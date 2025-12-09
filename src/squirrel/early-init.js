@@ -15,101 +15,92 @@
     window._squirrelEarlyInitDone = true;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TAURI AVAILABILITY TRACKING (via WebSocket - silent, no console errors)
+    // TAURI AVAILABILITY TRACKING (via HTTP fetch - silent, no console errors)
     // ═══════════════════════════════════════════════════════════════════════════
 
     var loadTime = Date.now();
     var tauriAvailable = false; // Start assuming unavailable - will be updated
-    var tauriWs = null;
     var tauriCheckInterval = null;
     window._tauriAvailable = false; // Expose globally for other modules
 
     /**
-     * Check Tauri availability using WebSocket (silent - no console errors)
+     * Check Tauri availability using HTTP fetch (silent - no console errors)
+     * Uses fetch instead of WebSocket to avoid Safari console errors
      */
-    function checkTauriViaWebSocket() {
+    function checkTauriViaHttp() {
         return new Promise(function (resolve) {
-            // If already connected, just return true
-            if (tauriWs && tauriWs.readyState === WebSocket.OPEN) {
+            // If we're in Tauri environment, assume it's available
+            if (window.__TAURI__ || window.__TAURI_INTERNALS__) {
+                tauriAvailable = true;
+                window._tauriAvailable = true;
+                if (!window._tauriInitLogged) {
+                    window._tauriInitLogged = true;
+                    console.log('[Squirrel] ✅ Tauri environment detected');
+                }
                 resolve(true);
                 return;
             }
-
-            // Close any existing connection
-            if (tauriWs) {
-                try { tauriWs.close(); } catch (e) { }
-                tauriWs = null;
-            }
-
-            try {
-                tauriWs = new WebSocket('ws://127.0.0.1:3000/ws/sync');
-
-                var timeout = setTimeout(function () {
-                    if (tauriWs) {
-                        try { tauriWs.close(); } catch (e) { }
-                        tauriWs = null;
-                    }
-                    tauriAvailable = false;
-                    window._tauriAvailable = false;
-                    resolve(false);
-                }, 3000);
-
-                tauriWs.onopen = function () {
-                    clearTimeout(timeout);
-                    var wasOffline = tauriAvailable === false && window._tauriInitLogged !== true;
-                    tauriAvailable = true;
-                    window._tauriAvailable = true;
-
-                    if (!window._tauriInitLogged) {
-                        window._tauriInitLogged = true;
-                        console.log('[Squirrel] ✅ Tauri server detected');
-                    } else if (wasOffline) {
-                        console.log('[Squirrel] 🔄 Tauri server reconnected');
-                        window.dispatchEvent(new CustomEvent('squirrel:tauri-reconnected'));
-                    }
-
-                    // Stop checking interval since we're connected
-                    if (tauriCheckInterval) {
-                        clearInterval(tauriCheckInterval);
-                        tauriCheckInterval = null;
-                    }
-
-                    resolve(true);
-                };
-
-                tauriWs.onerror = function () {
-                    // Silent - no console error with WebSocket
-                    clearTimeout(timeout);
-                    tauriAvailable = false;
-                    window._tauriAvailable = false;
-                    tauriWs = null;
-
-                    // Start periodic check if not running
-                    if (!tauriCheckInterval) {
-                        tauriCheckInterval = setInterval(checkTauriViaWebSocket, 30000);
-                    }
-                    resolve(false);
-                };
-
-                tauriWs.onclose = function () {
-                    if (tauriAvailable === true) {
-                        tauriAvailable = false;
-                        window._tauriAvailable = false;
-                        // Start periodic check to detect reconnection
-                        if (!tauriCheckInterval) {
-                            tauriCheckInterval = setInterval(checkTauriViaWebSocket, 30000);
-                        }
-                    }
-                    tauriWs = null;
-                };
-
-            } catch (e) {
+            
+            // Only check on localhost (dev environment)
+            var hostname = window.location.hostname || '';
+            var isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1' || 
+                             hostname === '' || hostname.startsWith('192.168.') || hostname.startsWith('10.');
+            
+            if (!isLocalDev) {
                 tauriAvailable = false;
                 window._tauriAvailable = false;
                 resolve(false);
+                return;
             }
+
+            // Use fetch with timeout to check if Tauri server is running
+            var controller = new AbortController();
+            var timeoutId = setTimeout(function() { controller.abort(); }, 2000);
+
+            fetch('http://127.0.0.1:3000/api/auth/local/me', {
+                method: 'GET',
+                signal: controller.signal,
+                credentials: 'omit',
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function() {
+                clearTimeout(timeoutId);
+                var wasOffline = tauriAvailable === false && window._tauriInitLogged !== true;
+                tauriAvailable = true;
+                window._tauriAvailable = true;
+
+                if (!window._tauriInitLogged) {
+                    window._tauriInitLogged = true;
+                    console.log('[Squirrel] ✅ Tauri server detected');
+                } else if (wasOffline) {
+                    console.log('[Squirrel] 🔄 Tauri server reconnected');
+                    window.dispatchEvent(new CustomEvent('squirrel:tauri-reconnected'));
+                }
+
+                // Stop checking interval since server is available
+                if (tauriCheckInterval) {
+                    clearInterval(tauriCheckInterval);
+                    tauriCheckInterval = null;
+                }
+
+                resolve(true);
+            })
+            .catch(function() {
+                clearTimeout(timeoutId);
+                tauriAvailable = false;
+                window._tauriAvailable = false;
+
+                // Start periodic check if not running
+                if (!tauriCheckInterval) {
+                    tauriCheckInterval = setInterval(checkTauriViaHttp, 30000);
+                }
+                resolve(false);
+            });
         });
     }
+
+    // Backwards compatibility alias
+    var checkTauriViaWebSocket = checkTauriViaHttp;
 
     // Tauri availability detection:
     // - If __TAURI__ exists, we're in Tauri app, mark as available immediately

@@ -32,6 +32,7 @@ const UnifiedAuth = {
     /**
      * Register a new user
      * Creates account on available backends (prefers Tauri for local-first)
+     * Immediately syncs to the other backend if available
      * 
      * @param {Object} data - Registration data
      * @param {string} data.username - Username (required)
@@ -84,7 +85,7 @@ const UnifiedAuth = {
             }
         }
 
-        // Register on Fastify (cloud)
+        // Register on Fastify (cloud) 
         if (fastify) {
             try {
                 results.fastify = await FastifyAdapter.auth.register({
@@ -100,20 +101,23 @@ const UnifiedAuth = {
             }
         }
 
-        // Handle partial success - queue sync for offline backend
+        // Handle success - sync to offline backend if needed
         if (primaryResult && primaryResult.success) {
+            let pendingSync = false;
+
             // If Tauri is offline but Fastify succeeded, queue for Tauri sync
             if (!tauri && results.fastify?.success) {
                 this._queuePendingSync('register', {
                     username: regData.username,
                     phone: regData.phone,
-                    password: regData.password, // Note: stored temporarily for sync
+                    password: regData.password, // Stored temporarily for sync
                     userId: primaryResult.user?.id,
                     createdOn: 'fastify'
                 });
+                pendingSync = true;
             }
             // If Fastify is offline but Tauri succeeded, queue for Fastify sync
-            if (!fastify && results.tauri?.success) {
+            else if (!fastify && results.tauri?.success) {
                 this._queuePendingSync('register', {
                     username: regData.username,
                     phone: regData.phone,
@@ -121,6 +125,41 @@ const UnifiedAuth = {
                     userId: primaryResult.user?.id,
                     createdOn: 'tauri'
                 });
+                pendingSync = true;
+            }
+            // BOTH online: If one succeeded but other failed (not just offline), try to sync
+            else if (tauri && fastify) {
+                // If Tauri succeeded but Fastify failed (user didn't exist there)
+                if (results.tauri?.success && !results.fastify?.success) {
+                    const msg = results.fastify?.message || results.fastify?.error || '';
+                    // Only retry if not "already exists"
+                    if (!msg.includes('already') && !msg.includes('exists')) {
+                        try {
+                            results.fastify = await FastifyAdapter.auth.register({
+                                phone: regData.phone,
+                                password: regData.password,
+                                username: regData.username
+                            });
+                        } catch (e) {
+                            console.log('[UnifiedAuth] Fastify sync retry failed:', e.message);
+                        }
+                    }
+                }
+                // If Fastify succeeded but Tauri failed
+                if (results.fastify?.success && !results.tauri?.success) {
+                    const msg = results.tauri?.message || results.tauri?.error || '';
+                    if (!msg.includes('already') && !msg.includes('exists')) {
+                        try {
+                            results.tauri = await TauriAdapter.auth.register({
+                                username: regData.username,
+                                phone: regData.phone,
+                                password: regData.password
+                            });
+                        } catch (e) {
+                            console.log('[UnifiedAuth] Tauri sync retry failed:', e.message);
+                        }
+                    }
+                }
             }
 
             return {
@@ -131,7 +170,7 @@ const UnifiedAuth = {
                     tauri: results.tauri?.success || false,
                     fastify: results.fastify?.success || false
                 },
-                pendingSync: (!tauri && results.fastify?.success) || (!fastify && results.tauri?.success)
+                pendingSync
             };
         }
 

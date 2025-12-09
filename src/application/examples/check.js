@@ -232,11 +232,15 @@ async function createUserOnTauri() {
     const msgOrError = result.message || result.error || '';
     if (msgOrError.includes('already') || msgOrError.includes('exists') || msgOrError.includes('ready to login')) {
       log(`ℹ️ User "${username}" already exists on Tauri - ready to login`, 'info');
+      // Try to sync to Fastify anyway
+      await syncUserToFastify(username, password);
       return { success: true, alreadyExists: true };
     }
 
     if (result.success) {
       log(`✅ User created on Tauri: ${JSON.stringify(result.user)}`, 'success');
+      // Automatically sync to Fastify
+      await syncUserToFastify(username, password);
     } else {
       log(`❌ Failed: ${result.error || 'Unknown error'} (status: ${result.status})`, 'error');
     }
@@ -248,10 +252,73 @@ async function createUserOnTauri() {
     const errorMsg = e.message || '';
     if (errorMsg.includes('already') || errorMsg.includes('exists') || errorMsg.includes('registered')) {
       log(`ℹ️ User "${username}" already exists on Tauri - ready to login`, 'info');
+      await syncUserToFastify(username, password);
       return { success: true, alreadyExists: true };
     }
     log(`❌ Error: ${e.message}`, 'error');
     return { success: false, error: e.message };
+  }
+}
+
+// Sync user to Fastify after creation on Tauri
+async function syncUserToFastify(username, password) {
+  const backends = await checkBackends(true);
+  if (!backends.fastify) {
+    log(`⏳ Fastify offline - user will sync when available`, 'warn');
+    return;
+  }
+
+  try {
+    log(`🔄 Syncing user "${username}" to FASTIFY...`, 'info');
+    const result = await FastifyAdapter.auth.register({
+      phone: username,
+      password: password,
+      username: username
+    });
+
+    const msgOrError = result.message || result.error || '';
+    if (result.success || msgOrError.includes('already') || msgOrError.includes('exists')) {
+      log(`✅ User synced to Fastify`, 'success');
+    } else {
+      log(`⚠️ Fastify sync: ${result.error || 'Unknown'}`, 'warn');
+    }
+  } catch (e) {
+    if (e.message?.includes('already') || e.message?.includes('exists')) {
+      log(`✅ User already exists on Fastify`, 'info');
+    } else {
+      log(`⚠️ Fastify sync error: ${e.message}`, 'warn');
+    }
+  }
+}
+
+// Sync user to Tauri after creation on Fastify
+async function syncUserToTauri(username, password) {
+  const backends = await checkBackends(true);
+  if (!backends.tauri) {
+    log(`⏳ Tauri offline - user will sync when available`, 'warn');
+    return;
+  }
+
+  try {
+    log(`🔄 Syncing user "${username}" to TAURI...`, 'info');
+    const result = await TauriAdapter.auth.register({
+      username: username,
+      phone: username,
+      password: password
+    });
+
+    const msgOrError = result.message || result.error || '';
+    if (result.success || msgOrError.includes('already') || msgOrError.includes('exists')) {
+      log(`✅ User synced to Tauri`, 'success');
+    } else {
+      log(`⚠️ Tauri sync: ${result.error || 'Unknown'}`, 'warn');
+    }
+  } catch (e) {
+    if (e.message?.includes('already') || e.message?.includes('exists')) {
+      log(`✅ User already exists on Tauri`, 'info');
+    } else {
+      log(`⚠️ Tauri sync error: ${e.message}`, 'warn');
+    }
   }
 }
 
@@ -272,11 +339,15 @@ async function createUserOnFastify() {
     const msgOrError = result.message || result.error || '';
     if (msgOrError.includes('already') || msgOrError.includes('exists') || msgOrError.includes('registered') || msgOrError.includes('ready to login')) {
       log(`ℹ️ User "${username}" already exists on Fastify - ready to login`, 'info');
+      // Try to sync to Tauri anyway
+      await syncUserToTauri(username, password);
       return { success: true, alreadyExists: true };
     }
 
     if (result.success) {
       log(`✅ User created on Fastify: ${JSON.stringify(result.user)}`, 'success');
+      // Automatically sync to Tauri
+      await syncUserToTauri(username, password);
     } else {
       log(`❌ Failed: ${result.error}`, 'error');
     }
@@ -288,6 +359,7 @@ async function createUserOnFastify() {
     const errorMsg = e.message || '';
     if (errorMsg.includes('already') || errorMsg.includes('exists') || errorMsg.includes('registered')) {
       log(`ℹ️ User "${username}" already exists on Fastify - ready to login`, 'info');
+      await syncUserToTauri(username, password);
       return { success: true, alreadyExists: true };
     }
     log(`❌ Error: ${e.message}`, 'error');

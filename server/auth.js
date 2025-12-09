@@ -192,9 +192,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
         try {
             const existingRows = await dataSource.query(
-                `SELECT principal_id FROM principals p
-                 JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id
-                 WHERE os.snapshot->>'phone' = $1 LIMIT 1`,
+                `SELECT user_id FROM users WHERE phone = ?`,
                 [cleanPhone]
             );
 
@@ -217,6 +215,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     /**
      * POST /api/auth/register
      * Create a new user account
+     * Uses simplified SQLite schema with direct users table
      */
     server.post('/api/auth/register', async (request, reply) => {
         const { username, phone, password, optional = {} } = request.body || {};
@@ -240,9 +239,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         try {
             // Check if phone already exists
             const existingRows = await dataSource.query(
-                `SELECT principal_id FROM principals p
-                 JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id
-                 WHERE os.snapshot->>'phone' = $1 LIMIT 1`,
+                `SELECT user_id FROM users WHERE phone = ?`,
                 [cleanPhone]
             );
 
@@ -254,57 +251,30 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Hash password
             const passwordHash = await hashPassword(password);
 
-            // Create user in ADOLE schema
-            const tenantId = uuidv4();
             // Use deterministic user ID based on phone number
             // This ensures same user gets same ID across Fastify, Tauri, and iOS
+            const tenantId = uuidv4();
             const principalId = generateDeterministicUserId(cleanPhone);
-            const branchId = uuidv4();
-            const commitId = uuidv4();
-            const logicalClock = Date.now();
+            const now = new Date().toISOString();
 
-            const snapshot = {
-                type: 'user_profile',
-                username: cleanUsername,
-                phone: cleanPhone,
-                password_hash: passwordHash,
-                optional,
-                created_at: new Date().toISOString(),
-                created_source: 'fastify',  // Track where the user was created
-                created_server: process.env.SQUIRREL_SERVER_ID || 'fastify-dev'
-            };
+            // Create tenant first
+            await dataSource.query(
+                `INSERT INTO tenants (tenant_id, name) VALUES (?, ?)`,
+                [tenantId, cleanUsername]
+            );
 
-            await dataSource.manager.transaction(async (tx) => {
-                await tx.query(
-                    `INSERT INTO tenants (tenant_id, name) VALUES ($1, $2)`,
-                    [tenantId, cleanUsername]
-                );
+            // Create principal
+            await dataSource.query(
+                `INSERT INTO principals (principal_id, tenant_id, type, name) VALUES (?, ?, 'user', ?)`,
+                [principalId, tenantId, cleanUsername]
+            );
 
-                await tx.query(
-                    `INSERT INTO principals (tenant_id, principal_id, kind, email) VALUES ($1, $2, 'user', $3)`,
-                    [tenantId, principalId, optional.email || null]
-                );
-
-                await tx.query(
-                    `INSERT INTO objects (object_id, tenant_id, type, created_by) VALUES ($1, $2, 'user_profile', $1)`,
-                    [principalId, tenantId]
-                );
-
-                await tx.query(
-                    `INSERT INTO branches (branch_id, tenant_id, object_id, name, is_default) VALUES ($1, $2, $3, 'main', true)`,
-                    [branchId, tenantId, principalId]
-                );
-
-                await tx.query(
-                    `INSERT INTO commits (commit_id, tenant_id, object_id, branch_id, author_id, logical_clock, message) VALUES ($1, $2, $3, $4, $3, $5, 'user created')`,
-                    [commitId, tenantId, principalId, branchId, logicalClock]
-                );
-
-                await tx.query(
-                    `INSERT INTO object_state (tenant_id, object_id, branch_id, version_seq, snapshot) VALUES ($1, $2, $3, $4, $5::jsonb)`,
-                    [tenantId, principalId, branchId, logicalClock, JSON.stringify(snapshot)]
-                );
-            });
+            // Create user
+            await dataSource.query(
+                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [principalId, principalId, tenantId, cleanPhone, cleanUsername, passwordHash, now, now]
+            );
 
             console.log(`✅ User registered: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
@@ -314,7 +284,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 if (eventBus) {
                     eventBus.emit('event', {
                         type: 'sync:account-created',
-                        timestamp: new Date().toISOString(),
+                        timestamp: now,
                         runtime: 'Fastify',
                         payload: {
                             userId: principalId,
@@ -342,9 +312,100 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     });
 
     /**
+     * POST /api/auth/sync-register
+     * Create a user account from another server (Tauri sync)
+     * Accepts pre-hashed password for server-to-server sync
+     * Uses a sync secret for authentication instead of user credentials
+     */
+    server.post('/api/auth/sync-register', async (request, reply) => {
+        // Accept both camelCase (from Tauri) and snake_case formats
+        const body = request.body || {};
+        const username = body.username;
+        const phone = body.phone;
+        const passwordHash = body.passwordHash || body.password_hash;
+        const syncSecret = body.syncSecret || body.sync_secret;
+        const sourceServer = body.source || body.source_server;
+
+        // Also check headers for sync secret (preferred method)
+        const headerSyncSecret = request.headers['x-sync-secret'];
+
+        // Validate sync secret (simple shared secret for now)
+        const expectedSecret = process.env.SYNC_SECRET || 'squirrel-sync-2024';
+        const providedSecret = headerSyncSecret || syncSecret;
+        if (providedSecret !== expectedSecret) {
+            return reply.code(403).send({ success: false, error: 'Invalid sync secret' });
+        }
+
+        // Validation
+        if (!username || typeof username !== 'string' || username.trim().length < 2) {
+            return reply.code(400).send({ success: false, error: 'Username must be at least 2 characters' });
+        }
+
+        if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
+            return reply.code(400).send({ success: false, error: 'Valid phone number is required' });
+        }
+
+        if (!passwordHash || typeof passwordHash !== 'string') {
+            return reply.code(400).send({ success: false, error: 'Password hash is required for sync' });
+        }
+
+        const cleanPhone = phone.trim().replace(/\s+/g, '');
+        const cleanUsername = username.trim();
+
+        try {
+            // Check if phone already exists
+            const existingRows = await dataSource.query(
+                `SELECT user_id FROM users WHERE phone = ?`,
+                [cleanPhone]
+            );
+
+            if (existingRows.length > 0) {
+                // User already exists - this is fine for sync
+                return { success: true, message: 'User already exists', alreadyExists: true, principalId: existingRows[0].user_id };
+            }
+
+            // Create user with pre-hashed password
+            const tenantId = uuidv4();
+            const principalId = generateDeterministicUserId(cleanPhone);
+            const now = new Date().toISOString();
+
+            // Create tenant
+            await dataSource.query(
+                `INSERT INTO tenants (tenant_id, name) VALUES (?, ?)`,
+                [tenantId, cleanUsername]
+            );
+
+            // Create principal
+            await dataSource.query(
+                `INSERT INTO principals (principal_id, tenant_id, type, name) VALUES (?, ?, 'user', ?)`,
+                [principalId, tenantId, cleanUsername]
+            );
+
+            // Create user with pre-hashed password
+            await dataSource.query(
+                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [principalId, principalId, tenantId, cleanPhone, cleanUsername, passwordHash, now, now]
+            );
+
+            console.log(`✅ User synced from ${sourceServer || 'unknown'}: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
+
+            return {
+                success: true,
+                message: 'User synced successfully',
+                principalId
+            };
+
+        } catch (error) {
+            request.log.error({ err: error }, 'Sync registration failed');
+            return reply.code(500).send({ success: false, error: 'Sync registration failed' });
+        }
+    });
+
+    /**
      * POST /api/auth/login
      * Authenticate user and create session
-     * Returns 200 with success:false for invalid credentials (avoids browser console errors)
+     * Uses simplified SQLite schema with direct users table
      */
     server.post('/api/auth/login', async (request, reply) => {
         const { phone, password } = request.body || {};
@@ -358,10 +419,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         try {
             // Find user by phone
             const rows = await dataSource.query(
-                `SELECT p.principal_id, p.tenant_id, os.snapshot
-                 FROM principals p
-                 JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id
-                 WHERE os.snapshot->>'phone' = $1 LIMIT 1`,
+                `SELECT user_id, tenant_id, username, phone, password_hash FROM users WHERE phone = ?`,
                 [cleanPhone]
             );
 
@@ -371,10 +429,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const user = rows[0];
-            const snapshot = user.snapshot;
 
             // Verify password
-            const passwordValid = await verifyPassword(password, snapshot.password_hash);
+            const passwordValid = await verifyPassword(password, user.password_hash);
             if (!passwordValid) {
                 // Return 200 with success:false to avoid browser console error
                 return { success: false, error: 'Invalid credentials' };
@@ -382,10 +439,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             // Generate JWT
             const token = server.jwt.sign({
-                id: user.principal_id,
+                id: user.user_id,
                 tenantId: user.tenant_id,
-                phone: snapshot.phone,
-                username: snapshot.username
+                phone: user.phone,
+                username: user.username
             });
 
             // Set HttpOnly cookie
@@ -397,16 +454,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 maxAge: COOKIE_MAX_AGE
             });
 
-            console.log(`✅ User logged in: ${snapshot.username} (${snapshot.phone})`);
+            console.log(`✅ User logged in: ${user.username} (${user.phone})`);
 
             return {
                 success: true,
                 token: token, // Also return token in response for cross-origin requests
                 user: {
-                    id: user.principal_id,
-                    username: snapshot.username,
-                    phone: snapshot.phone,
-                    optional: snapshot.optional || {}
+                    id: user.user_id,
+                    username: user.username,
+                    phone: user.phone,
+                    optional: {}
                 }
             };
 
@@ -433,7 +490,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     /**
      * GET /api/auth/me
      * Get current authenticated user
-     * Returns 200 with success:false when not authenticated (avoids browser console errors)
+     * Uses simplified SQLite schema with direct users table
      */
     server.get('/api/auth/me', async (request, reply) => {
         try {
@@ -445,9 +502,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             const decoded = server.jwt.verify(token);
 
-            // Optionally fetch fresh data from DB
+            // Fetch fresh data from DB
             const rows = await dataSource.query(
-                `SELECT os.snapshot FROM object_state os WHERE os.object_id = $1 LIMIT 1`,
+                `SELECT user_id, username, phone FROM users WHERE user_id = ?`,
                 [decoded.id]
             );
 
@@ -461,15 +518,15 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return { success: false, authenticated: false, error: 'User not found' };
             }
 
-            const snapshot = rows[0].snapshot;
+            const user = rows[0];
 
             return {
                 success: true,
                 user: {
-                    id: decoded.id,
-                    username: snapshot.username,
-                    phone: snapshot.phone,
-                    optional: snapshot.optional || {}
+                    id: user.user_id,
+                    username: user.username,
+                    phone: user.phone,
+                    optional: {}
                 }
             };
 
@@ -497,12 +554,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const decoded = server.jwt.verify(token);
-            const { username, optional } = request.body || {};
+            const { username } = request.body || {};
 
-            // Get current snapshot
+            // Get current user
             const rows = await dataSource.query(
-                `SELECT os.tenant_id, os.branch_id, os.version_seq, os.snapshot 
-                 FROM object_state os WHERE os.object_id = $1 LIMIT 1`,
+                `SELECT user_id, tenant_id, username, phone FROM users WHERE user_id = ?`,
                 [decoded.id]
             );
 
@@ -511,29 +567,23 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const current = rows[0];
-            const newSnapshot = {
-                ...current.snapshot,
-                username: username || current.snapshot.username,
-                optional: { ...current.snapshot.optional, ...optional },
-                updated_at: new Date().toISOString()
-            };
+            const now = new Date().toISOString();
+            const newUsername = username || current.username;
 
             await dataSource.query(
-                `UPDATE object_state 
-                 SET snapshot = $1::jsonb, version_seq = $2, updated_at = now() 
-                 WHERE object_id = $3`,
-                [JSON.stringify(newSnapshot), Date.now(), decoded.id]
+                `UPDATE users SET username = ?, updated_at = ? WHERE user_id = ?`,
+                [newUsername, now, decoded.id]
             );
 
-            console.log(`✅ User profile updated: ${newSnapshot.username}`);
+            console.log(`✅ User profile updated: ${newUsername}`);
 
             return {
                 success: true,
                 user: {
                     id: decoded.id,
-                    username: newSnapshot.username,
-                    phone: newSnapshot.phone,
-                    optional: newSnapshot.optional
+                    username: newUsername,
+                    phone: current.phone,
+                    optional: {}
                 }
             };
 
@@ -563,9 +613,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         try {
             // Check if user exists
             const rows = await dataSource.query(
-                `SELECT p.principal_id FROM principals p
-                 JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id
-                 WHERE os.snapshot->>'phone' = $1 LIMIT 1`,
+                `SELECT user_id FROM users WHERE phone = ?`,
                 [cleanPhone]
             );
 
@@ -618,11 +666,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Hash new password
             const newHash = await hashPassword(newPassword);
 
-            // Update in database
+            // Update in database - using users table
             const rows = await dataSource.query(
-                `SELECT os.object_id, os.snapshot FROM object_state os
-                 JOIN principals p ON p.principal_id = os.object_id AND p.tenant_id = os.tenant_id
-                 WHERE os.snapshot->>'phone' = $1 LIMIT 1`,
+                `SELECT user_id FROM users WHERE phone = ?`,
                 [cleanPhone]
             );
 
@@ -630,16 +676,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            const current = rows[0];
-            const newSnapshot = {
-                ...current.snapshot,
-                password_hash: newHash,
-                updated_at: new Date().toISOString()
-            };
+            const userId = rows[0].user_id;
 
             await dataSource.query(
-                `UPDATE object_state SET snapshot = $1::jsonb, version_seq = $2, updated_at = now() WHERE object_id = $3`,
-                [JSON.stringify(newSnapshot), Date.now(), current.object_id]
+                `UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?`,
+                [newHash, userId]
             );
 
             console.log(`✅ Password reset for ${cleanPhone}`);
@@ -683,9 +724,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: 'New password must be at least 8 characters' });
             }
 
-            // Get current user data
+            // Get current user data - using users table
             const rows = await dataSource.query(
-                `SELECT os.object_id, os.snapshot FROM object_state os WHERE os.object_id = $1 LIMIT 1`,
+                `SELECT user_id, password_hash FROM users WHERE user_id = ?`,
                 [decoded.id]
             );
 
@@ -694,10 +735,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const current = rows[0];
-            const snapshot = current.snapshot;
 
             // Verify current password
-            const passwordValid = await verifyPassword(currentPassword, snapshot.password_hash);
+            const passwordValid = await verifyPassword(currentPassword, current.password_hash);
             if (!passwordValid) {
                 return reply.code(401).send({ success: false, error: 'Current password is incorrect' });
             }
@@ -705,15 +745,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Hash new password
             const newHash = await hashPassword(newPassword);
 
-            const newSnapshot = {
-                ...snapshot,
-                password_hash: newHash,
-                updated_at: new Date().toISOString()
-            };
-
             await dataSource.query(
-                `UPDATE object_state SET snapshot = $1::jsonb, version_seq = $2, updated_at = now() WHERE object_id = $3`,
-                [JSON.stringify(newSnapshot), Date.now(), current.object_id]
+                `UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?`,
+                [newHash, decoded.id]
             );
 
             console.log(`✅ Password changed for user ${decoded.id}`);
@@ -747,11 +781,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             const cleanPhone = newPhone.trim().replace(/\s+/g, '');
 
-            // Check if new phone is already in use
+            // Check if new phone is already in use - using users table
             const existingRows = await dataSource.query(
-                `SELECT principal_id FROM principals p
-                 JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id
-                 WHERE os.snapshot->>'phone' = $1 LIMIT 1`,
+                `SELECT user_id FROM users WHERE phone = ?`,
                 [cleanPhone]
             );
 
@@ -803,9 +835,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: otpResult.error });
             }
 
-            // Update phone in database
+            // Update phone in database - using users table
             const rows = await dataSource.query(
-                `SELECT os.object_id, os.tenant_id, os.snapshot FROM object_state os WHERE os.object_id = $1 LIMIT 1`,
+                `SELECT user_id, username, optional FROM users WHERE user_id = ?`,
                 [decoded.id]
             );
 
@@ -814,15 +846,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const current = rows[0];
-            const newSnapshot = {
-                ...current.snapshot,
-                phone: cleanPhone,
-                updated_at: new Date().toISOString()
-            };
 
             await dataSource.query(
-                `UPDATE object_state SET snapshot = $1::jsonb, version_seq = $2, updated_at = now() WHERE object_id = $3`,
-                [JSON.stringify(newSnapshot), Date.now(), current.object_id]
+                `UPDATE users SET phone = ?, updated_at = datetime('now') WHERE user_id = ?`,
+                [cleanPhone, decoded.id]
             );
 
             // Generate new JWT with updated phone
@@ -830,7 +857,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 id: decoded.id,
                 tenantId: decoded.tenantId,
                 phone: cleanPhone,
-                username: newSnapshot.username
+                username: current.username
             });
 
             // Update cookie
@@ -844,14 +871,20 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             console.log(`✅ Phone changed for user ${decoded.id}: ${cleanPhone}`);
 
+            // Parse optional if it's a string
+            let optional = current.optional;
+            if (typeof optional === 'string') {
+                try { optional = JSON.parse(optional); } catch { optional = {}; }
+            }
+
             return {
                 success: true,
                 message: 'Phone number updated successfully',
                 user: {
                     id: decoded.id,
-                    username: newSnapshot.username,
+                    username: current.username,
                     phone: cleanPhone,
-                    optional: newSnapshot.optional || {}
+                    optional: optional || {}
                 }
             };
 
@@ -899,12 +932,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: 'Password is required for account deletion' });
             }
 
-            // Get current user data with snapshot
+            // Get current user data - using users table
             const rows = await dataSource.query(
-                `SELECT p.principal_id, p.tenant_id, os.snapshot
-                 FROM principals p
-                 JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id
-                 WHERE p.principal_id = $1 LIMIT 1`,
+                `SELECT user_id, tenant_id, phone, username, password_hash FROM users WHERE user_id = ?`,
                 [decoded.id]
             );
 
@@ -919,32 +949,29 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const user = rows[0];
-            const snapshot = user.snapshot;
 
             // Verify password
-            const passwordMatch = await verifyPassword(password, snapshot.password_hash);
+            const passwordMatch = await verifyPassword(password, user.password_hash);
             if (!passwordMatch) {
                 return reply.code(401).send({ success: false, error: 'Incorrect password' });
             }
 
-            // Delete all user data - handle missing tables gracefully for legacy accounts
-            const deleteQueries = [
-                { table: 'object_state', query: `DELETE FROM object_state WHERE object_id = $1`, params: [decoded.id] },
-                { table: 'commits', query: `DELETE FROM commits WHERE object_id = $1`, params: [decoded.id] },
-                { table: 'branches', query: `DELETE FROM branches WHERE object_id = $1`, params: [decoded.id] },
-                { table: 'property_versions', query: `DELETE FROM property_versions WHERE object_id = $1`, params: [decoded.id] },
-                { table: 'properties', query: `DELETE FROM properties WHERE object_id = $1`, params: [decoded.id] },
-                { table: 'acls', query: `DELETE FROM acls WHERE object_id = $1`, params: [decoded.id] },
-                { table: 'objects', query: `DELETE FROM objects WHERE object_id = $1`, params: [decoded.id] },
-                { table: 'principals', query: `DELETE FROM principals WHERE principal_id = $1`, params: [decoded.id] },
-                { table: 'tenants', query: `DELETE FROM tenants WHERE tenant_id = $1`, params: [user.tenant_id] }
-            ];
+            // Delete user from users table
+            await dataSource.query(`DELETE FROM users WHERE user_id = ?`, [decoded.id]);
 
-            for (const { table, query, params } of deleteQueries) {
+            // Also clean up related tables if they exist
+            const cleanupTables = ['property_versions', 'properties', 'objects', 'principals', 'tenants'];
+            for (const table of cleanupTables) {
                 try {
-                    await dataSource.query(query, params);
+                    if (table === 'tenants') {
+                        await dataSource.query(`DELETE FROM ${table} WHERE tenant_id = ?`, [user.tenant_id]);
+                    } else if (table === 'principals') {
+                        await dataSource.query(`DELETE FROM ${table} WHERE principal_id = ?`, [decoded.id]);
+                    } else {
+                        await dataSource.query(`DELETE FROM ${table} WHERE object_id = ?`, [decoded.id]);
+                    }
                 } catch (tableErr) {
-                    // Ignore errors for missing tables or constraints - legacy accounts may not have all tables
+                    // Ignore errors for missing tables
                     console.log(`[delete] Skipping ${table}: ${tableErr.message?.substring(0, 50) || 'error'}`);
                 }
             }
@@ -962,7 +989,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // === SYNC: Delete account on Tauri server ===
             try {
                 const tauriUrl = 'http://localhost:3000/api/auth/local/sync-delete';
-                console.log(`[auth] Syncing account deletion to Tauri: ${snapshot.phone}`);
+                console.log(`[auth] Syncing account deletion to Tauri: ${user.phone}`);
 
                 const syncResponse = await fetch(tauriUrl, {
                     method: 'POST',
@@ -972,7 +999,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                         'X-Sync-Secret': process.env.SYNC_SECRET || 'squirrel-sync-2024'
                     },
                     body: JSON.stringify({
-                        phone: snapshot.phone,
+                        phone: user.phone,
                         userId: decoded.id
                     })
                 });
@@ -997,8 +1024,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                         runtime: 'Fastify',
                         payload: {
                             userId: decoded.id,
-                            phone: snapshot.phone,
-                            username: snapshot.username
+                            phone: user.phone,
+                            username: user.username
                         }
                     });
                     console.log('[auth] Emitted sync:account-deleted event');
@@ -1442,9 +1469,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 }
             }
 
-            // Verify user still exists
+            // Verify user still exists - using users table
             const rows = await dataSource.query(
-                `SELECT os.object_id, os.snapshot FROM object_state os WHERE os.object_id = $1 LIMIT 1`,
+                `SELECT user_id, username, phone FROM users WHERE user_id = ?`,
                 [decoded.id || decoded.sub]
             );
 
@@ -1453,14 +1480,13 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const user = rows[0];
-            const snapshot = user.snapshot;
 
             // Generate new token with fresh expiry
             const newToken = server.jwt.sign({
-                sub: user.object_id,
-                id: user.object_id,
-                username: snapshot.username,
-                phone: snapshot.phone
+                sub: user.user_id,
+                id: user.user_id,
+                username: user.username,
+                phone: user.phone
             });
 
             // Set new cookie
@@ -1472,15 +1498,15 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 maxAge: COOKIE_MAX_AGE
             });
 
-            console.log(`🔄 Token refreshed for user ${user.object_id}`);
+            console.log(`🔄 Token refreshed for user ${user.user_id}`);
 
             return {
                 success: true,
                 token: newToken,
                 user: {
-                    id: user.object_id,
-                    username: snapshot.username,
-                    phone: snapshot.phone
+                    id: user.user_id,
+                    username: user.username,
+                    phone: user.phone
                 }
             };
 

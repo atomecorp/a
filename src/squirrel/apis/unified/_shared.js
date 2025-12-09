@@ -39,41 +39,38 @@ const _connectionState = {
 
 /**
  * Silent ping - checks server availability WITHOUT console errors
- * Uses WebSocket which doesn't show errors in browser console
+ * Uses fetch with GET request which is less intrusive than WebSocket
  * @param {string} baseUrl - Server base URL (http://...)
  * @returns {Promise<boolean>} - true if online, false otherwise
  */
 async function silentPing(baseUrl) {
-    return new Promise((resolve) => {
-        try {
-            // Convert HTTP URL to WebSocket URL
-            const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/sync';
-
-            const ws = new WebSocket(wsUrl);
-            const timeout = setTimeout(() => {
-                try { ws.close(); } catch (e) { }
-                resolve(false);
-            }, CONFIG.PING_TIMEOUT);
-
-            ws.onopen = () => {
-                clearTimeout(timeout);
-                try { ws.close(); } catch (e) { }
-                resolve(true);
-            };
-
-            ws.onerror = () => {
-                // WebSocket errors don't appear in console - silent!
-                clearTimeout(timeout);
-                resolve(false);
-            };
-
-            ws.onclose = () => {
-                // If we get here without onopen, server is offline
-            };
-        } catch {
-            resolve(false);
-        }
-    });
+    try {
+        // Use AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CONFIG.PING_TIMEOUT);
+        
+        // Choose endpoint based on server (Tauri uses /local/, Fastify doesn't)
+        const isTauriServer = baseUrl.includes(':3000');
+        const pingEndpoint = isTauriServer ? '/api/auth/local/me' : '/api/auth/me';
+        
+        const response = await fetch(`${baseUrl}${pingEndpoint}`, {
+            method: 'GET',
+            signal: controller.signal,
+            // Don't include credentials to avoid CORS preflight complexity
+            credentials: 'omit',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        clearTimeout(timeoutId);
+        // Any response (even 401/403) means server is online
+        return true;
+    } catch (e) {
+        // Network error or timeout - server is offline
+        // This doesn't show errors in console for network failures
+        return false;
+    }
 }
 
 /**
@@ -104,16 +101,29 @@ export async function checkConnection(backend) {
     const state = _connectionState[backend];
     const now = Date.now();
 
-    // TAURI: Only check if we're actually in Tauri environment
-    // Don't try to connect from browser - it will always fail with console error
+    // TAURI: Check if we're in Tauri environment OR on localhost (dev mode)
+    // In dev mode, we might want to test cross-server from browser
     if (backend === 'tauri') {
         if (isInTauri()) {
             // In Tauri app, assume Tauri server is available
             state.online = true;
             state.lastCheck = now;
             return true;
+        } else if (isLocalDev()) {
+            // On localhost - try to ping Tauri server (might be running for dev)
+            // Use cached state if recently checked
+            const cacheMultiplier = Math.min(state.failCount + 1, 6);
+            const effectiveCacheDuration = CONFIG.OFFLINE_CACHE_DURATION * cacheMultiplier;
+            if (state.lastCheck && (now - state.lastCheck < effectiveCacheDuration)) {
+                return state.online;
+            }
+            const isOnline = await silentPing(CONFIG.TAURI_BASE_URL);
+            state.online = isOnline;
+            state.lastCheck = now;
+            state.failCount = isOnline ? 0 : state.failCount + 1;
+            return isOnline;
         } else {
-            // Not in Tauri - don't even try to ping, just return false
+            // Not in Tauri and not on localhost - don't try to ping
             state.online = false;
             state.lastCheck = now;
             return false;

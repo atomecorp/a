@@ -20,6 +20,7 @@ use axum::{
 use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use reqwest;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -59,6 +60,51 @@ fn generate_deterministic_user_id(phone: &str) -> String {
     );
 
     user_id.to_string()
+}
+
+// =============================================================================
+// SYNC FUNCTIONS
+// =============================================================================
+
+/// Sync user to Fastify server
+/// Sends user data to Fastify's sync-register endpoint
+async fn sync_user_to_fastify(
+    user_id: &str,
+    username: &str,
+    phone: &str,
+    password_hash: &str,
+) -> Result<(), String> {
+    let fastify_url =
+        std::env::var("FASTIFY_URL").unwrap_or_else(|_| "http://localhost:3001".to_string());
+    let sync_secret =
+        std::env::var("SYNC_SECRET").unwrap_or_else(|_| "squirrel-sync-2024".to_string());
+
+    let client = reqwest::Client::new();
+
+    let payload = serde_json::json!({
+        "userId": user_id,
+        "username": username,
+        "phone": phone,
+        "passwordHash": password_hash,
+        "source": "tauri",
+        "syncSecret": sync_secret
+    });
+
+    let response = client
+        .post(format!("{}/api/auth/sync-register", fastify_url))
+        .header("Content-Type", "application/json")
+        .header("X-Sync-Source", "tauri")
+        .header("X-Sync-Secret", &sync_secret)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("Fastify returned status: {}", response.status()))
+    }
 }
 
 // =============================================================================
@@ -152,6 +198,16 @@ pub struct SyncDeleteRequest {
     pub phone: String,
     #[serde(rename = "userId")]
     pub user_id: Option<String>,
+}
+
+/// Request for sync-register from Fastify server (creates user with pre-hashed password)
+#[derive(Debug, Deserialize)]
+pub struct SyncRegisterRequest {
+    pub username: String,
+    pub phone: String,
+    pub password_hash: String,
+    pub sync_secret: String,
+    pub source_server: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -423,6 +479,16 @@ async fn register_handler(
         clean_username, clean_phone
     );
 
+    // === SYNC: Try to sync user to Fastify server ===
+    let sync_result =
+        sync_user_to_fastify(&user_id, &clean_username, &clean_phone, &password_hash).await;
+    let synced = sync_result.is_ok();
+    if synced {
+        println!("[auth] ✅ User synced to Fastify server");
+    } else if let Err(ref e) = sync_result {
+        println!("[auth] ⚠️ Could not sync to Fastify: {}", e);
+    }
+
     (
         StatusCode::OK,
         Json(AuthResponse {
@@ -434,9 +500,151 @@ async fn register_handler(
                 username: clean_username,
                 phone: clean_phone,
                 cloud_id: None,
-                synced: Some(false),
+                synced: Some(synced),
             }),
             token: Some(token),
+        }),
+    )
+}
+
+/// POST /api/auth/local/sync-register
+/// Create a user from another server (Fastify sync)
+/// Accepts pre-hashed password for server-to-server sync
+async fn sync_register_handler(
+    State(state): State<LocalAuthState>,
+    Json(req): Json<SyncRegisterRequest>,
+) -> impl IntoResponse {
+    // Validate sync secret
+    let expected_secret =
+        std::env::var("SYNC_SECRET").unwrap_or_else(|_| "squirrel_sync_secret_dev".to_string());
+    if req.sync_secret != expected_secret {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(AuthResponse {
+                success: false,
+                error: Some("Invalid sync secret".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        );
+    }
+
+    // Validate input
+    if req.username.trim().len() < 2 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse {
+                success: false,
+                error: Some("Username must be at least 2 characters".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        );
+    }
+
+    if req.phone.trim().len() < 6 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse {
+                success: false,
+                error: Some("Valid phone number is required".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        );
+    }
+
+    let clean_phone = req.phone.trim().replace(" ", "");
+    let clean_username = req.username.trim().to_string();
+    let source = req.source_server.unwrap_or_else(|| "sync".to_string());
+
+    // Check if phone already exists
+    {
+        let db = state.db.lock().unwrap();
+        let existing_id: Option<String> = db
+            .query_row(
+                "SELECT id FROM users WHERE phone = ?1",
+                [&clean_phone],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(id) = existing_id {
+            // User already exists - this is fine for sync
+            return (
+                StatusCode::OK,
+                Json(AuthResponse {
+                    success: true,
+                    message: Some("User already exists".into()),
+                    error: None,
+                    user: Some(UserInfo {
+                        id,
+                        username: clean_username,
+                        phone: clean_phone,
+                        cloud_id: None,
+                        synced: Some(true),
+                    }),
+                    token: None,
+                }),
+            );
+        }
+    }
+
+    // Create user with deterministic ID and pre-hashed password
+    let user_id = generate_deterministic_user_id(&clean_phone);
+    let now = Utc::now().to_rfc3339();
+
+    {
+        let db = state.db.lock().unwrap();
+        if let Err(e) = db.execute(
+            "INSERT INTO users (id, username, phone, password_hash, created_at, updated_at, created_source, last_sync)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                user_id,
+                clean_username,
+                clean_phone,
+                req.password_hash, // Already hashed from source server
+                now,
+                now,
+                source,
+                now // Mark as synced
+            ],
+        ) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some(format!("Failed to create synced user: {}", e)),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    }
+
+    println!(
+        "✅ User synced from {}: {} ({})",
+        source, clean_username, clean_phone
+    );
+
+    (
+        StatusCode::OK,
+        Json(AuthResponse {
+            success: true,
+            message: Some("User synced successfully".into()),
+            error: None,
+            user: Some(UserInfo {
+                id: user_id,
+                username: clean_username,
+                phone: clean_phone,
+                cloud_id: None,
+                synced: Some(true),
+            }),
+            token: None,
         }),
     )
 }
@@ -1544,6 +1752,7 @@ pub fn create_local_auth_router(data_dir: PathBuf) -> Router {
 
     Router::new()
         .route("/api/auth/local/register", post(register_handler))
+        .route("/api/auth/local/sync-register", post(sync_register_handler))
         .route("/api/auth/local/login", post(login_handler))
         .route("/api/auth/local/logout", post(logout_handler))
         .route("/api/auth/local/me", get(me_handler))

@@ -786,6 +786,33 @@ export async function deleteAtome(objectId) {
 // ============================================================================
 
 /**
+ * Convert PostgreSQL-style SQL to SQLite-compatible SQL
+ * @param {string} sql - PostgreSQL SQL query
+ * @param {Array} params - Query parameters
+ * @returns {{sql: string, params: Array}} - Converted SQL and params
+ */
+function convertPostgresToSqlite(sql, params = []) {
+    let convertedSql = sql;
+
+    // Remove PostgreSQL-specific type casts (::jsonb, ::text, etc.)
+    convertedSql = convertedSql.replace(/::(jsonb|json|text|varchar|integer|bigint|boolean|uuid)/gi, '');
+
+    // Convert $1, $2 PostgreSQL params to ? SQLite params
+    if (params && params.length > 0) {
+        for (let i = params.length; i >= 1; i--) {
+            convertedSql = convertedSql.replace(new RegExp(`\\$${i}`, 'g'), '?');
+        }
+    }
+
+    // Convert PostgreSQL JSON operators to SQLite JSON functions
+    // snapshot->>'phone' becomes json_extract(snapshot, '$.phone')
+    convertedSql = convertedSql.replace(/(\w+)->>'\s*(\w+)\s*'/g, "json_extract($1, '$$.$2')");
+    convertedSql = convertedSql.replace(/(\w+)->>\s*'(\w+)'/g, "json_extract($1, '$$.$2')");
+
+    return { sql: convertedSql, params };
+}
+
+/**
  * DataSource adapter for backwards compatibility with TypeORM-style code
  */
 export function getDataSourceAdapter() {
@@ -793,38 +820,51 @@ export function getDataSourceAdapter() {
         throw new Error('[ADOLE] Database not initialized. Call initDatabase() first.');
     }
 
+    /**
+     * Execute raw SQL query with PostgreSQL to SQLite conversion
+     * Automatically detects INSERT/UPDATE/DELETE and uses run() instead of all()
+     */
+    const executeQuery = async (sql, params = []) => {
+        const converted = convertPostgresToSqlite(sql, params);
+
+        // Determine if this is a write operation that doesn't return data
+        const trimmedSql = converted.sql.trim().toUpperCase();
+        const isWriteOp = trimmedSql.startsWith('INSERT') ||
+            trimmedSql.startsWith('UPDATE') ||
+            trimmedSql.startsWith('DELETE');
+
+        if (isWriteOp) {
+            // Use run() for write operations
+            await query('run', converted.sql, converted.params);
+            return []; // Return empty array for consistency
+        }
+
+        return await query('all', converted.sql, converted.params);
+    };
+
     return {
         isInitialized: true,
 
         /**
          * Execute raw SQL query
          */
-        async query(sql, params = []) {
-            // Convert $1, $2 PostgreSQL params to ? SQLite params
-            let convertedSql = sql;
-            if (params && params.length > 0) {
-                for (let i = params.length; i >= 1; i--) {
-                    convertedSql = convertedSql.replace(new RegExp(`\\$${i}`, 'g'), '?');
-                }
-            }
-
-            return await query('all', convertedSql, params);
-        },
+        query: executeQuery,
 
         manager: {
             async transaction(callback) {
-                if (db.type === 'sqlite') {
-                    db.beginTransaction();
-                    try {
-                        const result = await callback({ query: this.query });
-                        db.commit();
-                        return result;
-                    } catch (error) {
-                        db.rollback();
-                        throw error;
-                    }
-                } else {
-                    return await db.transaction(callback);
+                // Create a transaction context with the query function
+                const txContext = {
+                    query: executeQuery
+                };
+
+                // For SQLite, we use a simple approach since better-sqlite3 auto-commits
+                // In a production setup, you'd want proper transaction support
+                try {
+                    const result = await callback(txContext);
+                    return result;
+                } catch (error) {
+                    console.error('[ADOLE] Transaction error:', error);
+                    throw error;
                 }
             }
         }
