@@ -481,6 +481,44 @@ async function deleteUserFromFastify() {
   }
 }
 
+async function deleteUserFromTauri() {
+  const username = usernameInput.value;
+  const password = passwordInput.value;
+
+  log(`🗑️ Deleting user "${username}" from TAURI...`, 'test');
+
+  try {
+    // First login to get auth
+    const loginResult = await TauriAdapter.auth.login({
+      phone: username,
+      password: password
+    });
+
+    if (!loginResult.success) {
+      log(`❌ Cannot login to delete: ${loginResult.error}`, 'error');
+      return { success: false };
+    }
+
+    const result = await TauriAdapter.auth.deleteAccount({
+      password: password,
+      deleteData: true
+    });
+
+    if (result.success) {
+      log(`✅ User deleted from Tauri`, 'success');
+      TauriAdapter.clearToken();
+    } else {
+      log(`❌ Delete failed: ${result.error}`, 'error');
+    }
+
+    await updateStatus();
+    return result;
+  } catch (e) {
+    log(`❌ Error: ${e.message}`, 'error');
+    return { success: false, error: e.message };
+  }
+}
+
 // ============================================================================
 // AUTOMATED TESTS
 // ============================================================================
@@ -787,6 +825,7 @@ $('div', { parent: controlPanel, css: { width: '100%', height: '1px' } });
 createButton('🚪 Logout Tauri', logoutFromTauri, '#ff9800');
 createButton('🚪 Logout Fastify', logoutFromFastify, '#ff9800');
 createButton('🚪 Logout All', logoutFromAll, '#f44336');
+createButton('🗑️ Delete (Tauri)', deleteUserFromTauri, '#b71c1c');
 createButton('🗑️ Delete (Fastify)', deleteUserFromFastify, '#d32f2f');
 
 $('div', { parent: controlPanel, css: { width: '100%', height: '1px' } });
