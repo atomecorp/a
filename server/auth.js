@@ -148,11 +148,11 @@ export async function sendSMS(phone, message) {
 async function syncUserToTauri(username, phone, passwordHash) {
     const tauriUrl = process.env.TAURI_URL || 'http://localhost:3000';
     const syncSecret = process.env.SYNC_SECRET || 'squirrel-sync-2024';
-    
+
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
+
         const response = await fetch(`${tauriUrl}/api/auth/local/sync-register`, {
             method: 'POST',
             headers: {
@@ -167,11 +167,11 @@ async function syncUserToTauri(username, phone, passwordHash) {
             }),
             signal: controller.signal
         });
-        
+
         clearTimeout(timeoutId);
-        
+
         const data = await response.json();
-        
+
         if (data.success || data.alreadyExists) {
             console.log(`🔄 User synced to Tauri: ${username} (${phone})`);
             return { success: true, synced: true };
