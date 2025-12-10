@@ -196,35 +196,40 @@ export function registerAtomeRoutes(server, dataSource) {
                 properties: allProperties
             });
 
+            const now = new Date().toISOString();
             console.log(`✅ [Atome] Created: ${object_id} (${kind})`);
 
             // Get client ID from header to exclude from broadcast (avoid echo back to sender)
             const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
 
+            // Build unified atome object (same as Tauri format)
+            const unifiedAtome = {
+                id: object_id,
+                kind: kind || 'generic',
+                type: tag || 'div',
+                data: mergedProperties,
+                snapshot: mergedProperties,
+                parentId: parentId || null,
+                ownerId: principal_id,
+                logicalClock: 1,
+                syncStatus: 'synced',
+                deviceId: null,
+                createdAt: now,
+                updatedAt: now,
+                meta: {}
+            };
+
             // Broadcast to all connected clients EXCEPT the sender for real-time sync
             broadcastMessage('atome:created', {
-                atome: {
-                    id: object_id,
-                    originalId: id || null,  // Client's original ID for dedup
-                    kind,
-                    tag,
-                    parentId,
-                    properties: mergedProperties,
-                    createdAt: new Date().toISOString(),
-                    createdBy: principal_id
-                }
-            }, senderClientId);  // Exclude sender from broadcast
+                atome: unifiedAtome
+            }, senderClientId);
 
+            // Return in UNIFIED format (same as Tauri)
             return {
                 success: true,
-                data: {
-                    id: object_id,
-                    kind,
-                    tag,
-                    parentId,
-                    properties,
-                    createdAt: new Date().toISOString()
-                }
+                message: 'Atome created successfully',
+                atome: unifiedAtome,
+                data: unifiedAtome
             };
 
         } catch (error) {
@@ -390,16 +395,25 @@ export function registerAtomeRoutes(server, dataSource) {
                 }
             }
 
+            const props = atome.properties || {};
+
+            // Return in UNIFIED format (same as Tauri)
             return {
                 success: true,
-                data: {
+                atome: {
                     id: atome.object_id,
-                    kind: atome.properties.kind,
-                    tag: atome.properties.tag,
-                    parentId: atome.properties.parentId || atome.parent_id,
-                    properties: atome.properties,
+                    kind: props.kind || atome.kind || 'generic',
+                    type: props.tag || props.type || 'div',
+                    data: props,
+                    snapshot: props,
+                    parentId: props.parentId || atome.parent_id || null,
+                    ownerId: atome.created_by,
+                    logicalClock: 1,
+                    syncStatus: 'synced',
+                    deviceId: null,
                     createdAt: atome.created_at,
-                    createdBy: atome.created_by
+                    updatedAt: atome.updated_at || atome.created_at,
+                    meta: {}
                 }
             };
 
@@ -422,9 +436,8 @@ export function registerAtomeRoutes(server, dataSource) {
             await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
-            // Accept both camelCase and snake_case for compatibility
-            const parentId = request.query.parentId || request.query.parent_id;
-            const projectId = request.query.projectId || request.query.project_id;
+            const parentId = request.query.parentId;
+            const projectId = request.query.projectId;
             const { kind } = request.query;
 
             console.log(`[Atome] LIST - Looking for atomes for user: ${principal_id}`);
@@ -432,23 +445,29 @@ export function registerAtomeRoutes(server, dataSource) {
             // Get all atomes for this user
             const atomes = await db.getAtomesByUser(principal_id);
 
-            // Apply filters and map to camelCase response
-            let results = atomes.map(atome => ({
-                id: atome.object_id,
-                kind: atome.properties.kind || atome.kind,
-                tag: atome.properties.tag,
-                parentId: atome.properties.parentId || atome.properties.parent_id || atome.parent_id,
-                properties: atome.properties,
-                createdAt: atome.created_at,
-                createdBy: atome.created_by
-            }));
+            // Map to UNIFIED format (same as Tauri)
+            let results = atomes.map(atome => {
+                const props = atome.properties || {};
+                return {
+                    id: atome.object_id,
+                    kind: props.kind || atome.kind || 'generic',
+                    type: props.tag || props.type || 'div',
+                    data: props,
+                    snapshot: props,
+                    parentId: props.parentId || atome.parent_id || null,
+                    ownerId: atome.created_by,
+                    logicalClock: 1,
+                    syncStatus: 'synced',
+                    deviceId: null,
+                    createdAt: atome.created_at,
+                    updatedAt: atome.updated_at || atome.created_at,
+                    meta: {}
+                };
+            });
 
             // Filter by projectId
             if (projectId) {
-                results = results.filter(a =>
-                    a.properties.projectId === projectId ||
-                    a.properties.project_id === projectId
-                );
+                results = results.filter(a => a.data.projectId === projectId);
             }
 
             // Filter by kind
@@ -458,19 +477,16 @@ export function registerAtomeRoutes(server, dataSource) {
 
             // Filter by parentId
             if (parentId) {
-                results = results.filter(a =>
-                    a.parentId === parentId ||
-                    a.properties?.parentId === parentId ||
-                    a.properties?.parent_id === parentId
-                );
+                results = results.filter(a => a.parentId === parentId);
             }
 
             console.log(`📋 [Atome] List for user ${principal_id}: ${results.length} atomes`);
 
+            // Return in UNIFIED format (same as Tauri: atomes array, total count)
             return {
                 success: true,
-                data: results,
-                count: results.length
+                atomes: results,
+                total: results.length
             };
 
         } catch (error) {

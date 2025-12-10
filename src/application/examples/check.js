@@ -322,6 +322,144 @@ async function syncUserToTauri(username, password) {
   }
 }
 
+/**
+ * Sync projects and their atomes between Tauri and Fastify
+ * Projects and atomes created on one server will be replicated to the other
+ */
+async function syncProjectsBetweenServers() {
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+
+  if (!localToken || !cloudToken) {
+    log('⚠️ Sync skipped: need both Tauri and Fastify tokens', 'warning');
+    return;
+  }
+
+  log('🔄 Syncing projects & atomes between servers...', 'info');
+
+  let tauriProjects = [];
+  let fastifyProjects = [];
+
+  // Get projects from Tauri
+  try {
+    const result = await TauriAdapter.atome.list({ kind: 'project' });
+    if (result.success) {
+      tauriProjects = result.atomes || [];
+      log(`📦 Tauri projects: ${tauriProjects.length}`, 'info');
+    }
+  } catch (e) {
+    log(`❌ Error fetching Tauri projects: ${e.message}`, 'error');
+  }
+
+  // Get projects from Fastify
+  try {
+    const result = await FastifyAdapter.atome.list({ kind: 'project' });
+    if (result.success) {
+      fastifyProjects = result.atomes || [];
+      log(`📦 Fastify projects: ${fastifyProjects.length}`, 'info');
+    }
+  } catch (e) {
+    log(`❌ Error fetching Fastify projects: ${e.message}`, 'error');
+  }
+
+  let syncedProjects = 0;
+  let syncedAtomes = 0;
+
+  // Sync Tauri → Fastify (projects)
+  for (const proj of tauriProjects) {
+    if (!fastifyProjects.find(p => p.id === proj.id)) {
+      try {
+        const result = await FastifyAdapter.atome.create({
+          id: proj.id,
+          kind: 'project',
+          type: 'container',
+          data: proj.data || { name: proj.id.substring(0, 8) }
+        });
+        if (result.success) {
+          syncedProjects++;
+          log(`➡️ Synced to Fastify: ${proj.data?.name || proj.id}`, 'info');
+        }
+      } catch (e) { }
+    }
+  }
+
+  // Sync Fastify → Tauri (projects)
+  for (const proj of fastifyProjects) {
+    if (!tauriProjects.find(p => p.id === proj.id)) {
+      try {
+        const result = await TauriAdapter.atome.create({
+          id: proj.id,
+          kind: 'project',
+          type: 'container',
+          data: proj.data || { name: proj.id.substring(0, 8) }
+        });
+        if (result.success) {
+          syncedProjects++;
+          log(`⬅️ Synced to Tauri: ${proj.data?.name || proj.id}`, 'info');
+        }
+      } catch (e) { }
+    }
+  }
+
+  // Get all shapes
+  let tauriAtomes = [];
+  let fastifyAtomes = [];
+
+  try {
+    const result = await TauriAdapter.atome.list({ kind: 'shape' });
+    if (result.success) {
+      tauriAtomes = result.atomes || [];
+      log(`📦 Tauri shapes: ${tauriAtomes.length}`, 'info');
+    }
+  } catch (e) { }
+
+  try {
+    const result = await FastifyAdapter.atome.list({ kind: 'shape' });
+    if (result.success) {
+      fastifyAtomes = result.atomes || [];
+      log(`📦 Fastify shapes: ${fastifyAtomes.length}`, 'info');
+    }
+  } catch (e) { }
+
+  // Sync Tauri → Fastify (shapes)
+  for (const atome of tauriAtomes) {
+    if (!fastifyAtomes.find(a => a.id === atome.id)) {
+      try {
+        const result = await FastifyAdapter.atome.create({
+          id: atome.id,
+          kind: atome.kind || 'shape',
+          type: atome.type || 'div',
+          parentId: atome.parentId,
+          data: atome.data || {}
+        });
+        if (result.success) syncedAtomes++;
+      } catch (e) { }
+    }
+  }
+
+  // Sync Fastify → Tauri (shapes)
+  for (const atome of fastifyAtomes) {
+    if (!tauriAtomes.find(a => a.id === atome.id)) {
+      try {
+        const result = await TauriAdapter.atome.create({
+          id: atome.id,
+          kind: atome.kind || 'shape',
+          type: atome.type || 'div',
+          parentId: atome.parentId,
+          data: atome.data || {}
+        });
+        if (result.success) syncedAtomes++;
+      } catch (e) { }
+    }
+  }
+
+  if (syncedProjects > 0 || syncedAtomes > 0) {
+    log(`✅ Synced: ${syncedProjects} project(s), ${syncedAtomes} atome(s)`, 'success');
+  } else {
+    log('✅ All synced (nothing new)', 'info');
+  }
+}
+
 async function createUserOnFastify() {
   const username = usernameInput.value;
   const password = passwordInput.value;
@@ -384,7 +522,8 @@ async function loginOnTauri() {
 
     if (result.success) {
       log(`✅ Logged in on Tauri! Token: ${result.token?.substring(0, 30)}...`, 'success');
-      // Auto-load atomes after login
+      // Auto-sync between servers if both tokens available
+      await syncProjectsBetweenServers();
       await loadAndSyncAtomes();
     } else {
       log(`❌ Login failed: ${result.error || 'Unknown error'}`, 'error');
@@ -412,7 +551,8 @@ async function loginOnFastify() {
 
     if (result.success) {
       log(`✅ Logged in on Fastify! Token: ${result.token?.substring(0, 30)}...`, 'success');
-      // Auto-load atomes after login
+      // Auto-sync between servers if both tokens available
+      await syncProjectsBetweenServers();
       await loadAndSyncAtomes();
     } else {
       log(`❌ Login failed: ${result.error}`, 'error');
@@ -845,6 +985,28 @@ createButton('📝 Create on Tauri', createUserOnTauri, '#1976d2');
 createButton('📝 Create on Fastify', createUserOnFastify, '#388e3c');
 createButton('🔑 Login Tauri', loginOnTauri, '#1976d2');
 createButton('🔑 Login Fastify', loginOnFastify, '#388e3c');
+createButton('🔑 Login BOTH', async () => {
+  const username = usernameInput.value;
+  const password = passwordInput.value;
+  if (!username || !password) {
+    log('❌ Enter username and password', 'warn');
+    return;
+  }
+  log(`🔑 Logging in on BOTH servers...`, 'info');
+
+  // Sync user to both servers first (register if not exists)
+  await syncUserToTauri(username, password);
+  await syncUserToFastify(username, password);
+
+  // Login on both
+  await loginOnTauri();
+  await loginOnFastify();
+
+  // Auto-sync projects after login
+  await syncProjectsBetweenServers();
+
+  log('✅ Login complete on both servers', 'success');
+}, '#9c27b0');
 
 $('div', { parent: controlPanel, css: { width: '100%', height: '1px' } });
 
@@ -1370,21 +1532,34 @@ createProjectButton('➕ Create Project', async () => {
   const localToken = localStorage.getItem('local_auth_token');
   const cloudToken = localStorage.getItem('cloud_auth_token');
 
+  log(`🔍 Tokens - Tauri: ${localToken ? 'yes' : 'NO'}, Fastify: ${cloudToken ? 'yes' : 'NO'}`, 'info');
+
   let tauriOk = false;
   let fastifyOk = false;
 
-  // Create on both servers
+  // Create on both servers with SAME ID
   if (localToken) {
     try {
       const result = await TauriAdapter.atome.create(projectData);
       tauriOk = result.success;
-    } catch (e) { }
+      log(`📦 Tauri create: ${result.success ? '✅' : '❌'} ${result.error || ''}`, result.success ? 'success' : 'error');
+    } catch (e) {
+      log(`📦 Tauri error: ${e.message}`, 'error');
+    }
+  } else {
+    log(`⚠️ No Tauri token - project will only exist on Fastify`, 'warn');
   }
+
   if (cloudToken) {
     try {
       const result = await FastifyAdapter.atome.create(projectData);
       fastifyOk = result.success;
-    } catch (e) { }
+      log(`📦 Fastify create: ${result.success ? '✅' : '❌'} ${result.error || ''}`, result.success ? 'success' : 'error');
+    } catch (e) {
+      log(`📦 Fastify error: ${e.message}`, 'error');
+    }
+  } else {
+    log(`⚠️ No Fastify token - project will only exist on Tauri`, 'warn');
   }
 
   if (tauriOk || fastifyOk) {
@@ -1400,6 +1575,11 @@ createProjectButton('➕ Create Project', async () => {
     atomeArea.innerHTML = '';
     selectedAtomeId = null;
     selectedAtomeEl = null;
+
+    // Auto-sync: if one server was unavailable, sync when both are connected
+    if ((tauriOk && !fastifyOk) || (!tauriOk && fastifyOk)) {
+      log(`⚠️ Project created on one server only - will sync later`, 'warn');
+    }
   } else {
     log(`❌ Failed to create project`, 'error');
   }
@@ -1414,29 +1594,39 @@ createProjectButton('📂 Open Project', async () => {
   const localToken = localStorage.getItem('local_auth_token');
   const cloudToken = localStorage.getItem('cloud_auth_token');
 
+  log(`🔍 Tokens - Tauri: ${localToken ? 'yes' : 'NO'}, Fastify: ${cloudToken ? 'yes' : 'NO'}`, 'info');
+
   let projects = [];
 
   // Fetch projects from both servers
   if (localToken) {
     try {
       const result = await TauriAdapter.atome.list({ kind: 'project' });
+      log(`📦 Tauri projects: ${result.success ? (result.data || result.atomes || []).length : 'FAILED'} ${result.error || ''}`, 'info');
       if (result.success) {
         (result.data || result.atomes || []).forEach(p => {
           if (!projects.find(x => x.id === p.id)) projects.push(p);
         });
       }
-    } catch (e) { }
+    } catch (e) {
+      log(`📦 Tauri error: ${e.message}`, 'error');
+    }
   }
   if (cloudToken) {
     try {
       const result = await FastifyAdapter.atome.list({ kind: 'project' });
+      log(`📦 Fastify projects: ${result.success ? (result.data || result.atomes || []).length : 'FAILED'} ${result.error || ''}`, 'info');
       if (result.success) {
         (result.data || result.atomes || []).forEach(p => {
           if (!projects.find(x => x.id === p.id)) projects.push(p);
         });
       }
-    } catch (e) { }
+    } catch (e) {
+      log(`📦 Fastify error: ${e.message}`, 'error');
+    }
   }
+
+  log(`📋 Total projects found: ${projects.length}`, 'info');
 
   if (projects.length === 0) {
     log('ℹ️ No projects found. Create one first.', 'info');
@@ -1498,9 +1688,9 @@ createProjectButton('📂 Open Project', async () => {
         color: 'white',
         transition: 'background-color 0.2s'
       },
-      onmouseover: function() { this.style.backgroundColor = '#4a4a4a'; },
-      onmouseout: function() { this.style.backgroundColor = '#3a3a3a'; },
-      onclick: async function() {
+      onmouseover: function () { this.style.backgroundColor = '#4a4a4a'; },
+      onmouseout: function () { this.style.backgroundColor = '#3a3a3a'; },
+      onclick: async function () {
         currentProjectId = project.id;
         currentProjectName = name;
         localStorage.setItem('current_project_id', currentProjectId);
@@ -1526,7 +1716,7 @@ createProjectButton('📂 Open Project', async () => {
       color: 'white',
       textAlign: 'center'
     },
-    onclick: function() { modal.remove(); }
+    onclick: function () { modal.remove(); }
   });
 }, '#2196f3');
 
@@ -1598,7 +1788,7 @@ createProjectButton('🗑️ Delete Project', async () => {
       cursor: 'pointer',
       color: 'white'
     },
-    onclick: function() { modal.remove(); }
+    onclick: function () { modal.remove(); }
   });
 
   // Confirm delete button
@@ -1612,7 +1802,7 @@ createProjectButton('🗑️ Delete Project', async () => {
       cursor: 'pointer',
       color: 'white'
     },
-    onclick: async function() {
+    onclick: async function () {
       modal.remove();
       log(`🗑️ Deleting project "${currentProjectName}"...`, 'info');
 
@@ -1783,7 +1973,7 @@ window.addEventListener('squirrel:atome-deleted', (e) => {
 // ============================================================================
 
 /**
- * Restore user session: load current project and its atomes
+ * Restore user session: sync projects and atomes, then load current project
  */
 async function restoreSession() {
   log('🔄 Restoring session...', 'info');
@@ -1796,7 +1986,12 @@ async function restoreSession() {
     return;
   }
 
-  // First, sync atomes between servers
+  // Auto-sync projects between servers (if both are available)
+  if (localToken && cloudToken) {
+    await syncProjectsBetweenServers();
+  }
+
+  // Sync atomes between servers
   await loadAndSyncAtomes();
 
   // If we have a current project, load its atomes
@@ -1805,6 +2000,61 @@ async function restoreSession() {
     await loadProjectAtomes(currentProjectId);
   }
 }
+
+// ============================================================================
+// SERVER AVAILABILITY MONITORING - Auto-sync when reconnected
+// ============================================================================
+
+const serverAvailabilityState = {
+  tauri: false,
+  fastify: false
+};
+
+async function monitorServerAvailability() {
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+
+  // Check Tauri availability
+  let tauriNowOnline = false;
+  try {
+    const response = await fetch('http://127.0.0.1:3000/api/auth/local/me', {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000)
+    });
+    tauriNowOnline = true;
+  } catch (e) {
+    tauriNowOnline = false;
+  }
+
+  // Check Fastify availability
+  let fastifyNowOnline = false;
+  try {
+    const response = await fetch('http://127.0.0.1:3001/api/auth/me', {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000)
+    });
+    fastifyNowOnline = true;
+  } catch (e) {
+    fastifyNowOnline = false;
+  }
+
+  // Detect reconnection and trigger sync
+  const tauriReconnected = !serverAvailabilityState.tauri && tauriNowOnline;
+  const fastifyReconnected = !serverAvailabilityState.fastify && fastifyNowOnline;
+
+  if ((tauriReconnected || fastifyReconnected) && localToken && cloudToken) {
+    log(`🔌 Server reconnected! Auto-syncing...`, 'info');
+    await syncProjectsBetweenServers();
+    await loadAndSyncAtomes();
+  }
+
+  // Update state
+  serverAvailabilityState.tauri = tauriNowOnline;
+  serverAvailabilityState.fastify = fastifyNowOnline;
+}
+
+// Check every 10 seconds for reconnection
+setInterval(monitorServerAvailability, 10000);
 
 // ============================================================================
 // FINAL INIT
@@ -1816,5 +2066,8 @@ log('Or use individual buttons for manual testing', 'info');
 
 // Restore session if tokens exist
 restoreSession();
+
+// Initial availability check
+monitorServerAvailability();
 
 updateStatus();
