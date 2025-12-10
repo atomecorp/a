@@ -477,9 +477,18 @@ export function createAdapter(config) {
 
         atome: {
             async create(data) {
+                // Transform to ADOLE format: parent (not parentId), no ownerId
+                const serverData = { ...data };
+                if ('parentId' in serverData) {
+                    serverData.parent = serverData.parentId;
+                    delete serverData.parentId;
+                }
+                delete serverData.ownerId;
+                delete serverData.owner;  // Server determines owner from token
+
                 return request('/api/atome/create', {
                     method: 'POST',
-                    body: data
+                    body: serverData
                 });
             },
             async get(id) {
@@ -487,9 +496,12 @@ export function createAdapter(config) {
             },
             async list(params = {}) {
                 const query = new URLSearchParams();
-                ['kind', 'type', 'page', 'limit', 'sortBy', 'sortOrder', 'parentId'].forEach(key => {
+                // Support both parent and parentId for backward compatibility
+                ['kind', 'type', 'page', 'limit', 'sortBy', 'sortOrder', 'parent'].forEach(key => {
                     if (params[key]) query.append(key, params[key]);
                 });
+                // Also check for parentId and map to parent
+                if (params.parentId) query.append('parent', params.parentId);
                 const qs = query.toString();
                 return request(`/api/atome/list${qs ? '?' + qs : ''}`, { method: 'GET' });
             },

@@ -380,14 +380,14 @@ async function syncProjectsBetweenServers() {
 
   // Helper to check if parent exists on target
   const parentExistsOnTarget = (atome, targetIds, targetAtomes) => {
-    if (!atome.parentId) return true; // No parent = project = always OK
-    return targetIds.has(atome.parentId);
+    if (!atome.parent) return true; // No parent = project = always OK
+    return targetIds.has(atome.parent);
   };
 
-  // Sort atomes: projects first (parentId null), then children
+  // Sort atomes: projects first (parent null), then children
   const sortByParent = (a, b) => {
-    if (!a.parentId && b.parentId) return -1;
-    if (a.parentId && !b.parentId) return 1;
+    if (!a.parent && b.parent) return -1;
+    if (a.parent && !b.parent) return 1;
     return 0;
   };
 
@@ -399,7 +399,7 @@ async function syncProjectsBetweenServers() {
   for (const atome of tauriToSync) {
     // Check if parent exists on Fastify
     if (!parentExistsOnTarget(atome, fastifyIds, fastifyAtomes)) {
-      log(`⏭️ Skip ${atome.id.substring(0, 8)}: parent ${atome.parentId?.substring(0, 8)} missing on Fastify`, 'warn');
+      log(`⏭️ Skip ${atome.id.substring(0, 8)}: parent ${atome.parent?.substring(0, 8)} missing on Fastify`, 'warn');
       skipped++;
       continue;
     }
@@ -409,7 +409,7 @@ async function syncProjectsBetweenServers() {
         id: atome.id,
         kind: atome.kind,
         type: atome.type,
-        parentId: atome.parentId,
+        parent: atome.parent,
         data: atome.data
       });
       if (result.success) {
@@ -434,7 +434,7 @@ async function syncProjectsBetweenServers() {
   for (const atome of fastifyToSync) {
     // Check if parent exists on Tauri
     if (!parentExistsOnTarget(atome, tauriIds, tauriAtomes)) {
-      log(`⏭️ Skip ${atome.id.substring(0, 8)}: parent ${atome.parentId?.substring(0, 8)} missing on Tauri`, 'warn');
+      log(`⏭️ Skip ${atome.id.substring(0, 8)}: parent ${atome.parent?.substring(0, 8)} missing on Tauri`, 'warn');
       skipped++;
       continue;
     }
@@ -444,7 +444,7 @@ async function syncProjectsBetweenServers() {
         id: atome.id,
         kind: atome.kind,
         type: atome.type,
-        parentId: atome.parentId,
+        parent: atome.parent,
         data: atome.data
       });
       if (result.success) {
@@ -1235,7 +1235,7 @@ createAtomeButton('➕ Create Atome', async () => {
     id: atomeId,
     kind: 'shape',
     type: 'div',
-    parentId: currentProjectId, // Link to current project
+    parent: currentProjectId, // Link to current project
     data: {
       id: atomeId,
       css: { width: '60px', height: '60px', backgroundColor: color, borderRadius: '8px' },
@@ -1868,7 +1868,7 @@ async function loadProjectAtomes(projectId) {
   // Fetch from Tauri
   if (localToken) {
     try {
-      const result = await TauriAdapter.atome.list({ kind: 'shape', parentId: projectId });
+      const result = await TauriAdapter.atome.list({ kind: 'shape', parent: projectId });
       if (result.success) {
         (result.data || result.atomes || []).forEach(a => allAtomes.set(a.id, a));
       }
@@ -1878,7 +1878,7 @@ async function loadProjectAtomes(projectId) {
   // Fetch from Fastify
   if (cloudToken) {
     try {
-      const result = await FastifyAdapter.atome.list({ kind: 'shape', parentId: projectId });
+      const result = await FastifyAdapter.atome.list({ kind: 'shape', parent: projectId });
       if (result.success) {
         (result.data || result.atomes || []).forEach(a => allAtomes.set(a.id, a));
       }

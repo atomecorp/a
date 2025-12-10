@@ -10,6 +10,60 @@ import { v4 as uuidv4 } from 'uuid';
 import { broadcastMessage } from './githubSync.js';
 import db from '../database/adole.js';
 
+// =============================================================================
+// AUTO-SYNC TO TAURI
+// =============================================================================
+
+const TAURI_URL = process.env.TAURI_URL || 'http://localhost:3000';
+const SYNC_SECRET = process.env.SYNC_SECRET || 'squirrel-sync-2024';
+
+/**
+ * Sync an atome to Tauri server automatically
+ * This is called after create/update operations on Fastify
+ */
+async function syncAtomeToTauri(atome) {
+    try {
+        const syncPayload = {
+            atomes: [{
+                id: atome.id,
+                kind: atome.kind,
+                type: atome.type,
+                data: atome.data || atome.properties || {},
+                snapshot: atome.data || atome.properties || {},
+                parent: atome.parent,
+                owner: atome.owner,
+                logical_clock: atome.logical_clock || 1,
+                sync_status: 'synced',
+                device_id: null,
+                created_at: atome.created_at,
+                updated_at: atome.updated_at,
+                meta: {},
+                deleted: false
+            }]
+        };
+
+        const response = await fetch(`${TAURI_URL}/api/atome/sync/receive`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Sync-Secret': SYNC_SECRET
+            },
+            body: JSON.stringify(syncPayload),
+            signal: AbortSignal.timeout(5000)
+        });
+
+        if (response.ok) {
+            console.log(`🔄 [AutoSync] Synced atome ${atome.id} to Tauri`);
+        } else {
+            const body = await response.text();
+            console.log(`⚠️ [AutoSync] Tauri returned ${response.status}: ${body}`);
+        }
+    } catch (error) {
+        // Don't fail - Tauri might be offline
+        console.log(`⚠️ [AutoSync] Could not reach Tauri: ${error.message}`);
+    }
+}
+
 /**
  * Validate authentication token and return user info
  */
@@ -37,7 +91,7 @@ async function validateToken(request) {
 }
 
 /**
- * Format object to unified API response format
+ * Format object to unified API response format (ADOLE schema)
  */
 function formatAtome(obj) {
     if (!obj) return null;
@@ -46,12 +100,12 @@ function formatAtome(obj) {
         id: obj.id,
         type: obj.type,
         kind: obj.kind,
-        parentId: obj.parent,
-        ownerId: obj.owner,
-        creatorId: obj.creator,
+        parent: obj.parent,
+        owner: obj.owner,
+        creator: obj.creator,
         data: obj.properties || {},
-        createdAt: obj.created_at,
-        updatedAt: obj.updated_at
+        created_at: obj.created_at,
+        updated_at: obj.updated_at
     };
 }
 
@@ -94,6 +148,9 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                 type: 'atome-created',
                 atome: formatted
             });
+
+            // Auto-sync to Tauri in background (non-blocking)
+            syncAtomeToTauri(formatted).catch(() => { });
 
             return reply.code(201).send({
                 success: true,
@@ -473,6 +530,103 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             });
         } catch (error) {
             console.error('[Atome] Snapshot error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // SYNC - POST /api/atome/sync/receive - Receive full atomes from Tauri
+    // This endpoint accepts ADOLE-formatted atomes for cross-server sync
+    // Supports both JWT auth (for client) and sync-secret (for server-to-server)
+    // ========================================================================
+    server.post('/api/atome/sync/receive', async (request, reply) => {
+        // Check for sync-secret header first (server-to-server sync)
+        const syncSecret = request.headers['x-sync-secret'];
+        const expectedSecret = process.env.SYNC_SECRET || 'squirrel-sync-2024';
+
+        let userId;
+
+        if (syncSecret === expectedSecret) {
+            // Server-to-server sync - use owner from first atome
+            const { atomes } = request.body;
+            if (atomes && atomes.length > 0) {
+                userId = atomes[0].owner;
+            }
+            if (!userId) {
+                return reply.code(400).send({ success: false, error: 'No owner in atomes' });
+            }
+        } else {
+            // Regular JWT auth
+            const user = await validateToken(request);
+            if (!user) {
+                return reply.code(401).send({ success: false, error: 'Unauthorized' });
+            }
+            userId = user.id;
+        }
+
+        const { atomes } = request.body;
+
+        if (!Array.isArray(atomes)) {
+            return reply.code(400).send({
+                success: false,
+                error: 'atomes must be an array'
+            });
+        }
+
+        try {
+            let synced = 0;
+
+            for (const atome of atomes) {
+                // Check if atome already exists
+                const existing = await db.getAtome(atome.id);
+
+                // Check if parent exists (to avoid FK constraint error)
+                let parentValue = atome.parent || null;
+                if (parentValue) {
+                    const parentExists = await db.getAtome(parentValue);
+                    if (!parentExists) {
+                        console.log(`[Sync] Parent ${parentValue} not found, setting to null`);
+                        parentValue = null;
+                    }
+                }
+
+                if (existing) {
+                    // Update if incoming has higher logical_clock
+                    const existingClock = existing.logical_clock || 1;
+                    const incomingClock = atome.logical_clock || 1;
+
+                    if (incomingClock > existingClock) {
+                        // updateAtome takes (id, properties, author)
+                        await db.updateAtome(atome.id, atome.data || {}, userId);
+                        synced++;
+                    }
+                } else {
+                    // Create new atome
+                    await db.createAtome({
+                        id: atome.id,
+                        type: atome.type || 'shape',
+                        kind: atome.kind || null,
+                        parent: parentValue,
+                        owner: atome.owner || userId,
+                        properties: atome.data || {},
+                        author: userId
+                    });
+                    synced++;
+                }
+            }
+
+            console.log(`[Sync] Received ${synced} atomes from Tauri for user ${userId}`);
+
+            return reply.send({
+                success: true,
+                message: `Synced ${synced} atomes`,
+                synced
+            });
+        } catch (error) {
+            console.error('[Atome] Sync receive error:', error);
             return reply.code(500).send({
                 success: false,
                 error: error.message

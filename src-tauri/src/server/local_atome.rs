@@ -29,6 +29,76 @@ use uuid::Uuid;
 /// Default tenant ID for local storage
 const DEFAULT_TENANT_ID: &str = "local-tenant";
 
+/// Fastify server URL for auto-sync
+const FASTIFY_URL: &str = "http://localhost:3001";
+
+// =============================================================================
+// AUTO-SYNC TO FASTIFY
+// =============================================================================
+
+/// Sync secret for server-to-server communication
+const SYNC_SECRET: &str = "squirrel-sync-2024";
+
+/// Sync an atome to Fastify server automatically
+/// This is called after create/update operations on Tauri
+async fn sync_atome_to_fastify(atome: &AtomeData) {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            println!("⚠️ [AutoSync] Failed to create HTTP client: {}", e);
+            return;
+        }
+    };
+
+    // Build sync payload
+    let sync_payload = serde_json::json!({
+        "atomes": [{
+            "id": atome.id,
+            "kind": atome.kind,
+            "type": atome.atome_type,
+            "data": atome.data,
+            "snapshot": atome.snapshot,
+            "parent": atome.parent,
+            "owner": atome.owner,
+            "logical_clock": atome.logical_clock,
+            "sync_status": "synced",
+            "device_id": atome.device_id,
+            "created_at": atome.created_at,
+            "updated_at": atome.updated_at,
+            "meta": atome.meta,
+            "deleted": false
+        }]
+    });
+
+    let url = format!("{}/api/atome/sync/receive", FASTIFY_URL);
+    
+    match client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("X-Sync-Secret", SYNC_SECRET)
+        .json(&sync_payload)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!("🔄 [AutoSync] Synced atome {} to Fastify", atome.id);
+            } else {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                println!("⚠️ [AutoSync] Fastify returned {}: {}", status, body);
+            }
+        }
+        Err(e) => {
+            // Don't fail - Fastify might be offline
+            println!("⚠️ [AutoSync] Could not reach Fastify: {}", e);
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct LocalAtomeState {
     pub db: Arc<Mutex<Connection>>,
@@ -67,11 +137,9 @@ pub struct CreateAtomeRequest {
     pub snapshot: Option<serde_json::Value>,
     #[serde(default)]
     pub tag: Option<String>,
-    #[serde(rename = "parentId", alias = "parent_id")]
-    pub parent_id: Option<String>,
-    #[serde(rename = "logicalClock", alias = "logical_clock", default = "default_version")]
+    pub parent: Option<String>,
+    #[serde(default = "default_version")]
     pub logical_clock: i64,
-    #[serde(rename = "deviceId", alias = "device_id")]
     pub device_id: Option<String>,
     #[serde(default)]
     pub meta: Option<serde_json::Value>,
@@ -111,11 +179,8 @@ pub struct UpdateAtomeRequest {
     pub data: Option<serde_json::Value>,
     pub snapshot: Option<serde_json::Value>,
     pub kind: Option<String>,
-    #[serde(rename = "parentId", alias = "parent_id")]
-    pub parent_id: Option<String>,
-    #[serde(rename = "logicalClock", alias = "logical_clock")]
+    pub parent: Option<String>,
     pub logical_clock: Option<i64>,
-    #[serde(rename = "deviceId", alias = "device_id")]
     pub device_id: Option<String>,
     pub meta: Option<serde_json::Value>,
 }
@@ -123,9 +188,7 @@ pub struct UpdateAtomeRequest {
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
     pub kind: Option<String>,
-    #[serde(rename = "parentId", alias = "parent_id")]
-    pub parent_id: Option<String>,
-    #[serde(rename = "syncStatus", alias = "sync_status")]
+    pub parent: Option<String>,
     pub sync_status: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
@@ -156,19 +219,12 @@ pub struct AtomeData {
     pub atome_type: String,
     pub data: serde_json::Value,
     pub snapshot: serde_json::Value,
-    #[serde(rename = "parentId")]
-    pub parent_id: Option<String>,
-    #[serde(rename = "ownerId")]
-    pub owner_id: String,
-    #[serde(rename = "logicalClock")]
+    pub parent: Option<String>,
+    pub owner: String,
     pub logical_clock: i64,
-    #[serde(rename = "syncStatus")]
     pub sync_status: String,
-    #[serde(rename = "deviceId")]
     pub device_id: Option<String>,
-    #[serde(rename = "createdAt")]
     pub created_at: String,
-    #[serde(rename = "updatedAt")]
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meta: Option<serde_json::Value>,
@@ -310,7 +366,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     )?;
 
     // =========================================================================
-    // Legacy: Keep atomes table for backward compatibility during migration
+    // Main atomes table - ADOLE compliant naming (owner, parent, not owner_id, parent_id)
     // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS atomes (
@@ -318,8 +374,8 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
             tenant_id TEXT NOT NULL DEFAULT 'local-tenant',
             kind TEXT NOT NULL DEFAULT 'atome',
             type TEXT NOT NULL DEFAULT 'atome',
-            owner_id TEXT NOT NULL,
-            parent_id TEXT,
+            owner TEXT NOT NULL,
+            parent TEXT,
             data TEXT NOT NULL DEFAULT '{}',
             snapshot TEXT NOT NULL DEFAULT '{}',
             logical_clock INTEGER NOT NULL DEFAULT 1,
@@ -341,10 +397,10 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     // Run migrations for legacy table
     run_migrations(&conn)?;
 
-    // Create indexes for legacy table
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id)", [])?;
+    // Create indexes for atomes table (ADOLE naming)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_kind ON atomes(kind)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_sync_status ON atomes(sync_status)", [])?;
 
     println!("📦 ADOLE v2.0 database initialized: {:?}", db_path);
@@ -584,7 +640,7 @@ async fn create_atome_handler(
                 &atome_id,
                 &req.atome_type,
                 &req.kind,
-                &req.parent_id,
+                &req.parent,
                 &claims.sub,
                 &now,
             ],
@@ -604,9 +660,9 @@ async fn create_atome_handler(
             }
         }
 
-        // 3. Also insert into legacy atomes table for backward compatibility
+        // 3. Also insert into atomes table (ADOLE compliant naming)
         if let Err(e) = db.execute(
-            "INSERT INTO atomes (id, tenant_id, kind, type, owner_id, parent_id, data, snapshot, 
+            "INSERT INTO atomes (id, tenant_id, kind, type, owner, parent, data, snapshot, 
              logical_clock, device_id, sync_status, meta, created_at, updated_at, created_source)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             rusqlite::params![
@@ -615,7 +671,7 @@ async fn create_atome_handler(
                 &req.kind,
                 &req.atome_type,
                 &claims.sub,
-                &req.parent_id,
+                &req.parent,
                 &data_json,
                 &snapshot_json,
                 &req.logical_clock,
@@ -650,8 +706,8 @@ async fn create_atome_handler(
         atome_type: req.atome_type,
         data: final_data_value,
         snapshot: snapshot_value,
-        parent_id: req.parent_id,
-        owner_id: claims.sub,
+        parent: req.parent,
+        owner: claims.sub,
         logical_clock: req.logical_clock,
         sync_status: "synced".to_string(),
         device_id,
@@ -659,6 +715,12 @@ async fn create_atome_handler(
         updated_at: now,
         meta: req.meta,
     };
+
+    // Auto-sync to Fastify in background (non-blocking)
+    let atome_for_sync = atome_data.clone();
+    tokio::spawn(async move {
+        sync_atome_to_fastify(&atome_for_sync).await;
+    });
 
     (
         StatusCode::CREATED,
@@ -697,8 +759,8 @@ async fn list_atomes_handler(
     // Build query
     let db = state.db.lock().unwrap();
     
-    // Build WHERE clause
-    let mut conditions = vec!["owner_id = ?1".to_string(), "deleted = 0".to_string()];
+    // Build WHERE clause (ADOLE naming: owner, parent)
+    let mut conditions = vec!["owner = ?1".to_string(), "deleted = 0".to_string()];
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(claims.sub.clone())];
     let mut param_idx = 2;
 
@@ -708,9 +770,9 @@ async fn list_atomes_handler(
         param_idx += 1;
     }
 
-    if let Some(ref parent_id) = query.parent_id {
-        conditions.push(format!("parent_id = ?{}", param_idx));
-        params.push(Box::new(parent_id.clone()));
+    if let Some(ref parent_val) = query.parent {
+        conditions.push(format!("parent = ?{}", param_idx));
+        params.push(Box::new(parent_val.clone()));
         param_idx += 1;
     }
 
@@ -733,9 +795,9 @@ async fn list_atomes_handler(
         count_result
     };
 
-    // Fetch atomes with ADOLE fields
+    // Fetch atomes with ADOLE fields (owner, parent columns)
     let select_sql = format!(
-        "SELECT id, kind, COALESCE(type, 'atome'), owner_id, parent_id, data, 
+        "SELECT id, kind, COALESCE(type, 'atome'), owner, parent, data, 
                 COALESCE(snapshot, data), COALESCE(logical_clock, 1), 
                 COALESCE(sync_status, 'synced'), device_id, 
                 created_at, updated_at, meta
@@ -777,8 +839,8 @@ async fn list_atomes_handler(
             id: row.get(0)?,
             kind: row.get(1)?,
             atome_type: row.get(2)?,
-            owner_id: row.get(3)?,
-            parent_id: row.get(4)?,
+            owner: row.get(3)?,
+            parent: row.get(4)?,
             data,
             snapshot,
             logical_clock: row.get(7)?,
@@ -842,12 +904,12 @@ async fn get_atome_handler(
     let db = state.db.lock().unwrap();
     
     let result = db.query_row(
-        "SELECT id, kind, COALESCE(type, 'atome'), owner_id, parent_id, data, 
+        "SELECT id, kind, COALESCE(type, 'atome'), owner, parent, data, 
                 COALESCE(snapshot, data), COALESCE(logical_clock, 1), 
                 COALESCE(sync_status, 'synced'), device_id, 
                 created_at, updated_at, meta
          FROM atomes 
-         WHERE id = ?1 AND owner_id = ?2 AND deleted = 0",
+         WHERE id = ?1 AND owner = ?2 AND deleted = 0",
         rusqlite::params![&id, &claims.sub],
         |row| {
             let data_str: String = row.get(5)?;
@@ -861,8 +923,8 @@ async fn get_atome_handler(
                 id: row.get(0)?,
                 kind: row.get(1)?,
                 atome_type: row.get(2)?,
-                owner_id: row.get(3)?,
-                parent_id: row.get(4)?,
+                owner: row.get(3)?,
+                parent: row.get(4)?,
                 data,
                 snapshot,
                 logical_clock: row.get(7)?,
@@ -920,14 +982,14 @@ async fn update_atome_handler(
     let now = Utc::now().to_rfc3339();
     let db = state.db.lock().unwrap();
 
-    // First check if atome exists and belongs to user
+    // First check if atome exists and belongs to user (ADOLE naming: owner, parent)
     let existing: Result<(String, String, Option<String>, String), _> = db.query_row(
-        "SELECT kind, data, parent_id, owner_id FROM atomes WHERE id = ?1 AND owner_id = ?2 AND deleted = 0",
+        "SELECT kind, data, parent, owner FROM atomes WHERE id = ?1 AND owner = ?2 AND deleted = 0",
         rusqlite::params![&id, &claims.sub],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     );
 
-    let (current_kind, current_data_str, current_parent_id, _owner_id) = match existing {
+    let (current_kind, current_data_str, current_parent, _owner) = match existing {
         Ok(data) => data,
         Err(_) => {
             return (
@@ -960,7 +1022,7 @@ async fn update_atome_handler(
     };
 
     let new_kind = req.kind.unwrap_or(current_kind);
-    let new_parent_id = req.parent_id.or(current_parent_id);
+    let new_parent = req.parent.or(current_parent);
     let data_json = serde_json::to_string(&new_data).unwrap_or_else(|_| "{}".to_string());
 
     // Get current logical_clock and increment
@@ -974,10 +1036,10 @@ async fn update_atome_handler(
     // Get device_id from request or use "local"
     let device_id = req.device_id.clone().unwrap_or_else(|| "local".to_string());
 
-    // Update with ADOLE fields
+    // Update with ADOLE fields (owner, parent columns)
     if let Err(e) = db.execute(
-        "UPDATE atomes SET kind = ?1, data = ?2, parent_id = ?3, updated_at = ?4, logical_clock = ?5, device_id = ?6, sync_status = 'pending' WHERE id = ?7",
-        rusqlite::params![&new_kind, &data_json, &new_parent_id, &now, &new_clock, &device_id, &id],
+        "UPDATE atomes SET kind = ?1, data = ?2, parent = ?3, updated_at = ?4, logical_clock = ?5, device_id = ?6, sync_status = 'pending' WHERE id = ?7",
+        rusqlite::params![&new_kind, &data_json, &new_parent, &now, &new_clock, &device_id, &id],
     ) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -995,9 +1057,9 @@ async fn update_atome_handler(
 
     println!("📝 Updated atome {} (v{}) for user {}", id, new_clock, claims.sub);
 
-    // Fetch updated atome with ADOLE fields
+    // Fetch updated atome with ADOLE fields (owner, parent columns)
     let updated = db.query_row(
-        "SELECT id, kind, type, owner_id, parent_id, data, snapshot, logical_clock, sync_status, device_id, created_at, updated_at, meta FROM atomes WHERE id = ?1",
+        "SELECT id, kind, type, owner, parent, data, snapshot, logical_clock, sync_status, device_id, created_at, updated_at, meta FROM atomes WHERE id = ?1",
         rusqlite::params![&id],
         |row| {
             let data_str: String = row.get(5)?;
@@ -1011,8 +1073,8 @@ async fn update_atome_handler(
                 id: row.get(0)?,
                 kind: row.get(1)?,
                 atome_type: row.get(2)?,
-                owner_id: row.get(3)?,
-                parent_id: row.get(4)?,
+                owner: row.get(3)?,
+                parent: row.get(4)?,
                 data,
                 snapshot,
                 logical_clock: row.get(7)?,
@@ -1079,7 +1141,7 @@ async fn delete_atome_handler(
 
     // Soft delete (matching ADOLE/Eden pattern) with sync_status = pending
     let result = db.execute(
-        "UPDATE atomes SET deleted = 1, deleted_at = ?1, updated_at = ?1, logical_clock = ?2, sync_status = 'pending' WHERE id = ?3 AND owner_id = ?4 AND deleted = 0",
+        "UPDATE atomes SET deleted = 1, deleted_at = ?1, updated_at = ?1, logical_clock = ?2, sync_status = 'pending' WHERE id = ?3 AND owner = ?4 AND deleted = 0",
         rusqlite::params![&now, &new_clock, &id, &claims.sub],
     );
 
@@ -1147,19 +1209,12 @@ pub struct SyncAtomeData {
     pub atome_type: String,
     pub data: serde_json::Value,
     pub snapshot: serde_json::Value,
-    #[serde(rename = "parentId")]
-    pub parent_id: Option<String>,
-    #[serde(rename = "ownerId")]
-    pub owner_id: String,
-    #[serde(rename = "logicalClock")]
+    pub parent: Option<String>,
+    pub owner: String,
     pub logical_clock: i64,
-    #[serde(rename = "syncStatus")]
     pub sync_status: String,
-    #[serde(rename = "deviceId")]
     pub device_id: Option<String>,
-    #[serde(rename = "createdAt")]
     pub created_at: String,
-    #[serde(rename = "updatedAt")]
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meta: Option<serde_json::Value>,
@@ -1187,9 +1242,7 @@ pub struct SyncResponse {
 #[derive(Debug, Serialize)]
 pub struct SyncConflict {
     pub id: String,
-    #[serde(rename = "localClock")]
     pub local_clock: i64,
-    #[serde(rename = "remoteClock")]
     pub remote_clock: i64,
     pub resolution: String,
 }
@@ -1246,15 +1299,15 @@ async fn sync_push_handler(
                             rusqlite::params![&now, &atome.logical_clock, &atome.id],
                         );
                     } else {
-                        // Update
+                        // Update (ADOLE naming: parent column)
                         let _ = db.execute(
-                            "UPDATE atomes SET kind = ?1, type = ?2, data = ?3, snapshot = ?4, parent_id = ?5, logical_clock = ?6, device_id = ?7, updated_at = ?8, meta = ?9, sync_status = 'synced' WHERE id = ?10",
+                            "UPDATE atomes SET kind = ?1, type = ?2, data = ?3, snapshot = ?4, parent = ?5, logical_clock = ?6, device_id = ?7, updated_at = ?8, meta = ?9, sync_status = 'synced' WHERE id = ?10",
                             rusqlite::params![
                                 &atome.kind,
                                 &atome.atome_type,
                                 &data_json,
                                 &snapshot_json,
-                                &atome.parent_id,
+                                &atome.parent,
                                 &atome.logical_clock,
                                 &atome.device_id,
                                 &now,
@@ -1276,14 +1329,14 @@ async fn sync_push_handler(
                 let created_source = "synced";
 
                 let _ = db.execute(
-                    "INSERT INTO atomes (id, tenant_id, kind, type, owner_id, parent_id, data, snapshot, logical_clock, schema_version, device_id, sync_status, meta, created_at, updated_at, deleted, deleted_at, created_source)
+                    "INSERT INTO atomes (id, tenant_id, kind, type, owner, parent, data, snapshot, logical_clock, schema_version, device_id, sync_status, meta, created_at, updated_at, deleted, deleted_at, created_source)
                      VALUES (?1, 'local-tenant', ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, 'synced', ?10, ?11, ?12, ?13, ?14, ?15)",
                     rusqlite::params![
                         &atome.id,
                         &atome.kind,
                         &atome.atome_type,
-                        &atome.owner_id,
-                        &atome.parent_id,
+                        &atome.owner,
+                        &atome.parent,
                         &data_json,
                         &snapshot_json,
                         &atome.logical_clock,
@@ -1331,12 +1384,12 @@ async fn sync_pull_handler(
 
     let db = state.db.lock().unwrap();
 
-    // Get all pending atomes for this user since last sync
+    // Get all pending atomes for this user since last sync (ADOLE naming: owner, parent)
     let since_clock = query.since.unwrap_or(0);
     
     let mut stmt = match db.prepare(
-        "SELECT id, kind, type, owner_id, parent_id, data, snapshot, logical_clock, sync_status, device_id, created_at, updated_at, meta, deleted
-         FROM atomes WHERE owner_id = ?1 AND (sync_status = 'pending' OR logical_clock > ?2) AND deleted = 0"
+        "SELECT id, kind, type, owner, parent, data, snapshot, logical_clock, sync_status, device_id, created_at, updated_at, meta, deleted
+         FROM atomes WHERE owner = ?1 AND (sync_status = 'pending' OR logical_clock > ?2) AND deleted = 0"
     ) {
         Ok(s) => s,
         Err(e) => {
@@ -1368,8 +1421,8 @@ async fn sync_pull_handler(
                 id: row.get(0)?,
                 kind: row.get(1)?,
                 atome_type: row.get(2)?,
-                owner_id: row.get(3)?,
-                parent_id: row.get(4)?,
+                owner: row.get(3)?,
+                parent: row.get(4)?,
                 data,
                 snapshot,
                 logical_clock: row.get(7)?,
@@ -1437,7 +1490,7 @@ async fn sync_ack_handler(
 
     for id in &req.ids {
         let result = db.execute(
-            "UPDATE atomes SET sync_status = 'synced', updated_at = ?1 WHERE id = ?2 AND owner_id = ?3",
+            "UPDATE atomes SET sync_status = 'synced', updated_at = ?1 WHERE id = ?2 AND owner = ?3",
             rusqlite::params![&now, id, &claims.sub],
         );
         if let Ok(rows) = result {
@@ -1473,14 +1526,12 @@ pub struct AlterAtomeRequest {
     pub changes: serde_json::Value,
     #[serde(default)]
     pub reason: Option<String>,
-    #[serde(rename = "deviceId", alias = "device_id")]
     pub device_id: Option<String>,
 }
 
 /// Request for rename operation
 #[derive(Debug, Deserialize)]
 pub struct RenameAtomeRequest {
-    #[serde(rename = "newName")]
     pub new_name: String,
 }
 
@@ -1509,7 +1560,7 @@ pub struct HistoryResponse {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[serde(rename = "currentVersion", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub current_version: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alterations: Option<Vec<serde_json::Value>>,
@@ -1536,9 +1587,9 @@ async fn alter_atome_handler(
     let db = state.db.lock().unwrap();
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Get current atome
+    // Get current atome (ADOLE naming: owner column)
     let current: Result<(serde_json::Value, i64, String), _> = db.query_row(
-        "SELECT data, logical_clock, owner_id FROM atomes WHERE id = ?1 AND deleted = 0",
+        "SELECT data, logical_clock, owner FROM atomes WHERE id = ?1 AND deleted = 0",
         rusqlite::params![id],
         |row| {
             let data_str: String = row.get(0)?;
@@ -1548,9 +1599,9 @@ async fn alter_atome_handler(
     );
 
     match current {
-        Ok((current_data, current_clock, owner_id)) => {
+        Ok((current_data, current_clock, owner)) => {
             // Verify ownership
-            if owner_id != claims.sub {
+            if owner != claims.sub {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(AtomeResponse {
@@ -1720,17 +1771,17 @@ async fn history_atome_handler(
 
     let db = state.db.lock().unwrap();
 
-    // Get atome with meta (contains alterations)
+    // Get atome with meta (contains alterations) - ADOLE naming: owner column
     let result: Result<(i64, String, String), _> = db.query_row(
-        "SELECT logical_clock, owner_id, COALESCE(meta, '{}') FROM atomes WHERE id = ?1",
+        "SELECT logical_clock, owner, COALESCE(meta, '{}') FROM atomes WHERE id = ?1",
         rusqlite::params![id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     );
 
     match result {
-        Ok((current_version, owner_id, meta_str)) => {
+        Ok((current_version, owner, meta_str)) => {
             // Verify ownership
-            if owner_id != claims.sub {
+            if owner != claims.sub {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(HistoryResponse {
@@ -1790,17 +1841,17 @@ async fn restore_atome_handler(
     let db = state.db.lock().unwrap();
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Get atome with meta (contains alterations history)
+    // Get atome with meta (contains alterations history) - ADOLE naming: owner column
     let result: Result<(String, i64, String, String), _> = db.query_row(
-        "SELECT data, logical_clock, owner_id, COALESCE(meta, '{}') FROM atomes WHERE id = ?1",
+        "SELECT data, logical_clock, owner, COALESCE(meta, '{}') FROM atomes WHERE id = ?1",
         rusqlite::params![id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     );
 
     match result {
-        Ok((current_data_str, current_clock, owner_id, meta_str)) => {
+        Ok((current_data_str, current_clock, owner, meta_str)) => {
             // Verify ownership
-            if owner_id != claims.sub {
+            if owner != claims.sub {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(AtomeResponse {
@@ -1928,13 +1979,13 @@ async fn delete_user_data_handler(
     let db = state.db.lock().unwrap();
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Build query based on kinds filter
+    // Build query based on kinds filter (ADOLE naming: owner column)
     let result = if let Some(kinds) = &req.kinds {
         // Delete specific kinds
         let placeholders: Vec<String> = (0..kinds.len()).map(|i| format!("?{}", i + 2)).collect();
         let _sql = format!(
             "UPDATE atomes SET deleted = 1, deleted_at = ?1 
-             WHERE owner_id = ?2 AND kind IN ({}) AND deleted = 0",
+             WHERE owner = ?2 AND kind IN ({}) AND deleted = 0",
             placeholders.join(", ")
         );
         
@@ -1948,13 +1999,13 @@ async fn delete_user_data_handler(
         
         // This is a simplified version - proper implementation would use dynamic params
         db.execute(
-            "UPDATE atomes SET deleted = 1, deleted_at = ?1 WHERE owner_id = ?2 AND deleted = 0",
+            "UPDATE atomes SET deleted = 1, deleted_at = ?1 WHERE owner = ?2 AND deleted = 0",
             rusqlite::params![now, claims.sub],
         )
     } else {
         // Delete all user data
         db.execute(
-            "UPDATE atomes SET deleted = 1, deleted_at = ?1 WHERE owner_id = ?2 AND deleted = 0",
+            "UPDATE atomes SET deleted = 1, deleted_at = ?1 WHERE owner = ?2 AND deleted = 0",
             rusqlite::params![now, claims.sub],
         )
     };
@@ -2004,11 +2055,11 @@ async fn export_user_data_handler(
 
     let db = state.db.lock().unwrap();
 
-    // Get all user's atomes
+    // Get all user's atomes (ADOLE naming: owner, parent columns)
     let mut stmt = match db.prepare(
-        "SELECT id, kind, type, owner_id, parent_id, data, snapshot, logical_clock, 
+        "SELECT id, kind, type, owner, parent, data, snapshot, logical_clock, 
                 sync_status, device_id, created_at, updated_at, meta
-         FROM atomes WHERE owner_id = ?1 AND deleted = 0
+         FROM atomes WHERE owner = ?1 AND deleted = 0
          ORDER BY created_at DESC"
     ) {
         Ok(s) => s,
@@ -2040,8 +2091,8 @@ async fn export_user_data_handler(
             id: row.get(0)?,
             kind: row.get(1)?,
             atome_type: row.get(2)?,
-            owner_id: row.get(3)?,
-            parent_id: row.get(4)?,
+            owner: row.get(3)?,
+            parent: row.get(4)?,
             data,
             snapshot,
             logical_clock: row.get(7)?,
@@ -2090,6 +2141,133 @@ async fn export_user_data_handler(
 // ROUTER
 // =============================================================================
 
+/// Request for sync receive (server-to-server sync with sync_secret)
+#[derive(Debug, Deserialize)]
+pub struct SyncReceiveRequest {
+    pub atomes: Vec<SyncAtomeData>,
+}
+
+/// POST /api/atome/sync/receive - Receive atomes from Fastify (server-to-server)
+/// Accepts sync_secret header for authentication instead of JWT
+async fn sync_receive_handler(
+    State(state): State<LocalAtomeState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<SyncReceiveRequest>,
+) -> impl IntoResponse {
+    // Check sync secret header
+    let sync_secret = headers
+        .get("x-sync-secret")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+    
+    if sync_secret != SYNC_SECRET {
+        // Fall back to JWT validation
+        let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
+        if validate_jwt(auth_header, &state.jwt_secret).is_err() {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(SyncResponse {
+                    success: false,
+                    error: Some("Unauthorized - invalid sync secret or JWT".into()),
+                    message: None,
+                    synced: None,
+                    conflicts: None,
+                    atomes: None,
+                }),
+            );
+        }
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let db = state.db.lock().unwrap();
+    let mut synced = 0i64;
+
+    for atome in req.atomes {
+        // Check if atome exists locally
+        let existing: Result<i64, _> = db.query_row(
+            "SELECT logical_clock FROM atomes WHERE id = ?1",
+            rusqlite::params![&atome.id],
+            |row| row.get(0),
+        );
+
+        match existing {
+            Ok(local_clock) => {
+                // Only update if remote is newer
+                if atome.logical_clock > local_clock {
+                    let data_json = serde_json::to_string(&atome.data).unwrap_or_else(|_| "{}".to_string());
+                    let snapshot_json = serde_json::to_string(&atome.snapshot).unwrap_or_else(|_| data_json.clone());
+                    let meta_json = atome.meta.as_ref().map(|m| serde_json::to_string(m).unwrap_or_else(|_| "null".to_string()));
+
+                    let _ = db.execute(
+                        "UPDATE atomes SET kind = ?1, type = ?2, data = ?3, snapshot = ?4, 
+                         parent = ?5, logical_clock = ?6, sync_status = 'synced', 
+                         meta = ?7, updated_at = ?8 WHERE id = ?9",
+                        rusqlite::params![
+                            &atome.kind,
+                            &atome.atome_type,
+                            &data_json,
+                            &snapshot_json,
+                            &atome.parent,
+                            &atome.logical_clock,
+                            &meta_json,
+                            &now,
+                            &atome.id
+                        ],
+                    );
+                    synced += 1;
+                    println!("🔄 [SyncReceive] Updated atome {} (clock {} -> {})", atome.id, local_clock, atome.logical_clock);
+                }
+            }
+            Err(_) => {
+                // Atome doesn't exist locally, create it
+                let data_json = serde_json::to_string(&atome.data).unwrap_or_else(|_| "{}".to_string());
+                let snapshot_json = serde_json::to_string(&atome.snapshot).unwrap_or_else(|_| data_json.clone());
+                let meta_json = atome.meta.as_ref().map(|m| serde_json::to_string(m).unwrap_or_else(|_| "null".to_string()));
+                let deleted_at: Option<String> = if atome.deleted { Some(now.clone()) } else { None };
+
+                let _ = db.execute(
+                    "INSERT INTO atomes (id, tenant_id, kind, type, owner, parent, data, snapshot, 
+                     logical_clock, schema_version, device_id, sync_status, meta, created_at, updated_at, 
+                     deleted, deleted_at, created_source)
+                     VALUES (?1, 'local-tenant', ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, 'synced', ?10, ?11, ?12, ?13, ?14, 'fastify')",
+                    rusqlite::params![
+                        &atome.id,
+                        &atome.kind,
+                        &atome.atome_type,
+                        &atome.owner,
+                        &atome.parent,
+                        &data_json,
+                        &snapshot_json,
+                        &atome.logical_clock,
+                        &atome.device_id,
+                        &meta_json,
+                        &atome.created_at,
+                        &now,
+                        &atome.deleted,
+                        &deleted_at
+                    ],
+                );
+                synced += 1;
+                println!("🔄 [SyncReceive] Created atome {} from Fastify", atome.id);
+            }
+        }
+    }
+
+    println!("🔄 [SyncReceive] Total: {} atomes synced from Fastify", synced);
+
+    (
+        StatusCode::OK,
+        Json(SyncResponse {
+            success: true,
+            message: Some(format!("Synced {} atomes", synced)),
+            error: None,
+            synced: Some(synced),
+            conflicts: None,
+            atomes: None,
+        }),
+    )
+}
+
 /// Create the local atome router
 pub fn create_local_atome_router(data_dir: PathBuf) -> Router {
     // Initialize database
@@ -2119,9 +2297,11 @@ pub fn create_local_atome_router(data_dir: PathBuf) -> Router {
         .route("/api/sync/push", post(sync_push_handler))
         .route("/api/sync/pull", get(sync_pull_handler))
         .route("/api/sync/ack", post(sync_ack_handler))
+        .route("/api/sync/receive", post(sync_receive_handler))
         // Backward compatibility aliases
         .route("/api/atome/sync/push", post(sync_push_handler))
         .route("/api/atome/sync/pull", get(sync_pull_handler))
         .route("/api/atome/sync/ack", post(sync_ack_handler))
+        .route("/api/atome/sync/receive", post(sync_receive_handler))
         .with_state(state)
 }
