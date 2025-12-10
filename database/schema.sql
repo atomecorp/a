@@ -1,209 +1,161 @@
 -- ============================================================================
--- ADOLE Unified Schema for SQLite / libSQL (Turso)
--- ============================================================================
--- 
--- This schema implements the ADOLE (Append-only Distributed Object Ledger Engine)
--- data model. All operations are append-only with full versioning support.
---
--- Compatible with:
--- - SQLite native (iOS, Desktop, Node.js)
--- - SQLite WASM (Browser)
--- - libSQL (Turso cloud)
---
--- NO PostgreSQL-specific features used.
+-- ADOLE Schema v2.0 (Append-only Distributed Object Ledger Engine)
+-- SQLite + libSQL compatible
 -- ============================================================================
 
--- Enable foreign key constraints
 PRAGMA foreign_keys = ON;
 
 -- ============================================================================
--- CORE TABLES
+-- TENANTS TABLE (for auth.js compatibility)
 -- ============================================================================
 
--- Tenants: Multi-tenant isolation
 CREATE TABLE IF NOT EXISTS tenants (
-    tenant_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+  tenant_id TEXT PRIMARY KEY,
+  name TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Principals: Users and service accounts
+-- ============================================================================
+-- PRINCIPALS TABLE (for auth.js compatibility)
+-- ============================================================================
+
 CREATE TABLE IF NOT EXISTS principals (
-    principal_id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('user', 'service', 'system')),
-    name TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+  principal_id TEXT PRIMARY KEY,
+  tenant_id TEXT,
+  type TEXT DEFAULT 'user',
+  name TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_principals_tenant ON principals(tenant_id);
-
--- Users: Authentication data (extends principals)
-CREATE TABLE IF NOT EXISTS users (
-    user_id TEXT PRIMARY KEY,
-    principal_id TEXT UNIQUE REFERENCES principals(principal_id) ON DELETE CASCADE,
-    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
-    phone TEXT UNIQUE,
-    email TEXT UNIQUE,
-    username TEXT UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    last_login_at TEXT,
-    is_active INTEGER DEFAULT 1
-);
-
-CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
-
 -- ============================================================================
--- ADOLE OBJECT MODEL
+-- 1. TABLE objects
+-- Represents the identity, category, and ownership of an Atome object.
+-- No properties are stored here.
 -- ============================================================================
 
--- Objects: Base table for all entities (atomes, files, etc.)
 CREATE TABLE IF NOT EXISTS objects (
-    object_id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
-    type TEXT NOT NULL,              -- 'atome', 'file', 'folder', etc.
-    kind TEXT,                       -- sub-type (e.g., 'document', 'image')
-    created_by TEXT REFERENCES principals(principal_id),
-    parent_id TEXT REFERENCES objects(object_id),
-    meta TEXT DEFAULT '{}',          -- JSON metadata
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    deleted_at TEXT                  -- Soft delete (append-only)
+  id TEXT PRIMARY KEY,                              -- UUID of the object
+  type TEXT NOT NULL,                               -- Technical category: shape, text, sound, image, project...
+  kind TEXT,                                        -- Semantic role: button, logo, layer, container...
+  parent TEXT,                                      -- Parent object ID (NULL for root/projects)
+  owner TEXT NOT NULL,                              -- User who currently owns the object
+  creator TEXT,                                     -- User who originally created the object
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  FOREIGN KEY(parent) REFERENCES objects(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_objects_tenant ON objects(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_objects_type ON objects(type);
-CREATE INDEX IF NOT EXISTS idx_objects_parent ON objects(parent_id);
-CREATE INDEX IF NOT EXISTS idx_objects_created_by ON objects(created_by);
+CREATE INDEX IF NOT EXISTS idx_objects_parent ON objects(parent);
+CREATE INDEX IF NOT EXISTS idx_objects_owner ON objects(owner);
 
--- Properties: Key-value storage per object (ADOLE property model)
+-- ============================================================================
+-- 2. TABLE properties
+-- Stores the CURRENT LIVE STATE of every property of an object.
+-- One row = one property.
+-- ============================================================================
+
 CREATE TABLE IF NOT EXISTS properties (
-    property_id TEXT PRIMARY KEY,
-    object_id TEXT NOT NULL REFERENCES objects(object_id) ON DELETE CASCADE,
-    key TEXT NOT NULL,
-    value TEXT,                      -- JSON-serialized value
-    value_type TEXT,                 -- 'string', 'number', 'boolean', 'object', 'array'
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(object_id, key)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  object_id TEXT NOT NULL,                          -- The object this property belongs to
+  name TEXT NOT NULL,                               -- Property name: x, y, width, color, opacity, text, src...
+  value TEXT,                                       -- Current value (TEXT or JSON-encoded)
+  version INTEGER NOT NULL DEFAULT 1,               -- Current version number
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE,
+  UNIQUE(object_id, name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_properties_object ON properties(object_id);
-CREATE INDEX IF NOT EXISTS idx_properties_key ON properties(key);
+CREATE INDEX IF NOT EXISTS idx_properties_name ON properties(name);
 
--- Property Versions: Append-only history for time-travel
+-- ============================================================================
+-- 3. TABLE property_versions
+-- Full historical record of every property change.
+-- Used for: undo/redo, branching timelines, retro-editing, diff-based sync.
+-- ============================================================================
+
 CREATE TABLE IF NOT EXISTS property_versions (
-    version_id TEXT PRIMARY KEY,
-    property_id TEXT NOT NULL REFERENCES properties(property_id) ON DELETE CASCADE,
-    object_id TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value TEXT,                      -- JSON-serialized new value
-    previous_value TEXT,             -- JSON-serialized previous value
-    changed_by TEXT REFERENCES principals(principal_id),
-    change_type TEXT NOT NULL CHECK (change_type IN ('create', 'update', 'delete')),
-    changed_at TEXT DEFAULT (datetime('now'))
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  property_id INTEGER NOT NULL,                     -- Link to properties table
+  object_id TEXT NOT NULL,                          -- Redundant for fast lookup
+  name TEXT NOT NULL,                               -- Property name at time of version
+  version INTEGER NOT NULL,                         -- Version number captured
+  value TEXT,                                       -- Exact value at this version
+  author TEXT,                                      -- User who performed the change
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE,
+  FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_property_versions_property ON property_versions(property_id);
-CREATE INDEX IF NOT EXISTS idx_property_versions_object ON property_versions(object_id);
-CREATE INDEX IF NOT EXISTS idx_property_versions_key ON property_versions(object_id, key);
-CREATE INDEX IF NOT EXISTS idx_property_versions_time ON property_versions(changed_at);
+CREATE INDEX IF NOT EXISTS idx_prop_versions_property ON property_versions(property_id);
+CREATE INDEX IF NOT EXISTS idx_prop_versions_object ON property_versions(object_id);
 
 -- ============================================================================
--- ACL (Access Control List)
+-- 4. TABLE permissions
+-- Fine-grained property-level sharing.
+-- Controls read/write access per object or per specific property.
 -- ============================================================================
 
--- ACLs: Granular permissions per property
-CREATE TABLE IF NOT EXISTS acls (
-    acl_id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
-    object_id TEXT NOT NULL REFERENCES objects(object_id) ON DELETE CASCADE,
-    principal_id TEXT NOT NULL REFERENCES principals(principal_id) ON DELETE CASCADE,
-    property_path TEXT,              -- Specific property or NULL for whole object
-    action TEXT NOT NULL CHECK (action IN ('read', 'write', 'delete', 'admin')),
-    allow INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    created_by TEXT REFERENCES principals(principal_id),
-    UNIQUE(tenant_id, object_id, principal_id, property_path, action)
+CREATE TABLE IF NOT EXISTS permissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  object_id TEXT NOT NULL,                          -- Object this permission applies to
+  property_name TEXT,                               -- NULL = whole object, set = specific property
+  user_id TEXT NOT NULL,                            -- User impacted by this permission
+  can_read INTEGER NOT NULL DEFAULT 1,              -- 1 = allowed, 0 = denied
+  can_write INTEGER NOT NULL DEFAULT 0,             -- 1 = allowed, 0 = denied
+  
+  FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_acls_object ON acls(object_id);
-CREATE INDEX IF NOT EXISTS idx_acls_principal ON acls(principal_id);
+CREATE INDEX IF NOT EXISTS idx_permissions_object ON permissions(object_id);
+CREATE INDEX IF NOT EXISTS idx_permissions_user ON permissions(user_id);
 
 -- ============================================================================
--- SYNCHRONIZATION
+-- 5. TABLE snapshots
+-- Stores stable snapshots for full-restore operations, exports, backups.
 -- ============================================================================
 
--- Sync Queue: Pending sync operations
-CREATE TABLE IF NOT EXISTS sync_queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id),
-    object_id TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('push', 'pull', 'merge')),
-    device_id TEXT,
-    payload TEXT DEFAULT '{}',       -- JSON payload
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    completed_at TEXT
+CREATE TABLE IF NOT EXISTS snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  object_id TEXT NOT NULL,                          -- Target object
+  snapshot TEXT NOT NULL,                           -- Serialized JSON of full state
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  
+  FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
-CREATE INDEX IF NOT EXISTS idx_sync_queue_device ON sync_queue(device_id);
+CREATE INDEX IF NOT EXISTS idx_snapshots_object ON snapshots(object_id);
 
--- Sync State: Track last sync per device
+-- ============================================================================
+-- 6. TABLE users (for local auth)
+-- Stores local user accounts for offline authentication
+-- Compatible with auth.js column names
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS users (
+  user_id TEXT PRIMARY KEY,                         -- UUID (used as principal ID)
+  principal_id TEXT,                                -- Same as user_id (compatibility)
+  tenant_id TEXT,                                   -- Tenant ID (default: squirrel-main)
+  phone TEXT UNIQUE,                                -- Phone number (login)
+  username TEXT,                                    -- Display name
+  password_hash TEXT,                               -- Hashed password
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+
+-- ============================================================================
+-- 7. TABLE sync_state (for cross-server sync)
+-- Tracks sync progress with remote servers
+-- ============================================================================
+
 CREATE TABLE IF NOT EXISTS sync_state (
-    device_id TEXT PRIMARY KEY,
-    tenant_id TEXT REFERENCES tenants(tenant_id),
-    last_sync_at TEXT,
-    last_sync_version TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  server_id TEXT NOT NULL UNIQUE,                   -- Remote server identifier
+  last_sync_version INTEGER NOT NULL DEFAULT 0,     -- Last synced property_version id
+  last_sync_at TEXT                                 -- Timestamp of last sync
 );
-
--- ============================================================================
--- ATOMES (High-level wrapper for objects)
--- ============================================================================
-
--- Atomes: Convenience view/table for atome-type objects
-CREATE TABLE IF NOT EXISTS atomes (
-    atome_id TEXT PRIMARY KEY,
-    object_id TEXT UNIQUE NOT NULL REFERENCES objects(object_id) ON DELETE CASCADE,
-    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
-    owner_id TEXT REFERENCES principals(principal_id),
-    atome_type TEXT NOT NULL,
-    name TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    deleted_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_atomes_tenant ON atomes(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id);
-CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type);
-CREATE INDEX IF NOT EXISTS idx_atomes_object ON atomes(object_id);
-
--- ============================================================================
--- SCHEMA MIGRATIONS
--- ============================================================================
-
--- Track applied migrations
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    applied_at TEXT DEFAULT (datetime('now'))
-);
-
--- ============================================================================
--- DEFAULT TENANT (for single-tenant mode)
--- ============================================================================
-
-INSERT OR IGNORE INTO tenants (tenant_id, name) 
-VALUES ('default', 'Default Tenant');

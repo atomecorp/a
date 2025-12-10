@@ -1,10 +1,9 @@
 /**
- * Atome API Routes (ORM Version)
+ * Atome API Routes v2.0 - Using ADOLE Schema
  * 
  * Server-side routes for Atome CRUD operations.
- * Uses the unified ORM layer for database operations.
+ * Uses the ADOLE data layer (objects + properties + versions).
  * Requires authentication for all operations.
- * Broadcasts changes via WebSocket for real-time sync.
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -12,29 +11,7 @@ import { broadcastMessage } from './githubSync.js';
 import db from '../database/adole.js';
 
 /**
- * Safely parse a JSON value, returning raw value if parsing fails
- * This handles cases where:
- * - Values are stored as raw strings vs JSON (SQLite)
- * - PostgreSQL json columns return already-parsed objects
- */
-function safeParseJSON(value) {
-    if (value === null || value === undefined) {
-        return null;
-    }
-    // If it's already an object (PostgreSQL json column), return as-is
-    if (typeof value === 'object') {
-        return value;
-    }
-    try {
-        return JSON.parse(value);
-    } catch {
-        // If it's not valid JSON, return as-is (it's a raw string value)
-        return value;
-    }
-}
-
-/**
- * Validate authentication token
+ * Validate authentication token and return user info
  */
 async function validateToken(request) {
     const authHeader = request.headers.authorization;
@@ -44,13 +21,9 @@ async function validateToken(request) {
 
     const token = authHeader.substring(7);
 
-    // Decode JWT token
     try {
         const [, payload] = token.split('.');
         const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
-        console.log('[Atome] Token decoded:', JSON.stringify(decoded));
-
-        // Normalize the user object - JWT uses 'sub' for user id
         return {
             id: decoded.sub || decoded.id || decoded.userId,
             userId: decoded.sub || decoded.id || decoded.userId,
@@ -64,913 +37,536 @@ async function validateToken(request) {
 }
 
 /**
- * Ensure user has a tenant and principal in the ORM
- * Creates them if they don't exist
+ * Format object to unified API response format
  */
-async function ensureUserInORM(user) {
-    const phone = user.phone || user.id || user.userId;
-    const userId = user.id || user.userId;
-
-    // Get or create tenant for this user
-    const tenant = await db.getOrCreateTenant(phone);
-
-    // Check if principal exists by phone first
-    let principal = await db.findPrincipalByPhone(phone);
-
-    if (!principal) {
-        // Also check by principal_id (in case phone wasn't set)
-        principal = await db.findPrincipalById(userId);
-    }
-
-    if (!principal) {
-        // Create principal with try/catch for race conditions
-        try {
-            await db.createPrincipal({
-                principal_id: userId,
-                tenant_id: tenant.tenant_id,
-                kind: 'user',
-                phone: phone,
-                username: user.username
-            });
-            principal = await db.findPrincipalById(userId);
-        } catch (error) {
-            // If duplicate key, try to find existing
-            if (error.message.includes('duplicate key')) {
-                principal = await db.findPrincipalById(userId);
-                if (!principal) {
-                    principal = await db.findPrincipalByPhone(phone);
-                }
-            }
-            if (!principal) {
-                throw error;
-            }
-        }
-    }
-
-    // Update phone if missing
-    if (principal && !principal.phone && phone) {
-        try {
-            const db = db.getDatabase();
-            await db('principals')
-                .where('principal_id', principal.principal_id)
-                .update({ phone: phone });
-        } catch (e) {
-            console.warn('[Atome] Could not update phone:', e.message);
-        }
-    }
+function formatAtome(obj) {
+    if (!obj) return null;
 
     return {
-        tenant_id: tenant.tenant_id,
-        principal_id: principal.principal_id
+        id: obj.id,
+        type: obj.type,
+        kind: obj.kind,
+        parentId: obj.parent,
+        ownerId: obj.owner,
+        creatorId: obj.creator,
+        data: obj.properties || {},
+        createdAt: obj.created_at,
+        updatedAt: obj.updated_at
     };
 }
 
 /**
- * Register Atome API routes
+ * Register all atome routes
  */
-export function registerAtomeRoutes(server, dataSource) {
-    // Initialize ORM (non-blocking, will complete before first request)
-    db.initDatabase().catch(err => {
-        console.error('[Atome] ORM initialization error:', err.message);
-    });
+export async function registerAtomeRoutes(server, dataSource = null) {
+    // Initialize database (dataSource param is legacy, kept for API compatibility)
+    await db.initDatabase();
 
-    // =========================================================================
+    // ========================================================================
     // CREATE - POST /api/atome/create
-    // =========================================================================
+    // ========================================================================
     server.post('/api/atome/create', async (request, reply) => {
         const user = await validateToken(request);
         if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
+        const { id, type, kind, parentId, parent, data } = request.body;
+        const objectId = id || uuidv4();
+        const parentValue = parentId || parent || null;
+
         try {
-            // Ensure ORM is initialized
-            await db.initDatabase();
-
-            // Ensure user exists in ORM
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            // Accept both camelCase and snake_case for compatibility
-            const parentId = request.body.parentId || request.body.parent_id;
-            const projectId = request.body.projectId || request.body.project_id;
-            const { id, kind, tag, properties, data } = request.body;
-
-            // Also check for ID in data object (sent by UnifiedAtome)
-            const providedId = id || data?.id;
-
-            console.log(`[Atome] CREATE request - id: ${providedId}, kind: ${kind}, user: ${principal_id}`);
-
-            // Support both 'properties' and 'data' field names (merge them)
-            const mergedProperties = { ...(data || {}), ...(properties || {}) };
-
-            // Generate UUID if not provided (must be valid UUID for PostgreSQL)
-            // If client provides an ID, check if it's a valid UUID, otherwise generate one
-            let atomeId;
-            if (providedId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(providedId)) {
-                atomeId = providedId;
-                console.log(`[Atome] Using provided UUID: ${atomeId}`);
-            } else {
-                atomeId = uuidv4();
-                console.log(`[Atome] Generated new UUID: ${atomeId} (original id was: ${id || 'none'})`);
-            }
-
-            // Build properties to store (include original id if provided for reference)
-            const allProperties = {
-                ...mergedProperties,
-                kind: kind || 'generic',
-                tag: tag || 'div',
-                parentId: parentId || null,
-                projectId: projectId || null,
-                originalId: id || null,  // Keep original ID if provided
-                createdSource: 'fastify',  // Track where the atome was created
-                createdServer: process.env.SQUIRREL_SERVER_ID || 'fastify-dev'
-            };
-
-            // Create atome via ORM (internal uses snake_case for DB)
-            const { object_id } = await db.createAtome({
-                object_id: atomeId,
-                tenant_id: tenant_id,
-                created_by: principal_id,
-                kind: kind || 'generic',
-                parent_id: parentId || null,
-                properties: allProperties
+            // Create object with properties
+            const atome = await db.createAtome({
+                id: objectId,
+                type: type || 'shape',
+                kind: kind || null,
+                parent: parentValue,
+                owner: user.id,
+                properties: data || {},
+                author: user.id
             });
 
-            const now = new Date().toISOString();
-            console.log(`✅ [Atome] Created: ${object_id} (${kind})`);
+            const formatted = formatAtome(atome);
 
-            // Get client ID from header to exclude from broadcast (avoid echo back to sender)
-            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
+            // Broadcast to WebSocket clients
+            broadcastMessage({
+                type: 'atome-created',
+                atome: formatted
+            });
 
-            // Build unified atome object (same as Tauri format)
-            const unifiedAtome = {
-                id: object_id,
-                kind: kind || 'generic',
-                type: tag || 'div',
-                data: mergedProperties,
-                snapshot: mergedProperties,
-                parentId: parentId || null,
-                ownerId: principal_id,
-                logicalClock: 1,
-                syncStatus: 'synced',
-                deviceId: null,
-                createdAt: now,
-                updatedAt: now,
-                meta: {}
-            };
-
-            // Broadcast to all connected clients EXCEPT the sender for real-time sync
-            broadcastMessage('atome:created', {
-                atome: unifiedAtome
-            }, senderClientId);
-
-            // Return in UNIFIED format (same as Tauri)
-            return {
+            return reply.code(201).send({
                 success: true,
                 message: 'Atome created successfully',
-                atome: unifiedAtome,
-                data: unifiedAtome
-            };
-
+                atome: formatted,
+                data: formatted
+            });
         } catch (error) {
-            console.error('❌ [Atome] Create error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
+            console.error('[Atome] Create error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
         }
     });
 
-    // =========================================================================
-    // UPDATE - PUT /api/atome/:id
-    // =========================================================================
-    server.put('/api/atome/:id', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const { id } = request.params;
-            const { properties } = request.body;
-
-            // Check if atome exists
-            const atome = await db.getAtome(id);
-            if (!atome) {
-                return reply.status(404).send({ success: false, error: 'Atome not found' });
-            }
-
-            // Check ownership
-            if (atome.created_by !== principal_id) {
-                // Check ACL
-                const hasAccess = await db.hasPermission(principal_id, id, 'write');
-                if (!hasAccess) {
-                    return reply.status(403).send({ success: false, error: 'Access denied' });
-                }
-            }
-
-            // Update properties
-            if (properties && typeof properties === 'object') {
-                await db.updateAtome(id, properties, principal_id);
-            }
-
-            const now = new Date().toISOString();
-            console.log(`✅ [Atome] Updated: ${id} (${Object.keys(properties || {}).length} properties)`);
-
-            // Get client ID from header to exclude from broadcast
-            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
-
-            // Broadcast to all connected clients EXCEPT sender for real-time sync
-            broadcastMessage('atome:updated', {
-                atome: {
-                    id,
-                    properties,
-                    updated_at: now,
-                    updated_by: principal_id
-                }
-            }, senderClientId);
-
-            return {
-                success: true,
-                data: {
-                    id,
-                    properties,
-                    updated_at: now
-                }
-            };
-
-        } catch (error) {
-            console.error('❌ [Atome] Update error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
-        }
-    });
-
-    // =========================================================================
-    // DELETE - DELETE /api/atome/:id
-    // =========================================================================
-    server.delete('/api/atome/:id', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const { id } = request.params;
-
-            // Check if atome exists
-            const atome = await db.getAtome(id);
-            if (!atome) {
-                return reply.status(404).send({ success: false, error: 'Atome not found' });
-            }
-
-            // Check ownership
-            console.log(`[Atome] DELETE check - principal_id: ${principal_id}, atome.created_by: ${atome.created_by}`);
-
-            if (atome.created_by && atome.created_by !== principal_id) {
-                // Check ACL
-                const hasAccess = await db.hasPermission(principal_id, id, 'delete');
-                if (!hasAccess) {
-                    return reply.status(403).send({ success: false, error: 'Access denied' });
-                }
-            }
-
-            // Soft delete
-            await db.deleteAtome(id);
-            const deletedAt = new Date().toISOString();
-
-            console.log(`✅ [Atome] Deleted: ${id}`);
-
-            // Get client ID from header to exclude from broadcast
-            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
-
-            // Broadcast to all connected clients EXCEPT sender for real-time sync
-            broadcastMessage('atome:deleted', {
-                atome: {
-                    id,
-                    deleted_at: deletedAt,
-                    deleted_by: principal_id
-                }
-            }, senderClientId);
-
-            return {
-                success: true,
-                data: { id, deleted_at: deletedAt }
-            };
-
-        } catch (error) {
-            console.error('❌ [Atome] Delete error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
-        }
-    });
-
-    // =========================================================================
-    // GET - GET /api/atome/:id
-    // =========================================================================
-    server.get('/api/atome/:id', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const { id } = request.params;
-
-            // Get atome
-            const atome = await db.getAtome(id);
-            if (!atome) {
-                return reply.status(404).send({ success: false, error: 'Atome not found' });
-            }
-
-            // Check ownership or ACL
-            if (atome.created_by !== principal_id) {
-                const hasAccess = await db.hasPermission(principal_id, id, 'read');
-                if (!hasAccess) {
-                    return reply.status(403).send({ success: false, error: 'Access denied' });
-                }
-            }
-
-            const props = atome.properties || {};
-
-            // Return in UNIFIED format (same as Tauri)
-            return {
-                success: true,
-                atome: {
-                    id: atome.object_id,
-                    kind: props.kind || atome.kind || 'generic',
-                    type: props.tag || props.type || 'div',
-                    data: props,
-                    snapshot: props,
-                    parentId: props.parentId || atome.parent_id || null,
-                    ownerId: atome.created_by,
-                    logicalClock: 1,
-                    syncStatus: 'synced',
-                    deviceId: null,
-                    createdAt: atome.created_at,
-                    updatedAt: atome.updated_at || atome.created_at,
-                    meta: {}
-                }
-            };
-
-        } catch (error) {
-            console.error('❌ [Atome] Get error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
-        }
-    });
-
-    // =========================================================================
+    // ========================================================================
     // LIST - GET /api/atome/list
-    // =========================================================================
+    // ========================================================================
     server.get('/api/atome/list', async (request, reply) => {
         const user = await validateToken(request);
         if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
+        const { type, kind, parentId, parent, limit = 100, offset = 0 } = request.query;
+        const parentValue = parentId || parent;
+
         try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const parentId = request.query.parentId;
-            const projectId = request.query.projectId;
-            const { kind } = request.query;
-
-            console.log(`[Atome] LIST - Looking for atomes for user: ${principal_id}`);
-
-            // Get all atomes for this user
-            const atomes = await db.getAtomesByUser(principal_id);
-
-            // Map to UNIFIED format (same as Tauri)
-            let results = atomes.map(atome => {
-                const props = atome.properties || {};
-                return {
-                    id: atome.object_id,
-                    kind: props.kind || atome.kind || 'generic',
-                    type: props.tag || props.type || 'div',
-                    data: props,
-                    snapshot: props,
-                    parentId: props.parentId || atome.parent_id || null,
-                    ownerId: atome.created_by,
-                    logicalClock: 1,
-                    syncStatus: 'synced',
-                    deviceId: null,
-                    createdAt: atome.created_at,
-                    updatedAt: atome.updated_at || atome.created_at,
-                    meta: {}
-                };
-            });
-
-            // Filter by projectId
-            if (projectId) {
-                results = results.filter(a => a.data.projectId === projectId);
-            }
-
-            // Filter by kind
-            if (kind) {
-                results = results.filter(a => a.kind === kind);
-            }
-
-            // Filter by parentId
-            if (parentId) {
-                results = results.filter(a => a.parentId === parentId);
-            }
-
-            console.log(`📋 [Atome] List for user ${principal_id}: ${results.length} atomes`);
-
-            // Return in UNIFIED format (same as Tauri: atomes array, total count)
-            return {
-                success: true,
-                atomes: results,
-                total: results.length
+            const options = {
+                type,
+                limit: parseInt(limit),
+                offset: parseInt(offset)
             };
 
+            // Handle parent filter
+            if (parentValue === 'null' || parentValue === '') {
+                options.parent = null;
+            } else if (parentValue) {
+                options.parent = parentValue;
+            }
+
+            const atomes = await db.listAtomes(user.id, options);
+
+            // Filter by kind if specified
+            let filtered = atomes;
+            if (kind) {
+                filtered = atomes.filter(a => a.kind === kind);
+            }
+
+            const formatted = filtered.map(formatAtome);
+
+            return reply.send({
+                success: true,
+                atomes: formatted,
+                total: formatted.length
+            });
         } catch (error) {
-            console.error('❌ [Atome] List error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
+            console.error('[Atome] List error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
         }
     });
 
-    // =========================================================================
+    // ========================================================================
+    // GET - GET /api/atome/:id
+    // ========================================================================
+    server.get('/api/atome/:id', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { id } = request.params;
+
+        try {
+            const atome = await db.getAtome(id);
+
+            if (!atome) {
+                return reply.code(404).send({
+                    success: false,
+                    error: 'Atome not found'
+                });
+            }
+
+            // Check permission
+            const hasAccess = atome.owner === user.id || await db.canRead(id, user.id);
+            if (!hasAccess) {
+                return reply.code(403).send({
+                    success: false,
+                    error: 'Access denied'
+                });
+            }
+
+            const formatted = formatAtome(atome);
+
+            return reply.send({
+                success: true,
+                atome: formatted,
+                data: formatted
+            });
+        } catch (error) {
+            console.error('[Atome] Get error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // UPDATE - PUT /api/atome/:id
+    // ========================================================================
+    server.put('/api/atome/:id', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { id } = request.params;
+        const { data, type, kind, parentId } = request.body;
+
+        try {
+            const existing = await db.getObjectById(id);
+            if (!existing) {
+                return reply.code(404).send({
+                    success: false,
+                    error: 'Atome not found'
+                });
+            }
+
+            // Check permission
+            const hasAccess = existing.owner === user.id || await db.canWrite(id, user.id);
+            if (!hasAccess) {
+                return reply.code(403).send({
+                    success: false,
+                    error: 'Access denied'
+                });
+            }
+
+            // Update object metadata if provided
+            if (type || kind || parentId !== undefined) {
+                await db.updateObject(id, {
+                    type: type || undefined,
+                    kind: kind || undefined,
+                    parent: parentId !== undefined ? parentId : undefined
+                });
+            }
+
+            // Update properties
+            if (data && typeof data === 'object') {
+                await db.setProperties(id, data, user.id);
+            }
+
+            const updated = await db.getAtome(id);
+            const formatted = formatAtome(updated);
+
+            // Broadcast
+            broadcastMessage({
+                type: 'atome-updated',
+                atome: formatted
+            });
+
+            return reply.send({
+                success: true,
+                message: 'Atome updated successfully',
+                atome: formatted,
+                data: formatted
+            });
+        } catch (error) {
+            console.error('[Atome] Update error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // ALTER - POST /api/atome/:id/alter (partial update)
+    // ========================================================================
+    server.post('/api/atome/:id/alter', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { id } = request.params;
+        const changes = request.body;
+
+        try {
+            const existing = await db.getObjectById(id);
+            if (!existing) {
+                return reply.code(404).send({
+                    success: false,
+                    error: 'Atome not found'
+                });
+            }
+
+            // Check permission
+            const hasAccess = existing.owner === user.id || await db.canWrite(id, user.id);
+            if (!hasAccess) {
+                return reply.code(403).send({
+                    success: false,
+                    error: 'Access denied'
+                });
+            }
+
+            // Apply property changes
+            for (const [key, value] of Object.entries(changes)) {
+                if (key !== 'id' && key !== 'type' && key !== 'kind') {
+                    await db.setProperty(id, key, value, user.id);
+                }
+            }
+
+            const updated = await db.getAtome(id);
+            const formatted = formatAtome(updated);
+
+            // Broadcast
+            broadcastMessage({
+                type: 'atome-altered',
+                atome: formatted
+            });
+
+            return reply.send({
+                success: true,
+                message: 'Atome altered successfully',
+                atome: formatted
+            });
+        } catch (error) {
+            console.error('[Atome] Alter error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // DELETE - DELETE /api/atome/:id
+    // ========================================================================
+    server.delete('/api/atome/:id', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { id } = request.params;
+
+        try {
+            const existing = await db.getObjectById(id);
+            if (!existing) {
+                return reply.code(404).send({
+                    success: false,
+                    error: 'Atome not found'
+                });
+            }
+
+            // Check permission - only owner can delete
+            if (existing.owner !== user.id) {
+                return reply.code(403).send({
+                    success: false,
+                    error: 'Access denied - only owner can delete'
+                });
+            }
+
+            await db.deleteObject(id);
+
+            // Broadcast
+            broadcastMessage({
+                type: 'atome-deleted',
+                atomeId: id
+            });
+
+            return reply.send({
+                success: true,
+                message: 'Atome deleted successfully'
+            });
+        } catch (error) {
+            console.error('[Atome] Delete error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
     // HISTORY - GET /api/atome/:id/history
-    // =========================================================================
+    // ========================================================================
     server.get('/api/atome/:id/history', async (request, reply) => {
         const user = await validateToken(request);
         if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
+        const { id } = request.params;
+        const { property, limit = 50 } = request.query;
+
         try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const { id } = request.params;
-            const { key } = request.query;
-
-            // Check atome exists and user has access
-            const atome = await db.getAtome(id);
-            if (!atome) {
-                return reply.status(404).send({ success: false, error: 'Atome not found' });
+            const existing = await db.getObjectById(id);
+            if (!existing) {
+                return reply.code(404).send({
+                    success: false,
+                    error: 'Atome not found'
+                });
             }
 
-            if (atome.created_by !== principal_id) {
-                const hasAccess = await db.hasPermission(principal_id, id, 'read');
-                if (!hasAccess) {
-                    return reply.status(403).send({ success: false, error: 'Access denied' });
-                }
+            // Check permission
+            const hasAccess = existing.owner === user.id || await db.canRead(id, user.id);
+            if (!hasAccess) {
+                return reply.code(403).send({
+                    success: false,
+                    error: 'Access denied'
+                });
             }
 
-            // Get property history
-            let versions = [];
-
-            if (key) {
-                // History for specific property
-                const history = await db.getPropertyHistory(id, key);
-                versions = history.map(h => ({
-                    key: h.key,
-                    value: safeParseJSON(h.value),
-                    previous_value: h.previous_value ? safeParseJSON(h.previous_value) : null,
-                    changed_at: h.changed_at,
-                    changed_by: h.changed_by,
-                    change_type: h.change_type
-                }));
+            let history;
+            if (property) {
+                history = await db.getPropertyHistory(id, property, parseInt(limit));
             } else {
-                // Get all properties and their histories
-                const allProperties = await db.getAllProperties(id);
-                for (const propKey of Object.keys(allProperties)) {
-                    const history = await db.getPropertyHistory(id, propKey, 10);
-                    for (const h of history) {
-                        versions.push({
-                            key: h.key,
-                            value: safeParseJSON(h.value),
-                            previous_value: h.previous_value ? safeParseJSON(h.previous_value) : null,
-                            changed_at: h.changed_at,
-                            changed_by: h.changed_by,
-                            change_type: h.change_type
-                        });
-                    }
-                }
+                // Get all changes for this object
+                history = await db.getChangesSince(0);
+                history = history.filter(h => h.object_id === id).slice(0, parseInt(limit));
             }
 
-            // Sort by changed_at descending
-            versions.sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at));
-
-            return {
+            return reply.send({
                 success: true,
-                data: versions,
-                count: versions.length
-            };
-
+                history,
+                total: history.length
+            });
         } catch (error) {
-            console.error('❌ [Atome] History error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
+            console.error('[Atome] History error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
         }
     });
 
-    // =========================================================================
-    // ALTER - POST /api/atome/:id/alter (ADOLE: append-only alterations)
-    // =========================================================================
-    server.post('/api/atome/:id/alter', async (request, reply) => {
-        console.log(`📝 [Atome] ALTER request for ${request.params.id}`);
-
+    // ========================================================================
+    // SNAPSHOT - POST /api/atome/:id/snapshot
+    // ========================================================================
+    server.post('/api/atome/:id/snapshot', async (request, reply) => {
         const user = await validateToken(request);
         if (!user) {
-            console.log(`❌ [Atome] ALTER unauthorized`);
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { id } = request.params;
+
+        try {
+            const existing = await db.getObjectById(id);
+            if (!existing) {
+                return reply.code(404).send({
+                    success: false,
+                    error: 'Atome not found'
+                });
+            }
+
+            // Check permission
+            if (existing.owner !== user.id) {
+                return reply.code(403).send({
+                    success: false,
+                    error: 'Access denied - only owner can create snapshots'
+                });
+            }
+
+            const snapshotId = await db.createSnapshot(id);
+
+            return reply.send({
+                success: true,
+                message: 'Snapshot created',
+                snapshotId
+            });
+        } catch (error) {
+            console.error('[Atome] Snapshot error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // SYNC - GET /api/atome/sync/pull
+    // ========================================================================
+    server.get('/api/atome/sync/pull', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { since = 0 } = request.query;
+
+        try {
+            const changes = await db.getChangesSince(parseInt(since));
+
+            // Filter to only user's objects
+            const userChanges = changes.filter(c => c.owner === user.id);
+
+            return reply.send({
+                success: true,
+                changes: userChanges,
+                lastVersionId: userChanges.length > 0 ? userChanges[userChanges.length - 1].id : since
+            });
+        } catch (error) {
+            console.error('[Atome] Sync pull error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // SYNC - POST /api/atome/sync/push
+    // ========================================================================
+    server.post('/api/atome/sync/push', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { changes } = request.body;
+
+        if (!Array.isArray(changes)) {
+            return reply.code(400).send({
+                success: false,
+                error: 'changes must be an array'
+            });
         }
 
         try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
+            let applied = 0;
 
-            const { id } = request.params;
-            let { alterations, operation, changes, reason } = request.body;
-            console.log(`📝 [Atome] ALTER body:`, { operation, changes: changes ? Object.keys(changes) : null, alterations: alterations?.length });
+            for (const change of changes) {
+                const { objectId, name, value, version } = change;
 
-            // Support unified API format: { operation, changes, reason }
-            // Convert to alterations array format
-            if (!alterations && changes && typeof changes === 'object') {
-                alterations = Object.entries(changes).map(([key, value]) => ({
-                    key,
-                    value,
-                    operation: operation || 'set'
-                }));
-            }
+                // Check if object exists
+                let obj = await db.getObjectById(objectId);
 
-            if (!alterations || !Array.isArray(alterations) || alterations.length === 0) {
-                return reply.status(400).send({
-                    success: false,
-                    error: 'Alterations array or changes object is required'
-                });
-            }
-
-            // Check atome exists and user has write access
-            const atome = await db.getAtome(id);
-            if (!atome) {
-                return reply.status(404).send({ success: false, error: 'Atome not found' });
-            }
-
-            if (atome.created_by !== principal_id) {
-                const hasAccess = await db.hasPermission(principal_id, id, 'write');
-                if (!hasAccess) {
-                    return reply.status(403).send({ success: false, error: 'Access denied' });
-                }
-            }
-
-            // Apply alterations (each creates a new version in history)
-            const appliedAlterations = [];
-            for (const alteration of alterations) {
-                const { key, value, operation = 'set' } = alteration;
-
-                if (!key) {
-                    continue;
+                if (!obj) {
+                    // Create object if it doesn't exist
+                    await db.createObject({
+                        id: objectId,
+                        type: change.type || 'shape',
+                        kind: change.kind || null,
+                        parent: change.parent || null,
+                        owner: user.id
+                    });
                 }
 
-                // Get current value for history
-                const currentValue = await db.getProperty(id, key);
-
-                // Apply the alteration
-                await db.setProperty(id, key, value, principal_id);
-
-                appliedAlterations.push({
-                    key,
-                    previous_value: currentValue,
-                    new_value: value,
-                    operation,
-                    applied_at: new Date().toISOString()
-                });
+                // Apply property change
+                await db.setProperty(objectId, name, value, user.id);
+                applied++;
             }
 
-            // Get client ID from header to exclude from broadcast
-            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
-
-            // Broadcast change EXCEPT to sender
-            broadcastMessage('atome:altered', {
-                atomeId: id,
-                userId: principal_id,
-                alterations: appliedAlterations
-            }, senderClientId);
-
-            console.log(`✅ [Atome] Altered ${id}: ${appliedAlterations.length} changes`);
-
-            return {
+            return reply.send({
                 success: true,
-                data: {
-                    atome_id: id,
-                    alterations_applied: appliedAlterations.length,
-                    alterations: appliedAlterations
-                }
-            };
-
+                message: `Applied ${applied} changes`,
+                applied
+            });
         } catch (error) {
-            console.error('❌ [Atome] Alter error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
+            console.error('[Atome] Sync push error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
         }
     });
 
-    // =========================================================================
-    // RENAME - POST /api/atome/:id/rename
-    // =========================================================================
-    server.post('/api/atome/:id/rename', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const { id } = request.params;
-            // Support both camelCase (unified API) and snake_case formats
-            const new_name = request.body.new_name || request.body.newName;
-
-            if (!new_name || typeof new_name !== 'string' || new_name.trim().length === 0) {
-                return reply.status(400).send({
-                    success: false,
-                    error: 'new_name or newName is required and must be a non-empty string'
-                });
-            }
-
-            // Check atome exists and user has write access
-            const atome = await db.getAtome(id);
-            if (!atome) {
-                return reply.status(404).send({ success: false, error: 'Atome not found' });
-            }
-
-            if (atome.created_by !== principal_id) {
-                const hasAccess = await db.hasPermission(principal_id, id, 'write');
-                if (!hasAccess) {
-                    return reply.status(403).send({ success: false, error: 'Access denied' });
-                }
-            }
-
-            // Get current name for history
-            const oldName = await db.getProperty(id, 'name');
-
-            // Update the name
-            await db.setProperty(id, 'name', new_name.trim(), principal_id);
-
-            // Get client ID from header to exclude from broadcast
-            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
-
-            // Broadcast change EXCEPT to sender
-            broadcastMessage('atome:renamed', {
-                atomeId: id,
-                userId: principal_id,
-                oldName,
-                newName: new_name.trim()
-            }, senderClientId);
-
-            console.log(`✅ [Atome] Renamed ${id}: "${oldName}" -> "${new_name.trim()}"`);
-
-            return {
-                success: true,
-                data: {
-                    atome_id: id,
-                    old_name: oldName,
-                    new_name: new_name.trim()
-                }
-            };
-
-        } catch (error) {
-            console.error('❌ [Atome] Rename error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
-        }
-    });
-
-    // =========================================================================
-    // RESTORE - POST /api/atome/:id/restore (restore to a specific version)
-    // =========================================================================
-    server.post('/api/atome/:id/restore', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const { id } = request.params;
-            const { key, version_index } = request.body;
-
-            if (!key || typeof key !== 'string') {
-                return reply.status(400).send({
-                    success: false,
-                    error: 'key is required to restore a specific property'
-                });
-            }
-
-            if (typeof version_index !== 'number' || version_index < 0) {
-                return reply.status(400).send({
-                    success: false,
-                    error: 'version_index must be a non-negative integer (0 = most recent)'
-                });
-            }
-
-            // Check atome exists and user has write access
-            const atome = await db.getAtome(id);
-            if (!atome) {
-                return reply.status(404).send({ success: false, error: 'Atome not found' });
-            }
-
-            if (atome.created_by !== principal_id) {
-                const hasAccess = await db.hasPermission(principal_id, id, 'write');
-                if (!hasAccess) {
-                    return reply.status(403).send({ success: false, error: 'Access denied' });
-                }
-            }
-
-            // Get property history
-            const history = await db.getPropertyHistory(id, key);
-
-            if (!history || history.length === 0) {
-                return reply.status(404).send({
-                    success: false,
-                    error: `No history found for property "${key}"`
-                });
-            }
-
-            if (version_index >= history.length) {
-                return reply.status(400).send({
-                    success: false,
-                    error: `Version index ${version_index} out of range. Available: 0-${history.length - 1}`
-                });
-            }
-
-            // Get the version to restore
-            const versionToRestore = history[version_index];
-            const valueToRestore = safeParseJSON(versionToRestore.value);
-            const currentValue = await db.getProperty(id, key);
-
-            // Apply the restoration (this creates a new history entry)
-            await db.setProperty(id, key, valueToRestore, principal_id);
-
-            // Get client ID from header to exclude from broadcast
-            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
-
-            // Broadcast change EXCEPT to sender
-            broadcastMessage('atome:restored', {
-                atomeId: id,
-                userId: principal_id,
-                key,
-                restoredFromVersion: version_index
-            }, senderClientId);
-
-            console.log(`✅ [Atome] Restored ${id}.${key} to version ${version_index}`);
-
-            return {
-                success: true,
-                data: {
-                    atome_id: id,
-                    key,
-                    previous_value: currentValue,
-                    restored_value: valueToRestore,
-                    restored_from_version: version_index,
-                    restored_from_date: versionToRestore.changed_at
-                }
-            };
-
-        } catch (error) {
-            console.error('❌ [Atome] Restore error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
-        }
-    });
-
-    // =========================================================================
-    // USER DATA - DELETE /api/user-data/delete-all
-    // =========================================================================
-    server.delete('/api/user-data/delete-all', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            const { confirm } = request.body || {};
-
-            if (confirm !== true && confirm !== 'DELETE_ALL_MY_DATA') {
-                return reply.status(400).send({
-                    success: false,
-                    error: 'Confirmation required. Set confirm to true or "DELETE_ALL_MY_DATA"'
-                });
-            }
-
-            const db = db.getDatabase();
-
-            // Count atomes before deletion
-            const atomes = await db('atomes')
-                .where('created_by', principal_id)
-                .select('atome_id');
-
-            const atomeIds = atomes.map(a => a.atome_id);
-            let deletedCount = 0;
-
-            if (atomeIds.length > 0) {
-                // Delete properties and history for user's atomes
-                await db('properties')
-                    .whereIn('atome_id', atomeIds)
-                    .del();
-
-                await db('property_history')
-                    .whereIn('atome_id', atomeIds)
-                    .del();
-
-                // Delete permissions
-                await db('permissions')
-                    .whereIn('atome_id', atomeIds)
-                    .del();
-
-                // Delete atomes
-                deletedCount = await db('atomes')
-                    .where('created_by', principal_id)
-                    .del();
-            }
-
-            console.log(`🗑️ [UserData] Deleted ${deletedCount} atomes for user ${principal_id}`);
-
-            return {
-                success: true,
-                data: {
-                    deleted_atomes: deletedCount,
-                    user_id: principal_id
-                }
-            };
-
-        } catch (error) {
-            console.error('❌ [UserData] Delete error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
-        }
-    });
-
-    // =========================================================================
-    // USER DATA - GET /api/user-data/export
-    // =========================================================================
-    server.get('/api/user-data/export', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        try {
-            await db.initDatabase();
-            const { tenant_id, principal_id } = await ensureUserInORM(user);
-
-            // Use ORM function to get all atomes with properties
-            const atomes = await db.getAtomesByUser(principal_id);
-
-            const exportData = {
-                exported_at: new Date().toISOString(),
-                user_id: principal_id,
-                atomes: []
-            };
-
-            for (const atome of atomes) {
-                // Get history for each property
-                const history = {};
-                for (const key of Object.keys(atome.properties || {})) {
-                    const propHistory = await db.getPropertyHistory(atome.object_id, key);
-                    history[key] = propHistory.map(h => ({
-                        value: safeParseJSON(h.value),
-                        previous_value: h.previous_value ? safeParseJSON(h.previous_value) : null,
-                        changed_at: h.changed_at,
-                        change_type: h.change_type
-                    }));
-                }
-
-                exportData.atomes.push({
-                    atome_id: atome.object_id,
-                    atome_type: atome.type,
-                    kind: atome.kind,
-                    created_at: atome.created_at,
-                    updated_at: atome.updated_at,
-                    properties: atome.properties,
-                    history
-                });
-            }
-
-            console.log(`📦 [UserData] Exported ${exportData.atomes.length} atomes for user ${principal_id}`);
-
-            return {
-                success: true,
-                data: exportData
-            };
-
-        } catch (error) {
-            console.error('❌ [UserData] Export error:', error.message);
-            return reply.status(500).send({ success: false, error: error.message });
-        }
-    });
-
-    console.log('🔧 Atome API routes registered (ORM version with ADOLE support)');
+    console.log('[Atome] Routes v2.0 registered (ADOLE schema)');
 }
-
-export default registerAtomeRoutes;

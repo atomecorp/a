@@ -175,10 +175,11 @@ pub struct AtomeData {
 }
 
 // =============================================================================
-// DATABASE INITIALIZATION
+// DATABASE INITIALIZATION - ADOLE v2.0 Schema
 // =============================================================================
 
-/// Initialize SQLite database for local atomes
+/// Initialize SQLite database with ADOLE v2.0 schema
+/// Same schema as Fastify server for perfect sync compatibility
 pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> {
     let db_path = data_dir.join("local_atomes.db");
 
@@ -189,7 +190,125 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
 
     let conn = Connection::open(&db_path)?;
 
-    // Create atomes table (ADOLE-compliant schema)
+    // Enable foreign keys and WAL mode
+    conn.execute("PRAGMA foreign_keys = ON", [])?;
+    // WAL mode returns a result, so use execute_batch or ignore result
+    let _ = conn.execute_batch("PRAGMA journal_mode = WAL;");
+
+    // =========================================================================
+    // TABLE 1: objects - Identity, category, ownership (no properties here)
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS objects (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            kind TEXT,
+            parent TEXT,
+            owner TEXT NOT NULL,
+            creator TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(parent) REFERENCES objects(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_parent ON objects(parent)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_objects_owner ON objects(owner)", [])?;
+
+    // =========================================================================
+    // TABLE 2: properties - Current live state of each property
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS properties (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            object_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            value TEXT,
+            version INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE,
+            UNIQUE(object_id, name)
+        )",
+        [],
+    )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_properties_object ON properties(object_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_properties_name ON properties(name)", [])?;
+
+    // =========================================================================
+    // TABLE 3: property_versions - Full history for undo/redo, sync
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS property_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            property_id INTEGER NOT NULL,
+            object_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            value TEXT,
+            author TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE,
+            FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prop_versions_property ON property_versions(property_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prop_versions_object ON property_versions(object_id)", [])?;
+
+    // =========================================================================
+    // TABLE 4: permissions - Fine-grained ACL per property
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            object_id TEXT NOT NULL,
+            property_name TEXT,
+            user_id TEXT NOT NULL,
+            can_read INTEGER NOT NULL DEFAULT 1,
+            can_write INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_permissions_object ON permissions(object_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_permissions_user ON permissions(user_id)", [])?;
+
+    // =========================================================================
+    // TABLE 5: snapshots - Full state backups
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            object_id TEXT NOT NULL,
+            snapshot TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_object ON snapshots(object_id)", [])?;
+
+    // =========================================================================
+    // TABLE 6: sync_state - Cross-server sync tracking
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_state (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server_id TEXT NOT NULL UNIQUE,
+            last_sync_version INTEGER NOT NULL DEFAULT 0,
+            last_sync_at TEXT
+        )",
+        [],
+    )?;
+
+    // =========================================================================
+    // Legacy: Keep atomes table for backward compatibility during migration
+    // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS atomes (
             id TEXT PRIMARY KEY,
@@ -216,56 +335,16 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         [],
     )?;
 
-    // Create sync_queue table (ADOLE-compliant)
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS sync_queue (
-            id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL DEFAULT 'local-tenant',
-            object_id TEXT NOT NULL,
-            device_id TEXT,
-            action TEXT NOT NULL,
-            payload TEXT NOT NULL DEFAULT '{}',
-            target TEXT NOT NULL DEFAULT 'both',
-            status TEXT NOT NULL DEFAULT 'pending',
-            retries INTEGER NOT NULL DEFAULT 0,
-            error TEXT,
-            created_at TEXT NOT NULL,
-            sent_at TEXT,
-            acked_at TEXT
-        )",
-        [],
-    )?;
-
-    // Run migrations BEFORE creating indexes (to add missing columns)
+    // Run migrations for legacy table
     run_migrations(&conn)?;
 
-    // Create indexes for faster lookups (AFTER migrations to ensure columns exist)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_kind ON atomes(kind)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_sync_status ON atomes(sync_status)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_object ON sync_queue(object_id)",
-        [],
-    )?;
+    // Create indexes for legacy table
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_kind ON atomes(kind)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_sync_status ON atomes(sync_status)", [])?;
 
-    println!("📦 Local atomes database initialized (ADOLE-compliant): {:?}", db_path);
+    println!("📦 ADOLE v2.0 database initialized: {:?}", db_path);
 
     Ok(conn)
 }
@@ -490,9 +569,39 @@ async fn create_atome_handler(
     let device_id = req.device_id.clone()
         .or_else(|| headers.get("x-device-id").and_then(|h| h.to_str().ok()).map(|s| s.to_string()));
 
-    // Insert into database with ADOLE fields
+    // Insert into database with ADOLE v2.0 schema
     {
         let db = state.db.lock().unwrap();
+        
+        // 1. Insert into ADOLE objects table (new schema)
+        if let Err(e) = db.execute(
+            "INSERT OR REPLACE INTO objects (id, type, kind, parent, owner, creator, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?6)",
+            rusqlite::params![
+                &atome_id,
+                &req.atome_type,
+                &req.kind,
+                &req.parent_id,
+                &claims.sub,
+                &now,
+            ],
+        ) {
+            println!("⚠️ ADOLE objects insert failed: {}", e);
+        }
+        
+        // 2. Insert properties into ADOLE properties table
+        for (key, value) in &final_data {
+            let value_str = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
+            if let Err(e) = db.execute(
+                "INSERT OR REPLACE INTO properties (object_id, name, value, version, updated_at)
+                 VALUES (?1, ?2, ?3, 1, ?4)",
+                rusqlite::params![&atome_id, key, &value_str, &now],
+            ) {
+                println!("⚠️ ADOLE property insert failed for {}: {}", key, e);
+            }
+        }
+
+        // 3. Also insert into legacy atomes table for backward compatibility
         if let Err(e) = db.execute(
             "INSERT INTO atomes (id, tenant_id, kind, type, owner_id, parent_id, data, snapshot, 
              logical_clock, device_id, sync_status, meta, created_at, updated_at, created_source)
@@ -530,7 +639,7 @@ async fn create_atome_handler(
         }
     }
 
-    println!("✨ Created atome {} (kind: {}, v{}) for user {}", atome_id, req.kind, req.logical_clock, claims.sub);
+    println!("✨ Created atome {} (kind: {}, v{}) for user {} [ADOLE v2.0]", atome_id, req.kind, req.logical_clock, claims.sub);
 
     let atome_data = AtomeData {
         id: atome_id,
