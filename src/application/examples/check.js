@@ -323,140 +323,149 @@ async function syncUserToTauri(username, password) {
 }
 
 /**
- * Sync projects and their atomes between Tauri and Fastify
- * Projects and atomes created on one server will be replicated to the other
+ * Sync ALL atomes between Tauri and Fastify
+ * Projects first, then all other atomes
  */
 async function syncProjectsBetweenServers() {
   const localToken = localStorage.getItem('local_auth_token');
   const cloudToken = localStorage.getItem('cloud_auth_token');
 
   if (!localToken || !cloudToken) {
-    log('⚠️ Sync skipped: need both Tauri and Fastify tokens', 'warning');
+    log('⚠️ Sync skipped: need both Tauri and Fastify tokens', 'warn');
     return;
   }
 
-  log('🔄 Syncing projects & atomes between servers...', 'info');
+  log('🔄 Syncing ALL atomes between servers...', 'info');
 
-  let tauriProjects = [];
-  let fastifyProjects = [];
-
-  // Get projects from Tauri
-  try {
-    const result = await TauriAdapter.atome.list({ kind: 'project' });
-    if (result.success) {
-      tauriProjects = result.atomes || [];
-      log(`📦 Tauri projects: ${tauriProjects.length}`, 'info');
-    }
-  } catch (e) {
-    log(`❌ Error fetching Tauri projects: ${e.message}`, 'error');
-  }
-
-  // Get projects from Fastify
-  try {
-    const result = await FastifyAdapter.atome.list({ kind: 'project' });
-    if (result.success) {
-      fastifyProjects = result.atomes || [];
-      log(`📦 Fastify projects: ${fastifyProjects.length}`, 'info');
-    }
-  } catch (e) {
-    log(`❌ Error fetching Fastify projects: ${e.message}`, 'error');
-  }
-
-  let syncedProjects = 0;
-  let syncedAtomes = 0;
-
-  // Sync Tauri → Fastify (projects)
-  for (const proj of tauriProjects) {
-    if (!fastifyProjects.find(p => p.id === proj.id)) {
-      try {
-        const result = await FastifyAdapter.atome.create({
-          id: proj.id,
-          kind: 'project',
-          type: 'container',
-          data: proj.data || { name: proj.id.substring(0, 8) }
-        });
-        if (result.success) {
-          syncedProjects++;
-          log(`➡️ Synced to Fastify: ${proj.data?.name || proj.id}`, 'info');
-        }
-      } catch (e) { }
-    }
-  }
-
-  // Sync Fastify → Tauri (projects)
-  for (const proj of fastifyProjects) {
-    if (!tauriProjects.find(p => p.id === proj.id)) {
-      try {
-        const result = await TauriAdapter.atome.create({
-          id: proj.id,
-          kind: 'project',
-          type: 'container',
-          data: proj.data || { name: proj.id.substring(0, 8) }
-        });
-        if (result.success) {
-          syncedProjects++;
-          log(`⬅️ Synced to Tauri: ${proj.data?.name || proj.id}`, 'info');
-        }
-      } catch (e) { }
-    }
-  }
-
-  // Get all shapes
   let tauriAtomes = [];
   let fastifyAtomes = [];
 
+  // Get ALL atomes from Tauri (no filter)
   try {
-    const result = await TauriAdapter.atome.list({ kind: 'shape' });
+    const result = await TauriAdapter.atome.list({});
     if (result.success) {
       tauriAtomes = result.atomes || [];
-      log(`📦 Tauri shapes: ${tauriAtomes.length}`, 'info');
+      log(`📦 Tauri total: ${tauriAtomes.length} atomes`, 'info');
+    } else {
+      log(`❌ Failed to fetch Tauri atomes: ${result.error || 'unknown'}`, 'error');
+      return;
     }
-  } catch (e) { }
+  } catch (e) {
+    log(`❌ Error fetching Tauri atomes: ${e.message}`, 'error');
+    return;
+  }
 
+  // Get ALL atomes from Fastify (no filter)
   try {
-    const result = await FastifyAdapter.atome.list({ kind: 'shape' });
+    const result = await FastifyAdapter.atome.list({});
     if (result.success) {
       fastifyAtomes = result.atomes || [];
-      log(`📦 Fastify shapes: ${fastifyAtomes.length}`, 'info');
+      log(`📦 Fastify total: ${fastifyAtomes.length} atomes`, 'info');
+    } else {
+      log(`❌ Failed to fetch Fastify atomes: ${result.error || 'unknown'}`, 'error');
+      return;
     }
-  } catch (e) { }
+  } catch (e) {
+    log(`❌ Error fetching Fastify atomes: ${e.message}`, 'error');
+    return;
+  }
 
-  // Sync Tauri → Fastify (shapes)
-  for (const atome of tauriAtomes) {
-    if (!fastifyAtomes.find(a => a.id === atome.id)) {
-      try {
-        const result = await FastifyAdapter.atome.create({
-          id: atome.id,
-          kind: atome.kind || 'shape',
-          type: atome.type || 'div',
-          parentId: atome.parentId,
-          data: atome.data || {}
-        });
-        if (result.success) syncedAtomes++;
-      } catch (e) { }
+  // Build ID sets for quick lookup
+  const tauriIds = new Set(tauriAtomes.map(a => a.id));
+  const fastifyIds = new Set(fastifyAtomes.map(a => a.id));
+
+  let synced = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  // Helper to check if parent exists on target
+  const parentExistsOnTarget = (atome, targetIds, targetAtomes) => {
+    if (!atome.parentId) return true; // No parent = project = always OK
+    return targetIds.has(atome.parentId);
+  };
+
+  // Sort atomes: projects first (parentId null), then children
+  const sortByParent = (a, b) => {
+    if (!a.parentId && b.parentId) return -1;
+    if (a.parentId && !b.parentId) return 1;
+    return 0;
+  };
+
+  // Sync Tauri → Fastify
+  const tauriToSync = tauriAtomes
+    .filter(a => !fastifyIds.has(a.id))
+    .sort(sortByParent);
+
+  for (const atome of tauriToSync) {
+    // Check if parent exists on Fastify
+    if (!parentExistsOnTarget(atome, fastifyIds, fastifyAtomes)) {
+      log(`⏭️ Skip ${atome.id.substring(0, 8)}: parent ${atome.parentId?.substring(0, 8)} missing on Fastify`, 'warn');
+      skipped++;
+      continue;
+    }
+
+    try {
+      const result = await FastifyAdapter.atome.create({
+        id: atome.id,
+        kind: atome.kind,
+        type: atome.type,
+        parentId: atome.parentId,
+        data: atome.data
+      });
+      if (result.success) {
+        synced++;
+        fastifyIds.add(atome.id); // Mark as synced for child atomes
+        log(`➡️ → Fastify: ${atome.kind} ${atome.data?.name || atome.id.substring(0, 8)}`, 'info');
+      } else {
+        errors++;
+        log(`❌ Failed → Fastify ${atome.id.substring(0, 8)}: ${result.error || 'unknown'}`, 'error');
+      }
+    } catch (e) {
+      errors++;
+      log(`❌ Error → Fastify ${atome.id.substring(0, 8)}: ${e.message}`, 'error');
     }
   }
 
-  // Sync Fastify → Tauri (shapes)
-  for (const atome of fastifyAtomes) {
-    if (!tauriAtomes.find(a => a.id === atome.id)) {
-      try {
-        const result = await TauriAdapter.atome.create({
-          id: atome.id,
-          kind: atome.kind || 'shape',
-          type: atome.type || 'div',
-          parentId: atome.parentId,
-          data: atome.data || {}
-        });
-        if (result.success) syncedAtomes++;
-      } catch (e) { }
+  // Sync Fastify → Tauri
+  const fastifyToSync = fastifyAtomes
+    .filter(a => !tauriIds.has(a.id))
+    .sort(sortByParent);
+
+  for (const atome of fastifyToSync) {
+    // Check if parent exists on Tauri
+    if (!parentExistsOnTarget(atome, tauriIds, tauriAtomes)) {
+      log(`⏭️ Skip ${atome.id.substring(0, 8)}: parent ${atome.parentId?.substring(0, 8)} missing on Tauri`, 'warn');
+      skipped++;
+      continue;
+    }
+
+    try {
+      const result = await TauriAdapter.atome.create({
+        id: atome.id,
+        kind: atome.kind,
+        type: atome.type,
+        parentId: atome.parentId,
+        data: atome.data
+      });
+      if (result.success) {
+        synced++;
+        tauriIds.add(atome.id); // Mark as synced for child atomes
+        log(`⬅️ → Tauri: ${atome.kind} ${atome.data?.name || atome.id.substring(0, 8)}`, 'info');
+      } else {
+        errors++;
+        log(`❌ Failed → Tauri ${atome.id.substring(0, 8)}: ${result.error || 'unknown'}`, 'error');
+      }
+    } catch (e) {
+      errors++;
+      log(`❌ Error → Tauri ${atome.id.substring(0, 8)}: ${e.message}`, 'error');
     }
   }
 
-  if (syncedProjects > 0 || syncedAtomes > 0) {
-    log(`✅ Synced: ${syncedProjects} project(s), ${syncedAtomes} atome(s)`, 'success');
+  // Summary
+  if (synced > 0 || skipped > 0 || errors > 0) {
+    log(`✅ Sync done: ${synced} synced, ${skipped} skipped (orphans), ${errors} errors`, synced > 0 ? 'success' : 'info');
   } else {
-    log('✅ All synced (nothing new)', 'info');
+    log('✅ All atomes already synced', 'success');
   }
 }
 
@@ -1281,6 +1290,14 @@ createAtomeButton('➕ Create Atome', async () => {
         log(`Selected: ${atomeId.substring(0, 8)}`, 'info');
       }
     });
+
+    // IMMEDIATE SYNC if one server failed
+    if ((tauriOk && !fastifyOk) || (!tauriOk && fastifyOk)) {
+      log(`⚠️ Atome created on one server only - syncing now...`, 'warn');
+      setTimeout(async () => {
+        await syncProjectsBetweenServers();
+      }, 1000);
+    }
   } else {
     log(`❌ Create failed on both servers`, 'error');
   }
@@ -1576,9 +1593,13 @@ createProjectButton('➕ Create Project', async () => {
     selectedAtomeId = null;
     selectedAtomeEl = null;
 
-    // Auto-sync: if one server was unavailable, sync when both are connected
+    // IMMEDIATE SYNC if one server failed
     if ((tauriOk && !fastifyOk) || (!tauriOk && fastifyOk)) {
-      log(`⚠️ Project created on one server only - will sync later`, 'warn');
+      log(`⚠️ Project created on one server only - syncing now...`, 'warn');
+      // Wait 1 second then try to sync
+      setTimeout(async () => {
+        await syncProjectsBetweenServers();
+      }, 1000);
     }
   } else {
     log(`❌ Failed to create project`, 'error');
@@ -2007,7 +2028,8 @@ async function restoreSession() {
 
 const serverAvailabilityState = {
   tauri: false,
-  fastify: false
+  fastify: false,
+  lastFullSync: 0
 };
 
 async function monitorServerAvailability() {
@@ -2042,10 +2064,18 @@ async function monitorServerAvailability() {
   const tauriReconnected = !serverAvailabilityState.tauri && tauriNowOnline;
   const fastifyReconnected = !serverAvailabilityState.fastify && fastifyNowOnline;
 
-  if ((tauriReconnected || fastifyReconnected) && localToken && cloudToken) {
-    log(`🔌 Server reconnected! Auto-syncing...`, 'info');
+  // SYNC if reconnected OR if both online and it's been more than 30 seconds
+  const bothOnline = tauriNowOnline && fastifyNowOnline;
+  const now = Date.now();
+  const timeSinceLastSync = now - serverAvailabilityState.lastFullSync;
+  const shouldPeriodicSync = bothOnline && timeSinceLastSync > 30000;
+
+  if ((tauriReconnected || fastifyReconnected || shouldPeriodicSync) && localToken && cloudToken) {
+    if (tauriReconnected || fastifyReconnected) {
+      log(`🔌 Server reconnected! Auto-syncing...`, 'info');
+    }
     await syncProjectsBetweenServers();
-    await loadAndSyncAtomes();
+    serverAvailabilityState.lastFullSync = now;
   }
 
   // Update state
