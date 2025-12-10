@@ -175,10 +175,14 @@ pub struct AtomeData {
 }
 
 // =============================================================================
-// DATABASE INITIALIZATION - ADOLE v2.0 Schema
+// DATABASE INITIALIZATION - ADOLE Schema (Pure)
+// =============================================================================
+// ADOLE = Atome Data Object Layer for Eden
+// Uses objects + properties tables only - NO legacy atomes table
+// Same schema as Fastify server for perfect sync compatibility
 // =============================================================================
 
-/// Initialize SQLite database with ADOLE v2.0 schema
+/// Initialize SQLite database with ADOLE schema
 /// Same schema as Fastify server for perfect sync compatibility
 pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> {
     let db_path = data_dir.join("local_atomes.db");
@@ -192,7 +196,6 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
 
     // Enable foreign keys and WAL mode
     conn.execute("PRAGMA foreign_keys = ON", [])?;
-    // WAL mode returns a result, so use execute_batch or ignore result
     let _ = conn.execute_batch("PRAGMA journal_mode = WAL;");
 
     // =========================================================================
