@@ -749,6 +749,65 @@ async fn login_handler(
     )
 }
 
+/// Response for list users endpoint
+#[derive(Debug, Serialize)]
+pub struct ListUsersResponse {
+    pub success: bool,
+    pub database: String,
+    pub users: Vec<UserInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// GET /api/auth/local/users
+/// List all users in the local SQLite database
+async fn list_users_handler(State(state): State<LocalAuthState>) -> impl IntoResponse {
+    let db = state.db.lock().unwrap();
+
+    let mut stmt = match db.prepare(
+        "SELECT id, username, phone, created_at, cloud_id, last_sync, created_source FROM users ORDER BY created_at DESC"
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ListUsersResponse {
+                    success: false,
+                    database: "Tauri/SQLite".into(),
+                    users: vec![],
+                    error: Some(format!("Database error: {}", e)),
+                }),
+            );
+        }
+    };
+
+    let users: Vec<UserInfo> = stmt
+        .query_map([], |row| {
+            Ok(UserInfo {
+                id: row.get(0)?,
+                username: row.get(1)?,
+                phone: row.get(2)?,
+                cloud_id: row.get(4).ok(),
+                synced: Some(row.get::<_, Option<String>>(5).ok().flatten().is_some()),
+            })
+        })
+        .unwrap_or_else(|_| panic!("Query failed"))
+        .filter_map(|r| r.ok())
+        .collect();
+
+    println!("[Auth] Listed {} users from SQLite", users.len());
+
+    (
+        StatusCode::OK,
+        Json(ListUsersResponse {
+            success: true,
+            database: "Tauri/SQLite".into(),
+            users,
+            error: None,
+        }),
+    )
+}
+
 /// GET /api/auth/local/me
 async fn me_handler(
     State(state): State<LocalAuthState>,
@@ -1756,6 +1815,7 @@ pub fn create_local_auth_router(data_dir: PathBuf) -> Router {
         .route("/api/auth/local/login", post(login_handler))
         .route("/api/auth/local/logout", post(logout_handler))
         .route("/api/auth/local/me", get(me_handler))
+        .route("/api/auth/local/users", get(list_users_handler))
         .route(
             "/api/auth/local/change-password",
             post(change_password_handler),

@@ -84,7 +84,7 @@ async function syncAtomeToTauriWithQueue(atome, operation = 'create') {
                 created_at: atome.created_at,
                 updated_at: atome.updated_at,
                 meta: {},
-                deleted: false
+                deleted: operation === 'delete' // Mark as deleted for delete operation
             }]
         };
 
@@ -504,6 +504,9 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             const updated = await db.getAtome(id);
             const formatted = formatAtome(updated);
 
+            // Auto-sync UPDATE to Tauri in background with queue fallback (non-blocking)
+            syncAtomeToTauriWithQueue(formatted, 'update').catch(() => { });
+
             // Broadcast
             broadcastMessage({
                 type: 'atome-updated',
@@ -613,7 +616,16 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                 });
             }
 
+            // Get the atome data before delete for sync
+            const atomeBeforeDelete = await db.getAtome(id);
+            const formattedForSync = atomeBeforeDelete ? formatAtome(atomeBeforeDelete) : null;
+
             await db.deleteObject(id);
+
+            // Auto-sync DELETE to Tauri in background with queue fallback (non-blocking)
+            if (formattedForSync) {
+                syncAtomeToTauriWithQueue(formattedForSync, 'delete').catch(() => { });
+            }
 
             // Broadcast
             broadcastMessage({
@@ -788,6 +800,15 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                 }
 
                 if (existing) {
+                    // Check if this is a delete sync
+                    if (atome.deleted === true) {
+                        // Delete the atome
+                        await db.deleteObject(atome.id);
+                        console.log(`[Sync] Deleted atome ${atome.id} (synced from Tauri)`);
+                        synced++;
+                        continue;
+                    }
+
                     // Update if incoming has higher logical_clock
                     const existingClock = existing.logical_clock || 1;
                     const incomingClock = atome.logical_clock || 1;
@@ -798,6 +819,12 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                         synced++;
                     }
                 } else {
+                    // If deleted is true and doesn't exist, skip creation
+                    if (atome.deleted === true) {
+                        console.log(`[Sync] Skipping deleted atome ${atome.id} (doesn't exist locally)`);
+                        continue;
+                    }
+
                     // Create new atome
                     await db.createAtome({
                         id: atome.id,

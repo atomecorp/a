@@ -265,6 +265,39 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     });
 
     /**
+     * GET /api/auth/users
+     * List all users in the database (for sync debugging)
+     */
+    server.get('/api/auth/users', async (request, reply) => {
+        try {
+            const rows = await dataSource.query(
+                `SELECT user_id, username, phone, created_at FROM users ORDER BY created_at DESC`
+            );
+
+            console.log(`[Auth] Listed ${rows.length} users from LibSQL`);
+
+            return {
+                success: true,
+                database: 'Fastify/LibSQL',
+                users: rows.map(row => ({
+                    id: row.user_id,
+                    username: row.username,
+                    phone: row.phone,
+                    created_at: row.created_at
+                }))
+            };
+        } catch (error) {
+            request.log.error({ err: error }, 'List users failed');
+            return reply.code(500).send({
+                success: false,
+                database: 'Fastify/LibSQL',
+                users: [],
+                error: error.message
+            });
+        }
+    });
+
+    /**
      * POST /api/auth/register
      * Create a new user account
      * Uses simplified SQLite schema with direct users table

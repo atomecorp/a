@@ -83,7 +83,7 @@ fn queue_sync_to_fastify(db: &Connection, atome: &AtomeData, operation: &str) ->
 }
 
 /// Try to sync an atome to Fastify immediately, queue on failure
-async fn sync_atome_to_fastify_with_queue(atome: &AtomeData, db_arc: Arc<Mutex<Connection>>) {
+async fn sync_atome_to_fastify_with_queue(atome: &AtomeData, db_arc: Arc<Mutex<Connection>>, is_delete: bool) {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -115,7 +115,7 @@ async fn sync_atome_to_fastify_with_queue(atome: &AtomeData, db_arc: Arc<Mutex<C
             "created_at": atome.created_at,
             "updated_at": atome.updated_at,
             "meta": atome.meta,
-            "deleted": false
+            "deleted": is_delete
         }]
     });
 
@@ -1014,7 +1014,7 @@ async fn create_atome_handler(
     let atome_for_sync = atome_data.clone();
     let db_arc = state.db.clone();
     tokio::spawn(async move {
-        sync_atome_to_fastify_with_queue(&atome_for_sync, db_arc).await;
+        sync_atome_to_fastify_with_queue(&atome_for_sync, db_arc, false).await;
     });
 
     (
@@ -1383,18 +1383,31 @@ async fn update_atome_handler(
     );
 
     match updated {
-        Ok(atome) => (
-            StatusCode::OK,
-            Json(AtomeResponse {
-                success: true,
-                message: Some("Atome updated successfully".into()),
-                error: None,
-                atome: Some(atome),
-                atomes: None,
-                total: None,
-                data: None,
-            }),
-        ),
+        Ok(atome) => {
+            // Update sync hash for this user
+            let _ = update_user_sync_hash(&db, &atome.owner);
+            
+            // Auto-sync UPDATE to Fastify in background with queue fallback (non-blocking)
+            let atome_for_sync = atome.clone();
+            let db_arc = state.db.clone();
+            drop(db); // Release the lock before spawning async task
+            tokio::spawn(async move {
+                sync_atome_to_fastify_with_queue(&atome_for_sync, db_arc, false).await;
+            });
+            
+            (
+                StatusCode::OK,
+                Json(AtomeResponse {
+                    success: true,
+                    message: Some("Atome updated successfully".into()),
+                    error: None,
+                    atome: Some(atome),
+                    atomes: None,
+                    total: None,
+                    data: None,
+                }),
+            )
+        },
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(AtomeResponse {
@@ -1426,6 +1439,41 @@ async fn delete_atome_handler(
     let now = Utc::now().to_rfc3339();
     let db = state.db.lock().unwrap();
 
+    // First fetch the atome data before soft delete (needed for sync)
+    let atome_before_delete: Result<AtomeData, _> = db.query_row(
+        "SELECT id, kind, COALESCE(type, 'atome'), owner, parent, data, 
+                COALESCE(snapshot, data), COALESCE(logical_clock, 1), 
+                COALESCE(sync_status, 'synced'), device_id, 
+                created_at, updated_at, meta
+         FROM atomes 
+         WHERE id = ?1 AND owner = ?2 AND deleted = 0",
+        rusqlite::params![&id, &claims.sub],
+        |row| {
+            let data_str: String = row.get(5)?;
+            let data: serde_json::Value = serde_json::from_str(&data_str).unwrap_or(serde_json::json!({}));
+            let snapshot_str: String = row.get(6)?;
+            let snapshot: serde_json::Value = serde_json::from_str(&snapshot_str).unwrap_or(data.clone());
+            let meta_str: Option<String> = row.get(12)?;
+            let meta: Option<serde_json::Value> = meta_str.and_then(|s| serde_json::from_str(&s).ok());
+            
+            Ok(AtomeData {
+                id: row.get(0)?,
+                kind: row.get(1)?,
+                atome_type: row.get(2)?,
+                owner: row.get(3)?,
+                parent: row.get(4)?,
+                data,
+                snapshot,
+                logical_clock: row.get(7)?,
+                sync_status: row.get(8)?,
+                device_id: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+                meta,
+            })
+        },
+    );
+
     // Get current logical_clock and increment
     let current_clock: i64 = db.query_row(
         "SELECT logical_clock FROM atomes WHERE id = ?1",
@@ -1443,6 +1491,23 @@ async fn delete_atome_handler(
     match result {
         Ok(rows) if rows > 0 => {
             println!("🗑️ Deleted atome {} (v{}) for user {}", id, new_clock, claims.sub);
+            
+            // Update sync hash for this user
+            let _ = update_user_sync_hash(&db, &claims.sub);
+            
+            // Auto-sync DELETE to Fastify in background with queue fallback (non-blocking)
+            // Use the atome data we fetched before the soft delete, with updated logical_clock
+            if let Ok(mut atome_for_sync) = atome_before_delete {
+                atome_for_sync.logical_clock = new_clock;
+                atome_for_sync.updated_at = now.clone();
+                atome_for_sync.sync_status = "pending".to_string();
+                let db_arc = state.db.clone();
+                drop(db); // Release the lock before spawning async task
+                tokio::spawn(async move {
+                    sync_atome_to_fastify_with_queue(&atome_for_sync, db_arc, true).await;
+                });
+            }
+            
             (
                 StatusCode::OK,
                 Json(AtomeResponse {
@@ -2489,42 +2554,58 @@ async fn sync_receive_handler(
             Ok(local_clock) => {
                 // Only update if remote is newer
                 if atome.logical_clock > local_clock {
-                    let data_json = serde_json::to_string(&atome.data).unwrap_or_else(|_| "{}".to_string());
-                    let snapshot_json = serde_json::to_string(&atome.snapshot).unwrap_or_else(|_| data_json.clone());
-                    let meta_json = atome.meta.as_ref().map(|m| serde_json::to_string(m).unwrap_or_else(|_| "null".to_string()));
+                    // Check if this is a delete sync
+                    if atome.deleted {
+                        let _ = db.execute(
+                            "UPDATE atomes SET deleted = 1, deleted_at = ?1, updated_at = ?1, 
+                             logical_clock = ?2, sync_status = 'synced' WHERE id = ?3",
+                            rusqlite::params![&now, &atome.logical_clock, &atome.id],
+                        );
+                        synced += 1;
+                        println!("🔄 [SyncReceive] Deleted atome {} (synced from Fastify)", atome.id);
+                    } else {
+                        let data_json = serde_json::to_string(&atome.data).unwrap_or_else(|_| "{}".to_string());
+                        let snapshot_json = serde_json::to_string(&atome.snapshot).unwrap_or_else(|_| data_json.clone());
+                        let meta_json = atome.meta.as_ref().map(|m| serde_json::to_string(m).unwrap_or_else(|_| "null".to_string()));
 
-                    let _ = db.execute(
-                        "UPDATE atomes SET kind = ?1, type = ?2, data = ?3, snapshot = ?4, 
-                         parent = ?5, logical_clock = ?6, sync_status = 'synced', 
-                         meta = ?7, updated_at = ?8 WHERE id = ?9",
-                        rusqlite::params![
-                            &atome.kind,
-                            &atome.atome_type,
-                            &data_json,
-                            &snapshot_json,
-                            &atome.parent,
-                            &atome.logical_clock,
-                            &meta_json,
-                            &now,
-                            &atome.id
-                        ],
-                    );
-                    synced += 1;
-                    println!("🔄 [SyncReceive] Updated atome {} (clock {} -> {})", atome.id, local_clock, atome.logical_clock);
+                        let _ = db.execute(
+                            "UPDATE atomes SET kind = ?1, type = ?2, data = ?3, snapshot = ?4, 
+                             parent = ?5, logical_clock = ?6, sync_status = 'synced', 
+                             meta = ?7, updated_at = ?8 WHERE id = ?9",
+                            rusqlite::params![
+                                &atome.kind,
+                                &atome.atome_type,
+                                &data_json,
+                                &snapshot_json,
+                                &atome.parent,
+                                &atome.logical_clock,
+                                &meta_json,
+                                &now,
+                                &atome.id
+                            ],
+                        );
+                        synced += 1;
+                        println!("🔄 [SyncReceive] Updated atome {} (clock {} -> {})", atome.id, local_clock, atome.logical_clock);
+                    }
                 }
             }
             Err(_) => {
+                // Skip creation if atome is deleted
+                if atome.deleted {
+                    println!("🔄 [SyncReceive] Skipping deleted atome {} (doesn't exist locally)", atome.id);
+                    continue;
+                }
+
                 // Atome doesn't exist locally, create it
                 let data_json = serde_json::to_string(&atome.data).unwrap_or_else(|_| "{}".to_string());
                 let snapshot_json = serde_json::to_string(&atome.snapshot).unwrap_or_else(|_| data_json.clone());
                 let meta_json = atome.meta.as_ref().map(|m| serde_json::to_string(m).unwrap_or_else(|_| "null".to_string()));
-                let deleted_at: Option<String> = if atome.deleted { Some(now.clone()) } else { None };
 
                 let _ = db.execute(
                     "INSERT INTO atomes (id, tenant_id, kind, type, owner, parent, data, snapshot, 
                      logical_clock, schema_version, device_id, sync_status, meta, created_at, updated_at, 
-                     deleted, deleted_at, created_source)
-                     VALUES (?1, 'local-tenant', ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, 'synced', ?10, ?11, ?12, ?13, ?14, 'fastify')",
+                     deleted, created_source)
+                     VALUES (?1, 'local-tenant', ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, 'synced', ?10, ?11, ?12, 0, 'fastify')",
                     rusqlite::params![
                         &atome.id,
                         &atome.kind,
@@ -2538,8 +2619,6 @@ async fn sync_receive_handler(
                         &meta_json,
                         &atome.created_at,
                         &now,
-                        &atome.deleted,
-                        &deleted_at
                     ],
                 );
                 synced += 1;
