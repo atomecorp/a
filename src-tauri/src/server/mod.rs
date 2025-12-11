@@ -33,6 +33,8 @@ struct AppState {
     uploads_dir: Arc<PathBuf>,
     static_dir: Arc<PathBuf>,
     version: Arc<String>,
+    atome_state: Option<local_atome::LocalAtomeState>,
+    auth_state: Option<local_auth::LocalAuthState>,
 }
 
 const SERVER_TYPE: &str = "Tauri frontend process";
@@ -783,8 +785,8 @@ async fn ws_api_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
     ws.on_upgrade(move |socket| handle_ws_api(socket, state))
 }
 
-/// Handle WebSocket API connection
-async fn handle_ws_api(mut socket: WebSocket, _state: AppState) {
+/// Handle WebSocket API connection (ADOLE v3.0)
+async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
     println!("🔗 New WebSocket API connection");
 
     while let Some(msg) = socket.next().await {
@@ -808,22 +810,69 @@ async fn handle_ws_api(mut socket: WebSocket, _state: AppState) {
                     }
                 };
 
+                let msg_type = data.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
                 // Handle ping/pong
-                if data.get("type").and_then(|v| v.as_str()) == Some("ping") {
+                if msg_type == "ping" {
                     let _ = socket
                         .send(Message::Text(json!({"type": "pong"}).to_string()))
                         .await;
                     continue;
                 }
 
-                // Handle API requests
-                if data.get("type").and_then(|v| v.as_str()) == Some("api-request") {
+                // Route to atome handler
+                if msg_type == "atome" {
+                    if let Some(ref atome_state) = state.atome_state {
+                        // Extract user_id from message (required for ADOLE v3.0 permission checks)
+                        let user_id = data
+                            .get("userId")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("anonymous")
+                            .to_string();
+                        let response =
+                            local_atome::handle_atome_message(data, &user_id, atome_state).await;
+                        let _ = socket
+                            .send(Message::Text(
+                                serde_json::to_string(&response).unwrap_or_default(),
+                            ))
+                            .await;
+                    } else {
+                        let _ = socket
+                            .send(Message::Text(
+                                json!({"type": "error", "message": "Atome state not initialized"})
+                                    .to_string(),
+                            ))
+                            .await;
+                    }
+                    continue;
+                }
+
+                // Route to auth handler
+                if msg_type == "auth" {
+                    if let Some(ref auth_state) = state.auth_state {
+                        let response = local_auth::handle_auth_message(data, auth_state).await;
+                        let _ = socket
+                            .send(Message::Text(
+                                serde_json::to_string(&response).unwrap_or_default(),
+                            ))
+                            .await;
+                    } else {
+                        let _ = socket
+                            .send(Message::Text(
+                                json!({"type": "error", "message": "Auth state not initialized"})
+                                    .to_string(),
+                            ))
+                            .await;
+                    }
+                    continue;
+                }
+
+                // Handle legacy API requests (for backward compatibility)
+                if msg_type == "api-request" {
                     let id = data.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     let method = data.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
                     let path = data.get("path").and_then(|v| v.as_str()).unwrap_or("/");
 
-                    // For now, return a simple acknowledgment
-                    // TODO: Implement proper request routing
                     let response = json!({
                         "type": "api-response",
                         "id": id,
@@ -975,10 +1024,34 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
     println!("📂 Static dir (absolute): {:?}", static_dir_abs);
 
+    // Use a separate data directory for SQLite databases to avoid triggering Tauri hot-reload
+    // The data_dir should be outside the watched src/ folder
+    let data_dir = {
+        // Try to use a 'data' folder at project root (outside src/)
+        let project_root = static_dir.parent().unwrap_or(&static_dir);
+        let data_path = project_root.join("data");
+
+        // Create the data directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&data_path) {
+            eprintln!("⚠️ Could not create data directory {:?}: {}", data_path, e);
+            // Fallback to uploads parent if data dir creation fails
+            uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf()
+        } else {
+            println!("📂 Database directory (outside src/): {:?}", data_path);
+            data_path
+        }
+    };
+
+    // Initialize local atome and auth states (ADOLE v3.0 WebSocket-based)
+    let atome_state = local_atome::create_state(data_dir.clone());
+    let auth_state = local_auth::create_state(&atome_state, &data_dir);
+
     let state = AppState {
         uploads_dir: Arc::new(uploads_dir.clone()),
         static_dir: Arc::new(static_dir_abs),
         version: Arc::new(version.clone()),
+        atome_state: Some(atome_state),
+        auth_state: Some(auth_state),
     };
 
     // CORS configuration that allows credentials (required for cookie-based auth)
@@ -1008,32 +1081,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         ])
         .allow_credentials(true);
 
-    // Use a separate data directory for SQLite databases to avoid triggering Tauri hot-reload
-    // The data_dir should be outside the watched src/ folder
-    let data_dir = {
-        // Try to use a 'data' folder at project root (outside src/)
-        let project_root = static_dir.parent().unwrap_or(&static_dir);
-        let data_path = project_root.join("data");
-
-        // Create the data directory if it doesn't exist
-        if let Err(e) = std::fs::create_dir_all(&data_path) {
-            eprintln!("⚠️ Could not create data directory {:?}: {}", data_path, e);
-            // Fallback to uploads parent if data dir creation fails
-            uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf()
-        } else {
-            println!("📂 Database directory (outside src/): {:?}", data_path);
-            data_path
-        }
-    };
-
-    // Create local auth router (independent state) with CORS layer
-    let local_auth_router =
-        local_auth::create_local_auth_router(data_dir.clone()).layer(cors.clone());
-
-    // Create local atome router with CORS layer
-    let local_atome_router =
-        local_atome::create_local_atome_router(data_dir.clone()).layer(cors.clone());
-
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
         .route("/api/debug-log", post(debug_log_handler))
@@ -1045,7 +1092,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))
         .route("/api/admin/sync-from-zip", post(sync_from_zip_handler))
-        // WebSocket endpoint for API calls (silent connection detection)
+        // WebSocket endpoints for API and sync (ADOLE v3.0)
         .route("/ws/api", get(ws_api_handler))
         .route("/ws/sync", get(ws_sync_handler))
         .nest_service("/", root_service)
@@ -1054,16 +1101,12 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
-        .with_state(state)
-        // Merge local auth routes AFTER with_state (uses its own state with CORS)
-        .merge(local_auth_router)
-        // Merge local atome routes
-        .merge(local_atome_router);
+        .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Serveur Axum {} démarré: http://localhost:3000", version);
-    println!("🔐 Local authentication enabled: /api/auth/local/*");
-    println!("📦 Local atome storage enabled: /api/atome/*");
+    println!("🔗 WebSocket API enabled: ws://localhost:3000/ws/api");
+    println!("🔗 WebSocket Sync enabled: ws://localhost:3000/ws/sync");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

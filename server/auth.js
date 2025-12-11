@@ -170,9 +170,9 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
 
     for (const p of particles) {
         await dataSource.query(
-            `INSERT INTO particles (atome_id, key, value, value_type, version, created_at, updated_at)
-             VALUES (?, ?, ?, 'string', 1, ?, ?)`,
-            [userId, p.key, p.value, now, now]
+            `INSERT INTO particles (atome_id, key, value, updated_at)
+             VALUES (?, ?, ?, ?)`,
+            [userId, p.key, p.value, now]
         );
     }
 
@@ -195,7 +195,7 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
  */
 async function findUserByPhone(dataSource, phone) {
     const rows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.cloud_id, a.last_sync, a.created_source,
+        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
                 MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username,
                 MAX(CASE WHEN p.key = 'password_hash' THEN p.value END) AS password_hash
@@ -218,7 +218,6 @@ async function findUserByPhone(dataSource, phone) {
         password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
         created_at: user.created_at,
         updated_at: user.updated_at,
-        cloud_id: user.cloud_id,
         last_sync: user.last_sync,
         created_source: user.created_source
     };
@@ -232,7 +231,7 @@ async function findUserByPhone(dataSource, phone) {
  */
 async function findUserById(dataSource, userId) {
     const rows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.cloud_id, a.last_sync, a.created_source,
+        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
                 MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username,
                 MAX(CASE WHEN p.key = 'password_hash' THEN p.value END) AS password_hash
@@ -253,7 +252,6 @@ async function findUserById(dataSource, userId) {
         password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
         created_at: user.created_at,
         updated_at: user.updated_at,
-        cloud_id: user.cloud_id,
         last_sync: user.last_sync,
         created_source: user.created_source
     };
@@ -266,7 +264,7 @@ async function findUserById(dataSource, userId) {
  */
 async function listAllUsers(dataSource) {
     const rows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.cloud_id, a.last_sync, a.created_source,
+        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
                 MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username
          FROM atomes a
@@ -282,7 +280,6 @@ async function listAllUsers(dataSource) {
         phone: user.phone ? JSON.parse(user.phone) : null,
         created_at: user.created_at,
         updated_at: user.updated_at,
-        cloud_id: user.cloud_id,
         last_sync: user.last_sync,
         created_source: user.created_source
     }));
@@ -464,14 +461,13 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     a.created_at,
                     a.updated_at,
                     a.created_source,
+                    a.last_sync,
                     MAX(CASE WHEN p.key = 'username' THEN p.value END) as username,
-                    MAX(CASE WHEN p.key = 'phone' THEN p.value END) as phone,
-                    MAX(CASE WHEN p.key = 'cloud_id' THEN p.value END) as cloud_id,
-                    MAX(CASE WHEN p.key = 'last_sync' THEN p.value END) as last_sync
+                    MAX(CASE WHEN p.key = 'phone' THEN p.value END) as phone
                  FROM atomes a
                  LEFT JOIN particles p ON a.atome_id = p.atome_id
-                 WHERE a.atome_type = 'user'
-                 GROUP BY a.atome_id, a.created_at, a.updated_at, a.created_source
+                 WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
+                 GROUP BY a.atome_id, a.created_at, a.updated_at, a.created_source, a.last_sync
                  ORDER BY a.created_at DESC`
             );
 
@@ -491,8 +487,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     username: parseJsonValue(row.username) || 'Unknown',
                     phone: parseJsonValue(row.phone) || 'Unknown',
                     created_at: row.created_at,
-                    cloud_id: parseJsonValue(row.cloud_id) || null,
-                    last_sync: parseJsonValue(row.last_sync) || null,
+                    last_sync: row.last_sync || null,
                     created_source: row.created_source || null,
                     synced: row.last_sync ? true : false
                 }))

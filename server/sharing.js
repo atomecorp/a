@@ -458,6 +458,16 @@ export function registerSharingWebSocket() {
     console.log('Sharing WebSocket handler registered (ADOLE v3.0)');
 }
 
+/**
+ * Register sharing routes (backward compatibility)
+ * In ADOLE v3.0, sharing is handled via WebSocket, not HTTP routes
+ */
+export function registerSharingRoutes(server, validateToken) {
+    // Register WebSocket handler
+    registerSharingWebSocket();
+    console.log('Sharing routes registered (ADOLE v3.0 - WebSocket mode)');
+}
+
 export default {
     PERMISSION,
     createShare,
@@ -470,5 +480,6 @@ export default {
     parsePermission,
     getPermissionName,
     handleShareMessage,
-    registerSharingWebSocket
+    registerSharingWebSocket,
+    registerSharingRoutes
 };

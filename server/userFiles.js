@@ -37,7 +37,7 @@ export async function registerFileUpload(fileName, userId, options = {}) {
         for (const [key, value] of Object.entries(particles)) {
             if (value !== null) {
                 await db.query('run', `
-                    INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+                    INSERT INTO particles (atome_id, key, value, updated_at)
                     VALUES (?, ?, ?, ?)
                 `, [atomeId, key, JSON.stringify(value), now]);
             }
@@ -69,7 +69,7 @@ export async function getFileMetadata(identifier) {
     try {
         // Try by atome_id first
         let atome = await db.query('get', `
-            SELECT a.*, p.particle_key, p.particle_value
+            SELECT a.*, p.key, p.value
             FROM atomes a
             LEFT JOIN particles p ON a.atome_id = p.atome_id
             WHERE a.atome_id = ? AND a.atome_type = 'file' AND a.deleted_at IS NULL
@@ -81,7 +81,7 @@ export async function getFileMetadata(identifier) {
                 SELECT a.atome_id, a.owner_id, a.created_at
                 FROM atomes a
                 JOIN particles p ON a.atome_id = p.atome_id
-                WHERE p.particle_key = 'file_name' AND p.particle_value = ?
+                WHERE p.key = 'file_name' AND p.value = ?
                 AND a.atome_type = 'file' AND a.deleted_at IS NULL
             `, [JSON.stringify(identifier)]);
         }
@@ -90,7 +90,7 @@ export async function getFileMetadata(identifier) {
         
         // Get all particles for this file
         const particles = await db.query('all', `
-            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
+            SELECT key, value FROM particles WHERE atome_id = ?
         `, [atome.atome_id]);
         
         const meta = {
@@ -101,9 +101,9 @@ export async function getFileMetadata(identifier) {
         
         for (const p of (particles || [])) {
             try {
-                meta[p.particle_key] = JSON.parse(p.particle_value);
+                meta[p.key] = JSON.parse(p.value);
             } catch {
-                meta[p.particle_key] = p.particle_value;
+                meta[p.key] = p.value;
             }
         }
         
@@ -129,15 +129,15 @@ export async function getUserFiles(userId) {
     const result = [];
     for (const file of (files || [])) {
         const particles = await db.query('all', `
-            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
+            SELECT key, value FROM particles WHERE atome_id = ?
         `, [file.atome_id]);
         
         const meta = { ...file };
         for (const p of (particles || [])) {
             try {
-                meta[p.particle_key] = JSON.parse(p.particle_value);
+                meta[p.key] = JSON.parse(p.value);
             } catch {
-                meta[p.particle_key] = p.particle_value;
+                meta[p.key] = p.value;
             }
         }
         result.push(meta);
@@ -165,15 +165,15 @@ export async function getAccessibleFiles(userId) {
     const result = [];
     for (const file of (files || [])) {
         const particles = await db.query('all', `
-            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
+            SELECT key, value FROM particles WHERE atome_id = ?
         `, [file.atome_id]);
         
         const meta = { ...file };
         for (const p of (particles || [])) {
             try {
-                meta[p.particle_key] = JSON.parse(p.particle_value);
+                meta[p.key] = JSON.parse(p.value);
             } catch {
-                meta[p.particle_key] = p.particle_value;
+                meta[p.key] = p.value;
             }
         }
         result.push(meta);
@@ -236,7 +236,7 @@ export async function setFilePublic(atomeId, ownerId, isPublic) {
         `, [JSON.stringify(isPublic), now, atomeId]);
     } else {
         await db.query('run', `
-            INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+            INSERT INTO particles (atome_id, key, value, updated_at)
             VALUES (?, 'is_public', ?, ?)
         `, [atomeId, JSON.stringify(isPublic), now]);
     }
@@ -288,7 +288,7 @@ export async function getFileStats() {
         SELECT COUNT(*) as count
         FROM particles p
         JOIN atomes a ON p.atome_id = a.atome_id
-        WHERE p.particle_key = 'is_public' AND p.particle_value = 'true'
+        WHERE p.key = 'is_public' AND p.value = 'true'
         AND a.atome_type = 'file' AND a.deleted_at IS NULL
     `);
     
@@ -409,7 +409,43 @@ export function registerFileWebSocket() {
     console.log('File WebSocket handler registered (ADOLE v3.0)');
 }
 
+/**
+ * Initialize user files system (backward compatibility)
+ * In ADOLE v3.0, initialization is handled by the database module
+ */
+export async function initUserFiles(uploadsDir) {
+    console.log('User files system initialized (ADOLE v3.0) - uploads:', uploadsDir);
+    // Register WebSocket handler
+    registerFileWebSocket();
+    return true;
+}
+
+/**
+ * Share a file with another user (backward compatibility wrapper)
+ */
+export async function shareFile(fileId, targetUserId, granterId, permissions = { canRead: true }) {
+    const { createShare } = await import('./sharing.js');
+    return createShare({
+        atomeId: fileId,
+        principalId: targetUserId,
+        granterId,
+        canRead: permissions.canRead ?? true,
+        canWrite: permissions.canWrite ?? false,
+        canDelete: permissions.canDelete ?? false,
+        canShare: permissions.canShare ?? false
+    });
+}
+
+/**
+ * Revoke file sharing (backward compatibility wrapper)
+ */
+export async function unshareFile(fileId, targetUserId) {
+    const { revokeShare } = await import('./sharing.js');
+    return revokeShare(fileId, targetUserId);
+}
+
 export default {
+    initUserFiles,
     registerFileUpload,
     getFileMetadata,
     getUserFiles,
@@ -418,6 +454,8 @@ export default {
     setFilePublic,
     deleteFile,
     getFileStats,
+    shareFile,
+    unshareFile,
     handleFileMessage,
     registerFileWebSocket
 };
