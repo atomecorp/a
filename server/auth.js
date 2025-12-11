@@ -138,6 +138,209 @@ export async function sendSMS(phone, message) {
     return true;
 }
 
+// =============================================================================
+// ADOLE v3.0 USER FUNCTIONS (Users are Atomes with particles)
+// =============================================================================
+
+/**
+ * Create a user as an atome with particles for properties
+ * @param {Object} dataSource - Database connection
+ * @param {string} userId - User's unique ID
+ * @param {string} username - User's display name
+ * @param {string} phone - User's phone number
+ * @param {string} passwordHash - Bcrypt hashed password
+ * @returns {Promise<Object>} Created user data
+ */
+async function createUserAtome(dataSource, userId, username, phone, passwordHash) {
+    const now = new Date().toISOString();
+
+    // Create the atome with type 'user'
+    await dataSource.query(
+        `INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, sync_status, created_source, created_at, updated_at)
+         VALUES (?, 'user', ?, ?, 'local', 'fastify', ?, ?)`,
+        [userId, userId, userId, now, now]
+    );
+
+    // Create particles for user properties (particle_id is auto-increment)
+    const particles = [
+        { key: 'phone', value: JSON.stringify(phone) },
+        { key: 'username', value: JSON.stringify(username) },
+        { key: 'password_hash', value: JSON.stringify(passwordHash) }
+    ];
+
+    for (const p of particles) {
+        await dataSource.query(
+            `INSERT INTO particles (atome_id, key, value, value_type, version, created_at, updated_at)
+             VALUES (?, ?, ?, 'string', 1, ?, ?)`,
+            [userId, p.key, p.value, now, now]
+        );
+    }
+
+    console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}]`);
+
+    return {
+        user_id: userId,
+        username,
+        phone,
+        created_at: now,
+        created_source: 'fastify'
+    };
+}
+
+/**
+ * Find a user by phone number (query atomes+particles)
+ * @param {Object} dataSource - Database connection
+ * @param {string} phone - Phone number to search
+ * @returns {Promise<Object|null>} User data or null
+ */
+async function findUserByPhone(dataSource, phone) {
+    const rows = await dataSource.query(
+        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.cloud_id, a.last_sync, a.created_source,
+                MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
+                MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username,
+                MAX(CASE WHEN p.key = 'password_hash' THEN p.value END) AS password_hash
+         FROM atomes a
+         LEFT JOIN particles p ON a.atome_id = p.atome_id
+         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
+         GROUP BY a.atome_id
+         HAVING MAX(CASE WHEN p.key = 'phone' THEN p.value END) = ?`,
+        [JSON.stringify(phone)]
+    );
+
+    if (rows.length === 0) return null;
+
+    const user = rows[0];
+    // Parse JSON values
+    return {
+        user_id: user.user_id,
+        username: user.username ? JSON.parse(user.username) : null,
+        phone: user.phone ? JSON.parse(user.phone) : null,
+        password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        cloud_id: user.cloud_id,
+        last_sync: user.last_sync,
+        created_source: user.created_source
+    };
+}
+
+/**
+ * Find a user by user_id (query atomes+particles)
+ * @param {Object} dataSource - Database connection
+ * @param {string} userId - User ID to search
+ * @returns {Promise<Object|null>} User data or null
+ */
+async function findUserById(dataSource, userId) {
+    const rows = await dataSource.query(
+        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.cloud_id, a.last_sync, a.created_source,
+                MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
+                MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username,
+                MAX(CASE WHEN p.key = 'password_hash' THEN p.value END) AS password_hash
+         FROM atomes a
+         LEFT JOIN particles p ON a.atome_id = p.atome_id
+         WHERE a.atome_id = ? AND a.atome_type = 'user' AND a.deleted_at IS NULL
+         GROUP BY a.atome_id`,
+        [userId]
+    );
+
+    if (rows.length === 0) return null;
+
+    const user = rows[0];
+    return {
+        user_id: user.user_id,
+        username: user.username ? JSON.parse(user.username) : null,
+        phone: user.phone ? JSON.parse(user.phone) : null,
+        password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        cloud_id: user.cloud_id,
+        last_sync: user.last_sync,
+        created_source: user.created_source
+    };
+}
+
+/**
+ * List all users (query atomes with type='user')
+ * @param {Object} dataSource - Database connection
+ * @returns {Promise<Array>} Array of user objects
+ */
+async function listAllUsers(dataSource) {
+    const rows = await dataSource.query(
+        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.cloud_id, a.last_sync, a.created_source,
+                MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
+                MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username
+         FROM atomes a
+         LEFT JOIN particles p ON a.atome_id = p.atome_id
+         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
+         GROUP BY a.atome_id
+         ORDER BY a.created_at DESC`
+    );
+
+    return rows.map(user => ({
+        user_id: user.user_id,
+        username: user.username ? JSON.parse(user.username) : null,
+        phone: user.phone ? JSON.parse(user.phone) : null,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        cloud_id: user.cloud_id,
+        last_sync: user.last_sync,
+        created_source: user.created_source
+    }));
+}
+
+/**
+ * Update a user's particle (property)
+ * @param {Object} dataSource - Database connection
+ * @param {string} userId - User's atome_id
+ * @param {string} key - Particle key
+ * @param {any} value - New value
+ */
+async function updateUserParticle(dataSource, userId, key, value) {
+    const now = new Date().toISOString();
+    const valueStr = JSON.stringify(value);
+
+    // Check if particle exists
+    const existing = await dataSource.query(
+        `SELECT particle_id, version FROM particles WHERE atome_id = ? AND key = ?`,
+        [userId, key]
+    );
+
+    if (existing.length > 0) {
+        const newVersion = (existing[0].version || 1) + 1;
+        await dataSource.query(
+            `UPDATE particles SET value = ?, version = ?, updated_at = ? WHERE atome_id = ? AND key = ?`,
+            [valueStr, newVersion, now, userId, key]
+        );
+    } else {
+        // particle_id is auto-increment, don't specify it
+        await dataSource.query(
+            `INSERT INTO particles (atome_id, key, value, value_type, version, created_at, updated_at)
+             VALUES (?, ?, ?, 'string', 1, ?, ?)`,
+            [userId, key, valueStr, now, now]
+        );
+    }
+
+    // Update atome's updated_at
+    await dataSource.query(
+        `UPDATE atomes SET updated_at = ?, sync_status = 'pending' WHERE atome_id = ?`,
+        [now, userId]
+    );
+}
+
+/**
+ * Delete a user (soft delete the atome)
+ * @param {Object} dataSource - Database connection
+ * @param {string} userId - User's atome_id
+ */
+async function deleteUserAtome(dataSource, userId) {
+    const now = new Date().toISOString();
+    await dataSource.query(
+        `UPDATE atomes SET deleted_at = ?, updated_at = ?, sync_status = 'pending' WHERE atome_id = ?`,
+        [now, now, userId]
+    );
+    console.log(`🗑️ [ADOLE] User atome soft-deleted: ${userId}`);
+}
+
 /**
  * Sync a newly created user to Tauri server
  * @param {string} username - User's username
@@ -243,14 +446,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         const cleanPhone = phone.trim().replace(/\s+/g, '');
 
         try {
-            const existingRows = await dataSource.query(
-                `SELECT user_id FROM users WHERE phone = ?`,
-                [cleanPhone]
-            );
+            // ADOLE v3.0: Check if phone exists in particles
+            const existingUser = await findUserByPhone(dataSource, cleanPhone);
 
             return {
                 success: true,
-                exists: existingRows.length > 0,
+                exists: existingUser !== null,
                 // Don't return user ID for privacy
             };
 
@@ -267,25 +468,46 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     /**
      * GET /api/auth/users
      * List all users in the database (for sync debugging)
+     * ADOLE v3.0: Users are atomes with atome_type='user', properties in particles
      */
     server.get('/api/auth/users', async (request, reply) => {
         try {
+            // Query user atomes with their particles (phone, username, etc.)
             const rows = await dataSource.query(
-                `SELECT user_id, username, phone, created_at, cloud_id, last_sync, created_source FROM users ORDER BY created_at DESC`
+                `SELECT 
+                    a.atome_id as user_id,
+                    a.created_at,
+                    a.updated_at,
+                    a.created_source,
+                    MAX(CASE WHEN p.key = 'username' THEN p.value END) as username,
+                    MAX(CASE WHEN p.key = 'phone' THEN p.value END) as phone,
+                    MAX(CASE WHEN p.key = 'cloud_id' THEN p.value END) as cloud_id,
+                    MAX(CASE WHEN p.key = 'last_sync' THEN p.value END) as last_sync
+                 FROM atomes a
+                 LEFT JOIN particles p ON a.atome_id = p.atome_id
+                 WHERE a.atome_type = 'user'
+                 GROUP BY a.atome_id, a.created_at, a.updated_at, a.created_source
+                 ORDER BY a.created_at DESC`
             );
 
-            console.log(`[Auth] Listed ${rows.length} users from LibSQL`);
+            console.log(`[Auth] Listed ${rows.length} users from LibSQL (ADOLE atomes)`);
+
+            // Helper to safely parse JSON values
+            const parseJsonValue = (val) => {
+                if (!val) return null;
+                try { return JSON.parse(val); } catch { return val; }
+            };
 
             return {
                 success: true,
-                database: 'Fastify/LibSQL',
+                database: 'Fastify/LibSQL (ADOLE v3.0)',
                 users: rows.map(row => ({
                     user_id: row.user_id,
-                    username: row.username,
-                    phone: row.phone,
+                    username: parseJsonValue(row.username) || 'Unknown',
+                    phone: parseJsonValue(row.phone) || 'Unknown',
                     created_at: row.created_at,
-                    cloud_id: row.cloud_id || null,
-                    last_sync: row.last_sync || null,
+                    cloud_id: parseJsonValue(row.cloud_id) || null,
+                    last_sync: parseJsonValue(row.last_sync) || null,
                     created_source: row.created_source || null,
                     synced: row.last_sync ? true : false
                 }))
@@ -294,7 +516,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             request.log.error({ err: error }, 'List users failed');
             return reply.code(500).send({
                 success: false,
-                database: 'Fastify/LibSQL',
+                database: 'Fastify/LibSQL (ADOLE v3.0)',
                 users: [],
                 error: error.message
             });
@@ -304,7 +526,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     /**
      * POST /api/auth/register
      * Create a new user account
-     * Uses simplified SQLite schema with direct users table
+     * ADOLE v3.0: Users are atomes with atome_type='user', properties in particles
      */
     server.post('/api/auth/register', async (request, reply) => {
         const { username, phone, password, optional = {} } = request.body || {};
@@ -326,13 +548,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         const cleanUsername = username.trim();
 
         try {
-            // Check if phone already exists
-            const existingRows = await dataSource.query(
-                `SELECT user_id FROM users WHERE phone = ?`,
-                [cleanPhone]
-            );
+            // Check if phone already exists (ADOLE: query particles for phone)
+            const existingUser = await findUserByPhone(dataSource, cleanPhone);
 
-            if (existingRows.length > 0) {
+            if (existingUser) {
                 // Return 200 with success:true and message to avoid browser console error
                 return { success: true, message: 'User already exists - ready to login', alreadyExists: true };
             }
@@ -342,30 +561,13 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             // Use deterministic user ID based on phone number
             // This ensures same user gets same ID across Fastify, Tauri, and iOS
-            const tenantId = uuidv4();
             const principalId = generateDeterministicUserId(cleanPhone);
             const now = new Date().toISOString();
 
-            // Create tenant first
-            await dataSource.query(
-                `INSERT INTO tenants (tenant_id, name) VALUES (?, ?)`,
-                [tenantId, cleanUsername]
-            );
+            // Create user atome with particles (ADOLE v3.0)
+            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash);
 
-            // Create principal
-            await dataSource.query(
-                `INSERT INTO principals (principal_id, tenant_id, type, name) VALUES (?, ?, 'user', ?)`,
-                [principalId, tenantId, cleanUsername]
-            );
-
-            // Create user
-            await dataSource.query(
-                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at, created_source)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'fastify')`,
-                [principalId, principalId, tenantId, cleanPhone, cleanUsername, passwordHash, now, now]
-            );
-
-            console.log(`✅ User registered: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
+            console.log(`✅ User registered (ADOLE atome): ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
             // Sync to Tauri server (async, don't block response)
             let syncResult = { success: false };
@@ -405,7 +607,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
         } catch (error) {
             request.log.error({ err: error }, 'Registration failed');
-            return reply.code(500).send({ success: false, error: 'Registration failed' });
+            return reply.code(500).send({ success: false, error: 'Registration failed: ' + error.message });
         }
     });
 
@@ -451,42 +653,23 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         const cleanUsername = username.trim();
 
         try {
-            // Check if phone already exists
-            const existingRows = await dataSource.query(
-                `SELECT user_id FROM users WHERE phone = ?`,
-                [cleanPhone]
-            );
+            // ADOLE v3.0: Check if phone already exists in particles
+            const existingUser = await findUserByPhone(dataSource, cleanPhone);
 
-            if (existingRows.length > 0) {
+            if (existingUser) {
                 // User already exists - this is fine for sync
-                return { success: true, message: 'User already exists', alreadyExists: true, principalId: existingRows[0].user_id };
+                return { success: true, message: 'User already exists', alreadyExists: true, principalId: existingUser.user_id };
             }
 
-            // Create user with pre-hashed password
-            const tenantId = uuidv4();
+            // Create user atome with pre-hashed password (ADOLE v3.0)
             const principalId = generateDeterministicUserId(cleanPhone);
-            const now = new Date().toISOString();
 
-            // Create tenant
-            await dataSource.query(
-                `INSERT INTO tenants (tenant_id, name) VALUES (?, ?)`,
-                [tenantId, cleanUsername]
-            );
+            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash);
 
-            // Create principal
-            await dataSource.query(
-                `INSERT INTO principals (principal_id, tenant_id, type, name) VALUES (?, ?, 'user', ?)`,
-                [principalId, tenantId, cleanUsername]
-            );
+            // Update last_sync particle
+            await updateUserParticle(dataSource, principalId, 'last_sync', new Date().toISOString());
 
-            // Create user with pre-hashed password
-            await dataSource.query(
-                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at, created_source, last_sync)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [principalId, principalId, tenantId, cleanPhone, cleanUsername, passwordHash, now, now, sourceServer || 'sync', now]
-            );
-
-            console.log(`✅ User synced from ${sourceServer || 'unknown'}: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
+            console.log(`✅ User synced (ADOLE atome) from ${sourceServer || 'unknown'}: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
             return {
                 success: true,
@@ -503,7 +686,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     /**
      * POST /api/auth/login
      * Authenticate user and create session
-     * Uses simplified SQLite schema with direct users table
+     * ADOLE v3.0: Users are atomes with atome_type='user', properties in particles
      */
     server.post('/api/auth/login', async (request, reply) => {
         const { phone, password } = request.body || {};
@@ -515,18 +698,13 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         const cleanPhone = phone.trim().replace(/\s+/g, '');
 
         try {
-            // Find user by phone
-            const rows = await dataSource.query(
-                `SELECT user_id, tenant_id, username, phone, password_hash FROM users WHERE phone = ?`,
-                [cleanPhone]
-            );
+            // ADOLE v3.0: Find user by phone (query particles)
+            const user = await findUserByPhone(dataSource, cleanPhone);
 
-            if (rows.length === 0) {
+            if (!user) {
                 // Return 200 with success:false to avoid browser console error
                 return { success: false, error: 'Invalid credentials' };
             }
-
-            const user = rows[0];
 
             // Verify password
             const passwordValid = await verifyPassword(password, user.password_hash);
@@ -535,10 +713,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return { success: false, error: 'Invalid credentials' };
             }
 
-            // Generate JWT
+            // Generate JWT (ADOLE v3.0: no tenant_id, user_id is atome_id)
             const token = server.jwt.sign({
                 id: user.user_id,
-                tenantId: user.tenant_id,
+                tenantId: 'local-tenant', // ADOLE: flat tenant model
                 phone: user.phone,
                 username: user.username
             });
@@ -552,7 +730,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 maxAge: COOKIE_MAX_AGE
             });
 
-            console.log(`✅ User logged in: ${user.username} (${user.phone})`);
+            console.log(`✅ User logged in (ADOLE): ${user.username} (${user.phone})`);
 
             return {
                 success: true,
@@ -567,7 +745,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
         } catch (error) {
             request.log.error({ err: error }, 'Login failed');
-            return reply.code(500).send({ success: false, error: 'Login failed' });
+            return reply.code(500).send({ success: false, error: 'Login failed: ' + error.message });
         }
     });
 
@@ -610,13 +788,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             const decoded = server.jwt.verify(token);
 
-            // Fetch fresh data from DB
-            const rows = await dataSource.query(
-                `SELECT user_id, username, phone FROM users WHERE user_id = ?`,
-                [decoded.id]
-            );
+            // ADOLE v3.0: Fetch user data from atomes+particles
+            const user = await findUserById(dataSource, decoded.id);
 
-            if (rows.length === 0) {
+            if (!user) {
                 reply.clearCookie('access_token', {
                     path: '/',
                     httpOnly: true,
@@ -625,8 +800,6 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 });
                 return { success: false, authenticated: false, error: 'User not found' };
             }
-
-            const user = rows[0];
 
             return {
                 success: true,
@@ -664,26 +837,19 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             const decoded = server.jwt.verify(token);
             const { username } = request.body || {};
 
-            // Get current user
-            const rows = await dataSource.query(
-                `SELECT user_id, tenant_id, username, phone FROM users WHERE user_id = ?`,
-                [decoded.id]
-            );
+            // ADOLE v3.0: Get current user from atomes+particles
+            const current = await findUserById(dataSource, decoded.id);
 
-            if (rows.length === 0) {
+            if (!current) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            const current = rows[0];
-            const now = new Date().toISOString();
             const newUsername = username || current.username;
 
-            await dataSource.query(
-                `UPDATE users SET username = ?, updated_at = ? WHERE user_id = ?`,
-                [newUsername, now, decoded.id]
-            );
+            // Update username particle
+            await updateUserParticle(dataSource, decoded.id, 'username', newUsername);
 
-            console.log(`✅ User profile updated: ${newUsername}`);
+            console.log(`✅ User profile updated (ADOLE): ${newUsername}`);
 
             return {
                 success: true,
@@ -719,13 +885,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         const cleanPhone = phone.trim().replace(/\s+/g, '');
 
         try {
-            // Check if user exists
-            const rows = await dataSource.query(
-                `SELECT user_id FROM users WHERE phone = ?`,
-                [cleanPhone]
-            );
+            // ADOLE v3.0: Check if user exists via particles
+            const user = await findUserByPhone(dataSource, cleanPhone);
 
-            if (rows.length === 0) {
+            if (!user) {
                 // Don't reveal if user exists or not (security)
                 return { success: true, message: 'If this phone is registered, a code has been sent' };
             }
@@ -774,22 +937,15 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Hash new password
             const newHash = await hashPassword(newPassword);
 
-            // Update in database - using users table
-            const rows = await dataSource.query(
-                `SELECT user_id FROM users WHERE phone = ?`,
-                [cleanPhone]
-            );
+            // ADOLE v3.0: Find user by phone via particles
+            const user = await findUserByPhone(dataSource, cleanPhone);
 
-            if (rows.length === 0) {
+            if (!user) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            const userId = rows[0].user_id;
-
-            await dataSource.query(
-                `UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?`,
-                [newHash, userId]
-            );
+            // Update password_hash particle
+            await updateUserParticle(dataSource, user.user_id, 'password_hash', newHash);
 
             console.log(`✅ Password reset for ${cleanPhone}`);
 
@@ -832,17 +988,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: 'New password must be at least 8 characters' });
             }
 
-            // Get current user data - using users table
-            const rows = await dataSource.query(
-                `SELECT user_id, password_hash FROM users WHERE user_id = ?`,
-                [decoded.id]
-            );
+            // ADOLE v3.0: Get current user from atomes+particles
+            const current = await findUserById(dataSource, decoded.id);
 
-            if (rows.length === 0) {
+            if (!current) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
-
-            const current = rows[0];
 
             // Verify current password
             const passwordValid = await verifyPassword(currentPassword, current.password_hash);
@@ -850,13 +1001,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(401).send({ success: false, error: 'Current password is incorrect' });
             }
 
-            // Hash new password
+            // Hash new password and update particle
             const newHash = await hashPassword(newPassword);
-
-            await dataSource.query(
-                `UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?`,
-                [newHash, decoded.id]
-            );
+            await updateUserParticle(dataSource, decoded.id, 'password_hash', newHash);
 
             console.log(`✅ Password changed for user ${decoded.id}`);
 
@@ -889,13 +1036,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             const cleanPhone = newPhone.trim().replace(/\s+/g, '');
 
-            // Check if new phone is already in use - using users table
-            const existingRows = await dataSource.query(
-                `SELECT user_id FROM users WHERE phone = ?`,
-                [cleanPhone]
-            );
+            // ADOLE v3.0: Check if new phone is already in use via particles
+            const existingUser = await findUserByPhone(dataSource, cleanPhone);
 
-            if (existingRows.length > 0) {
+            if (existingUser) {
                 // Return 200 with success:false to avoid browser console error
                 return { success: false, error: 'Phone number already in use' };
             }
@@ -943,22 +1087,14 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: otpResult.error });
             }
 
-            // Update phone in database - using users table
-            const rows = await dataSource.query(
-                `SELECT user_id, username, optional FROM users WHERE user_id = ?`,
-                [decoded.id]
-            );
+            // ADOLE v3.0: Update phone in particles
+            const current = await findUserById(dataSource, decoded.id);
 
-            if (rows.length === 0) {
+            if (!current) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            const current = rows[0];
-
-            await dataSource.query(
-                `UPDATE users SET phone = ?, updated_at = datetime('now') WHERE user_id = ?`,
-                [cleanPhone, decoded.id]
-            );
+            await updateUserParticle(dataSource, decoded.id, 'phone', cleanPhone);
 
             // Generate new JWT with updated phone
             const newToken = server.jwt.sign({
@@ -1040,13 +1176,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: 'Password is required for account deletion' });
             }
 
-            // Get current user data - using users table
-            const rows = await dataSource.query(
-                `SELECT user_id, tenant_id, phone, username, password_hash FROM users WHERE user_id = ?`,
-                [decoded.id]
-            );
+            // ADOLE v3.0: Get current user from atomes+particles
+            const user = await findUserById(dataSource, decoded.id);
 
-            if (rows.length === 0) {
+            if (!user) {
                 reply.clearCookie('access_token', {
                     path: '/',
                     httpOnly: true,
@@ -1056,33 +1189,19 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            const user = rows[0];
-
             // Verify password
             const passwordMatch = await verifyPassword(password, user.password_hash);
             if (!passwordMatch) {
                 return reply.code(401).send({ success: false, error: 'Incorrect password' });
             }
 
-            // Delete user from users table
-            await dataSource.query(`DELETE FROM users WHERE user_id = ?`, [decoded.id]);
+            // ADOLE v3.0: Delete user atome and all its particles
+            await dataSource.query(`DELETE FROM particles WHERE atome_id = ?`, [decoded.id]);
+            await dataSource.query(`DELETE FROM particles_versions WHERE atome_id = ?`, [decoded.id]);
+            await dataSource.query(`DELETE FROM permissions WHERE atome_id = ?`, [decoded.id]);
+            await dataSource.query(`DELETE FROM atomes WHERE atome_id = ?`, [decoded.id]);
 
-            // Also clean up related tables if they exist
-            const cleanupTables = ['property_versions', 'properties', 'objects', 'principals', 'tenants'];
-            for (const table of cleanupTables) {
-                try {
-                    if (table === 'tenants') {
-                        await dataSource.query(`DELETE FROM ${table} WHERE tenant_id = ?`, [user.tenant_id]);
-                    } else if (table === 'principals') {
-                        await dataSource.query(`DELETE FROM ${table} WHERE principal_id = ?`, [decoded.id]);
-                    } else {
-                        await dataSource.query(`DELETE FROM ${table} WHERE object_id = ?`, [decoded.id]);
-                    }
-                } catch (tableErr) {
-                    // Ignore errors for missing tables
-                    console.log(`[delete] Skipping ${table}: ${tableErr.message?.substring(0, 50) || 'error'}`);
-                }
-            }
+            console.log(`[delete] User atome ${decoded.id} and particles deleted`);
 
             // Clear the authentication cookie
             reply.clearCookie('access_token', {
@@ -1577,17 +1696,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 }
             }
 
-            // Verify user still exists - using users table
-            const rows = await dataSource.query(
-                `SELECT user_id, username, phone FROM users WHERE user_id = ?`,
-                [decoded.id || decoded.sub]
-            );
+            // ADOLE v3.0: Verify user atome still exists
+            const user = await findUserById(dataSource, decoded.id || decoded.sub);
 
-            if (rows.length === 0) {
+            if (!user) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
-
-            const user = rows[0];
 
             // Generate new token with fresh expiry
             const newToken = server.jwt.sign({

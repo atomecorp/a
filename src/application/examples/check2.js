@@ -4,9 +4,10 @@ import { TauriAdapter, FastifyAdapter, checkBackends, CONFIG } from '../../squir
 /**
  * Create a new user with phone/password: 99999999
  */
-async function create_user() {
-  const phone = '99999999';
-  const password = '99999999';
+async function create_user(phone_params, password_params, name_params) {
+  const phone = phone_params;
+  const password = password_params;
+  const name = name_params;
   const backends = await checkBackends(true);
   const results = { tauri: null, fastify: null };
 
@@ -36,7 +37,7 @@ async function create_user() {
 
   return results;
 }
-
+create_user('00000000', '00000000', 'jeezs')
 /**
  * List users from both databases
  * Returns which database is queried: 'Tauri/SQLite' or 'Fastify/LibSQL'

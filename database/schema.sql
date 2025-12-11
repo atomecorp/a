@@ -193,9 +193,9 @@ CREATE TABLE IF NOT EXISTS sync_state (
 CREATE VIEW IF NOT EXISTS users_view AS
 SELECT 
     a.atome_id AS user_id,
-    MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
-    MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username,
-    MAX(CASE WHEN p.key = 'password_hash' THEN p.value END) AS password_hash,
+    MAX(CASE WHEN p.key = 'phone' THEN JSON_EXTRACT(p.value, '$') END) AS phone,
+    MAX(CASE WHEN p.key = 'username' THEN JSON_EXTRACT(p.value, '$') END) AS username,
+    MAX(CASE WHEN p.key = 'password_hash' THEN JSON_EXTRACT(p.value, '$') END) AS password_hash,
     a.created_at,
     a.updated_at,
     a.cloud_id,
@@ -207,27 +207,7 @@ WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
 GROUP BY a.atome_id;
 
 -- ============================================================================
--- TABLE users (COMPATIBILITÉ avec local_auth.rs et auth.js)
--- Cette table maintient la compatibilité avec le système d'authentification
--- Sera migrée vers atomes+particles dans une version future
--- ============================================================================
-
-CREATE TABLE IF NOT EXISTS users (
-    user_id TEXT PRIMARY KEY,
-    tenant_id TEXT DEFAULT 'local-tenant',
-    username TEXT,
-    phone TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    cloud_id TEXT,
-    last_sync TEXT,
-    created_source TEXT DEFAULT 'unknown'
-);
-
-CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
-CREATE INDEX IF NOT EXISTS idx_users_cloud_id ON users(cloud_id);
-
--- ============================================================================
 -- FIN DU SCHÉMA UNIFIÉ ADOLE v3.0
+-- Pas de table users séparée: les users sont des atomes avec atome_type='user'
+-- Utilisez la vue users_view pour la compatibilité
 -- ============================================================================
