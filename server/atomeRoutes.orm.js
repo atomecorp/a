@@ -48,17 +48,18 @@ async function queueSyncToTauri(atome, operation = 'create') {
 
     try {
         await db.query('run', `
-            INSERT INTO sync_queue (object_id, object_type, operation, payload, target_server, status, created_at, next_retry_at)
-            VALUES (?, 'atome', ?, ?, 'tauri', 'pending', ?, ?)
-            ON CONFLICT(object_id, operation, target_server) DO UPDATE SET
+            INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, created_at, next_retry_at)
+            VALUES (?, ?, ?, 'tauri', 'pending', ?, ?)
+            ON CONFLICT(atome_id, target_server) DO UPDATE SET
                 payload = excluded.payload,
+                operation = excluded.operation,
                 status = 'pending',
                 attempts = 0,
                 error_message = NULL,
                 next_retry_at = excluded.next_retry_at
-        `, [atome.id, operation, payload, now, now]);
+        `, [atome.atome_id || atome.id, operation, payload, now, now]);
 
-        console.log(`📥 [SyncQueue] Queued ${operation} for atome ${atome.id} to Tauri`);
+        console.log(`📥 [SyncQueue] Queued ${operation} for atome ${atome.atome_id || atome.id} to Tauri`);
     } catch (error) {
         console.error(`⚠️ [SyncQueue] Failed to queue: ${error.message}`);
     }
@@ -102,7 +103,7 @@ async function syncAtomeToTauriWithQueue(atome, operation = 'create') {
             console.log(`🔄 [AutoSync] Synced atome ${atome.id} to Tauri`);
             // Remove from queue if it was there
             await db.query('run',
-                `DELETE FROM sync_queue WHERE object_id = ? AND target_server = 'tauri'`,
+                `DELETE FROM sync_queue WHERE atome_id = ? AND target_server = 'tauri'`,
                 [atome.id]
             ).catch(() => { });
         } else {
@@ -126,7 +127,7 @@ async function processSyncQueue() {
     try {
         // Get pending items ready for retry
         const pendingItems = await db.query('all', `
-            SELECT id, object_id, payload FROM sync_queue 
+            SELECT queue_id, atome_id, payload FROM sync_queue 
             WHERE status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= ?)
             AND attempts < max_attempts
             ORDER BY created_at ASC
@@ -154,14 +155,14 @@ async function processSyncQueue() {
                 });
 
                 if (response.ok) {
-                    console.log(`✅ [SyncWorker] Synced queued atome ${item.object_id} to Tauri`);
-                    await db.query('run', `DELETE FROM sync_queue WHERE id = ?`, [item.id]);
+                    console.log(`✅ [SyncWorker] Synced queued atome ${item.atome_id} to Tauri`);
+                    await db.query('run', `DELETE FROM sync_queue WHERE queue_id = ?`, [item.queue_id]);
                 } else {
                     const body = await response.text();
-                    await updateQueueRetry(item.id, `HTTP ${response.status}: ${body}`);
+                    await updateQueueRetry(item.queue_id, `HTTP ${response.status}: ${body}`);
                 }
             } catch (error) {
-                await updateQueueRetry(item.id, error.message);
+                await updateQueueRetry(item.queue_id, error.message);
             }
         }
     } catch (error) {
@@ -174,7 +175,7 @@ async function processSyncQueue() {
  */
 async function updateQueueRetry(queueId, error) {
     try {
-        const item = await db.query('get', `SELECT attempts FROM sync_queue WHERE id = ?`, [queueId]);
+        const item = await db.query('get', `SELECT attempts FROM sync_queue WHERE queue_id = ?`, [queueId]);
         const attempts = (item?.attempts || 0) + 1;
         const backoffSeconds = 30 * Math.pow(2, Math.min(attempts - 1, 4)); // 30s, 60s, 120s, 240s, 480s
         const nextRetry = new Date(Date.now() + backoffSeconds * 1000).toISOString();
@@ -182,7 +183,7 @@ async function updateQueueRetry(queueId, error) {
         const status = attempts >= 5 ? 'failed' : 'pending';
 
         await db.query('run', `
-            UPDATE sync_queue SET attempts = ?, last_attempt_at = ?, next_retry_at = ?, error_message = ?, status = ? WHERE id = ?
+            UPDATE sync_queue SET attempts = ?, last_attempt_at = ?, next_retry_at = ?, error_message = ?, status = ? WHERE queue_id = ?
         `, [attempts, now, nextRetry, error, status, queueId]);
 
         if (status === 'failed') {
@@ -1049,7 +1050,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                 `SELECT COUNT(*) as count FROM sync_queue`, []);
 
             const items = await db.query('all', `
-                SELECT id, object_id, operation, status, attempts, error_message, created_at 
+                SELECT queue_id, atome_id, operation, status, attempts, error_message, created_at 
                 FROM sync_queue ORDER BY created_at DESC LIMIT 20
             `, []);
 
