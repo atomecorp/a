@@ -126,7 +126,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
 export async function getAtomeById(id) {
     const row = await query('get', `
         SELECT atome_id, atome_type, parent_id, owner_id, creator_id,
-               sync_status, cloud_id, last_sync, created_source,
+               sync_status,  last_sync, created_source,
                created_at, updated_at, deleted_at
         FROM atomes WHERE atome_id = ? AND deleted_at IS NULL
     `, [id]);
@@ -174,7 +174,6 @@ export async function getAtome(id) {
         creator_id: atome.creator_id,
         data,
         sync_status: atome.sync_status,
-        cloud_id: atome.cloud_id,
         last_sync: atome.last_sync,
         created_source: atome.created_source,
         created_at: atome.created_at,
@@ -306,8 +305,16 @@ export async function setParticle(atomeId, key, value, author = null) {
 
     let particleId;
     let version;
+    let oldValue = null;
 
     if (existing) {
+        // Get old value for history
+        const oldRow = await query('get',
+            'SELECT value FROM particles WHERE particle_id = ?',
+            [existing.particle_id]
+        );
+        oldValue = oldRow?.value || null;
+
         // Update existing particle
         version = (existing.version || 1) + 1;
         await query('run', `
@@ -316,20 +323,26 @@ export async function setParticle(atomeId, key, value, author = null) {
         `, [valueStr, valueType, version, now, atomeId, key]);
         particleId = existing.particle_id;
     } else {
-        // Create new particle
+        // Create new particle (particle_id is AUTOINCREMENT, don't specify it)
         version = 1;
-        particleId = uuidv4();
         await query('run', `
-            INSERT INTO particles (particle_id, atome_id, key, value, value_type, version, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [particleId, atomeId, key, valueStr, valueType, version, now, now]);
+            INSERT INTO particles (atome_id, key, value, value_type, version, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [atomeId, key, valueStr, valueType, version, now, now]);
+
+        // Get the auto-generated particle_id
+        const inserted = await query('get',
+            'SELECT particle_id FROM particles WHERE atome_id = ? AND key = ?',
+            [atomeId, key]
+        );
+        particleId = inserted?.particle_id;
     }
 
-    // Record in particles_versions for history
+    // Record in particles_versions for history (correct column names)
     await query('run', `
-        INSERT INTO particles_versions (particle_id, atome_id, key, version, value, value_type, author_id, created_at)
+        INSERT INTO particles_versions (particle_id, atome_id, key, version, old_value, new_value, changed_by, changed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [particleId, atomeId, key, version, valueStr, valueType, author, now]);
+    `, [particleId, atomeId, key, version, oldValue, valueStr, author, now]);
 
     // Update atome's updated_at and sync_status
     await query('run',
@@ -452,20 +465,25 @@ export async function getChangesSince(sinceTimestamp = null) {
 /**
  * Create a snapshot of an atome's current state
  */
-export async function createSnapshot(atomeId) {
+export async function createSnapshot(atomeId, createdBy = null) {
     const atome = await getAtome(atomeId);
     if (!atome) throw new Error('Atome not found');
 
-    const snapshotId = uuidv4();
     const snapshotData = JSON.stringify(atome);
     const now = new Date().toISOString();
 
     await query('run', `
-        INSERT INTO snapshots (snapshot_id, atome_id, data, created_at)
-        VALUES (?, ?, ?, ?)
-    `, [snapshotId, atomeId, snapshotData, now]);
+        INSERT INTO snapshots (atome_id, snapshot_data, snapshot_type, created_by, created_at)
+        VALUES (?, ?, 'manual', ?, ?)
+    `, [atomeId, snapshotData, createdBy, now]);
 
-    return snapshotId;
+    // Get the auto-generated snapshot_id
+    const inserted = await query('get',
+        'SELECT snapshot_id FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT 1',
+        [atomeId]
+    );
+
+    return inserted?.snapshot_id;
 }
 
 /**
@@ -487,7 +505,7 @@ export async function restoreSnapshot(snapshotId, author = null) {
     );
     if (!snap) throw new Error('Snapshot not found');
 
-    const data = JSON.parse(snap.data);
+    const data = JSON.parse(snap.snapshot_data);
 
     // Clear current particles
     await query('run', 'DELETE FROM particles WHERE atome_id = ?', [snap.atome_id]);
@@ -507,43 +525,42 @@ export async function restoreSnapshot(snapshotId, author = null) {
 /**
  * Set permission for a user on an atome
  */
-export async function setPermission(atomeId, userId, canRead = true, canWrite = false, particleKey = null) {
-    const permissionId = uuidv4();
+export async function setPermission(atomeId, principalId, canRead = true, canWrite = false, canDelete = false, canShare = false, particleKey = null, grantedBy = null) {
     const now = new Date().toISOString();
 
     // Check if exists
     const existing = await query('get', `
         SELECT permission_id FROM permissions 
-        WHERE atome_id = ? AND user_id = ? AND (particle_key = ? OR (particle_key IS NULL AND ? IS NULL))
-    `, [atomeId, userId, particleKey, particleKey]);
+        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR (particle_key IS NULL AND ? IS NULL))
+    `, [atomeId, principalId, particleKey, particleKey]);
 
     if (existing) {
         await query('run', `
-            UPDATE permissions SET can_read = ?, can_write = ?, updated_at = ?
+            UPDATE permissions SET can_read = ?, can_write = ?, can_delete = ?, can_share = ?
             WHERE permission_id = ?
-        `, [canRead ? 1 : 0, canWrite ? 1 : 0, now, existing.permission_id]);
+        `, [canRead ? 1 : 0, canWrite ? 1 : 0, canDelete ? 1 : 0, canShare ? 1 : 0, existing.permission_id]);
     } else {
         await query('run', `
-            INSERT INTO permissions (permission_id, atome_id, particle_key, user_id, can_read, can_write, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [permissionId, atomeId, particleKey, userId, canRead ? 1 : 0, canWrite ? 1 : 0, now, now]);
+            INSERT INTO permissions (atome_id, particle_key, principal_id, can_read, can_write, can_delete, can_share, granted_by, granted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [atomeId, particleKey, principalId, canRead ? 1 : 0, canWrite ? 1 : 0, canDelete ? 1 : 0, canShare ? 1 : 0, grantedBy, now]);
     }
 }
 
 /**
  * Check if user can read an atome/particle
  */
-export async function canRead(atomeId, userId, particleKey = null) {
+export async function canRead(atomeId, principalId, particleKey = null) {
     // Owner always has access
     const atome = await getAtomeById(atomeId);
-    if (atome && atome.owner_id === userId) return true;
+    if (atome && atome.owner_id === principalId) return true;
 
     // Check specific permission
     const perm = await query('get', `
         SELECT can_read FROM permissions
-        WHERE atome_id = ? AND user_id = ? AND (particle_key = ? OR particle_key IS NULL)
+        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
         ORDER BY particle_key DESC LIMIT 1
-    `, [atomeId, userId, particleKey]);
+    `, [atomeId, principalId, particleKey]);
 
     return perm ? perm.can_read === 1 : false;
 }
@@ -551,17 +568,17 @@ export async function canRead(atomeId, userId, particleKey = null) {
 /**
  * Check if user can write an atome/particle
  */
-export async function canWrite(atomeId, userId, particleKey = null) {
+export async function canWrite(atomeId, principalId, particleKey = null) {
     // Owner always has access
     const atome = await getAtomeById(atomeId);
-    if (atome && atome.owner_id === userId) return true;
+    if (atome && atome.owner_id === principalId) return true;
 
     // Check specific permission
     const perm = await query('get', `
         SELECT can_write FROM permissions
-        WHERE atome_id = ? AND user_id = ? AND (particle_key = ? OR particle_key IS NULL)
+        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
         ORDER BY particle_key DESC LIMIT 1
-    `, [atomeId, userId, particleKey]);
+    `, [atomeId, principalId, particleKey]);
 
     return perm ? perm.can_write === 1 : false;
 }
@@ -571,22 +588,26 @@ export async function canWrite(atomeId, userId, particleKey = null) {
 // ============================================================================
 
 /**
- * Get last sync state for a server
+ * Get sync state for an atome
  */
-export async function getSyncState(serverId) {
-    return await query('get', 'SELECT * FROM sync_state WHERE server_id = ?', [serverId]);
+export async function getSyncState(atomeId) {
+    return await query('get', 'SELECT * FROM sync_state WHERE atome_id = ?', [atomeId]);
 }
 
 /**
  * Update sync state after successful sync
  */
-export async function updateSyncState(serverId, lastSyncTimestamp) {
+export async function updateSyncState(atomeId, localHash = null, remoteHash = null, syncStatus = 'synced') {
     const now = new Date().toISOString();
     await query('run', `
-        INSERT INTO sync_state (server_id, last_sync, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(server_id) DO UPDATE SET last_sync = ?, updated_at = ?
-    `, [serverId, lastSyncTimestamp, now, lastSyncTimestamp, now]);
+        INSERT INTO sync_state (atome_id, local_hash, remote_hash, last_sync_at, sync_status)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(atome_id) DO UPDATE SET 
+            local_hash = ?, 
+            remote_hash = ?, 
+            last_sync_at = ?, 
+            sync_status = ?
+    `, [atomeId, localHash, remoteHash, now, syncStatus, localHash, remoteHash, now, syncStatus]);
 }
 
 /**

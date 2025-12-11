@@ -35,7 +35,6 @@ CREATE TABLE IF NOT EXISTS atomes (
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     deleted_at TEXT,                                -- Soft delete
     -- Sync columns
-    cloud_id TEXT,                                  -- ID sur serveur distant
     last_sync TEXT,                                 -- Dernière synchronisation
     created_source TEXT DEFAULT 'unknown',          -- 'tauri', 'fastify', 'sync'
     sync_status TEXT DEFAULT 'local',               -- 'local', 'synced', 'pending', 'conflict'

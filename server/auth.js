@@ -342,53 +342,38 @@ async function deleteUserAtome(dataSource, userId) {
 }
 
 /**
- * Sync a newly created user to Tauri server
+ * Sync a newly created user to Tauri server via WebSocket
+ * Uses EventBus instead of POST for reliable async sync
  * @param {string} username - User's username
  * @param {string} phone - User's phone number
  * @param {string} passwordHash - Bcrypt hashed password
+ * @param {string} userId - User's atome_id
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-async function syncUserToTauri(username, phone, passwordHash) {
-    const tauriUrl = process.env.TAURI_URL || 'http://localhost:3000';
-    const syncSecret = process.env.SYNC_SECRET || 'squirrel-sync-2024';
-
+async function syncUserToTauri(username, phone, passwordHash, userId = null) {
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-        const response = await fetch(`${tauriUrl}/api/auth/local/sync-register`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Sync-Secret': syncSecret
-            },
-            body: JSON.stringify({
-                username,
-                phone,
-                password_hash: passwordHash,
-                source_server: 'fastify'
-            }),
-            signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        const data = await response.json();
-
-        if (data.success || data.alreadyExists) {
-            console.log(`🔄 User synced to Tauri: ${username} (${phone})`);
+        const eventBus = getABoxEventBus();
+        if (eventBus) {
+            eventBus.emit('event', {
+                type: 'sync:user-created',
+                timestamp: new Date().toISOString(),
+                runtime: 'Fastify',
+                payload: {
+                    userId: userId || generateDeterministicUserId(phone),
+                    username,
+                    phone,
+                    passwordHash,
+                    source: 'fastify'
+                }
+            });
+            console.log(`🔄 [WebSocket] User sync event emitted: ${username} (${phone})`);
             return { success: true, synced: true };
         } else {
-            console.warn(`⚠️ Tauri sync response: ${data.error || 'Unknown error'}`);
-            return { success: false, error: data.error };
+            console.warn(`⚠️ EventBus not available for sync`);
+            return { success: false, error: 'EventBus not available' };
         }
     } catch (error) {
-        // Don't fail registration if Tauri is unavailable
-        if (error.name === 'AbortError') {
-            console.warn(`⚠️ Tauri sync timeout - server may be offline`);
-        } else {
-            console.warn(`⚠️ Tauri sync failed: ${error.message}`);
-        }
+        console.warn(`⚠️ WebSocket sync failed: ${error.message}`);
         return { success: false, error: error.message };
     }
 }
@@ -1213,40 +1198,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             console.log(`🗑️ Account deleted: user ${decoded.id}`);
 
-            // === SYNC: Delete account on Tauri server ===
-            try {
-                const tauriUrl = 'http://localhost:3000/api/auth/local/sync-delete';
-                console.log(`[auth] Syncing account deletion to Tauri: ${user.phone}`);
-
-                const syncResponse = await fetch(tauriUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Sync-Source': 'fastify',
-                        'X-Sync-Secret': process.env.SYNC_SECRET || 'squirrel-sync-2024'
-                    },
-                    body: JSON.stringify({
-                        phone: user.phone,
-                        userId: decoded.id
-                    })
-                });
-
-                if (syncResponse.ok) {
-                    const syncData = await syncResponse.json();
-                    console.log(`[auth] ✅ Tauri account sync-delete successful:`, syncData);
-                } else {
-                    console.warn(`[auth] ⚠️ Tauri sync-delete failed: ${syncResponse.status}`);
-                }
-            } catch (syncError) {
-                console.warn(`[auth] ⚠️ Could not sync delete to Tauri:`, syncError.message);
-            }
-
-            // Emit account deletion event for sync
+            // === SYNC: Delete account via WebSocket (not POST) ===
             try {
                 const eventBus = getABoxEventBus();
                 if (eventBus) {
                     eventBus.emit('event', {
-                        type: 'sync:account-deleted',
+                        type: 'sync:user-deleted',
                         timestamp: new Date().toISOString(),
                         runtime: 'Fastify',
                         payload: {
@@ -1255,10 +1212,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                             username: user.username
                         }
                     });
-                    console.log('[auth] Emitted sync:account-deleted event');
+                    console.log('[auth] ✅ User deletion synced via WebSocket');
                 }
-            } catch (e) {
-                console.warn('[auth] Could not emit account-deleted event:', e.message);
+            } catch (syncError) {
+                console.warn('[auth] ⚠️ Could not sync delete via WebSocket:', syncError.message);
             }
 
             return {

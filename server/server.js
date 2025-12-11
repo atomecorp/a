@@ -274,31 +274,23 @@ async function startServer() {
     }
 
     // ===========================
-    // 0. DATABASE INITIALIZATION
+    // 0. DATABASE INITIALIZATION (SQLite/LibSQL - ADOLE v3.0)
     // ===========================
 
     if (DATABASE_ENABLED) {
-      console.log('📊 Initialisation de la base de données...');
+      console.log('📊 Initialisation de la base de données SQLite/LibSQL...');
 
       try {
-        // Initialize Knex ORM (unified SQLite/PostgreSQL layer)
         await db.initDatabase();
-        console.log('✅ Connexion à la base de données établie (Knex ORM)');
+        console.log('✅ Connexion à la base de données établie (SQLite/LibSQL)');
       } catch (error) {
-        if (error && error.code === 'ECONNREFUSED') {
-          console.error('❌ PostgreSQL connection refused. Start the database and retry.');
-          console.error('   macOS (Homebrew): brew services start postgresql@16');
-          console.error('   macOS (manual):  pg_ctl -D /usr/local/var/postgresql@16 start');
-          console.error('   Linux (systemd): sudo systemctl start postgresql');
-          console.error('   Windows:         Services.msc → start "PostgreSQL 16" or run "net start postgresql-x64-16"');
-          console.error('   Docker (any OS): docker run --name squirrel-db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=squirrel -p 5432:5432 -d postgres:16');
-        }
+        console.error('❌ Database initialization failed:', error.message);
         throw error;
       }
 
-      console.log('✅ Schéma ADOLE prêt (Knex)');
+      console.log('✅ Schéma ADOLE v3.0 prêt');
     } else {
-      console.warn('⚠️  Aucune base PostgreSQL configurée. Les routes dépendant de la base renverront 503.');
+      console.warn('⚠️  Aucune base de données configurée. Les routes dépendant de la base renverront 503.');
     }
 
     // ===========================
@@ -584,154 +576,8 @@ async function startServer() {
       }
     });
 
-    server.post('/api/adole/users', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      const {
-        tenantId,
-        tenantName,
-        principalId,
-        email,
-        kind = 'user',
-        username,
-        phone,
-        optional = {}
-      } = request.body || {};
-
-      const tenant_id = tenantId || uuidv4();
-      const principal_id = principalId || uuidv4();
-      const branch_id = uuidv4();
-      const commit_id = uuidv4();
-      const logical_clock = Date.now();
-      const snapshot = {
-        type: 'user_profile',
-        username,
-        phone,
-        optional
-      };
-
-      try {
-        const dataSourceAdapter = db.getDataSourceAdapter();
-        await dataSourceAdapter.manager.transaction(async (tx) => {
-          await tx.query(
-            `INSERT INTO tenants (tenant_id, name) VALUES ($1, $2) ON CONFLICT (tenant_id) DO UPDATE SET name = EXCLUDED.name`,
-            [tenant_id, tenantName || username || 'tenant']
-          );
-
-          await tx.query(
-            `INSERT INTO principals (tenant_id, principal_id, kind, email) VALUES ($1, $2, $3, $4) ON CONFLICT (principal_id) DO UPDATE SET email = EXCLUDED.email, kind = EXCLUDED.kind`,
-            [tenant_id, principal_id, kind, email]
-          );
-
-          await tx.query(
-            `INSERT INTO objects (object_id, tenant_id, type, created_by) VALUES ($1, $2, $3, $4) ON CONFLICT (object_id) DO UPDATE SET type = EXCLUDED.type, created_by = EXCLUDED.created_by`,
-            [principal_id, tenant_id, 'user_profile', principal_id]
-          );
-
-          await tx.query(
-            `INSERT INTO branches (branch_id, tenant_id, object_id, name, is_default) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (branch_id) DO NOTHING`,
-            [branch_id, tenant_id, principal_id, 'main', true]
-          );
-
-          await tx.query(
-            `INSERT INTO commits (commit_id, tenant_id, object_id, branch_id, author_id, logical_clock, message) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (commit_id) DO NOTHING`,
-            [commit_id, tenant_id, principal_id, branch_id, principal_id, logical_clock, 'profile upsert']
-          );
-
-          await tx.query(
-            `INSERT INTO object_state (tenant_id, object_id, branch_id, version_seq, snapshot) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (tenant_id, object_id, branch_id) DO UPDATE SET version_seq = EXCLUDED.version_seq, snapshot = EXCLUDED.snapshot, updated_at = now()`,
-            [tenant_id, principal_id, branch_id, logical_clock, JSON.stringify(snapshot)]
-          );
-        });
-
-        return {
-          success: true,
-          tenantId: tenant_id,
-          principalId: principal_id,
-          branchId: branch_id,
-          commitId: commit_id
-        };
-      } catch (error) {
-        request.log.error({ err: error }, 'Failed to persist ADOLE user');
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.get('/api/adole/users/:principalId', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const principalId = request.params.principalId;
-        const dataSourceAdapter = db.getDataSourceAdapter();
-        const rows = await dataSourceAdapter.query(
-          `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
-           FROM principals p 
-           LEFT JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id 
-           WHERE p.principal_id = $1 LIMIT 1`,
-          [principalId]
-        );
-        const row = rows[0];
-
-        if (!row) {
-          reply.code(404);
-          return { success: false, error: 'User not found' };
-        }
-
-        return {
-          success: true,
-          data: {
-            principalId: row.principal_id,
-            tenantId: row.tenant_id,
-            email: row.email,
-            kind: row.kind,
-            snapshot: row.snapshot
-          }
-        };
-      } catch (error) {
-        request.log.error({ err: error }, 'Failed to read ADOLE user');
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.get('/api/adole/users', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const dataSourceAdapter = db.getDataSourceAdapter();
-        const rows = await dataSourceAdapter.query(
-          `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
-           FROM principals p 
-           LEFT JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id 
-           ORDER BY p.created_at DESC`
-        );
-
-        return {
-          success: true,
-          data: rows.map((row) => ({
-            principalId: row.principal_id,
-            tenantId: row.tenant_id,
-            email: row.email,
-            kind: row.kind,
-            snapshot: row.snapshot
-          }))
-        };
-      } catch (error) {
-        request.log.error({ err: error }, 'Failed to list ADOLE users');
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
+    // NOTE: User management is now handled via /api/auth/* routes in auth.js
+    // which use the ADOLE v3.0 schema (atomes + particles tables)
 
     server.get('/api/uploads', async (request, reply) => {
       try {
@@ -763,10 +609,10 @@ async function startServer() {
 
 
     // ===========================
-    // 3. DATABASE API ROUTES
+    // 3. DATABASE API ROUTES (ADOLE v3.0)
     // ===========================
 
-    // Database status endpoint
+    // Database status endpoint (SQLite/LibSQL - ADOLE v3.0)
     server.get('/api/db/status', async (request, reply) => {
       if (!DATABASE_ENABLED) {
         reply.code(503);
@@ -782,42 +628,17 @@ async function startServer() {
         const dataSourceAdapter = db.getDataSourceAdapter();
         await dataSourceAdapter.query('SELECT 1');
 
-        const tableRows = await dataSourceAdapter.query(`
-          SELECT tablename FROM pg_catalog.pg_tables 
-          WHERE schemaname = 'public' 
-          ORDER BY tablename
-        `);
-
-        let connectionInfo = {
-          type: 'postgres'
-        };
-
-        if (PG_URL) {
-          try {
-            const parsed = new URL(PG_URL);
-            connectionInfo = {
-              type: 'postgres',
-              host: parsed.hostname,
-              port: parsed.port || '5432',
-              database: parsed.pathname.replace(/^\//, ''),
-              user: parsed.username || undefined,
-              ssl: parsed.searchParams.get('sslmode') || undefined
-            };
-          } catch (parseError) {
-            request.log.warn({ err: parseError }, 'Unable to parse PG connection string');
-            connectionInfo = {
-              type: 'postgres',
-              dsn: PG_URL
-            };
-          }
-        }
+        // Get ADOLE tables from SQLite
+        const tableRows = await dataSourceAdapter.query(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        );
 
         return {
           success: true,
           status: 'connected',
-          database: 'PostgreSQL',
-          tables: tableRows.map((row) => row.tablename),
-          connection: connectionInfo,
+          database: 'SQLite/LibSQL (ADOLE v3.0)',
+          tables: tableRows.map((row) => row.name),
+          schema: 'atomes, particles, particles_versions, snapshots, permissions, sync_queue, sync_state',
           timestamp: new Date().toISOString()
         };
       } catch (error) {
@@ -832,191 +653,7 @@ async function startServer() {
       }
     });
 
-    // ...existing database routes...
-
-    // Users API
-    // Users API (now using Knex principals table - ADOLE compliant)
-    server.get('/api/users', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const db = db.getDatabase();
-        const users = await db('principals').select('*');
-        return { success: true, data: users };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.post('/api/users', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const db = db.getDatabase();
-        const { name, email, phone, password } = request.body;
-        const principal_id = uuidv4();
-
-        // Get or create default tenant
-        let tenant = await db('tenants').first();
-        if (!tenant) {
-          const tenant_id = uuidv4();
-          await db('tenants').insert({ tenant_id, name: 'default' });
-          tenant = { tenant_id };
-        }
-
-        await db('principals').insert({
-          principal_id,
-          tenant_id: tenant.tenant_id,
-          kind: 'user',
-          email: email || null,
-          phone: phone || null,
-          username: name || null
-        });
-
-        const user = await db('principals').where('principal_id', principal_id).first();
-        return { success: true, data: user };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.get('/api/users/:id', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const db = db.getDatabase();
-        const user = await db('principals').where('principal_id', request.params.id).first();
-
-        if (!user) {
-          reply.code(404);
-          return { success: false, error: 'User not found' };
-        }
-
-        return { success: true, data: user };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.delete('/api/users/:id', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const db = db.getDatabase();
-        const deleted = await db('principals').where('principal_id', request.params.id).del();
-
-        if (deleted === 0) {
-          reply.code(404);
-          return { success: false, error: 'User not found' };
-        }
-
-        return {
-          success: true,
-          message: `User with ID ${request.params.id} deleted successfully`,
-          data: { deletedId: request.params.id }
-        };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    // Projects API (now using Knex objects table with type='project' - ADOLE compliant)
-    server.get('/api/projects', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const db = db.getDatabase();
-        const projects = await db('objects').where('type', 'project').andWhere('deleted', false);
-        return { success: true, data: projects };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.post('/api/projects', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const db = db.getDatabase();
-        const { name, description } = request.body;
-        const object_id = uuidv4();
-
-        // Get or create default tenant
-        let tenant = await db('tenants').first();
-        if (!tenant) {
-          const tenant_id = uuidv4();
-          await db('tenants').insert({ tenant_id, name: 'default' });
-          tenant = { tenant_id };
-        }
-
-        await db('objects').insert({
-          object_id,
-          tenant_id: tenant.tenant_id,
-          type: 'project',
-          kind: 'project',
-          meta: JSON.stringify({ name, description })
-        });
-
-        const project = await db('objects').where('object_id', object_id).first();
-        return { success: true, data: project };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.get('/api/projects/:id', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const db = db.getDatabase();
-        const project = await db('objects')
-          .where('object_id', request.params.id)
-          .andWhere('type', 'project')
-          .first();
-
-        if (!project) {
-          reply.code(404);
-          return { success: false, error: 'Project not found' };
-        }
-
-        return { success: true, data: project };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    // NOTE: Atome routes are registered via registerAtomeRoutes() from atomeRoutes.orm.js
-    // They use /api/atome/* (singular) endpoints
-
-    // Database stats endpoint (now using Knex)
+    // Database stats endpoint (ADOLE v3.0)
     server.get('/api/db/stats', async (request, reply) => {
       if (!DATABASE_ENABLED) {
         reply.code(503);
@@ -1024,20 +661,20 @@ async function startServer() {
       }
 
       try {
-        const db = db.getDatabase();
-        const [userResult, projectResult, atomeResult] = await Promise.all([
-          db('principals').count('* as count').first(),
-          db('objects').where('type', 'project').count('* as count').first(),
-          db('objects').where('type', 'atome').count('* as count').first()
+        const dataSourceAdapter = db.getDataSourceAdapter();
+        const [atomesResult, particlesResult, usersResult] = await Promise.all([
+          dataSourceAdapter.query("SELECT COUNT(*) as count FROM atomes"),
+          dataSourceAdapter.query("SELECT COUNT(*) as count FROM particles"),
+          dataSourceAdapter.query("SELECT COUNT(*) as count FROM atomes WHERE atome_type = 'user'")
         ]);
 
         return {
           success: true,
           data: {
-            users: parseInt(userResult?.count || 0),
-            projects: parseInt(projectResult?.count || 0),
-            atomes: parseInt(atomeResult?.count || 0),
-            database: 'PostgreSQL + Knex (ADOLE)',
+            atomes: parseInt(atomesResult[0]?.count || 0),
+            particles: parseInt(particlesResult[0]?.count || 0),
+            users: parseInt(usersResult[0]?.count || 0),
+            database: 'SQLite/LibSQL (ADOLE v3.0)',
             timestamp: new Date().toISOString()
           }
         };

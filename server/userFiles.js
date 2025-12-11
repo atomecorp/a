@@ -1,291 +1,423 @@
 /**
- * User Files Management
+ * User Files Management - ADOLE v3.0
  * 
- * Tracks file ownership for user isolation in uploads/aBox.
- * Each file is associated with the user who uploaded it.
+ * Tracks file ownership using the ADOLE atomes table.
+ * Files are stored as atomes with atome_type = 'file'.
+ * Sharing uses the permissions table.
+ * All operations via WebSocket.
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
-
-// In-memory store for file ownership (in production, use database)
-const fileOwnershipStore = new Map();
-
-// Metadata file path (persisted to disk)
-let metadataFilePath = null;
+import db from '../database/adole.js';
+import { getABoxEventBus } from './aBoxServer.js';
+import { checkPermission, PERMISSION } from './sharing.js';
 
 /**
- * Initialize the metadata storage
- */
-export async function initUserFiles(uploadsDir) {
-    metadataFilePath = path.join(uploadsDir, '.file_metadata.json');
-
-    try {
-        const data = await fs.readFile(metadataFilePath, 'utf8');
-        const parsed = JSON.parse(data);
-
-        for (const [fileName, meta] of Object.entries(parsed)) {
-            fileOwnershipStore.set(fileName, meta);
-        }
-
-        console.log(`📁 Loaded ${fileOwnershipStore.size} file metadata entries`);
-    } catch (e) {
-        // File doesn't exist yet, start fresh
-        console.log('📁 No existing file metadata, starting fresh');
-    }
-}
-
-/**
- * Save metadata to disk
- */
-async function saveMetadata() {
-    if (!metadataFilePath) return;
-
-    const data = {};
-    for (const [fileName, meta] of fileOwnershipStore) {
-        data[fileName] = meta;
-    }
-
-    try {
-        await fs.writeFile(metadataFilePath, JSON.stringify(data, null, 2));
-    } catch (e) {
-        console.error('❌ Failed to save file metadata:', e.message);
-    }
-}
-
-/**
- * Register a file upload with ownership
+ * Register a file upload as an atome
  */
 export async function registerFileUpload(fileName, userId, options = {}) {
-    const meta = {
-        owner_id: userId,
-        uploaded_at: new Date().toISOString(),
-        original_name: options.originalName || fileName,
-        mime_type: options.mimeType || null,
-        size: options.size || 0,
-        shared_with: [],
-        is_public: false
-    };
-
-    fileOwnershipStore.set(fileName, meta);
-    await saveMetadata();
-
-    console.log(`📤 File registered: ${fileName} → user ${userId}`);
-
-    return meta;
+    const now = new Date().toISOString();
+    const atomeId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    
+    try {
+        // Create atome for the file
+        await db.query('run', `
+            INSERT INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at)
+            VALUES (?, 'file', ?, ?, ?)
+        `, [atomeId, userId, now, now]);
+        
+        // Store file metadata as particles
+        const particles = {
+            file_name: fileName,
+            original_name: options.originalName || fileName,
+            mime_type: options.mimeType || null,
+            size: options.size || 0,
+            is_public: false
+        };
+        
+        for (const [key, value] of Object.entries(particles)) {
+            if (value !== null) {
+                await db.query('run', `
+                    INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+                    VALUES (?, ?, ?, ?)
+                `, [atomeId, key, JSON.stringify(value), now]);
+            }
+        }
+        
+        console.log(`File registered: ${fileName} -> user ${userId}`);
+        
+        // Emit via WebSocket
+        emitFileEvent('upload', { atome_id: atomeId, file_name: fileName, owner_id: userId });
+        
+        return { 
+            success: true, 
+            atome_id: atomeId,
+            file_name: fileName,
+            owner_id: userId,
+            ...particles
+        };
+        
+    } catch (error) {
+        console.error('Failed to register file:', error.message);
+        return { success: false, error: error.message };
+    }
 }
 
 /**
- * Get file metadata
+ * Get file metadata by atome_id or file_name
  */
-export function getFileMetadata(fileName) {
-    return fileOwnershipStore.get(fileName) || null;
+export async function getFileMetadata(identifier) {
+    try {
+        // Try by atome_id first
+        let atome = await db.query('get', `
+            SELECT a.*, p.particle_key, p.particle_value
+            FROM atomes a
+            LEFT JOIN particles p ON a.atome_id = p.atome_id
+            WHERE a.atome_id = ? AND a.atome_type = 'file' AND a.deleted_at IS NULL
+        `, [identifier]);
+        
+        // If not found, try by file_name particle
+        if (!atome) {
+            atome = await db.query('get', `
+                SELECT a.atome_id, a.owner_id, a.created_at
+                FROM atomes a
+                JOIN particles p ON a.atome_id = p.atome_id
+                WHERE p.particle_key = 'file_name' AND p.particle_value = ?
+                AND a.atome_type = 'file' AND a.deleted_at IS NULL
+            `, [JSON.stringify(identifier)]);
+        }
+        
+        if (!atome) return null;
+        
+        // Get all particles for this file
+        const particles = await db.query('all', `
+            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
+        `, [atome.atome_id]);
+        
+        const meta = {
+            atome_id: atome.atome_id,
+            owner_id: atome.owner_id,
+            created_at: atome.created_at
+        };
+        
+        for (const p of (particles || [])) {
+            try {
+                meta[p.particle_key] = JSON.parse(p.particle_value);
+            } catch {
+                meta[p.particle_key] = p.particle_value;
+            }
+        }
+        
+        return meta;
+        
+    } catch (error) {
+        console.error('Failed to get file metadata:', error.message);
+        return null;
+    }
 }
 
 /**
  * Get all files owned by a user
  */
-export function getUserFiles(userId) {
-    const files = [];
-
-    for (const [fileName, meta] of fileOwnershipStore) {
-        if (meta.owner_id === userId) {
-            files.push({ name: fileName, ...meta });
+export async function getUserFiles(userId) {
+    const files = await db.query('all', `
+        SELECT a.atome_id, a.owner_id, a.created_at, a.updated_at
+        FROM atomes a
+        WHERE a.owner_id = ? AND a.atome_type = 'file' AND a.deleted_at IS NULL
+        ORDER BY a.created_at DESC
+    `, [userId]);
+    
+    const result = [];
+    for (const file of (files || [])) {
+        const particles = await db.query('all', `
+            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
+        `, [file.atome_id]);
+        
+        const meta = { ...file };
+        for (const p of (particles || [])) {
+            try {
+                meta[p.particle_key] = JSON.parse(p.particle_value);
+            } catch {
+                meta[p.particle_key] = p.particle_value;
+            }
         }
+        result.push(meta);
     }
-
-    return files;
+    
+    return result;
 }
 
 /**
- * Get files accessible by user (owned + shared)
+ * Get files accessible by user (owned + shared via permissions table)
  */
-export function getAccessibleFiles(userId) {
-    const files = [];
-
-    for (const [fileName, meta] of fileOwnershipStore) {
-        // Owner always has access
-        if (meta.owner_id === userId) {
-            files.push({ name: fileName, access: 'owner', ...meta });
-            continue;
+export async function getAccessibleFiles(userId) {
+    const files = await db.query('all', `
+        SELECT DISTINCT a.atome_id, a.owner_id, a.created_at, a.updated_at,
+            CASE WHEN a.owner_id = ? THEN 'owner' 
+                 WHEN p.can_write = 1 THEN 'write'
+                 ELSE 'read' END as access
+        FROM atomes a
+        LEFT JOIN permissions p ON a.atome_id = p.atome_id AND p.principal_id = ?
+        WHERE a.atome_type = 'file' AND a.deleted_at IS NULL
+        AND (a.owner_id = ? OR (p.can_read = 1 AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))))
+        ORDER BY a.created_at DESC
+    `, [userId, userId, userId]);
+    
+    const result = [];
+    for (const file of (files || [])) {
+        const particles = await db.query('all', `
+            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
+        `, [file.atome_id]);
+        
+        const meta = { ...file };
+        for (const p of (particles || [])) {
+            try {
+                meta[p.particle_key] = JSON.parse(p.particle_value);
+            } catch {
+                meta[p.particle_key] = p.particle_value;
+            }
         }
-
-        // Public files
-        if (meta.is_public) {
-            files.push({ name: fileName, access: 'public', ...meta });
-            continue;
-        }
-
-        // Shared with user
-        const shareInfo = meta.shared_with?.find(s => s.user_id === userId);
-        if (shareInfo) {
-            files.push({ name: fileName, access: shareInfo.permission, ...meta });
-        }
+        result.push(meta);
     }
-
-    return files;
+    
+    return result;
 }
 
 /**
  * Check if user can access file
  */
-export function canAccessFile(fileName, userId, requiredAccess = 'read') {
-    const meta = fileOwnershipStore.get(fileName);
-
+export async function canAccessFile(fileIdentifier, userId, requiredAccess = 'read') {
+    const meta = await getFileMetadata(fileIdentifier);
+    
     if (!meta) {
-        // File has no metadata - allow access (legacy files)
+        // File not in DB - allow access (legacy files)
         return true;
     }
-
+    
     // Owner always has full access
     if (meta.owner_id === userId) {
         return true;
     }
-
-    // Public files - read access only
+    
+    // Check public flag
     if (meta.is_public && requiredAccess === 'read') {
         return true;
     }
-
-    // Check shares
-    const shareInfo = meta.shared_with?.find(s => s.user_id === userId);
-    if (shareInfo) {
-        if (requiredAccess === 'read') {
-            return shareInfo.permission === 'read' || shareInfo.permission === 'write';
-        }
-        return shareInfo.permission === 'write';
-    }
-
-    return false;
-}
-
-/**
- * Share file with another user
- */
-export async function shareFile(fileName, ownerId, targetUserId, permission = 'read') {
-    const meta = fileOwnershipStore.get(fileName);
-
-    if (!meta) {
-        return { success: false, error: 'File not found' };
-    }
-
-    if (meta.owner_id !== ownerId) {
-        return { success: false, error: 'Only owner can share files' };
-    }
-
-    // Remove existing share if present
-    meta.shared_with = meta.shared_with.filter(s => s.user_id !== targetUserId);
-
-    // Add new share
-    meta.shared_with.push({
-        user_id: targetUserId,
-        permission,
-        shared_at: new Date().toISOString()
-    });
-
-    await saveMetadata();
-
-    console.log(`📤 File shared: ${fileName} → user ${targetUserId} (${permission})`);
-
-    return { success: true };
-}
-
-/**
- * Unshare file
- */
-export async function unshareFile(fileName, ownerId, targetUserId) {
-    const meta = fileOwnershipStore.get(fileName);
-
-    if (!meta) {
-        return { success: false, error: 'File not found' };
-    }
-
-    if (meta.owner_id !== ownerId) {
-        return { success: false, error: 'Only owner can unshare files' };
-    }
-
-    meta.shared_with = meta.shared_with.filter(s => s.user_id !== targetUserId);
-    await saveMetadata();
-
-    console.log(`🚫 File unshared: ${fileName} ← user ${targetUserId}`);
-
-    return { success: true };
+    
+    // Check permissions table
+    const permLevel = requiredAccess === 'write' ? PERMISSION.WRITE : PERMISSION.READ;
+    return await checkPermission(userId, meta.atome_id, permLevel);
 }
 
 /**
  * Set file public/private
  */
-export async function setFilePublic(fileName, ownerId, isPublic) {
-    const meta = fileOwnershipStore.get(fileName);
-
+export async function setFilePublic(atomeId, ownerId, isPublic) {
+    const meta = await getFileMetadata(atomeId);
+    
     if (!meta) {
         return { success: false, error: 'File not found' };
     }
-
+    
     if (meta.owner_id !== ownerId) {
         return { success: false, error: 'Only owner can change visibility' };
     }
-
-    meta.is_public = isPublic;
-    await saveMetadata();
-
-    console.log(`🌐 File ${isPublic ? 'public' : 'private'}: ${fileName}`);
-
+    
+    const now = new Date().toISOString();
+    
+    // Update or insert is_public particle
+    const existing = await db.query('get', `
+        SELECT 1 FROM particles WHERE atome_id = ? AND particle_key = 'is_public'
+    `, [atomeId]);
+    
+    if (existing) {
+        await db.query('run', `
+            UPDATE particles SET particle_value = ?, updated_at = ?
+            WHERE atome_id = ? AND particle_key = 'is_public'
+        `, [JSON.stringify(isPublic), now, atomeId]);
+    } else {
+        await db.query('run', `
+            INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+            VALUES (?, 'is_public', ?, ?)
+        `, [atomeId, JSON.stringify(isPublic), now]);
+    }
+    
+    console.log(`File ${isPublic ? 'public' : 'private'}: ${atomeId}`);
+    emitFileEvent('visibility', { atome_id: atomeId, is_public: isPublic });
+    
     return { success: true };
 }
 
 /**
- * Delete file metadata
+ * Delete file (soft delete)
  */
-export async function deleteFileMetadata(fileName, userId) {
-    const meta = fileOwnershipStore.get(fileName);
-
+export async function deleteFile(atomeId, userId) {
+    const meta = await getFileMetadata(atomeId);
+    
     if (!meta) {
         return { success: true }; // Already gone
     }
-
+    
     if (meta.owner_id !== userId) {
         return { success: false, error: 'Only owner can delete files' };
     }
-
-    fileOwnershipStore.delete(fileName);
-    await saveMetadata();
-
+    
+    const now = new Date().toISOString();
+    await db.query('run', `
+        UPDATE atomes SET deleted_at = ? WHERE atome_id = ?
+    `, [now, atomeId]);
+    
+    console.log(`File deleted: ${atomeId}`);
+    emitFileEvent('delete', { atome_id: atomeId });
+    
     return { success: true };
 }
 
 /**
- * Get file stats for admin
+ * Get file stats
  */
-export function getFileStats() {
-    const stats = {
-        totalFiles: fileOwnershipStore.size,
-        publicFiles: 0,
-        sharedFiles: 0,
-        byUser: {}
+export async function getFileStats() {
+    const stats = await db.query('get', `
+        SELECT 
+            COUNT(*) as total_files,
+            COUNT(DISTINCT owner_id) as unique_owners
+        FROM atomes 
+        WHERE atome_type = 'file' AND deleted_at IS NULL
+    `);
+    
+    const publicCount = await db.query('get', `
+        SELECT COUNT(*) as count
+        FROM particles p
+        JOIN atomes a ON p.atome_id = a.atome_id
+        WHERE p.particle_key = 'is_public' AND p.particle_value = 'true'
+        AND a.atome_type = 'file' AND a.deleted_at IS NULL
+    `);
+    
+    const sharedCount = await db.query('get', `
+        SELECT COUNT(DISTINCT atome_id) as count
+        FROM permissions p
+        JOIN atomes a ON p.atome_id = a.atome_id
+        WHERE a.atome_type = 'file' AND a.deleted_at IS NULL
+    `);
+    
+    return {
+        totalFiles: stats?.total_files || 0,
+        uniqueOwners: stats?.unique_owners || 0,
+        publicFiles: publicCount?.count || 0,
+        sharedFiles: sharedCount?.count || 0
     };
+}
 
-    for (const [fileName, meta] of fileOwnershipStore) {
-        if (meta.is_public) stats.publicFiles++;
-        if (meta.shared_with?.length > 0) stats.sharedFiles++;
-
-        const userId = meta.owner_id || 'unknown';
-        stats.byUser[userId] = (stats.byUser[userId] || 0) + 1;
+/**
+ * Emit file event via WebSocket
+ */
+function emitFileEvent(action, data) {
+    try {
+        const eventBus = getABoxEventBus();
+        if (eventBus) {
+            eventBus.emit('event', {
+                type: 'file-event',
+                action,
+                ...data,
+                timestamp: new Date().toISOString()
+            });
+        }
+    } catch (e) {
+        console.warn('Failed to emit file event:', e.message);
     }
+}
 
-    return stats;
+/**
+ * Handle file WebSocket messages
+ */
+export async function handleFileMessage(message, userId) {
+    const { action, requestId } = message;
+    
+    if (!userId) {
+        return { requestId, success: false, error: 'Unauthorized' };
+    }
+    
+    try {
+        switch (action) {
+            case 'list': {
+                const files = await getUserFiles(userId);
+                return { requestId, success: true, data: files };
+            }
+            
+            case 'accessible': {
+                const files = await getAccessibleFiles(userId);
+                return { requestId, success: true, data: files };
+            }
+            
+            case 'get': {
+                const { atome_id, file_name } = message;
+                const meta = await getFileMetadata(atome_id || file_name);
+                if (!meta) {
+                    return { requestId, success: false, error: 'File not found' };
+                }
+                const canAccess = await canAccessFile(meta.atome_id, userId);
+                if (!canAccess) {
+                    return { requestId, success: false, error: 'Access denied' };
+                }
+                return { requestId, success: true, data: meta };
+            }
+            
+            case 'set-public': {
+                const { atome_id, is_public } = message;
+                const result = await setFilePublic(atome_id, userId, is_public);
+                return { requestId, ...result };
+            }
+            
+            case 'delete': {
+                const { atome_id } = message;
+                const result = await deleteFile(atome_id, userId);
+                return { requestId, ...result };
+            }
+            
+            case 'stats': {
+                const stats = await getFileStats();
+                return { requestId, success: true, data: stats };
+            }
+            
+            default:
+                return { requestId, success: false, error: `Unknown action: ${action}` };
+        }
+    } catch (error) {
+        console.error('File message error:', error.message);
+        return { requestId, success: false, error: error.message };
+    }
+}
+
+/**
+ * Register file WebSocket handler
+ */
+export function registerFileWebSocket() {
+    const eventBus = getABoxEventBus();
+    if (!eventBus) {
+        console.warn('EventBus not available, file WebSocket handler not registered');
+        return;
+    }
+    
+    eventBus.on('file', async (message, socket) => {
+        const userId = socket?.userId || message.userId;
+        const response = await handleFileMessage(message, userId);
+        
+        if (socket && typeof socket.send === 'function') {
+            socket.send(JSON.stringify({ type: 'file-response', ...response }));
+        }
+    });
+    
+    console.log('File WebSocket handler registered (ADOLE v3.0)');
 }
 
 export default {
-    initUserFiles,
     registerFileUpload,
     getFileMetadata,
     getUserFiles,
     getAccessibleFiles,
     canAccessFile,
-    shareFile,
-    unshareFile,
     setFilePublic,
-    deleteFileMetadata,
-    getFileStats
+    deleteFile,
+    getFileStats,
+    handleFileMessage,
+    registerFileWebSocket
 };

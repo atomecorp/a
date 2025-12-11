@@ -1,166 +1,316 @@
 /**
- * Sharing & Permissions System
+ * Sharing & Permissions System - ADOLE v3.0
  * 
- * Manages sharing of projects, atomes, and files between users.
- * Supports read, write, and admin permissions.
+ * Manages sharing of atomes (projects, documents, files) between users.
+ * Uses the ADOLE permissions table for persistent, secure access control.
+ * 
+ * Features:
+ * - Granular permissions (read, write, delete, share)
+ * - Particle-level restrictions (optional)
+ * - Expiration dates
+ * - Full audit trail (granted_by, granted_at)
+ * - WebSocket sync for real-time permission updates
  */
 
-// In-memory shares store (in production, use database)
-const sharesStore = new Map();
+import db from '../database/adole.js';
+import { getABoxEventBus } from './aBoxServer.js';
 
 /**
- * Permission levels
+ * Permission levels (bitmask compatible)
  */
 export const PERMISSION = {
     NONE: 0,
     READ: 1,
     WRITE: 2,
-    ADMIN: 3
+    DELETE: 4,
+    SHARE: 8,
+    ADMIN: 15  // READ | WRITE | DELETE | SHARE
 };
 
 /**
- * Resource types
+ * Convert permission level to granular flags
  */
-export const RESOURCE_TYPE = {
-    PROJECT: 'project',
-    ATOME: 'atome',
-    FILE: 'file'
-};
+function permissionToFlags(level) {
+    if (typeof level === 'object') return level;
 
-/**
- * Create a share
- */
-export function createShare(ownerId, resourceType, resourceId, targetUserId, permission) {
-    const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    const share = {
-        id: shareId,
-        owner_id: ownerId,
-        resource_type: resourceType,
-        resource_id: resourceId,
-        target_user_id: targetUserId,
-        permission: permission,
-        created_at: new Date().toISOString(),
-        expires_at: null
+    return {
+        can_read: (level & PERMISSION.READ) ? 1 : 0,
+        can_write: (level & PERMISSION.WRITE) ? 1 : 0,
+        can_delete: (level & PERMISSION.DELETE) ? 1 : 0,
+        can_share: (level & PERMISSION.SHARE) ? 1 : 0
     };
-
-    sharesStore.set(shareId, share);
-    console.log(`📤 Share created: ${resourceType}/${resourceId} → user ${targetUserId} (${getPermissionName(permission)})`);
-
-    return share;
 }
 
 /**
- * Revoke a share
+ * Convert granular flags to permission level
  */
-export function revokeShare(shareId, requesterId) {
-    const share = sharesStore.get(shareId);
-    if (!share) {
-        return { success: false, error: 'Share not found' };
-    }
-
-    // Only owner can revoke
-    if (share.owner_id !== requesterId) {
-        return { success: false, error: 'Only owner can revoke shares' };
-    }
-
-    sharesStore.delete(shareId);
-    console.log(`🚫 Share revoked: ${shareId}`);
-
-    return { success: true };
+function flagsToPermission(flags) {
+    let level = 0;
+    if (flags.can_read) level |= PERMISSION.READ;
+    if (flags.can_write) level |= PERMISSION.WRITE;
+    if (flags.can_delete) level |= PERMISSION.DELETE;
+    if (flags.can_share) level |= PERMISSION.SHARE;
+    return level;
 }
 
 /**
- * Get shares for a resource
+ * Emit permission change via WebSocket
  */
-export function getSharesForResource(resourceType, resourceId) {
-    const shares = [];
-    for (const [id, share] of sharesStore) {
-        if (share.resource_type === resourceType && share.resource_id === resourceId) {
-            shares.push(share);
+function emitPermissionChange(action, permission) {
+    try {
+        const eventBus = getABoxEventBus();
+        if (eventBus) {
+            eventBus.emit('event', {
+                type: 'permission-change',
+                action,
+                permission: {
+                    permission_id: permission.permission_id,
+                    atome_id: permission.atome_id,
+                    principal_id: permission.principal_id,
+                    can_read: permission.can_read,
+                    can_write: permission.can_write,
+                    can_delete: permission.can_delete,
+                    can_share: permission.can_share
+                },
+                timestamp: new Date().toISOString()
+            });
         }
+    } catch (e) {
+        console.warn('Failed to emit permission change:', e.message);
     }
-    return shares;
 }
 
 /**
- * Get shares for a user (resources shared with them)
+ * Create or update a share (permission)
+ * 
+ * @param {string} grantorId - User granting the permission (must be owner or have can_share)
+ * @param {string} atomeId - The atome being shared
+ * @param {string} principalId - The user receiving permission
+ * @param {number|object} permission - Permission level or flags object
+ * @param {object} options - Optional: particleKey, expiresAt
+ * @returns {object} Result with created/updated permission
  */
-export function getSharesForUser(userId) {
-    const shares = [];
-    for (const [id, share] of sharesStore) {
-        if (share.target_user_id === userId) {
-            shares.push(share);
-        }
+export async function createShare(grantorId, atomeId, principalId, permission, options = {}) {
+    const { particleKey = null, expiresAt = null } = options;
+
+    // Verify grantor has permission to share
+    const canShare = await checkCanShare(grantorId, atomeId);
+    if (!canShare) {
+        return { success: false, error: 'You do not have permission to share this resource' };
     }
-    return shares;
+
+    const flags = permissionToFlags(permission);
+    const now = new Date().toISOString();
+
+    try {
+        // Check if permission already exists
+        const existing = await db.query('get', `
+            SELECT permission_id FROM permissions 
+            WHERE atome_id = ? AND principal_id = ? AND (particle_key IS NULL OR particle_key = ?)
+        `, [atomeId, principalId, particleKey]);
+
+        let permissionId;
+
+        if (existing) {
+            // Update existing permission
+            await db.query('run', `
+                UPDATE permissions SET
+                    can_read = ?,
+                    can_write = ?,
+                    can_delete = ?,
+                    can_share = ?,
+                    granted_by = ?,
+                    granted_at = ?,
+                    expires_at = ?
+                WHERE permission_id = ?
+            `, [
+                flags.can_read, flags.can_write, flags.can_delete, flags.can_share,
+                grantorId, now, expiresAt, existing.permission_id
+            ]);
+            permissionId = existing.permission_id;
+            console.log(`Permission updated: ${atomeId} -> ${principalId}`);
+        } else {
+            // Create new permission
+            await db.query('run', `
+                INSERT INTO permissions (atome_id, particle_key, principal_id, can_read, can_write, can_delete, can_share, granted_by, granted_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                atomeId, particleKey, principalId,
+                flags.can_read, flags.can_write, flags.can_delete, flags.can_share,
+                grantorId, now, expiresAt
+            ]);
+
+            // Get the inserted ID
+            const inserted = await db.query('get', `
+                SELECT permission_id FROM permissions 
+                WHERE atome_id = ? AND principal_id = ? ORDER BY permission_id DESC LIMIT 1
+            `, [atomeId, principalId]);
+            permissionId = inserted?.permission_id;
+            console.log(`Permission created: ${atomeId} -> ${principalId}`);
+        }
+
+        const share = {
+            permission_id: permissionId,
+            atome_id: atomeId,
+            particle_key: particleKey,
+            principal_id: principalId,
+            ...flags,
+            granted_by: grantorId,
+            granted_at: now,
+            expires_at: expiresAt
+        };
+
+        emitPermissionChange(existing ? 'update' : 'create', share);
+
+        return { success: true, data: share };
+
+    } catch (error) {
+        console.error('Failed to create share:', error.message);
+        return { success: false, error: error.message };
+    }
 }
 
 /**
- * Check if user has permission on resource
+ * Revoke a share (delete permission)
  */
-export function checkPermission(userId, ownerId, resourceType, resourceId, requiredPermission) {
-    // Owner has full access
-    if (userId === ownerId) {
-        return true;
-    }
+export async function revokeShare(grantorId, permissionId) {
+    try {
+        // Get the permission to verify ownership
+        const permission = await db.query('get', `
+            SELECT p.*, a.owner_id 
+            FROM permissions p
+            JOIN atomes a ON p.atome_id = a.atome_id
+            WHERE p.permission_id = ?
+        `, [permissionId]);
 
-    // Check shares
-    for (const [id, share] of sharesStore) {
-        if (share.resource_type === resourceType &&
-            share.resource_id === resourceId &&
-            share.target_user_id === userId) {
-
-            // Check expiration
-            if (share.expires_at && new Date(share.expires_at) < new Date()) {
-                continue;
-            }
-
-            if (share.permission >= requiredPermission) {
-                return true;
-            }
+        if (!permission) {
+            return { success: false, error: 'Permission not found' };
         }
-    }
 
-    return false;
+        // Only owner or grantor can revoke
+        if (permission.owner_id !== grantorId && permission.granted_by !== grantorId) {
+            return { success: false, error: 'Only owner or grantor can revoke this permission' };
+        }
+
+        await db.query('run', `DELETE FROM permissions WHERE permission_id = ?`, [permissionId]);
+
+        console.log(`Permission revoked: ${permissionId}`);
+        emitPermissionChange('revoke', permission);
+
+        return { success: true };
+
+    } catch (error) {
+        console.error('Failed to revoke share:', error.message);
+        return { success: false, error: error.message };
+    }
 }
 
 /**
- * Get all resources accessible by user
+ * Check if user can share an atome (is owner or has can_share permission)
  */
-export function getAccessibleResources(userId, resourceType, ownershipMap) {
-    const accessible = new Set();
+async function checkCanShare(userId, atomeId) {
+    // Check if user is owner
+    const atome = await db.query('get', `SELECT owner_id FROM atomes WHERE atome_id = ?`, [atomeId]);
+    if (atome?.owner_id === userId) return true;
 
-    // Add owned resources
-    for (const [resourceId, ownerId] of ownershipMap) {
-        if (ownerId === userId) {
-            accessible.add(resourceId);
-        }
-    }
+    // Check if user has share permission
+    const permission = await db.query('get', `
+        SELECT can_share FROM permissions 
+        WHERE atome_id = ? AND principal_id = ? AND can_share = 1
+        AND (expires_at IS NULL OR expires_at > datetime('now'))
+    `, [atomeId, userId]);
 
-    // Add shared resources
-    for (const [id, share] of sharesStore) {
-        if (share.target_user_id === userId &&
-            share.resource_type === resourceType &&
-            share.permission >= PERMISSION.READ) {
-            accessible.add(share.resource_id);
-        }
-    }
-
-    return Array.from(accessible);
+    return permission?.can_share === 1;
 }
 
 /**
- * Get permission name from level
+ * Check if user has specific permission on atome
  */
-export function getPermissionName(level) {
-    switch (level) {
-        case PERMISSION.NONE: return 'none';
-        case PERMISSION.READ: return 'read';
-        case PERMISSION.WRITE: return 'write';
-        case PERMISSION.ADMIN: return 'admin';
-        default: return 'unknown';
+export async function checkPermission(userId, atomeId, requiredPermission = PERMISSION.READ) {
+    // Owner always has full access
+    const atome = await db.query('get', `SELECT owner_id FROM atomes WHERE atome_id = ?`, [atomeId]);
+    if (atome?.owner_id === userId) return true;
+
+    // Check permissions table
+    const permission = await db.query('get', `
+        SELECT can_read, can_write, can_delete, can_share 
+        FROM permissions 
+        WHERE atome_id = ? AND principal_id = ?
+        AND (expires_at IS NULL OR expires_at > datetime('now'))
+    `, [atomeId, userId]);
+
+    if (!permission) return false;
+
+    const level = flagsToPermission(permission);
+    return (level & requiredPermission) === requiredPermission;
+}
+
+/**
+ * Get all shares for a specific atome
+ */
+export async function getSharesForAtome(atomeId) {
+    const shares = await db.query('all', `
+        SELECT p.*, a.atome_type as principal_type
+        FROM permissions p
+        LEFT JOIN atomes a ON p.principal_id = a.atome_id
+        WHERE p.atome_id = ?
+        ORDER BY p.granted_at DESC
+    `, [atomeId]);
+
+    return shares || [];
+}
+
+/**
+ * Get all shares granted to a user (resources shared with them)
+ */
+export async function getSharesForUser(userId) {
+    const shares = await db.query('all', `
+        SELECT p.*, a.atome_type, a.owner_id
+        FROM permissions p
+        JOIN atomes a ON p.atome_id = a.atome_id
+        WHERE p.principal_id = ?
+        AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))
+        ORDER BY p.granted_at DESC
+    `, [userId]);
+
+    return shares || [];
+}
+
+/**
+ * Get all shares granted by a user (resources they shared)
+ */
+export async function getSharesGrantedByUser(userId) {
+    const shares = await db.query('all', `
+        SELECT p.*, a.atome_type
+        FROM permissions p
+        JOIN atomes a ON p.atome_id = a.atome_id
+        WHERE p.granted_by = ?
+        ORDER BY p.granted_at DESC
+    `, [userId]);
+
+    return shares || [];
+}
+
+/**
+ * Get all atomes accessible by user (owned + shared)
+ */
+export async function getAccessibleAtomes(userId, atomeType = null) {
+    let query = `
+        SELECT DISTINCT a.* FROM atomes a
+        LEFT JOIN permissions p ON a.atome_id = p.atome_id
+        WHERE (a.owner_id = ? OR (p.principal_id = ? AND p.can_read = 1 AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))))
+        AND a.deleted_at IS NULL
+    `;
+    const params = [userId, userId];
+
+    if (atomeType) {
+        query += ` AND a.atome_type = ?`;
+        params.push(atomeType);
     }
+
+    query += ` ORDER BY a.updated_at DESC`;
+
+    return await db.query('all', query, params) || [];
 }
 
 /**
@@ -169,100 +319,156 @@ export function getPermissionName(level) {
 export function parsePermission(name) {
     switch (name?.toLowerCase()) {
         case 'read': return PERMISSION.READ;
-        case 'write': return PERMISSION.WRITE;
+        case 'write': return PERMISSION.READ | PERMISSION.WRITE;
+        case 'delete': return PERMISSION.READ | PERMISSION.WRITE | PERMISSION.DELETE;
+        case 'share': return PERMISSION.READ | PERMISSION.SHARE;
         case 'admin': return PERMISSION.ADMIN;
         default: return PERMISSION.NONE;
     }
 }
 
 /**
- * Register sharing routes
+ * Get permission name from level
  */
-export function registerSharingRoutes(server, validateToken) {
+export function getPermissionName(level) {
+    if (level === PERMISSION.ADMIN) return 'admin';
+    if (level & PERMISSION.DELETE) return 'delete';
+    if (level & PERMISSION.WRITE) return 'write';
+    if (level & PERMISSION.READ) return 'read';
+    return 'none';
+}
 
-    // Create share
-    server.post('/api/share/create', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
+/**
+ * Handle sharing WebSocket messages
+ * All sharing operations go through WebSocket via EventBus
+ * 
+ * Message format:
+ * {
+ *   type: 'share',
+ *   action: 'create' | 'revoke' | 'get-atome' | 'my-shares' | 'shared-with-me' | 'accessible' | 'check',
+ *   requestId: string,
+ *   ...params
+ * }
+ */
+export async function handleShareMessage(message, userId) {
+    const { action, requestId } = message;
 
-        const { resource_type, resource_id, target_user_id, permission } = request.body;
+    if (!userId) {
+        return { requestId, success: false, error: 'Unauthorized' };
+    }
 
-        if (!resource_type || !resource_id || !target_user_id) {
-            return reply.status(400).send({ success: false, error: 'Missing required fields' });
-        }
-
-        const userId = user.id || user.userId;
-        const permLevel = typeof permission === 'string' ? parsePermission(permission) : (permission || PERMISSION.READ);
-
-        const share = createShare(userId, resource_type, resource_id, target_user_id, permLevel);
-
-        return { success: true, data: share };
-    });
-
-    // Revoke share
-    server.delete('/api/share/:shareId', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        const { shareId } = request.params;
-        const userId = user.id || user.userId;
-
-        const result = revokeShare(shareId, userId);
-
-        if (!result.success) {
-            return reply.status(403).send(result);
-        }
-
-        return result;
-    });
-
-    // Get my shares (resources I've shared)
-    server.get('/api/share/my-shares', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        const userId = user.id || user.userId;
-        const shares = [];
-
-        for (const [id, share] of sharesStore) {
-            if (share.owner_id === userId) {
-                shares.push(share);
+    try {
+        switch (action) {
+            case 'create': {
+                const { atome_id, principal_id, permission, particle_key, expires_at } = message;
+                if (!atome_id || !principal_id) {
+                    return { requestId, success: false, error: 'Missing atome_id or principal_id' };
+                }
+                const permLevel = typeof permission === 'string' ? parsePermission(permission) : (permission || PERMISSION.READ);
+                const result = await createShare(userId, atome_id, principal_id, permLevel, {
+                    particleKey: particle_key,
+                    expiresAt: expires_at
+                });
+                return { requestId, ...result };
             }
-        }
 
-        return { success: true, data: shares };
+            case 'revoke': {
+                const { permission_id } = message;
+                if (!permission_id) {
+                    return { requestId, success: false, error: 'Missing permission_id' };
+                }
+                const result = await revokeShare(userId, parseInt(permission_id));
+                return { requestId, ...result };
+            }
+
+            case 'get-atome': {
+                const { atome_id } = message;
+                if (!atome_id) {
+                    return { requestId, success: false, error: 'Missing atome_id' };
+                }
+                const canView = await checkCanShare(userId, atome_id);
+                if (!canView) {
+                    return { requestId, success: false, error: 'Access denied' };
+                }
+                const shares = await getSharesForAtome(atome_id);
+                return { requestId, success: true, data: shares };
+            }
+
+            case 'my-shares': {
+                const shares = await getSharesGrantedByUser(userId);
+                return { requestId, success: true, data: shares };
+            }
+
+            case 'shared-with-me': {
+                const shares = await getSharesForUser(userId);
+                return { requestId, success: true, data: shares };
+            }
+
+            case 'accessible': {
+                const { atome_type } = message;
+                const atomes = await getAccessibleAtomes(userId, atome_type || null);
+                return { requestId, success: true, data: atomes, count: atomes.length };
+            }
+
+            case 'check': {
+                const { atome_id, permission } = message;
+                if (!atome_id) {
+                    return { requestId, success: false, error: 'Missing atome_id' };
+                }
+                const permLevel = parsePermission(permission || 'read');
+                const hasPermission = await checkPermission(userId, atome_id, permLevel);
+                return {
+                    requestId,
+                    success: true,
+                    atome_id,
+                    user_id: userId,
+                    permission: permission || 'read',
+                    granted: hasPermission
+                };
+            }
+
+            default:
+                return { requestId, success: false, error: `Unknown action: ${action}` };
+        }
+    } catch (error) {
+        console.error('Share message error:', error.message);
+        return { requestId, success: false, error: error.message };
+    }
+}
+
+/**
+ * Register sharing WebSocket handler with EventBus
+ */
+export function registerSharingWebSocket() {
+    const eventBus = getABoxEventBus();
+    if (!eventBus) {
+        console.warn('EventBus not available, sharing WebSocket handler not registered');
+        return;
+    }
+
+    eventBus.on('share', async (message, socket) => {
+        const userId = socket?.userId || message.userId;
+        const response = await handleShareMessage(message, userId);
+
+        if (socket && typeof socket.send === 'function') {
+            socket.send(JSON.stringify({ type: 'share-response', ...response }));
+        }
     });
 
-    // Get shared with me
-    server.get('/api/share/shared-with-me', async (request, reply) => {
-        const user = await validateToken(request);
-        if (!user) {
-            return reply.status(401).send({ success: false, error: 'Unauthorized' });
-        }
-
-        const userId = user.id || user.userId;
-        const shares = getSharesForUser(userId);
-
-        return { success: true, data: shares };
-    });
-
-    console.log('🔧 Sharing routes registered');
+    console.log('Sharing WebSocket handler registered (ADOLE v3.0)');
 }
 
 export default {
     PERMISSION,
-    RESOURCE_TYPE,
     createShare,
     revokeShare,
-    getSharesForResource,
-    getSharesForUser,
     checkPermission,
-    getAccessibleResources,
-    registerSharingRoutes
+    getSharesForAtome,
+    getSharesForUser,
+    getSharesGrantedByUser,
+    getAccessibleAtomes,
+    parsePermission,
+    getPermissionName,
+    handleShareMessage,
+    registerSharingWebSocket
 };
