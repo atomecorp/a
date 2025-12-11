@@ -114,7 +114,7 @@ async fn sync_user_to_fastify(
 /// Local user stored in SQLite
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalUser {
-    pub id: String,
+    pub user_id: String,
     pub username: String,
     pub phone: String,
     #[serde(skip_serializing)]
@@ -225,11 +225,17 @@ pub struct AuthResponse {
 
 #[derive(Debug, Serialize)]
 pub struct UserInfo {
-    pub id: String,
+    pub user_id: String,
     pub username: String,
     pub phone: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cloud_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_sync: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub synced: Option<bool>,
 }
@@ -252,7 +258,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     // Create users table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
+            user_id TEXT PRIMARY KEY,
             username TEXT NOT NULL,
             phone TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
@@ -432,7 +438,7 @@ async fn register_handler(
     {
         let db = state.db.lock().unwrap();
         if let Err(e) = db.execute(
-            "INSERT INTO users (id, username, phone, password_hash, created_at, updated_at, created_source)
+            "INSERT INTO users (user_id, username, phone, password_hash, created_at, updated_at, created_source)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 user_id,
@@ -496,10 +502,13 @@ async fn register_handler(
             message: Some("Account created successfully".into()),
             error: None,
             user: Some(UserInfo {
-                id: user_id,
+                user_id: user_id,
                 username: clean_username,
                 phone: clean_phone,
+                created_at: None,
                 cloud_id: None,
+                last_sync: None,
+                created_source: Some("tauri".into()),
                 synced: Some(synced),
             }),
             token: Some(token),
@@ -566,7 +575,7 @@ async fn sync_register_handler(
         let db = state.db.lock().unwrap();
         let existing_id: Option<String> = db
             .query_row(
-                "SELECT id FROM users WHERE phone = ?1",
+                "SELECT user_id FROM users WHERE phone = ?1",
                 [&clean_phone],
                 |row| row.get(0),
             )
@@ -581,10 +590,13 @@ async fn sync_register_handler(
                     message: Some("User already exists".into()),
                     error: None,
                     user: Some(UserInfo {
-                        id,
+                        user_id: id,
                         username: clean_username,
                         phone: clean_phone,
+                        created_at: None,
                         cloud_id: None,
+                        last_sync: None,
+                        created_source: None,
                         synced: Some(true),
                     }),
                     token: None,
@@ -600,7 +612,7 @@ async fn sync_register_handler(
     {
         let db = state.db.lock().unwrap();
         if let Err(e) = db.execute(
-            "INSERT INTO users (id, username, phone, password_hash, created_at, updated_at, created_source, last_sync)
+            "INSERT INTO users (user_id, username, phone, password_hash, created_at, updated_at, created_source, last_sync)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 user_id,
@@ -638,10 +650,13 @@ async fn sync_register_handler(
             message: Some("User synced successfully".into()),
             error: None,
             user: Some(UserInfo {
-                id: user_id,
+                user_id: user_id,
                 username: clean_username,
                 phone: clean_phone,
+                created_at: None,
                 cloud_id: None,
+                last_sync: None,
+                created_source: None,
                 synced: Some(true),
             }),
             token: None,
@@ -660,12 +675,12 @@ async fn login_handler(
     let user: Option<LocalUser> = {
         let db = state.db.lock().unwrap();
         db.query_row(
-            "SELECT id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync
+            "SELECT user_id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync
              FROM users WHERE phone = ?1",
             [&clean_phone],
             |row| {
                 Ok(LocalUser {
-                    id: row.get(0)?,
+                    user_id: row.get(0)?,
                     username: row.get(1)?,
                     phone: row.get(2)?,
                     password_hash: row.get(3)?,
@@ -710,7 +725,12 @@ async fn login_handler(
     }
 
     // Generate token
-    let token = match generate_token(&state.jwt_secret, &user.id, &user.username, &user.phone) {
+    let token = match generate_token(
+        &state.jwt_secret,
+        &user.user_id,
+        &user.username,
+        &user.phone,
+    ) {
         Ok(t) => t,
         Err(_) => {
             return (
@@ -738,10 +758,13 @@ async fn login_handler(
             message: None,
             error: None,
             user: Some(UserInfo {
-                id: user.id,
+                user_id: user.user_id,
                 username: user.username,
                 phone: user.phone,
+                created_at: Some(user.created_at),
                 cloud_id: user.cloud_id,
+                last_sync: user.last_sync.clone(),
+                created_source: None,
                 synced: Some(user.last_sync.is_some()),
             }),
             token: Some(token),
@@ -765,7 +788,7 @@ async fn list_users_handler(State(state): State<LocalAuthState>) -> impl IntoRes
     let db = state.db.lock().unwrap();
 
     let mut stmt = match db.prepare(
-        "SELECT id, username, phone, created_at, cloud_id, last_sync, created_source FROM users ORDER BY created_at DESC"
+        "SELECT user_id, username, phone, created_at, cloud_id, last_sync, created_source FROM users ORDER BY created_at DESC"
     ) {
         Ok(s) => s,
         Err(e) => {
@@ -783,12 +806,16 @@ async fn list_users_handler(State(state): State<LocalAuthState>) -> impl IntoRes
 
     let users: Vec<UserInfo> = stmt
         .query_map([], |row| {
+            let last_sync: Option<String> = row.get(5).ok();
             Ok(UserInfo {
-                id: row.get(0)?,
+                user_id: row.get(0)?,
                 username: row.get(1)?,
                 phone: row.get(2)?,
+                created_at: row.get(3).ok(),
                 cloud_id: row.get(4).ok(),
-                synced: Some(row.get::<_, Option<String>>(5).ok().flatten().is_some()),
+                last_sync: last_sync.clone(),
+                created_source: row.get(6).ok(),
+                synced: Some(last_sync.is_some()),
             })
         })
         .unwrap_or_else(|_| panic!("Query failed"))
@@ -867,12 +894,12 @@ async fn me_handler(
     let user: Option<LocalUser> = {
         let db = state.db.lock().unwrap();
         db.query_row(
-            "SELECT id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync
-             FROM users WHERE id = ?1",
+            "SELECT user_id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync
+             FROM users WHERE user_id = ?1",
             [&claims.sub],
             |row| {
                 Ok(LocalUser {
-                    id: row.get(0)?,
+                    user_id: row.get(0)?,
                     username: row.get(1)?,
                     phone: row.get(2)?,
                     password_hash: row.get(3)?,
@@ -894,10 +921,13 @@ async fn me_handler(
                 error: None,
                 message: None,
                 user: Some(UserInfo {
-                    id: u.id,
+                    user_id: u.user_id,
                     username: u.username,
                     phone: u.phone,
+                    created_at: Some(u.created_at),
                     cloud_id: u.cloud_id,
+                    last_sync: u.last_sync.clone(),
+                    created_source: None,
                     synced: Some(u.last_sync.is_some()),
                 }),
                 token: None,
@@ -995,7 +1025,7 @@ async fn change_password_handler(
 
     // Get current password hash
     let user: Result<(String, String), _> = db.query_row(
-        "SELECT id, password_hash FROM users WHERE id = ?1",
+        "SELECT user_id, password_hash FROM users WHERE user_id = ?1",
         params![claims.sub],
         |row| Ok((row.get(0)?, row.get(1)?)),
     );
@@ -1036,7 +1066,7 @@ async fn change_password_handler(
             // Update password
             let now = Utc::now().to_rfc3339();
             match db.execute(
-                "UPDATE users SET password_hash = ?1, updated_at = ?2 WHERE id = ?3",
+                "UPDATE users SET password_hash = ?1, updated_at = ?2 WHERE user_id = ?3",
                 params![new_hash, now, user_id],
             ) {
                 Ok(_) => {
@@ -1223,12 +1253,12 @@ async fn delete_handler(
     let user: Option<LocalUser> = {
         let db = state.db.lock().unwrap();
         db.query_row(
-            "SELECT id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync
-             FROM users WHERE id = ?1",
+            "SELECT user_id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync
+             FROM users WHERE user_id = ?1",
             [&claims.sub],
             |row| {
                 Ok(LocalUser {
-                    id: row.get(0)?,
+                    user_id: row.get(0)?,
                     username: row.get(1)?,
                     phone: row.get(2)?,
                     password_hash: row.get(3)?,
@@ -1285,7 +1315,7 @@ async fn delete_handler(
     // Delete user locally
     {
         let db = state.db.lock().unwrap();
-        if let Err(e) = db.execute("DELETE FROM users WHERE id = ?1", [&claims.sub]) {
+        if let Err(e) = db.execute("DELETE FROM users WHERE user_id = ?1", [&claims.sub]) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(AuthResponse {
@@ -1311,10 +1341,13 @@ async fn delete_handler(
             message: Some("Account deleted successfully".into()),
             error: None,
             user: Some(UserInfo {
-                id: user.id,
+                user_id: user.user_id,
                 username: user.username,
                 phone: user.phone,
+                created_at: Some(user.created_at),
                 cloud_id: user.cloud_id,
+                last_sync: user.last_sync,
+                created_source: None,
                 synced: None,
             }),
             token: None,
@@ -1466,12 +1499,12 @@ async fn delete_synced_handler(
     let user = {
         let db = state.db.lock().unwrap();
         let mut stmt = db
-            .prepare("SELECT id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync FROM users WHERE id = ?1 OR phone = ?2")
+            .prepare("SELECT user_id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync FROM users WHERE user_id = ?1 OR phone = ?2")
             .unwrap();
 
         stmt.query_row(params![&user_id_to_delete, &phone_to_check], |row| {
             Ok(LocalUser {
-                id: row.get(0)?,
+                user_id: row.get(0)?,
                 username: row.get(1)?,
                 phone: row.get(2)?,
                 password_hash: row.get(3)?,
@@ -1504,7 +1537,7 @@ async fn delete_synced_handler(
     // Delete user
     {
         let db = state.db.lock().unwrap();
-        if let Err(e) = db.execute("DELETE FROM users WHERE id = ?1", [&user.id]) {
+        if let Err(e) = db.execute("DELETE FROM users WHERE user_id = ?1", [&user.user_id]) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(AuthResponse {
@@ -1576,11 +1609,11 @@ async fn sync_delete_handler(
     let user = {
         let db = state.db.lock().unwrap();
         db.query_row(
-            "SELECT id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync FROM users WHERE phone = ?1",
+            "SELECT user_id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync FROM users WHERE phone = ?1",
             [&req.phone],
             |row| {
                 Ok(LocalUser {
-                    id: row.get(0)?,
+                    user_id: row.get(0)?,
                     username: row.get(1)?,
                     phone: row.get(2)?,
                     password_hash: row.get(3)?,
@@ -1619,7 +1652,7 @@ async fn sync_delete_handler(
     // Delete user
     {
         let db = state.db.lock().unwrap();
-        if let Err(e) = db.execute("DELETE FROM users WHERE id = ?1", [&user.id]) {
+        if let Err(e) = db.execute("DELETE FROM users WHERE user_id = ?1", [&user.user_id]) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(AuthResponse {
@@ -1761,7 +1794,7 @@ async fn update_cloud_id_handler(
     {
         let db = state.db.lock().unwrap();
         if let Err(e) = db.execute(
-            "UPDATE users SET cloud_id = ?1, last_sync = ?2 WHERE id = ?3",
+            "UPDATE users SET cloud_id = ?1, last_sync = ?2 WHERE user_id = ?3",
             params![&req.cloud_id, &now, &claims.sub],
         ) {
             return (

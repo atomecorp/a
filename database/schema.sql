@@ -130,23 +130,30 @@ CREATE TABLE IF NOT EXISTS snapshots (
 CREATE INDEX IF NOT EXISTS idx_snapshots_object ON snapshots(object_id);
 
 -- ============================================================================
--- 6. TABLE users (for local auth)
--- Stores local user accounts for offline authentication
--- Compatible with auth.js column names
+-- 6. TABLE users (UNIFIED SCHEMA for Tauri + Fastify)
+-- Single source of truth for user accounts
+-- Compatible with both local_auth.rs (Tauri) and auth.js (Fastify)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS users (
-  user_id TEXT PRIMARY KEY,                         -- UUID (used as principal ID)
-  principal_id TEXT,                                -- Same as user_id (compatibility)
-  tenant_id TEXT,                                   -- Tenant ID (default: squirrel-main)
-  phone TEXT UNIQUE,                                -- Phone number (login)
-  username TEXT,                                    -- Display name
-  password_hash TEXT,                               -- Hashed password
+  user_id TEXT PRIMARY KEY,                         -- UUID (deterministic from phone)
+  principal_id TEXT,                                -- Same as user_id (Fastify compatibility)
+  tenant_id TEXT,                                   -- Tenant ID (Fastify multi-tenant)
+  phone TEXT UNIQUE NOT NULL,                       -- Phone number (login identifier)
+  username TEXT NOT NULL,                           -- Display name
+  password_hash TEXT NOT NULL,                      -- Bcrypt hashed password
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Sync-related columns (used by Tauri)
+  cloud_id TEXT,                                    -- ID on remote server if synced
+  last_sync TEXT,                                   -- Last sync timestamp
+  created_source TEXT DEFAULT 'unknown',            -- Where user was created: tauri, fastify, sync
+  -- Optional data (used by Fastify)
+  optional TEXT                                     -- JSON blob for extra user data
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 
 -- ============================================================================
 -- 7. TABLE sync_state (for cross-server sync)

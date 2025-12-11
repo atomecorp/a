@@ -271,7 +271,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     server.get('/api/auth/users', async (request, reply) => {
         try {
             const rows = await dataSource.query(
-                `SELECT user_id, username, phone, created_at FROM users ORDER BY created_at DESC`
+                `SELECT user_id, username, phone, created_at, cloud_id, last_sync, created_source FROM users ORDER BY created_at DESC`
             );
 
             console.log(`[Auth] Listed ${rows.length} users from LibSQL`);
@@ -280,10 +280,14 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 success: true,
                 database: 'Fastify/LibSQL',
                 users: rows.map(row => ({
-                    id: row.user_id,
+                    user_id: row.user_id,
                     username: row.username,
                     phone: row.phone,
-                    created_at: row.created_at
+                    created_at: row.created_at,
+                    cloud_id: row.cloud_id || null,
+                    last_sync: row.last_sync || null,
+                    created_source: row.created_source || null,
+                    synced: row.last_sync ? true : false
                 }))
             };
         } catch (error) {
@@ -356,8 +360,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             // Create user
             await dataSource.query(
-                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at, created_source)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'fastify')`,
                 [principalId, principalId, tenantId, cleanPhone, cleanUsername, passwordHash, now, now]
             );
 
@@ -477,9 +481,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             // Create user with pre-hashed password
             await dataSource.query(
-                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [principalId, principalId, tenantId, cleanPhone, cleanUsername, passwordHash, now, now]
+                `INSERT INTO users (user_id, principal_id, tenant_id, phone, username, password_hash, created_at, updated_at, created_source, last_sync)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [principalId, principalId, tenantId, cleanPhone, cleanUsername, passwordHash, now, now, sourceServer || 'sync', now]
             );
 
             console.log(`✅ User synced from ${sourceServer || 'unknown'}: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
