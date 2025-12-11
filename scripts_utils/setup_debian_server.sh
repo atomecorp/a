@@ -81,7 +81,7 @@ if [ -f "$PROJECT_ROOT/package.json" ]; then
   # Création du fichier .env si nécessaire avec le chemin SQLite
   if [ ! -f ".env" ]; then
       log_info "Création du fichier .env..."
-      echo "SQLITE_PATH=$PROJECT_ROOT/src/assets/adole.db" > .env
+      echo "SQLITE_PATH=$PROJECT_ROOT/database_storage/adole.db" > .env
       chmod 600 .env
       log_ok "Fichier .env créé."
   fi
@@ -92,7 +92,7 @@ fi
 log_ok "✅ Installation terminée avec succès !"
 echo "-----------------------------------------------------"
 echo "Serveur prêt."
-echo "Base de données : SQLite ($PROJECT_ROOT/src/assets/adole.db)"
+echo "Base de données : SQLite ($PROJECT_ROOT/database_storage/adole.db)"
 echo "-----------------------------------------------------"
 echo ""
 echo "Pour utiliser libSQL/Turso en production, ajoutez à .env:"

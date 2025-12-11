@@ -53,7 +53,7 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 # Get SQLite path from env or use default
-SQLITE_PATH="${SQLITE_PATH:-$PROJECT_ROOT/src/assets/adole.db}"
+SQLITE_PATH="${SQLITE_PATH:-$PROJECT_ROOT/database_storage/adole.db}"
 
 # Confirmation
 if [ "$FORCE" = false ]; then

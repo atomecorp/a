@@ -40,11 +40,12 @@ function detectDriverType() {
 
 /**
  * Get SQLite database path
+ * Note: database_storage/ is outside src/ to avoid triggering Tauri hot-reload
  */
 function getSqlitePath() {
     return process.env.SQLITE_PATH ||
         process.env.ADOLE_SQLITE_PATH ||
-        path.join(PROJECT_ROOT, 'src', 'assets', 'adole.db');
+        path.join(PROJECT_ROOT, 'database_storage', 'adole.db');
 }
 
 /**

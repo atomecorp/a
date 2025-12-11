@@ -1,6 +1,12 @@
 # Dependencies
 node_modules/
 
+# Database storage (outside src/ to avoid Tauri hot-reload)
+database_storage/
+*.db
+*.db-wal
+*.db-shm
+
 # Build outputs
 src/svelte/build/
 src-Auv3/build/

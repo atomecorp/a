@@ -67,7 +67,7 @@ Tauri embeds the Axum server on port `3000`, points the webview to the same `src
 ./run.sh --prod       # builds frontend + tauri bundle, mounts the dmg
 ```
 
-`run.sh` also ensures `SQLITE_PATH` exists by using `src/assets/adole.db` as the default database location. For cloud deployments, set `LIBSQL_URL` and `LIBSQL_AUTH_TOKEN` for Turso.
+`run.sh` also ensures `SQLITE_PATH` exists by using `database_storage/adole.db` as the default database location. For cloud deployments, set `LIBSQL_URL` and `LIBSQL_AUTH_TOKEN` for Turso.
 
 ### 5. Production bundles & packages
 

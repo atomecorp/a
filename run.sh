@@ -21,7 +21,7 @@ DEFAULT_UPLOADS_PATH="src/assets/uploads"
 DEFAULT_MONITORED_PATH="/Users/Shared/monitored"
 
 # --- Database defaults (SQLite/libSQL) ---------------------------------------
-DEFAULT_SQLITE_PATH="src/assets/adole.db"
+DEFAULT_SQLITE_PATH="database_storage/adole.db"
 
 # =============================================================================
 # DATABASE SETUP FUNCTION (SQLite)

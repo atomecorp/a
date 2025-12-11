@@ -61,7 +61,7 @@ The installer generates a default one for you.
 NODE_ENV=production
 PORT=3001
 HOST=127.0.0.1
-SQLITE_PATH=/opt/a/src/assets/adole.db
+SQLITE_PATH=/opt/a/database_storage/adole.db
 SQUIRREL_UPLOADS_DIR=/opt/a/uploads
 
 # Optional: For cloud deployment with Turso/libSQL

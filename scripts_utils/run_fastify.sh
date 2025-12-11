@@ -31,7 +31,7 @@ load_env_file "$PROJECT_ROOT/.env.local"
 # SQLite is always available (local file), libSQL is optional for cloud
 # Just ensure SQLITE_PATH has a sensible default
 if [[ -z "${SQLITE_PATH:-}" ]]; then
-    export SQLITE_PATH="$PROJECT_ROOT/src/assets/adole.db"
+    export SQLITE_PATH="$PROJECT_ROOT/database_storage/adole.db"
     echo "INFO: SQLITE_PATH not set, using default: $SQLITE_PATH"
 fi
 

@@ -15,7 +15,7 @@ SKIP_FASTIFY=false
 SKIP_IPLUG=false
 
 # SQLite database path (no longer using PostgreSQL)
-DEFAULT_SQLITE_PATH="src/assets/adole.db"
+DEFAULT_SQLITE_PATH="database_storage/adole.db"
 
 write_sqlite_path_to_env() {
   local db_path="$1"
@@ -599,7 +599,7 @@ install_sqlite_modules() {
 }
 
 setup_sqlite_database() {
-  local sqlite_path="${SQLITE_PATH:-$PROJECT_ROOT/src/assets/adole.db}"
+  local sqlite_path="${SQLITE_PATH:-$PROJECT_ROOT/database_storage/adole.db}"
   local sqlite_dir
   sqlite_dir="$(dirname "$sqlite_path")"
   
