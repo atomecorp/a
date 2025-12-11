@@ -9,19 +9,65 @@
 import { v4 as uuidv4 } from 'uuid';
 import { broadcastMessage } from './githubSync.js';
 import db from '../database/adole.js';
+import crypto from 'crypto';
 
 // =============================================================================
-// AUTO-SYNC TO TAURI
+// AUTO-SYNC TO TAURI - Queue-based with retry
 // =============================================================================
 
 const TAURI_URL = process.env.TAURI_URL || 'http://localhost:3000';
 const SYNC_SECRET = process.env.SYNC_SECRET || 'squirrel-sync-2024';
 
+// Sync worker interval (30 seconds)
+let syncWorkerInterval = null;
+
 /**
- * Sync an atome to Tauri server automatically
- * This is called after create/update operations on Fastify
+ * Queue a sync operation for reliable delivery
+ * If sync fails, it will be retried by the background worker
  */
-async function syncAtomeToTauri(atome) {
+async function queueSyncToTauri(atome, operation = 'create') {
+    const now = new Date().toISOString();
+    const payload = JSON.stringify({
+        atomes: [{
+            id: atome.id,
+            kind: atome.kind,
+            type: atome.type,
+            data: atome.data || atome.properties || {},
+            snapshot: atome.data || atome.properties || {},
+            parent: atome.parent,
+            owner: atome.owner,
+            logical_clock: atome.logical_clock || 1,
+            sync_status: 'synced',
+            device_id: null,
+            created_at: atome.created_at,
+            updated_at: atome.updated_at,
+            meta: {},
+            deleted: false
+        }]
+    });
+
+    try {
+        await db.query('run', `
+            INSERT INTO sync_queue (object_id, object_type, operation, payload, target_server, status, created_at, next_retry_at)
+            VALUES (?, 'atome', ?, ?, 'tauri', 'pending', ?, ?)
+            ON CONFLICT(object_id, operation, target_server) DO UPDATE SET
+                payload = excluded.payload,
+                status = 'pending',
+                attempts = 0,
+                error_message = NULL,
+                next_retry_at = excluded.next_retry_at
+        `, [atome.id, operation, payload, now, now]);
+
+        console.log(`📥 [SyncQueue] Queued ${operation} for atome ${atome.id} to Tauri`);
+    } catch (error) {
+        console.error(`⚠️ [SyncQueue] Failed to queue: ${error.message}`);
+    }
+}
+
+/**
+ * Try to sync an atome to Tauri immediately, queue on failure
+ */
+async function syncAtomeToTauriWithQueue(atome, operation = 'create') {
     try {
         const syncPayload = {
             atomes: [{
@@ -54,14 +100,159 @@ async function syncAtomeToTauri(atome) {
 
         if (response.ok) {
             console.log(`🔄 [AutoSync] Synced atome ${atome.id} to Tauri`);
+            // Remove from queue if it was there
+            await db.query('run',
+                `DELETE FROM sync_queue WHERE object_id = ? AND target_server = 'tauri'`,
+                [atome.id]
+            ).catch(() => { });
         } else {
             const body = await response.text();
-            console.log(`⚠️ [AutoSync] Tauri returned ${response.status}: ${body}`);
+            console.log(`⚠️ [AutoSync] Tauri returned ${response.status}: ${body}, queuing for retry`);
+            await queueSyncToTauri(atome, operation);
         }
     } catch (error) {
-        // Don't fail - Tauri might be offline
-        console.log(`⚠️ [AutoSync] Could not reach Tauri: ${error.message}`);
+        // Queue for retry - Tauri might be offline
+        console.log(`⚠️ [AutoSync] Could not reach Tauri: ${error.message}, queuing for retry`);
+        await queueSyncToTauri(atome, operation);
     }
+}
+
+/**
+ * Process pending sync queue items (called by background worker)
+ */
+async function processSyncQueue() {
+    const now = new Date().toISOString();
+
+    try {
+        // Get pending items ready for retry
+        const pendingItems = await db.query('all', `
+            SELECT id, object_id, payload FROM sync_queue 
+            WHERE status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= ?)
+            AND attempts < max_attempts
+            ORDER BY created_at ASC
+            LIMIT 10
+        `, [now]);
+
+        if (!pendingItems || pendingItems.length === 0) {
+            return;
+        }
+
+        console.log(`🔄 [SyncWorker] Processing ${pendingItems.length} pending sync items`);
+
+        for (const item of pendingItems) {
+            try {
+                const payload = JSON.parse(item.payload);
+
+                const response = await fetch(`${TAURI_URL}/api/atome/sync/receive`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Sync-Secret': SYNC_SECRET
+                    },
+                    body: JSON.stringify(payload),
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                if (response.ok) {
+                    console.log(`✅ [SyncWorker] Synced queued atome ${item.object_id} to Tauri`);
+                    await db.query('run', `DELETE FROM sync_queue WHERE id = ?`, [item.id]);
+                } else {
+                    const body = await response.text();
+                    await updateQueueRetry(item.id, `HTTP ${response.status}: ${body}`);
+                }
+            } catch (error) {
+                await updateQueueRetry(item.id, error.message);
+            }
+        }
+    } catch (error) {
+        console.error(`⚠️ [SyncWorker] Error: ${error.message}`);
+    }
+}
+
+/**
+ * Update queue item for retry with exponential backoff
+ */
+async function updateQueueRetry(queueId, error) {
+    try {
+        const item = await db.query('get', `SELECT attempts FROM sync_queue WHERE id = ?`, [queueId]);
+        const attempts = (item?.attempts || 0) + 1;
+        const backoffSeconds = 30 * Math.pow(2, Math.min(attempts - 1, 4)); // 30s, 60s, 120s, 240s, 480s
+        const nextRetry = new Date(Date.now() + backoffSeconds * 1000).toISOString();
+        const now = new Date().toISOString();
+        const status = attempts >= 5 ? 'failed' : 'pending';
+
+        await db.query('run', `
+            UPDATE sync_queue SET attempts = ?, last_attempt_at = ?, next_retry_at = ?, error_message = ?, status = ? WHERE id = ?
+        `, [attempts, now, nextRetry, error, status, queueId]);
+
+        if (status === 'failed') {
+            console.log(`❌ [SyncQueue] Queue item ${queueId} failed after ${attempts} attempts`);
+        }
+    } catch (e) {
+        console.error(`⚠️ [SyncQueue] Failed to update retry: ${e.message}`);
+    }
+}
+
+/**
+ * Compute sync hash for a user (for integrity verification)
+ */
+async function computeUserSyncHash(userId) {
+    const atomes = await db.query('all', `
+        SELECT o.id, COALESCE(p.version, 1) as logical_clock, o.updated_at
+        FROM objects o
+        LEFT JOIN properties p ON o.id = p.object_id AND p.name = 'name'
+        WHERE o.owner = ?
+        ORDER BY o.id
+    `, [userId]);
+
+    let hasherInput = '';
+    let count = 0;
+    let maxClock = 0;
+
+    for (const atome of atomes) {
+        hasherInput += `${atome.id}:${atome.logical_clock}:${atome.updated_at};`;
+        count++;
+        if (atome.logical_clock > maxClock) {
+            maxClock = atome.logical_clock;
+        }
+    }
+
+    const hash = crypto.createHash('sha256').update(hasherInput).digest('hex').substring(0, 16);
+
+    return { hash, count, maxClock };
+}
+
+/**
+ * Update the stored sync hash for a user
+ */
+async function updateUserSyncHash(userId) {
+    const { hash, count, maxClock } = await computeUserSyncHash(userId);
+    const now = new Date().toISOString();
+
+    await db.query('run', `
+        INSERT INTO sync_state_hash (user_id, hash, atome_count, max_logical_clock, last_update)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            hash = excluded.hash,
+            atome_count = excluded.atome_count,
+            max_logical_clock = excluded.max_logical_clock,
+            last_update = excluded.last_update
+    `, [userId, hash, count, maxClock, now]);
+}
+
+/**
+ * Start the background sync worker
+ */
+function startSyncWorker() {
+    if (syncWorkerInterval) {
+        return; // Already running
+    }
+
+    console.log('🔄 [SyncWorker] Started background sync worker (30s interval)');
+    syncWorkerInterval = setInterval(processSyncQueue, 30000);
+
+    // Also run immediately on startup
+    setTimeout(processSyncQueue, 5000);
 }
 
 /**
@@ -149,8 +340,11 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                 atome: formatted
             });
 
-            // Auto-sync to Tauri in background (non-blocking)
-            syncAtomeToTauri(formatted).catch(() => { });
+            // Update sync hash for this user
+            updateUserSyncHash(user.id).catch(() => { });
+
+            // Auto-sync to Tauri in background with queue fallback (non-blocking)
+            syncAtomeToTauriWithQueue(formatted, 'create').catch(() => { });
 
             return reply.code(201).send({
                 success: true,
@@ -722,5 +916,134 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
     });
 
-    console.log('[Atome] Routes v2.0 registered (ADOLE schema)');
+    // ========================================================================
+    // SYNC HASH - GET /api/sync/hash
+    // Get current sync hash for authenticated user
+    // ========================================================================
+    server.get('/api/sync/hash', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            const { hash, count, maxClock } = await computeUserSyncHash(user.id);
+            const now = new Date().toISOString();
+
+            return reply.send({
+                success: true,
+                user_id: user.id,
+                hash,
+                atome_count: count,
+                max_logical_clock: maxClock,
+                last_update: now
+            });
+        } catch (error) {
+            console.error('[Sync] Hash error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // SYNC RECONCILE - POST /api/sync/reconcile
+    // Compare hashes and determine if sync is needed
+    // ========================================================================
+    server.post('/api/sync/reconcile', async (request, reply) => {
+        // Check for sync secret (server-to-server) or JWT
+        const syncSecret = request.headers['x-sync-secret'];
+        const user = syncSecret === SYNC_SECRET ?
+            { id: request.headers['x-user-id'] || 'unknown' } :
+            await validateToken(request);
+
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { remote_hash, remote_atome_count, remote_max_clock } = request.body;
+
+        try {
+            const { hash: localHash, count: localCount, maxClock: localMaxClock } = await computeUserSyncHash(user.id);
+
+            if (localHash === remote_hash) {
+                return reply.send({
+                    success: true,
+                    in_sync: true,
+                    message: 'Databases are in sync',
+                    local_hash: localHash,
+                    remote_hash
+                });
+            }
+
+            // Determine which side is ahead
+            const needsPull = remote_max_clock > localMaxClock;
+            const needsPush = localMaxClock > remote_max_clock;
+
+            return reply.send({
+                success: true,
+                in_sync: false,
+                message: 'Databases out of sync, reconciliation needed',
+                local_hash: localHash,
+                remote_hash,
+                local_count: localCount,
+                remote_count: remote_atome_count,
+                local_max_clock: localMaxClock,
+                remote_max_clock: remote_max_clock,
+                needs_pull: needsPull,
+                needs_push: needsPush
+            });
+        } catch (error) {
+            console.error('[Sync] Reconcile error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // ========================================================================
+    // SYNC QUEUE STATUS - GET /api/sync/queue-status
+    // Get pending sync queue status
+    // ========================================================================
+    server.get('/api/sync/queue-status', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            const pending = await db.query('get',
+                `SELECT COUNT(*) as count FROM sync_queue WHERE status = 'pending'`, []);
+            const failed = await db.query('get',
+                `SELECT COUNT(*) as count FROM sync_queue WHERE status = 'failed'`, []);
+            const total = await db.query('get',
+                `SELECT COUNT(*) as count FROM sync_queue`, []);
+
+            const items = await db.query('all', `
+                SELECT id, object_id, operation, status, attempts, error_message, created_at 
+                FROM sync_queue ORDER BY created_at DESC LIMIT 20
+            `, []);
+
+            return reply.send({
+                success: true,
+                pending: pending?.count || 0,
+                failed: failed?.count || 0,
+                total: total?.count || 0,
+                items: items || []
+            });
+        } catch (error) {
+            console.error('[Sync] Queue status error:', error);
+            return reply.code(500).send({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // Start the background sync worker
+    startSyncWorker();
+
+    console.log('[Atome] Routes v2.0 registered (ADOLE schema with robust sync)');
 }

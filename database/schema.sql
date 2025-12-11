@@ -159,3 +159,44 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_sync_version INTEGER NOT NULL DEFAULT 0,     -- Last synced property_version id
   last_sync_at TEXT                                 -- Timestamp of last sync
 );
+
+-- ============================================================================
+-- 8. TABLE sync_queue (for reliable cross-server sync)
+-- Persistent queue for sync operations that failed or are pending
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS sync_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  object_id TEXT NOT NULL,                          -- ID of the object to sync
+  object_type TEXT NOT NULL DEFAULT 'atome',        -- Type: atome, user, property
+  operation TEXT NOT NULL,                          -- Operation: create, update, delete
+  payload TEXT NOT NULL,                            -- Full JSON payload for sync
+  target_server TEXT NOT NULL DEFAULT 'tauri',      -- Target: tauri, fastify
+  attempts INTEGER NOT NULL DEFAULT 0,              -- Number of sync attempts
+  max_attempts INTEGER NOT NULL DEFAULT 5,          -- Max attempts before marking failed
+  last_attempt_at TEXT,                             -- Last attempt timestamp
+  next_retry_at TEXT,                               -- Next retry timestamp (for backoff)
+  status TEXT NOT NULL DEFAULT 'pending',           -- pending, syncing, failed, success
+  error_message TEXT,                               -- Last error message
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(object_id, operation, target_server)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at);
+
+-- ============================================================================
+-- 9. TABLE sync_state_hash (for integrity verification)
+-- Per-user hash for quick sync state comparison
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS sync_state_hash (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL UNIQUE,                     -- User ID
+  hash TEXT NOT NULL,                               -- Hash of all user's atomes
+  atome_count INTEGER NOT NULL DEFAULT 0,           -- Number of atomes
+  max_logical_clock INTEGER NOT NULL DEFAULT 0,     -- Max logical clock value
+  last_update TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_hash_user ON sync_state_hash(user_id);

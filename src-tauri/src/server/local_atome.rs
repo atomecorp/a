@@ -32,16 +32,58 @@ const DEFAULT_TENANT_ID: &str = "local-tenant";
 /// Fastify server URL for auto-sync
 const FASTIFY_URL: &str = "http://localhost:3001";
 
-// =============================================================================
-// AUTO-SYNC TO FASTIFY
+// ========RC TO FASTIFY - Queue-based with retry
 // =============================================================================
 
 /// Sync secret for server-to-server communication
 const SYNC_SECRET: &str = "squirrel-sync-2024";
 
-/// Sync an atome to Fastify server automatically
-/// This is called after create/update operations on Tauri
-async fn sync_atome_to_fastify(atome: &AtomeData) {
+/// Queue a sync operation to database for reliable delivery
+/// If sync fails, it will be retried by the background worker
+fn queue_sync_to_fastify(db: &Connection, atome: &AtomeData, operation: &str) -> Result<(), String> {
+    let now = Utc::now().to_rfc3339();
+    
+    // Build sync payload
+    let payload = serde_json::json!({
+        "atomes": [{
+            "id": atome.id,
+            "kind": atome.kind,
+            "type": atome.atome_type,
+            "data": atome.data,
+            "snapshot": atome.snapshot,
+            "parent": atome.parent,
+            "owner": atome.owner,
+            "logical_clock": atome.logical_clock,
+            "sync_status": "synced",
+            "device_id": atome.device_id,
+            "created_at": atome.created_at,
+            "updated_at": atome.updated_at,
+            "meta": atome.meta,
+            "deleted": false
+        }]
+    });
+    
+    let payload_str = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+    
+    // Insert or update queue entry (UPSERT)
+    db.execute(
+        "INSERT INTO sync_queue (object_id, object_type, operation, payload, target_server, status, created_at, next_retry_at)
+         VALUES (?1, 'atome', ?2, ?3, 'fastify', 'pending', ?4, ?4)
+         ON CONFLICT(object_id, operation, target_server) DO UPDATE SET
+            payload = excluded.payload,
+            status = 'pending',
+            attempts = 0,
+            error_message = NULL,
+            next_retry_at = excluded.next_retry_at",
+        rusqlite::params![&atome.id, operation, &payload_str, &now],
+    ).map_err(|e| e.to_string())?;
+    
+    println!("📥 [SyncQueue] Queued {} for atome {} to Fastify", operation, atome.id);
+    Ok(())
+}
+
+/// Try to sync an atome to Fastify immediately, queue on failure
+async fn sync_atome_to_fastify_with_queue(atome: &AtomeData, db_arc: Arc<Mutex<Connection>>) {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -49,6 +91,10 @@ async fn sync_atome_to_fastify(atome: &AtomeData) {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️ [AutoSync] Failed to create HTTP client: {}", e);
+            // Queue for retry
+            if let Ok(db) = db_arc.lock() {
+                let _ = queue_sync_to_fastify(&db, atome, "create");
+            }
             return;
         }
     };
@@ -86,17 +132,216 @@ async fn sync_atome_to_fastify(atome: &AtomeData) {
         Ok(response) => {
             if response.status().is_success() {
                 println!("🔄 [AutoSync] Synced atome {} to Fastify", atome.id);
+                // Remove from queue if it was there
+                if let Ok(db) = db_arc.lock() {
+                    let _ = db.execute(
+                        "DELETE FROM sync_queue WHERE object_id = ?1 AND target_server = 'fastify'",
+                        rusqlite::params![&atome.id],
+                    );
+                }
             } else {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
-                println!("⚠️ [AutoSync] Fastify returned {}: {}", status, body);
+                println!("⚠️ [AutoSync] Fastify returned {}: {}, queuing for retry", status, body);
+                // Queue for retry
+                if let Ok(db) = db_arc.lock() {
+                    let _ = queue_sync_to_fastify(&db, atome, "create");
+                }
             }
         }
         Err(e) => {
-            // Don't fail - Fastify might be offline
-            println!("⚠️ [AutoSync] Could not reach Fastify: {}", e);
+            // Queue for retry - Fastify might be offline
+            println!("⚠️ [AutoSync] Could not reach Fastify: {}, queuing for retry", e);
+            if let Ok(db) = db_arc.lock() {
+                let _ = queue_sync_to_fastify(&db, atome, "create");
+            }
         }
     }
+}
+
+/// Process pending sync queue items (called by background worker)
+async fn process_sync_queue(db_arc: Arc<Mutex<Connection>>) {
+    let now = Utc::now().to_rfc3339();
+    
+    // Get pending items ready for retry
+    let pending_items: Vec<(i64, String, String)> = {
+        let db = match db_arc.lock() {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        
+        let mut stmt = match db.prepare(
+            "SELECT id, object_id, payload FROM sync_queue 
+             WHERE status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= ?1)
+             AND attempts < max_attempts
+             ORDER BY created_at ASC
+             LIMIT 10"
+        ) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        
+        stmt.query_map(rusqlite::params![&now], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .ok()
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    };
+    
+    if pending_items.is_empty() {
+        return;
+    }
+    
+    println!("🔄 [SyncWorker] Processing {} pending sync items", pending_items.len());
+    
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    
+    let url = format!("{}/api/atome/sync/receive", FASTIFY_URL);
+    
+    for (queue_id, object_id, payload) in pending_items {
+        let payload_json: serde_json::Value = match serde_json::from_str(&payload) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        
+        match client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("X-Sync-Secret", SYNC_SECRET)
+            .json(&payload_json)
+            .send()
+            .await
+        {
+            Ok(response) if response.status().is_success() => {
+                println!("✅ [SyncWorker] Synced queued atome {} to Fastify", object_id);
+                // Remove from queue
+                if let Ok(db) = db_arc.lock() {
+                    let _ = db.execute(
+                        "DELETE FROM sync_queue WHERE id = ?1",
+                        rusqlite::params![queue_id],
+                    );
+                }
+            }
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let body = response.text().await.unwrap_or_default();
+                println!("⚠️ [SyncWorker] Fastify returned {} for {}: {}", status, object_id, body);
+                update_queue_retry(&db_arc, queue_id, &format!("HTTP {}: {}", status, body));
+            }
+            Err(e) => {
+                println!("⚠️ [SyncWorker] Could not reach Fastify for {}: {}", object_id, e);
+                update_queue_retry(&db_arc, queue_id, &e.to_string());
+            }
+        }
+    }
+}
+
+/// Update queue item for retry with exponential backoff
+fn update_queue_retry(db_arc: &Arc<Mutex<Connection>>, queue_id: i64, error: &str) {
+    if let Ok(db) = db_arc.lock() {
+        // Get current attempt count
+        let attempts: i64 = db.query_row(
+            "SELECT attempts FROM sync_queue WHERE id = ?1",
+            rusqlite::params![queue_id],
+            |row| row.get(0),
+        ).unwrap_or(0);
+        
+        let new_attempts = attempts + 1;
+        // Exponential backoff: 30s, 1m, 2m, 4m, 8m
+        let backoff_seconds = 30 * (1i64 << attempts.min(4));
+        let next_retry = Utc::now() + chrono::Duration::seconds(backoff_seconds);
+        let next_retry_str = next_retry.to_rfc3339();
+        let now = Utc::now().to_rfc3339();
+        
+        let status = if new_attempts >= 5 { "failed" } else { "pending" };
+        
+        let _ = db.execute(
+            "UPDATE sync_queue SET attempts = ?1, last_attempt_at = ?2, next_retry_at = ?3, error_message = ?4, status = ?5 WHERE id = ?6",
+            rusqlite::params![new_attempts, &now, &next_retry_str, error, status, queue_id],
+        );
+        
+        if status == "failed" {
+            println!("❌ [SyncQueue] Queue item {} failed after {} attempts", queue_id, new_attempts);
+        }
+    }
+}
+
+/// Compute sync hash for a user (for integrity verification)
+fn compute_user_sync_hash(db: &Connection, user_id: &str) -> Result<(String, i64, i64), String> {
+    // Get all atomes for user, sorted by ID for deterministic hash
+    let mut stmt = db.prepare(
+        "SELECT id, logical_clock, updated_at FROM atomes 
+         WHERE owner = ?1 AND deleted = 0 
+         ORDER BY id"
+    ).map_err(|e| e.to_string())?;
+    
+    let mut hasher_input = String::new();
+    let mut count: i64 = 0;
+    let mut max_clock: i64 = 0;
+    
+    let rows = stmt.query_map(rusqlite::params![user_id], |row| {
+        let id: String = row.get(0)?;
+        let clock: i64 = row.get(1)?;
+        let updated: String = row.get(2)?;
+        Ok((id, clock, updated))
+    }).map_err(|e| e.to_string())?;
+    
+    for row in rows {
+        if let Ok((id, clock, updated)) = row {
+            hasher_input.push_str(&format!("{}:{}:{};", id, clock, updated));
+            count += 1;
+            if clock > max_clock {
+                max_clock = clock;
+            }
+        }
+    }
+    
+    // Simple hash using first 16 chars of base64-encoded data
+    // In production, use a proper hash like SHA-256
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    hasher_input.hash(&mut hasher);
+    let hash = format!("{:016x}", hasher.finish());
+    
+    Ok((hash, count, max_clock))
+}
+
+/// Update the stored sync hash for a user
+fn update_user_sync_hash(db: &Connection, user_id: &str) -> Result<(), String> {
+    let (hash, count, max_clock) = compute_user_sync_hash(db, user_id)?;
+    let now = Utc::now().to_rfc3339();
+    
+    db.execute(
+        "INSERT INTO sync_state_hash (user_id, hash, atome_count, max_logical_clock, last_update)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(user_id) DO UPDATE SET
+            hash = excluded.hash,
+            atome_count = excluded.atome_count,
+            max_logical_clock = excluded.max_logical_clock,
+            last_update = excluded.last_update",
+        rusqlite::params![user_id, &hash, count, max_clock, &now],
+    ).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+/// Start the background sync worker
+pub fn start_sync_worker(db_arc: Arc<Mutex<Connection>>) {
+    tokio::spawn(async move {
+        println!("🔄 [SyncWorker] Started background sync worker (30s interval)");
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            process_sync_queue(db_arc.clone()).await;
+        }
+    });
 }
 
 #[derive(Clone)]
@@ -364,6 +609,49 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         )",
         [],
     )?;
+
+    // =========================================================================
+    // TABLE 7: sync_queue - Persistent queue for failed sync operations
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            object_id TEXT NOT NULL,
+            object_type TEXT NOT NULL DEFAULT 'atome',
+            operation TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            target_server TEXT NOT NULL DEFAULT 'fastify',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 5,
+            last_attempt_at TEXT,
+            next_retry_at TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            error_message TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(object_id, operation, target_server)
+        )",
+        [],
+    )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at)", [])?;
+
+    // =========================================================================
+    // TABLE 8: sync_state_hash - Per-user hash for integrity verification
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_state_hash (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            hash TEXT NOT NULL,
+            atome_count INTEGER NOT NULL DEFAULT 0,
+            max_logical_clock INTEGER NOT NULL DEFAULT 0,
+            last_update TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_hash_user ON sync_state_hash(user_id)", [])?;
 
     // =========================================================================
     // Main atomes table - ADOLE compliant naming (owner, parent, not owner_id, parent_id)
@@ -716,10 +1004,17 @@ async fn create_atome_handler(
         meta: req.meta,
     };
 
-    // Auto-sync to Fastify in background (non-blocking)
+    // Update sync hash for this user
+    {
+        let db = state.db.lock().unwrap();
+        let _ = update_user_sync_hash(&db, &atome_data.owner);
+    }
+
+    // Auto-sync to Fastify in background with queue fallback (non-blocking)
     let atome_for_sync = atome_data.clone();
+    let db_arc = state.db.clone();
     tokio::spawn(async move {
-        sync_atome_to_fastify(&atome_for_sync).await;
+        sync_atome_to_fastify_with_queue(&atome_for_sync, db_arc).await;
     });
 
     (
@@ -2268,6 +2563,264 @@ async fn sync_receive_handler(
     )
 }
 
+// =============================================================================
+// HASH VERIFICATION & RECONCILIATION HANDLERS
+// =============================================================================
+
+/// Response for hash verification
+#[derive(Debug, Serialize)]
+pub struct SyncHashResponse {
+    pub success: bool,
+    pub user_id: String,
+    pub hash: String,
+    pub atome_count: i64,
+    pub max_logical_clock: i64,
+    pub last_update: String,
+}
+
+/// Response for queue status
+#[derive(Debug, Serialize)]
+pub struct SyncQueueStatusResponse {
+    pub success: bool,
+    pub pending: i64,
+    pub failed: i64,
+    pub total: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<SyncQueueItem>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncQueueItem {
+    pub id: i64,
+    pub object_id: String,
+    pub operation: String,
+    pub status: String,
+    pub attempts: i64,
+    pub error_message: Option<String>,
+    pub created_at: String,
+}
+
+/// Request for reconciliation
+#[derive(Debug, Deserialize)]
+pub struct ReconcileRequest {
+    pub remote_hash: String,
+    pub remote_atome_count: i64,
+    pub remote_max_clock: i64,
+}
+
+/// GET /api/sync/hash - Get current sync hash for authenticated user
+async fn get_sync_hash_handler(
+    State(state): State<LocalAtomeState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Validate JWT
+    let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
+    let claims = match validate_jwt(auth_header, &state.jwt_secret) {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                e.0,
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": e.1.error
+                })),
+            );
+        }
+    };
+
+    let db = state.db.lock().unwrap();
+    
+    // Compute fresh hash
+    match compute_user_sync_hash(&db, &claims.sub) {
+        Ok((hash, count, max_clock)) => {
+            let now = Utc::now().to_rfc3339();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "user_id": claims.sub,
+                    "hash": hash,
+                    "atome_count": count,
+                    "max_logical_clock": max_clock,
+                    "last_update": now
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "success": false,
+                "error": e
+            })),
+        ),
+    }
+}
+
+/// POST /api/sync/reconcile - Compare hashes and trigger full sync if needed
+async fn reconcile_sync_handler(
+    State(state): State<LocalAtomeState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<ReconcileRequest>,
+) -> impl IntoResponse {
+    // Check for sync secret (server-to-server) or JWT
+    let sync_secret = headers.get("x-sync-secret").and_then(|h| h.to_str().ok());
+    let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
+    
+    let user_id = if sync_secret == Some(SYNC_SECRET) {
+        // Server-to-server - get user_id from request or header
+        headers.get("x-user-id").and_then(|h| h.to_str().ok()).unwrap_or("unknown").to_string()
+    } else {
+        match validate_jwt(auth_header, &state.jwt_secret) {
+            Ok(c) => c.sub,
+            Err(e) => {
+                return (
+                    e.0,
+                    Json(serde_json::json!({
+                        "success": false,
+                        "error": e.1.error
+                    })),
+                );
+            }
+        }
+    };
+
+    let db = state.db.lock().unwrap();
+    
+    // Compute local hash
+    let (local_hash, local_count, local_max_clock) = match compute_user_sync_hash(&db, &user_id) {
+        Ok(h) => h,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": e
+                })),
+            );
+        }
+    };
+
+    // Compare hashes
+    if local_hash == req.remote_hash {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "in_sync": true,
+                "message": "Databases are in sync",
+                "local_hash": local_hash,
+                "remote_hash": req.remote_hash
+            })),
+        );
+    }
+
+    // Hashes differ - need to sync
+    // Determine which side is ahead based on max logical clock
+    let needs_pull = req.remote_max_clock > local_max_clock;
+    let needs_push = local_max_clock > req.remote_max_clock;
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "in_sync": false,
+            "message": "Databases out of sync, reconciliation needed",
+            "local_hash": local_hash,
+            "remote_hash": req.remote_hash,
+            "local_count": local_count,
+            "remote_count": req.remote_atome_count,
+            "local_max_clock": local_max_clock,
+            "remote_max_clock": req.remote_max_clock,
+            "needs_pull": needs_pull,
+            "needs_push": needs_push
+        })),
+    )
+}
+
+/// GET /api/sync/queue-status - Get pending sync queue status
+async fn sync_queue_status_handler(
+    State(state): State<LocalAtomeState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Validate JWT
+    let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
+    if validate_jwt(auth_header, &state.jwt_secret).is_err() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Unauthorized"
+            })),
+        );
+    }
+
+    let db = state.db.lock().unwrap();
+    
+    // Count by status
+    let pending: i64 = db.query_row(
+        "SELECT COUNT(*) FROM sync_queue WHERE status = 'pending'",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(0);
+    
+    let failed: i64 = db.query_row(
+        "SELECT COUNT(*) FROM sync_queue WHERE status = 'failed'",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(0);
+    
+    let total: i64 = db.query_row(
+        "SELECT COUNT(*) FROM sync_queue",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(0);
+    
+    // Get recent items
+    let mut stmt = match db.prepare(
+        "SELECT id, object_id, operation, status, attempts, error_message, created_at 
+         FROM sync_queue ORDER BY created_at DESC LIMIT 20"
+    ) {
+        Ok(s) => s,
+        Err(_) => {
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "pending": pending,
+                    "failed": failed,
+                    "total": total
+                })),
+            );
+        }
+    };
+    
+    let items: Vec<SyncQueueItem> = stmt.query_map([], |row| {
+        Ok(SyncQueueItem {
+            id: row.get(0)?,
+            object_id: row.get(1)?,
+            operation: row.get(2)?,
+            status: row.get(3)?,
+            attempts: row.get(4)?,
+            error_message: row.get(5)?,
+            created_at: row.get(6)?,
+        })
+    })
+    .ok()
+    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+    .unwrap_or_default();
+    
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "pending": pending,
+            "failed": failed,
+            "total": total,
+            "items": items
+        })),
+    )
+}
+
 /// Create the local atome router
 pub fn create_local_atome_router(data_dir: PathBuf) -> Router {
     // Initialize database
@@ -2278,6 +2831,9 @@ pub fn create_local_atome_router(data_dir: PathBuf) -> Router {
         db: Arc::new(Mutex::new(conn)),
         jwt_secret: get_jwt_secret(&data_dir),
     };
+
+    // Start background sync worker
+    start_sync_worker(state.db.clone());
 
     Router::new()
         .route("/api/atome/create", post(create_atome_handler))
@@ -2298,6 +2854,10 @@ pub fn create_local_atome_router(data_dir: PathBuf) -> Router {
         .route("/api/sync/pull", get(sync_pull_handler))
         .route("/api/sync/ack", post(sync_ack_handler))
         .route("/api/sync/receive", post(sync_receive_handler))
+        // Hash verification endpoints
+        .route("/api/sync/hash", get(get_sync_hash_handler))
+        .route("/api/sync/reconcile", post(reconcile_sync_handler))
+        .route("/api/sync/queue-status", get(sync_queue_status_handler))
         // Backward compatibility aliases
         .route("/api/atome/sync/push", post(sync_push_handler))
         .route("/api/atome/sync/pull", get(sync_pull_handler))

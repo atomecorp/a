@@ -618,6 +618,9 @@ export default {
     updateAtome,
     listAtomes,
 
+    // Raw query access for sync operations
+    query,
+
     // Compatibility
     getDataSourceAdapter
 };
