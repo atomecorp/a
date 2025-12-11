@@ -87,7 +87,77 @@ async function user_list() {
   return results;
 }
 
+/**
+ * List all tables from both databases
+ * Returns table names from Tauri/SQLite and Fastify/LibSQL
+ */
+async function list_tables() {
+  const backends = await checkBackends(true);
+  const results = {
+    tauri: { database: 'Tauri/SQLite', tables: [], error: null },
+    fastify: { database: 'Fastify/LibSQL', tables: [], error: null }
+  };
+
+  // Tauri: use /api/atome/debug/tables endpoint
+  if (backends.tauri) {
+    try {
+      const response = await fetch(`${CONFIG.TAURI_BASE_URL}/api/atome/debug/tables`);
+      const data = await response.json();
+      if (data.success) {
+        results.tauri.tables = data.tables || [];
+        console.log('[Tauri/SQLite] Tables:', results.tauri.tables);
+      } else {
+        results.tauri.error = data.error || 'Unknown error';
+        console.error('[Tauri/SQLite] Error:', data.error);
+      }
+    } catch (e) {
+      results.tauri.error = e.message;
+      console.error('[Tauri/SQLite] Error:', e.message);
+    }
+  }
+
+  // Fastify: use /api/adole/debug/tables endpoint
+  if (backends.fastify) {
+    try {
+      const response = await fetch(`${CONFIG.FASTIFY_BASE_URL}/api/adole/debug/tables`);
+      const data = await response.json();
+      if (data.success) {
+        results.fastify.tables = data.tables || [];
+        console.log('[Fastify/LibSQL] Tables:', results.fastify.tables);
+      } else {
+        results.fastify.error = data.error || 'Unknown error';
+        console.error('[Fastify/LibSQL] Error:', data.error);
+      }
+    } catch (e) {
+      results.fastify.error = e.message;
+      console.error('[Fastify/LibSQL] Error:', e.message);
+    }
+  }
+
+  return results;
+}
+
 // Keep existing UI
+
+
+$('span', {
+  id: 'clear_console',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'clear console',
+  onClick: () => {
+    console.clear();
+  },
+});
+
+
+
 $('span', {
   id: 'user_list',
   css: {
@@ -105,7 +175,7 @@ $('span', {
 });
 
 $('span', {
-  id: 'clear_console',
+  id: 'list_tables',
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -114,10 +184,11 @@ $('span', {
     margin: '10px',
     display: 'inline-block'
   },
-  text: 'clear console',
+  text: 'List all tables',
   onClick: () => {
-    console.clear();
+    console.log(list_tables());
   },
 });
+
 
 

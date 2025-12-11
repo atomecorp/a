@@ -560,6 +560,30 @@ async function startServer() {
       return { success: true, data: stats };
     });
 
+    /**
+     * GET /api/adole/debug/tables
+     * List all tables in the database (for debugging)
+     */
+    server.get('/api/adole/debug/tables', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
+      try {
+        const dataSourceAdapter = db.getDataSourceAdapter();
+        const rows = await dataSourceAdapter.query(
+          "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        );
+        const tables = rows.map(r => r.name);
+        console.log(`[Debug] Listed ${tables.length} tables from LibSQL`);
+        return { success: true, database: 'Fastify/LibSQL', tables };
+      } catch (error) {
+        request.log.error({ err: error }, 'List tables failed');
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
     server.post('/api/adole/users', async (request, reply) => {
       if (!DATABASE_ENABLED) {
         reply.code(503);

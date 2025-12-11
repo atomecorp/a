@@ -1,14 +1,17 @@
 /**
- * ADOLE Data Layer v2.0 - Pure SQL implementation
+ * ADOLE Data Layer v3.0 UNIFIED - Pure SQL implementation
  * 
  * Implements the ADOLE (Append-only Distributed Object Ledger Engine) data model.
+ * UNIFIED SCHEMA - Same structure as Tauri (local_atome.rs)
  * 
  * Tables:
- * - objects: Identity, category, ownership (no properties)
- * - properties: Current live state of each property
- * - property_versions: Full history for undo/redo, time-travel, sync
- * - permissions: Fine-grained ACL per property
+ * - atomes: Identity, category, ownership (atome_id, atome_type, parent_id, owner_id, etc.)
+ * - particles: Current live state of each property (key-value pairs)
+ * - particles_versions: Full history for undo/redo, time-travel, sync
+ * - permissions: Fine-grained ACL per particle
  * - snapshots: Full state backups
+ * - sync_queue: Pending sync operations
+ * - sync_state: Sync metadata per server
  * 
  * No ORM. Pure SQL. Fast. Predictable.
  */
@@ -30,11 +33,11 @@ let isAsync = false;
 export async function initDatabase(config = {}) {
     if (db) return db;
 
-    console.log('[ADOLE] Initializing database v2.0...');
+    console.log('[ADOLE v3.0] Initializing unified database...');
     db = await connect(config);
     isAsync = db.type === 'libsql';
 
-    // Run schema
+    // Run schema from file
     const fs = await import('fs');
     const path = await import('path');
     const { fileURLToPath } = await import('url');
@@ -44,9 +47,9 @@ export async function initDatabase(config = {}) {
     try {
         const schema = fs.readFileSync(schemaPath, 'utf8');
         await query('exec', schema);
-        console.log('[ADOLE] Schema applied successfully');
+        console.log('[ADOLE v3.0] Unified schema applied successfully');
     } catch (e) {
-        console.log('[ADOLE] Schema already exists or error:', e.message);
+        console.log('[ADOLE v3.0] Schema already exists or error:', e.message);
     }
 
     return db;
@@ -72,83 +75,137 @@ export async function closeDatabase() {
 }
 
 // ============================================================================
-// OBJECT OPERATIONS
+// ATOME OPERATIONS (ADOLE v3.0)
 // ============================================================================
 
 /**
- * Create a new object (atome)
- * @param {Object} data - { id?, type, kind?, parent?, owner, creator? }
- * @returns {Object} Created object
+ * Create a new atome
+ * @param {Object} data - { id?, type, parent?, owner, creator? }
+ * @returns {Object} Created atome
  */
-export async function createObject({ id, type, kind, parent, owner, creator }) {
-    const objectId = id || uuidv4();
+export async function createAtome({ id, type, kind, parent, owner, creator, properties = {} }) {
+    const atomeId = id || uuidv4();
     const now = new Date().toISOString();
+    const ownerId = owner;
+    const creatorId = creator || owner;
 
     await query('run', `
-        INSERT INTO objects (id, type, kind, parent, owner, creator, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [objectId, type, kind || null, parent || null, owner, creator || owner, now, now]);
+        INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, 
+                           sync_status, created_source, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'local', 'fastify', ?, ?)
+    `, [atomeId, type, parent || null, ownerId, creatorId, now, now]);
+
+    // Store kind as a particle if provided
+    if (kind) {
+        await setParticle(atomeId, 'kind', kind, creatorId);
+    }
+
+    // Store all properties as particles
+    if (properties && Object.keys(properties).length > 0) {
+        await setParticles(atomeId, properties, creatorId);
+    }
 
     return {
-        id: objectId,
-        type,
+        atome_id: atomeId,
+        atome_type: type,
         kind,
-        parent,
-        owner,
-        creator: creator || owner,
+        parent_id: parent || null,
+        owner_id: ownerId,
+        creator_id: creatorId,
+        data: properties,
+        sync_status: 'local',
+        created_source: 'fastify',
         created_at: now,
         updated_at: now
     };
 }
 
 /**
- * Get object by ID (metadata only, no properties)
+ * Get atome by ID (metadata only, no particles)
  */
-export async function getObjectById(id) {
-    const row = await query('get', 'SELECT * FROM objects WHERE id = ?', [id]);
+export async function getAtomeById(id) {
+    const row = await query('get', `
+        SELECT atome_id, atome_type, parent_id, owner_id, creator_id,
+               sync_status, cloud_id, last_sync, created_source,
+               created_at, updated_at, deleted_at
+        FROM atomes WHERE atome_id = ? AND deleted_at IS NULL
+    `, [id]);
     return row || null;
 }
 
 /**
- * Get object with all its properties
+ * Get atome with all its particles (full data)
  */
-export async function getObject(id) {
-    const obj = await getObjectById(id);
-    if (!obj) return null;
+export async function getAtome(id) {
+    const atome = await getAtomeById(id);
+    if (!atome) return null;
 
-    const props = await query('all', 'SELECT name, value FROM properties WHERE object_id = ?', [id]);
+    const particles = await query('all',
+        'SELECT key, value, value_type FROM particles WHERE atome_id = ?',
+        [id]
+    );
 
-    // Build properties object
-    const properties = {};
-    for (const prop of props) {
+    // Build data object from particles
+    const data = {};
+    let kind = null;
+    for (const p of particles) {
         try {
-            properties[prop.name] = JSON.parse(prop.value);
+            const parsed = JSON.parse(p.value);
+            if (p.key === 'kind') {
+                kind = parsed;
+            } else {
+                data[p.key] = parsed;
+            }
         } catch {
-            properties[prop.name] = prop.value;
+            if (p.key === 'kind') {
+                kind = p.value;
+            } else {
+                data[p.key] = p.value;
+            }
         }
     }
 
-    return { ...obj, properties };
+    return {
+        atome_id: atome.atome_id,
+        atome_type: atome.atome_type,
+        kind,
+        parent_id: atome.parent_id,
+        owner_id: atome.owner_id,
+        creator_id: atome.creator_id,
+        data,
+        sync_status: atome.sync_status,
+        cloud_id: atome.cloud_id,
+        last_sync: atome.last_sync,
+        created_source: atome.created_source,
+        created_at: atome.created_at,
+        updated_at: atome.updated_at,
+        // Legacy compatibility
+        id: atome.atome_id,
+        type: atome.atome_type,
+        parent: atome.parent_id,
+        owner: atome.owner_id,
+        properties: data
+    };
 }
 
 /**
- * Get all objects owned by a user
+ * Get all atomes owned by a user
  */
-export async function getObjectsByOwner(ownerId, options = {}) {
+export async function getAtomesByOwner(ownerId, options = {}) {
     const { type, parent, limit = 100, offset = 0 } = options;
 
-    let sql = 'SELECT * FROM objects WHERE owner = ?';
+    let sql = 'SELECT * FROM atomes WHERE owner_id = ? AND deleted_at IS NULL';
     const params = [ownerId];
 
     if (type) {
-        sql += ' AND type = ?';
+        sql += ' AND atome_type = ?';
         params.push(type);
     }
     if (parent !== undefined) {
         if (parent === null) {
-            sql += ' AND parent IS NULL';
+            sql += ' AND parent_id IS NULL';
         } else {
-            sql += ' AND parent = ?';
+            sql += ' AND parent_id = ?';
             params.push(parent);
         }
     }
@@ -160,107 +217,145 @@ export async function getObjectsByOwner(ownerId, options = {}) {
 }
 
 /**
- * Get children of an object
+ * Get children of an atome
  */
-export async function getObjectChildren(parentId) {
-    return await query('all', 'SELECT * FROM objects WHERE parent = ?', [parentId]);
+export async function getAtomeChildren(parentId) {
+    return await query('all',
+        'SELECT * FROM atomes WHERE parent_id = ? AND deleted_at IS NULL',
+        [parentId]
+    );
 }
 
 /**
- * Update object metadata (type, kind, parent, owner)
+ * Update atome metadata (type, parent, owner)
  */
-export async function updateObject(id, updates) {
+export async function updateAtomeMetadata(id, updates) {
     const fields = [];
     const values = [];
 
-    if (updates.type !== undefined) { fields.push('type = ?'); values.push(updates.type); }
-    if (updates.kind !== undefined) { fields.push('kind = ?'); values.push(updates.kind); }
-    if (updates.parent !== undefined) { fields.push('parent = ?'); values.push(updates.parent); }
-    if (updates.owner !== undefined) { fields.push('owner = ?'); values.push(updates.owner); }
+    if (updates.type !== undefined) { fields.push('atome_type = ?'); values.push(updates.type); }
+    if (updates.parent !== undefined) { fields.push('parent_id = ?'); values.push(updates.parent); }
+    if (updates.owner !== undefined) { fields.push('owner_id = ?'); values.push(updates.owner); }
 
     if (fields.length === 0) return;
 
     fields.push('updated_at = ?');
+    fields.push('sync_status = ?');
     values.push(new Date().toISOString());
+    values.push('pending');
     values.push(id);
 
-    await query('run', `UPDATE objects SET ${fields.join(', ')} WHERE id = ?`, values);
+    await query('run', `UPDATE atomes SET ${fields.join(', ')} WHERE atome_id = ?`, values);
 }
 
 /**
- * Delete object and all its properties
+ * Update atome with properties
  */
-export async function deleteObject(id) {
-    await query('run', 'DELETE FROM objects WHERE id = ?', [id]);
+export async function updateAtome(id, properties, author = null) {
+    await setParticles(id, properties, author);
+    return await getAtome(id);
 }
 
-// ============================================================================
-// PROPERTY OPERATIONS
-// ============================================================================
-
 /**
- * Set a property on an object (creates or updates)
- * Also records the change in property_versions for history
+ * Soft delete atome
  */
-export async function setProperty(objectId, name, value, author = null) {
+export async function deleteAtome(id) {
     const now = new Date().toISOString();
-    const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    await query('run',
+        'UPDATE atomes SET deleted_at = ?, updated_at = ?, sync_status = ? WHERE atome_id = ?',
+        [now, now, 'pending', id]
+    );
+}
 
-    // Check if property exists
+/**
+ * List atomes for a user with full data
+ */
+export async function listAtomes(ownerId, options = {}) {
+    const atomes = await getAtomesByOwner(ownerId, options);
+
+    // Load particles for each atome
+    const result = [];
+    for (const atome of atomes) {
+        const fullAtome = await getAtome(atome.atome_id);
+        if (fullAtome) {
+            result.push(fullAtome);
+        }
+    }
+
+    return result;
+}
+
+// ============================================================================
+// PARTICLE OPERATIONS (ADOLE v3.0)
+// ============================================================================
+
+/**
+ * Set a particle on an atome (creates or updates)
+ * Also records the change in particles_versions for history
+ */
+export async function setParticle(atomeId, key, value, author = null) {
+    const now = new Date().toISOString();
+    const valueStr = typeof value === 'object' ? JSON.stringify(value) : JSON.stringify(value);
+    const valueType = typeof value === 'object' ? 'json' : typeof value;
+
+    // Check if particle exists
     const existing = await query('get',
-        'SELECT id, version FROM properties WHERE object_id = ? AND name = ?',
-        [objectId, name]
+        'SELECT particle_id, version FROM particles WHERE atome_id = ? AND key = ?',
+        [atomeId, key]
     );
 
-    let propertyId;
+    let particleId;
     let version;
 
     if (existing) {
-        // Update existing property
-        version = existing.version + 1;
+        // Update existing particle
+        version = (existing.version || 1) + 1;
         await query('run', `
-            UPDATE properties SET value = ?, version = ?, updated_at = ?
-            WHERE object_id = ? AND name = ?
-        `, [valueStr, version, now, objectId, name]);
-        propertyId = existing.id;
+            UPDATE particles SET value = ?, value_type = ?, version = ?, updated_at = ?
+            WHERE atome_id = ? AND key = ?
+        `, [valueStr, valueType, version, now, atomeId, key]);
+        particleId = existing.particle_id;
     } else {
-        // Create new property
+        // Create new particle
         version = 1;
-        const result = await query('run', `
-            INSERT INTO properties (object_id, name, value, version, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        `, [objectId, name, valueStr, version, now]);
-        propertyId = result.lastInsertRowid;
+        particleId = uuidv4();
+        await query('run', `
+            INSERT INTO particles (particle_id, atome_id, key, value, value_type, version, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [particleId, atomeId, key, valueStr, valueType, version, now, now]);
     }
 
-    // Record in property_versions for history
+    // Record in particles_versions for history
     await query('run', `
-        INSERT INTO property_versions (property_id, object_id, name, version, value, author, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [propertyId, objectId, name, version, valueStr, author, now]);
+        INSERT INTO particles_versions (particle_id, atome_id, key, version, value, value_type, author_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [particleId, atomeId, key, version, valueStr, valueType, author, now]);
 
-    // Update object's updated_at
-    await query('run', 'UPDATE objects SET updated_at = ? WHERE id = ?', [now, objectId]);
+    // Update atome's updated_at and sync_status
+    await query('run',
+        'UPDATE atomes SET updated_at = ?, sync_status = ? WHERE atome_id = ?',
+        [now, 'pending', atomeId]
+    );
 
-    return { propertyId, version };
+    return { particleId, version };
 }
 
 /**
- * Set multiple properties at once
+ * Set multiple particles at once
  */
-export async function setProperties(objectId, properties, author = null) {
-    for (const [name, value] of Object.entries(properties)) {
-        await setProperty(objectId, name, value, author);
+export async function setParticles(atomeId, particles, author = null) {
+    for (const [key, value] of Object.entries(particles)) {
+        await setParticle(atomeId, key, value, author);
     }
 }
 
 /**
- * Get a single property value
+ * Get a single particle value
  */
-export async function getProperty(objectId, name) {
+export async function getParticle(atomeId, key) {
     const row = await query('get',
-        'SELECT value FROM properties WHERE object_id = ? AND name = ?',
-        [objectId, name]
+        'SELECT value FROM particles WHERE atome_id = ? AND key = ?',
+        [atomeId, key]
     );
     if (!row) return null;
     try {
@@ -271,69 +366,83 @@ export async function getProperty(objectId, name) {
 }
 
 /**
- * Get all properties of an object
+ * Get all particles of an atome
  */
-export async function getProperties(objectId) {
-    const rows = await query('all', 'SELECT name, value FROM properties WHERE object_id = ?', [objectId]);
+export async function getParticles(atomeId) {
+    const rows = await query('all',
+        'SELECT key, value FROM particles WHERE atome_id = ?',
+        [atomeId]
+    );
     const result = {};
     for (const row of rows) {
         try {
-            result[row.name] = JSON.parse(row.value);
+            result[row.key] = JSON.parse(row.value);
         } catch {
-            result[row.name] = row.value;
+            result[row.key] = row.value;
         }
     }
     return result;
 }
 
 /**
- * Delete a property
+ * Delete a particle
  */
-export async function deleteProperty(objectId, name) {
-    await query('run', 'DELETE FROM properties WHERE object_id = ? AND name = ?', [objectId, name]);
+export async function deleteParticle(atomeId, key) {
+    await query('run', 'DELETE FROM particles WHERE atome_id = ? AND key = ?', [atomeId, key]);
 }
 
 // ============================================================================
-// PROPERTY VERSIONS (History / Time-Travel)
+// PARTICLE VERSIONS (History / Time-Travel)
 // ============================================================================
 
 /**
- * Get version history of a property
+ * Get version history of a particle
  */
-export async function getPropertyHistory(objectId, name, limit = 50) {
+export async function getParticleHistory(atomeId, key, limit = 50) {
     return await query('all', `
-        SELECT * FROM property_versions 
-        WHERE object_id = ? AND name = ?
+        SELECT * FROM particles_versions 
+        WHERE atome_id = ? AND key = ?
         ORDER BY version DESC
         LIMIT ?
-    `, [objectId, name, limit]);
+    `, [atomeId, key, limit]);
 }
 
 /**
- * Restore a property to a specific version
+ * Restore a particle to a specific version
  */
-export async function restorePropertyVersion(objectId, name, version, author = null) {
+export async function restoreParticleVersion(atomeId, key, version, author = null) {
     const versionRow = await query('get', `
-        SELECT value FROM property_versions
-        WHERE object_id = ? AND name = ? AND version = ?
-    `, [objectId, name, version]);
+        SELECT value, value_type FROM particles_versions
+        WHERE atome_id = ? AND key = ? AND version = ?
+    `, [atomeId, key, version]);
 
-    if (!versionRow) throw new Error(`Version ${version} not found for property ${name}`);
+    if (!versionRow) throw new Error(`Version ${version} not found for particle ${key}`);
 
-    await setProperty(objectId, name, versionRow.value, author);
+    const value = JSON.parse(versionRow.value);
+    await setParticle(atomeId, key, value, author);
 }
 
 /**
- * Get all changes since a specific version (for sync)
+ * Get all changes since a specific timestamp (for sync)
  */
-export async function getChangesSince(sinceVersionId = 0) {
+export async function getChangesSince(sinceTimestamp = null) {
+    if (!sinceTimestamp) {
+        return await query('all', `
+            SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
+            FROM particles_versions pv
+            JOIN atomes a ON pv.atome_id = a.atome_id
+            ORDER BY pv.created_at ASC
+            LIMIT 1000
+        `);
+    }
     return await query('all', `
-        SELECT pv.*, o.type, o.kind, o.parent, o.owner
-        FROM property_versions pv
-        JOIN objects o ON pv.object_id = o.id
-        WHERE pv.id > ?
-        ORDER BY pv.id ASC
-    `, [sinceVersionId]);
+        SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
+        FROM particles_versions pv
+        JOIN atomes a ON pv.atome_id = a.atome_id
+        WHERE pv.created_at > ?
+        ORDER BY pv.created_at ASC
+        LIMIT 1000
+    `, [sinceTimestamp]);
 }
 
 // ============================================================================
@@ -341,45 +450,51 @@ export async function getChangesSince(sinceVersionId = 0) {
 // ============================================================================
 
 /**
- * Create a snapshot of an object's current state
+ * Create a snapshot of an atome's current state
  */
-export async function createSnapshot(objectId) {
-    const obj = await getObject(objectId);
-    if (!obj) throw new Error('Object not found');
+export async function createSnapshot(atomeId) {
+    const atome = await getAtome(atomeId);
+    if (!atome) throw new Error('Atome not found');
 
-    const snapshotData = JSON.stringify(obj);
-    const result = await query('run', `
-        INSERT INTO snapshots (object_id, snapshot, created_at)
-        VALUES (?, ?, ?)
-    `, [objectId, snapshotData, new Date().toISOString()]);
+    const snapshotId = uuidv4();
+    const snapshotData = JSON.stringify(atome);
+    const now = new Date().toISOString();
 
-    return result.lastInsertRowid;
+    await query('run', `
+        INSERT INTO snapshots (snapshot_id, atome_id, data, created_at)
+        VALUES (?, ?, ?, ?)
+    `, [snapshotId, atomeId, snapshotData, now]);
+
+    return snapshotId;
 }
 
 /**
- * Get snapshots for an object
+ * Get snapshots for an atome
  */
-export async function getSnapshots(objectId, limit = 10) {
+export async function getSnapshots(atomeId, limit = 10) {
     return await query('all', `
-        SELECT * FROM snapshots WHERE object_id = ? ORDER BY created_at DESC LIMIT ?
-    `, [objectId, limit]);
+        SELECT * FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT ?
+    `, [atomeId, limit]);
 }
 
 /**
- * Restore an object from a snapshot
+ * Restore an atome from a snapshot
  */
 export async function restoreSnapshot(snapshotId, author = null) {
-    const snap = await query('get', 'SELECT * FROM snapshots WHERE id = ?', [snapshotId]);
+    const snap = await query('get',
+        'SELECT * FROM snapshots WHERE snapshot_id = ?',
+        [snapshotId]
+    );
     if (!snap) throw new Error('Snapshot not found');
 
-    const data = JSON.parse(snap.snapshot);
+    const data = JSON.parse(snap.data);
 
-    // Clear current properties
-    await query('run', 'DELETE FROM properties WHERE object_id = ?', [snap.object_id]);
+    // Clear current particles
+    await query('run', 'DELETE FROM particles WHERE atome_id = ?', [snap.atome_id]);
 
-    // Restore all properties
-    if (data.properties) {
-        await setProperties(snap.object_id, data.properties, author);
+    // Restore all particles
+    if (data.data) {
+        await setParticles(snap.atome_id, data.data, author);
     }
 
     return data;
@@ -390,60 +505,63 @@ export async function restoreSnapshot(snapshotId, author = null) {
 // ============================================================================
 
 /**
- * Set permission for a user on an object
+ * Set permission for a user on an atome
  */
-export async function setPermission(objectId, userId, canRead = true, canWrite = false, propertyName = null) {
+export async function setPermission(atomeId, userId, canRead = true, canWrite = false, particleKey = null) {
+    const permissionId = uuidv4();
+    const now = new Date().toISOString();
+
     // Check if exists
     const existing = await query('get', `
-        SELECT id FROM permissions 
-        WHERE object_id = ? AND user_id = ? AND (property_name = ? OR (property_name IS NULL AND ? IS NULL))
-    `, [objectId, userId, propertyName, propertyName]);
+        SELECT permission_id FROM permissions 
+        WHERE atome_id = ? AND user_id = ? AND (particle_key = ? OR (particle_key IS NULL AND ? IS NULL))
+    `, [atomeId, userId, particleKey, particleKey]);
 
     if (existing) {
         await query('run', `
-            UPDATE permissions SET can_read = ?, can_write = ?
-            WHERE id = ?
-        `, [canRead ? 1 : 0, canWrite ? 1 : 0, existing.id]);
+            UPDATE permissions SET can_read = ?, can_write = ?, updated_at = ?
+            WHERE permission_id = ?
+        `, [canRead ? 1 : 0, canWrite ? 1 : 0, now, existing.permission_id]);
     } else {
         await query('run', `
-            INSERT INTO permissions (object_id, property_name, user_id, can_read, can_write)
-            VALUES (?, ?, ?, ?, ?)
-        `, [objectId, propertyName, userId, canRead ? 1 : 0, canWrite ? 1 : 0]);
+            INSERT INTO permissions (permission_id, atome_id, particle_key, user_id, can_read, can_write, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [permissionId, atomeId, particleKey, userId, canRead ? 1 : 0, canWrite ? 1 : 0, now, now]);
     }
 }
 
 /**
- * Check if user can read an object/property
+ * Check if user can read an atome/particle
  */
-export async function canRead(objectId, userId, propertyName = null) {
+export async function canRead(atomeId, userId, particleKey = null) {
     // Owner always has access
-    const obj = await getObjectById(objectId);
-    if (obj && obj.owner === userId) return true;
+    const atome = await getAtomeById(atomeId);
+    if (atome && atome.owner_id === userId) return true;
 
     // Check specific permission
     const perm = await query('get', `
         SELECT can_read FROM permissions
-        WHERE object_id = ? AND user_id = ? AND (property_name = ? OR property_name IS NULL)
-        ORDER BY property_name DESC LIMIT 1
-    `, [objectId, userId, propertyName]);
+        WHERE atome_id = ? AND user_id = ? AND (particle_key = ? OR particle_key IS NULL)
+        ORDER BY particle_key DESC LIMIT 1
+    `, [atomeId, userId, particleKey]);
 
     return perm ? perm.can_read === 1 : false;
 }
 
 /**
- * Check if user can write an object/property
+ * Check if user can write an atome/particle
  */
-export async function canWrite(objectId, userId, propertyName = null) {
+export async function canWrite(atomeId, userId, particleKey = null) {
     // Owner always has access
-    const obj = await getObjectById(objectId);
-    if (obj && obj.owner === userId) return true;
+    const atome = await getAtomeById(atomeId);
+    if (atome && atome.owner_id === userId) return true;
 
     // Check specific permission
     const perm = await query('get', `
         SELECT can_write FROM permissions
-        WHERE object_id = ? AND user_id = ? AND (property_name = ? OR property_name IS NULL)
-        ORDER BY property_name DESC LIMIT 1
-    `, [objectId, userId, propertyName]);
+        WHERE atome_id = ? AND user_id = ? AND (particle_key = ? OR particle_key IS NULL)
+        ORDER BY particle_key DESC LIMIT 1
+    `, [atomeId, userId, particleKey]);
 
     return perm ? perm.can_write === 1 : false;
 }
@@ -462,62 +580,71 @@ export async function getSyncState(serverId) {
 /**
  * Update sync state after successful sync
  */
-export async function updateSyncState(serverId, lastVersionId) {
+export async function updateSyncState(serverId, lastSyncTimestamp) {
     const now = new Date().toISOString();
     await query('run', `
-        INSERT INTO sync_state (server_id, last_sync_version, last_sync_at)
+        INSERT INTO sync_state (server_id, last_sync, updated_at)
         VALUES (?, ?, ?)
-        ON CONFLICT(server_id) DO UPDATE SET last_sync_version = ?, last_sync_at = ?
-    `, [serverId, lastVersionId, now, lastVersionId, now]);
-}
-
-// ============================================================================
-// HIGH-LEVEL API (Convenience wrappers)
-// ============================================================================
-
-/**
- * Create a complete atome with properties
- */
-export async function createAtome({ id, type, kind, parent, owner, properties = {}, author }) {
-    const obj = await createObject({ id, type, kind, parent, owner, creator: author || owner });
-
-    if (Object.keys(properties).length > 0) {
-        await setProperties(obj.id, properties, author || owner);
-    }
-
-    return { ...obj, properties };
+        ON CONFLICT(server_id) DO UPDATE SET last_sync = ?, updated_at = ?
+    `, [serverId, lastSyncTimestamp, now, lastSyncTimestamp, now]);
 }
 
 /**
- * Get atome with full properties (alias for getObject)
+ * Get pending atomes for sync
  */
-export async function getAtome(id) {
-    return await getObject(id);
-}
+export async function getPendingForSync(ownerId) {
+    const atomes = await query('all', `
+        SELECT * FROM atomes 
+        WHERE owner_id = ? AND sync_status = 'pending'
+        ORDER BY updated_at ASC
+    `, [ownerId]);
 
-/**
- * Update atome properties
- */
-export async function updateAtome(id, properties, author = null) {
-    await setProperties(id, properties, author);
-    return await getObject(id);
-}
-
-/**
- * List atomes for a user
- */
-export async function listAtomes(ownerId, options = {}) {
-    const objects = await getObjectsByOwner(ownerId, options);
-
-    // Load properties for each object
     const result = [];
-    for (const obj of objects) {
-        const props = await getProperties(obj.id);
-        result.push({ ...obj, properties: props });
+    for (const atome of atomes) {
+        const fullAtome = await getAtome(atome.atome_id);
+        if (fullAtome) {
+            result.push({
+                ...fullAtome,
+                deleted: atome.deleted_at !== null
+            });
+        }
     }
-
     return result;
 }
+
+/**
+ * Mark atomes as synced
+ */
+export async function markAsSynced(atomeIds) {
+    const now = new Date().toISOString();
+    for (const id of atomeIds) {
+        await query('run',
+            'UPDATE atomes SET sync_status = ?, last_sync = ? WHERE atome_id = ?',
+            ['synced', now, id]
+        );
+    }
+}
+
+// ============================================================================
+// LEGACY COMPATIBILITY (objects/properties API)
+// ============================================================================
+
+// Aliases for backwards compatibility
+export const createObject = createAtome;
+export const getObject = getAtome;
+export const getObjectById = getAtomeById;
+export const getObjectsByOwner = getAtomesByOwner;
+export const getObjectChildren = getAtomeChildren;
+export const updateObject = updateAtomeMetadata;
+export const deleteObject = deleteAtome;
+
+export const setProperty = setParticle;
+export const setProperties = setParticles;
+export const getProperty = getParticle;
+export const getProperties = getParticles;
+export const deleteProperty = deleteParticle;
+export const getPropertyHistory = getParticleHistory;
+export const restorePropertyVersion = restoreParticleVersion;
 
 // ============================================================================
 // DATASOURCE ADAPTER (for auth.js compatibility)
@@ -529,14 +656,10 @@ export async function listAtomes(ownerId, options = {}) {
  */
 export function getDataSourceAdapter() {
     if (!db) {
-        throw new Error('[ADOLE] Database not initialized. Call initDatabase() first.');
+        throw new Error('[ADOLE v3.0] Database not initialized. Call initDatabase() first.');
     }
 
-    /**
-     * Execute raw SQL query
-     */
     const executeQuery = async (sql, params = []) => {
-        // Determine if this is a write operation
         const trimmedSql = sql.trim().toUpperCase();
         const isWriteOp = trimmedSql.startsWith('INSERT') ||
             trimmedSql.startsWith('UPDATE') ||
@@ -559,12 +682,43 @@ export function getDataSourceAdapter() {
                 try {
                     return await callback(txContext);
                 } catch (error) {
-                    console.error('[ADOLE] Transaction error:', error);
+                    console.error('[ADOLE v3.0] Transaction error:', error);
                     throw error;
                 }
             }
         }
     };
+}
+
+// ============================================================================
+// DEBUG ENDPOINTS SUPPORT
+// ============================================================================
+
+/**
+ * Get all table names in the database
+ */
+export async function getTableNames() {
+    const rows = await query('all',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    );
+    return rows.map(r => r.name);
+}
+
+/**
+ * Get table row counts
+ */
+export async function getTableCounts() {
+    const tables = await getTableNames();
+    const counts = {};
+    for (const table of tables) {
+        try {
+            const row = await query('get', `SELECT COUNT(*) as count FROM ${table}`);
+            counts[table] = row?.count || 0;
+        } catch {
+            counts[table] = 'error';
+        }
+    }
+    return counts;
 }
 
 // ============================================================================
@@ -577,25 +731,27 @@ export default {
     getDatabase,
     closeDatabase,
 
-    // Objects
-    createObject,
-    getObjectById,
-    getObject,
-    getObjectsByOwner,
-    getObjectChildren,
-    updateObject,
-    deleteObject,
+    // Atomes (ADOLE v3.0)
+    createAtome,
+    getAtome,
+    getAtomeById,
+    getAtomesByOwner,
+    getAtomeChildren,
+    updateAtome,
+    updateAtomeMetadata,
+    deleteAtome,
+    listAtomes,
 
-    // Properties
-    setProperty,
-    setProperties,
-    getProperty,
-    getProperties,
-    deleteProperty,
+    // Particles (ADOLE v3.0)
+    setParticle,
+    setParticles,
+    getParticle,
+    getParticles,
+    deleteParticle,
 
     // Versions
-    getPropertyHistory,
-    restorePropertyVersion,
+    getParticleHistory,
+    restoreParticleVersion,
     getChangesSince,
 
     // Snapshots
@@ -611,14 +767,30 @@ export default {
     // Sync
     getSyncState,
     updateSyncState,
+    getPendingForSync,
+    markAsSynced,
 
-    // High-level
-    createAtome,
-    getAtome,
-    updateAtome,
-    listAtomes,
+    // Legacy compatibility
+    createObject,
+    getObject,
+    getObjectById,
+    getObjectsByOwner,
+    getObjectChildren,
+    updateObject,
+    deleteObject,
+    setProperty,
+    setProperties,
+    getProperty,
+    getProperties,
+    deleteProperty,
+    getPropertyHistory,
+    restorePropertyVersion,
 
-    // Raw query access for sync operations
+    // Debug
+    getTableNames,
+    getTableCounts,
+
+    // Raw query access
     query,
 
     // Compatibility
