@@ -20,7 +20,8 @@ package-lock.json
 *.old
 
 # Test files
-src/assets/uploads/
+
+
 
 # Logs
 npm-debug.log*
