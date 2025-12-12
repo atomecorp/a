@@ -329,14 +329,18 @@ async fn handle_list(
     request_id: Option<String>,
 ) -> WsResponse {
     // Support both camelCase (atomeType) and snake_case (atome_type)
-    let atome_type = message.get("atomeType")
+    let atome_type = message
+        .get("atomeType")
         .or_else(|| message.get("atome_type"))
         .and_then(|v| v.as_str());
     let owner_id = message.get("ownerId").and_then(|v| v.as_str());
     let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(100);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
-    
-    println!("[Atome List Debug] atome_type={:?}, owner_id={:?}, user_id={}", atome_type, owner_id, user_id);
+
+    println!(
+        "[Atome List Debug] atome_type={:?}, owner_id={:?}, user_id={}",
+        atome_type, owner_id, user_id
+    );
 
     let db = match state.db.lock() {
         Ok(d) => d,

@@ -844,15 +844,27 @@ async function startServer() {
                   message: 'User created successfully'
                 });
               } else if (action === 'delete' || action === 'delete-user') {
-                const { userId, phone } = data;
-                const targetUserId = userId || (phone ? generateDeterministicUserId(phone) : null);
+                const { userId, phone, token, password } = data;
+                let targetUserId = userId || (phone ? generateDeterministicUserId(phone) : null);
+
+                // If no userId/phone provided, try to get from token
+                if (!targetUserId && token) {
+                  try {
+                    const jwt = await import('jsonwebtoken');
+                    const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                    const decoded = jwt.default.verify(token, jwtSecret);
+                    targetUserId = decoded.userId;
+                  } catch (jwtError) {
+                    // Token invalid, continue without userId
+                  }
+                }
 
                 if (!targetUserId) {
                   safeSend({
                     type: 'auth-response',
                     requestId,
                     success: false,
-                    error: 'Missing required field: userId or phone'
+                    error: 'Missing required field: userId, phone, or valid token'
                   });
                   return;
                 }

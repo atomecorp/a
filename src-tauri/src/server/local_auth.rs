@@ -125,21 +125,16 @@ async fn handle_register(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Check if phone already exists (user atome with phone particle)
-    let exists: bool = db
+    // Check if user already exists (including soft-deleted)
+    let existing_user: Option<(String, Option<String>)> = db
         .query_row(
-            "SELECT 1 FROM particles p
+            "SELECT a.atome_id, a.deleted_at FROM particles p
              JOIN atomes a ON p.atome_id = a.atome_id
-             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1
-             AND a.deleted_at IS NULL",
+             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1",
             rusqlite::params![format!("\"{}\"", phone)],
-            |_| Ok(true),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
-        .unwrap_or(false);
-
-    if exists {
-        return error_response(request_id, "Phone already registered");
-    }
+        .ok();
 
     // Hash password
     let password_hash = match hash(password, DEFAULT_COST) {
@@ -151,7 +146,58 @@ async fn handle_register(
     let user_id = generate_user_id(&phone);
     let now = Utc::now().to_rfc3339();
 
-    // Create user atome
+    if let Some((existing_id, deleted_at)) = existing_user {
+        if deleted_at.is_some() {
+            // Reactivate soft-deleted user
+            if let Err(e) = db.execute(
+                "UPDATE atomes SET deleted_at = NULL, updated_at = ?1 WHERE atome_id = ?2",
+                rusqlite::params![&now, &existing_id],
+            ) {
+                return error_response(request_id, &e.to_string());
+            }
+
+            // Update particles
+            let particles = [
+                ("username", &username),
+                ("phone", &phone),
+                ("password_hash", &password_hash),
+            ];
+
+            for (key, value) in particles {
+                let value_json = serde_json::to_string(value).unwrap_or_default();
+                let _ = db.execute(
+                    "UPDATE particles SET particle_value = ?1, updated_at = ?2 
+                     WHERE atome_id = ?3 AND particle_key = ?4",
+                    rusqlite::params![&value_json, &now, &existing_id, key],
+                );
+            }
+
+            // Generate JWT for reactivated user
+            let token = match generate_token(&state.jwt_secret, &existing_id, &username, &phone) {
+                Ok(t) => t,
+                Err(e) => return error_response(request_id, &e.to_string()),
+            };
+
+            return AuthResponse {
+                msg_type: "auth-response".into(),
+                request_id,
+                success: true,
+                error: None,
+                user: Some(UserInfo {
+                    user_id: existing_id,
+                    username,
+                    phone,
+                    created_at: Some(now),
+                }),
+                token: Some(token),
+            };
+        } else {
+            // User exists and is not deleted
+            return error_response(request_id, "Phone already registered");
+        }
+    }
+
+    // Create new user atome
     if let Err(e) = db.execute(
         "INSERT INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at, sync_status)
          VALUES (?1, 'user', ?1, ?2, ?2, 'pending')",

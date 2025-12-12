@@ -154,6 +154,50 @@ export async function sendSMS(phone, message) {
 async function createUserAtome(dataSource, userId, username, phone, passwordHash) {
     const now = new Date().toISOString();
 
+    // Check if user exists (including soft-deleted)
+    const existingRows = await dataSource.query(
+        `SELECT atome_id, deleted_at FROM atomes WHERE atome_id = ?`,
+        [userId]
+    );
+
+    if (existingRows.length > 0) {
+        const existing = existingRows[0];
+        if (existing.deleted_at) {
+            // Reactivate soft-deleted user
+            console.log(`🔄 [ADOLE] Reactivating soft-deleted user: ${userId}`);
+
+            // Clear deleted_at and update timestamp
+            await dataSource.query(
+                `UPDATE atomes SET deleted_at = NULL, updated_at = ?, sync_status = 'local' WHERE atome_id = ?`,
+                [now, userId]
+            );
+
+            // Update particles (username and password might have changed)
+            await dataSource.query(
+                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'username'`,
+                [JSON.stringify(username), now, userId]
+            );
+            await dataSource.query(
+                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'password_hash'`,
+                [JSON.stringify(passwordHash), now, userId]
+            );
+
+            console.log(`✅ [ADOLE] User reactivated: ${username} (${phone}) [${userId}]`);
+
+            return {
+                user_id: userId,
+                username,
+                phone,
+                created_at: now,
+                created_source: 'fastify',
+                reactivated: true
+            };
+        } else {
+            // User exists and is not deleted - throw error
+            throw new Error('User already exists');
+        }
+    }
+
     // Create the atome with type 'user'
     await dataSource.query(
         `INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, sync_status, created_source, created_at, updated_at)
