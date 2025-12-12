@@ -98,9 +98,16 @@ async function create_user(phone, password, username, callback) {
  * @param {string} phone - Phone number
  * @param {string} password - Password
  * @param {string} username - Username (for logging purposes)
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
-async function log_user(phone, password, username) {
+async function log_user(phone, password, username, callback) {
   console.log(`[log_user] Logging in user "${username}" via WebSocket...`);
+
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
 
   // Try Tauri first (local SQLite)
   try {
@@ -110,12 +117,14 @@ async function log_user(phone, password, username) {
     });
     if (tauriResult.ok || tauriResult.success) {
       console.log('[Tauri/SQLite] ✅ User logged in successfully:', tauriResult);
+      results.tauri = { success: true, data: tauriResult, error: null };
       if (tauriResult.token) {
         console.log('[Tauri/SQLite] Token stored for future requests');
       }
     } else {
       console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
       console.error('[Tauri/SQLite] REASON: Login failed on Tauri/Axum WebSocket server.');
+      results.tauri = { success: false, data: null, error: tauriResult.error };
       if (tauriResult.error?.includes('not found') || tauriResult.error?.includes('Not found')) {
         console.error('[Tauri/SQLite] SOLUTION: This user does not exist. Check the phone number or register first.');
       } else if (tauriResult.error?.includes('password') || tauriResult.error?.includes('Invalid')) {
@@ -130,6 +139,7 @@ async function log_user(phone, password, username) {
     console.error('[Tauri/SQLite] ERROR:', e.message);
     console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
     console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
+    results.tauri = { success: false, data: null, error: e.message };
   }
 
   // Also try Fastify (LibSQL)
@@ -140,37 +150,112 @@ async function log_user(phone, password, username) {
     });
     if (fastifyResult.ok || fastifyResult.success) {
       console.log('[Fastify/LibSQL] ✅ User logged in successfully:', fastifyResult);
+      results.fastify = { success: true, data: fastifyResult, error: null };
       if (fastifyResult.token) {
         console.log('[Fastify/LibSQL] Token stored for future requests');
       }
-    } else if (fastifyResult.error !== 'Server unreachable') {
-      console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-      console.error('[Fastify/LibSQL] REASON: Login failed on Fastify WebSocket server.');
-      if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
-        console.error('[Fastify/LibSQL] SOLUTION: This user does not exist. Check the phone number or register first.');
-      } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
-        console.error('[Fastify/LibSQL] SOLUTION: The password is incorrect. Verify the password.');
-      } else if (fastifyResult.error?.includes('at least')) {
-        console.error('[Fastify/LibSQL] SOLUTION: Phone must be at least 6 characters.');
-      } else {
-        console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+    } else {
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+      if (fastifyResult.error !== 'Server unreachable') {
+        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
+        console.error('[Fastify/LibSQL] REASON: Login failed on Fastify WebSocket server.');
+        if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
+          console.error('[Fastify/LibSQL] SOLUTION: This user does not exist. Check the phone number or register first.');
+        } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
+          console.error('[Fastify/LibSQL] SOLUTION: The password is incorrect. Verify the password.');
+        } else if (fastifyResult.error?.includes('at least')) {
+          console.error('[Fastify/LibSQL] SOLUTION: Phone must be at least 6 characters.');
+        } else {
+          console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+        }
       }
     }
   } catch (e) {
     console.error('[Fastify/LibSQL] ERROR:', e.message);
     console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
     console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
+    results.fastify = { success: false, data: null, error: e.message };
   }
+
+  // Call callback if provided
+  if (typeof callback === 'function') {
+    callback(results);
+  }
+
+  return results;
 }
+
+// ...existing code...
+
+
+
+async function unlog_user(callback = null) {
+  puts('Logging out user...');
+  console.log('[unlog_user] Logging out via WebSocket...');
+
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
+
+  // Tauri logout
+  try {
+    const tauriResult = await TauriAdapter.auth.logout();
+    if (tauriResult.ok && tauriResult.success) {
+      console.log('[Tauri/SQLite] ✅ User logged out successfully');
+      results.tauri = { success: true, data: tauriResult, error: null };
+    } else {
+      console.error('[Tauri/SQLite] Logout failed:', tauriResult.error);
+      results.tauri = { success: false, data: null, error: tauriResult.error };
+    }
+  } catch (e) {
+    console.error('[Tauri/SQLite] Logout exception:', e.message);
+    results.tauri = { success: false, data: null, error: e.message };
+  }
+
+  // Fastify logout
+  try {
+    const fastifyResult = await FastifyAdapter.auth.logout();
+    if (fastifyResult.ok && fastifyResult.success) {
+      console.log('[Fastify/LibSQL] ✅ User logged out successfully');
+      results.fastify = { success: true, data: fastifyResult, error: null };
+    } else {
+      // Silent if server unreachable
+      if (fastifyResult.error !== 'Server unreachable') {
+        console.error('[Fastify/LibSQL] Logout failed:', fastifyResult.error);
+      }
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+    }
+  } catch (e) {
+    console.error('[Fastify/LibSQL] Logout exception:', e.message);
+    results.fastify = { success: false, data: null, error: e.message };
+  }
+
+  // Execute callback if provided
+  if (callback && typeof callback === 'function') {
+    callback(results);
+  }
+
+  return results;
+}
+
+// ...existing code...
 
 /**
  * Delete a user via WebSocket
  * @param {string} phone - Phone number of the user to delete
  * @param {string} password - Password for verification
  * @param {string} username - Username (for logging purposes)
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
-async function delete_user(phone, password, username) {
+async function delete_user(phone, password, username, callback) {
   console.log(`[delete_user] Deleting user "${username}" via WebSocket...`);
+
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
 
   // Try Tauri first (local SQLite)
   try {
@@ -180,9 +265,11 @@ async function delete_user(phone, password, username) {
     });
     if (tauriResult.ok || tauriResult.success) {
       console.log('[Tauri/SQLite] ✅ User deleted successfully:', tauriResult);
+      results.tauri = { success: true, data: tauriResult, error: null };
     } else {
       console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
       console.error('[Tauri/SQLite] REASON: Delete failed on Tauri/Axum WebSocket server.');
+      results.tauri = { success: false, data: null, error: tauriResult.error };
       if (tauriResult.error?.includes('not found') || tauriResult.error?.includes('Not found')) {
         console.error('[Tauri/SQLite] SOLUTION: This user does not exist. Check the phone number.');
       } else if (tauriResult.error?.includes('password') || tauriResult.error?.includes('Invalid')) {
@@ -197,6 +284,7 @@ async function delete_user(phone, password, username) {
     console.error('[Tauri/SQLite] ERROR:', e.message);
     console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
     console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
+    results.tauri = { success: false, data: null, error: e.message };
   }
 
   // Also try Fastify (LibSQL)
@@ -207,24 +295,36 @@ async function delete_user(phone, password, username) {
     });
     if (fastifyResult.ok || fastifyResult.success) {
       console.log('[Fastify/LibSQL] ✅ User deleted successfully:', fastifyResult);
-    } else if (fastifyResult.error !== 'Server unreachable') {
-      console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-      console.error('[Fastify/LibSQL] REASON: Delete failed on Fastify WebSocket server.');
-      if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
-        console.error('[Fastify/LibSQL] SOLUTION: This user does not exist. Check the phone number.');
-      } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
-        console.error('[Fastify/LibSQL] SOLUTION: The password is incorrect. Verify the password.');
-      } else if (fastifyResult.error?.includes('token') || fastifyResult.error?.includes('unauthorized')) {
-        console.error('[Fastify/LibSQL] SOLUTION: You must be logged in to delete your account.');
-      } else {
-        console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+      results.fastify = { success: true, data: fastifyResult, error: null };
+    } else {
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+      if (fastifyResult.error !== 'Server unreachable') {
+        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
+        console.error('[Fastify/LibSQL] REASON: Delete failed on Fastify WebSocket server.');
+        if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
+          console.error('[Fastify/LibSQL] SOLUTION: This user does not exist. Check the phone number.');
+        } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
+          console.error('[Fastify/LibSQL] SOLUTION: The password is incorrect. Verify the password.');
+        } else if (fastifyResult.error?.includes('token') || fastifyResult.error?.includes('unauthorized')) {
+          console.error('[Fastify/LibSQL] SOLUTION: You must be logged in to delete your account.');
+        } else {
+          console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+        }
       }
     }
   } catch (e) {
     console.error('[Fastify/LibSQL] ERROR:', e.message);
     console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
     console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
+    results.fastify = { success: false, data: null, error: e.message };
   }
+
+  // Call callback if provided
+  if (typeof callback === 'function') {
+    callback(results);
+  }
+
+  return results;
 }
 
 /**
@@ -442,12 +542,14 @@ async function list_tables() {
 }
 
 // ============================================
-// UI BUTTONS
+// UI BUTTONS & tests
 // ============================================
 
 // Keep existing UI and code
 
-
+//todo : do not log user when creating user
+// view logged user
+//callback on every function
 
 
 $('span', {
@@ -481,7 +583,10 @@ $('span', {
   text: 'create user',
   onClick: () => {
     puts('Creating user...');
-    create_user('11111111', '11111111', 'jeezs');
+    const user_phone = '11111111'
+    const user_name = 'jeezs'
+
+    create_user(user_phone, '11111111', user_name);
   },
 });
 
