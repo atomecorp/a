@@ -1102,8 +1102,64 @@ async function startServer() {
                   message: 'Atome deleted'
                 });
               } else if (action === 'list') {
-                const { ownerId, type: filterType, limit, offset } = data;
-                const atomes = await db.listAtomes(ownerId, { type: filterType, limit, offset });
+                const { ownerId, userId, atomeType, limit, offset } = data;
+                const effectiveType = atomeType;
+                const effectiveOwner = ownerId || userId;
+
+                console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}`);
+                console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner}, effectiveType=${effectiveType}`);
+
+                let atomes;
+                if (effectiveOwner && effectiveOwner !== 'anonymous') {
+                  // List atomes for a specific owner
+                  atomes = await db.listAtomes(effectiveOwner, { type: effectiveType, limit, offset });
+                } else if (effectiveType) {
+                  // List all atomes of a specific type (e.g., all users)
+                  const dataSource = db.getDataSourceAdapter();
+                  const rows = await dataSource.query(
+                    `SELECT a.*, 
+                            GROUP_CONCAT(p.particle_key || ':' || p.particle_value, '||') as particles_raw
+                     FROM atomes a
+                     LEFT JOIN particles p ON a.atome_id = p.atome_id
+                     WHERE a.atome_type = ? AND a.deleted_at IS NULL
+                     GROUP BY a.atome_id
+                     ORDER BY a.created_at DESC
+                     LIMIT ? OFFSET ?`,
+                    [effectiveType, limit || 100, offset || 0]
+                  );
+
+                  // Parse particles
+                  atomes = rows.map(row => {
+                    const atome = {
+                      atome_id: row.atome_id,
+                      atome_type: row.atome_type,
+                      parent_id: row.parent_id,
+                      owner_id: row.owner_id,
+                      creator_id: row.creator_id,
+                      created_at: row.created_at,
+                      updated_at: row.updated_at
+                    };
+
+                    if (row.particles_raw) {
+                      const pairs = row.particles_raw.split('||');
+                      for (const pair of pairs) {
+                        const colonIdx = pair.indexOf(':');
+                        if (colonIdx > 0) {
+                          const key = pair.substring(0, colonIdx);
+                          const value = pair.substring(colonIdx + 1);
+                          try {
+                            atome[key] = JSON.parse(value);
+                          } catch {
+                            atome[key] = value;
+                          }
+                        }
+                      }
+                    }
+                    return atome;
+                  });
+                } else {
+                  atomes = [];
+                }
 
                 safeSend({
                   type: 'atome-response',

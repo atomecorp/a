@@ -328,29 +328,73 @@ async fn handle_list(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    let atome_type = message.get("atome_type").and_then(|v| v.as_str());
+    // Support both camelCase (atomeType) and snake_case (atome_type)
+    let atome_type = message.get("atomeType")
+        .or_else(|| message.get("atome_type"))
+        .and_then(|v| v.as_str());
+    let owner_id = message.get("ownerId").and_then(|v| v.as_str());
     let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(100);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
+    
+    println!("[Atome List Debug] atome_type={:?}, owner_id={:?}, user_id={}", atome_type, owner_id, user_id);
 
     let db = match state.db.lock() {
         Ok(d) => d,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Build query
-    let mut sql =
-        "SELECT atome_id FROM atomes WHERE owner_id = ?1 AND deleted_at IS NULL".to_string();
-    let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(user_id.to_string())];
+    // Determine effective owner - if anonymous or not specified, query by type only
+    let effective_owner = match owner_id.or(Some(user_id)) {
+        Some(id) if id != "anonymous" && !id.is_empty() => Some(id),
+        _ => None,
+    };
 
-    if let Some(t) = atome_type {
-        sql.push_str(" AND atome_type = ?2");
-        params.push(Box::new(t.to_string()));
-    }
-
-    sql.push_str(&format!(
-        " ORDER BY updated_at DESC LIMIT {} OFFSET {}",
-        limit, offset
-    ));
+    // Build query based on whether we have an owner or just a type
+    let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match (effective_owner, atome_type)
+    {
+        (Some(owner), Some(t)) => {
+            // Filter by both owner and type
+            (
+                format!(
+                    "SELECT atome_id FROM atomes WHERE owner_id = ?1 AND atome_type = ?2 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT {} OFFSET {}",
+                    limit, offset
+                ),
+                vec![Box::new(owner.to_string()), Box::new(t.to_string())]
+            )
+        }
+        (Some(owner), None) => {
+            // Filter by owner only
+            (
+                format!(
+                    "SELECT atome_id FROM atomes WHERE owner_id = ?1 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT {} OFFSET {}",
+                    limit, offset
+                ),
+                vec![Box::new(owner.to_string())]
+            )
+        }
+        (None, Some(t)) => {
+            // Filter by type only (e.g., list all users)
+            (
+                format!(
+                    "SELECT atome_id FROM atomes WHERE atome_type = ?1 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT {} OFFSET {}",
+                    limit, offset
+                ),
+                vec![Box::new(t.to_string())]
+            )
+        }
+        (None, None) => {
+            // No filter - return empty
+            return WsResponse {
+                msg_type: "atome-response".into(),
+                request_id,
+                success: true,
+                error: None,
+                data: None,
+                atomes: Some(Vec::new()),
+                count: Some(0),
+            };
+        }
+    };
 
     let mut stmt = match db.prepare(&sql) {
         Ok(s) => s,
