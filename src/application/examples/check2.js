@@ -71,6 +71,70 @@ async function create_user(phone, password, username) {
 }
 
 /**
+ * Delete a user via WebSocket
+ * @param {string} phone - Phone number of the user to delete
+ * @param {string} password - Password for verification
+ * @param {string} username - Username (for logging purposes)
+ */
+async function delete_user(phone, password, username) {
+  console.log(`[delete_user] Deleting user "${username}" via WebSocket...`);
+
+  // Try Tauri first (local SQLite)
+  try {
+    const tauriResult = await TauriAdapter.auth.deleteAccount({
+      phone,
+      password
+    });
+    if (tauriResult.ok || tauriResult.success) {
+      console.log('[Tauri/SQLite] ✅ User deleted successfully:', tauriResult);
+    } else {
+      console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
+      console.error('[Tauri/SQLite] REASON: Delete failed on Tauri/Axum WebSocket server.');
+      if (tauriResult.error?.includes('not found') || tauriResult.error?.includes('Not found')) {
+        console.error('[Tauri/SQLite] SOLUTION: This user does not exist. Check the phone number.');
+      } else if (tauriResult.error?.includes('password') || tauriResult.error?.includes('Invalid')) {
+        console.error('[Tauri/SQLite] SOLUTION: The password is incorrect. Verify the password.');
+      } else if (tauriResult.error?.includes('token') || tauriResult.error?.includes('unauthorized')) {
+        console.error('[Tauri/SQLite] SOLUTION: You must be logged in to delete your account.');
+      } else {
+        console.error('[Tauri/SQLite] SOLUTION: Check WebSocket connection and server logs.');
+      }
+    }
+  } catch (e) {
+    console.error('[Tauri/SQLite] ERROR:', e.message);
+    console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
+    console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
+  }
+
+  // Also try Fastify (LibSQL)
+  try {
+    const fastifyResult = await FastifyAdapter.auth.deleteAccount({
+      phone,
+      password
+    });
+    if (fastifyResult.ok || fastifyResult.success) {
+      console.log('[Fastify/LibSQL] ✅ User deleted successfully:', fastifyResult);
+    } else {
+      console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
+      console.error('[Fastify/LibSQL] REASON: Delete failed on Fastify WebSocket server.');
+      if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
+        console.error('[Fastify/LibSQL] SOLUTION: This user does not exist. Check the phone number.');
+      } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
+        console.error('[Fastify/LibSQL] SOLUTION: The password is incorrect. Verify the password.');
+      } else if (fastifyResult.error?.includes('token') || fastifyResult.error?.includes('unauthorized')) {
+        console.error('[Fastify/LibSQL] SOLUTION: You must be logged in to delete your account.');
+      } else {
+        console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+      }
+    }
+  } catch (e) {
+    console.error('[Fastify/LibSQL] ERROR:', e.message);
+    console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
+    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
+  }
+}
+
+/**
  * List all users via WebSocket
  * Uses atome.list to get user-type atomes
  */
@@ -285,6 +349,22 @@ $('span', {
   text: 'create user',
   onClick: () => {
     create_user('00000000', '00000000', 'jeezs');
+  },
+});
+
+$('span', {
+  id: 'delete_user',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'delete user',
+  onClick: () => {
+    delete_user('00000000', '00000000', 'jeezs');
   },
 });
 
