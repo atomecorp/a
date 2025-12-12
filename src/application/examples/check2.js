@@ -614,7 +614,7 @@ async function list_tables() {
 // Keep existing UI and code
 
 //todo : do not log user when creating user
-// view logged user
+
 
 
 
@@ -663,7 +663,7 @@ $('span', {
   onClick: () => {
     current_user((result) => {
       if (result.logged && result.user) {
-        const user_found = 'user logged: ' + result.user.phone + ':' + result.user.username;
+        const user_found = result.user.username;
         puts(user_found);
         grab('logged_user').textContent = user_found;
       } else {
@@ -692,7 +692,7 @@ $('span', {
     const user_name = 'jeezs'
 
     create_user(user_phone, '11111111', user_name, (results) => {
-      grab('logged_user').textContent = 'user logged: ' + user_name;
+      grab('logged_user').textContent = user_name;
       // puts('user created: ' + user_name + 'user phone created: ' + user_phone);
     });
   },
@@ -710,8 +710,16 @@ $('span', {
   },
   text: 'log user',
   onClick: () => {
-    puts('log user');
-    log_user('11111111', '11111111', 'jeezs');
+    log_user('11111111', '11111111', 'jeezs', (results) => {
+      if (results.tauri.success || results.fastify.success) {
+        const username = 'jeezs';
+        puts('Logged in as: ' + username);
+        grab('logged_user').textContent = username;
+      } else {
+        puts('no user logged');
+        grab('logged_user').textContent = 'no user logged';
+      }
+    });
   },
 });
 
@@ -727,8 +735,14 @@ $('span', {
   },
   text: 'unlog user',
   onClick: () => {
-    puts('unlog user');
-    unlog_user('11111111', '11111111', 'jeezs');
+    unlog_user((results) => {
+      if (results.tauri.success || results.fastify.success) {
+        puts('User logged out');
+        grab('logged_user').textContent = 'no user logged';
+      } else {
+        puts('Logout failed');
+      }
+    });
   },
 });
 
@@ -789,3 +803,13 @@ $('span', {
 
 
 
+current_user((result) => {
+  if (result.logged && result.user) {
+    const user_found = result.user.username;
+    puts(user_found);
+    grab('logged_user').textContent = user_found;
+  } else {
+    puts('no user logged');
+    grab('logged_user').textContent = 'no user logged';
+  }
+});
