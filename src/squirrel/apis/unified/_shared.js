@@ -424,7 +424,7 @@ class TauriWebSocket {
                 return;
             }
             if (this.isConnecting) {
-                // Wait for connection
+                // Wait for existing connection attempt
                 const checkInterval = setInterval(() => {
                     if (this.isConnected) {
                         clearInterval(checkInterval);
@@ -439,6 +439,7 @@ class TauriWebSocket {
             }
 
             this.isConnecting = true;
+            console.log(`[TauriWS] Connecting to ${this.url}...`, new Error().stack?.split('\n').slice(1, 5).join('\n'));
 
             try {
                 this.socket = new WebSocket(this.url);
@@ -447,17 +448,22 @@ class TauriWebSocket {
                     this.isConnecting = false;
                     this.isConnected = true;
                     this.startPing();
-                    console.log('[TauriWS] ✅ Connected');
+                    console.log(`[TauriWS] ✅ Connected to ${this.url}`);
                     resolve(true);
                 };
 
                 this.socket.onclose = () => {
-                    this.handleDisconnect();
+                    // Don't trigger handleDisconnect on normal close
+                    // Only schedule silent reconnect
+                    this.isConnected = false;
+                    this.isConnecting = false;
+                    this.stopPing();
                     resolve(false);
                 };
 
                 this.socket.onerror = () => {
-                    this.handleDisconnect();
+                    // Silent - don't call handleDisconnect to avoid cascading reconnects
+                    this.isConnecting = false;
                     resolve(false);
                 };
 
@@ -492,12 +498,59 @@ class TauriWebSocket {
         }
         this.pendingRequests.clear();
 
-        // Schedule reconnect
+        // Schedule silent reconnect (no logging, no error on failure)
         if (!this.reconnectTimer) {
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
-                this.connect();
+                this.silentConnect();
             }, 5000);
+        }
+    }
+
+    // Silent connect - no error logging on failure
+    silentConnect() {
+        if (this.isConnected || this.isConnecting) return;
+        this.isConnecting = true;
+
+        try {
+            this.socket = new WebSocket(this.url);
+
+            this.socket.onopen = () => {
+                this.isConnecting = false;
+                this.isConnected = true;
+                this.startPing();
+                console.log('[TauriWS] ✅ Reconnected');
+            };
+
+            this.socket.onclose = () => {
+                this.isConnecting = false;
+                this.isConnected = false;
+                this.stopPing();
+                // Silent retry after delay
+                if (!this.reconnectTimer) {
+                    this.reconnectTimer = setTimeout(() => {
+                        this.reconnectTimer = null;
+                        this.silentConnect();
+                    }, 10000);
+                }
+            };
+
+            this.socket.onerror = () => {
+                // Silent - no error logging for reconnect attempts
+            };
+
+            this.socket.onmessage = (event) => {
+                this.handleMessage(event.data);
+            };
+
+            setTimeout(() => {
+                if (this.isConnecting) {
+                    this.isConnecting = false;
+                }
+            }, 3000);
+
+        } catch (e) {
+            this.isConnecting = false;
         }
     }
 

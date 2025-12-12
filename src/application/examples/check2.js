@@ -297,6 +297,15 @@ async function list_tables() {
       // Create WebSocket connection to Tauri
       const ws = new WebSocket('ws://127.0.0.1:3000/ws/api');
       const requestId = `debug_${Date.now()}`;
+      let resolved = false;
+      let timeoutId = null;
+
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1000, 'Normal closure');
+        }
+      };
 
       ws.onopen = () => {
         ws.send(JSON.stringify({
@@ -307,24 +316,33 @@ async function list_tables() {
       };
 
       ws.onmessage = (event) => {
+        if (resolved) return;
         try {
           const data = JSON.parse(event.data);
           if (data.requestId === requestId) {
-            ws.close();
+            resolved = true;
+            cleanup();
             resolve(data);
           }
         } catch (e) {
+          resolved = true;
+          cleanup();
           resolve({ success: false, error: e.message });
         }
       };
 
       ws.onerror = (e) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
         resolve({ success: false, error: 'WebSocket connection failed' });
       };
 
       // Timeout after 5 seconds
-      setTimeout(() => {
-        ws.close();
+      timeoutId = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
         resolve({ success: false, error: 'Request timeout' });
       }, 5000);
     });
@@ -350,6 +368,15 @@ async function list_tables() {
     const fastifyResult = await new Promise((resolve) => {
       const ws = new WebSocket('ws://127.0.0.1:3001/ws/api');
       const requestId = `debug_${Date.now()}`;
+      let resolved = false;
+      let timeoutId = null;
+
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1000, 'Normal closure');
+        }
+      };
 
       ws.onopen = () => {
         ws.send(JSON.stringify({
@@ -360,23 +387,32 @@ async function list_tables() {
       };
 
       ws.onmessage = (event) => {
+        if (resolved) return;
         try {
           const data = JSON.parse(event.data);
           if (data.requestId === requestId) {
-            ws.close();
+            resolved = true;
+            cleanup();
             resolve(data);
           }
         } catch (e) {
+          resolved = true;
+          cleanup();
           resolve({ success: false, error: e.message });
         }
       };
 
       ws.onerror = (e) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
         resolve({ success: false, error: 'WebSocket connection failed' });
       };
 
-      setTimeout(() => {
-        ws.close();
+      timeoutId = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
         resolve({ success: false, error: 'Request timeout' });
       }, 5000);
     });

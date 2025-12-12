@@ -735,9 +735,9 @@ async function startServer() {
 
             if (action === 'list-tables') {
               try {
-                const db = await getDatabase();
-                const result = await db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
-                const tables = result.rows.map(row => row.name);
+                const dataSource = db.getDataSourceAdapter();
+                const result = await dataSource.query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+                const tables = result.map(row => row.name);
                 safeSend({
                   type: 'debug-response',
                   requestId,
