@@ -1165,8 +1165,9 @@ async function startServer() {
                   success: true,
                   message: 'Atome altered'
                 });
-              } else if (action === 'delete') {
+              } else if (action === 'delete' || action === 'soft-delete') {
                 // Support both: { id } and { atomeId }
+                // Note: This is a SOFT delete (sets deleted_at)
                 const atomeId = data.atomeId || data.id;
                 await db.deleteAtome(atomeId);
 
@@ -1177,17 +1178,65 @@ async function startServer() {
                   message: 'Atome deleted'
                 });
               } else if (action === 'list') {
-                const { ownerId, userId, atomeType, limit, offset } = data;
+                const { ownerId, userId, atomeType, limit, offset, includeDeleted } = data;
                 const effectiveType = atomeType;
                 const effectiveOwner = ownerId || userId;
 
-                console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}`);
+                console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}, includeDeleted=${includeDeleted}`);
                 console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner}, effectiveType=${effectiveType}`);
+
+                // Build WHERE clause for deleted_at
+                const deletedClause = includeDeleted ? '' : 'AND a.deleted_at IS NULL';
 
                 let atomes;
                 if (effectiveOwner && effectiveOwner !== 'anonymous') {
                   // List atomes for a specific owner
-                  atomes = await db.listAtomes(effectiveOwner, { type: effectiveType, limit, offset });
+                  // Note: db.listAtomes doesn't support includeDeleted, so we do a direct query
+                  const dataSource = db.getDataSourceAdapter();
+                  const rows = await dataSource.query(
+                    `SELECT a.*, 
+                            GROUP_CONCAT(p.particle_key || ':' || p.particle_value, '||') as particles_raw
+                     FROM atomes a
+                     LEFT JOIN particles p ON a.atome_id = p.atome_id
+                     WHERE a.owner_id = ? ${deletedClause} ${effectiveType ? 'AND a.atome_type = ?' : ''}
+                     GROUP BY a.atome_id
+                     ORDER BY a.created_at DESC
+                     LIMIT ? OFFSET ?`,
+                    effectiveType
+                      ? [effectiveOwner, effectiveType, limit || 100, offset || 0]
+                      : [effectiveOwner, limit || 100, offset || 0]
+                  );
+
+                  // Parse particles
+                  atomes = rows.map(row => {
+                    const atome = {
+                      atome_id: row.atome_id,
+                      atome_type: row.atome_type,
+                      parent_id: row.parent_id,
+                      owner_id: row.owner_id,
+                      creator_id: row.creator_id,
+                      created_at: row.created_at,
+                      updated_at: row.updated_at,
+                      deleted_at: row.deleted_at // Include deleted_at for sync
+                    };
+
+                    if (row.particles_raw) {
+                      const pairs = row.particles_raw.split('||');
+                      for (const pair of pairs) {
+                        const colonIdx = pair.indexOf(':');
+                        if (colonIdx > 0) {
+                          const key = pair.substring(0, colonIdx);
+                          const value = pair.substring(colonIdx + 1);
+                          try {
+                            atome[key] = JSON.parse(value);
+                          } catch {
+                            atome[key] = value;
+                          }
+                        }
+                      }
+                    }
+                    return atome;
+                  });
                 } else if (effectiveType) {
                   // List all atomes of a specific type (e.g., all users)
                   const dataSource = db.getDataSourceAdapter();
@@ -1196,7 +1245,7 @@ async function startServer() {
                             GROUP_CONCAT(p.particle_key || ':' || p.particle_value, '||') as particles_raw
                      FROM atomes a
                      LEFT JOIN particles p ON a.atome_id = p.atome_id
-                     WHERE a.atome_type = ? AND a.deleted_at IS NULL
+                     WHERE a.atome_type = ? ${deletedClause}
                      GROUP BY a.atome_id
                      ORDER BY a.created_at DESC
                      LIMIT ? OFFSET ?`,
@@ -1212,7 +1261,8 @@ async function startServer() {
                       owner_id: row.owner_id,
                       creator_id: row.creator_id,
                       created_at: row.created_at,
-                      updated_at: row.updated_at
+                      updated_at: row.updated_at,
+                      deleted_at: row.deleted_at // Include deleted_at for sync
                     };
 
                     if (row.particles_raw) {

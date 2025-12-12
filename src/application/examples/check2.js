@@ -610,6 +610,7 @@ async function list_tables() {
 /**
  * List all unsynced atomes between Tauri (local) and Fastify (remote)
  * Compares both presence and content (particles) to detect modifications
+ * Also detects soft-deleted atomes that need to be propagated
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<Object>} Sync status with categorized atomes
  */
@@ -621,6 +622,8 @@ async function list_unsynced_atomes(callback) {
     onlyOnFastify: [],    // Atomes to pull from server
     modifiedOnTauri: [],  // Local modifications not synced
     modifiedOnFastify: [], // Remote modifications not synced
+    deletedOnTauri: [],   // Deleted on Tauri, need to propagate to Fastify
+    deletedOnFastify: [], // Deleted on Fastify, need to propagate to Tauri
     conflicts: [],        // Modified on both sides (need resolution)
     synced: [],           // Identical on both sides
     error: null
@@ -632,12 +635,13 @@ async function list_unsynced_atomes(callback) {
   let tauriAtomes = [];
   let fastifyAtomes = [];
 
-  // Helper to fetch all atomes of all types from an adapter
+  // Helper to fetch all atomes of all types from an adapter (including deleted for sync)
   const fetchAllAtomes = async (adapter, name) => {
     const allAtomes = [];
     for (const type of atomeTypes) {
       try {
-        const result = await adapter.atome.list({ type });
+        // Include deleted atomes for sync comparison
+        const result = await adapter.atome.list({ type, includeDeleted: true });
         if (result.ok || result.success) {
           const atomes = result.atomes || result.data || [];
           allAtomes.push(...atomes);
@@ -652,7 +656,7 @@ async function list_unsynced_atomes(callback) {
   // Fetch all atomes from Tauri
   try {
     tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri');
-    console.log('[Tauri/SQLite] ✅ Fetched', tauriAtomes.length, 'atomes');
+    console.log('[Tauri/SQLite] ✅ Fetched', tauriAtomes.length, 'atomes (including deleted)');
   } catch (e) {
     result.error = 'Tauri connection failed: ' + e.message;
     console.error('[list_unsynced_atomes] ERROR:', result.error);
@@ -663,10 +667,10 @@ async function list_unsynced_atomes(callback) {
   // Fetch all atomes from Fastify
   try {
     fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify');
-    console.log('[Fastify/LibSQL] ✅ Fetched', fastifyAtomes.length, 'atomes');
+    console.log('[Fastify/LibSQL] ✅ Fetched', fastifyAtomes.length, 'atomes (including deleted)');
   } catch (e) {
     // If Fastify is offline, all Tauri atomes are "unsynced"
-    result.onlyOnTauri = tauriAtomes;
+    result.onlyOnTauri = tauriAtomes.filter(a => !a.deleted_at);
     result.error = 'Fastify connection failed - all local atomes considered unsynced';
     console.warn('[list_unsynced_atomes] Fastify offline, all local atomes unsynced');
     if (typeof callback === 'function') callback(result);
@@ -726,6 +730,9 @@ async function list_unsynced_atomes(callback) {
     const particles1 = extractParticlesForComparison(atome1);
     const particles2 = extractParticlesForComparison(atome2);
 
+    const count1 = Object.keys(particles1).length;
+    const count2 = Object.keys(particles2).length;
+
     // Sort keys for consistent comparison
     const sortedP1 = JSON.stringify(particles1, Object.keys(particles1).sort());
     const sortedP2 = JSON.stringify(particles2, Object.keys(particles2).sort());
@@ -735,7 +742,18 @@ async function list_unsynced_atomes(callback) {
       return 'equal';
     }
 
-    // Content differs - determine which is newer by updated_at
+    // Content differs - special case: one has data, other is empty
+    // The one with data should "win" regardless of timestamp
+    if (count1 === 0 && count2 > 0) {
+      // Tauri is empty, Fastify has data - Fastify is "newer" (more complete)
+      return 'fastify_newer';
+    }
+    if (count2 === 0 && count1 > 0) {
+      // Fastify is empty, Tauri has data - Tauri is "newer" (more complete)
+      return 'tauri_newer';
+    }
+
+    // Both have data but differ - use timestamps to determine which is newer
     const updated1 = atome1.updated_at || atome1.updatedAt;
     const updated2 = atome2.updated_at || atome2.updatedAt;
 
@@ -757,29 +775,57 @@ async function list_unsynced_atomes(callback) {
     const tauriAtome = tauriMap.get(id);
     const fastifyAtome = fastifyMap.get(id);
 
-    if (tauriAtome && !fastifyAtome) {
-      // Only on Tauri (local) - needs to be pushed
-      result.onlyOnTauri.push(tauriAtome);
-    } else if (!tauriAtome && fastifyAtome) {
-      // Only on Fastify (remote) - needs to be pulled
-      result.onlyOnFastify.push(fastifyAtome);
-    } else if (tauriAtome && fastifyAtome) {
-      // Exists on both - compare content
-      const comparison = compareAtomes(tauriAtome, fastifyAtome);
+    // Check for soft deletes
+    const tauriDeleted = tauriAtome?.deleted_at != null;
+    const fastifyDeleted = fastifyAtome?.deleted_at != null;
 
-      switch (comparison) {
-        case 'equal':
-          result.synced.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
-          break;
-        case 'tauri_newer':
-          result.modifiedOnTauri.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
-          break;
-        case 'fastify_newer':
-          result.modifiedOnFastify.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
-          break;
-        case 'conflict':
-          result.conflicts.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
-          break;
+    if (tauriAtome && !fastifyAtome) {
+      // Only on Tauri (local)
+      if (tauriDeleted) {
+        // Already deleted, nothing to do
+        result.synced.push({ id, tauri: tauriAtome, fastify: null, status: 'deleted_local_only' });
+      } else {
+        // Needs to be pushed
+        result.onlyOnTauri.push(tauriAtome);
+      }
+    } else if (!tauriAtome && fastifyAtome) {
+      // Only on Fastify (remote)
+      if (fastifyDeleted) {
+        // Already deleted, nothing to do
+        result.synced.push({ id, tauri: null, fastify: fastifyAtome, status: 'deleted_remote_only' });
+      } else {
+        // Needs to be pulled
+        result.onlyOnFastify.push(fastifyAtome);
+      }
+    } else if (tauriAtome && fastifyAtome) {
+      // Exists on both - check for deletion propagation first
+      if (tauriDeleted && !fastifyDeleted) {
+        // Deleted on Tauri, not on Fastify - propagate deletion
+        result.deletedOnTauri.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+      } else if (!tauriDeleted && fastifyDeleted) {
+        // Deleted on Fastify, not on Tauri - propagate deletion
+        result.deletedOnFastify.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+      } else if (tauriDeleted && fastifyDeleted) {
+        // Both deleted - synced
+        result.synced.push({ id, tauri: tauriAtome, fastify: fastifyAtome, status: 'both_deleted' });
+      } else {
+        // Neither deleted - compare content
+        const comparison = compareAtomes(tauriAtome, fastifyAtome);
+
+        switch (comparison) {
+          case 'equal':
+            result.synced.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+            break;
+          case 'tauri_newer':
+            result.modifiedOnTauri.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+            break;
+          case 'fastify_newer':
+            result.modifiedOnFastify.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+            break;
+          case 'conflict':
+            result.conflicts.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+            break;
+        }
       }
     }
   }
@@ -790,6 +836,8 @@ async function list_unsynced_atomes(callback) {
   console.log('  - Only on Fastify (to pull):', result.onlyOnFastify.length);
   console.log('  - Modified on Tauri:', result.modifiedOnTauri.length);
   console.log('  - Modified on Fastify:', result.modifiedOnFastify.length);
+  console.log('  - Deleted on Tauri (to propagate):', result.deletedOnTauri.length);
+  console.log('  - Deleted on Fastify (to propagate):', result.deletedOnFastify.length);
   console.log('  - Conflicts:', result.conflicts.length);
   console.log('  - Synced:', result.synced.length);
 
@@ -924,8 +972,14 @@ async function sync_atomes(callback) {
   console.log('[sync_atomes] Updating Fastify with', unsyncedResult.modifiedOnTauri.length, 'local changes...');
   for (const item of unsyncedResult.modifiedOnTauri) {
     try {
+      // Debug: log the raw item structure
+      console.log('[sync_atomes] DEBUG item.tauri:', JSON.stringify(item.tauri));
+
       // Get the particles data using helper function
       const particles = extractParticles(item.tauri);
+
+      // Debug: log what extractParticles returned
+      console.log('[sync_atomes] DEBUG extracted particles:', JSON.stringify(particles));
 
       // Log for debugging
       console.log('[sync_atomes] Updating Fastify atome:', item.id, 'with particles:', Object.keys(particles));
@@ -988,7 +1042,49 @@ async function sync_atomes(callback) {
     }
   }
 
-  // 5. Report conflicts (don't auto-resolve, just report)
+  // 5. Propagate deletions from Tauri to Fastify
+  console.log('[sync_atomes] Propagating', unsyncedResult.deletedOnTauri.length, 'deletions to Fastify...');
+  for (const item of unsyncedResult.deletedOnTauri) {
+    try {
+      const deleteResult = await FastifyAdapter.atome.softDelete(item.id);
+
+      if (deleteResult.ok || deleteResult.success) {
+        result.updated.success++;
+        console.log('[sync_atomes] ✅ Deleted on Fastify:', item.id);
+      } else {
+        result.updated.failed++;
+        result.updated.errors.push({ id: item.id, error: deleteResult.error });
+        console.error('[sync_atomes] ❌ Failed to delete on Fastify:', item.id, deleteResult.error);
+      }
+    } catch (e) {
+      result.updated.failed++;
+      result.updated.errors.push({ id: item.id, error: e.message });
+      console.error('[sync_atomes] ❌ Exception deleting on Fastify:', item.id, e.message);
+    }
+  }
+
+  // 6. Propagate deletions from Fastify to Tauri
+  console.log('[sync_atomes] Propagating', unsyncedResult.deletedOnFastify.length, 'deletions to Tauri...');
+  for (const item of unsyncedResult.deletedOnFastify) {
+    try {
+      const deleteResult = await TauriAdapter.atome.softDelete(item.id);
+
+      if (deleteResult.ok || deleteResult.success) {
+        result.updated.success++;
+        console.log('[sync_atomes] ✅ Deleted on Tauri:', item.id);
+      } else {
+        result.updated.failed++;
+        result.updated.errors.push({ id: item.id, error: deleteResult.error });
+        console.error('[sync_atomes] ❌ Failed to delete on Tauri:', item.id, deleteResult.error);
+      }
+    } catch (e) {
+      result.updated.failed++;
+      result.updated.errors.push({ id: item.id, error: e.message });
+      console.error('[sync_atomes] ❌ Exception deleting on Tauri:', item.id, e.message);
+    }
+  }
+
+  // 7. Report conflicts (don't auto-resolve, just report)
   result.conflicts.count = unsyncedResult.conflicts.length;
   result.conflicts.items = unsyncedResult.conflicts.map(c => c.id);
   if (result.conflicts.count > 0) {
@@ -1000,6 +1096,7 @@ async function sync_atomes(callback) {
   console.log('  Pushed to Fastify:', result.pushed.success, 'success,', result.pushed.failed, 'failed');
   console.log('  Pulled to Tauri:', result.pulled.success, 'success,', result.pulled.failed, 'failed');
   console.log('  Updated:', result.updated.success, 'success,', result.updated.failed, 'failed');
+  console.log('  Deletions propagated:', unsyncedResult.deletedOnTauri.length + unsyncedResult.deletedOnFastify.length);
   console.log('  Conflicts:', result.conflicts.count);
   console.log('  Already synced:', result.alreadySynced);
 
@@ -1217,7 +1314,46 @@ $('span', {
   text: 'list unsynced',
   onClick: () => {
     list_unsynced_atomes((result) => {
-      puts('Unsynced atomes: ' + JSON.stringify(result));
+      // Create a concise summary including deletion states
+      const summary = {
+        onlyOnTauri: result.onlyOnTauri.length,
+        onlyOnFastify: result.onlyOnFastify.length,
+        modifiedOnTauri: result.modifiedOnTauri.length,
+        modifiedOnFastify: result.modifiedOnFastify.length,
+        deletedOnTauri: result.deletedOnTauri.length,
+        deletedOnFastify: result.deletedOnFastify.length,
+        conflicts: result.conflicts.length,
+        synced: result.synced.length,
+        error: result.error
+      };
+
+      // Check if there's anything to sync (including deletions)
+      const hasUnsyncedItems = summary.onlyOnTauri > 0 || summary.onlyOnFastify > 0 ||
+        summary.modifiedOnTauri > 0 || summary.modifiedOnFastify > 0 ||
+        summary.deletedOnTauri > 0 || summary.deletedOnFastify > 0 ||
+        summary.conflicts > 0;
+
+      if (hasUnsyncedItems) {
+        puts('Unsynced atomes: ' + JSON.stringify(summary));
+        // Show IDs of items needing sync
+        if (result.onlyOnTauri.length > 0) {
+          puts('  To push: ' + result.onlyOnTauri.map(a => a.atome_id).join(', '));
+        }
+        if (result.onlyOnFastify.length > 0) {
+          puts('  To pull: ' + result.onlyOnFastify.map(a => a.atome_id).join(', '));
+        }
+        if (result.deletedOnTauri.length > 0) {
+          puts('  Deleted on Tauri (propagate to Fastify): ' + result.deletedOnTauri.map(d => d.id).join(', '));
+        }
+        if (result.deletedOnFastify.length > 0) {
+          puts('  Deleted on Fastify (propagate to Tauri): ' + result.deletedOnFastify.map(d => d.id).join(', '));
+        }
+        if (result.conflicts.length > 0) {
+          puts('  Conflicts: ' + result.conflicts.map(c => c.id).join(', '));
+        }
+      } else {
+        puts('✅ All ' + summary.synced + ' atomes are synchronized');
+      }
     });
   },
 });

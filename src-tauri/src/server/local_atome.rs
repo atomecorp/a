@@ -201,7 +201,7 @@ pub async fn handle_atome_message(
         "get" => handle_get(message, user_id, state, request_id).await,
         "list" => handle_list(message, user_id, state, request_id).await,
         "update" => handle_update(message, user_id, state, request_id).await,
-        "delete" => handle_delete(message, user_id, state, request_id).await,
+        "delete" | "soft-delete" => handle_delete(message, user_id, state, request_id).await,
         "alter" => handle_alter(message, user_id, state, request_id).await,
         _ => WsResponse {
             msg_type: "atome-response".into(),
@@ -360,12 +360,16 @@ async fn handle_list(
         .or_else(|| message.get("atome_type"))
         .and_then(|v| v.as_str());
     let owner_id = message.get("ownerId").and_then(|v| v.as_str());
+    let include_deleted = message
+        .get("includeDeleted")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(100);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
 
     println!(
-        "[Atome List Debug] atome_type={:?}, owner_id={:?}, user_id={}",
-        atome_type, owner_id, user_id
+        "[Atome List Debug] atome_type={:?}, owner_id={:?}, user_id={}, includeDeleted={}",
+        atome_type, owner_id, user_id, include_deleted
     );
 
     let db = match state.db.lock() {
@@ -379,6 +383,13 @@ async fn handle_list(
         _ => None,
     };
 
+    // Build WHERE clause for deleted_at based on includeDeleted
+    let deleted_clause = if include_deleted {
+        ""
+    } else {
+        "AND deleted_at IS NULL"
+    };
+
     // Build query based on whether we have an owner or just a type
     let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match (effective_owner, atome_type)
     {
@@ -386,8 +397,8 @@ async fn handle_list(
             // Filter by both owner and type
             (
                 format!(
-                    "SELECT atome_id FROM atomes WHERE owner_id = ?1 AND atome_type = ?2 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT {} OFFSET {}",
-                    limit, offset
+                    "SELECT atome_id, deleted_at FROM atomes WHERE owner_id = ?1 AND atome_type = ?2 {} ORDER BY updated_at DESC LIMIT {} OFFSET {}",
+                    deleted_clause, limit, offset
                 ),
                 vec![Box::new(owner.to_string()), Box::new(t.to_string())]
             )
@@ -396,8 +407,8 @@ async fn handle_list(
             // Filter by owner only
             (
                 format!(
-                    "SELECT atome_id FROM atomes WHERE owner_id = ?1 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT {} OFFSET {}",
-                    limit, offset
+                    "SELECT atome_id, deleted_at FROM atomes WHERE owner_id = ?1 {} ORDER BY updated_at DESC LIMIT {} OFFSET {}",
+                    deleted_clause, limit, offset
                 ),
                 vec![Box::new(owner.to_string())]
             )
@@ -406,8 +417,8 @@ async fn handle_list(
             // Filter by type only (e.g., list all users)
             (
                 format!(
-                    "SELECT atome_id FROM atomes WHERE atome_type = ?1 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT {} OFFSET {}",
-                    limit, offset
+                    "SELECT atome_id, deleted_at FROM atomes WHERE atome_type = ?1 {} ORDER BY updated_at DESC LIMIT {} OFFSET {}",
+                    deleted_clause, limit, offset
                 ),
                 vec![Box::new(t.to_string())]
             )
@@ -441,7 +452,7 @@ async fn handle_list(
 
     let mut atomes = Vec::new();
     for id in atome_ids {
-        if let Ok(atome) = load_atome(&db, &id, None) {
+        if let Ok(atome) = load_atome_with_deleted(&db, &id, None, include_deleted) {
             atomes.push(atome);
         }
     }
@@ -698,12 +709,33 @@ fn load_atome(
     atome_id: &str,
     owner_filter: Option<&str>,
 ) -> Result<AtomeData, String> {
-    let query = if owner_filter.is_some() {
-        "SELECT atome_id, atome_type, parent_id, owner_id, sync_status, created_at, updated_at, deleted_at
-         FROM atomes WHERE atome_id = ?1 AND owner_id = ?2 AND deleted_at IS NULL"
+    load_atome_with_deleted(db, atome_id, owner_filter, false)
+}
+
+fn load_atome_with_deleted(
+    db: &Connection,
+    atome_id: &str,
+    owner_filter: Option<&str>,
+    include_deleted: bool,
+) -> Result<AtomeData, String> {
+    let deleted_clause = if include_deleted {
+        ""
     } else {
-        "SELECT atome_id, atome_type, parent_id, owner_id, sync_status, created_at, updated_at, deleted_at
-         FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL"
+        "AND deleted_at IS NULL"
+    };
+
+    let query = if owner_filter.is_some() {
+        format!(
+            "SELECT atome_id, atome_type, parent_id, owner_id, sync_status, created_at, updated_at, deleted_at
+             FROM atomes WHERE atome_id = ?1 AND owner_id = ?2 {}",
+            deleted_clause
+        )
+    } else {
+        format!(
+            "SELECT atome_id, atome_type, parent_id, owner_id, sync_status, created_at, updated_at, deleted_at
+             FROM atomes WHERE atome_id = ?1 {}",
+            deleted_clause
+        )
     };
 
     let row: (
@@ -716,7 +748,7 @@ fn load_atome(
         String,
         Option<String>,
     ) = if let Some(owner) = owner_filter {
-        db.query_row(query, rusqlite::params![atome_id, owner], |row| {
+        db.query_row(&query, rusqlite::params![atome_id, owner], |row| {
             Ok((
                 row.get(0)?,
                 row.get(1)?,
@@ -729,7 +761,7 @@ fn load_atome(
             ))
         })
     } else {
-        db.query_row(query, rusqlite::params![atome_id], |row| {
+        db.query_row(&query, rusqlite::params![atome_id], |row| {
             Ok((
                 row.get(0)?,
                 row.get(1)?,

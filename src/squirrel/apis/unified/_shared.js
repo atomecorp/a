@@ -667,8 +667,18 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     token,
                     atomeType: params.type || params.kind,
                     parentId: params.parentId || params.parent,
+                    includeDeleted: params.includeDeleted || false,
                     limit: params.limit,
                     offset: params.offset || ((params.page || 0) * (params.limit || 50))
+                });
+            },
+            async softDelete(id) {
+                const token = getToken(tokenKey);
+                return ws.send({
+                    type: 'atome',
+                    action: 'soft-delete',
+                    token,
+                    atomeId: id
                 });
             },
             async alter(id, data) {
