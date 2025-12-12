@@ -1114,9 +1114,12 @@ async function sync_atomes(callback) {
 // Keep existing UI and code
 
 //todo : do not log user when creating user
+//todo : create/delete/modify atomes project type and atomes and theyre particles and sync
 
+//todo: share atomes both atome project type and atome width other user user
 
-
+//todo: restore atomes from it's history to and brig back the new state to present
+//todo : estore atomes from it's history and create  and  alterated  history from the present state
 
 $('span', {
   id: 'clear_console',
