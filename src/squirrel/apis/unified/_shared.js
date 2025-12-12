@@ -439,7 +439,6 @@ class TauriWebSocket {
             }
 
             this.isConnecting = true;
-            console.log(`[TauriWS] Connecting to ${this.url}...`, new Error().stack?.split('\n').slice(1, 5).join('\n'));
 
             try {
                 this.socket = new WebSocket(this.url);
@@ -448,7 +447,6 @@ class TauriWebSocket {
                     this.isConnecting = false;
                     this.isConnected = true;
                     this.startPing();
-                    console.log(`[TauriWS] ✅ Connected to ${this.url}`);
                     resolve(true);
                 };
 

@@ -64,15 +64,18 @@ async function create_user(phone, password, username, callback) {
       console.log('[Fastify/LibSQL] ✅ User created successfully:', fastifyResult);
       results.fastify = { success: true, data: fastifyResult, error: null };
     } else {
-      console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-      console.error('[Fastify/LibSQL] REASON: Registration failed on Fastify WebSocket server.');
       results.fastify = { success: false, data: null, error: fastifyResult.error };
-      if (fastifyResult.error?.includes('UNIQUE') || fastifyResult.error?.includes('already')) {
-        console.error('[Fastify/LibSQL] SOLUTION: This user already exists. Use a different phone number or delete the existing user.');
-      } else if (fastifyResult.error?.includes('at least')) {
-        console.error('[Fastify/LibSQL] SOLUTION: Check that phone (6+ chars), password (6+ chars), and username (2+ chars) meet requirements.');
-      } else {
-        console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+      // Only log errors if server is reachable (not just offline)
+      if (fastifyResult.error !== 'Server unreachable') {
+        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
+        console.error('[Fastify/LibSQL] REASON: Registration failed on Fastify WebSocket server.');
+        if (fastifyResult.error?.includes('UNIQUE') || fastifyResult.error?.includes('already')) {
+          console.error('[Fastify/LibSQL] SOLUTION: This user already exists. Use a different phone number or delete the existing user.');
+        } else if (fastifyResult.error?.includes('at least')) {
+          console.error('[Fastify/LibSQL] SOLUTION: Check that phone (6+ chars), password (6+ chars), and username (2+ chars) meet requirements.');
+        } else {
+          console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+        }
       }
     }
   } catch (e) {
@@ -140,7 +143,7 @@ async function log_user(phone, password, username) {
       if (fastifyResult.token) {
         console.log('[Fastify/LibSQL] Token stored for future requests');
       }
-    } else {
+    } else if (fastifyResult.error !== 'Server unreachable') {
       console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
       console.error('[Fastify/LibSQL] REASON: Login failed on Fastify WebSocket server.');
       if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
@@ -204,7 +207,7 @@ async function delete_user(phone, password, username) {
     });
     if (fastifyResult.ok || fastifyResult.success) {
       console.log('[Fastify/LibSQL] ✅ User deleted successfully:', fastifyResult);
-    } else {
+    } else if (fastifyResult.error !== 'Server unreachable') {
       console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
       console.error('[Fastify/LibSQL] REASON: Delete failed on Fastify WebSocket server.');
       if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
@@ -265,9 +268,11 @@ async function user_list() {
       console.log('[Fastify/LibSQL] Users:', results.fastify);
     } else {
       results.fastify.error = fastifyResult.error;
-      console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-      console.error('[Fastify/LibSQL] REASON: Failed to list users from Fastify WebSocket server.');
-      console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket handler in server.js');
+      if (fastifyResult.error !== 'Server unreachable') {
+        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
+        console.error('[Fastify/LibSQL] REASON: Failed to list users from Fastify WebSocket server.');
+        console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket handler in server.js');
+      }
     }
   } catch (e) {
     results.fastify.error = e.message;
@@ -476,7 +481,7 @@ $('span', {
   text: 'create user',
   onClick: () => {
     puts('Creating user...');
-    create_user('00000000', '00000000', 'jeezs');
+    create_user('11111111', '11111111', 'jeezs');
   },
 });
 
@@ -493,9 +498,28 @@ $('span', {
   text: 'log user',
   onClick: () => {
     puts('log user');
-    log_user('00000000', '00000000', 'jeezs');
+    log_user('11111111', '11111111', 'jeezs');
   },
 });
+
+$('span', {
+  id: 'unlog_user',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'unlog user',
+  onClick: () => {
+    puts('unlog user');
+    unlog_user('11111111', '11111111', 'jeezs');
+  },
+});
+
+
 
 $('span', {
   id: 'delete_user',
@@ -510,7 +534,7 @@ $('span', {
   text: 'delete user',
   onClick: () => {
     puts('Deleting user...');
-    delete_user('00000000', '00000000', 'jeezs');
+    delete_user('11111111', '11111111', 'jeezs');
   },
 });
 
