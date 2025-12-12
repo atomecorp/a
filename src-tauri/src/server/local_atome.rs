@@ -86,25 +86,37 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         [],
     )?;
 
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_atomes_sync ON atomes(sync_status)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_atomes_sync ON atomes(sync_status)",
+        [],
+    )?;
 
     // Table 2: particles
     conn.execute(
         "CREATE TABLE IF NOT EXISTS particles (
             particle_id INTEGER PRIMARY KEY AUTOINCREMENT,
             atome_id TEXT NOT NULL,
-            key TEXT NOT NULL,
-            value TEXT,
+            particle_key TEXT NOT NULL,
+            particle_value TEXT,
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
-            UNIQUE(atome_id, key)
+            UNIQUE(atome_id, particle_key)
         )",
         [],
     )?;
 
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_particles_atome ON particles(atome_id)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_particles_atome ON particles(atome_id)",
+        [],
+    )?;
 
     // Table 3: particles_versions (history)
     conn.execute(
@@ -112,7 +124,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
             version_id INTEGER PRIMARY KEY AUTOINCREMENT,
             particle_id INTEGER NOT NULL,
             atome_id TEXT NOT NULL,
-            key TEXT NOT NULL,
+            particle_key TEXT NOT NULL,
             old_value TEXT,
             new_value TEXT,
             changed_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -140,8 +152,14 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         [],
     )?;
 
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_permissions_atome ON permissions(atome_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_permissions_principal ON permissions(principal_id)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_permissions_atome ON permissions(atome_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_permissions_principal ON permissions(principal_id)",
+        [],
+    )?;
 
     // Table 5: sync_queue
     conn.execute(
@@ -173,7 +191,10 @@ pub async fn handle_atome_message(
     state: &LocalAtomeState,
 ) -> WsResponse {
     let action = message.get("action").and_then(|v| v.as_str()).unwrap_or("");
-    let request_id = message.get("requestId").and_then(|v| v.as_str()).map(String::from);
+    let request_id = message
+        .get("requestId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
 
     match action {
         "create" => handle_create(message, user_id, state, request_id).await,
@@ -204,17 +225,22 @@ async fn handle_create(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    let atome_id = message.get("atome_id")
+    let atome_id = message
+        .get("atome_id")
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    let atome_type = message.get("atome_type")
+    let atome_type = message
+        .get("atome_type")
         .and_then(|v| v.as_str())
         .unwrap_or("generic");
 
     let parent_id = message.get("parent_id").and_then(|v| v.as_str());
-    let data = message.get("data").cloned().unwrap_or(serde_json::json!({}));
+    let data = message
+        .get("data")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
     let now = Utc::now().to_rfc3339();
 
     let db = match state.db.lock() {
@@ -236,7 +262,7 @@ async fn handle_create(
         for (key, value) in obj {
             let value_str = serde_json::to_string(value).unwrap_or_default();
             let _ = db.execute(
-                "INSERT INTO particles (atome_id, key, value, updated_at)
+                "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
                  VALUES (?1, ?2, ?3, ?4)",
                 rusqlite::params![&atome_id, key, &value_str, &now],
             );
@@ -312,7 +338,8 @@ async fn handle_list(
     };
 
     // Build query
-    let mut sql = "SELECT atome_id FROM atomes WHERE owner_id = ?1 AND deleted_at IS NULL".to_string();
+    let mut sql =
+        "SELECT atome_id FROM atomes WHERE owner_id = ?1 AND deleted_at IS NULL".to_string();
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(user_id.to_string())];
 
     if let Some(t) = atome_type {
@@ -320,7 +347,10 @@ async fn handle_list(
         params.push(Box::new(t.to_string()));
     }
 
-    sql.push_str(&format!(" ORDER BY updated_at DESC LIMIT {} OFFSET {}", limit, offset));
+    sql.push_str(&format!(
+        " ORDER BY updated_at DESC LIMIT {} OFFSET {}",
+        limit, offset
+    ));
 
     let mut stmt = match db.prepare(&sql) {
         Ok(s) => s,
@@ -328,7 +358,7 @@ async fn handle_list(
     };
 
     let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-    
+
     let atome_ids: Vec<String> = stmt
         .query_map(params_refs.as_slice(), |row| row.get(0))
         .ok()
@@ -366,7 +396,10 @@ async fn handle_update(
         None => return error_response(request_id, "Missing atome_id"),
     };
 
-    let data = message.get("data").cloned().unwrap_or(serde_json::json!({}));
+    let data = message
+        .get("data")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
     let now = Utc::now().to_rfc3339();
 
     let db = match state.db.lock() {
@@ -398,10 +431,10 @@ async fn handle_update(
         for (key, value) in obj {
             let value_str = serde_json::to_string(value).unwrap_or_default();
             let _ = db.execute(
-                "INSERT INTO particles (atome_id, key, value, updated_at)
+                "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
                  VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(atome_id, key) DO UPDATE SET
-                    value = excluded.value,
+                 ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                    particle_value = excluded.particle_value,
                     updated_at = excluded.updated_at",
                 rusqlite::params![atome_id, key, &value_str, &now],
             );
@@ -474,7 +507,10 @@ async fn handle_alter(
         None => return error_response(request_id, "Missing atome_id"),
     };
 
-    let particles = message.get("particles").cloned().unwrap_or(serde_json::json!({}));
+    let particles = message
+        .get("particles")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
     let now = Utc::now().to_rfc3339();
 
     let db = match state.db.lock() {
@@ -507,7 +543,7 @@ async fn handle_alter(
             // Get old value for history
             let old_value: Option<String> = db
                 .query_row(
-                    "SELECT value FROM particles WHERE atome_id = ?1 AND key = ?2",
+                    "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = ?2",
                     rusqlite::params![atome_id, key],
                     |row| row.get(0),
                 )
@@ -517,10 +553,10 @@ async fn handle_alter(
 
             // Upsert particle
             let _ = db.execute(
-                "INSERT INTO particles (atome_id, key, value, updated_at)
+                "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
                  VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(atome_id, key) DO UPDATE SET
-                    value = excluded.value,
+                 ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                    particle_value = excluded.particle_value,
                     updated_at = excluded.updated_at",
                 rusqlite::params![atome_id, key, &value_str, &now],
             );
@@ -529,14 +565,14 @@ async fn handle_alter(
             if let Some(old) = old_value {
                 let particle_id: i64 = db
                     .query_row(
-                        "SELECT particle_id FROM particles WHERE atome_id = ?1 AND key = ?2",
+                        "SELECT particle_id FROM particles WHERE atome_id = ?1 AND particle_key = ?2",
                         rusqlite::params![atome_id, key],
                         |row| row.get(0),
                     )
                     .unwrap_or(0);
 
                 let _ = db.execute(
-                    "INSERT INTO particles_versions (particle_id, atome_id, key, old_value, new_value, changed_at)
+                    "INSERT INTO particles_versions (particle_id, atome_id, particle_key, old_value, new_value, changed_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     rusqlite::params![particle_id, atome_id, key, &old, &value_str, &now],
                 );
@@ -562,7 +598,11 @@ async fn handle_alter(
 // HELPERS
 // =============================================================================
 
-fn load_atome(db: &Connection, atome_id: &str, owner_filter: Option<&str>) -> Result<AtomeData, String> {
+fn load_atome(
+    db: &Connection,
+    atome_id: &str,
+    owner_filter: Option<&str>,
+) -> Result<AtomeData, String> {
     let query = if owner_filter.is_some() {
         "SELECT atome_id, atome_type, parent_id, owner_id, sync_status, created_at, updated_at, deleted_at
          FROM atomes WHERE atome_id = ?1 AND owner_id = ?2 AND deleted_at IS NULL"
@@ -571,27 +611,55 @@ fn load_atome(db: &Connection, atome_id: &str, owner_filter: Option<&str>) -> Re
          FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL"
     };
 
-    let row: (String, String, Option<String>, String, String, String, String, Option<String>) = 
-        if let Some(owner) = owner_filter {
-            db.query_row(query, rusqlite::params![atome_id, owner], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, 
-                    row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?))
-            })
-        } else {
-            db.query_row(query, rusqlite::params![atome_id], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, 
-                    row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?))
-            })
-        }.map_err(|e| e.to_string())?;
+    let row: (
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+    ) = if let Some(owner) = owner_filter {
+        db.query_row(query, rusqlite::params![atome_id, owner], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+            ))
+        })
+    } else {
+        db.query_row(query, rusqlite::params![atome_id], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+            ))
+        })
+    }
+    .map_err(|e| e.to_string())?;
 
     // Load particles
     let mut data_map = serde_json::Map::new();
-    let mut stmt = db.prepare("SELECT key, value FROM particles WHERE atome_id = ?1")
+    let mut stmt = db
+        .prepare("SELECT particle_key, particle_value FROM particles WHERE atome_id = ?1")
         .map_err(|e| e.to_string())?;
 
-    let particles = stmt.query_map(rusqlite::params![atome_id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    }).map_err(|e| e.to_string())?;
+    let particles = stmt
+        .query_map(rusqlite::params![atome_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
 
     for p in particles.filter_map(|r| r.ok()) {
         let (key, value_str) = p;

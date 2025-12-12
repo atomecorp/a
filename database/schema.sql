@@ -58,19 +58,19 @@ CREATE INDEX IF NOT EXISTS idx_atomes_sync_status ON atomes(sync_status);
 CREATE TABLE IF NOT EXISTS particles (
     particle_id INTEGER PRIMARY KEY AUTOINCREMENT,
     atome_id TEXT NOT NULL,                         -- L'atome auquel appartient cette propriété
-    key TEXT NOT NULL,                              -- Nom de la propriété: phone, username, title, x, y...
-    value TEXT,                                     -- Valeur (TEXT ou JSON)
+    particle_key TEXT NOT NULL,                     -- Nom de la propriété: phone, username, title, x, y...
+    particle_value TEXT,                            -- Valeur (TEXT ou JSON)
     value_type TEXT DEFAULT 'string',               -- 'string', 'number', 'boolean', 'json', 'binary'
     version INTEGER NOT NULL DEFAULT 1,             -- Version actuelle
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     
     FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
-    UNIQUE(atome_id, key)
+    UNIQUE(atome_id, particle_key)
 );
 
 CREATE INDEX IF NOT EXISTS idx_particles_atome ON particles(atome_id);
-CREATE INDEX IF NOT EXISTS idx_particles_key ON particles(key);
+CREATE INDEX IF NOT EXISTS idx_particles_key ON particles(particle_key);
 
 -- ============================================================================
 -- 3. TABLE particles_versions
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS particles_versions (
     version_id INTEGER PRIMARY KEY AUTOINCREMENT,
     particle_id INTEGER NOT NULL,                   -- Référence à particles
     atome_id TEXT NOT NULL,                         -- Redondant pour lookup rapide
-    key TEXT NOT NULL,                              -- Nom de la propriété au moment de la version
+    particle_key TEXT NOT NULL,                     -- Nom de la propriété au moment de la version
     version INTEGER NOT NULL,                       -- Numéro de version
     old_value TEXT,                                 -- Valeur avant modification
     new_value TEXT,                                 -- Valeur après modification

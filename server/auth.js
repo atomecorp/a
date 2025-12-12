@@ -170,7 +170,7 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
 
     for (const p of particles) {
         await dataSource.query(
-            `INSERT INTO particles (atome_id, key, value, updated_at)
+            `INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
              VALUES (?, ?, ?, ?)`,
             [userId, p.key, p.value, now]
         );
@@ -196,14 +196,14 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
 async function findUserByPhone(dataSource, phone) {
     const rows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
-                MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username,
-                MAX(CASE WHEN p.key = 'password_hash' THEN p.value END) AS password_hash
+                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
+                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
+                MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
          FROM atomes a
          LEFT JOIN particles p ON a.atome_id = p.atome_id
          WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
          GROUP BY a.atome_id
-         HAVING MAX(CASE WHEN p.key = 'phone' THEN p.value END) = ?`,
+         HAVING MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) = ?`,
         [JSON.stringify(phone)]
     );
 
@@ -232,9 +232,9 @@ async function findUserByPhone(dataSource, phone) {
 async function findUserById(dataSource, userId) {
     const rows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
-                MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username,
-                MAX(CASE WHEN p.key = 'password_hash' THEN p.value END) AS password_hash
+                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
+                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
+                MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
          FROM atomes a
          LEFT JOIN particles p ON a.atome_id = p.atome_id
          WHERE a.atome_id = ? AND a.atome_type = 'user' AND a.deleted_at IS NULL
@@ -265,8 +265,8 @@ async function findUserById(dataSource, userId) {
 async function listAllUsers(dataSource) {
     const rows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.key = 'phone' THEN p.value END) AS phone,
-                MAX(CASE WHEN p.key = 'username' THEN p.value END) AS username
+                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
+                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username
          FROM atomes a
          LEFT JOIN particles p ON a.atome_id = p.atome_id
          WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
@@ -298,20 +298,20 @@ async function updateUserParticle(dataSource, userId, key, value) {
 
     // Check if particle exists
     const existing = await dataSource.query(
-        `SELECT particle_id, version FROM particles WHERE atome_id = ? AND key = ?`,
+        `SELECT particle_id, version FROM particles WHERE atome_id = ? AND particle_key = ?`,
         [userId, key]
     );
 
     if (existing.length > 0) {
         const newVersion = (existing[0].version || 1) + 1;
         await dataSource.query(
-            `UPDATE particles SET value = ?, version = ?, updated_at = ? WHERE atome_id = ? AND key = ?`,
+            `UPDATE particles SET particle_value = ?, version = ?, updated_at = ? WHERE atome_id = ? AND particle_key = ?`,
             [valueStr, newVersion, now, userId, key]
         );
     } else {
         // particle_id is auto-increment, don't specify it
         await dataSource.query(
-            `INSERT INTO particles (atome_id, key, value, value_type, version, created_at, updated_at)
+            `INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
              VALUES (?, ?, ?, 'string', 1, ?, ?)`,
             [userId, key, valueStr, now, now]
         );
@@ -462,8 +462,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     a.updated_at,
                     a.created_source,
                     a.last_sync,
-                    MAX(CASE WHEN p.key = 'username' THEN p.value END) as username,
-                    MAX(CASE WHEN p.key = 'phone' THEN p.value END) as phone
+                    MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) as username,
+                    MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) as phone
                  FROM atomes a
                  LEFT JOIN particles p ON a.atome_id = p.atome_id
                  WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
@@ -1700,5 +1700,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         console.log('⚠️  Server identity not configured (run npm run generate-keys)');
     }
 }
+
+// Export user management functions for WebSocket handlers
+export {
+    createUserAtome,
+    findUserByPhone,
+    findUserById,
+    listAllUsers,
+    updateUserParticle,
+    deleteUserAtome,
+    generateDeterministicUserId
+};
 
 export default { registerAuthRoutes, hashPassword, verifyPassword, generateOTP, sendSMS };

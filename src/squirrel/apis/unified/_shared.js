@@ -509,10 +509,10 @@ class TauriWebSocket {
             if (message.type === 'pong') return;
 
             // Handle auth-response
-            if (message.type === 'auth-response' && message.request_id) {
-                const pending = this.pendingRequests.get(message.request_id);
+            if (message.type === 'auth-response' && (message.request_id || message.requestId)) {
+                const pending = this.pendingRequests.get(message.request_id || message.requestId);
                 if (pending) {
-                    this.pendingRequests.delete(message.request_id);
+                    this.pendingRequests.delete(message.request_id || message.requestId);
                     clearTimeout(pending.timeout);
                     pending.resolve({
                         ok: message.success,
@@ -520,17 +520,18 @@ class TauriWebSocket {
                         status: message.success ? 200 : 400,
                         error: message.error,
                         user: message.user,
-                        token: message.token
+                        token: message.token,
+                        userId: message.userId
                     });
                 }
                 return;
             }
 
             // Handle atome-response
-            if (message.type === 'atome-response' && message.request_id) {
-                const pending = this.pendingRequests.get(message.request_id);
+            if (message.type === 'atome-response' && (message.request_id || message.requestId)) {
+                const pending = this.pendingRequests.get(message.request_id || message.requestId);
                 if (pending) {
-                    this.pendingRequests.delete(message.request_id);
+                    this.pendingRequests.delete(message.request_id || message.requestId);
                     clearTimeout(pending.timeout);
                     pending.resolve({
                         ok: message.success,

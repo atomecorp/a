@@ -51,7 +51,7 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import { registerAuthRoutes } from './auth.js';
+import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId } from './auth.js';
 import { registerAtomeRoutes } from './atomeRoutes.orm.js';
 import { registerSharingRoutes } from './sharing.js';
 import {
@@ -793,6 +793,379 @@ async function startServer() {
                 type: 'api-response',
                 id,
                 error: error.message || 'Internal server error'
+              });
+            }
+            return;
+          }
+
+          // Handle auth requests (ADOLE v3.0 WebSocket-only)
+          if (data.type === 'auth') {
+            const action = data.action || '';
+            const requestId = data.requestId;
+
+            // Get dataSource adapter for auth functions
+            const dataSource = db.getDataSourceAdapter();
+
+            try {
+              if (action === 'register' || action === 'create-user') {
+                const { username, phone, password } = data;
+                if (!username || !phone || !password) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing required fields: username, phone, password'
+                  });
+                  return;
+                }
+
+                // Check if user already exists
+                const existingUser = await findUserByPhone(dataSource, phone);
+                if (existingUser) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'User with this phone already exists'
+                  });
+                  return;
+                }
+
+                // Hash password and create user
+                const passwordHash = await hashPassword(password);
+                const userId = generateDeterministicUserId(phone);
+                await createUserAtome(dataSource, userId, username, phone, passwordHash);
+
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  userId,
+                  message: 'User created successfully'
+                });
+              } else if (action === 'delete' || action === 'delete-user') {
+                const { userId, phone } = data;
+                const targetUserId = userId || (phone ? generateDeterministicUserId(phone) : null);
+
+                if (!targetUserId) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing required field: userId or phone'
+                  });
+                  return;
+                }
+
+                await deleteUserAtome(dataSource, targetUserId);
+
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  message: 'User deleted successfully'
+                });
+              } else if (action === 'list-users') {
+                const users = await listAllUsers(dataSource);
+
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  users
+                });
+              } else if (action === 'get-user') {
+                const { userId, phone } = data;
+                let user = null;
+
+                if (userId) {
+                  user = await findUserById(dataSource, userId);
+                } else if (phone) {
+                  user = await findUserByPhone(dataSource, phone);
+                }
+
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  user
+                });
+              } else if (action === 'update-user') {
+                const { userId, key, value } = data;
+
+                if (!userId || !key) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing required fields: userId, key'
+                  });
+                  return;
+                }
+
+                await updateUserParticle(dataSource, userId, key, value);
+
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  message: 'User updated successfully'
+                });
+              } else if (action === 'login') {
+                const { phone, password } = data;
+
+                if (!phone || !password) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing required fields: phone, password'
+                  });
+                  return;
+                }
+
+                // Find user by phone
+                const user = await findUserByPhone(dataSource, phone);
+                if (!user) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'User not found'
+                  });
+                  return;
+                }
+
+                // Verify password
+                const { verifyPassword } = await import('./auth.js');
+                const isValid = await verifyPassword(password, user.password_hash);
+                if (!isValid) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Invalid password'
+                  });
+                  return;
+                }
+
+                // Generate JWT token
+                const jwt = await import('jsonwebtoken');
+                const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                const token = jwt.default.sign(
+                  { userId: user.user_id, phone: user.phone },
+                  jwtSecret,
+                  { expiresIn: '7d' }
+                );
+
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  ok: true,
+                  token,
+                  user: {
+                    id: user.user_id,
+                    username: user.username,
+                    phone: user.phone
+                  }
+                });
+              } else if (action === 'me') {
+                const { token } = data;
+
+                if (!token) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'No token provided'
+                  });
+                  return;
+                }
+
+                try {
+                  const jwt = await import('jsonwebtoken');
+                  const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                  const decoded = jwt.default.verify(token, jwtSecret);
+                  const user = await findUserById(dataSource, decoded.userId);
+
+                  if (!user) {
+                    safeSend({
+                      type: 'auth-response',
+                      requestId,
+                      success: false,
+                      error: 'User not found'
+                    });
+                    return;
+                  }
+
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: true,
+                    ok: true,
+                    user: {
+                      id: user.user_id,
+                      username: user.username,
+                      phone: user.phone
+                    }
+                  });
+                } catch (jwtError) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Invalid or expired token'
+                  });
+                }
+              } else if (action === 'logout') {
+                // Logout is client-side token clearing, just acknowledge
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  ok: true,
+                  message: 'Logged out successfully'
+                });
+              } else {
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: false,
+                  error: `Unknown auth action: ${action}`
+                });
+              }
+            } catch (error) {
+              console.error(`❌ Auth WebSocket error: ${error.message}`);
+              safeSend({
+                type: 'auth-response',
+                requestId,
+                success: false,
+                error: error.message
+              });
+            }
+            return;
+          }
+
+          // Handle atome requests (ADOLE v3.0 WebSocket-only)
+          if (data.type === 'atome') {
+            const action = data.action || '';
+            const requestId = data.requestId;
+
+            try {
+              if (action === 'create') {
+                const { id, type: atomeType, kind, parent, owner, creator, properties } = data;
+                const result = await db.createAtome({
+                  id: id || uuidv4(),
+                  type: atomeType,
+                  kind,
+                  parent,
+                  owner,
+                  creator,
+                  properties
+                });
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  atome: result
+                });
+              } else if (action === 'get') {
+                const { id } = data;
+                const atome = await db.getAtome(id);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  atome
+                });
+              } else if (action === 'update') {
+                const { id, properties, author } = data;
+                await db.updateAtome(id, properties, author);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  message: 'Atome updated'
+                });
+              } else if (action === 'delete') {
+                const { id } = data;
+                await db.deleteAtome(id);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  message: 'Atome deleted'
+                });
+              } else if (action === 'list') {
+                const { ownerId, type: filterType, limit, offset } = data;
+                const atomes = await db.listAtomes(ownerId, { type: filterType, limit, offset });
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  atomes
+                });
+              } else if (action === 'set-particle') {
+                const { atomeId, key, value, author } = data;
+                await db.setParticle(atomeId, key, value, author);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  message: 'Particle set'
+                });
+              } else if (action === 'get-particle') {
+                const { atomeId, key } = data;
+                const value = await db.getParticle(atomeId, key);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  value
+                });
+              } else if (action === 'get-particles') {
+                const { atomeId } = data;
+                const particles = await db.getParticles(atomeId);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  particles
+                });
+              } else if (action === 'delete-particle') {
+                const { atomeId, key } = data;
+                await db.deleteParticle(atomeId, key);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  message: 'Particle deleted'
+                });
+              } else {
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: false,
+                  error: `Unknown atome action: ${action}`
+                });
+              }
+            } catch (error) {
+              console.error(`❌ Atome WebSocket error: ${error.message}`);
+              safeSend({
+                type: 'atome-response',
+                requestId,
+                success: false,
+                error: error.message
               });
             }
             return;

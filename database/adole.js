@@ -141,7 +141,7 @@ export async function getAtome(id) {
     if (!atome) return null;
 
     const particles = await query('all',
-        'SELECT key, value, value_type FROM particles WHERE atome_id = ?',
+        'SELECT particle_key, particle_value, value_type FROM particles WHERE atome_id = ?',
         [id]
     );
 
@@ -150,17 +150,17 @@ export async function getAtome(id) {
     let kind = null;
     for (const p of particles) {
         try {
-            const parsed = JSON.parse(p.value);
-            if (p.key === 'kind') {
+            const parsed = JSON.parse(p.particle_value);
+            if (p.particle_key === 'kind') {
                 kind = parsed;
             } else {
-                data[p.key] = parsed;
+                data[p.particle_key] = parsed;
             }
         } catch {
-            if (p.key === 'kind') {
-                kind = p.value;
+            if (p.particle_key === 'kind') {
+                kind = p.particle_value;
             } else {
-                data[p.key] = p.value;
+                data[p.particle_key] = p.particle_value;
             }
         }
     }
@@ -299,7 +299,7 @@ export async function setParticle(atomeId, key, value, author = null) {
 
     // Check if particle exists
     const existing = await query('get',
-        'SELECT particle_id, version FROM particles WHERE atome_id = ? AND key = ?',
+        'SELECT particle_id, version FROM particles WHERE atome_id = ? AND particle_key = ?',
         [atomeId, key]
     );
 
@@ -310,29 +310,29 @@ export async function setParticle(atomeId, key, value, author = null) {
     if (existing) {
         // Get old value for history
         const oldRow = await query('get',
-            'SELECT value FROM particles WHERE particle_id = ?',
+            'SELECT particle_value FROM particles WHERE particle_id = ?',
             [existing.particle_id]
         );
-        oldValue = oldRow?.value || null;
+        oldValue = oldRow?.particle_value || null;
 
         // Update existing particle
         version = (existing.version || 1) + 1;
         await query('run', `
-            UPDATE particles SET value = ?, value_type = ?, version = ?, updated_at = ?
-            WHERE atome_id = ? AND key = ?
+            UPDATE particles SET particle_value = ?, value_type = ?, version = ?, updated_at = ?
+            WHERE atome_id = ? AND particle_key = ?
         `, [valueStr, valueType, version, now, atomeId, key]);
         particleId = existing.particle_id;
     } else {
         // Create new particle (particle_id is AUTOINCREMENT, don't specify it)
         version = 1;
         await query('run', `
-            INSERT INTO particles (atome_id, key, value, value_type, version, created_at, updated_at)
+            INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [atomeId, key, valueStr, valueType, version, now, now]);
 
         // Get the auto-generated particle_id
         const inserted = await query('get',
-            'SELECT particle_id FROM particles WHERE atome_id = ? AND key = ?',
+            'SELECT particle_id FROM particles WHERE atome_id = ? AND particle_key = ?',
             [atomeId, key]
         );
         particleId = inserted?.particle_id;
@@ -340,7 +340,7 @@ export async function setParticle(atomeId, key, value, author = null) {
 
     // Record in particles_versions for history (correct column names)
     await query('run', `
-        INSERT INTO particles_versions (particle_id, atome_id, key, version, old_value, new_value, changed_by, changed_at)
+        INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `, [particleId, atomeId, key, version, oldValue, valueStr, author, now]);
 
@@ -367,14 +367,14 @@ export async function setParticles(atomeId, particles, author = null) {
  */
 export async function getParticle(atomeId, key) {
     const row = await query('get',
-        'SELECT value FROM particles WHERE atome_id = ? AND key = ?',
+        'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
         [atomeId, key]
     );
     if (!row) return null;
     try {
-        return JSON.parse(row.value);
+        return JSON.parse(row.particle_value);
     } catch {
-        return row.value;
+        return row.particle_value;
     }
 }
 
@@ -383,15 +383,15 @@ export async function getParticle(atomeId, key) {
  */
 export async function getParticles(atomeId) {
     const rows = await query('all',
-        'SELECT key, value FROM particles WHERE atome_id = ?',
+        'SELECT particle_key, particle_value FROM particles WHERE atome_id = ?',
         [atomeId]
     );
     const result = {};
     for (const row of rows) {
         try {
-            result[row.key] = JSON.parse(row.value);
+            result[row.particle_key] = JSON.parse(row.particle_value);
         } catch {
-            result[row.key] = row.value;
+            result[row.particle_key] = row.particle_value;
         }
     }
     return result;
@@ -401,7 +401,7 @@ export async function getParticles(atomeId) {
  * Delete a particle
  */
 export async function deleteParticle(atomeId, key) {
-    await query('run', 'DELETE FROM particles WHERE atome_id = ? AND key = ?', [atomeId, key]);
+    await query('run', 'DELETE FROM particles WHERE atome_id = ? AND particle_key = ?', [atomeId, key]);
 }
 
 // ============================================================================
@@ -414,7 +414,7 @@ export async function deleteParticle(atomeId, key) {
 export async function getParticleHistory(atomeId, key, limit = 50) {
     return await query('all', `
         SELECT * FROM particles_versions 
-        WHERE atome_id = ? AND key = ?
+        WHERE atome_id = ? AND particle_key = ?
         ORDER BY version DESC
         LIMIT ?
     `, [atomeId, key, limit]);
@@ -425,13 +425,13 @@ export async function getParticleHistory(atomeId, key, limit = 50) {
  */
 export async function restoreParticleVersion(atomeId, key, version, author = null) {
     const versionRow = await query('get', `
-        SELECT value, value_type FROM particles_versions
-        WHERE atome_id = ? AND key = ? AND version = ?
+        SELECT particle_value, value_type FROM particles_versions
+        WHERE atome_id = ? AND particle_key = ? AND version = ?
     `, [atomeId, key, version]);
 
     if (!versionRow) throw new Error(`Version ${version} not found for particle ${key}`);
 
-    const value = JSON.parse(versionRow.value);
+    const value = JSON.parse(versionRow.particle_value);
     await setParticle(atomeId, key, value, author);
 }
 

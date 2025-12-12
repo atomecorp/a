@@ -25,8 +25,7 @@ use super::local_atome::LocalAtomeState;
 
 /// Namespace UUID for deterministic user ID generation (same as Fastify)
 const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
-    0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, 
-    0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+    0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
 ]);
 
 // =============================================================================
@@ -35,7 +34,7 @@ const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,      // User ID (atome_id)
+    pub sub: String, // User ID (atome_id)
     pub username: String,
     pub phone: String,
     pub exp: i64,
@@ -81,7 +80,10 @@ pub async fn handle_auth_message(
     state: &LocalAuthState,
 ) -> AuthResponse {
     let action = message.get("action").and_then(|v| v.as_str()).unwrap_or("");
-    let request_id = message.get("requestId").and_then(|v| v.as_str()).map(String::from);
+    let request_id = message
+        .get("requestId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
 
     match action {
         "register" => handle_register(message, state, request_id).await,
@@ -128,7 +130,7 @@ async fn handle_register(
         .query_row(
             "SELECT 1 FROM particles p
              JOIN atomes a ON p.atome_id = a.atome_id
-             WHERE a.atome_type = 'user' AND p.key = 'phone' AND p.value = ?1
+             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1
              AND a.deleted_at IS NULL",
             rusqlite::params![format!("\"{}\"", phone)],
             |_| Ok(true),
@@ -168,7 +170,7 @@ async fn handle_register(
     for (key, value) in particles {
         let value_json = serde_json::to_string(value).unwrap_or_default();
         let _ = db.execute(
-            "INSERT INTO particles (atome_id, key, value, updated_at)
+            "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
              VALUES (?1, ?2, ?3, ?4)",
             rusqlite::params![&user_id, key, &value_json, &now],
         );
@@ -220,7 +222,7 @@ async fn handle_login(
         .query_row(
             "SELECT a.atome_id FROM atomes a
              JOIN particles p ON a.atome_id = p.atome_id
-             WHERE a.atome_type = 'user' AND p.key = 'phone' AND p.value = ?1
+             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1
              AND a.deleted_at IS NULL",
             rusqlite::params![format!("\"{}\"", phone)],
             |row| row.get(0),
@@ -484,7 +486,7 @@ fn get_user_particles(db: &Connection, user_id: &str) -> Result<(String, String,
 
     // Get username
     if let Ok(v) = db.query_row(
-        "SELECT value FROM particles WHERE atome_id = ?1 AND key = 'username'",
+        "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = 'username'",
         rusqlite::params![user_id],
         |row| row.get::<_, String>(0),
     ) {
@@ -493,7 +495,7 @@ fn get_user_particles(db: &Connection, user_id: &str) -> Result<(String, String,
 
     // Get password_hash
     if let Ok(v) = db.query_row(
-        "SELECT value FROM particles WHERE atome_id = ?1 AND key = 'password_hash'",
+        "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = 'password_hash'",
         rusqlite::params![user_id],
         |row| row.get::<_, String>(0),
     ) {
@@ -516,7 +518,12 @@ fn get_user_particles(db: &Connection, user_id: &str) -> Result<(String, String,
     Ok((username, password_hash, created_at))
 }
 
-fn generate_token(secret: &str, user_id: &str, username: &str, phone: &str) -> Result<String, String> {
+fn generate_token(
+    secret: &str,
+    user_id: &str,
+    username: &str,
+    phone: &str,
+) -> Result<String, String> {
     let now = Utc::now();
     let exp = now + Duration::days(7);
 
@@ -591,6 +598,6 @@ fn get_or_create_jwt_secret(data_dir: &PathBuf) -> String {
     let secret = hex::encode(bytes);
 
     let _ = std::fs::write(&secret_path, &secret);
-    
+
     secret
 }
