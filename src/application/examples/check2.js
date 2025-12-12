@@ -331,6 +331,7 @@ $('span', {
   },
   text: 'clear console',
   onClick: () => {
+    puts('Clearing console...');
     console.clear();
   },
 });
@@ -348,6 +349,7 @@ $('span', {
   },
   text: 'create user',
   onClick: () => {
+    puts('Creating user...');
     create_user('00000000', '00000000', 'jeezs');
   },
 });
@@ -364,6 +366,7 @@ $('span', {
   },
   text: 'delete user',
   onClick: () => {
+    puts('Deleting user...');
     delete_user('00000000', '00000000', 'jeezs');
   },
 });
@@ -382,6 +385,7 @@ $('span', {
   },
   text: 'Get user list',
   onClick: () => {
+    puts('Fetching user list...');
     console.log(user_list());
   },
 });
@@ -398,6 +402,7 @@ $('span', {
   },
   text: 'List all tables',
   onClick: () => {
+    puts('Listing all tables...');
     console.log(list_tables());
   },
 });
