@@ -1261,7 +1261,13 @@ $('span', {
   text: 'delete user',
   onClick: () => {
     puts('Deleting user...');
-    delete_user('11111111', '11111111', 'jeezs');
+    delete_user('11111111', '11111111', 'jeezs', (results) => {
+      if (results.tauri.success || results.fastify.success) {
+        puts('User deleted, logging out...');
+        unlog_user();
+        grab('logged_user').textContent = 'no user logged';
+      }
+    });
   },
 });
 
