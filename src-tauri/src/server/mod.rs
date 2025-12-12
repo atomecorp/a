@@ -823,12 +823,18 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                 // Route to atome handler
                 if msg_type == "atome" {
                     if let Some(ref atome_state) = state.atome_state {
-                        // Extract user_id from message (required for ADOLE v3.0 permission checks)
-                        let user_id = data
-                            .get("userId")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("anonymous")
-                            .to_string();
+                        // Extract user_id from JWT token (secure - cannot be spoofed)
+                        // If no auth_state, fall back to anonymous (development mode)
+                        let user_id = if let Some(ref auth_state) = state.auth_state {
+                            let token = data.get("token").and_then(|v| v.as_str());
+                            local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token)
+                        } else {
+                            // Fallback to userId from message (insecure, only for dev)
+                            data.get("userId")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("anonymous")
+                                .to_string()
+                        };
                         let response =
                             local_atome::handle_atome_message(data, &user_id, atome_state).await;
                         let _ = socket

@@ -1066,15 +1066,21 @@ async function startServer() {
 
             try {
               if (action === 'create') {
-                const { id, type: atomeType, kind, parent, owner, creator, properties } = data;
+                // Support multiple field names for ADOLE v3.0 compatibility
+                const atomeId = data.id || data.atomeId || data.atome_id || uuidv4();
+                const atomeType = data.atomeType || data.atome_type || data.type || 'generic';
+                const parentId = data.parentId || data.parent_id || data.parent;
+                const ownerId = data.userId || data.ownerId || data.owner_id || data.owner;
+                const particles = data.particles || data.properties || data.data || {};
+
                 const result = await db.createAtome({
-                  id: id || uuidv4(),
+                  id: atomeId,
                   type: atomeType,
-                  kind,
-                  parent,
-                  owner,
-                  creator,
-                  properties
+                  kind: data.kind,
+                  parent: parentId,
+                  owner: ownerId,
+                  creator: data.creator,
+                  properties: particles
                 });
 
                 safeSend({
@@ -1084,8 +1090,9 @@ async function startServer() {
                   atome: result
                 });
               } else if (action === 'get') {
-                const { id } = data;
-                const atome = await db.getAtome(id);
+                // Support both: { id } and { atomeId }
+                const atomeId = data.atomeId || data.id;
+                const atome = await db.getAtome(atomeId);
 
                 safeSend({
                   type: 'atome-response',
@@ -1094,8 +1101,39 @@ async function startServer() {
                   atome
                 });
               } else if (action === 'update') {
-                const { id, properties, author } = data;
-                await db.updateAtome(id, properties, author);
+                // Support both formats: 
+                // - Legacy: { id, properties, author }
+                // - ADOLE v3.0: { atomeId, particles, token }
+                const atomeId = data.atomeId || data.id;
+                const particles = data.particles || data.properties;
+                const author = data.author;
+
+                console.log('[WS Update Debug] atomeId:', atomeId);
+                console.log('[WS Update Debug] particles:', JSON.stringify(particles));
+                console.log('[WS Update Debug] data keys:', Object.keys(data));
+
+                if (!atomeId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing atome id'
+                  });
+                  return;
+                }
+
+                // Guard against null/undefined particles
+                if (!particles || typeof particles !== 'object') {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing or invalid particles data'
+                  });
+                  return;
+                }
+
+                await db.updateAtome(atomeId, particles, author);
 
                 safeSend({
                   type: 'atome-response',
@@ -1103,9 +1141,34 @@ async function startServer() {
                   success: true,
                   message: 'Atome updated'
                 });
+              } else if (action === 'alter') {
+                // ADOLE v3.0: partial update of specific particles
+                const atomeId = data.atomeId || data.id;
+                const particles = data.particles || {};
+
+                if (!atomeId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing atome id'
+                  });
+                  return;
+                }
+
+                // Alter uses updateAtome with partial particles
+                await db.updateAtome(atomeId, particles);
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  message: 'Atome altered'
+                });
               } else if (action === 'delete') {
-                const { id } = data;
-                await db.deleteAtome(id);
+                // Support both: { id } and { atomeId }
+                const atomeId = data.atomeId || data.id;
+                await db.deleteAtome(atomeId);
 
                 safeSend({
                   type: 'atome-response',

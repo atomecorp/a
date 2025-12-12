@@ -225,20 +225,40 @@ async fn handle_create(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
+    // Debug: print received message
+    println!(
+        "[Create Debug] Received message: {}",
+        serde_json::to_string_pretty(&message).unwrap_or_default()
+    );
+
+    // Support multiple field names for ID: id, atomeId, atome_id
     let atome_id = message
-        .get("atome_id")
+        .get("id")
+        .or_else(|| message.get("atomeId"))
+        .or_else(|| message.get("atome_id"))
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
+    println!("[Create Debug] Using atome_id: {}", atome_id);
+
+    // Support multiple field names for type: atomeType, atome_type
     let atome_type = message
-        .get("atome_type")
+        .get("atomeType")
+        .or_else(|| message.get("atome_type"))
         .and_then(|v| v.as_str())
         .unwrap_or("generic");
 
-    let parent_id = message.get("parent_id").and_then(|v| v.as_str());
+    // Support multiple field names for parent: parentId, parent_id
+    let parent_id = message
+        .get("parentId")
+        .or_else(|| message.get("parent_id"))
+        .and_then(|v| v.as_str());
+
+    // Support multiple field names for data: particles, data
     let data = message
-        .get("data")
+        .get("particles")
+        .or_else(|| message.get("data"))
         .cloned()
         .unwrap_or(serde_json::json!({}));
     let now = Utc::now().to_rfc3339();
@@ -248,26 +268,32 @@ async fn handle_create(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Insert atome
+    // Insert or replace atome (upsert for sync operations)
     if let Err(e) = db.execute(
-        "INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, created_at, updated_at, sync_status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5, 'pending')",
+        "INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, created_at, updated_at, sync_status)
+         VALUES (?1, ?2, ?3, ?4, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?5), ?5, 'pending')",
         rusqlite::params![&atome_id, atome_type, parent_id, user_id, &now],
     ) {
+        println!("[Create Debug] Insert error: {}", e);
         return error_response(request_id, &e.to_string());
     }
 
-    // Insert particles from data
+    // Insert or replace particles from data
     if let Some(obj) = data.as_object() {
         for (key, value) in obj {
             let value_str = serde_json::to_string(value).unwrap_or_default();
             let _ = db.execute(
-                "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+                "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, updated_at)
                  VALUES (?1, ?2, ?3, ?4)",
                 rusqlite::params![&atome_id, key, &value_str, &now],
             );
         }
     }
+
+    println!(
+        "[Create Debug] Successfully created/updated atome: {}",
+        atome_id
+    );
 
     let atome = AtomeData {
         atome_id: atome_id.clone(),
@@ -439,13 +465,20 @@ async fn handle_update(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    let atome_id = match message.get("atome_id").and_then(|v| v.as_str()) {
+    // Support both camelCase (atomeId) and snake_case (atome_id)
+    let atome_id = match message
+        .get("atomeId")
+        .or_else(|| message.get("atome_id"))
+        .and_then(|v| v.as_str())
+    {
         Some(id) => id,
         None => return error_response(request_id, "Missing atome_id"),
     };
 
+    // Support both camelCase (particles) and snake_case (data)
     let data = message
-        .get("data")
+        .get("particles")
+        .or_else(|| message.get("data"))
         .cloned()
         .unwrap_or(serde_json::json!({}));
     let now = Utc::now().to_rfc3339();
@@ -455,15 +488,19 @@ async fn handle_update(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Verify ownership
+    // Verify atome exists
     let owner: Result<String, _> = db.query_row(
         "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
         rusqlite::params![atome_id],
         |row| row.get(0),
     );
 
+    // Only allow update if user is the owner
+    // user_id is extracted from JWT token in mod.rs, so it's verified
     match owner {
-        Ok(o) if o != user_id => return error_response(request_id, "Access denied"),
+        Ok(o) if o != user_id => {
+            return error_response(request_id, "Access denied: only owner can modify")
+        }
         Err(_) => return error_response(request_id, "Atome not found"),
         _ => {}
     }
@@ -509,7 +546,12 @@ async fn handle_delete(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    let atome_id = match message.get("atome_id").and_then(|v| v.as_str()) {
+    // Support both camelCase and snake_case
+    let atome_id = match message
+        .get("atomeId")
+        .or_else(|| message.get("atome_id"))
+        .and_then(|v| v.as_str())
+    {
         Some(id) => id,
         None => return error_response(request_id, "Missing atome_id"),
     };
@@ -550,7 +592,12 @@ async fn handle_alter(
     request_id: Option<String>,
 ) -> WsResponse {
     // ADOLE alter = update specific particles without replacing the whole data
-    let atome_id = match message.get("atome_id").and_then(|v| v.as_str()) {
+    // Support both camelCase and snake_case
+    let atome_id = match message
+        .get("atomeId")
+        .or_else(|| message.get("atome_id"))
+        .and_then(|v| v.as_str())
+    {
         Some(id) => id,
         None => return error_response(request_id, "Missing atome_id"),
     };

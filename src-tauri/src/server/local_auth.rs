@@ -600,6 +600,18 @@ fn verify_token(secret: &str, token: &str) -> Result<Claims, String> {
     Ok(token_data.claims)
 }
 
+/// Public function to extract user_id from JWT token
+/// Returns the user_id (sub claim) if valid, otherwise returns "anonymous"
+pub fn extract_user_id_from_token(secret: &str, token: Option<&str>) -> String {
+    match token {
+        Some(t) if !t.is_empty() => match verify_token(secret, t) {
+            Ok(claims) => claims.sub,
+            Err(_) => "anonymous".to_string(),
+        },
+        _ => "anonymous".to_string(),
+    }
+}
+
 fn error_response(request_id: Option<String>, error: &str) -> AuthResponse {
     AuthResponse {
         msg_type: "auth-response".into(),

@@ -291,113 +291,6 @@ export function clearToken(key) {
 }
 
 // ============================================
-// HTTP REQUEST FACTORY
-// ============================================
-
-/**
- * Create a request function for a specific backend
- * Silent mode: checks connection before sending requests to avoid console errors
- * @param {string} baseUrl - Backend base URL
- * @param {string} tokenKey - LocalStorage key for auth token
- * @param {Object} options - Additional options
- * @returns {Function} Request function
- */
-export function createRequest(baseUrl, tokenKey, options = {}) {
-    // Determine which backend this is for connection checking
-    const backendType = baseUrl.includes(':3000') ? 'tauri' : 'fastify';
-
-    return async function request(endpoint, reqOptions = {}) {
-        // Silent connection check before making request
-        // Skip check for skipConnectionCheck option (used internally)
-        if (!reqOptions.skipConnectionCheck) {
-            const isOnline = await checkConnection(backendType);
-            if (!isOnline) {
-                return {
-                    ok: false,
-                    success: false,
-                    error: 'Server unreachable',
-                    status: 0,
-                    offline: true
-                };
-            }
-        }
-
-        const url = `${baseUrl}${endpoint}`;
-        const token = getToken(tokenKey);
-        const wsClientId = getToken('squirrel_client_id');
-
-        const headers = {
-            'Content-Type': 'application/json',
-            ...(reqOptions.headers || {}),
-        };
-
-        if (token && !reqOptions.skipAuth) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        // Include WebSocket client ID for deduplication
-        if (wsClientId && options.includeClientId !== false) {
-            headers['X-Client-Id'] = wsClientId;
-        }
-
-        const config = {
-            ...reqOptions,
-            headers,
-        };
-
-        if (reqOptions.body && typeof reqOptions.body === 'object') {
-            config.body = JSON.stringify(reqOptions.body);
-        }
-
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-            const response = await fetch(url, {
-                ...config,
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-
-            let data;
-            try {
-                data = await response.json();
-            } catch {
-                data = { success: response.ok };
-            }
-
-            // Store token if returned
-            if (data.token) {
-                setToken(tokenKey, data.token);
-            }
-
-            return {
-                ok: response.ok,
-                status: response.status,
-                ...data
-            };
-        } catch (error) {
-            // Update connection state on failure
-            const state = _connectionState[backendType];
-            if (state) {
-                state.online = false;
-                state.lastCheck = Date.now();
-                state.failCount++;
-            }
-
-            return {
-                ok: false,
-                success: false,
-                error: error.name === 'AbortError' ? 'Request timeout' : (error.message || 'Network error'),
-                status: 0,
-                offline: true
-            };
-        }
-    };
-}
-
-// ============================================
 // WEBSOCKET ADAPTER FACTORY (ADOLE v3.0)
 // ============================================
 
@@ -745,10 +638,12 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         atome: {
             async create(data) {
                 const token = getToken(tokenKey);
-                // Extract userId from token if needed
                 return ws.send({
                     type: 'atome',
                     action: 'create',
+                    token,
+                    id: data.id,  // Allow specifying ID for sync operations
+                    atomeId: data.id,  // Also send as atomeId for compatibility
                     userId: data.ownerId || 'anonymous',
                     atomeType: data.type || data.kind,
                     parentId: data.parentId || data.parent,
@@ -756,18 +651,20 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 });
             },
             async get(id) {
+                const token = getToken(tokenKey);
                 return ws.send({
                     type: 'atome',
                     action: 'get',
-                    userId: 'anonymous',
+                    token,
                     atomeId: id
                 });
             },
             async list(params = {}) {
+                const token = getToken(tokenKey);
                 return ws.send({
                     type: 'atome',
                     action: 'list',
-                    userId: 'anonymous',
+                    token,
                     atomeType: params.type || params.kind,
                     parentId: params.parentId || params.parent,
                     limit: params.limit,
@@ -775,28 +672,31 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 });
             },
             async alter(id, data) {
+                const token = getToken(tokenKey);
                 return ws.send({
                     type: 'atome',
                     action: 'alter',
-                    userId: 'anonymous',
+                    token,
                     atomeId: id,
                     particles: data
                 });
             },
             async update(id, data) {
+                const token = getToken(tokenKey);
                 return ws.send({
                     type: 'atome',
                     action: 'update',
-                    userId: 'anonymous',
+                    token,
                     atomeId: id,
                     particles: data
                 });
             },
             async delete(id) {
+                const token = getToken(tokenKey);
                 return ws.send({
                     type: 'atome',
                     action: 'delete',
-                    userId: 'anonymous',
+                    token,
                     atomeId: id
                 });
             },
@@ -837,199 +737,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
 }
 
 // ============================================
-// HTTP ADAPTER FACTORY (for Fastify)
-// ============================================
-
-/**
- * Create a complete backend adapter
- * @param {Object} config - Adapter configuration
- * @param {string} config.baseUrl - Backend base URL
- * @param {string} config.tokenKey - LocalStorage key for auth token
- * @param {Object} config.authEndpoints - Auth endpoint mappings
- * @param {Object} config.syncEndpoints - Sync endpoint mappings (optional)
- * @returns {Object} Complete adapter
- */
-export function createAdapter(config) {
-    const { baseUrl, tokenKey, authEndpoints = {}, syncEndpoints = {} } = config;
-    const request = createRequest(baseUrl, tokenKey);
-
-    // Default auth endpoints (can be overridden)
-    const defaultAuthEndpoints = {
-        register: '/api/auth/register',
-        login: '/api/auth/login',
-        me: '/api/auth/me',
-        changePassword: '/api/auth/change-password',
-        deleteAccount: '/api/auth/delete-account',
-        refresh: '/api/auth/refresh'
-    };
-
-    const authPaths = { ...defaultAuthEndpoints, ...authEndpoints };
-
-    return {
-        baseUrl,
-        tokenKey,
-
-        isAvailable: () => checkServerAvailable(baseUrl),
-        getToken: () => getToken(tokenKey),
-        setToken: (token) => setToken(tokenKey, token),
-        clearToken: () => clearToken(tokenKey),
-        request,
-
-        auth: {
-            async register(data) {
-                return request(authPaths.register, {
-                    method: 'POST',
-                    body: data,
-                    skipAuth: true
-                });
-            },
-            async login(data) {
-                return request(authPaths.login, {
-                    method: 'POST',
-                    body: data,
-                    skipAuth: true
-                });
-            },
-            async logout() {
-                clearToken(tokenKey);
-                return { ok: true, success: true };
-            },
-            async me() {
-                return request(authPaths.me, { method: 'GET' });
-            },
-            async changePassword(data) {
-                return request(authPaths.changePassword, {
-                    method: 'POST',
-                    body: data
-                });
-            },
-            async deleteAccount(data) {
-                return request(authPaths.deleteAccount, {
-                    method: 'DELETE',
-                    body: data
-                });
-            },
-            async refreshToken() {
-                return request(authPaths.refresh, { method: 'POST' });
-            }
-        },
-
-        atome: {
-            async create(data) {
-                // Transform to ADOLE format: parent (not parentId), no ownerId
-                const serverData = { ...data };
-                if ('parentId' in serverData) {
-                    serverData.parent = serverData.parentId;
-                    delete serverData.parentId;
-                }
-                delete serverData.ownerId;
-                delete serverData.owner;  // Server determines owner from token
-
-                return request('/api/atome/create', {
-                    method: 'POST',
-                    body: serverData
-                });
-            },
-            async get(id) {
-                return request(`/api/atome/${id}`, { method: 'GET' });
-            },
-            async list(params = {}) {
-                const query = new URLSearchParams();
-                // Support both parent and parentId for backward compatibility
-                ['kind', 'type', 'page', 'limit', 'sortBy', 'sortOrder', 'parent'].forEach(key => {
-                    if (params[key]) query.append(key, params[key]);
-                });
-                // Also check for parentId and map to parent
-                if (params.parentId) query.append('parent', params.parentId);
-                const qs = query.toString();
-                return request(`/api/atome/list${qs ? '?' + qs : ''}`, { method: 'GET' });
-            },
-            async alter(id, data) {
-                return request(`/api/atome/${id}/alter`, {
-                    method: 'POST',
-                    body: data
-                });
-            },
-            async update(id, data) {
-                return request(`/api/atome/${id}`, {
-                    method: 'PUT',
-                    body: data
-                });
-            },
-            async rename(id, data) {
-                return request(`/api/atome/${id}/rename`, {
-                    method: 'POST',
-                    body: data
-                });
-            },
-            async delete(id, data = {}) {
-                return request(`/api/atome/${id}`, {
-                    method: 'DELETE',
-                    body: data
-                });
-            },
-            async history(id, params = {}) {
-                const query = new URLSearchParams();
-                if (params.page) query.append('page', params.page);
-                if (params.limit) query.append('limit', params.limit);
-                const qs = query.toString();
-                return request(`/api/atome/${id}/history${qs ? '?' + qs : ''}`, { method: 'GET' });
-            },
-            async restore(id, data) {
-                return request(`/api/atome/${id}/restore`, {
-                    method: 'POST',
-                    body: data
-                });
-            }
-        },
-
-        userData: {
-            async deleteAll(data) {
-                return request('/api/user-data/delete-all', {
-                    method: 'DELETE',
-                    body: data
-                });
-            },
-            async export(params = {}) {
-                const query = new URLSearchParams();
-                if (params.format) query.append('format', params.format);
-                if (params.kinds) query.append('kinds', params.kinds.join(','));
-                const qs = query.toString();
-                return request(`/api/user-data/export${qs ? '?' + qs : ''}`, { method: 'GET' });
-            }
-        },
-
-        sync: {
-            async getPending() {
-                const endpoint = syncEndpoints.getPending || '/api/atome/sync/pull';
-                return request(endpoint, { method: 'GET' });
-            },
-            async push(data) {
-                const endpoint = syncEndpoints.push || '/api/sync/push';
-                return request(endpoint, {
-                    method: 'POST',
-                    body: data
-                });
-            },
-            async pull(params = {}) {
-                const endpoint = syncEndpoints.pull || '/api/sync/pull';
-                const query = new URLSearchParams();
-                if (params.since) query.append('since', params.since);
-                const qs = query.toString();
-                return request(`${endpoint}${qs ? '?' + qs : ''}`, { method: 'GET' });
-            },
-            async ack(data) {
-                const endpoint = syncEndpoints.ack || '/api/atome/sync/ack';
-                return request(endpoint, {
-                    method: 'POST',
-                    body: data
-                });
-            }
-        }
-    };
-}
-
-// ============================================
 // PRE-BUILT ADAPTERS
 // ============================================
 
@@ -1054,8 +761,6 @@ export default {
     getToken,
     setToken,
     clearToken,
-    createRequest,
-    createAdapter,
     createWebSocketAdapter,
     TauriAdapter,
     FastifyAdapter

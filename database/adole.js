@@ -89,11 +89,15 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     const ownerId = owner;
     const creatorId = creator || owner;
 
+    console.log('[createAtome Debug] Creating with id:', atomeId, 'type:', type, 'owner:', ownerId);
+
+    // Use INSERT OR REPLACE for sync operations (upsert)
     await query('run', `
-        INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, 
+        INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, 
                            sync_status, created_source, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'local', 'fastify', ?, ?)
-    `, [atomeId, type, parent || null, ownerId, creatorId, now, now]);
+        VALUES (?, ?, ?, ?, ?, 'local', 'fastify', 
+                COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?), ?)
+    `, [atomeId, type, parent || null, ownerId, creatorId, atomeId, now, now]);
 
     // Store kind as a particle if provided
     if (kind) {
@@ -357,6 +361,11 @@ export async function setParticle(atomeId, key, value, author = null) {
  * Set multiple particles at once
  */
 export async function setParticles(atomeId, particles, author = null) {
+    // Guard against null/undefined particles
+    if (!particles || typeof particles !== 'object') {
+        console.warn('[setParticles] Invalid particles:', particles, 'for atome:', atomeId);
+        return;
+    }
     for (const [key, value] of Object.entries(particles)) {
         await setParticle(atomeId, key, value, author);
     }

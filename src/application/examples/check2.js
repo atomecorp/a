@@ -607,6 +607,409 @@ async function list_tables() {
   return results;
 }
 
+/**
+ * List all unsynced atomes between Tauri (local) and Fastify (remote)
+ * Compares both presence and content (particles) to detect modifications
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Sync status with categorized atomes
+ */
+async function list_unsynced_atomes(callback) {
+  console.log('[list_unsynced_atomes] Comparing atomes between backends...');
+
+  const result = {
+    onlyOnTauri: [],      // Atomes to push to server
+    onlyOnFastify: [],    // Atomes to pull from server
+    modifiedOnTauri: [],  // Local modifications not synced
+    modifiedOnFastify: [], // Remote modifications not synced
+    conflicts: [],        // Modified on both sides (need resolution)
+    synced: [],           // Identical on both sides
+    error: null
+  };
+
+  // Known atome types to query (server requires a type when no owner specified)
+  const atomeTypes = ['user', 'atome', 'shape', 'color', 'text', 'image', 'audio', 'video', 'code', 'data'];
+
+  let tauriAtomes = [];
+  let fastifyAtomes = [];
+
+  // Helper to fetch all atomes of all types from an adapter
+  const fetchAllAtomes = async (adapter, name) => {
+    const allAtomes = [];
+    for (const type of atomeTypes) {
+      try {
+        const result = await adapter.atome.list({ type });
+        if (result.ok || result.success) {
+          const atomes = result.atomes || result.data || [];
+          allAtomes.push(...atomes);
+        }
+      } catch (e) {
+        // Ignore errors for individual types
+      }
+    }
+    return allAtomes;
+  };
+
+  // Fetch all atomes from Tauri
+  try {
+    tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri');
+    console.log('[Tauri/SQLite] ✅ Fetched', tauriAtomes.length, 'atomes');
+  } catch (e) {
+    result.error = 'Tauri connection failed: ' + e.message;
+    console.error('[list_unsynced_atomes] ERROR:', result.error);
+    if (typeof callback === 'function') callback(result);
+    return result;
+  }
+
+  // Fetch all atomes from Fastify
+  try {
+    fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify');
+    console.log('[Fastify/LibSQL] ✅ Fetched', fastifyAtomes.length, 'atomes');
+  } catch (e) {
+    // If Fastify is offline, all Tauri atomes are "unsynced"
+    result.onlyOnTauri = tauriAtomes;
+    result.error = 'Fastify connection failed - all local atomes considered unsynced';
+    console.warn('[list_unsynced_atomes] Fastify offline, all local atomes unsynced');
+    if (typeof callback === 'function') callback(result);
+    return result;
+  }
+
+  // If Fastify returned nothing but Tauri has atomes, check if Fastify is just unreachable
+  if (fastifyAtomes.length === 0 && tauriAtomes.length > 0) {
+    // Could be offline, mark all as unsynced
+    console.warn('[list_unsynced_atomes] Fastify has no atomes, may be offline');
+  }
+
+  // Create lookup maps by atome_id
+  const tauriMap = new Map();
+  const fastifyMap = new Map();
+
+  tauriAtomes.forEach(atome => {
+    const id = atome.atome_id || atome.id;
+    if (id) tauriMap.set(id, atome);
+  });
+
+  fastifyAtomes.forEach(atome => {
+    const id = atome.atome_id || atome.id;
+    if (id) fastifyMap.set(id, atome);
+  });
+
+  // Helper function to extract particles from an atome (handles inline format)
+  const extractParticlesForComparison = (atome) => {
+    // If data field exists and has content, use it
+    if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
+      return atome.data;
+    }
+    // If particles field exists and has content, use it
+    if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
+      return atome.particles;
+    }
+
+    // Otherwise, extract inline particles (all fields except metadata)
+    const metadataFields = [
+      'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
+      'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
+      'created_source', 'id', 'type', 'data', 'particles'
+    ];
+
+    const inlineParticles = {};
+    for (const [key, value] of Object.entries(atome)) {
+      if (!metadataFields.includes(key) && value !== null && value !== undefined) {
+        inlineParticles[key] = value;
+      }
+    }
+    return inlineParticles;
+  };
+
+  // Helper function to compare atome content
+  const compareAtomes = (atome1, atome2) => {
+    // First, compare particles content (the actual data)
+    const particles1 = extractParticlesForComparison(atome1);
+    const particles2 = extractParticlesForComparison(atome2);
+
+    // Sort keys for consistent comparison
+    const sortedP1 = JSON.stringify(particles1, Object.keys(particles1).sort());
+    const sortedP2 = JSON.stringify(particles2, Object.keys(particles2).sort());
+
+    // If content is identical, they are synced
+    if (sortedP1 === sortedP2) {
+      return 'equal';
+    }
+
+    // Content differs - determine which is newer by updated_at
+    const updated1 = atome1.updated_at || atome1.updatedAt;
+    const updated2 = atome2.updated_at || atome2.updatedAt;
+
+    if (updated1 && updated2) {
+      const date1 = new Date(updated1).getTime();
+      const date2 = new Date(updated2).getTime();
+      if (date1 > date2) return 'tauri_newer';
+      if (date2 > date1) return 'fastify_newer';
+    }
+
+    // If timestamps are equal or missing but content differs, it's a conflict
+    return 'conflict';
+  };
+
+  // Compare atomes
+  const allIds = new Set([...tauriMap.keys(), ...fastifyMap.keys()]);
+
+  for (const id of allIds) {
+    const tauriAtome = tauriMap.get(id);
+    const fastifyAtome = fastifyMap.get(id);
+
+    if (tauriAtome && !fastifyAtome) {
+      // Only on Tauri (local) - needs to be pushed
+      result.onlyOnTauri.push(tauriAtome);
+    } else if (!tauriAtome && fastifyAtome) {
+      // Only on Fastify (remote) - needs to be pulled
+      result.onlyOnFastify.push(fastifyAtome);
+    } else if (tauriAtome && fastifyAtome) {
+      // Exists on both - compare content
+      const comparison = compareAtomes(tauriAtome, fastifyAtome);
+
+      switch (comparison) {
+        case 'equal':
+          result.synced.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+          break;
+        case 'tauri_newer':
+          result.modifiedOnTauri.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+          break;
+        case 'fastify_newer':
+          result.modifiedOnFastify.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+          break;
+        case 'conflict':
+          result.conflicts.push({ id, tauri: tauriAtome, fastify: fastifyAtome });
+          break;
+      }
+    }
+  }
+
+  // Log summary
+  console.log('[list_unsynced_atomes] Summary:');
+  console.log('  - Only on Tauri (to push):', result.onlyOnTauri.length);
+  console.log('  - Only on Fastify (to pull):', result.onlyOnFastify.length);
+  console.log('  - Modified on Tauri:', result.modifiedOnTauri.length);
+  console.log('  - Modified on Fastify:', result.modifiedOnFastify.length);
+  console.log('  - Conflicts:', result.conflicts.length);
+  console.log('  - Synced:', result.synced.length);
+
+  if (typeof callback === 'function') {
+    callback(result);
+  }
+
+  return result;
+}
+
+/**
+ * Synchronize atomes between Tauri (local) and Fastify (remote)
+ * - Pushes local-only atomes to Fastify
+ * - Pulls remote-only atomes to Tauri
+ * - Updates based on most recent modification
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Sync results with success/failure counts
+ */
+async function sync_atomes(callback) {
+  console.log('[sync_atomes] Starting synchronization...');
+
+  const result = {
+    pushed: { success: 0, failed: 0, errors: [] },
+    pulled: { success: 0, failed: 0, errors: [] },
+    updated: { success: 0, failed: 0, errors: [] },
+    conflicts: { count: 0, items: [] },
+    alreadySynced: 0,
+    error: null
+  };
+
+  // First, get the list of unsynced atomes
+  let unsyncedResult;
+  try {
+    unsyncedResult = await list_unsynced_atomes();
+    if (unsyncedResult.error) {
+      result.error = unsyncedResult.error;
+      console.error('[sync_atomes] ERROR:', result.error);
+      if (typeof callback === 'function') callback(result);
+      return result;
+    }
+  } catch (e) {
+    result.error = 'Failed to list unsynced atomes: ' + e.message;
+    console.error('[sync_atomes] ERROR:', result.error);
+    if (typeof callback === 'function') callback(result);
+    return result;
+  }
+
+  result.alreadySynced = unsyncedResult.synced.length;
+
+  // 1. Push local-only atomes to Fastify
+  console.log('[sync_atomes] Pushing', unsyncedResult.onlyOnTauri.length, 'atomes to Fastify...');
+  for (const atome of unsyncedResult.onlyOnTauri) {
+    try {
+      const createResult = await FastifyAdapter.atome.create({
+        id: atome.atome_id,  // Preserve original ID for sync
+        type: atome.atome_type,
+        ownerId: atome.owner_id,
+        parentId: atome.parent_id,
+        particles: atome.data || atome.particles || {}
+      });
+
+      if (createResult.ok || createResult.success) {
+        result.pushed.success++;
+        console.log('[sync_atomes] ✅ Pushed to Fastify:', atome.atome_id);
+      } else {
+        result.pushed.failed++;
+        result.pushed.errors.push({ id: atome.atome_id, error: createResult.error });
+        console.error('[sync_atomes] ❌ Failed to push:', atome.atome_id, createResult.error);
+      }
+    } catch (e) {
+      result.pushed.failed++;
+      result.pushed.errors.push({ id: atome.atome_id, error: e.message });
+      console.error('[sync_atomes] ❌ Exception pushing:', atome.atome_id, e.message);
+    }
+  }
+
+  // 2. Pull remote-only atomes to Tauri
+  console.log('[sync_atomes] Pulling', unsyncedResult.onlyOnFastify.length, 'atomes to Tauri...');
+  for (const atome of unsyncedResult.onlyOnFastify) {
+    try {
+      const createResult = await TauriAdapter.atome.create({
+        id: atome.atome_id,  // Preserve original ID for sync
+        type: atome.atome_type,
+        ownerId: atome.owner_id,
+        parentId: atome.parent_id,
+        particles: atome.data || atome.particles || {}
+      });
+
+      if (createResult.ok || createResult.success) {
+        result.pulled.success++;
+        console.log('[sync_atomes] ✅ Pulled to Tauri:', atome.atome_id);
+      } else {
+        result.pulled.failed++;
+        result.pulled.errors.push({ id: atome.atome_id, error: createResult.error });
+        console.error('[sync_atomes] ❌ Failed to pull:', atome.atome_id, createResult.error);
+      }
+    } catch (e) {
+      result.pulled.failed++;
+      result.pulled.errors.push({ id: atome.atome_id, error: e.message });
+      console.error('[sync_atomes] ❌ Exception pulling:', atome.atome_id, e.message);
+    }
+  }
+
+  // Helper function to extract particles from an atome object
+  // Handles different formats: { data: {...} }, { particles: {...} }, or inline { phone: "...", username: "..." }
+  const extractParticles = (atome) => {
+    // If data or particles field exists, use it
+    if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
+      return atome.data;
+    }
+    if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
+      return atome.particles;
+    }
+
+    // Otherwise, extract inline particles (all fields except metadata)
+    const metadataFields = [
+      'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
+      'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
+      'created_source', 'id', 'type', 'data', 'particles'
+    ];
+
+    const inlineParticles = {};
+    for (const [key, value] of Object.entries(atome)) {
+      if (!metadataFields.includes(key) && value !== null && value !== undefined) {
+        inlineParticles[key] = value;
+      }
+    }
+    return inlineParticles;
+  };
+
+  // 3. Update Fastify with newer Tauri modifications
+  console.log('[sync_atomes] Updating Fastify with', unsyncedResult.modifiedOnTauri.length, 'local changes...');
+  for (const item of unsyncedResult.modifiedOnTauri) {
+    try {
+      // Get the particles data using helper function
+      const particles = extractParticles(item.tauri);
+
+      // Log for debugging
+      console.log('[sync_atomes] Updating Fastify atome:', item.id, 'with particles:', Object.keys(particles));
+
+      // Skip if no particles to update
+      if (!particles || Object.keys(particles).length === 0) {
+        console.warn('[sync_atomes] ⚠️ No particles to update for:', item.id);
+        result.updated.success++; // Consider it synced since there's nothing to update
+        continue;
+      }
+
+      const updateResult = await FastifyAdapter.atome.update(item.id, particles);
+
+      if (updateResult.ok || updateResult.success) {
+        result.updated.success++;
+        console.log('[sync_atomes] ✅ Updated Fastify:', item.id);
+      } else {
+        result.updated.failed++;
+        result.updated.errors.push({ id: item.id, error: updateResult.error });
+        console.error('[sync_atomes] ❌ Failed to update Fastify:', item.id, updateResult.error);
+      }
+    } catch (e) {
+      result.updated.failed++;
+      result.updated.errors.push({ id: item.id, error: e.message });
+      console.error('[sync_atomes] ❌ Exception updating Fastify:', item.id, e.message);
+    }
+  }
+
+  // 4. Update Tauri with newer Fastify modifications
+  console.log('[sync_atomes] Updating Tauri with', unsyncedResult.modifiedOnFastify.length, 'remote changes...');
+  for (const item of unsyncedResult.modifiedOnFastify) {
+    try {
+      // Get the particles data using helper function
+      const particles = extractParticles(item.fastify);
+
+      // Log for debugging
+      console.log('[sync_atomes] Updating Tauri atome:', item.id, 'with particles:', Object.keys(particles));
+
+      // Skip if no particles to update
+      if (!particles || Object.keys(particles).length === 0) {
+        console.warn('[sync_atomes] ⚠️ No particles to update for:', item.id);
+        result.updated.success++; // Consider it synced since there's nothing to update
+        continue;
+      }
+
+      const updateResult = await TauriAdapter.atome.update(item.id, particles);
+
+      if (updateResult.ok || updateResult.success) {
+        result.updated.success++;
+        console.log('[sync_atomes] ✅ Updated Tauri:', item.id);
+      } else {
+        result.updated.failed++;
+        result.updated.errors.push({ id: item.id, error: updateResult.error });
+        console.error('[sync_atomes] ❌ Failed to update Tauri:', item.id, updateResult.error);
+      }
+    } catch (e) {
+      result.updated.failed++;
+      result.updated.errors.push({ id: item.id, error: e.message });
+      console.error('[sync_atomes] ❌ Exception updating Tauri:', item.id, e.message);
+    }
+  }
+
+  // 5. Report conflicts (don't auto-resolve, just report)
+  result.conflicts.count = unsyncedResult.conflicts.length;
+  result.conflicts.items = unsyncedResult.conflicts.map(c => c.id);
+  if (result.conflicts.count > 0) {
+    console.warn('[sync_atomes] ⚠️', result.conflicts.count, 'conflicts need manual resolution:', result.conflicts.items);
+  }
+
+  // Log summary
+  console.log('[sync_atomes] ========== SYNC COMPLETE ==========');
+  console.log('  Pushed to Fastify:', result.pushed.success, 'success,', result.pushed.failed, 'failed');
+  console.log('  Pulled to Tauri:', result.pulled.success, 'success,', result.pulled.failed, 'failed');
+  console.log('  Updated:', result.updated.success, 'success,', result.updated.failed, 'failed');
+  console.log('  Conflicts:', result.conflicts.count);
+  console.log('  Already synced:', result.alreadySynced);
+
+  if (typeof callback === 'function') {
+    callback(result);
+  }
+
+  return result;
+}
+
 // ============================================
 // UI BUTTONS & tests
 // ============================================
@@ -800,6 +1203,43 @@ $('span', {
     console.log(list_tables());
   },
 });
+
+$('span', {
+  id: 'list_unsynced',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'list unsynced',
+  onClick: () => {
+    list_unsynced_atomes((result) => {
+      puts('Unsynced atomes: ' + JSON.stringify(result));
+    });
+  },
+});
+
+$('span', {
+  id: 'sync_atomes',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'sync atomes',
+  onClick: () => {
+    sync_atomes((result) => {
+      puts('sync atomes: ' + JSON.stringify(result));
+    });
+  },
+});
+
 
 
 
