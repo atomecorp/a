@@ -728,6 +728,41 @@ async function startServer() {
             return;
           }
 
+          // Handle debug requests (ADOLE v3.0)
+          if (data.type === 'debug') {
+            const action = data.action || '';
+            const requestId = data.requestId;
+
+            if (action === 'list-tables') {
+              try {
+                const db = await getDatabase();
+                const result = await db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+                const tables = result.rows.map(row => row.name);
+                safeSend({
+                  type: 'debug-response',
+                  requestId,
+                  success: true,
+                  tables
+                });
+              } catch (error) {
+                safeSend({
+                  type: 'debug-response',
+                  requestId,
+                  success: false,
+                  error: error.message
+                });
+              }
+            } else {
+              safeSend({
+                type: 'debug-response',
+                requestId,
+                success: false,
+                error: `Unknown debug action: ${action}`
+              });
+            }
+            return;
+          }
+
           // Handle API requests
           if (data.type === 'api-request') {
             const { id, method, path, body, headers } = data;

@@ -867,6 +867,65 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
+                // Route to debug handler
+                if msg_type == "debug" {
+                    let action = data.get("action").and_then(|v| v.as_str()).unwrap_or("");
+                    let request_id = data
+                        .get("requestId")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
+
+                    if action == "list-tables" {
+                        let response = if let Some(ref atome_state) = state.atome_state {
+                            // Collect tables in a sync block, then drop the guard before await
+                            let tables_result: Result<Vec<String>, String> = (|| {
+                                let db = atome_state.db.lock().map_err(|e| e.to_string())?;
+                                let mut stmt = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                                    .map_err(|e| e.to_string())?;
+                                let tables: Vec<String> = stmt
+                                    .query_map([], |row| row.get(0))
+                                    .map_err(|e| e.to_string())?
+                                    .filter_map(|r| r.ok())
+                                    .collect();
+                                Ok(tables)
+                            })(
+                            );
+
+                            match tables_result {
+                                Ok(tables) => json!({
+                                    "type": "debug-response",
+                                    "requestId": request_id,
+                                    "success": true,
+                                    "tables": tables
+                                }),
+                                Err(e) => json!({
+                                    "type": "debug-response",
+                                    "requestId": request_id,
+                                    "success": false,
+                                    "error": e
+                                }),
+                            }
+                        } else {
+                            json!({
+                                "type": "debug-response",
+                                "requestId": request_id,
+                                "success": false,
+                                "error": "Database not initialized"
+                            })
+                        };
+                        let _ = socket.send(Message::Text(response.to_string())).await;
+                    } else {
+                        let response = json!({
+                            "type": "debug-response",
+                            "requestId": request_id,
+                            "success": false,
+                            "error": format!("Unknown debug action: {}", action)
+                        });
+                        let _ = socket.send(Message::Text(response.to_string())).await;
+                    }
+                    continue;
+                }
+
                 // Handle legacy API requests (for backward compatibility)
                 if msg_type == "api-request" {
                     let id = data.get("id").and_then(|v| v.as_str()).unwrap_or("");

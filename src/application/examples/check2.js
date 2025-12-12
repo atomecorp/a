@@ -129,43 +129,118 @@ async function user_list() {
  * List all tables from both databases via WebSocket
  */
 async function list_tables() {
-  console.log('[list_tables] Fetching tables...');
+  console.log('[list_tables] Fetching tables via WebSocket...');
 
   const results = {
     tauri: { database: 'Tauri/SQLite', tables: [], error: null },
     fastify: { database: 'Fastify/LibSQL', tables: [], error: null }
   };
 
-  // Tauri: The debug/tables endpoint does not exist in WebSocket-only mode
-  // This is expected behavior after ADOLE v3.0 migration
-  console.error('[Tauri/SQLite] ERROR: The endpoint /api/debug/tables does not exist.');
-  console.error('[Tauri/SQLite] REASON: Tauri/Axum server has been migrated to WebSocket-only architecture (ADOLE v3.0).');
-  console.error('[Tauri/SQLite] SOLUTION: To list tables, you need to either:');
-  console.error('  1. Add a WebSocket handler for "debug" messages in local_atome.rs');
-  console.error('  2. Or query the database directly via SQLite tools');
-  console.error('  3. Or add an HTTP route in mod.rs for /api/debug/tables');
-  results.tauri.error = 'Endpoint not available - WebSocket-only mode (ADOLE v3.0)';
-
-  // Fastify: Try HTTP debug endpoint
+  // Tauri: Use WebSocket debug handler
   try {
-    const response = await fetch(`${CONFIG.FASTIFY_BASE_URL}/api/adole/debug/tables`);
-    if (response.ok) {
-      const data = await response.json();
-      results.fastify.tables = data.tables || [];
-      console.log('[Fastify/LibSQL] Tables:', results.fastify.tables);
+    // Get the WebSocket connection from TauriAdapter
+    const tauriResult = await new Promise((resolve) => {
+      // Create WebSocket connection to Tauri
+      const ws = new WebSocket('ws://127.0.0.1:3000/ws/api');
+      const requestId = `debug_${Date.now()}`;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'debug',
+          action: 'list-tables',
+          requestId
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.requestId === requestId) {
+            ws.close();
+            resolve(data);
+          }
+        } catch (e) {
+          resolve({ success: false, error: e.message });
+        }
+      };
+
+      ws.onerror = (e) => {
+        resolve({ success: false, error: 'WebSocket connection failed' });
+      };
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        ws.close();
+        resolve({ success: false, error: 'Request timeout' });
+      }, 5000);
+    });
+
+    if (tauriResult.success) {
+      results.tauri.tables = tauriResult.tables || [];
+      console.log('[Tauri/SQLite] ✅ Tables:', results.tauri.tables);
     } else {
-      const status = response.status;
-      const statusText = response.statusText;
-      console.error(`[Fastify/LibSQL] ERROR: HTTP ${status} ${statusText}`);
-      console.error(`[Fastify/LibSQL] REASON: The endpoint /api/adole/debug/tables returned an error.`);
-      console.error(`[Fastify/LibSQL] SOLUTION: Check if the debug route is registered in atomeRoutes.orm.js`);
-      results.fastify.error = `HTTP ${status} ${statusText}`;
+      results.tauri.error = tauriResult.error;
+      console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
+      console.error('[Tauri/SQLite] REASON: WebSocket debug request failed.');
+      console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
     }
   } catch (e) {
-    console.error('[Fastify/LibSQL] ERROR:', e.message);
-    console.error('[Fastify/LibSQL] REASON: Network error or server not reachable.');
-    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on port 3001');
+    results.tauri.error = e.message;
+    console.error('[Tauri/SQLite] ERROR:', e.message);
+    console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
+    console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
+  }
+
+  // Fastify: Use WebSocket debug handler
+  try {
+    const fastifyResult = await new Promise((resolve) => {
+      const ws = new WebSocket('ws://127.0.0.1:3001/ws/api');
+      const requestId = `debug_${Date.now()}`;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'debug',
+          action: 'list-tables',
+          requestId
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.requestId === requestId) {
+            ws.close();
+            resolve(data);
+          }
+        } catch (e) {
+          resolve({ success: false, error: e.message });
+        }
+      };
+
+      ws.onerror = (e) => {
+        resolve({ success: false, error: 'WebSocket connection failed' });
+      };
+
+      setTimeout(() => {
+        ws.close();
+        resolve({ success: false, error: 'Request timeout' });
+      }, 5000);
+    });
+
+    if (fastifyResult.success) {
+      results.fastify.tables = fastifyResult.tables || [];
+      console.log('[Fastify/LibSQL] ✅ Tables:', results.fastify.tables);
+    } else {
+      results.fastify.error = fastifyResult.error;
+      console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
+      console.error('[Fastify/LibSQL] REASON: WebSocket debug request failed.');
+      console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
+    }
+  } catch (e) {
     results.fastify.error = e.message;
+    console.error('[Fastify/LibSQL] ERROR:', e.message);
+    console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
+    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
   }
 
   return results;
