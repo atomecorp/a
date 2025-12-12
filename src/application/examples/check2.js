@@ -586,7 +586,9 @@ $('span', {
     const user_phone = '11111111'
     const user_name = 'jeezs'
 
-    create_user(user_phone, '11111111', user_name);
+    create_user(user_phone, '11111111', user_name, (results) => {
+      puts('user created: ' + user_name + 'user phone created: ' + user_phone);
+    });
   },
 });
 
