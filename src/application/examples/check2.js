@@ -185,9 +185,75 @@ async function log_user(phone, password, username, callback) {
   return results;
 }
 
-// ...existing code...
+/**
+ * Get the currently logged in user
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<{logged: boolean, user: Object|null, source: string}>}
+ */
+async function current_user(callback) {
+  console.log('[current_user] Checking current user via WebSocket...');
 
+  const result = {
+    logged: false,
+    user: null,
+    source: null
+  };
 
+  // Try Tauri first
+  try {
+    const tauriResult = await TauriAdapter.auth.me();
+    if (tauriResult.ok || tauriResult.success) {
+      if (tauriResult.user) {
+        console.log('[Tauri/SQLite] ✅ Current user:', tauriResult.user);
+        result.logged = true;
+        result.user = tauriResult.user;
+        result.source = 'tauri';
+        grab('logged_user').textContent = 'user logged: ' + (tauriResult.user.username || tauriResult.user.phone);
+
+        if (typeof callback === 'function') {
+          callback(result);
+        }
+        return result;
+      }
+    }
+  } catch (e) {
+    console.error('[Tauri/SQLite] Current user check failed:', e.message);
+  }
+
+  // Try Fastify if Tauri didn't have a user
+  try {
+    const fastifyResult = await FastifyAdapter.auth.me();
+    if (fastifyResult.ok || fastifyResult.success) {
+      if (fastifyResult.user) {
+        console.log('[Fastify/LibSQL] ✅ Current user:', fastifyResult.user);
+        result.logged = true;
+        result.user = fastifyResult.user;
+        result.source = 'fastify';
+        grab('logged_user').textContent = 'user logged: ' + (fastifyResult.user.username || fastifyResult.user.phone);
+
+        if (typeof callback === 'function') {
+          callback(result);
+        }
+        return result;
+      }
+    }
+  } catch (e) {
+    // Silent if server unreachable
+    if (!e.message?.includes('unreachable')) {
+      console.error('[Fastify/LibSQL] Current user check failed:', e.message);
+    }
+  }
+
+  // No user logged in
+  console.log('[current_user] No user logged in');
+  grab('logged_user').textContent = 'no user logged';
+
+  if (typeof callback === 'function') {
+    callback(result);
+  }
+
+  return result;
+}
 
 async function unlog_user(callback = null) {
   puts('Logging out user...');
@@ -549,13 +615,13 @@ async function list_tables() {
 
 //todo : do not log user when creating user
 // view logged user
-//callback on every function
+
 
 
 $('span', {
   id: 'clear_console',
   css: {
-    backgroundColor: '#00f',
+    backgroundColor: 'rgba(247, 0, 255, 1)',
     marginLeft: '0',
     padding: '10px',
     color: 'white',
@@ -566,6 +632,45 @@ $('span', {
   onClick: () => {
     puts('Clearing console...');
     console.clear();
+  },
+});
+$('span', {
+  id: 'logged_user',
+  css: {
+    backgroundColor: 'rgba(0, 255, 98, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'black',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'no user logged',
+
+});
+
+
+$('span', {
+  id: 'current_user',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'current user',
+  onClick: () => {
+    current_user((result) => {
+      if (result.logged && result.user) {
+        const user_found = 'user logged: ' + result.user.phone + ':' + result.user.username;
+        puts(user_found);
+        grab('logged_user').textContent = user_found;
+      } else {
+        puts('no user logged');
+        grab('logged_user').textContent = 'no user logged';
+      }
+    });
   },
 });
 
@@ -587,7 +692,8 @@ $('span', {
     const user_name = 'jeezs'
 
     create_user(user_phone, '11111111', user_name, (results) => {
-      puts('user created: ' + user_name + 'user phone created: ' + user_phone);
+      grab('logged_user').textContent = 'user logged: ' + user_name;
+      // puts('user created: ' + user_name + 'user phone created: ' + user_phone);
     });
   },
 });
