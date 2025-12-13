@@ -1017,6 +1017,20 @@ async function sync_atomes(callback) {
 
 /// input box below
 
+
+
+
+current_user((result) => {
+  if (result.logged && result.user) {
+    const user_found = result.user.username;
+    puts(user_found);
+    grab('logged_user').textContent = user_found;
+  } else {
+    puts('no user logged');
+    grab('logged_user').textContent = 'no user logged';
+  }
+});
+
 const phone_pass = '11111111';
 const username = 'jeezs';
 
@@ -1032,7 +1046,7 @@ $('input', {
     padding: '8px',
     borderRadius: '4px',
     border: '1px solid #ccc',
-    width: '200px'
+    width: '100px'
   }
 });
 
@@ -1048,7 +1062,7 @@ $('input', {
     padding: '8px',
     borderRadius: '4px',
     border: '1px solid #ccc',
-    width: '200px'
+    width: '100px'
   }
 });
 $('span', {
@@ -1344,12 +1358,162 @@ $('span', {
   },
 });
 
+$('br', {});
+const atome_type = 'shape';
+const atome_color = 'blue';
+const atome_project_name = 'my project';
 
+$('input', {
+  id: 'atome_project_name_input',
+  attrs: {
+    type: 'text',
+    placeholder: 'Atome Type',
+    value: atome_project_name
+  },
+  css: {
+    margin: '10px',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    width: '100px'
+  }
+});
+
+
+
+$('input', {
+  id: 'atome_type_input',
+  attrs: {
+    type: 'text',
+    placeholder: 'Atome Type',
+    value: atome_type
+  },
+  css: {
+    margin: '10px',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    width: '100px'
+  }
+});
+
+
+$('input', {
+  id: 'atome_color_input',
+  attrs: {
+    type: 'text',
+    placeholder: 'Atome Color',
+    value: atome_color
+  },
+  css: {
+    margin: '10px',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    width: '100px'
+  }
+});
+$('br', {});
+
+
+
+$('span', {
+  id: 'create_project',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'create project',
+  onClick: () => {
+    create_project((project_name), (result) => {
+      puts('sync atomes: ' + JSON.stringify(result));
+    });
+  },
+});
+
+
+$('span', {
+  id: 'delete_project',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'delete project',
+  onClick: () => {
+    delete_project((project_id), (result) => {
+      puts('sync atomes: ' + JSON.stringify(result));
+    });
+  },
+});
+
+
+$('span', {
+  id: 'create_atome',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'create atomes',
+  onClick: () => {
+    create_atome((result) => {
+      puts('sync atomes: ' + JSON.stringify(result));
+    });
+  },
+});
+
+$('span', {
+  id: 'delete_atome',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'delete atomes',
+  onClick: () => {
+    create_atome((result) => {
+      puts('sync atomes: ' + JSON.stringify(result));
+    });
+  },
+});
+$('span', {
+  id: 'alter_atome',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'alter atomes',
+  onClick: () => {
+    alter((result) => {
+      puts('sync atomes: ' + JSON.stringify(result));
+    });
+  },
+});
+
+$('br', {});
 
 $('span', {
   id: 'sync_atomes',
   css: {
-    backgroundColor: '#00f',
+    backgroundColor: 'rgba(233, 146, 6, 1)',
     marginLeft: '0',
     padding: '10px',
     color: 'white',
@@ -1365,15 +1529,3 @@ $('span', {
 });
 
 
-
-
-current_user((result) => {
-  if (result.logged && result.user) {
-    const user_found = result.user.username;
-    puts(user_found);
-    grab('logged_user').textContent = user_found;
-  } else {
-    puts('no user logged');
-    grab('logged_user').textContent = 'no user logged';
-  }
-});
