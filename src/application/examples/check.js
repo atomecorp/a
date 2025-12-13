@@ -1237,6 +1237,211 @@ async function get_atome(atomeId, callback) {
 let selectedProjectId = null;
 let selectedAtomeId = null;
 let currentProjectName = null;
+let currentProjectDiv = null;
+let selectedVisualAtome = null;
+
+/**
+ * TEST ONLY - Create or replace the project visual container in 'view'
+ * @param {string} projectId - The project ID
+ * @param {string} projectName - The project name
+ */
+function loadProjectView(projectId, projectName) {
+  console.log('[loadProjectView] Loading project:', projectId, projectName);
+
+  // Remove existing project div if any
+  if (currentProjectDiv) {
+    currentProjectDiv.remove();
+  }
+
+  // Check if project_canvas exists, create if not
+  let canvasContainer = grab('project_canvas');
+  if (!canvasContainer) {
+    console.log('[loadProjectView] Creating project_canvas container');
+    canvasContainer = $('div', {
+      id: 'project_canvas',
+      parent: grab('view'),
+      css: {
+        position: 'fixed',
+        left: '0',
+        top: '0',
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#333',
+        overflow: 'hidden',
+        zIndex: '-1'
+      }
+    });
+  }
+
+  console.log('[loadProjectView] canvasContainer:', canvasContainer);
+
+  // Create new project container inside the canvas
+  currentProjectDiv = $('div', {
+    id: 'project_view_' + projectId,
+    parent: canvasContainer,
+    css: {
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      backgroundColor: '#3a3a3a',
+      overflow: 'hidden'
+    }
+  });
+
+  console.log('[loadProjectView] Created currentProjectDiv:', currentProjectDiv);
+
+  // Update state
+  selectedProjectId = projectId;
+  currentProjectName = projectName;
+  grab('current_project').textContent = projectName;
+
+  // Load atomes for this project and display them
+  loadProjectAtomes(projectId);
+}
+
+/**
+ * TEST ONLY - Load and display atomes belonging to a project
+ * @param {string} projectId - The project ID
+ */
+async function loadProjectAtomes(projectId) {
+  const result = await list_atomes({ parentId: projectId });
+  const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
+
+  // Filter to get only atomes that belong to this project
+  atomes.forEach(atome => {
+    const atomeId = atome.atome_id || atome.id;
+    const atomeType = atome.atome_type || atome.type;
+    const particles = atome.particles || atome.data || {};
+
+    // Skip projects and users
+    if (atomeType === 'project' || atomeType === 'user') return;
+
+    // Get stored position or default
+    const left = particles.left || '50px';
+    const top = particles.top || '50px';
+    const color = particles.color || atome.color || 'blue';
+
+    createVisualAtome(atomeId, atomeType, color, left, top);
+  });
+}
+
+/**
+ * TEST ONLY - Create a visual atome element in the project container
+ * @param {string} atomeId - The atome ID
+ * @param {string} type - The atome type
+ * @param {string} color - The atome color
+ * @param {string} left - CSS left position
+ * @param {string} top - CSS top position
+ * @returns {HTMLElement} The created element
+ */
+function createVisualAtome(atomeId, type, color, left, top) {
+  console.log('[createVisualAtome] Creating visual atome:', atomeId, type, color, left, top);
+  console.log('[createVisualAtome] currentProjectDiv:', currentProjectDiv);
+
+  if (!currentProjectDiv) {
+    puts('No project loaded. Please load a project first.');
+    return null;
+  }
+
+  const atomeEl = $('div', {
+    id: 'atome_' + atomeId,
+    parent: currentProjectDiv,
+    css: {
+      position: 'absolute',
+      left: left,
+      top: top,
+      width: '80px',
+      height: '80px',
+      backgroundColor: color,
+      borderRadius: '8px',
+      cursor: 'move',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      color: 'white',
+      fontSize: '12px',
+      textAlign: 'center',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+      userSelect: 'none',
+      border: '2px solid transparent'
+    },
+    text: type + '\n' + atomeId.substring(0, 6),
+    onClick: (e) => {
+      e.stopPropagation();
+      selectVisualAtome(atomeEl, atomeId);
+    }
+  });
+
+  console.log('[createVisualAtome] Created element:', atomeEl);
+
+  // Make draggable
+  makeAtomeDraggable(atomeEl, atomeId);
+
+  return atomeEl;
+}
+
+/**
+ * TEST ONLY - Select a visual atome for operations
+ * @param {HTMLElement} atomeEl - The atome element
+ * @param {string} atomeId - The atome ID
+ */
+function selectVisualAtome(atomeEl, atomeId) {
+  // Deselect previous
+  if (selectedVisualAtome) {
+    selectedVisualAtome.style.border = '2px solid transparent';
+  }
+
+  // Select new
+  selectedVisualAtome = atomeEl;
+  selectedAtomeId = atomeId;
+  atomeEl.style.border = '2px solid yellow';
+  puts('Selected atome: ' + atomeId.substring(0, 8) + '...');
+}
+
+/**
+ * TEST ONLY - Make an atome element draggable and save position
+ * @param {HTMLElement} atomeEl - The atome element
+ * @param {string} atomeId - The atome ID
+ */
+function makeAtomeDraggable(atomeEl, atomeId) {
+  let isDragging = false;
+  let startX, startY, initialLeft, initialTop;
+
+  atomeEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // Left click only
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    initialLeft = parseInt(atomeEl.style.left) || 0;
+    initialTop = parseInt(atomeEl.style.top) || 0;
+    atomeEl.style.zIndex = '100';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    atomeEl.style.left = (initialLeft + dx) + 'px';
+    atomeEl.style.top = (initialTop + dy) + 'px';
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    atomeEl.style.zIndex = '';
+
+    // Save new position to database
+    const newLeft = atomeEl.style.left;
+    const newTop = atomeEl.style.top;
+
+    alter_atome(atomeId, { left: newLeft, top: newTop }, (result) => {
+      if (result.tauri.success || result.fastify.success) {
+        puts('Position saved: ' + newLeft + ', ' + newTop);
+      }
+    });
+  });
+}
 
 /**
  * TEST ONLY - Open a project selector dialog
@@ -1500,10 +1705,11 @@ list_projects((result) => {
   if (projects && projects.length > 0) {
     // Auto-select first project if none selected
     const firstProject = projects[0];
-    selectedProjectId = firstProject.atome_id || firstProject.id;
-    currentProjectName = firstProject.name || firstProject.data?.name || firstProject.particles?.name || 'Unnamed Project';
-    grab('current_project').textContent = currentProjectName;
-    puts('Project loaded: ' + currentProjectName);
+    const projectId = firstProject.atome_id || firstProject.id;
+    const projectName = firstProject.name || firstProject.data?.name || firstProject.particles?.name || 'Unnamed Project';
+    puts('Project loaded: ' + projectName);
+    // Use loadProjectView to properly initialize the visual container
+    loadProjectView(projectId, projectName);
   } else {
     puts('no project available');
     grab('current_project').textContent = 'no project loaded';
@@ -1925,7 +2131,11 @@ $('span', {
     puts('Creating project: ' + projectName);
     create_project(projectName, (result) => {
       if (result.tauri.success || result.fastify.success) {
+        const newId = result.tauri.data?.atome_id || result.tauri.data?.id ||
+          result.fastify.data?.atome_id || result.fastify.data?.id;
         puts('✅ Project created: ' + projectName);
+        // Load the new project view
+        loadProjectView(newId, projectName);
       } else {
         puts('❌ Failed to create project');
       }
@@ -1951,9 +2161,7 @@ $('span', {
         puts('Loading cancelled');
         return;
       }
-      selectedProjectId = selection.project_id;
-      currentProjectName = selection.project_name;
-      grab('current_project').textContent = selection.project_name;
+      loadProjectView(selection.project_id, selection.project_name);
       puts('✅ Project loaded: ' + selection.project_name);
     });
   },
@@ -2031,14 +2239,33 @@ $('span', {
   },
   text: 'create atome',
   onClick: () => {
+    if (!selectedProjectId) {
+      puts('❌ No project loaded. Please load a project first.');
+      return;
+    }
     const atomeType = grab('atome_type_input').value;
     const atomeColor = grab('atome_color_input').value;
     puts('Creating atome: ' + atomeType + ' (' + atomeColor + ')');
-    create_atome({ type: atomeType, color: atomeColor }, (result) => {
+    create_atome({
+      type: atomeType,
+      color: atomeColor,
+      projectId: selectedProjectId,
+      particles: { left: '100px', top: '100px' }
+    }, (result) => {
+      console.log('[create_atome button] Full result:', result);
       if (result.tauri.success || result.fastify.success) {
-        const newId = result.tauri.data?.atome_id || result.tauri.data?.id ||
-          result.fastify.data?.atome_id || result.fastify.data?.id || 'unknown';
+        // Try multiple paths to extract the ID
+        const tauriData = result.tauri.data || {};
+        const fastifyData = result.fastify.data || {};
+        const newId = tauriData.atome_id || tauriData.id || tauriData.atomeId ||
+          fastifyData.atome_id || fastifyData.id || fastifyData.atomeId ||
+          (typeof tauriData === 'string' ? tauriData : null) ||
+          (typeof fastifyData === 'string' ? fastifyData : null) ||
+          'atome_' + Date.now();
+        console.log('[create_atome button] Extracted ID:', newId);
         puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
+        // Create visual element
+        createVisualAtome(newId, atomeType, atomeColor, '100px', '100px');
       } else {
         puts('❌ Failed to create atome');
       }
@@ -2058,11 +2285,20 @@ $('span', {
   },
   text: 'delete atome',
   onClick: () => {
-    puts('Select an atome to delete...');
-    delete_atome((result) => {
-      if (result.cancelled) return;
+    if (!selectedAtomeId || !selectedVisualAtome) {
+      puts('❌ No atome selected. Click on an atome to select it first.');
+      return;
+    }
+    puts('Deleting selected atome: ' + selectedAtomeId.substring(0, 8) + '...');
+    delete_atome(selectedAtomeId, (result) => {
       if (result.tauri?.success || result.fastify?.success) {
         puts('✅ Atome deleted');
+        // Remove visual element
+        if (selectedVisualAtome) {
+          selectedVisualAtome.remove();
+          selectedVisualAtome = null;
+          selectedAtomeId = null;
+        }
       } else {
         puts('❌ Failed to delete atome');
       }
@@ -2082,11 +2318,19 @@ $('span', {
   },
   text: 'alter atome',
   onClick: () => {
-    puts('Select an atome to alter...');
-    alter_atome((result) => {
-      if (result.cancelled) return;
+    if (!selectedAtomeId || !selectedVisualAtome) {
+      puts('❌ No atome selected. Click on an atome to select it first.');
+      return;
+    }
+    // For testing, change color to a random one
+    const colors = ['red', 'green', 'blue', 'purple', 'orange', 'cyan', 'magenta'];
+    const newColor = colors[Math.floor(Math.random() * colors.length)];
+    puts('Altering atome color to: ' + newColor);
+    alter_atome(selectedAtomeId, { color: newColor }, (result) => {
       if (result.tauri?.success || result.fastify?.success) {
         puts('✅ Atome altered');
+        // Update visual element
+        selectedVisualAtome.style.backgroundColor = newColor;
       } else {
         puts('❌ Failed to alter atome');
       }
