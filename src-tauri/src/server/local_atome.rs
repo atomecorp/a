@@ -29,9 +29,16 @@ pub struct AtomeData {
     pub atome_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
-    pub owner_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub creator_id: Option<String>,
     pub data: serde_json::Value,
     pub sync_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_sync: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,6 +64,7 @@ pub struct WsResponse {
 
 // =============================================================================
 // DATABASE INITIALIZATION - ADOLE v3.0 Schema
+// UNIFIED with Fastify (database/schema.sql) - Same 7 tables
 // =============================================================================
 
 pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> {
@@ -70,18 +78,24 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     conn.execute("PRAGMA foreign_keys = ON", [])?;
     let _ = conn.execute_batch("PRAGMA journal_mode = WAL;");
 
-    // Table 1: atomes
+    // =========================================================================
+    // Table 1: atomes - Represents EVERYTHING (users, documents, folders, etc.)
+    // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS atomes (
             atome_id TEXT PRIMARY KEY,
             atome_type TEXT NOT NULL,
             parent_id TEXT,
             owner_id TEXT,
+            creator_id TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             deleted_at TEXT,
+            last_sync TEXT,
+            created_source TEXT DEFAULT 'unknown',
             sync_status TEXT DEFAULT 'local',
-            FOREIGN KEY(parent_id) REFERENCES atomes(atome_id) ON DELETE SET NULL
+            FOREIGN KEY(parent_id) REFERENCES atomes(atome_id) ON DELETE SET NULL,
+            FOREIGN KEY(owner_id) REFERENCES atomes(atome_id) ON DELETE SET NULL
         )",
         [],
     )?;
@@ -91,21 +105,30 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         [],
     )?;
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id)",
+        [],
+    )?;
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id)",
         [],
     )?;
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_sync ON atomes(sync_status)",
+        "CREATE INDEX IF NOT EXISTS idx_atomes_sync_status ON atomes(sync_status)",
         [],
     )?;
 
-    // Table 2: particles
+    // =========================================================================
+    // Table 2: particles - Properties of atomes (dynamic key-value system)
+    // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS particles (
             particle_id INTEGER PRIMARY KEY AUTOINCREMENT,
             atome_id TEXT NOT NULL,
             particle_key TEXT NOT NULL,
             particle_value TEXT,
+            value_type TEXT DEFAULT 'string',
+            version INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
             UNIQUE(atome_id, particle_key)
@@ -117,37 +140,79 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         "CREATE INDEX IF NOT EXISTS idx_particles_atome ON particles(atome_id)",
         [],
     )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_particles_key ON particles(particle_key)",
+        [],
+    )?;
 
-    // Table 3: particles_versions (history)
+    // =========================================================================
+    // Table 3: particles_versions - Full history of all particle modifications
+    // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS particles_versions (
             version_id INTEGER PRIMARY KEY AUTOINCREMENT,
             particle_id INTEGER NOT NULL,
             atome_id TEXT NOT NULL,
             particle_key TEXT NOT NULL,
+            version INTEGER NOT NULL,
             old_value TEXT,
             new_value TEXT,
+            changed_by TEXT,
             changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(particle_id) REFERENCES particles(particle_id) ON DELETE CASCADE,
             FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
         )",
         [],
     )?;
 
-    // Table 4: permissions
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_particles_versions_particle ON particles_versions(particle_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_particles_versions_atome ON particles_versions(atome_id)",
+        [],
+    )?;
+
+    // =========================================================================
+    // Table 4: snapshots - Complete snapshots of an atome at a point in time
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS snapshots (
+            snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            atome_id TEXT NOT NULL,
+            snapshot_data TEXT NOT NULL,
+            snapshot_type TEXT DEFAULT 'manual',
+            created_by TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_atome ON snapshots(atome_id)",
+        [],
+    )?;
+
+    // =========================================================================
+    // Table 5: permissions - Granular access control (per atome or particle)
+    // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS permissions (
             permission_id INTEGER PRIMARY KEY AUTOINCREMENT,
             atome_id TEXT NOT NULL,
             particle_key TEXT,
             principal_id TEXT NOT NULL,
-            can_read INTEGER DEFAULT 1,
-            can_write INTEGER DEFAULT 0,
-            can_delete INTEGER DEFAULT 0,
-            can_share INTEGER DEFAULT 0,
+            can_read INTEGER NOT NULL DEFAULT 1,
+            can_write INTEGER NOT NULL DEFAULT 0,
+            can_delete INTEGER NOT NULL DEFAULT 0,
+            can_share INTEGER NOT NULL DEFAULT 0,
             granted_by TEXT,
-            granted_at TEXT DEFAULT (datetime('now')),
+            granted_at TEXT NOT NULL DEFAULT (datetime('now')),
             expires_at TEXT,
-            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
+            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+            FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
         )",
         [],
     )?;
@@ -161,22 +226,55 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         [],
     )?;
 
-    // Table 5: sync_queue
+    // =========================================================================
+    // Table 6: sync_queue - Persistent synchronization queue
+    // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS sync_queue (
             queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
             atome_id TEXT NOT NULL,
             operation TEXT NOT NULL,
             payload TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            attempts INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now')),
-            next_retry_at TEXT
+            target_server TEXT NOT NULL DEFAULT 'fastify',
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 5,
+            last_attempt_at TEXT,
+            next_retry_at TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
         )",
         [],
     )?;
 
-    println!("ADOLE v3.0 database initialized: {:?}", db_path);
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at)",
+        [],
+    )?;
+
+    // =========================================================================
+    // Table 7: sync_state - Synchronization state per atome (with hash)
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_state (
+            atome_id TEXT PRIMARY KEY,
+            local_hash TEXT,
+            remote_hash TEXT,
+            local_version INTEGER DEFAULT 0,
+            remote_version INTEGER DEFAULT 0,
+            last_sync_at TEXT,
+            sync_status TEXT DEFAULT 'unknown',
+            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    println!("ADOLE v3.0 database initialized (7 tables): {:?}", db_path);
 
     Ok(conn)
 }
@@ -270,8 +368,8 @@ async fn handle_create(
 
     // Insert or replace atome (upsert for sync operations)
     if let Err(e) = db.execute(
-        "INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, created_at, updated_at, sync_status)
-         VALUES (?1, ?2, ?3, ?4, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?5), ?5, 'pending')",
+        "INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
+         VALUES (?1, ?2, ?3, ?4, ?4, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?5), ?5, NULL, 'tauri', 'pending')",
         rusqlite::params![&atome_id, atome_type, parent_id, user_id, &now],
     ) {
         println!("[Create Debug] Insert error: {}", e);
@@ -282,10 +380,17 @@ async fn handle_create(
     if let Some(obj) = data.as_object() {
         for (key, value) in obj {
             let value_str = serde_json::to_string(value).unwrap_or_default();
+            let value_type = match value {
+                serde_json::Value::String(_) => "string",
+                serde_json::Value::Number(_) => "number",
+                serde_json::Value::Bool(_) => "boolean",
+                serde_json::Value::Array(_) | serde_json::Value::Object(_) => "json",
+                _ => "string",
+            };
             let _ = db.execute(
-                "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, updated_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![&atome_id, key, &value_str, &now],
+                "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, COALESCE((SELECT version + 1 FROM particles WHERE atome_id = ?1 AND particle_key = ?2), 1), COALESCE((SELECT created_at FROM particles WHERE atome_id = ?1 AND particle_key = ?2), ?5), ?5)",
+                rusqlite::params![&atome_id, key, &value_str, value_type, &now],
             );
         }
     }
@@ -299,9 +404,12 @@ async fn handle_create(
         atome_id: atome_id.clone(),
         atome_type: atome_type.into(),
         parent_id: parent_id.map(String::from),
-        owner_id: user_id.into(),
+        owner_id: Some(user_id.into()),
+        creator_id: Some(user_id.into()),
         data,
         sync_status: "pending".into(),
+        created_source: Some("tauri".into()),
+        last_sync: None,
         created_at: now.clone(),
         updated_at: now,
         deleted_at: None,
@@ -656,18 +764,37 @@ async fn handle_alter(
                 .ok();
 
             let value_str = serde_json::to_string(value).unwrap_or_default();
+            let value_type = match value {
+                serde_json::Value::String(_) => "string",
+                serde_json::Value::Number(_) => "number",
+                serde_json::Value::Bool(_) => "boolean",
+                serde_json::Value::Array(_) | serde_json::Value::Object(_) => "json",
+                _ => "string",
+            };
 
-            // Upsert particle
+            // Get current version before update
+            let current_version: i64 = db
+                .query_row(
+                    "SELECT version FROM particles WHERE atome_id = ?1 AND particle_key = ?2",
+                    rusqlite::params![atome_id, key],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            let new_version = current_version + 1;
+
+            // Upsert particle with version and value_type
             let _ = db.execute(
-                "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
-                 VALUES (?1, ?2, ?3, ?4)
+                "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)
                  ON CONFLICT(atome_id, particle_key) DO UPDATE SET
                     particle_value = excluded.particle_value,
+                    value_type = excluded.value_type,
+                    version = version + 1,
                     updated_at = excluded.updated_at",
-                rusqlite::params![atome_id, key, &value_str, &now],
+                rusqlite::params![atome_id, key, &value_str, value_type, &now],
             );
 
-            // Record history
+            // Record history with version and changed_by
             if let Some(old) = old_value {
                 let particle_id: i64 = db
                     .query_row(
@@ -678,9 +805,9 @@ async fn handle_alter(
                     .unwrap_or(0);
 
                 let _ = db.execute(
-                    "INSERT INTO particles_versions (particle_id, atome_id, particle_key, old_value, new_value, changed_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    rusqlite::params![particle_id, atome_id, key, &old, &value_str, &now],
+                    "INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    rusqlite::params![particle_id, atome_id, key, new_version, &old, &value_str, user_id, &now],
                 );
             }
         }
@@ -726,27 +853,30 @@ fn load_atome_with_deleted(
 
     let query = if owner_filter.is_some() {
         format!(
-            "SELECT atome_id, atome_type, parent_id, owner_id, sync_status, created_at, updated_at, deleted_at
+            "SELECT atome_id, atome_type, parent_id, owner_id, creator_id, sync_status, created_source, last_sync, created_at, updated_at, deleted_at
              FROM atomes WHERE atome_id = ?1 AND owner_id = ?2 {}",
             deleted_clause
         )
     } else {
         format!(
-            "SELECT atome_id, atome_type, parent_id, owner_id, sync_status, created_at, updated_at, deleted_at
+            "SELECT atome_id, atome_type, parent_id, owner_id, creator_id, sync_status, created_source, last_sync, created_at, updated_at, deleted_at
              FROM atomes WHERE atome_id = ?1 {}",
             deleted_clause
         )
     };
 
     let row: (
-        String,
-        String,
-        Option<String>,
-        String,
-        String,
-        String,
-        String,
-        Option<String>,
+        String,         // atome_id
+        String,         // atome_type
+        Option<String>, // parent_id
+        Option<String>, // owner_id
+        Option<String>, // creator_id
+        String,         // sync_status
+        Option<String>, // created_source
+        Option<String>, // last_sync
+        String,         // created_at
+        String,         // updated_at
+        Option<String>, // deleted_at
     ) = if let Some(owner) = owner_filter {
         db.query_row(&query, rusqlite::params![atome_id, owner], |row| {
             Ok((
@@ -758,6 +888,9 @@ fn load_atome_with_deleted(
                 row.get(5)?,
                 row.get(6)?,
                 row.get(7)?,
+                row.get(8)?,
+                row.get(9)?,
+                row.get(10)?,
             ))
         })
     } else {
@@ -771,6 +904,9 @@ fn load_atome_with_deleted(
                 row.get(5)?,
                 row.get(6)?,
                 row.get(7)?,
+                row.get(8)?,
+                row.get(9)?,
+                row.get(10)?,
             ))
         })
     }
@@ -802,11 +938,14 @@ fn load_atome_with_deleted(
         atome_type: row.1,
         parent_id: row.2,
         owner_id: row.3,
-        sync_status: row.4,
-        created_at: row.5,
-        updated_at: row.6,
-        deleted_at: row.7,
+        creator_id: row.4,
         data: serde_json::Value::Object(data_map),
+        sync_status: row.5,
+        created_source: row.6,
+        last_sync: row.7,
+        created_at: row.8,
+        updated_at: row.9,
+        deleted_at: row.10,
     })
 }
 

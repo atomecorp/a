@@ -156,7 +156,7 @@ async fn handle_register(
                 return error_response(request_id, &e.to_string());
             }
 
-            // Update particles
+            // Update particles with version increment
             let particles = [
                 ("username", &username),
                 ("phone", &phone),
@@ -166,7 +166,7 @@ async fn handle_register(
             for (key, value) in particles {
                 let value_json = serde_json::to_string(value).unwrap_or_default();
                 let _ = db.execute(
-                    "UPDATE particles SET particle_value = ?1, updated_at = ?2 
+                    "UPDATE particles SET particle_value = ?1, version = version + 1, updated_at = ?2 
                      WHERE atome_id = ?3 AND particle_key = ?4",
                     rusqlite::params![&value_json, &now, &existing_id, key],
                 );
@@ -199,14 +199,14 @@ async fn handle_register(
 
     // Create new user atome
     if let Err(e) = db.execute(
-        "INSERT INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at, sync_status)
-         VALUES (?1, 'user', ?1, ?2, ?2, 'pending')",
+        "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
+         VALUES (?1, 'user', ?1, ?1, ?2, ?2, NULL, 'tauri', 'pending')",
         rusqlite::params![&user_id, &now],
     ) {
         return error_response(request_id, &e.to_string());
     }
 
-    // Create user particles
+    // Create user particles with value_type and version
     let particles = [
         ("username", &username),
         ("phone", &phone),
@@ -216,8 +216,8 @@ async fn handle_register(
     for (key, value) in particles {
         let value_json = serde_json::to_string(value).unwrap_or_default();
         let _ = db.execute(
-            "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
             rusqlite::params![&user_id, key, &value_json, &now],
         );
     }
@@ -427,10 +427,10 @@ async fn handle_change_password(
     let now = Utc::now().to_rfc3339();
     let hash_json = serde_json::to_string(&new_hash).unwrap_or_default();
 
-    // Update password particle
+    // Update password particle with version increment
     if let Err(e) = db.execute(
-        "UPDATE particles SET value = ?1, updated_at = ?2
-         WHERE atome_id = ?3 AND key = 'password_hash'",
+        "UPDATE particles SET particle_value = ?1, version = version + 1, updated_at = ?2
+         WHERE atome_id = ?3 AND particle_key = 'password_hash'",
         rusqlite::params![&hash_json, &now, &claims.sub],
     ) {
         return error_response(request_id, &e.to_string());

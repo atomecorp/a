@@ -192,12 +192,11 @@ CREATE TABLE IF NOT EXISTS sync_state (
 CREATE VIEW IF NOT EXISTS users_view AS
 SELECT 
     a.atome_id AS user_id,
-    MAX(CASE WHEN p.key = 'phone' THEN JSON_EXTRACT(p.value, '$') END) AS phone,
-    MAX(CASE WHEN p.key = 'username' THEN JSON_EXTRACT(p.value, '$') END) AS username,
-    MAX(CASE WHEN p.key = 'password_hash' THEN JSON_EXTRACT(p.value, '$') END) AS password_hash,
+    MAX(CASE WHEN p.particle_key = 'phone' THEN JSON_EXTRACT(p.particle_value, '$') END) AS phone,
+    MAX(CASE WHEN p.particle_key = 'username' THEN JSON_EXTRACT(p.particle_value, '$') END) AS username,
+    MAX(CASE WHEN p.particle_key = 'password_hash' THEN JSON_EXTRACT(p.particle_value, '$') END) AS password_hash,
     a.created_at,
     a.updated_at,
-    a.cloud_id,
     a.last_sync,
     a.created_source
 FROM atomes a

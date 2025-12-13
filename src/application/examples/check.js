@@ -1295,11 +1295,13 @@ $('span', {
   text: 'log user',
   onClick: () => {
     const phone = grab('phone_pass_input').value;
-    const user_name = grab('username_input').value;
-    log_user(phone, phone, user_name, (results) => {
+    log_user(phone, phone, '', (results) => {
       if (results.tauri.success || results.fastify.success) {
-        puts('Logged in as: ' + user_name);
-        grab('logged_user').textContent = user_name;
+        // Get username from the successful result
+        const userData = results.tauri.success ? results.tauri.data : results.fastify.data;
+        const loggedUsername = userData?.user?.username || userData?.username || 'unknown';
+        puts('Logged in as: ' + loggedUsername);
+        grab('logged_user').textContent = loggedUsername;
       } else {
         puts('no user logged');
         grab('logged_user').textContent = 'no user logged';
