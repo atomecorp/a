@@ -116,29 +116,21 @@ async function log_user(phone, password, username, callback) {
       password
     });
     if (tauriResult.ok || tauriResult.success) {
-      console.log('[Tauri/SQLite] ✅ User logged in successfully:', tauriResult);
+      console.log('[Tauri/SQLite] ✅ User logged in successfully');
       results.tauri = { success: true, data: tauriResult, error: null };
-      if (tauriResult.token) {
-        console.log('[Tauri/SQLite] Token stored for future requests');
-      }
     } else {
-      console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
-      console.error('[Tauri/SQLite] REASON: Login failed on Tauri/Axum WebSocket server.');
       results.tauri = { success: false, data: null, error: tauriResult.error };
+      // Clean log for expected cases
       if (tauriResult.error?.includes('not found') || tauriResult.error?.includes('Not found')) {
-        console.error('[Tauri/SQLite] SOLUTION: This user does not exist. Check the phone number or register first.');
+        console.log('[Tauri/SQLite] ℹ️ User not found');
       } else if (tauriResult.error?.includes('password') || tauriResult.error?.includes('Invalid')) {
-        console.error('[Tauri/SQLite] SOLUTION: The password is incorrect. Verify the password.');
-      } else if (tauriResult.error?.includes('at least')) {
-        console.error('[Tauri/SQLite] SOLUTION: Phone must be at least 6 characters.');
+        console.log('[Tauri/SQLite] ℹ️ Invalid credentials');
       } else {
-        console.error('[Tauri/SQLite] SOLUTION: Check WebSocket connection and server logs.');
+        console.log('[Tauri/SQLite] ℹ️ Login failed:', tauriResult.error);
       }
     }
   } catch (e) {
-    console.error('[Tauri/SQLite] ERROR:', e.message);
-    console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
-    console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
+    console.log('[Tauri/SQLite] ℹ️ Connection failed:', e.message);
     results.tauri = { success: false, data: null, error: e.message };
   }
 
@@ -149,31 +141,23 @@ async function log_user(phone, password, username, callback) {
       password
     });
     if (fastifyResult.ok || fastifyResult.success) {
-      console.log('[Fastify/LibSQL] ✅ User logged in successfully:', fastifyResult);
+      console.log('[Fastify/LibSQL] ✅ User logged in successfully');
       results.fastify = { success: true, data: fastifyResult, error: null };
-      if (fastifyResult.token) {
-        console.log('[Fastify/LibSQL] Token stored for future requests');
-      }
     } else {
       results.fastify = { success: false, data: null, error: fastifyResult.error };
       if (fastifyResult.error !== 'Server unreachable') {
-        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-        console.error('[Fastify/LibSQL] REASON: Login failed on Fastify WebSocket server.');
+        // Clean log for expected cases
         if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
-          console.error('[Fastify/LibSQL] SOLUTION: This user does not exist. Check the phone number or register first.');
+          console.log('[Fastify/LibSQL] ℹ️ User not found');
         } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
-          console.error('[Fastify/LibSQL] SOLUTION: The password is incorrect. Verify the password.');
-        } else if (fastifyResult.error?.includes('at least')) {
-          console.error('[Fastify/LibSQL] SOLUTION: Phone must be at least 6 characters.');
+          console.log('[Fastify/LibSQL] ℹ️ Invalid credentials');
         } else {
-          console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
+          console.log('[Fastify/LibSQL] ℹ️ Login failed:', fastifyResult.error);
         }
       }
     }
   } catch (e) {
-    console.error('[Fastify/LibSQL] ERROR:', e.message);
-    console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
-    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
+    console.log('[Fastify/LibSQL] ℹ️ Connection failed:', e.message);
     results.fastify = { success: false, data: null, error: e.message };
   }
 
