@@ -1236,6 +1236,7 @@ async function get_atome(atomeId, callback) {
 // Test state variables
 let selectedProjectId = null;
 let selectedAtomeId = null;
+let currentProjectName = null;
 
 /**
  * TEST ONLY - Open a project selector dialog
@@ -1260,7 +1261,7 @@ async function open_project_selector(callback) {
   const existingSelector = grab('project_selector_overlay');
   if (existingSelector) existingSelector.remove();
 
-  $('div', {
+  const overlay = $('div', {
     id: 'project_selector_overlay',
     css: {
       position: 'fixed',
@@ -1276,9 +1277,9 @@ async function open_project_selector(callback) {
     }
   });
 
-  $('div', {
+  const modal = $('div', {
     id: 'project_selector_modal',
-    parent: 'project_selector_overlay',
+    parent: overlay,
     css: {
       backgroundColor: '#fff',
       padding: '20px',
@@ -1290,7 +1291,7 @@ async function open_project_selector(callback) {
   });
 
   $('div', {
-    parent: 'project_selector_modal',
+    parent: modal,
     css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
     text: 'Select a Project'
   });
@@ -1301,7 +1302,7 @@ async function open_project_selector(callback) {
 
     $('div', {
       id: 'project_item_' + index,
-      parent: 'project_selector_modal',
+      parent: modal,
       css: {
         padding: '10px',
         margin: '5px 0',
@@ -1313,7 +1314,9 @@ async function open_project_selector(callback) {
       text: projectName,
       onClick: () => {
         selectedProjectId = projectId;
-        grab('project_selector_overlay').remove();
+        currentProjectName = projectName;
+        overlay.remove();
+        grab('current_project').textContent = projectName;
         console.log('[open_project_selector] Selected project:', projectName, '(' + projectId + ')');
         if (typeof callback === 'function') {
           callback({ project_id: projectId, project_name: projectName, cancelled: false });
@@ -1323,7 +1326,7 @@ async function open_project_selector(callback) {
   });
 
   $('div', {
-    parent: 'project_selector_modal',
+    parent: modal,
     css: {
       padding: '10px',
       marginTop: '15px',
@@ -1335,7 +1338,7 @@ async function open_project_selector(callback) {
     },
     text: 'Cancel',
     onClick: () => {
-      grab('project_selector_overlay').remove();
+      overlay.remove();
       if (typeof callback === 'function') {
         callback({ project_id: null, project_name: null, cancelled: true });
       }
@@ -1377,7 +1380,7 @@ async function open_atome_selector(options, callback) {
   const existingSelector = grab('atome_selector_overlay');
   if (existingSelector) existingSelector.remove();
 
-  $('div', {
+  const overlay = $('div', {
     id: 'atome_selector_overlay',
     css: {
       position: 'fixed',
@@ -1393,9 +1396,9 @@ async function open_atome_selector(options, callback) {
     }
   });
 
-  $('div', {
+  const modal = $('div', {
     id: 'atome_selector_modal',
-    parent: 'atome_selector_overlay',
+    parent: overlay,
     css: {
       backgroundColor: '#fff',
       padding: '20px',
@@ -1407,7 +1410,7 @@ async function open_atome_selector(options, callback) {
   });
 
   $('div', {
-    parent: 'atome_selector_modal',
+    parent: modal,
     css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
     text: 'Select an Atome'
   });
@@ -1420,7 +1423,7 @@ async function open_atome_selector(options, callback) {
 
     $('div', {
       id: 'atome_item_' + index,
-      parent: 'atome_selector_modal',
+      parent: modal,
       css: {
         padding: '10px',
         margin: '5px 0',
@@ -1433,7 +1436,7 @@ async function open_atome_selector(options, callback) {
       text: displayText,
       onClick: () => {
         selectedAtomeId = atomeId;
-        grab('atome_selector_overlay').remove();
+        overlay.remove();
         console.log('[open_atome_selector] Selected atome:', atomeId);
         if (typeof callback === 'function') {
           callback({ atome_id: atomeId, atome: atome, cancelled: false });
@@ -1443,7 +1446,7 @@ async function open_atome_selector(options, callback) {
   });
 
   $('div', {
-    parent: 'atome_selector_modal',
+    parent: modal,
     css: {
       padding: '10px',
       marginTop: '15px',
@@ -1455,7 +1458,7 @@ async function open_atome_selector(options, callback) {
     },
     text: 'Cancel',
     onClick: () => {
-      grab('atome_selector_overlay').remove();
+      overlay.remove();
       if (typeof callback === 'function') {
         callback({ atome_id: null, atome: null, cancelled: true });
       }
@@ -1485,6 +1488,25 @@ current_user((result) => {
   } else {
     puts('no user logged');
     grab('logged_user').textContent = 'no user logged';
+  }
+});
+
+// Load current project on startup
+list_projects((result) => {
+  const projects = result.tauri.projects.length > 0
+    ? result.tauri.projects
+    : result.fastify.projects;
+
+  if (projects && projects.length > 0) {
+    // Auto-select first project if none selected
+    const firstProject = projects[0];
+    selectedProjectId = firstProject.atome_id || firstProject.id;
+    currentProjectName = firstProject.name || firstProject.data?.name || firstProject.particles?.name || 'Unnamed Project';
+    grab('current_project').textContent = currentProjectName;
+    puts('Project loaded: ' + currentProjectName);
+  } else {
+    puts('no project available');
+    grab('current_project').textContent = 'no project loaded';
   }
 });
 
@@ -1550,6 +1572,19 @@ $('span', {
   },
   text: 'no user logged',
 
+});
+
+$('span', {
+  id: 'current_project',
+  css: {
+    backgroundColor: 'rgba(0, 255, 98, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'black',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'no project loaded',
 });
 
 $('br', {});
@@ -1894,6 +1929,32 @@ $('span', {
       } else {
         puts('❌ Failed to create project');
       }
+    });
+  },
+});
+
+$('span', {
+  id: 'load_project',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'load project',
+  onClick: () => {
+    puts('Select a project to load...');
+    open_project_selector((selection) => {
+      if (selection.cancelled) {
+        puts('Loading cancelled');
+        return;
+      }
+      selectedProjectId = selection.project_id;
+      currentProjectName = selection.project_name;
+      grab('current_project').textContent = selection.project_name;
+      puts('✅ Project loaded: ' + selection.project_name);
     });
   },
 });
