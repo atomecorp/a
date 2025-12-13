@@ -1121,6 +1121,43 @@ async function sync_atomes(callback) {
 //todo: restore atomes from it's history to and brig back the new state to present
 //todo : estore atomes from it's history and create  and  alterated  history from the present state
 
+/// input box below
+
+const phone_pass = '11111111';
+const username = 'jeezs';
+
+$('input', {
+  id: 'phone_pass_input',
+  attrs: {
+    type: 'text',
+    placeholder: 'Phone / Password',
+    value: phone_pass
+  },
+  css: {
+    margin: '10px',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    width: '200px'
+  }
+});
+
+$('input', {
+  id: 'username_input',
+  attrs: {
+    type: 'text',
+    placeholder: 'Username',
+    value: username
+  },
+  css: {
+    margin: '10px',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    width: '200px'
+  }
+});
+
 $('span', {
   id: 'clear_console',
   css: {
@@ -1191,10 +1228,10 @@ $('span', {
   text: 'create user',
   onClick: () => {
     puts('Creating user...');
-    const user_phone = '11111111'
-    const user_name = 'jeezs'
+    const user_phone = grab('phone_pass_input').value;
+    const user_name = grab('username_input').value;
 
-    create_user(user_phone, '11111111', user_name, (results) => {
+    create_user(user_phone, user_phone, user_name, (results) => {
       grab('logged_user').textContent = user_name;
       // puts('user created: ' + user_name + 'user phone created: ' + user_phone);
     });
@@ -1213,11 +1250,12 @@ $('span', {
   },
   text: 'log user',
   onClick: () => {
-    log_user('11111111', '11111111', 'jeezs', (results) => {
+    const phone = grab('phone_pass_input').value;
+    const user_name = grab('username_input').value;
+    log_user(phone, phone, user_name, (results) => {
       if (results.tauri.success || results.fastify.success) {
-        const username = 'jeezs';
-        puts('Logged in as: ' + username);
-        grab('logged_user').textContent = username;
+        puts('Logged in as: ' + user_name);
+        grab('logged_user').textContent = user_name;
       } else {
         puts('no user logged');
         grab('logged_user').textContent = 'no user logged';
@@ -1264,7 +1302,9 @@ $('span', {
   text: 'delete user',
   onClick: () => {
     puts('Deleting user...');
-    delete_user('11111111', '11111111', 'jeezs', (results) => {
+    const phone = grab('phone_pass_input').value;
+    const user_name = grab('username_input').value;
+    delete_user(phone, phone, user_name, (results) => {
       if (results.tauri.success || results.fastify.success) {
         puts('User deleted, logging out...');
         unlog_user();
@@ -1287,9 +1327,34 @@ $('span', {
     display: 'inline-block'
   },
   text: 'Get user list',
-  onClick: () => {
+  onClick: async () => {
     puts('Fetching user list...');
-    console.log(user_list());
+    const result = await user_list();
+    console.log('[user_list] Result:', result);
+
+    // Display users from Tauri
+    if (result.tauri.users && result.tauri.users.length > 0) {
+      puts('[Tauri] Users:');
+      result.tauri.users.forEach(user => {
+        const name = user.username || user.data?.username || 'unknown';
+        const phone = user.phone || user.data?.phone || 'unknown';
+        puts('  - ' + name + ' (' + phone + ')');
+      });
+    } else {
+      puts('[Tauri] No users found');
+    }
+
+    // Display users from Fastify
+    if (result.fastify.users && result.fastify.users.length > 0) {
+      puts('[Fastify] Users:');
+      result.fastify.users.forEach(user => {
+        const name = user.username || user.data?.username || 'unknown';
+        const phone = user.phone || user.data?.phone || 'unknown';
+        puts('  - ' + name + ' (' + phone + ')');
+      });
+    } else {
+      puts('[Fastify] No users found');
+    }
   },
 });
 
