@@ -1157,7 +1157,6 @@ $('input', {
     width: '200px'
   }
 });
-
 $('span', {
   id: 'clear_console',
   css: {
@@ -1188,6 +1187,7 @@ $('span', {
 
 });
 
+$('br', {});
 
 $('span', {
   id: 'current_user',
@@ -1199,7 +1199,7 @@ $('span', {
     margin: '10px',
     display: 'inline-block'
   },
-  text: 'current user',
+  text: 'get current user',
   onClick: () => {
     current_user((result) => {
       if (result.logged && result.user) {
@@ -1213,6 +1213,140 @@ $('span', {
     });
   },
 });
+
+
+
+
+$('span', {
+  id: 'user_list',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'Get user list',
+  onClick: async () => {
+    puts('Fetching user list...');
+    const result = await user_list();
+    console.log('[user_list] Result:', result);
+
+    // Display users from Tauri
+    if (result.tauri.users && result.tauri.users.length > 0) {
+      puts('[Tauri] Users:');
+      result.tauri.users.forEach(user => {
+        const name = user.username || user.data?.username || 'unknown';
+        const phone = user.phone || user.data?.phone || 'unknown';
+        puts('  - ' + name + ' (' + phone + ')');
+      });
+    } else {
+      puts('[Tauri] No users found');
+    }
+
+    // Display users from Fastify
+    if (result.fastify.users && result.fastify.users.length > 0) {
+      puts('[Fastify] Users:');
+      result.fastify.users.forEach(user => {
+        const name = user.username || user.data?.username || 'unknown';
+        const phone = user.phone || user.data?.phone || 'unknown';
+        puts('  - ' + name + ' (' + phone + ')');
+      });
+    } else {
+      puts('[Fastify] No users found');
+    }
+  },
+});
+
+$('span', {
+  id: 'list_tables',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'List all tables',
+  onClick: async () => {
+    puts('Listing all tables...');
+    const result = await list_tables();
+
+    if (result.tauri.tables && result.tauri.tables.length > 0) {
+      puts('[Tauri] Tables: ' + result.tauri.tables.join(', '));
+    } else {
+      puts('[Tauri] No tables found or error: ' + (result.tauri.error || 'unknown'));
+    }
+
+    if (result.fastify.tables && result.fastify.tables.length > 0) {
+      puts('[Fastify] Tables: ' + result.fastify.tables.join(', '));
+    } else {
+      puts('[Fastify] No tables found or error: ' + (result.fastify.error || 'unknown'));
+    }
+  },
+});
+
+$('span', {
+  id: 'list_unsynced',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'list unsynced',
+  onClick: () => {
+    list_unsynced_atomes((result) => {
+      // Create a concise summary including deletion states
+      const summary = {
+        onlyOnTauri: result.onlyOnTauri.length,
+        onlyOnFastify: result.onlyOnFastify.length,
+        modifiedOnTauri: result.modifiedOnTauri.length,
+        modifiedOnFastify: result.modifiedOnFastify.length,
+        deletedOnTauri: result.deletedOnTauri.length,
+        deletedOnFastify: result.deletedOnFastify.length,
+        conflicts: result.conflicts.length,
+        synced: result.synced.length,
+        error: result.error
+      };
+
+      // Check if there's anything to sync (including deletions)
+      const hasUnsyncedItems = summary.onlyOnTauri > 0 || summary.onlyOnFastify > 0 ||
+        summary.modifiedOnTauri > 0 || summary.modifiedOnFastify > 0 ||
+        summary.deletedOnTauri > 0 || summary.deletedOnFastify > 0 ||
+        summary.conflicts > 0;
+
+      if (hasUnsyncedItems) {
+        puts('Unsynced atomes: ' + JSON.stringify(summary));
+        // Show IDs of items needing sync
+        if (result.onlyOnTauri.length > 0) {
+          puts('  To push: ' + result.onlyOnTauri.map(a => a.atome_id).join(', '));
+        }
+        if (result.onlyOnFastify.length > 0) {
+          puts('  To pull: ' + result.onlyOnFastify.map(a => a.atome_id).join(', '));
+        }
+        if (result.deletedOnTauri.length > 0) {
+          puts('  Deleted on Tauri (propagate to Fastify): ' + result.deletedOnTauri.map(d => d.id).join(', '));
+        }
+        if (result.deletedOnFastify.length > 0) {
+          puts('  Deleted on Fastify (propagate to Tauri): ' + result.deletedOnFastify.map(d => d.id).join(', '));
+        }
+        if (result.conflicts.length > 0) {
+          puts('  Conflicts: ' + result.conflicts.map(c => c.id).join(', '));
+        }
+      } else {
+        puts('✅ All ' + summary.synced + ' atomes are synchronized');
+      }
+    });
+  },
+});
+
+
+$('br', {});
 
 
 $('span', {
@@ -1315,122 +1449,6 @@ $('span', {
 });
 
 
-
-$('span', {
-  id: 'user_list',
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'Get user list',
-  onClick: async () => {
-    puts('Fetching user list...');
-    const result = await user_list();
-    console.log('[user_list] Result:', result);
-
-    // Display users from Tauri
-    if (result.tauri.users && result.tauri.users.length > 0) {
-      puts('[Tauri] Users:');
-      result.tauri.users.forEach(user => {
-        const name = user.username || user.data?.username || 'unknown';
-        const phone = user.phone || user.data?.phone || 'unknown';
-        puts('  - ' + name + ' (' + phone + ')');
-      });
-    } else {
-      puts('[Tauri] No users found');
-    }
-
-    // Display users from Fastify
-    if (result.fastify.users && result.fastify.users.length > 0) {
-      puts('[Fastify] Users:');
-      result.fastify.users.forEach(user => {
-        const name = user.username || user.data?.username || 'unknown';
-        const phone = user.phone || user.data?.phone || 'unknown';
-        puts('  - ' + name + ' (' + phone + ')');
-      });
-    } else {
-      puts('[Fastify] No users found');
-    }
-  },
-});
-
-$('span', {
-  id: 'list_tables',
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'List all tables',
-  onClick: () => {
-    puts('Listing all tables...');
-    console.log(list_tables());
-  },
-});
-
-$('span', {
-  id: 'list_unsynced',
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'list unsynced',
-  onClick: () => {
-    list_unsynced_atomes((result) => {
-      // Create a concise summary including deletion states
-      const summary = {
-        onlyOnTauri: result.onlyOnTauri.length,
-        onlyOnFastify: result.onlyOnFastify.length,
-        modifiedOnTauri: result.modifiedOnTauri.length,
-        modifiedOnFastify: result.modifiedOnFastify.length,
-        deletedOnTauri: result.deletedOnTauri.length,
-        deletedOnFastify: result.deletedOnFastify.length,
-        conflicts: result.conflicts.length,
-        synced: result.synced.length,
-        error: result.error
-      };
-
-      // Check if there's anything to sync (including deletions)
-      const hasUnsyncedItems = summary.onlyOnTauri > 0 || summary.onlyOnFastify > 0 ||
-        summary.modifiedOnTauri > 0 || summary.modifiedOnFastify > 0 ||
-        summary.deletedOnTauri > 0 || summary.deletedOnFastify > 0 ||
-        summary.conflicts > 0;
-
-      if (hasUnsyncedItems) {
-        puts('Unsynced atomes: ' + JSON.stringify(summary));
-        // Show IDs of items needing sync
-        if (result.onlyOnTauri.length > 0) {
-          puts('  To push: ' + result.onlyOnTauri.map(a => a.atome_id).join(', '));
-        }
-        if (result.onlyOnFastify.length > 0) {
-          puts('  To pull: ' + result.onlyOnFastify.map(a => a.atome_id).join(', '));
-        }
-        if (result.deletedOnTauri.length > 0) {
-          puts('  Deleted on Tauri (propagate to Fastify): ' + result.deletedOnTauri.map(d => d.id).join(', '));
-        }
-        if (result.deletedOnFastify.length > 0) {
-          puts('  Deleted on Fastify (propagate to Tauri): ' + result.deletedOnFastify.map(d => d.id).join(', '));
-        }
-        if (result.conflicts.length > 0) {
-          puts('  Conflicts: ' + result.conflicts.map(c => c.id).join(', '));
-        }
-      } else {
-        puts('✅ All ' + summary.synced + ' atomes are synchronized');
-      }
-    });
-  },
-});
 
 $('span', {
   id: 'sync_atomes',
