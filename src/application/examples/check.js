@@ -9,7 +9,7 @@
  */
 
 import { UnifiedAuth, UnifiedAtome } from '../../squirrel/apis/unified/index.js';
-import { TauriAdapter, FastifyAdapter, checkBackends } from '../../squirrel/apis/unified/_shared.js';
+import { TauriAdapter, FastifyAdapter, checkBackends } from '../../squirrel/apis/unified/adole.js';
 
 // ============================================================================
 // UI SETUP

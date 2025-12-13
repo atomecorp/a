@@ -6,7 +6,7 @@
 // ADOLE v3.0 - WebSocket API Functions
 // ============================================
 
-import { TauriAdapter, FastifyAdapter, CONFIG } from '../../squirrel/apis/unified/_shared.js';
+import { TauriAdapter, FastifyAdapter, CONFIG } from '../../squirrel/apis/unified/adole.js';
 
 /**
  * Create a user via WebSocket
