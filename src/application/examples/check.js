@@ -451,7 +451,30 @@ async function user_list() {
 }
 
 /**
+ * Send a debug request via the existing WebSocket adapters
+ * @param {Object} adapter - TauriAdapter or FastifyAdapter
+ * @param {string} action - Debug action (e.g., 'list-tables')
+ * @returns {Promise<Object>} Result from server
+ */
+async function sendDebugRequest(adapter, action) {
+  // Access the internal WebSocket send method
+  // The adapter uses ws.send() internally, we need to use the same pattern
+  const ws = adapter === TauriAdapter ? getTauriWsInternal() : getFastifyWsInternal();
+
+  if (!ws) {
+    return { success: false, error: 'WebSocket not available' };
+  }
+
+  return ws.send({
+    type: 'debug',
+    action: action
+  });
+}
+
+// Helper to access internal WebSocket instances
+/**
  * List all tables from both databases via WebSocket
+ * Uses the TauriAdapter and FastifyAdapter debug.listTables() method
  */
 async function list_tables() {
   console.log('[list_tables] Fetching tables via WebSocket...');
@@ -461,147 +484,34 @@ async function list_tables() {
     fastify: { database: 'Fastify/LibSQL', tables: [], error: null }
   };
 
-  // Tauri: Use WebSocket debug handler
+  // Tauri: Use WebSocket adapter
   try {
-    // Get the WebSocket connection from TauriAdapter
-    const tauriResult = await new Promise((resolve) => {
-      // Create WebSocket connection to Tauri
-      const ws = new WebSocket('ws://127.0.0.1:3000/ws/api');
-      const requestId = `debug_${Date.now()}`;
-      let resolved = false;
-      let timeoutId = null;
-
-      const cleanup = () => {
-        if (timeoutId) clearTimeout(timeoutId);
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close(1000, 'Normal closure');
-        }
-      };
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: 'debug',
-          action: 'list-tables',
-          requestId
-        }));
-      };
-
-      ws.onmessage = (event) => {
-        if (resolved) return;
-        try {
-          const data = JSON.parse(event.data);
-          if (data.requestId === requestId) {
-            resolved = true;
-            cleanup();
-            resolve(data);
-          }
-        } catch (e) {
-          resolved = true;
-          cleanup();
-          resolve({ success: false, error: e.message });
-        }
-      };
-
-      ws.onerror = (e) => {
-        if (resolved) return;
-        resolved = true;
-        cleanup();
-        resolve({ success: false, error: 'WebSocket connection failed' });
-      };
-
-      // Timeout after 5 seconds
-      timeoutId = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        cleanup();
-        resolve({ success: false, error: 'Request timeout' });
-      }, 5000);
-    });
-
-    if (tauriResult.success) {
+    const tauriResult = await TauriAdapter.debug.listTables();
+    if (tauriResult.success || tauriResult.ok) {
       results.tauri.tables = tauriResult.tables || [];
       console.log('[Tauri/SQLite] ✅ Tables:', results.tauri.tables);
     } else {
-      results.tauri.error = tauriResult.error;
-      console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
-      console.error('[Tauri/SQLite] REASON: WebSocket debug request failed.');
-      console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
+      results.tauri.error = tauriResult.error || 'Unknown error';
+      console.error('[Tauri/SQLite] ERROR:', results.tauri.error);
     }
   } catch (e) {
     results.tauri.error = e.message;
     console.error('[Tauri/SQLite] ERROR:', e.message);
-    console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
-    console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
   }
 
-  // Fastify: Use WebSocket debug handler
+  // Fastify: Use WebSocket adapter
   try {
-    const fastifyResult = await new Promise((resolve) => {
-      const ws = new WebSocket('ws://127.0.0.1:3001/ws/api');
-      const requestId = `debug_${Date.now()}`;
-      let resolved = false;
-      let timeoutId = null;
-
-      const cleanup = () => {
-        if (timeoutId) clearTimeout(timeoutId);
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close(1000, 'Normal closure');
-        }
-      };
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: 'debug',
-          action: 'list-tables',
-          requestId
-        }));
-      };
-
-      ws.onmessage = (event) => {
-        if (resolved) return;
-        try {
-          const data = JSON.parse(event.data);
-          if (data.requestId === requestId) {
-            resolved = true;
-            cleanup();
-            resolve(data);
-          }
-        } catch (e) {
-          resolved = true;
-          cleanup();
-          resolve({ success: false, error: e.message });
-        }
-      };
-
-      ws.onerror = (e) => {
-        if (resolved) return;
-        resolved = true;
-        cleanup();
-        resolve({ success: false, error: 'WebSocket connection failed' });
-      };
-
-      timeoutId = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        cleanup();
-        resolve({ success: false, error: 'Request timeout' });
-      }, 5000);
-    });
-
-    if (fastifyResult.success) {
+    const fastifyResult = await FastifyAdapter.debug.listTables();
+    if (fastifyResult.success || fastifyResult.ok) {
       results.fastify.tables = fastifyResult.tables || [];
       console.log('[Fastify/LibSQL] ✅ Tables:', results.fastify.tables);
     } else {
-      results.fastify.error = fastifyResult.error;
-      console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-      console.error('[Fastify/LibSQL] REASON: WebSocket debug request failed.');
-      console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
+      results.fastify.error = fastifyResult.error || 'Unknown error';
+      console.error('[Fastify/LibSQL] ERROR:', results.fastify.error);
     }
   } catch (e) {
     results.fastify.error = e.message;
     console.error('[Fastify/LibSQL] ERROR:', e.message);
-    console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
-    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
   }
 
   return results;

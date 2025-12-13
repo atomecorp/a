@@ -490,6 +490,23 @@ class TauriWebSocket {
                 return;
             }
 
+            // Handle debug-response
+            if (message.type === 'debug-response' && (message.request_id || message.requestId)) {
+                const pending = this.pendingRequests.get(message.request_id || message.requestId);
+                if (pending) {
+                    this.pendingRequests.delete(message.request_id || message.requestId);
+                    clearTimeout(pending.timeout);
+                    pending.resolve({
+                        ok: message.success,
+                        success: message.success,
+                        status: message.success ? 200 : 400,
+                        error: message.error,
+                        tables: message.tables
+                    });
+                }
+                return;
+            }
+
         } catch (e) {
             // Ignore parse errors
         }
@@ -741,6 +758,15 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async ack() {
                 return { ok: true, success: true };
+            }
+        },
+
+        debug: {
+            async listTables() {
+                return ws.send({
+                    type: 'debug',
+                    action: 'list-tables'
+                });
             }
         }
     };
