@@ -17,8 +17,6 @@ import { TauriAdapter, FastifyAdapter, CONFIG } from '../../squirrel/apis/unifie
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
 async function create_user(phone, password, username, callback) {
-  console.log('[create_user] Creating user via WebSocket...');
-
   const results = {
     tauri: { success: false, data: null, error: null },
     fastify: { success: false, data: null, error: null }
@@ -32,24 +30,11 @@ async function create_user(phone, password, username, callback) {
       username
     });
     if (tauriResult.ok || tauriResult.success) {
-      console.log('[Tauri/SQLite] ✅ User created successfully:', tauriResult);
       results.tauri = { success: true, data: tauriResult, error: null };
     } else {
-      console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
-      console.error('[Tauri/SQLite] REASON: Registration failed on Tauri/Axum WebSocket server.');
       results.tauri = { success: false, data: null, error: tauriResult.error };
-      if (tauriResult.error?.includes('UNIQUE constraint')) {
-        console.error('[Tauri/SQLite] SOLUTION: This user already exists. Use a different phone number or delete the existing user.');
-      } else if (tauriResult.error?.includes('at least')) {
-        console.error('[Tauri/SQLite] SOLUTION: Check that phone (6+ chars), password (6+ chars), and username (2+ chars) meet requirements.');
-      } else {
-        console.error('[Tauri/SQLite] SOLUTION: Check WebSocket connection and server logs.');
-      }
     }
   } catch (e) {
-    console.error('[Tauri/SQLite] ERROR:', e.message);
-    console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
-    console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
     results.tauri = { success: false, data: null, error: e.message };
   }
 
@@ -61,27 +46,11 @@ async function create_user(phone, password, username, callback) {
       username
     });
     if (fastifyResult.ok || fastifyResult.success) {
-      console.log('[Fastify/LibSQL] ✅ User created successfully:', fastifyResult);
       results.fastify = { success: true, data: fastifyResult, error: null };
     } else {
       results.fastify = { success: false, data: null, error: fastifyResult.error };
-      // Only log errors if server is reachable (not just offline)
-      if (fastifyResult.error !== 'Server unreachable') {
-        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-        console.error('[Fastify/LibSQL] REASON: Registration failed on Fastify WebSocket server.');
-        if (fastifyResult.error?.includes('UNIQUE') || fastifyResult.error?.includes('already')) {
-          console.error('[Fastify/LibSQL] SOLUTION: This user already exists. Use a different phone number or delete the existing user.');
-        } else if (fastifyResult.error?.includes('at least')) {
-          console.error('[Fastify/LibSQL] SOLUTION: Check that phone (6+ chars), password (6+ chars), and username (2+ chars) meet requirements.');
-        } else {
-          console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
-        }
-      }
     }
   } catch (e) {
-    console.error('[Fastify/LibSQL] ERROR:', e.message);
-    console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
-    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
     results.fastify = { success: false, data: null, error: e.message };
   }
 
@@ -102,8 +71,6 @@ async function create_user(phone, password, username, callback) {
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
 async function log_user(phone, password, username, callback) {
-  console.log(`[log_user] Logging in user "${username}" via WebSocket...`);
-
   const results = {
     tauri: { success: false, data: null, error: null },
     fastify: { success: false, data: null, error: null }
@@ -116,21 +83,11 @@ async function log_user(phone, password, username, callback) {
       password
     });
     if (tauriResult.ok || tauriResult.success) {
-      console.log('[Tauri/SQLite] ✅ User logged in successfully');
       results.tauri = { success: true, data: tauriResult, error: null };
     } else {
       results.tauri = { success: false, data: null, error: tauriResult.error };
-      // Clean log for expected cases
-      if (tauriResult.error?.includes('not found') || tauriResult.error?.includes('Not found')) {
-        console.log('[Tauri/SQLite] ℹ️ User not found');
-      } else if (tauriResult.error?.includes('password') || tauriResult.error?.includes('Invalid')) {
-        console.log('[Tauri/SQLite] ℹ️ Invalid credentials');
-      } else {
-        console.log('[Tauri/SQLite] ℹ️ Login failed:', tauriResult.error);
-      }
     }
   } catch (e) {
-    console.log('[Tauri/SQLite] ℹ️ Connection failed:', e.message);
     results.tauri = { success: false, data: null, error: e.message };
   }
 
@@ -141,23 +98,11 @@ async function log_user(phone, password, username, callback) {
       password
     });
     if (fastifyResult.ok || fastifyResult.success) {
-      console.log('[Fastify/LibSQL] ✅ User logged in successfully');
       results.fastify = { success: true, data: fastifyResult, error: null };
     } else {
       results.fastify = { success: false, data: null, error: fastifyResult.error };
-      if (fastifyResult.error !== 'Server unreachable') {
-        // Clean log for expected cases
-        if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
-          console.log('[Fastify/LibSQL] ℹ️ User not found');
-        } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
-          console.log('[Fastify/LibSQL] ℹ️ Invalid credentials');
-        } else {
-          console.log('[Fastify/LibSQL] ℹ️ Login failed:', fastifyResult.error);
-        }
-      }
     }
   } catch (e) {
-    console.log('[Fastify/LibSQL] ℹ️ Connection failed:', e.message);
     results.fastify = { success: false, data: null, error: e.message };
   }
 
@@ -175,8 +120,6 @@ async function log_user(phone, password, username, callback) {
  * @returns {Promise<{logged: boolean, user: Object|null, source: string}>}
  */
 async function current_user(callback) {
-  console.log('[current_user] Checking current user via WebSocket...');
-
   const result = {
     logged: false,
     user: null,
@@ -188,11 +131,9 @@ async function current_user(callback) {
     const tauriResult = await TauriAdapter.auth.me();
     if (tauriResult.ok || tauriResult.success) {
       if (tauriResult.user) {
-        console.log('[Tauri/SQLite] ✅ Current user:', tauriResult.user);
         result.logged = true;
         result.user = tauriResult.user;
         result.source = 'tauri';
-        grab('logged_user').textContent = 'user logged: ' + (tauriResult.user.username || tauriResult.user.phone);
 
         if (typeof callback === 'function') {
           callback(result);
@@ -201,7 +142,7 @@ async function current_user(callback) {
       }
     }
   } catch (e) {
-    console.error('[Tauri/SQLite] Current user check failed:', e.message);
+    // Silent failure
   }
 
   // Try Fastify if Tauri didn't have a user
@@ -209,11 +150,9 @@ async function current_user(callback) {
     const fastifyResult = await FastifyAdapter.auth.me();
     if (fastifyResult.ok || fastifyResult.success) {
       if (fastifyResult.user) {
-        console.log('[Fastify/LibSQL] ✅ Current user:', fastifyResult.user);
         result.logged = true;
         result.user = fastifyResult.user;
         result.source = 'fastify';
-        grab('logged_user').textContent = 'user logged: ' + (fastifyResult.user.username || fastifyResult.user.phone);
 
         if (typeof callback === 'function') {
           callback(result);
@@ -222,16 +161,10 @@ async function current_user(callback) {
       }
     }
   } catch (e) {
-    // Silent if server unreachable
-    if (!e.message?.includes('unreachable')) {
-      console.error('[Fastify/LibSQL] Current user check failed:', e.message);
-    }
+    // Silent failure
   }
 
   // No user logged in
-  console.log('[current_user] No user logged in');
-  grab('logged_user').textContent = 'no user logged';
-
   if (typeof callback === 'function') {
     callback(result);
   }
@@ -240,9 +173,6 @@ async function current_user(callback) {
 }
 
 async function unlog_user(callback = null) {
-  puts('Logging out user...');
-  console.log('[unlog_user] Logging out via WebSocket...');
-
   const results = {
     tauri: { success: false, data: null, error: null },
     fastify: { success: false, data: null, error: null }
@@ -252,14 +182,11 @@ async function unlog_user(callback = null) {
   try {
     const tauriResult = await TauriAdapter.auth.logout();
     if (tauriResult.ok && tauriResult.success) {
-      console.log('[Tauri/SQLite] ✅ User logged out successfully');
       results.tauri = { success: true, data: tauriResult, error: null };
     } else {
-      console.error('[Tauri/SQLite] Logout failed:', tauriResult.error);
       results.tauri = { success: false, data: null, error: tauriResult.error };
     }
   } catch (e) {
-    console.error('[Tauri/SQLite] Logout exception:', e.message);
     results.tauri = { success: false, data: null, error: e.message };
   }
 
@@ -267,17 +194,11 @@ async function unlog_user(callback = null) {
   try {
     const fastifyResult = await FastifyAdapter.auth.logout();
     if (fastifyResult.ok && fastifyResult.success) {
-      console.log('[Fastify/LibSQL] ✅ User logged out successfully');
       results.fastify = { success: true, data: fastifyResult, error: null };
     } else {
-      // Silent if server unreachable
-      if (fastifyResult.error !== 'Server unreachable') {
-        console.error('[Fastify/LibSQL] Logout failed:', fastifyResult.error);
-      }
       results.fastify = { success: false, data: null, error: fastifyResult.error };
     }
   } catch (e) {
-    console.error('[Fastify/LibSQL] Logout exception:', e.message);
     results.fastify = { success: false, data: null, error: e.message };
   }
 
@@ -300,8 +221,6 @@ async function unlog_user(callback = null) {
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
 async function delete_user(phone, password, username, callback) {
-  console.log(`[delete_user] Deleting user "${username}" via WebSocket...`);
-
   const results = {
     tauri: { success: false, data: null, error: null },
     fastify: { success: false, data: null, error: null }
@@ -314,26 +233,11 @@ async function delete_user(phone, password, username, callback) {
       password
     });
     if (tauriResult.ok || tauriResult.success) {
-      console.log('[Tauri/SQLite] ✅ User deleted successfully:', tauriResult);
       results.tauri = { success: true, data: tauriResult, error: null };
     } else {
-      console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
-      console.error('[Tauri/SQLite] REASON: Delete failed on Tauri/Axum WebSocket server.');
       results.tauri = { success: false, data: null, error: tauriResult.error };
-      if (tauriResult.error?.includes('not found') || tauriResult.error?.includes('Not found')) {
-        console.error('[Tauri/SQLite] SOLUTION: This user does not exist. Check the phone number.');
-      } else if (tauriResult.error?.includes('password') || tauriResult.error?.includes('Invalid')) {
-        console.error('[Tauri/SQLite] SOLUTION: The password is incorrect. Verify the password.');
-      } else if (tauriResult.error?.includes('token') || tauriResult.error?.includes('unauthorized')) {
-        console.error('[Tauri/SQLite] SOLUTION: You must be logged in to delete your account.');
-      } else {
-        console.error('[Tauri/SQLite] SOLUTION: Check WebSocket connection and server logs.');
-      }
     }
   } catch (e) {
-    console.error('[Tauri/SQLite] ERROR:', e.message);
-    console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
-    console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
     results.tauri = { success: false, data: null, error: e.message };
   }
 
@@ -344,28 +248,11 @@ async function delete_user(phone, password, username, callback) {
       password
     });
     if (fastifyResult.ok || fastifyResult.success) {
-      console.log('[Fastify/LibSQL] ✅ User deleted successfully:', fastifyResult);
       results.fastify = { success: true, data: fastifyResult, error: null };
     } else {
       results.fastify = { success: false, data: null, error: fastifyResult.error };
-      if (fastifyResult.error !== 'Server unreachable') {
-        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-        console.error('[Fastify/LibSQL] REASON: Delete failed on Fastify WebSocket server.');
-        if (fastifyResult.error?.includes('not found') || fastifyResult.error?.includes('Not found')) {
-          console.error('[Fastify/LibSQL] SOLUTION: This user does not exist. Check the phone number.');
-        } else if (fastifyResult.error?.includes('password') || fastifyResult.error?.includes('Invalid')) {
-          console.error('[Fastify/LibSQL] SOLUTION: The password is incorrect. Verify the password.');
-        } else if (fastifyResult.error?.includes('token') || fastifyResult.error?.includes('unauthorized')) {
-          console.error('[Fastify/LibSQL] SOLUTION: You must be logged in to delete your account.');
-        } else {
-          console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket connection and server logs.');
-        }
-      }
     }
   } catch (e) {
-    console.error('[Fastify/LibSQL] ERROR:', e.message);
-    console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
-    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
     results.fastify = { success: false, data: null, error: e.message };
   }
 
@@ -382,8 +269,6 @@ async function delete_user(phone, password, username, callback) {
  * Uses atome.list to get user-type atomes
  */
 async function user_list() {
-  console.log('[user_list] Fetching users via WebSocket...');
-
   const results = {
     tauri: { users: [], error: null },
     fastify: { users: [], error: null }
@@ -394,19 +279,11 @@ async function user_list() {
     const tauriResult = await TauriAdapter.atome.list({ type: 'user' });
     if (tauriResult.ok || tauriResult.success) {
       results.tauri.users = tauriResult.atomes || tauriResult.data || [];
-      console.log('[Tauri/SQLite] ✅ Users found:', results.tauri.users.length);
-      console.log('[Tauri/SQLite] Users:', results.tauri);
     } else {
       results.tauri.error = tauriResult.error;
-      console.error('[Tauri/SQLite] ERROR:', tauriResult.error);
-      console.error('[Tauri/SQLite] REASON: Failed to list users from Tauri/Axum WebSocket server.');
-      console.error('[Tauri/SQLite] SOLUTION: Check that the atome.list action is implemented in local_atome.rs');
     }
   } catch (e) {
     results.tauri.error = e.message;
-    console.error('[Tauri/SQLite] ERROR:', e.message);
-    console.error('[Tauri/SQLite] REASON: Exception during WebSocket communication.');
-    console.error('[Tauri/SQLite] SOLUTION: Ensure Tauri server is running on ws://127.0.0.1:3000/ws/api');
   }
 
   // Try Fastify
@@ -414,21 +291,11 @@ async function user_list() {
     const fastifyResult = await FastifyAdapter.atome.list({ type: 'user' });
     if (fastifyResult.ok || fastifyResult.success) {
       results.fastify.users = fastifyResult.atomes || fastifyResult.data || [];
-      console.log('[Fastify/LibSQL] ✅ Users found:', results.fastify.users.length);
-      console.log('[Fastify/LibSQL] Users:', results.fastify);
     } else {
       results.fastify.error = fastifyResult.error;
-      if (fastifyResult.error !== 'Server unreachable') {
-        console.error('[Fastify/LibSQL] ERROR:', fastifyResult.error);
-        console.error('[Fastify/LibSQL] REASON: Failed to list users from Fastify WebSocket server.');
-        console.error('[Fastify/LibSQL] SOLUTION: Check WebSocket handler in server.js');
-      }
     }
   } catch (e) {
     results.fastify.error = e.message;
-    console.error('[Fastify/LibSQL] ERROR:', e.message);
-    console.error('[Fastify/LibSQL] REASON: Exception during WebSocket communication.');
-    console.error('[Fastify/LibSQL] SOLUTION: Ensure Fastify server is running on ws://127.0.0.1:3001/ws/api');
   }
 
   return results;
@@ -461,8 +328,6 @@ async function sendDebugRequest(adapter, action) {
  * Uses the TauriAdapter and FastifyAdapter debug.listTables() method
  */
 async function list_tables() {
-  console.log('[list_tables] Fetching tables via WebSocket...');
-
   const results = {
     tauri: { database: 'Tauri/SQLite', tables: [], error: null },
     fastify: { database: 'Fastify/LibSQL', tables: [], error: null }
@@ -473,14 +338,11 @@ async function list_tables() {
     const tauriResult = await TauriAdapter.debug.listTables();
     if (tauriResult.success || tauriResult.ok) {
       results.tauri.tables = tauriResult.tables || [];
-      console.log('[Tauri/SQLite] ✅ Tables:', results.tauri.tables);
     } else {
       results.tauri.error = tauriResult.error || 'Unknown error';
-      console.error('[Tauri/SQLite] ERROR:', results.tauri.error);
     }
   } catch (e) {
     results.tauri.error = e.message;
-    console.error('[Tauri/SQLite] ERROR:', e.message);
   }
 
   // Fastify: Use WebSocket adapter
@@ -488,14 +350,11 @@ async function list_tables() {
     const fastifyResult = await FastifyAdapter.debug.listTables();
     if (fastifyResult.success || fastifyResult.ok) {
       results.fastify.tables = fastifyResult.tables || [];
-      console.log('[Fastify/LibSQL] ✅ Tables:', results.fastify.tables);
     } else {
       results.fastify.error = fastifyResult.error || 'Unknown error';
-      console.error('[Fastify/LibSQL] ERROR:', results.fastify.error);
     }
   } catch (e) {
     results.fastify.error = e.message;
-    console.error('[Fastify/LibSQL] ERROR:', e.message);
   }
 
   return results;
@@ -509,8 +368,6 @@ async function list_tables() {
  * @returns {Promise<Object>} Sync status with categorized atomes
  */
 async function list_unsynced_atomes(callback) {
-  console.log('[list_unsynced_atomes] Comparing atomes between backends...');
-
   const result = {
     onlyOnTauri: [],      // Atomes to push to server
     onlyOnFastify: [],    // Atomes to pull from server
@@ -550,10 +407,8 @@ async function list_unsynced_atomes(callback) {
   // Fetch all atomes from Tauri
   try {
     tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri');
-    console.log('[Tauri/SQLite] ✅ Fetched', tauriAtomes.length, 'atomes (including deleted)');
   } catch (e) {
     result.error = 'Tauri connection failed: ' + e.message;
-    console.error('[list_unsynced_atomes] ERROR:', result.error);
     if (typeof callback === 'function') callback(result);
     return result;
   }
@@ -561,21 +416,16 @@ async function list_unsynced_atomes(callback) {
   // Fetch all atomes from Fastify
   try {
     fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify');
-    console.log('[Fastify/LibSQL] ✅ Fetched', fastifyAtomes.length, 'atomes (including deleted)');
   } catch (e) {
     // If Fastify is offline, all Tauri atomes are "unsynced"
     result.onlyOnTauri = tauriAtomes.filter(a => !a.deleted_at);
     result.error = 'Fastify connection failed - all local atomes considered unsynced';
-    console.warn('[list_unsynced_atomes] Fastify offline, all local atomes unsynced');
     if (typeof callback === 'function') callback(result);
     return result;
   }
 
   // If Fastify returned nothing but Tauri has atomes, check if Fastify is just unreachable
-  if (fastifyAtomes.length === 0 && tauriAtomes.length > 0) {
-    // Could be offline, mark all as unsynced
-    console.warn('[list_unsynced_atomes] Fastify has no atomes, may be offline');
-  }
+  // Could be offline, mark all as unsynced
 
   // Create lookup maps by atome_id
   const tauriMap = new Map();
@@ -724,17 +574,6 @@ async function list_unsynced_atomes(callback) {
     }
   }
 
-  // Log summary
-  console.log('[list_unsynced_atomes] Summary:');
-  console.log('  - Only on Tauri (to push):', result.onlyOnTauri.length);
-  console.log('  - Only on Fastify (to pull):', result.onlyOnFastify.length);
-  console.log('  - Modified on Tauri:', result.modifiedOnTauri.length);
-  console.log('  - Modified on Fastify:', result.modifiedOnFastify.length);
-  console.log('  - Deleted on Tauri (to propagate):', result.deletedOnTauri.length);
-  console.log('  - Deleted on Fastify (to propagate):', result.deletedOnFastify.length);
-  console.log('  - Conflicts:', result.conflicts.length);
-  console.log('  - Synced:', result.synced.length);
-
   if (typeof callback === 'function') {
     callback(result);
   }
@@ -751,8 +590,6 @@ async function list_unsynced_atomes(callback) {
  * @returns {Promise<Object>} Sync results with success/failure counts
  */
 async function sync_atomes(callback) {
-  console.log('[sync_atomes] Starting synchronization...');
-
   const result = {
     pushed: { success: 0, failed: 0, errors: [] },
     pulled: { success: 0, failed: 0, errors: [] },
@@ -768,13 +605,11 @@ async function sync_atomes(callback) {
     unsyncedResult = await list_unsynced_atomes();
     if (unsyncedResult.error) {
       result.error = unsyncedResult.error;
-      console.error('[sync_atomes] ERROR:', result.error);
       if (typeof callback === 'function') callback(result);
       return result;
     }
   } catch (e) {
     result.error = 'Failed to list unsynced atomes: ' + e.message;
-    console.error('[sync_atomes] ERROR:', result.error);
     if (typeof callback === 'function') callback(result);
     return result;
   }
@@ -782,11 +617,10 @@ async function sync_atomes(callback) {
   result.alreadySynced = unsyncedResult.synced.length;
 
   // 1. Push local-only atomes to Fastify
-  console.log('[sync_atomes] Pushing', unsyncedResult.onlyOnTauri.length, 'atomes to Fastify...');
   for (const atome of unsyncedResult.onlyOnTauri) {
     try {
       const createResult = await FastifyAdapter.atome.create({
-        id: atome.atome_id,  // Preserve original ID for sync
+        id: atome.atome_id,
         type: atome.atome_type,
         ownerId: atome.owner_id,
         parentId: atome.parent_id,
@@ -795,25 +629,21 @@ async function sync_atomes(callback) {
 
       if (createResult.ok || createResult.success) {
         result.pushed.success++;
-        console.log('[sync_atomes] ✅ Pushed to Fastify:', atome.atome_id);
       } else {
         result.pushed.failed++;
         result.pushed.errors.push({ id: atome.atome_id, error: createResult.error });
-        console.error('[sync_atomes] ❌ Failed to push:', atome.atome_id, createResult.error);
       }
     } catch (e) {
       result.pushed.failed++;
       result.pushed.errors.push({ id: atome.atome_id, error: e.message });
-      console.error('[sync_atomes] ❌ Exception pushing:', atome.atome_id, e.message);
     }
   }
 
   // 2. Pull remote-only atomes to Tauri
-  console.log('[sync_atomes] Pulling', unsyncedResult.onlyOnFastify.length, 'atomes to Tauri...');
   for (const atome of unsyncedResult.onlyOnFastify) {
     try {
       const createResult = await TauriAdapter.atome.create({
-        id: atome.atome_id,  // Preserve original ID for sync
+        id: atome.atome_id,
         type: atome.atome_type,
         ownerId: atome.owner_id,
         parentId: atome.parent_id,
@@ -822,23 +652,18 @@ async function sync_atomes(callback) {
 
       if (createResult.ok || createResult.success) {
         result.pulled.success++;
-        console.log('[sync_atomes] ✅ Pulled to Tauri:', atome.atome_id);
       } else {
         result.pulled.failed++;
         result.pulled.errors.push({ id: atome.atome_id, error: createResult.error });
-        console.error('[sync_atomes] ❌ Failed to pull:', atome.atome_id, createResult.error);
       }
     } catch (e) {
       result.pulled.failed++;
       result.pulled.errors.push({ id: atome.atome_id, error: e.message });
-      console.error('[sync_atomes] ❌ Exception pulling:', atome.atome_id, e.message);
     }
   }
 
   // Helper function to extract particles from an atome object
-  // Handles different formats: { data: {...} }, { particles: {...} }, or inline { phone: "...", username: "..." }
   const extractParticles = (atome) => {
-    // If data or particles field exists, use it
     if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
       return atome.data;
     }
@@ -846,7 +671,6 @@ async function sync_atomes(callback) {
       return atome.particles;
     }
 
-    // Otherwise, extract inline particles (all fields except metadata)
     const metadataFields = [
       'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
       'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
@@ -863,25 +687,12 @@ async function sync_atomes(callback) {
   };
 
   // 3. Update Fastify with newer Tauri modifications
-  console.log('[sync_atomes] Updating Fastify with', unsyncedResult.modifiedOnTauri.length, 'local changes...');
   for (const item of unsyncedResult.modifiedOnTauri) {
     try {
-      // Debug: log the raw item structure
-      console.log('[sync_atomes] DEBUG item.tauri:', JSON.stringify(item.tauri));
-
-      // Get the particles data using helper function
       const particles = extractParticles(item.tauri);
 
-      // Debug: log what extractParticles returned
-      console.log('[sync_atomes] DEBUG extracted particles:', JSON.stringify(particles));
-
-      // Log for debugging
-      console.log('[sync_atomes] Updating Fastify atome:', item.id, 'with particles:', Object.keys(particles));
-
-      // Skip if no particles to update
       if (!particles || Object.keys(particles).length === 0) {
-        console.warn('[sync_atomes] ⚠️ No particles to update for:', item.id);
-        result.updated.success++; // Consider it synced since there's nothing to update
+        result.updated.success++;
         continue;
       }
 
@@ -889,33 +700,23 @@ async function sync_atomes(callback) {
 
       if (updateResult.ok || updateResult.success) {
         result.updated.success++;
-        console.log('[sync_atomes] ✅ Updated Fastify:', item.id);
       } else {
         result.updated.failed++;
         result.updated.errors.push({ id: item.id, error: updateResult.error });
-        console.error('[sync_atomes] ❌ Failed to update Fastify:', item.id, updateResult.error);
       }
     } catch (e) {
       result.updated.failed++;
       result.updated.errors.push({ id: item.id, error: e.message });
-      console.error('[sync_atomes] ❌ Exception updating Fastify:', item.id, e.message);
     }
   }
 
   // 4. Update Tauri with newer Fastify modifications
-  console.log('[sync_atomes] Updating Tauri with', unsyncedResult.modifiedOnFastify.length, 'remote changes...');
   for (const item of unsyncedResult.modifiedOnFastify) {
     try {
-      // Get the particles data using helper function
       const particles = extractParticles(item.fastify);
 
-      // Log for debugging
-      console.log('[sync_atomes] Updating Tauri atome:', item.id, 'with particles:', Object.keys(particles));
-
-      // Skip if no particles to update
       if (!particles || Object.keys(particles).length === 0) {
-        console.warn('[sync_atomes] ⚠️ No particles to update for:', item.id);
-        result.updated.success++; // Consider it synced since there's nothing to update
+        result.updated.success++;
         continue;
       }
 
@@ -923,76 +724,53 @@ async function sync_atomes(callback) {
 
       if (updateResult.ok || updateResult.success) {
         result.updated.success++;
-        console.log('[sync_atomes] ✅ Updated Tauri:', item.id);
       } else {
         result.updated.failed++;
         result.updated.errors.push({ id: item.id, error: updateResult.error });
-        console.error('[sync_atomes] ❌ Failed to update Tauri:', item.id, updateResult.error);
       }
     } catch (e) {
       result.updated.failed++;
       result.updated.errors.push({ id: item.id, error: e.message });
-      console.error('[sync_atomes] ❌ Exception updating Tauri:', item.id, e.message);
     }
   }
 
   // 5. Propagate deletions from Tauri to Fastify
-  console.log('[sync_atomes] Propagating', unsyncedResult.deletedOnTauri.length, 'deletions to Fastify...');
   for (const item of unsyncedResult.deletedOnTauri) {
     try {
       const deleteResult = await FastifyAdapter.atome.softDelete(item.id);
 
       if (deleteResult.ok || deleteResult.success) {
         result.updated.success++;
-        console.log('[sync_atomes] ✅ Deleted on Fastify:', item.id);
       } else {
         result.updated.failed++;
         result.updated.errors.push({ id: item.id, error: deleteResult.error });
-        console.error('[sync_atomes] ❌ Failed to delete on Fastify:', item.id, deleteResult.error);
       }
     } catch (e) {
       result.updated.failed++;
       result.updated.errors.push({ id: item.id, error: e.message });
-      console.error('[sync_atomes] ❌ Exception deleting on Fastify:', item.id, e.message);
     }
   }
 
   // 6. Propagate deletions from Fastify to Tauri
-  console.log('[sync_atomes] Propagating', unsyncedResult.deletedOnFastify.length, 'deletions to Tauri...');
   for (const item of unsyncedResult.deletedOnFastify) {
     try {
       const deleteResult = await TauriAdapter.atome.softDelete(item.id);
 
       if (deleteResult.ok || deleteResult.success) {
         result.updated.success++;
-        console.log('[sync_atomes] ✅ Deleted on Tauri:', item.id);
       } else {
         result.updated.failed++;
         result.updated.errors.push({ id: item.id, error: deleteResult.error });
-        console.error('[sync_atomes] ❌ Failed to delete on Tauri:', item.id, deleteResult.error);
       }
     } catch (e) {
       result.updated.failed++;
       result.updated.errors.push({ id: item.id, error: e.message });
-      console.error('[sync_atomes] ❌ Exception deleting on Tauri:', item.id, e.message);
     }
   }
 
   // 7. Report conflicts (don't auto-resolve, just report)
   result.conflicts.count = unsyncedResult.conflicts.length;
   result.conflicts.items = unsyncedResult.conflicts.map(c => c.id);
-  if (result.conflicts.count > 0) {
-    console.warn('[sync_atomes] ⚠️', result.conflicts.count, 'conflicts need manual resolution:', result.conflicts.items);
-  }
-
-  // Log summary
-  console.log('[sync_atomes] ========== SYNC COMPLETE ==========');
-  console.log('  Pushed to Fastify:', result.pushed.success, 'success,', result.pushed.failed, 'failed');
-  console.log('  Pulled to Tauri:', result.pulled.success, 'success,', result.pulled.failed, 'failed');
-  console.log('  Updated:', result.updated.success, 'success,', result.updated.failed, 'failed');
-  console.log('  Deletions propagated:', unsyncedResult.deletedOnTauri.length + unsyncedResult.deletedOnFastify.length);
-  console.log('  Conflicts:', result.conflicts.count);
-  console.log('  Already synced:', result.alreadySynced);
 
   if (typeof callback === 'function') {
     callback(result);
@@ -1002,18 +780,697 @@ async function sync_atomes(callback) {
 }
 
 // ============================================
+// PROJECT & ATOME MANAGEMENT FUNCTIONS
+// ============================================
+
+/**
+ * Create a project (a project is an atome with type='project')
+ * A project serves as an entry point to contain user's atomes
+ * @param {string} projectName - Name of the project
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Results from both backends
+ */
+async function create_project(projectName, callback) {
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
+
+  // Get current user to set as owner
+  const currentUserResult = await current_user();
+  const ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+
+  if (!ownerId) {
+    const error = 'No user logged in. Please log in first.';
+    results.tauri.error = error;
+    results.fastify.error = error;
+    if (typeof callback === 'function') callback(results);
+    return results;
+  }
+
+  const projectData = {
+    type: 'project',
+    ownerId: ownerId,
+    particles: {
+      name: projectName,
+      created_at: new Date().toISOString()
+    }
+  };
+
+  // Create on Tauri
+  try {
+    const tauriResult = await TauriAdapter.atome.create(projectData);
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri = { success: true, data: tauriResult, error: null };
+    } else {
+      results.tauri = { success: false, data: null, error: tauriResult.error };
+    }
+  } catch (e) {
+    results.tauri = { success: false, data: null, error: e.message };
+  }
+
+  // Create on Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.create(projectData);
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify = { success: true, data: fastifyResult, error: null };
+    } else {
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+    }
+  } catch (e) {
+    results.fastify = { success: false, data: null, error: e.message };
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+/**
+ * List all projects for the current user
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} List of projects from both backends
+ */
+async function list_projects(callback) {
+  const results = {
+    tauri: { projects: [], error: null },
+    fastify: { projects: [], error: null }
+  };
+
+  // Try Tauri
+  try {
+    const tauriResult = await TauriAdapter.atome.list({ type: 'project' });
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri.projects = tauriResult.atomes || tauriResult.data || [];
+    } else {
+      results.tauri.error = tauriResult.error;
+    }
+  } catch (e) {
+    results.tauri.error = e.message;
+  }
+
+  // Try Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.list({ type: 'project' });
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify.projects = fastifyResult.atomes || fastifyResult.data || [];
+    } else {
+      results.fastify.error = fastifyResult.error;
+    }
+  } catch (e) {
+    results.fastify.error = e.message;
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+/**
+ * Delete a project and all its contents (soft delete)
+ * @param {string} projectId - ID of the project to delete
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Results from both backends
+ */
+async function delete_project(projectId, callback) {
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
+
+  if (!projectId) {
+    const error = 'No project ID provided';
+    results.tauri.error = error;
+    results.fastify.error = error;
+    if (typeof callback === 'function') callback(results);
+    return results;
+  }
+
+  // Soft delete on Tauri
+  try {
+    const tauriResult = await TauriAdapter.atome.softDelete(projectId);
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri = { success: true, data: tauriResult, error: null };
+    } else {
+      results.tauri = { success: false, data: null, error: tauriResult.error };
+    }
+  } catch (e) {
+    results.tauri = { success: false, data: null, error: e.message };
+  }
+
+  // Soft delete on Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.softDelete(projectId);
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify = { success: true, data: fastifyResult, error: null };
+    } else {
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+    }
+  } catch (e) {
+    results.fastify = { success: false, data: null, error: e.message };
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+/**
+ * Create an atome within a project
+ * @param {Object} options - Atome options { type, color, projectId, particles }
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Results from both backends
+ */
+async function create_atome(options, callback) {
+  // Handle both object and callback-only signatures
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+
+  const atomeType = options.type || 'shape';
+  const atomeColor = options.color || 'blue';
+  const projectId = options.projectId || null;
+
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
+
+  // Get current user
+  const currentUserResult = await current_user();
+  const ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+
+  if (!ownerId) {
+    const error = 'No user logged in. Please log in first.';
+    results.tauri.error = error;
+    results.fastify.error = error;
+    if (typeof callback === 'function') callback(results);
+    return results;
+  }
+
+  const atomeData = {
+    type: atomeType,
+    ownerId: ownerId,
+    parentId: projectId, // Link to project if provided
+    particles: {
+      color: atomeColor,
+      created_at: new Date().toISOString(),
+      ...options.particles
+    }
+  };
+
+  // Create on Tauri
+  try {
+    const tauriResult = await TauriAdapter.atome.create(atomeData);
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri = { success: true, data: tauriResult, error: null };
+    } else {
+      results.tauri = { success: false, data: null, error: tauriResult.error };
+    }
+  } catch (e) {
+    results.tauri = { success: false, data: null, error: e.message };
+  }
+
+  // Create on Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.create(atomeData);
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify = { success: true, data: fastifyResult, error: null };
+    } else {
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+    }
+  } catch (e) {
+    results.fastify = { success: false, data: null, error: e.message };
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+/**
+ * List atomes, optionally filtered by project or type
+ * @param {Object} options - Filter options { type, projectId }
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} List of atomes from both backends
+ */
+async function list_atomes(options = {}, callback) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+
+  const atomeType = options.type || null;
+
+  const results = {
+    tauri: { atomes: [], error: null },
+    fastify: { atomes: [], error: null }
+  };
+
+  const queryOptions = atomeType ? { type: atomeType } : {};
+
+  // Try Tauri
+  try {
+    const tauriResult = await TauriAdapter.atome.list(queryOptions);
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri.atomes = tauriResult.atomes || tauriResult.data || [];
+    } else {
+      results.tauri.error = tauriResult.error;
+    }
+  } catch (e) {
+    results.tauri.error = e.message;
+  }
+
+  // Try Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify.atomes = fastifyResult.atomes || fastifyResult.data || [];
+    } else {
+      results.fastify.error = fastifyResult.error;
+    }
+  } catch (e) {
+    results.fastify.error = e.message;
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+/**
+ * Delete an atome (soft delete to preserve history)
+ * @param {string} atomeId - ID of the atome to delete (REQUIRED)
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Results from both backends
+ */
+async function delete_atome(atomeId, callback) {
+  // Handle callback-only call
+  if (typeof atomeId === 'function') {
+    callback = atomeId;
+    atomeId = null;
+  }
+
+  // atomeId is required
+  if (!atomeId) {
+    const error = 'atomeId parameter is required';
+    const results = {
+      tauri: { success: false, data: null, error },
+      fastify: { success: false, data: null, error }
+    };
+    if (typeof callback === 'function') callback(results);
+    return results;
+  }
+
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
+
+  // Soft delete on Tauri
+  try {
+    const tauriResult = await TauriAdapter.atome.softDelete(atomeId);
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri = { success: true, data: tauriResult, error: null };
+    } else {
+      results.tauri = { success: false, data: null, error: tauriResult.error };
+    }
+  } catch (e) {
+    results.tauri = { success: false, data: null, error: e.message };
+  }
+
+  // Soft delete on Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.softDelete(atomeId);
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify = { success: true, data: fastifyResult, error: null };
+    } else {
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+    }
+  } catch (e) {
+    results.fastify = { success: false, data: null, error: e.message };
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+/**
+ * Alter an atome's particles (update with history tracking)
+ * The particles_versions table stores each change for undo functionality
+ * @param {string} atomeId - ID of the atome to alter (REQUIRED)
+ * @param {Object} newParticles - New particle values to set/update (REQUIRED)
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Results from both backends
+ */
+async function alter_atome(atomeId, newParticles, callback) {
+  // Handle callback as second argument
+  if (typeof newParticles === 'function') {
+    callback = newParticles;
+    newParticles = null;
+  }
+
+  // Both atomeId and newParticles are required
+  if (!atomeId || !newParticles || typeof newParticles !== 'object') {
+    const error = !atomeId
+      ? 'atomeId parameter is required'
+      : 'newParticles object is required';
+    const results = {
+      tauri: { success: false, data: null, error },
+      fastify: { success: false, data: null, error }
+    };
+    if (typeof callback === 'function') callback(results);
+    return results;
+  }
+
+  const results = {
+    tauri: { success: false, data: null, error: null },
+    fastify: { success: false, data: null, error: null }
+  };
+
+  // Update on Tauri (particles_versions are automatically updated in the backend)
+  try {
+    const tauriResult = await TauriAdapter.atome.update(atomeId, newParticles);
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri = { success: true, data: tauriResult, error: null };
+    } else {
+      results.tauri = { success: false, data: null, error: tauriResult.error };
+    }
+  } catch (e) {
+    results.tauri = { success: false, data: null, error: e.message };
+  }
+
+  // Update on Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.update(atomeId, newParticles);
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify = { success: true, data: fastifyResult, error: null };
+    } else {
+      results.fastify = { success: false, data: null, error: fastifyResult.error };
+    }
+  } catch (e) {
+    results.fastify = { success: false, data: null, error: e.message };
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+/**
+ * Get an atome with all its particles and history
+ * @param {string} atomeId - ID of the atome to retrieve (REQUIRED)
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<Object>} Atome data with particles
+ */
+async function get_atome(atomeId, callback) {
+  // Handle callback as first argument
+  if (typeof atomeId === 'function') {
+    callback = atomeId;
+    atomeId = null;
+  }
+
+  if (!atomeId) {
+    const error = 'atomeId parameter is required';
+    if (typeof callback === 'function') callback({ error });
+    return { error };
+  }
+
+  const results = {
+    tauri: { atome: null, error: null },
+    fastify: { atome: null, error: null }
+  };
+
+  // Try Tauri
+  try {
+    const tauriResult = await TauriAdapter.atome.get(atomeId);
+    if (tauriResult.ok || tauriResult.success) {
+      results.tauri.atome = tauriResult.atome || tauriResult.data || tauriResult;
+    } else {
+      results.tauri.error = tauriResult.error;
+    }
+  } catch (e) {
+    results.tauri.error = e.message;
+  }
+
+  // Try Fastify
+  try {
+    const fastifyResult = await FastifyAdapter.atome.get(atomeId);
+    if (fastifyResult.ok || fastifyResult.success) {
+      results.fastify.atome = fastifyResult.atome || fastifyResult.data || fastifyResult;
+    } else {
+      results.fastify.error = fastifyResult.error;
+    }
+  } catch (e) {
+    results.fastify.error = e.message;
+  }
+
+  if (typeof callback === 'function') callback(results);
+  return results;
+}
+
+
+// ============================================
+// ⚠️⚠️⚠️ TEST SECTION - DO NOT CALL FROM PRODUCTION CODE ⚠️⚠️⚠️
+// ============================================
+// Everything below this line is temporary test UI and will be removed.
+// Production code above MUST NOT reference any element defined below.
+// Any such reference will cause a crash when the test section is removed.
+// ============================================
+
+// Test state variables
+let selectedProjectId = null;
+let selectedAtomeId = null;
+
+/**
+ * TEST ONLY - Open a project selector dialog
+ * @param {Function} callback - Callback with selected project { project_id, project_name }
+ */
+async function open_project_selector(callback) {
+  console.log('[open_project_selector] Opening project selector...');
+
+  const projectsResult = await list_projects();
+  const projects = projectsResult.tauri.projects.length > 0
+    ? projectsResult.tauri.projects
+    : projectsResult.fastify.projects;
+
+  if (projects.length === 0) {
+    console.log('[open_project_selector] No projects found');
+    if (typeof callback === 'function') {
+      callback({ project_id: null, project_name: null, cancelled: true });
+    }
+    return;
+  }
+
+  const existingSelector = grab('project_selector_overlay');
+  if (existingSelector) existingSelector.remove();
+
+  $('div', {
+    id: 'project_selector_overlay',
+    css: {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: '1000'
+    }
+  });
+
+  $('div', {
+    id: 'project_selector_modal',
+    parent: 'project_selector_overlay',
+    css: {
+      backgroundColor: '#fff',
+      padding: '20px',
+      borderRadius: '8px',
+      minWidth: '300px',
+      maxHeight: '400px',
+      overflowY: 'auto'
+    }
+  });
+
+  $('div', {
+    parent: 'project_selector_modal',
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
+    text: 'Select a Project'
+  });
+
+  projects.forEach((project, index) => {
+    const projectId = project.atome_id || project.id;
+    const projectName = project.name || project.data?.name || project.particles?.name || 'Unnamed Project';
+
+    $('div', {
+      id: 'project_item_' + index,
+      parent: 'project_selector_modal',
+      css: {
+        padding: '10px',
+        margin: '5px 0',
+        backgroundColor: '#f0f0f0',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        color: '#333'
+      },
+      text: projectName,
+      onClick: () => {
+        selectedProjectId = projectId;
+        grab('project_selector_overlay').remove();
+        console.log('[open_project_selector] Selected project:', projectName, '(' + projectId + ')');
+        if (typeof callback === 'function') {
+          callback({ project_id: projectId, project_name: projectName, cancelled: false });
+        }
+      }
+    });
+  });
+
+  $('div', {
+    parent: 'project_selector_modal',
+    css: {
+      padding: '10px',
+      marginTop: '15px',
+      backgroundColor: '#ccc',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      textAlign: 'center',
+      color: '#333'
+    },
+    text: 'Cancel',
+    onClick: () => {
+      grab('project_selector_overlay').remove();
+      if (typeof callback === 'function') {
+        callback({ project_id: null, project_name: null, cancelled: true });
+      }
+    }
+  });
+}
+
+/**
+ * TEST ONLY - Open an atome selector dialog
+ * @param {Object} options - Filter options { type, projectId }
+ * @param {Function} callback - Callback with selected atome { atome_id, atome }
+ */
+async function open_atome_selector(options, callback) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+
+  console.log('[open_atome_selector] Opening atome selector...');
+
+  const atomesResult = await list_atomes(options);
+  const atomes = atomesResult.tauri.atomes.length > 0
+    ? atomesResult.tauri.atomes
+    : atomesResult.fastify.atomes;
+
+  const filteredAtomes = atomes.filter(a => {
+    const type = a.atome_type || a.type;
+    return type !== 'project' && type !== 'user';
+  });
+
+  if (filteredAtomes.length === 0) {
+    console.log('[open_atome_selector] No atomes found');
+    if (typeof callback === 'function') {
+      callback({ atome_id: null, atome: null, cancelled: true });
+    }
+    return;
+  }
+
+  const existingSelector = grab('atome_selector_overlay');
+  if (existingSelector) existingSelector.remove();
+
+  $('div', {
+    id: 'atome_selector_overlay',
+    css: {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: '1000'
+    }
+  });
+
+  $('div', {
+    id: 'atome_selector_modal',
+    parent: 'atome_selector_overlay',
+    css: {
+      backgroundColor: '#fff',
+      padding: '20px',
+      borderRadius: '8px',
+      minWidth: '350px',
+      maxHeight: '400px',
+      overflowY: 'auto'
+    }
+  });
+
+  $('div', {
+    parent: 'atome_selector_modal',
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
+    text: 'Select an Atome'
+  });
+
+  filteredAtomes.forEach((atome, index) => {
+    const atomeId = atome.atome_id || atome.id;
+    const atomeType = atome.atome_type || atome.type || 'unknown';
+    const atomeColor = atome.color || atome.data?.color || atome.particles?.color || '';
+    const displayText = atomeType + (atomeColor ? ' (' + atomeColor + ')' : '') + ' - ' + atomeId.substring(0, 8) + '...';
+
+    $('div', {
+      id: 'atome_item_' + index,
+      parent: 'atome_selector_modal',
+      css: {
+        padding: '10px',
+        margin: '5px 0',
+        backgroundColor: '#f0f0f0',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        color: '#333',
+        fontSize: '14px'
+      },
+      text: displayText,
+      onClick: () => {
+        selectedAtomeId = atomeId;
+        grab('atome_selector_overlay').remove();
+        console.log('[open_atome_selector] Selected atome:', atomeId);
+        if (typeof callback === 'function') {
+          callback({ atome_id: atomeId, atome: atome, cancelled: false });
+        }
+      }
+    });
+  });
+
+  $('div', {
+    parent: 'atome_selector_modal',
+    css: {
+      padding: '10px',
+      marginTop: '15px',
+      backgroundColor: '#ccc',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      textAlign: 'center',
+      color: '#333'
+    },
+    text: 'Cancel',
+    onClick: () => {
+      grab('atome_selector_overlay').remove();
+      if (typeof callback === 'function') {
+        callback({ atome_id: null, atome: null, cancelled: true });
+      }
+    }
+  });
+}
+
+// ============================================
 // UI BUTTONS & tests
 // ============================================
 
-// Keep existing UI and code
-
-//todo : do not log user when creating user
-//todo : create/delete/modify atomes project type and atomes and theyre particles and sync
-
 //todo: share atomes both atome project type and atome width other user user
 
-//todo: restore atomes from it's history to and brig back the new state to present
-//todo : estore atomes from it's history and create  and  alterated  history from the present state
+//todo: restore atomes from it's history to and bring back the new state to present
+//todo: restore atomes from it's history and create an altered history from the present state
 
 /// input box below
 
@@ -1429,8 +1886,14 @@ $('span', {
   },
   text: 'create project',
   onClick: () => {
-    create_project((project_name), (result) => {
-      puts('sync atomes: ' + JSON.stringify(result));
+    const projectName = grab('atome_project_name_input').value;
+    puts('Creating project: ' + projectName);
+    create_project(projectName, (result) => {
+      if (result.tauri.success || result.fastify.success) {
+        puts('✅ Project created: ' + projectName);
+      } else {
+        puts('❌ Failed to create project');
+      }
     });
   },
 });
@@ -1448,12 +1911,52 @@ $('span', {
   },
   text: 'delete project',
   onClick: () => {
-    delete_project((project_id), (result) => {
-      puts('sync atomes: ' + JSON.stringify(result));
+    puts('Select a project to delete...');
+    open_project_selector((selection) => {
+      if (selection.cancelled) {
+        puts('Deletion cancelled');
+        return;
+      }
+      delete_project(selection.project_id, (result) => {
+        if (result.tauri.success || result.fastify.success) {
+          puts('✅ Project deleted: ' + selection.project_name);
+        } else {
+          puts('❌ Failed to delete project');
+        }
+      });
     });
   },
 });
 
+$('span', {
+  id: 'list_projects',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'list projects',
+  onClick: async () => {
+    puts('Fetching projects...');
+    const result = await list_projects();
+    const projects = result.tauri.projects.length > 0 ? result.tauri.projects : result.fastify.projects;
+    if (projects.length > 0) {
+      puts('Projects found: ' + projects.length);
+      projects.forEach(p => {
+        const name = p.name || p.data?.name || p.particles?.name || 'Unnamed';
+        const id = (p.atome_id || p.id).substring(0, 8);
+        puts('  - ' + name + ' (' + id + '...)');
+      });
+    } else {
+      puts('No projects found');
+    }
+  },
+});
+
+$('br', {});
 
 $('span', {
   id: 'create_atome',
@@ -1465,10 +1968,19 @@ $('span', {
     margin: '10px',
     display: 'inline-block'
   },
-  text: 'create atomes',
+  text: 'create atome',
   onClick: () => {
-    create_atome((result) => {
-      puts('sync atomes: ' + JSON.stringify(result));
+    const atomeType = grab('atome_type_input').value;
+    const atomeColor = grab('atome_color_input').value;
+    puts('Creating atome: ' + atomeType + ' (' + atomeColor + ')');
+    create_atome({ type: atomeType, color: atomeColor }, (result) => {
+      if (result.tauri.success || result.fastify.success) {
+        const newId = result.tauri.data?.atome_id || result.tauri.data?.id ||
+          result.fastify.data?.atome_id || result.fastify.data?.id || 'unknown';
+        puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
+      } else {
+        puts('❌ Failed to create atome');
+      }
     });
   },
 });
@@ -1483,13 +1995,20 @@ $('span', {
     margin: '10px',
     display: 'inline-block'
   },
-  text: 'delete atomes',
+  text: 'delete atome',
   onClick: () => {
-    create_atome((result) => {
-      puts('sync atomes: ' + JSON.stringify(result));
+    puts('Select an atome to delete...');
+    delete_atome((result) => {
+      if (result.cancelled) return;
+      if (result.tauri?.success || result.fastify?.success) {
+        puts('✅ Atome deleted');
+      } else {
+        puts('❌ Failed to delete atome');
+      }
     });
   },
 });
+
 $('span', {
   id: 'alter_atome',
   css: {
@@ -1500,11 +2019,47 @@ $('span', {
     margin: '10px',
     display: 'inline-block'
   },
-  text: 'alter atomes',
+  text: 'alter atome',
   onClick: () => {
-    alter((result) => {
-      puts('sync atomes: ' + JSON.stringify(result));
+    puts('Select an atome to alter...');
+    alter_atome((result) => {
+      if (result.cancelled) return;
+      if (result.tauri?.success || result.fastify?.success) {
+        puts('✅ Atome altered');
+      } else {
+        puts('❌ Failed to alter atome');
+      }
     });
+  },
+});
+
+$('span', {
+  id: 'list_atomes',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'list atomes',
+  onClick: async () => {
+    const atomeType = grab('atome_type_input').value;
+    puts('Fetching atomes of type: ' + atomeType);
+    const result = await list_atomes({ type: atomeType });
+    const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
+    if (atomes.length > 0) {
+      puts('Atomes found: ' + atomes.length);
+      atomes.forEach(a => {
+        const type = a.atome_type || a.type || 'unknown';
+        const color = a.color || a.data?.color || a.particles?.color || '';
+        const id = (a.atome_id || a.id).substring(0, 8);
+        puts('  - ' + type + (color ? ' (' + color + ')' : '') + ' - ' + id + '...');
+      });
+    } else {
+      puts('No atomes found');
+    }
   },
 });
 
