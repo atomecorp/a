@@ -1984,7 +1984,30 @@ $('input', {
     width: '200px',
     margin: '5px 0'
   },
+  onInput: (e) => {
+    // Real-time preview while dragging (without releasing mouse)
+    if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
+    
+    const historyIndex = parseInt(e.target.value);
+    const historyEntry = currentAtomeHistory[historyIndex];
+    
+    if (historyEntry && selectedVisualAtome) {
+      // Apply visual changes from history for preview
+      const particles = historyEntry.particles || historyEntry.data || {};
+      
+      if (particles.left) selectedVisualAtome.style.left = particles.left;
+      if (particles.top) selectedVisualAtome.style.top = particles.top;
+      if (particles.color) selectedVisualAtome.style.backgroundColor = particles.color;
+      if (particles.borderRadius) selectedVisualAtome.style.borderRadius = particles.borderRadius;
+      if (particles.opacity !== undefined) selectedVisualAtome.style.opacity = particles.opacity;
+      
+      // Update info display in real-time
+      grab('history_info').textContent = 'Preview ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
+        ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || historyEntry.timestamp || 'unknown');
+    }
+  },
   onChange: async (e) => {
+    // Final selection when mouse is released
     if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
     
     const historyIndex = parseInt(e.target.value);
@@ -1994,7 +2017,7 @@ $('input', {
     if (historyEntry && selectedVisualAtome) {
       puts('📊 Applying history entry ' + historyIndex + ' to atome');
       
-      // Apply visual changes from history
+      // Apply visual changes from history (final)
       const particles = historyEntry.particles || historyEntry.data || {};
       
       if (particles.left) selectedVisualAtome.style.left = particles.left;
@@ -2003,9 +2026,9 @@ $('input', {
       if (particles.borderRadius) selectedVisualAtome.style.borderRadius = particles.borderRadius;
       if (particles.opacity !== undefined) selectedVisualAtome.style.opacity = particles.opacity;
       
-      // Update info display
+      // Update info display to show final selection
       grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
-        ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || 'unknown');
+        ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || historyEntry.timestamp || 'unknown');
       
       console.log('[History] Applied entry:', historyEntry);
     }
