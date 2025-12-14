@@ -1,9 +1,13 @@
 
+
+
+
 // ============================================
 // ADOLE v3.0 - PRODUCTION API ACCESS
 // ============================================
 
-import { AdoleAPI } from '../../squirrel/apis/unified/adole_apis.js';
+// AdoleAPI is now available globally via spark.js
+// No need to import manually - use window.AdoleAPI or simply AdoleAPI
 
 // Authentication functions - Use AdoleAPI.auth.*
 const create_user = AdoleAPI.auth.create;

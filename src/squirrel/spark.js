@@ -44,9 +44,24 @@ import './apis/essentials.js';
 import './apis/utils.js';
 import './apis/loader.js';
 import './apis/shortcut.js';
-import './apis/unified/adole_apis.js';
+import { AdoleAPI } from './apis/unified/adole_apis.js';
 import DragDrop from './apis/dragdrop.js';
 import { $, define, observeMutations } from './squirrel.js';
+
+// ============================================
+// GLOBAL API EXPOSURE
+// ============================================
+
+// Make AdoleAPI available globally throughout the framework
+if (typeof window !== 'undefined') {
+  window.AdoleAPI = AdoleAPI;
+}
+// Also make it available in Node.js environments
+if (typeof global !== 'undefined') {
+  global.AdoleAPI = AdoleAPI;
+}
+
+console.log('[Squirrel] AdoleAPI v3.0 loaded globally ✅');
 
 // === COMPONENT IMPORTS ===
 import Button from './components/button_builder.js';
