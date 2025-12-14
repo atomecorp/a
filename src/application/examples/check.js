@@ -2511,13 +2511,34 @@ $('span', {
       return;
     }
     
-    const historyEntry = currentAtomeHistory[currentHistoryIndex];
-    if (!historyEntry) {
-      puts('❌ Invalid history entry');
+    // Get current slider position and convert to history index
+    const slider = grab('history_slider');
+    if (!slider) {
+      puts('❌ History slider not found');
       return;
     }
     
-    puts('💾 Applying history entry ' + currentHistoryIndex + ' permanently to atome');
+    let historyEntry;
+    let historyIndex;
+    
+    if (isInScrubMode && currentScrubEntry) {
+      // If in scrub mode, use the scrub entry
+      historyEntry = currentScrubEntry;
+      historyIndex = currentAtomeHistory.indexOf(currentScrubEntry);
+    } else {
+      // Use proportional system to find the current entry
+      const sliderValue = parseInt(slider.value);
+      const sliderPosition = sliderValue / 1000;
+      historyIndex = findHistoryIndexFromPosition(sliderPosition, currentProportionalPositions);
+      historyEntry = currentAtomeHistory[historyIndex];
+    }
+    
+    if (!historyEntry) {
+      puts('❌ Invalid history entry - Index: ' + historyIndex + ', Total: ' + currentAtomeHistory.length);
+      return;
+    }
+    
+    puts('💾 Applying history entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + ' permanently to atome');
     
     const particles = historyEntry.particles || historyEntry.data || {};
     const updates = {};
