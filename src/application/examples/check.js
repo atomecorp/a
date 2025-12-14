@@ -1967,12 +1967,13 @@ $('span', {
   },
   text: 'create user',
   onClick: () => {
-    puts('Creating user...');
+
     const user_phone = grab('phone_pass_input').value;
     const user_name = grab('username_input').value;
 
     create_user(user_phone, user_phone, user_name, (results) => {
       grab('logged_user').textContent = user_name;
+      puts('user created: ' + user_name + ' user phone created: ' + user_phone);
       // puts('user created: ' + user_name + 'user phone created: ' + user_phone);
     });
   },
@@ -2128,7 +2129,6 @@ $('span', {
   text: 'create project',
   onClick: () => {
     const projectName = grab('atome_project_name_input').value;
-    puts('Creating project: ' + projectName);
     create_project(projectName, (result) => {
       if (result.tauri.success || result.fastify.success) {
         const newId = result.tauri.data?.atome_id || result.tauri.data?.id ||
@@ -2245,7 +2245,7 @@ $('span', {
     }
     const atomeType = grab('atome_type_input').value;
     const atomeColor = grab('atome_color_input').value;
-    puts('Creating atome: ' + atomeType + ' (' + atomeColor + ')');
+    // puts('Creating atome: ' + atomeType + ' (' + atomeColor + ')');
     create_atome({
       type: atomeType,
       color: atomeColor,

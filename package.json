@@ -58,6 +58,7 @@
     "serve": "python -m http.server 8000",
     "perf": "rollup -c --environment BUILD:development && python -m http.server 8000",
     "tauri": "tauri",
+    "postinstall": "./scripts_utils/fix_node_modules.sh",
     "tauri:dev": "tauri dev",
     "debug-bundle": "node debug-bundle.mjs",
     "build:minimal": "rollup -c scripts_utils/rollup.config.minimal.js",
