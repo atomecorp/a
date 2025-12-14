@@ -846,7 +846,8 @@ async function create_project(projectName, callback) {
 }
 
 /**
- * List all projects for the current user
+ * List all projects for the current user - SECURE VERSION
+ * Only returns projects owned by the currently logged-in user
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<Object>} List of projects from both backends
  */
@@ -856,11 +857,29 @@ async function list_projects(callback) {
     fastify: { projects: [], error: null }
   };
 
-  // Try Tauri
+  // SECURITY: Verify user is logged in
+  const currentUserResult = await current_user();
+  const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+
+  if (!currentUserId || currentUserId === 'anonymous') {
+    const error = 'SECURITY: No user logged in. Cannot list projects.';
+    results.tauri.error = error;
+    results.fastify.error = error;
+    if (typeof callback === 'function') callback(results);
+    return results;
+  }
+
+  // Try Tauri - Server automatically filters by owner_id
   try {
     const tauriResult = await TauriAdapter.atome.list({ type: 'project' });
     if (tauriResult.ok || tauriResult.success) {
-      results.tauri.projects = tauriResult.atomes || tauriResult.data || [];
+      const projects = tauriResult.atomes || tauriResult.data || [];
+      // SECURITY: Double-check each project belongs to current user
+      const userProjects = projects.filter(project => {
+        const projectOwnerId = project.owner_id || project.ownerId || project.particles?.owner_id;
+        return projectOwnerId === currentUserId;
+      });
+      results.tauri.projects = userProjects;
     } else {
       results.tauri.error = tauriResult.error;
     }
@@ -868,11 +887,17 @@ async function list_projects(callback) {
     results.tauri.error = e.message;
   }
 
-  // Try Fastify
+  // Try Fastify - Server automatically filters by owner_id
   try {
     const fastifyResult = await FastifyAdapter.atome.list({ type: 'project' });
     if (fastifyResult.ok || fastifyResult.success) {
-      results.fastify.projects = fastifyResult.atomes || fastifyResult.data || [];
+      const projects = fastifyResult.atomes || fastifyResult.data || [];
+      // SECURITY: Double-check each project belongs to current user
+      const userProjects = projects.filter(project => {
+        const projectOwnerId = project.owner_id || project.ownerId || project.particles?.owner_id;
+        return projectOwnerId === currentUserId;
+      });
+      results.fastify.projects = userProjects;
     } else {
       results.fastify.error = fastifyResult.error;
     }
@@ -1241,13 +1266,42 @@ let currentProjectDiv = null;
 let selectedVisualAtome = null;
 
 /**
- * TEST ONLY - Create or replace the project visual container in 'view'
+ * TEST ONLY - Create or replace the project visual container in 'view' - SECURE VERSION
  * @param {string} projectId - The project ID
  * @param {string} projectName - The project name
  */
-function loadProjectView(projectId, projectName) {
+async function loadProjectView(projectId, projectName) {
   if (!projectId) {
     puts('❌ Cannot load project: Missing project ID');
+    return;
+  }
+  
+  // SECURITY: Verify project belongs to current user
+  const currentUserResult = await current_user();
+  const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+  
+  if (!currentUserId) {
+    puts('❌ SECURITY: Cannot load project - no user logged in');
+    return;
+  }
+  
+  // Get project details to verify ownership
+  try {
+    const projectResult = await TauriAdapter.atome.get(projectId);
+    if (projectResult.ok || projectResult.success) {
+      const project = projectResult.atome || projectResult.data;
+      const projectOwnerId = project?.owner_id || project?.ownerId || project?.particles?.owner_id;
+      
+      if (projectOwnerId !== currentUserId) {
+        puts('❌ SECURITY: Access denied - project belongs to another user');
+        return;
+      }
+    } else {
+      puts('❌ SECURITY: Cannot verify project ownership');
+      return;
+    }
+  } catch (e) {
+    puts('❌ SECURITY: Error verifying project ownership: ' + e.message);
     return;
   }
 
@@ -1446,16 +1500,28 @@ function makeAtomeDraggable(atomeEl, atomeId) {
 }
 
 /**
- * TEST ONLY - Open a project selector dialog
+ * TEST ONLY - Open a project selector dialog - SECURE VERSION
+ * Only shows projects owned by the current user
  * @param {Function} callback - Callback with selected project { project_id, project_name }
  */
 async function open_project_selector(callback) {
   const projectsResult = await list_projects();
+  
+  // SECURITY: Check for authentication errors
+  if (projectsResult.tauri.error && projectsResult.tauri.error.includes('SECURITY')) {
+    puts('❌ ' + projectsResult.tauri.error);
+    if (typeof callback === 'function') {
+      callback({ project_id: null, project_name: null, cancelled: true, error: 'Not logged in' });
+    }
+    return;
+  }
+  
   const projects = projectsResult.tauri.projects.length > 0
     ? projectsResult.tauri.projects
     : projectsResult.fastify.projects;
 
   if (projects.length === 0) {
+    puts('No projects found for current user');
     if (typeof callback === 'function') {
       callback({ project_id: null, project_name: null, cancelled: true });
     }
@@ -1830,7 +1896,7 @@ async function open_atome_selector(options, callback) {
 
     if (projectId) {
       puts('Project loaded: ' + projectName);
-      loadProjectView(projectId, projectName);
+      await loadProjectView(projectId, projectName);
     } else {
       puts('❌ Project found but missing ID');
     }
@@ -2254,7 +2320,7 @@ $('span', {
 
       if (newId) {
         puts('✅ Project created: ' + projectName);
-        loadProjectView(newId, projectName);
+        await loadProjectView(newId, projectName);
       } else {
         puts('❌ Project creation failed: Invalid response');
       }
@@ -2286,7 +2352,7 @@ $('span', {
       return;
     }
 
-    loadProjectView(selection.project_id, selection.project_name);
+    await loadProjectView(selection.project_id, selection.project_name);
     puts('✅ Project loaded: ' + selection.project_name);
   },
 });
