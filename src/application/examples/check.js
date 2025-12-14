@@ -139,6 +139,11 @@ Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, ori
 // Create a container for our test UI controls, separate from project space
 const intuitionContainer = grab('intuition')
 intuitionContainer.style.width = '100%';
+intuitionContainer.style.position = 'relative';
+intuitionContainer.style.zIndex = '10';
+intuitionContainer.style.pointerEvents = 'none'; // Don't block interactions
+// Allow pointer events only on child elements
+intuitionContainer.style.background = 'transparent';
 
 // ============================================
 // ADOLE v3.0 - PRODUCTION API ACCESS
@@ -242,7 +247,8 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
       height: '100%',
       backgroundColor: backgroundColor,
       overflow: 'hidden',
-      zIndex: '-1'  // Behind the UI tools but available for projects
+      zIndex: '5',  // Above background but below UI
+      pointerEvents: 'none'  // Don't capture events, let children handle them
     }
   });
 
@@ -371,7 +377,9 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
       textAlign: 'center',
       boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
       userSelect: 'none',
-      border: '2px solid transparent'
+      border: '2px solid transparent',
+      zIndex: '50',
+      pointerEvents: 'auto'
     },
     text: type + '\n' + atomeId.substring(0, 6),
     onClick: (e) => {
@@ -391,7 +399,7 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
  * @param {HTMLElement} atomeEl - The atome element
  * @param {string} atomeId - The atome ID
  */
-function selectVisualAtome(atomeEl, atomeId) {
+async function selectVisualAtome(atomeEl, atomeId) {
   // Deselect previous
   if (selectedVisualAtome) {
     selectedVisualAtome.style.border = '2px solid transparent';
@@ -402,6 +410,145 @@ function selectVisualAtome(atomeEl, atomeId) {
   selectedAtomeId = atomeId;
   atomeEl.style.border = '2px solid yellow';
   puts('Selected atome: ' + atomeId.substring(0, 8) + '...');
+  
+  // Load atome history for navigation
+  await loadAtomeHistory(atomeId);
+}
+
+/**
+ * TEST ONLY - Load history for the selected atome
+ * @param {string} atomeId - The atome ID
+ */
+async function loadAtomeHistory(atomeId) {
+  if (!atomeId) {
+    currentAtomeHistory = [];
+    updateHistorySlider();
+    return;
+  }
+  
+  puts('📚 Loading history for atome: ' + atomeId.substring(0, 8) + '...');
+  
+  try {
+    // Try to get current atome state from list_atomes since get_atome has issues
+    const listResult = await list_atomes({ projectId: selectedProjectId });
+    const atomes = listResult.tauri.atomes.length > 0 ? listResult.tauri.atomes : listResult.fastify.atomes;
+    
+    const currentAtome = atomes.find(a => (a.atome_id || a.id) === atomeId);
+    
+    if (currentAtome) {
+      puts('✅ Found current atome state');
+      console.log('Current atome data:', currentAtome);
+      
+      // Check if manual history exists in localStorage
+      const historyKey = 'atome_history_' + atomeId;
+      const storedHistory = localStorage.getItem(historyKey);
+      
+      if (storedHistory) {
+        try {
+          const parsedHistory = JSON.parse(storedHistory);
+          currentAtomeHistory = parsedHistory.sort((a, b) => {
+            return new Date(a.timestamp) - new Date(b.timestamp);
+          });
+          puts('✅ Loaded manual history: ' + currentAtomeHistory.length + ' entries');
+        } catch (e) {
+          puts('⚠️ Failed to parse stored history, creating new');
+          currentAtomeHistory = [];
+        }
+      } else {
+        puts('📝 No stored history found, creating initial entry');
+        currentAtomeHistory = [];
+      }
+      
+      // Always add current state as most recent entry
+      const currentState = {
+        particles: currentAtome.particles || currentAtome.data || {},
+        timestamp: new Date().toISOString(),
+        id: currentAtome.atome_id || currentAtome.id,
+        note: 'Current state (loaded from database)'
+      };
+      
+      // Add current state if it's different from the last entry
+      const lastEntry = currentAtomeHistory[currentAtomeHistory.length - 1];
+      if (!lastEntry || JSON.stringify(lastEntry.particles) !== JSON.stringify(currentState.particles)) {
+        currentAtomeHistory.push(currentState);
+        
+        // Save updated history to localStorage
+        localStorage.setItem(historyKey, JSON.stringify(currentAtomeHistory));
+      }
+      
+      // Set to most recent entry
+      currentHistoryIndex = Math.max(0, currentAtomeHistory.length - 1);
+      
+    } else {
+      puts('❌ Atome not found in project atomes list');
+      currentAtomeHistory = [];
+    }
+  } catch (error) {
+    puts('❌ Error loading atome history: ' + error);
+    console.error('History loading error:', error);
+    currentAtomeHistory = [];
+  }
+  
+  updateHistorySlider();
+}
+
+/**
+ * Save a new history entry for an atome
+ */
+function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
+  if (!atomeId || atomeId.startsWith('temp_')) return;
+  
+  const historyKey = 'atome_history_' + atomeId;
+  const storedHistory = localStorage.getItem(historyKey);
+  let history = [];
+  
+  if (storedHistory) {
+    try {
+      history = JSON.parse(storedHistory);
+    } catch (e) {
+      history = [];
+    }
+  }
+  
+  const newEntry = {
+    particles: { ...particles },
+    timestamp: new Date().toISOString(),
+    id: atomeId,
+    note: note
+  };
+  
+  history.push(newEntry);
+  
+  // Keep only last 50 entries to avoid storage overflow
+  if (history.length > 50) {
+    history = history.slice(-50);
+  }
+  
+  localStorage.setItem(historyKey, JSON.stringify(history));
+  puts('📝 Saved history entry: ' + note);
+}
+
+/**
+ * Update the history slider UI based on current history data
+ */
+function updateHistorySlider() {
+  const slider = grab('history_slider');
+  const info = grab('history_info');
+  
+  if (currentAtomeHistory.length === 0) {
+    slider.disabled = true;
+    slider.max = '0';
+    slider.value = '0';
+    info.textContent = 'No history available';
+  } else {
+    slider.disabled = false;
+    slider.max = (currentAtomeHistory.length - 1).toString();
+    slider.value = currentHistoryIndex.toString();
+    
+    const currentEntry = currentAtomeHistory[currentHistoryIndex];
+    info.textContent = 'Entry ' + currentHistoryIndex + '/' + (currentAtomeHistory.length - 1) + 
+      ' - Date: ' + (currentEntry.created_at || 'unknown');
+  }
 }
 
 /**
@@ -449,16 +596,25 @@ function makeAtomeDraggable(atomeEl, atomeId) {
 
     puts('💾 Saving position for atome ' + atomeId.substring(0, 8) + ': ' + newLeft + ', ' + newTop);
     
-    alter_atome(atomeId, { left: newLeft, top: newTop }).then(result => {
+    // Save to manual history first
+    saveHistoryEntry(atomeId, { left: newLeft, top: newTop }, 'Position changed');
+    
+    alter_atome(atomeId, { left: newLeft, top: newTop }).then(async result => {
       if (result.tauri.success || result.fastify.success) {
         puts('✅ Position saved: ' + newLeft + ', ' + newTop);
         console.log('[Position Save] Success result:', result);
       } else {
-        puts('❌ Position save failed');
+        puts('⚠️ Database save failed, but position tracked in history');
         console.log('[Position Save] Failed result:', result);
       }
+      
+      // Reload history if this atome is currently selected
+      if (selectedAtomeId === atomeId) {
+        puts('🔄 Reloading history after position save...');
+        await loadAtomeHistory(atomeId);
+      }
     }).catch(error => {
-      puts('❌ Failed to save position: ' + error);
+      puts('⚠️ Database save error, but position tracked in history: ' + error);
       console.error('[Position Save] Error:', error);
     });
   });
@@ -509,7 +665,8 @@ async function open_project_selector(callback) {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      zIndex: '1000'
+      zIndex: '1000',
+      pointerEvents: 'auto'
     }
   });
 
@@ -522,13 +679,14 @@ async function open_project_selector(callback) {
       borderRadius: '8px',
       minWidth: '300px',
       maxHeight: '400px',
-      overflowY: 'auto'
+      overflowY: 'auto',
+      pointerEvents: 'auto'
     }
   });
 
   $('div', {
     parent: modal,
-    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333', pointerEvents: 'auto' },
     text: 'Select a Project'
   });
 
@@ -545,7 +703,8 @@ async function open_project_selector(callback) {
         backgroundColor: '#f0f0f0',
         borderRadius: '4px',
         cursor: 'pointer',
-        color: '#333'
+        color: '#333',
+        pointerEvents: 'auto'
       },
       text: projectName,
       onClick: () => {
@@ -569,7 +728,8 @@ async function open_project_selector(callback) {
       borderRadius: '4px',
       cursor: 'pointer',
       textAlign: 'center',
-      color: '#333'
+      color: '#333',
+      pointerEvents: 'auto'
     },
     text: 'Cancel',
     onClick: () => {
@@ -614,7 +774,8 @@ async function open_user_selector(callback) {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      zIndex: '1000'
+      zIndex: '1000',
+      pointerEvents: 'auto'
     }
   });
 
@@ -627,13 +788,14 @@ async function open_user_selector(callback) {
       borderRadius: '8px',
       minWidth: '300px',
       maxHeight: '400px',
-      overflowY: 'auto'
+      overflowY: 'auto',
+      pointerEvents: 'auto'
     }
   });
 
   $('div', {
     parent: modal,
-    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333', pointerEvents: 'auto' },
     text: 'Select a User'
   });
 
@@ -651,7 +813,8 @@ async function open_user_selector(callback) {
         backgroundColor: '#f0f0f0',
         borderRadius: '4px',
         cursor: 'pointer',
-        color: '#333'
+        color: '#333',
+        pointerEvents: 'auto'
       },
       text: username + ' (' + phone + ')',
       onClick: async () => {
@@ -726,7 +889,8 @@ async function open_user_selector(callback) {
       borderRadius: '4px',
       cursor: 'pointer',
       textAlign: 'center',
-      color: '#333'
+      color: '#333',
+      pointerEvents: 'auto'
     },
     text: 'Cancel',
     onClick: () => {
@@ -785,7 +949,8 @@ async function open_atome_selector(options, callback) {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      zIndex: '1000'
+      zIndex: '1000',
+      pointerEvents: 'auto'
     }
   });
 
@@ -798,13 +963,14 @@ async function open_atome_selector(options, callback) {
       borderRadius: '8px',
       minWidth: '350px',
       maxHeight: '400px',
-      overflowY: 'auto'
+      overflowY: 'auto',
+      pointerEvents: 'auto'
     }
   });
 
   $('div', {
     parent: modal,
-    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333', pointerEvents: 'auto' },
     text: 'Select an Atome'
   });
 
@@ -824,7 +990,8 @@ async function open_atome_selector(options, callback) {
         borderRadius: '4px',
         cursor: 'pointer',
         color: '#333',
-        fontSize: '14px'
+        fontSize: '14px',
+        pointerEvents: 'auto'
       },
       text: displayText,
       onClick: () => {
@@ -847,7 +1014,8 @@ async function open_atome_selector(options, callback) {
       borderRadius: '4px',
       cursor: 'pointer',
       textAlign: 'center',
-      color: '#333'
+      color: '#333',
+      pointerEvents: 'auto'
     },
     text: 'Cancel',
     onClick: () => {
@@ -1647,6 +1815,13 @@ $('span', {
     
     puts('🔄 Altering atome style - color: ' + newColor + ', borderRadius: ' + newBorderRadius + ', opacity: ' + newOpacity);
     
+    // Save to manual history first
+    saveHistoryEntry(selectedAtomeId, { 
+      color: newColor, 
+      borderRadius: newBorderRadius, 
+      opacity: newOpacity 
+    }, 'Style changed');
+    
     // Save to database using alter_atome
     const result = await alter_atome(selectedAtomeId, { 
       color: newColor,
@@ -1656,17 +1831,20 @@ $('span', {
 
     if (result.tauri?.success || result.fastify?.success) {
       puts('✅ Atome style altered and saved');
-      
-      // Update visual element immediately
-      selectedVisualAtome.style.backgroundColor = newColor;
-      selectedVisualAtome.style.borderRadius = newBorderRadius;
-      selectedVisualAtome.style.opacity = newOpacity;
-      
       console.log('[Alter Save] Success result:', result);
     } else {
-      puts('❌ Failed to alter atome style');
+      puts('⚠️ Database save failed, but style tracked in history');
       console.log('[Alter Save] Failed result:', result);
     }
+    
+    // Update visual element immediately
+    selectedVisualAtome.style.backgroundColor = newColor;
+    selectedVisualAtome.style.borderRadius = newBorderRadius;
+    selectedVisualAtome.style.opacity = newOpacity;
+    
+    // Reload history to show the new entry
+    puts('🔄 Reloading history after style change...');
+    await loadAtomeHistory(selectedAtomeId);
   },
 });
 
@@ -1756,6 +1934,141 @@ $('span', {
     });
   },
 });
+
+// History navigation slider
+let currentAtomeHistory = [];
+let currentHistoryIndex = 0;
+
+// Add CSS rule to ensure all UI elements are clickable
+const uiStyle = document.createElement('style');
+uiStyle.textContent = `
+  #intuition span, #intuition input, #intuition div[id*="slider"], #intuition div[id*="button"] {
+    pointer-events: auto !important;
+  }
+`;
+document.head.appendChild(uiStyle);
+
+$('div', {
+  id: 'history_slider_container',
+  parent: intuitionContainer,
+  css: {
+    position: 'relative',
+    margin: '10px',
+    padding: '10px',
+    backgroundColor: 'rgba(50, 50, 50, 0.8)',
+    borderRadius: '8px',
+    display: 'block',
+    zIndex: '1',
+    pointerEvents: 'auto',
+    maxWidth: '300px'
+  }
+});
+
+$('div', {
+  parent: grab('history_slider_container'),
+  css: { color: 'white', fontSize: '12px', marginBottom: '5px' },
+  text: 'Atome History Navigation (select an atome first)'
+});
+
+$('input', {
+  id: 'history_slider',
+  parent: grab('history_slider_container'),
+  attrs: {
+    type: 'range',
+    min: '0',
+    max: '0',
+    value: '0',
+    disabled: true
+  },
+  css: {
+    width: '200px',
+    margin: '5px 0'
+  },
+  onChange: async (e) => {
+    if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
+    
+    const historyIndex = parseInt(e.target.value);
+    currentHistoryIndex = historyIndex;
+    
+    const historyEntry = currentAtomeHistory[historyIndex];
+    if (historyEntry && selectedVisualAtome) {
+      puts('📊 Applying history entry ' + historyIndex + ' to atome');
+      
+      // Apply visual changes from history
+      const particles = historyEntry.particles || historyEntry.data || {};
+      
+      if (particles.left) selectedVisualAtome.style.left = particles.left;
+      if (particles.top) selectedVisualAtome.style.top = particles.top;
+      if (particles.color) selectedVisualAtome.style.backgroundColor = particles.color;
+      if (particles.borderRadius) selectedVisualAtome.style.borderRadius = particles.borderRadius;
+      if (particles.opacity !== undefined) selectedVisualAtome.style.opacity = particles.opacity;
+      
+      // Update info display
+      grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
+        ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || 'unknown');
+      
+      console.log('[History] Applied entry:', historyEntry);
+    }
+  }
+});
+
+$('div', {
+  id: 'history_info',
+  parent: grab('history_slider_container'),
+  css: { color: 'white', fontSize: '11px', marginTop: '5px' },
+  text: 'No history loaded'
+});
+
+$('span', {
+  id: 'apply_history_to_atome',
+  parent: grab('history_slider_container'),
+  css: {
+    backgroundColor: 'rgba(100, 200, 100, 0.8)',
+    padding: '5px 10px',
+    color: 'white',
+    margin: '5px',
+    display: 'inline-block',
+    borderRadius: '4px',
+    fontSize: '12px',
+    cursor: 'pointer'
+  },
+  text: 'Apply to Atome',
+  onClick: async () => {
+    if (!selectedAtomeId || currentAtomeHistory.length === 0) {
+      puts('❌ No atome selected or no history available');
+      return;
+    }
+    
+    const historyEntry = currentAtomeHistory[currentHistoryIndex];
+    if (!historyEntry) {
+      puts('❌ Invalid history entry');
+      return;
+    }
+    
+    puts('💾 Applying history entry ' + currentHistoryIndex + ' permanently to atome');
+    
+    const particles = historyEntry.particles || historyEntry.data || {};
+    const updates = {};
+    
+    if (particles.left) updates.left = particles.left;
+    if (particles.top) updates.top = particles.top;
+    if (particles.color) updates.color = particles.color;
+    if (particles.borderRadius) updates.borderRadius = particles.borderRadius;
+    if (particles.opacity !== undefined) updates.opacity = particles.opacity;
+    
+    const result = await alter_atome(selectedAtomeId, updates);
+    
+    if (result.tauri?.success || result.fastify?.success) {
+      puts('✅ History entry applied permanently');
+      console.log('[History Apply] Success result:', result);
+    } else {
+      puts('❌ Failed to apply history entry');
+      console.log('[History Apply] Failed result:', result);
+    }
+  }
+});
+
+$('br', { parent: intuitionContainer });
 
 $('br', { parent: intuitionContainer });
 
