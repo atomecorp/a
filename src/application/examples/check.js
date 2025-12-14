@@ -228,11 +228,11 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
     currentProjectDiv.remove();
     currentProjectDiv = null;
   }
-  
+
   // Clear visual atome selection
   selectedVisualAtome = null;
   selectedAtomeId = null;
-  
+
   puts('🔄 Creating new project view for: ' + projectName + ' (ID: ' + projectId + ')');
 
   // Create new project container directly in 'view' (no intermediate project_canvas)
@@ -274,37 +274,37 @@ async function loadProjectAtomes(projectId) {
   }
 
   puts('🔍 Loading atomes for project: ' + projectId);
-  
+
   // Try different filter approaches
   const result = await list_atomes({ projectId: projectId });
   let atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
-  
+
   puts('📊 Total atomes found: ' + atomes.length);
-  
+
   // Filter to get only atomes that belong to this project and are not projects/users
   const projectAtomes = atomes.filter(atome => {
     const atomeType = atome.atome_type || atome.type;
     const atomeProjectId = atome.project_id || atome.projectId || atome.parent_id || atome.parentId;
     const particles = atome.particles || atome.data || {};
     const particleProjectId = particles.projectId || particles.project_id;
-    
+
     // Skip projects and users
     if (atomeType === 'project' || atomeType === 'user') return false;
-    
+
     // Check if atome belongs to this project
     const belongsToProject = atomeProjectId === projectId || particleProjectId === projectId;
-    
-    puts('🔍 Atome ' + (atome.atome_id || atome.id).substring(0, 8) + 
-         ' type: ' + atomeType + 
-         ' projectId: ' + (atomeProjectId || 'none') + 
-         ' particleProjectId: ' + (particleProjectId || 'none') + 
-         ' belongs: ' + belongsToProject);
-    
+
+    puts('🔍 Atome ' + (atome.atome_id || atome.id).substring(0, 8) +
+      ' type: ' + atomeType +
+      ' projectId: ' + (atomeProjectId || 'none') +
+      ' particleProjectId: ' + (particleProjectId || 'none') +
+      ' belongs: ' + belongsToProject);
+
     return belongsToProject;
   });
-  
+
   puts('✅ Project atomes found: ' + projectAtomes.length);
-  
+
   // Create visual elements for project atomes
   projectAtomes.forEach(atome => {
     const atomeId = atome.atome_id || atome.id;
@@ -317,20 +317,20 @@ async function loadProjectAtomes(projectId) {
     const left = savedLeft || '50px';
     const top = savedTop || '50px';
     const color = particles.color || atome.color || 'blue';
-    
+
     // Get stored style properties
     const savedBorderRadius = particles.borderRadius;
     const savedOpacity = particles.opacity;
     const borderRadius = savedBorderRadius || '8px';
     const opacity = savedOpacity !== undefined ? savedOpacity : 1.0;
-    
-    puts('📍 Loading atome ' + atomeId.substring(0, 8) + 
-         ' - saved position: (' + (savedLeft || 'none') + ', ' + (savedTop || 'none') + ')' +
-         ' - using position: (' + left + ', ' + top + ')' +
-         ' - saved style: borderRadius=' + (savedBorderRadius || 'default') + ', opacity=' + (savedOpacity !== undefined ? savedOpacity : 'default'));
-    console.log('[Position Load] Atome data:', { 
-      atomeId: atomeId.substring(0, 8), 
-      particles, 
+
+    puts('📍 Loading atome ' + atomeId.substring(0, 8) +
+      ' - saved position: (' + (savedLeft || 'none') + ', ' + (savedTop || 'none') + ')' +
+      ' - using position: (' + left + ', ' + top + ')' +
+      ' - saved style: borderRadius=' + (savedBorderRadius || 'default') + ', opacity=' + (savedOpacity !== undefined ? savedOpacity : 'default'));
+    console.log('[Position Load] Atome data:', {
+      atomeId: atomeId.substring(0, 8),
+      particles,
       savedLeft, savedTop, left, top,
       savedBorderRadius, savedOpacity, borderRadius, opacity
     });
@@ -410,7 +410,7 @@ async function selectVisualAtome(atomeEl, atomeId) {
   selectedAtomeId = atomeId;
   atomeEl.style.border = '2px solid yellow';
   puts('Selected atome: ' + atomeId.substring(0, 8) + '...');
-  
+
   // Load atome history for navigation
   await loadAtomeHistory(atomeId);
 }
@@ -425,24 +425,24 @@ async function loadAtomeHistory(atomeId) {
     updateHistorySlider();
     return;
   }
-  
+
   puts('📚 Loading history for atome: ' + atomeId.substring(0, 8) + '...');
-  
+
   try {
     // Try to get current atome state from list_atomes since get_atome has issues
     const listResult = await list_atomes({ projectId: selectedProjectId });
     const atomes = listResult.tauri.atomes.length > 0 ? listResult.tauri.atomes : listResult.fastify.atomes;
-    
+
     const currentAtome = atomes.find(a => (a.atome_id || a.id) === atomeId);
-    
+
     if (currentAtome) {
       puts('✅ Found current atome state');
       console.log('Current atome data:', currentAtome);
-      
+
       // Check if manual history exists in localStorage
       const historyKey = 'atome_history_' + atomeId;
       const storedHistory = localStorage.getItem(historyKey);
-      
+
       if (storedHistory) {
         try {
           const parsedHistory = JSON.parse(storedHistory);
@@ -458,7 +458,7 @@ async function loadAtomeHistory(atomeId) {
         puts('📝 No stored history found, creating initial entry');
         currentAtomeHistory = [];
       }
-      
+
       // Always add current state as most recent entry
       const currentState = {
         particles: currentAtome.particles || currentAtome.data || {},
@@ -466,22 +466,22 @@ async function loadAtomeHistory(atomeId) {
         id: currentAtome.atome_id || currentAtome.id,
         note: 'Current state (loaded from database)'
       };
-      
+
       // Add current state if it's different from the last entry
       const lastEntry = currentAtomeHistory[currentAtomeHistory.length - 1];
       if (!lastEntry || JSON.stringify(lastEntry.particles) !== JSON.stringify(currentState.particles)) {
         currentAtomeHistory.push(currentState);
-        
+
         // Save updated history to localStorage
         localStorage.setItem(historyKey, JSON.stringify(currentAtomeHistory));
       }
-      
+
       // Set to most recent entry
       currentHistoryIndex = Math.max(0, currentAtomeHistory.length - 1);
-      
+
       // Recalculate proportional positions after loading history
       currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
-      
+
     } else {
       puts('❌ Atome not found in project atomes list');
       currentAtomeHistory = [];
@@ -493,7 +493,7 @@ async function loadAtomeHistory(atomeId) {
     currentAtomeHistory = [];
     currentProportionalPositions = [];
   }
-  
+
   updateHistorySlider();
 }
 
@@ -502,11 +502,11 @@ async function loadAtomeHistory(atomeId) {
  */
 function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
   if (!atomeId || atomeId.startsWith('temp_')) return;
-  
+
   const historyKey = 'atome_history_' + atomeId;
   const storedHistory = localStorage.getItem(historyKey);
   let history = [];
-  
+
   if (storedHistory) {
     try {
       history = JSON.parse(storedHistory);
@@ -514,21 +514,21 @@ function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
       history = [];
     }
   }
-  
+
   const newEntry = {
     particles: { ...particles },
     timestamp: new Date().toISOString(),
     id: atomeId,
     note: note
   };
-  
+
   history.push(newEntry);
-  
+
   // Keep only last 50 entries to avoid storage overflow
   if (history.length > 50) {
     history = history.slice(-50);
   }
-  
+
   localStorage.setItem(historyKey, JSON.stringify(history));
   puts('📝 Saved history entry: ' + note);
 }
@@ -539,7 +539,7 @@ function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
 function updateHistorySlider() {
   const slider = grab('history_slider');
   const info = grab('history_info');
-  
+
   if (currentAtomeHistory.length === 0) {
     slider.disabled = true;
     slider.max = '0';
@@ -549,10 +549,10 @@ function updateHistorySlider() {
     slider.disabled = false;
     slider.max = '1000'; // Use high resolution for smooth scrubbing
     slider.value = '1000'; // Start at the end (most recent)
-    
+
     // Calculate proportional positions for better scrubbing
     currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
-    
+
     const currentEntry = currentAtomeHistory[currentHistoryIndex];
     info.textContent = 'Loaded ' + currentAtomeHistory.length + ' entries with enhanced spacing - Entry ' + currentHistoryIndex + '/' + (currentAtomeHistory.length - 1);
     puts('✅ Loaded manual history: ' + currentAtomeHistory.length + ' entries with proportional spacing');
@@ -572,20 +572,20 @@ function makeAtomeDraggable(atomeEl, atomeId) {
   atomeEl.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Left click only
     isDragging = true;
-    
+
     startX = e.clientX;
     startY = e.clientY;
     initialLeft = parseInt(atomeEl.style.left) || 0;
     initialTop = parseInt(atomeEl.style.top) || 0;
     atomeEl.style.zIndex = '100';
-    
+
     // Start continuous recording for drag
     startContinuousRecording(atomeId, 'drag movement');
     recordContinuousState(atomeId, {
       left: initialLeft + 'px',
       top: initialTop + 'px'
     });
-    
+
     e.preventDefault();
   });
 
@@ -595,10 +595,10 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     const dy = e.clientY - startY;
     const newLeft = (initialLeft + dx) + 'px';
     const newTop = (initialTop + dy) + 'px';
-    
+
     atomeEl.style.left = newLeft;
     atomeEl.style.top = newTop;
-    
+
     // Record continuous position changes
     recordContinuousState(atomeId, {
       left: newLeft,
@@ -622,10 +622,10 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     }
 
     puts('💾 Saving drag sequence for atome ' + atomeId.substring(0, 8));
-    
+
     // Stop continuous recording which will save to history
     stopContinuousRecording(atomeId, { left: newLeft, top: newTop }, 'drag movement');
-    
+
     alter_atome(atomeId, { left: newLeft, top: newTop }).then(async result => {
       if (result.tauri.success || result.fastify.success) {
         puts('✅ Position saved: ' + newLeft + ', ' + newTop);
@@ -634,7 +634,7 @@ function makeAtomeDraggable(atomeEl, atomeId) {
         puts('⚠️ Database save failed, but position tracked in history');
         console.log('[Position Save] Failed result:', result);
       }
-      
+
       // Reload history if this atome is currently selected
       if (selectedAtomeId === atomeId) {
         puts('🔄 Reloading history after position save...');
@@ -657,27 +657,27 @@ function playDragAnimation(atomeEl, dragSequence, speedMultiplier = 1) {
   if (!dragSequence || dragSequence.length < 2 || isPlayingAnimation) {
     return;
   }
-  
+
   isPlayingAnimation = true;
   let currentFrame = 0;
-  
+
   // Show stop button
   const stopBtn = grab('stop_animation_button');
   if (stopBtn) stopBtn.style.display = 'inline-block';
-  
+
   function animateNextFrame() {
     if (currentFrame >= dragSequence.length || !isPlayingAnimation) {
       isPlayingAnimation = false;
       if (stopBtn) stopBtn.style.display = 'none';
       return;
     }
-    
+
     const frame = dragSequence[currentFrame];
     atomeEl.style.left = frame.left;
     atomeEl.style.top = frame.top;
-    
+
     currentFrame++;
-    
+
     if (currentFrame < dragSequence.length) {
       const nextFrame = dragSequence[currentFrame];
       const delay = (nextFrame.relativeTime - frame.relativeTime) / speedMultiplier;
@@ -687,7 +687,7 @@ function playDragAnimation(atomeEl, dragSequence, speedMultiplier = 1) {
       if (stopBtn) stopBtn.style.display = 'none';
     }
   }
-  
+
   // Start from first position
   if (dragSequence.length > 0) {
     atomeEl.style.left = dragSequence[0].left;
@@ -703,12 +703,12 @@ function playDragAnimation(atomeEl, dragSequence, speedMultiplier = 1) {
  */
 function startContinuousRecording(atomeId, changeType = 'unknown') {
   if (isRecordingContinuous) return; // Already recording
-  
+
   isRecordingContinuous = true;
   continuousStartTime = Date.now();
   lastContinuousRecordTime = continuousStartTime;
   currentContinuousSequence = [];
-  
+
   puts('🎬 Started continuous recording for ' + changeType);
 }
 
@@ -720,7 +720,7 @@ function startContinuousRecording(atomeId, changeType = 'unknown') {
  */
 function recordContinuousState(atomeId, properties, throttleMs = 50) {
   if (!isRecordingContinuous) return;
-  
+
   const now = Date.now();
   if (now - lastContinuousRecordTime >= throttleMs) {
     currentContinuousSequence.push({
@@ -743,19 +743,19 @@ function stopContinuousRecording(atomeId, finalProperties, changeDescription) {
     isRecordingContinuous = false;
     return;
   }
-  
+
   isRecordingContinuous = false;
   const endTime = Date.now();
-  
+
   // Add final state
   currentContinuousSequence.push({
     timestamp: endTime,
     relativeTime: endTime - continuousStartTime,
     ...finalProperties
   });
-  
+
   puts('🎬 Stopped continuous recording: ' + currentContinuousSequence.length + ' frames over ' + (endTime - continuousStartTime) + 'ms');
-  
+
   // Save complete sequence to history
   saveHistoryEntry(atomeId, {
     ...finalProperties,
@@ -763,7 +763,7 @@ function stopContinuousRecording(atomeId, finalProperties, changeDescription) {
     continuousDuration: endTime - continuousStartTime,
     changeType: changeDescription
   }, changeDescription + ' (' + currentContinuousSequence.length + ' frames)');
-  
+
   // Clear sequence
   currentContinuousSequence = [];
 }
@@ -775,27 +775,27 @@ function stopContinuousRecording(atomeId, finalProperties, changeDescription) {
  */
 function calculateProportionalPositions(historyEntries) {
   if (!historyEntries || historyEntries.length === 0) return [];
-  
+
   const weights = historyEntries.map(entry => {
     const particles = entry.particles || entry.data || {};
     const continuousSeq = particles.continuousSequence || particles.dragSequence;
-    
+
     // Give continuous sequences 5x more space than punctual changes
     return continuousSeq && continuousSeq.length > 1 ? 5 : 1;
   });
-  
+
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const positions = [];
   let cumulativeWeight = 0;
-  
+
   for (let i = 0; i < weights.length; i++) {
     positions.push(cumulativeWeight / totalWeight);
     cumulativeWeight += weights[i];
   }
-  
+
   // Add final position
   positions.push(1);
-  
+
   return positions;
 }
 
@@ -1043,7 +1043,7 @@ async function open_user_selector(callback) {
             const loggedUsername = userData?.user?.username || userData?.username || username;
             puts('✅ Switched to user: ' + loggedUsername);
             grab('logged_user').textContent = loggedUsername;
-            
+
             // Clear current project view when switching users
             if (currentProjectDiv) {
               currentProjectDiv.remove();
@@ -1052,23 +1052,23 @@ async function open_user_selector(callback) {
             selectedProjectId = null;
             currentProjectName = null;
             grab('current_project').textContent = 'no project loaded';
-            
+
             // Auto-load first project of new user
             try {
               const projectsResult = await list_projects();
               const projects = projectsResult.tauri.projects.length > 0
                 ? projectsResult.tauri.projects
                 : projectsResult.fastify.projects;
-              
+
               if (projects && projects.length > 0) {
                 const firstProject = projects[0];
                 const projectId = firstProject.atome_id || firstProject.id;
                 const projectName = firstProject.name || firstProject.data?.name || firstProject.particles?.name || 'Unnamed Project';
-                
+
                 // Get background color
                 const particles = firstProject.particles || firstProject.data || {};
                 const backgroundColor = particles.backgroundColor || firstProject.backgroundColor || '#333';
-                
+
                 await loadProjectView(projectId, projectName, backgroundColor);
                 puts('✅ Auto-loaded first project: ' + projectName);
               } else {
@@ -1077,7 +1077,7 @@ async function open_user_selector(callback) {
             } catch (error) {
               puts('❌ Failed to auto-load project: ' + error);
             }
-            
+
             if (typeof callback === 'function') {
               callback({ user_id: userId, username: loggedUsername, phone: phone, cancelled: false });
             }
@@ -1286,13 +1286,13 @@ async function open_atome_selector(options, callback) {
       // Retrieve background color from project data
       const projectResult = await get_atome(projectId);
       let backgroundColor = '#333'; // Default color
-      
+
       if (projectResult.tauri.success || projectResult.fastify.success) {
         const projectData = projectResult.tauri.atome || projectResult.fastify.atome;
         const particles = projectData?.particles || projectData?.data || {};
         backgroundColor = particles.backgroundColor || '#333';
       }
-      
+
       puts('Project loaded: ' + projectName + ' (color: ' + backgroundColor + ')');
       await loadProjectView(projectId, projectName, backgroundColor);
     } else {
@@ -1725,11 +1725,11 @@ $('span', {
   text: 'create project',
   onClick: async () => {
     const projectName = grab('atome_project_name_input').value;
-    
+
     // Generate random background color for the project
     const colors = ['#2c3e50', '#8e44ad', '#3498db', '#e67e22', '#27ae60', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#34495e', '#16a085', '#f1c40f', '#d35400'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    
+
     // Step 1: Create project using standard API
     const result = await create_project(projectName);
 
@@ -1742,13 +1742,13 @@ $('span', {
       if (newId) {
         // Step 2: Add backgroundColor using standard alter_atome API for proper historization
         const alterResult = await alter_atome(newId, { backgroundColor: randomColor });
-        
+
         if (alterResult.tauri.success || alterResult.fastify.success) {
           puts('✅ Project created with background color: ' + projectName + ' (color: ' + randomColor + ')');
         } else {
           puts('⚠️ Project created but failed to set background color: ' + projectName);
         }
-        
+
         await loadProjectView(newId, projectName, randomColor);
       } else {
         puts('❌ Project creation failed: Invalid response');
@@ -1784,23 +1784,23 @@ $('span', {
 
     // For now, get background color from the projects list since get_atome has issues
     let backgroundColor = '#333'; // Default color
-    
+
     try {
       const projectsResult = await list_projects();
       const projects = projectsResult.tauri.projects.length > 0
         ? projectsResult.tauri.projects
         : projectsResult.fastify.projects;
-      
-      const selectedProject = projects.find(p => 
+
+      const selectedProject = projects.find(p =>
         (p.atome_id || p.id) === selection.project_id
       );
-      
+
       if (selectedProject) {
         const particles = selectedProject.particles || selectedProject.data || {};
-        backgroundColor = particles.backgroundColor || 
-                         selectedProject.backgroundColor ||
-                         selectedProject.color ||
-                         '#333';
+        backgroundColor = particles.backgroundColor ||
+          selectedProject.backgroundColor ||
+          selectedProject.color ||
+          '#333';
         puts('✅ Found background color from projects list: ' + backgroundColor);
       } else {
         puts('⚠️ Project not found in list, using default color');
@@ -1899,47 +1899,47 @@ $('span', {
     const atomeColor = grab('atome_color_input').value;
     const initialLeft = '100px';
     const initialTop = '100px';
-    
+
     puts('🔄 Creating atome: ' + atomeType + ' (' + atomeColor + ') at position: ' + initialLeft + ', ' + initialTop);
-    
+
     const result = await create_atome({
       type: atomeType,
       color: atomeColor,
       projectId: selectedProjectId,
       particles: { left: initialLeft, top: initialTop }
     });
-    
+
     console.log('[create_atome button] Full result:', result);
-    
+
     // Debug: Let's see the exact structure
     puts('🔍 DEBUG create_atome result structure:');
     puts('  Tauri: ' + JSON.stringify(result.tauri));
     puts('  Fastify: ' + JSON.stringify(result.fastify));
-    
+
     if (result.tauri.success || result.fastify.success) {
       // Try to extract the real ID from the API response
       const tauriData = result.tauri.data || {};
       const fastifyData = result.fastify.data || {};
-      
+
       // Try different possible paths for the ID
       let newId = null;
-      
+
       // Check Tauri response first
       if (result.tauri.success && tauriData) {
         newId = tauriData.atome_id || tauriData.id || tauriData.atomeId ||
-                (tauriData.data && tauriData.data.atome_id) ||
-                (tauriData.atome && tauriData.atome.atome_id) ||
-                (typeof tauriData === 'string' ? tauriData : null);
+          (tauriData.data && tauriData.data.atome_id) ||
+          (tauriData.atome && tauriData.atome.atome_id) ||
+          (typeof tauriData === 'string' ? tauriData : null);
       }
-      
+
       // If not found in Tauri, check Fastify
       if (!newId && result.fastify.success && fastifyData) {
         newId = fastifyData.atome_id || fastifyData.id || fastifyData.atomeId ||
-                (fastifyData.data && fastifyData.data.atome_id) ||
-                (fastifyData.atome && fastifyData.atome.atome_id) ||
-                (typeof fastifyData === 'string' ? fastifyData : null);
+          (fastifyData.data && fastifyData.data.atome_id) ||
+          (fastifyData.atome && fastifyData.atome.atome_id) ||
+          (typeof fastifyData === 'string' ? fastifyData : null);
       }
-      
+
       // If still no ID, generate temporary one as fallback
       if (!newId) {
         newId = 'temp_atome_' + Date.now();
@@ -1947,13 +1947,13 @@ $('span', {
       } else {
         puts('✅ Extracted real atome ID: ' + newId);
       }
-      
+
       console.log('[create_atome button] Final ID:', newId);
       puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
-      
+
       // Create visual element with initial position and default style
       createVisualAtome(newId, atomeType, atomeColor, initialLeft, initialTop, '8px', 1.0);
-      
+
       // If we got a real ID, try to reload project to ensure consistency
       if (!newId.startsWith('temp_')) {
         puts('🔄 Reloading project to ensure consistency...');
@@ -2020,30 +2020,30 @@ $('span', {
       puts('❌ No atome selected. Click on an atome to select it first.');
       return;
     }
-    
+
     // Generate random color, border radius and opacity
     const colorOptions = ['red', 'green', 'blue', 'purple', 'orange', 'cyan', 'magenta', 'pink', 'yellow', 'lime', 'teal', 'navy'];
     const borderRadiusOptions = ['0px', '8px', '15px', '25px', '40px', '50%'];
     const opacityOptions = [0.3, 0.5, 0.7, 0.8, 0.9, 1.0];
-    
+
     const newColor = colorOptions[Math.floor(Math.random() * colorOptions.length)];
     const newBorderRadius = borderRadiusOptions[Math.floor(Math.random() * borderRadiusOptions.length)];
     const newOpacity = opacityOptions[Math.floor(Math.random() * opacityOptions.length)];
-    
+
     puts('🔄 Altering atome style - color: ' + newColor + ', borderRadius: ' + newBorderRadius + ', opacity: ' + newOpacity);
-    
+
     // Save to manual history first
-    saveHistoryEntry(selectedAtomeId, { 
-      color: newColor, 
-      borderRadius: newBorderRadius, 
-      opacity: newOpacity 
-    }, 'Style changed');
-    
-    // Save to database using alter_atome
-    const result = await alter_atome(selectedAtomeId, { 
+    saveHistoryEntry(selectedAtomeId, {
       color: newColor,
-      borderRadius: newBorderRadius, 
-      opacity: newOpacity 
+      borderRadius: newBorderRadius,
+      opacity: newOpacity
+    }, 'Style changed');
+
+    // Save to database using alter_atome
+    const result = await alter_atome(selectedAtomeId, {
+      color: newColor,
+      borderRadius: newBorderRadius,
+      opacity: newOpacity
     });
 
     if (result.tauri?.success || result.fastify?.success) {
@@ -2053,12 +2053,12 @@ $('span', {
       puts('⚠️ Database save failed, but style tracked in history');
       console.log('[Alter Save] Failed result:', result);
     }
-    
+
     // Update visual element immediately
     selectedVisualAtome.style.backgroundColor = newColor;
     selectedVisualAtome.style.borderRadius = newBorderRadius;
     selectedVisualAtome.style.opacity = newOpacity;
-    
+
     // Reload history to show the new entry
     puts('🔄 Reloading history after style change...');
     await loadAtomeHistory(selectedAtomeId);
@@ -2113,7 +2113,7 @@ $('span', {
       puts('❌ No project loaded. Please load a project first.');
       return;
     }
-    
+
     puts('🔍 Listing atomes for current project: ' + selectedProjectId);
     await loadProjectAtomes(selectedProjectId);
   },
@@ -2136,15 +2136,15 @@ $('span', {
       puts('❌ No project loaded. Please load a project first.');
       return;
     }
-    
+
     puts('🔍 DEBUG: Checking saved positions for project: ' + selectedProjectId);
     const result = await list_atomes({ projectId: selectedProjectId });
     const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
-    
+
     atomes.forEach(atome => {
       const atomeType = atome.atome_type || atome.type;
       if (atomeType === 'project' || atomeType === 'user') return;
-      
+
       const atomeId = atome.atome_id || atome.id;
       const particles = atome.particles || atome.data || {};
       puts('🔍 Atome ' + atomeId.substring(0, 8) + ' particles: ' + JSON.stringify(particles));
@@ -2218,29 +2218,29 @@ $('input', {
   },
   onInput: (e) => {
     if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
-    
+
     // Stop any playing animation first
     stopDragAnimation();
-    
+
     const sliderValue = parseInt(e.target.value);
     const sliderPosition = sliderValue / 1000; // Convert to 0-1 range
-    
+
     if (isInScrubMode && currentDragSequenceForScrub && currentScrubEntry) {
       // SCRUB MODE: Navigate through continuous sequence frames
       const frameIndex = Math.max(0, Math.min(currentDragSequenceForScrub.length - 1, sliderValue));
       const currentFrame = currentDragSequenceForScrub[frameIndex];
-      
+
       // Ensure exit button is visible
       const exitBtn = grab('exit_scrub_button');
       if (exitBtn) exitBtn.style.display = 'inline-block';
-      
+
       // Ensure play button is visible
       const playBtn = grab('play_animation_button');
       if (playBtn) {
         playBtn.style.display = 'inline-block';
         playBtn.dragSequence = currentDragSequenceForScrub;
       }
-      
+
       if (currentFrame && selectedVisualAtome) {
         // Apply all recorded properties
         if (currentFrame.left) selectedVisualAtome.style.left = currentFrame.left;
@@ -2251,29 +2251,29 @@ $('input', {
         if (currentFrame.width) selectedVisualAtome.style.width = currentFrame.width;
         if (currentFrame.height) selectedVisualAtome.style.height = currentFrame.height;
         if (currentFrame.transform) selectedVisualAtome.style.transform = currentFrame.transform;
-        
-        grab('history_info').textContent = 'SCRUB: Frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length + 
+
+        grab('history_info').textContent = 'SCRUB: Frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length +
           ' - Time: ' + currentFrame.relativeTime + 'ms';
       }
     } else {
       // HISTORY MODE: Use proportional mapping to find the correct entry
       const historyIndex = findHistoryIndexFromPosition(sliderPosition, currentProportionalPositions);
       const historyEntry = currentAtomeHistory[historyIndex];
-      
+
       if (historyEntry && selectedVisualAtome) {
         const particles = historyEntry.particles || historyEntry.data || {};
-        
+
         // Auto-detect continuous sequences for potential scrubbing
         const continuousSeq = particles.continuousSequence || particles.dragSequence;
-        
+
         if (continuousSeq && continuousSeq.length > 1) {
           // AUTO-SCRUB: Calculate which frame to show based on position within this entry's space
           const entryStartPos = currentProportionalPositions[historyIndex];
           const entryEndPos = currentProportionalPositions[historyIndex + 1];
-          
+
           const frameIndex = calculateFrameIndex(sliderPosition, entryStartPos, entryEndPos, continuousSeq.length);
           const currentFrame = continuousSeq[frameIndex];
-          
+
           // SCRUB through the sequence based on slider position
           if (currentFrame) {
             if (currentFrame.left) selectedVisualAtome.style.left = currentFrame.left;
@@ -2285,7 +2285,7 @@ $('input', {
             if (currentFrame.height) selectedVisualAtome.style.height = currentFrame.height;
             if (currentFrame.transform) selectedVisualAtome.style.transform = currentFrame.transform;
           }
-          
+
           // SHOW SCRUB AND PLAY BUTTONS for this sequence
           const scrubBtn = grab('scrub_sequence_button');
           if (scrubBtn) {
@@ -2293,15 +2293,15 @@ $('input', {
             scrubBtn.dragSequence = continuousSeq;
             scrubBtn.historyEntry = historyEntry;
           }
-          
+
           const playBtn = grab('play_animation_button');
           if (playBtn) {
             playBtn.style.display = 'inline-block';
             playBtn.dragSequence = continuousSeq;
           }
-          
+
           const changeType = particles.changeType || 'continuous change';
-          grab('history_info').textContent = 'SCRUB: ' + changeType + ' - Frame ' + (frameIndex + 1) + '/' + continuousSeq.length + 
+          grab('history_info').textContent = 'SCRUB: ' + changeType + ' - Frame ' + (frameIndex + 1) + '/' + continuousSeq.length +
             ' (Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + ') - Enhanced spacing';
         } else {
           // HIDE SCRUB AND PLAY BUTTONS for single-state entries
@@ -2309,7 +2309,7 @@ $('input', {
           if (scrubBtn) scrubBtn.style.display = 'none';
           const playBtn = grab('play_animation_button');
           if (playBtn) playBtn.style.display = 'none';
-          
+
           // Apply single state change for punctual entries
           if (particles.left) selectedVisualAtome.style.left = particles.left;
           if (particles.top) selectedVisualAtome.style.top = particles.top;
@@ -2319,11 +2319,11 @@ $('input', {
           if (particles.width) selectedVisualAtome.style.width = particles.width;
           if (particles.height) selectedVisualAtome.style.height = particles.height;
           if (particles.transform) selectedVisualAtome.style.transform = particles.transform;
-          
-          grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
+
+          grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) +
             ' - Punctual change - Position ' + Math.round(sliderPosition * 100) + '%';
         }
-        
+
         // Hide exit scrub button in history mode
         const exitBtn = grab('exit_scrub_button');
         if (exitBtn) exitBtn.style.display = 'none';
@@ -2332,17 +2332,17 @@ $('input', {
   },
   onChange: async (e) => {
     if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
-    
+
     // Stop any playing animation first
     stopDragAnimation();
-    
+
     const sliderValue = parseInt(e.target.value);
-    
+
     if (isInScrubMode && currentDragSequenceForScrub && currentScrubEntry) {
       // STAY in scrub mode and on current frame - don't exit
       const frameIndex = Math.max(0, Math.min(currentDragSequenceForScrub.length - 1, sliderValue));
       const currentFrame = currentDragSequenceForScrub[frameIndex];
-      
+
       if (currentFrame && selectedVisualAtome) {
         // Apply the selected frame properties
         if (currentFrame.left) selectedVisualAtome.style.left = currentFrame.left;
@@ -2353,8 +2353,8 @@ $('input', {
         if (currentFrame.width) selectedVisualAtome.style.width = currentFrame.width;
         if (currentFrame.height) selectedVisualAtome.style.height = currentFrame.height;
         if (currentFrame.transform) selectedVisualAtome.style.transform = currentFrame.transform;
-        
-        grab('history_info').textContent = 'SCRUB: Selected frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length + 
+
+        grab('history_info').textContent = 'SCRUB: Selected frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length +
           ' - Time: ' + currentFrame.relativeTime + 'ms (Release mouse to exit scrub mode)';
         puts('🎯 Selected frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length);
       }
@@ -2362,7 +2362,7 @@ $('input', {
       // Normal history mode selection
       const historyIndex = sliderValue;
       currentHistoryIndex = historyIndex;
-      
+
       console.log('[History] Selected entry:', currentAtomeHistory[historyIndex]);
     }
   }
@@ -2414,17 +2414,17 @@ $('span', {
       // Exit scrub mode, return to history mode
       isInScrubMode = false;
       const slider = grab('history_slider');
-      
+
       // Reset slider to history mode
       slider.max = currentAtomeHistory.length - 1;
       slider.value = currentHistoryIndex; // Return to the history entry we were on
-      
+
       // Hide exit button
       grab('exit_scrub_button').style.display = 'none';
-      
+
       grab('history_info').textContent = 'Exited scrub mode - Back to history navigation';
       puts('⬅️ Exited scrub mode manually');
-      
+
       // Reset scrub variables
       currentDragSequenceForScrub = null;
       currentScrubEntry = null;
@@ -2475,20 +2475,20 @@ $('span', {
       // Exit scrub mode, return to history mode
       isInScrubMode = false;
       const slider = grab('history_slider');
-      
+
       // Reset slider to history mode
       slider.max = currentAtomeHistory.length - 1;
       slider.value = currentHistoryIndex; // Return to the history entry we were on
-      
+
       // Hide exit button and play button, show scrub button again
       grab('exit_scrub_button').style.display = 'none';
       grab('play_animation_button').style.display = 'none';
       const scrubBtn = grab('scrub_sequence_button');
       if (scrubBtn) scrubBtn.style.display = 'inline-block';
-      
+
       grab('history_info').textContent = 'Exited scrub mode - Back to history navigation';
       puts('⬅️ Exited scrub mode manually');
-      
+
       // Reset scrub variables
       currentDragSequenceForScrub = null;
       currentScrubEntry = null;
@@ -2515,17 +2515,17 @@ $('span', {
       puts('❌ No atome selected or no history available');
       return;
     }
-    
+
     // Get current slider position and convert to history index
     const slider = grab('history_slider');
     if (!slider) {
       puts('❌ History slider not found');
       return;
     }
-    
+
     let historyEntry;
     let historyIndex;
-    
+
     if (isInScrubMode && currentScrubEntry) {
       // If in scrub mode, use the scrub entry
       historyEntry = currentScrubEntry;
@@ -2537,29 +2537,29 @@ $('span', {
       historyIndex = findHistoryIndexFromPosition(sliderPosition, currentProportionalPositions);
       historyEntry = currentAtomeHistory[historyIndex];
     }
-    
+
     if (!historyEntry) {
       puts('❌ Invalid history entry - Index: ' + historyIndex + ', Total: ' + currentAtomeHistory.length);
       return;
     }
-    
+
     puts('💾 Applying history entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + ' permanently to atome');
-    
+
     const particles = historyEntry.particles || historyEntry.data || {};
     const updates = {};
-    
+
     if (particles.left) updates.left = particles.left;
     if (particles.top) updates.top = particles.top;
     if (particles.color) updates.color = particles.color;
     if (particles.borderRadius) updates.borderRadius = particles.borderRadius;
     if (particles.opacity !== undefined) updates.opacity = particles.opacity;
-    
+
     const result = await alter_atome(selectedAtomeId, updates);
-    
+
     if (result.tauri?.success || result.fastify?.success) {
       puts('✅ History entry applied permanently');
       console.log('[History Apply] Success result:', result);
-      
+
       // Add the new applied state to history
       const newHistoryEntry = {
         timestamp: Date.now(),
@@ -2567,10 +2567,10 @@ $('span', {
         particles: { ...updates },
         data: { ...updates }
       };
-      
+
       // Add to history
       currentAtomeHistory.push(newHistoryEntry);
-      
+
       // Update localStorage
       const storageKey = 'atome_history_' + selectedAtomeId;
       try {
@@ -2578,16 +2578,16 @@ $('span', {
       } catch (e) {
         console.warn('[History] Failed to save to localStorage:', e);
       }
-      
+
       // Recalculate proportional positions
       currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
-      
+
       // Update slider to point to the new latest state
       const slider = grab('history_slider');
       if (slider) {
         slider.value = 1000; // Move to end (latest state)
       }
-      
+
       // Update current atome with the new state visually
       const atome = grab(selectedAtomeId);
       if (atome) {
@@ -2597,9 +2597,9 @@ $('span', {
         if (updates.borderRadius !== undefined) atome.borderRadius = updates.borderRadius;
         if (updates.opacity !== undefined) atome.opacity = updates.opacity;
       }
-      
+
       puts('🔄 History updated with new applied state (' + currentAtomeHistory.length + ' total entries)');
-      
+
     } else {
       puts('❌ Failed to apply history entry');
       console.log('[History Apply] Failed result:', result);
@@ -2641,7 +2641,7 @@ function createProjectSquare(project, index) {
   const id = project.atome_id || project.id;
   const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22'];
   const color = colors[index % colors.length];
-  
+
   const square = $('div', {
     id: 'project_square_' + index,
     parent: grab('project_selector_container'),
@@ -2666,27 +2666,27 @@ function createProjectSquare(project, index) {
     title: name + ' (' + id.substring(0, 8) + '...)',
     onClick: () => selectProject(project, square)
   });
-  
+
   square.addEventListener('mouseenter', () => {
     if (selectedProjectForSharing !== id) {
       square.style.transform = 'scale(1.1)';
       square.style.transition = 'transform 0.2s';
     }
   });
-  
+
   square.addEventListener('mouseleave', () => {
     if (selectedProjectForSharing !== id) {
       square.style.transform = 'scale(1)';
     }
   });
-  
+
   return square;
 }
 
 function selectProject(project, squareElement) {
   const id = project.atome_id || project.id;
   const name = project.name || project.data?.name || project.particles?.name || 'Unnamed';
-  
+
   // Remove previous selection
   const container = grab('project_selector_container');
   const squares = container.querySelectorAll('[id^="project_square_"]');
@@ -2694,14 +2694,14 @@ function selectProject(project, squareElement) {
     square.style.border = '2px solid transparent';
     square.style.transform = 'scale(1)';
   });
-  
+
   // Mark new selection
   selectedProjectForSharing = id;
   squareElement.style.border = '2px solid yellow';
   squareElement.style.transform = 'scale(1.2)';
-  
+
   puts('Selected project for sharing: ' + name);
-  
+
   // Save selection to localStorage
   localStorage.setItem('selected_project_for_sharing', id);
   localStorage.setItem('selected_project_name', name);
@@ -2725,7 +2725,7 @@ function loadProjectSelector() {
         pointerEvents: 'auto'
       }
     });
-    
+
     // Add refresh button
     $('div', {
       id: 'refresh_projects_button',
@@ -2748,31 +2748,31 @@ function loadProjectSelector() {
       onClick: testListProjects
     });
   }
-  
+
   return container;
 }
 
 async function testListProjects() {
   try {
     const result = await list_projects();
-    
+
     // Use same structure as working button: result.tauri.projects or result.fastify.projects
     const projects = result.tauri.projects.length > 0 ? result.tauri.projects : result.fastify.projects;
-    
+
     puts('Found ' + projects.length + ' projects for selection');
-    
+
     // Load or create container
     const container = loadProjectSelector();
-    
+
     // Clear existing project squares (keep refresh button)
     const existingSquares = container.querySelectorAll('[id^="project_square_"]');
     existingSquares.forEach(square => square.remove());
-    
+
     // Create squares for each project
     projects.forEach((project, index) => {
       createProjectSquare(project, index);
     });
-    
+
     // Restore previous selection
     const savedProjectId = localStorage.getItem('selected_project_for_sharing');
     if (savedProjectId) {
@@ -2785,7 +2785,7 @@ async function testListProjects() {
         }
       }
     }
-    
+
   } catch (error) {
     console.error('[PROJECTS] Error:', error);
   }
@@ -2795,5 +2795,3 @@ async function testListProjects() {
 setTimeout(() => {
   testListProjects();
 }, 2000);
-
-
