@@ -312,12 +312,24 @@ async function loadProjectAtomes(projectId) {
     const top = savedTop || '50px';
     const color = particles.color || atome.color || 'blue';
     
+    // Get stored style properties
+    const savedBorderRadius = particles.borderRadius;
+    const savedOpacity = particles.opacity;
+    const borderRadius = savedBorderRadius || '8px';
+    const opacity = savedOpacity !== undefined ? savedOpacity : 1.0;
+    
     puts('📍 Loading atome ' + atomeId.substring(0, 8) + 
          ' - saved position: (' + (savedLeft || 'none') + ', ' + (savedTop || 'none') + ')' +
-         ' - using position: (' + left + ', ' + top + ')');
-    console.log('[Position Load] Atome data:', { atomeId: atomeId.substring(0, 8), particles, savedLeft, savedTop, left, top });
+         ' - using position: (' + left + ', ' + top + ')' +
+         ' - saved style: borderRadius=' + (savedBorderRadius || 'default') + ', opacity=' + (savedOpacity !== undefined ? savedOpacity : 'default'));
+    console.log('[Position Load] Atome data:', { 
+      atomeId: atomeId.substring(0, 8), 
+      particles, 
+      savedLeft, savedTop, left, top,
+      savedBorderRadius, savedOpacity, borderRadius, opacity
+    });
 
-    createVisualAtome(atomeId, atomeType, color, left, top);
+    createVisualAtome(atomeId, atomeType, color, left, top, borderRadius, opacity);
   });
 }
 
@@ -328,9 +340,11 @@ async function loadProjectAtomes(projectId) {
  * @param {string} color - The atome color
  * @param {string} left - CSS left position
  * @param {string} top - CSS top position
+ * @param {string} borderRadius - CSS border radius (optional)
+ * @param {number} opacity - CSS opacity (optional)
  * @returns {HTMLElement} The created element
  */
-function createVisualAtome(atomeId, type, color, left, top) {
+function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px', opacity = 1.0) {
   if (!currentProjectDiv) {
     puts('No project loaded. Please load a project first.');
     return null;
@@ -346,7 +360,8 @@ function createVisualAtome(atomeId, type, color, left, top) {
       width: '80px',
       height: '80px',
       backgroundColor: color,
-      borderRadius: '8px',
+      borderRadius: borderRadius,
+      opacity: opacity,
       cursor: 'move',
       display: 'flex',
       justifyContent: 'center',
@@ -1551,8 +1566,8 @@ $('span', {
       console.log('[create_atome button] Final ID:', newId);
       puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
       
-      // Create visual element with initial position
-      createVisualAtome(newId, atomeType, atomeColor, initialLeft, initialTop);
+      // Create visual element with initial position and default style
+      createVisualAtome(newId, atomeType, atomeColor, initialLeft, initialTop, '8px', 1.0);
       
       // If we got a real ID, try to reload project to ensure consistency
       if (!newId.startsWith('temp_')) {
@@ -1620,18 +1635,37 @@ $('span', {
       puts('❌ No atome selected. Click on an atome to select it first.');
       return;
     }
-    // For testing, change color to a random one
-    const colors = ['red', 'green', 'blue', 'purple', 'orange', 'cyan', 'magenta'];
-    const newColor = colors[Math.floor(Math.random() * colors.length)];
-    puts('Altering atome color to: ' + newColor);
-    const result = await alter_atome(selectedAtomeId, { color: newColor });
+    
+    // Generate random color, border radius and opacity
+    const colorOptions = ['red', 'green', 'blue', 'purple', 'orange', 'cyan', 'magenta', 'pink', 'yellow', 'lime', 'teal', 'navy'];
+    const borderRadiusOptions = ['0px', '8px', '15px', '25px', '40px', '50%'];
+    const opacityOptions = [0.3, 0.5, 0.7, 0.8, 0.9, 1.0];
+    
+    const newColor = colorOptions[Math.floor(Math.random() * colorOptions.length)];
+    const newBorderRadius = borderRadiusOptions[Math.floor(Math.random() * borderRadiusOptions.length)];
+    const newOpacity = opacityOptions[Math.floor(Math.random() * opacityOptions.length)];
+    
+    puts('🔄 Altering atome style - color: ' + newColor + ', borderRadius: ' + newBorderRadius + ', opacity: ' + newOpacity);
+    
+    // Save to database using alter_atome
+    const result = await alter_atome(selectedAtomeId, { 
+      color: newColor,
+      borderRadius: newBorderRadius, 
+      opacity: newOpacity 
+    });
 
     if (result.tauri?.success || result.fastify?.success) {
-      puts('✅ Atome altered');
-      // Update visual element
+      puts('✅ Atome style altered and saved');
+      
+      // Update visual element immediately
       selectedVisualAtome.style.backgroundColor = newColor;
+      selectedVisualAtome.style.borderRadius = newBorderRadius;
+      selectedVisualAtome.style.opacity = newOpacity;
+      
+      console.log('[Alter Save] Success result:', result);
     } else {
-      puts('❌ Failed to alter atome');
+      puts('❌ Failed to alter atome style');
+      console.log('[Alter Save] Failed result:', result);
     }
   },
 });
