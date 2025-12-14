@@ -542,12 +542,16 @@ function updateHistorySlider() {
     info.textContent = 'No history available';
   } else {
     slider.disabled = false;
-    slider.max = (currentAtomeHistory.length - 1).toString();
-    slider.value = currentHistoryIndex.toString();
+    slider.max = '1000'; // Use high resolution for smooth scrubbing
+    slider.value = '1000'; // Start at the end (most recent)
+    
+    // Calculate proportional positions for better scrubbing
+    currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
     
     const currentEntry = currentAtomeHistory[currentHistoryIndex];
-    info.textContent = 'Entry ' + currentHistoryIndex + '/' + (currentAtomeHistory.length - 1) + 
-      ' - Date: ' + (currentEntry.created_at || 'unknown');
+    info.textContent = 'Loaded ' + currentAtomeHistory.length + ' entries with enhanced spacing - Entry ' + currentHistoryIndex + '/' + (currentAtomeHistory.length - 1);
+    puts('✅ Loaded manual history: ' + currentAtomeHistory.length + ' entries with proportional spacing');
+    console.log('[History] Proportional positions:', currentProportionalPositions);
   }
 }
 
@@ -757,6 +761,66 @@ function stopContinuousRecording(atomeId, finalProperties, changeDescription) {
   
   // Clear sequence
   currentContinuousSequence = [];
+}
+
+/**
+ * Calculate proportional slider positions giving more space to continuous sequences
+ * @param {Array} historyEntries - Array of history entries
+ * @returns {Array} Array of cumulative positions (0-1) for each entry
+ */
+function calculateProportionalPositions(historyEntries) {
+  if (!historyEntries || historyEntries.length === 0) return [];
+  
+  const weights = historyEntries.map(entry => {
+    const particles = entry.particles || entry.data || {};
+    const continuousSeq = particles.continuousSequence || particles.dragSequence;
+    
+    // Give continuous sequences 5x more space than punctual changes
+    return continuousSeq && continuousSeq.length > 1 ? 5 : 1;
+  });
+  
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const positions = [];
+  let cumulativeWeight = 0;
+  
+  for (let i = 0; i < weights.length; i++) {
+    positions.push(cumulativeWeight / totalWeight);
+    cumulativeWeight += weights[i];
+  }
+  
+  // Add final position
+  positions.push(1);
+  
+  return positions;
+}
+
+/**
+ * Find history index from slider position using proportional mapping
+ * @param {number} sliderPosition - Position from slider (0-1)
+ * @param {Array} proportionalPositions - Array of proportional positions
+ * @returns {number} History index
+ */
+function findHistoryIndexFromPosition(sliderPosition, proportionalPositions) {
+  for (let i = 0; i < proportionalPositions.length - 1; i++) {
+    if (sliderPosition >= proportionalPositions[i] && sliderPosition <= proportionalPositions[i + 1]) {
+      return i;
+    }
+  }
+  return proportionalPositions.length - 2; // Last valid index
+}
+
+/**
+ * Calculate frame index within a continuous sequence based on position within that entry's space
+ * @param {number} sliderPosition - Position from slider (0-1)
+ * @param {number} entryStartPos - Start position of this entry (0-1)
+ * @param {number} entryEndPos - End position of this entry (0-1)
+ * @param {number} sequenceLength - Number of frames in the sequence
+ * @returns {number} Frame index
+ */
+function calculateFrameIndex(sliderPosition, entryStartPos, entryEndPos, sequenceLength) {
+  const progressWithinEntry = (sliderPosition - entryStartPos) / (entryEndPos - entryStartPos);
+  const clampedProgress = Math.max(0, Math.min(1, progressWithinEntry));
+  return Math.floor(clampedProgress * (sequenceLength - 1));
 }
 
 /**
@@ -2131,6 +2195,7 @@ let isRecordingContinuous = false;
 let continuousStartTime = 0;
 let lastContinuousRecordTime = 0;
 let currentContinuousSequence = [];
+let currentProportionalPositions = [];
 
 $('input', {
   id: 'history_slider',
@@ -2143,7 +2208,7 @@ $('input', {
     disabled: true
   },
   css: {
-    width: '200px',
+    width: '400px',
     margin: '5px 0'
   },
   onInput: (e) => {
@@ -2153,6 +2218,7 @@ $('input', {
     stopDragAnimation();
     
     const sliderValue = parseInt(e.target.value);
+    const sliderPosition = sliderValue / 1000; // Convert to 0-1 range
     
     if (isInScrubMode && currentDragSequenceForScrub && currentScrubEntry) {
       // SCRUB MODE: Navigate through continuous sequence frames
@@ -2185,8 +2251,8 @@ $('input', {
           ' - Time: ' + currentFrame.relativeTime + 'ms';
       }
     } else {
-      // HISTORY MODE: Navigate between history entries and apply all changes
-      const historyIndex = sliderValue;
+      // HISTORY MODE: Use proportional mapping to find the correct entry
+      const historyIndex = findHistoryIndexFromPosition(sliderPosition, currentProportionalPositions);
       const historyEntry = currentAtomeHistory[historyIndex];
       
       if (historyEntry && selectedVisualAtome) {
@@ -2196,7 +2262,26 @@ $('input', {
         const continuousSeq = particles.continuousSequence || particles.dragSequence;
         
         if (continuousSeq && continuousSeq.length > 1) {
-          // SHOW SCRUB BUTTON but don't auto-enter scrub mode
+          // AUTO-SCRUB: Calculate which frame to show based on position within this entry's space
+          const entryStartPos = currentProportionalPositions[historyIndex];
+          const entryEndPos = currentProportionalPositions[historyIndex + 1];
+          
+          const frameIndex = calculateFrameIndex(sliderPosition, entryStartPos, entryEndPos, continuousSeq.length);
+          const currentFrame = continuousSeq[frameIndex];
+          
+          // SCRUB through the sequence based on slider position
+          if (currentFrame) {
+            if (currentFrame.left) selectedVisualAtome.style.left = currentFrame.left;
+            if (currentFrame.top) selectedVisualAtome.style.top = currentFrame.top;
+            if (currentFrame.color) selectedVisualAtome.style.backgroundColor = currentFrame.color;
+            if (currentFrame.borderRadius) selectedVisualAtome.style.borderRadius = currentFrame.borderRadius;
+            if (currentFrame.opacity !== undefined) selectedVisualAtome.style.opacity = currentFrame.opacity;
+            if (currentFrame.width) selectedVisualAtome.style.width = currentFrame.width;
+            if (currentFrame.height) selectedVisualAtome.style.height = currentFrame.height;
+            if (currentFrame.transform) selectedVisualAtome.style.transform = currentFrame.transform;
+          }
+          
+          // SHOW SCRUB AND PLAY BUTTONS for this sequence
           const scrubBtn = grab('scrub_sequence_button');
           if (scrubBtn) {
             scrubBtn.style.display = 'inline-block';
@@ -2204,27 +2289,15 @@ $('input', {
             scrubBtn.historyEntry = historyEntry;
           }
           
-          // SHOW PLAY BUTTON for this sequence
           const playBtn = grab('play_animation_button');
           if (playBtn) {
             playBtn.style.display = 'inline-block';
             playBtn.dragSequence = continuousSeq;
           }
           
-          // Apply FINAL state of the sequence (not auto-scrub)
-          const finalFrame = continuousSeq[continuousSeq.length - 1];
-          if (finalFrame.left) selectedVisualAtome.style.left = finalFrame.left;
-          if (finalFrame.top) selectedVisualAtome.style.top = finalFrame.top;
-          if (finalFrame.color) selectedVisualAtome.style.backgroundColor = finalFrame.color;
-          if (finalFrame.borderRadius) selectedVisualAtome.style.borderRadius = finalFrame.borderRadius;
-          if (finalFrame.opacity !== undefined) selectedVisualAtome.style.opacity = finalFrame.opacity;
-          if (finalFrame.width) selectedVisualAtome.style.width = finalFrame.width;
-          if (finalFrame.height) selectedVisualAtome.style.height = finalFrame.height;
-          if (finalFrame.transform) selectedVisualAtome.style.transform = finalFrame.transform;
-          
           const changeType = particles.changeType || 'continuous change';
-          grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
-            ' - ' + changeType + ' (' + continuousSeq.length + ' frames, ' + particles.continuousDuration + 'ms)';
+          grab('history_info').textContent = 'SCRUB: ' + changeType + ' - Frame ' + (frameIndex + 1) + '/' + continuousSeq.length + 
+            ' (Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + ') - Enhanced spacing';
         } else {
           // HIDE SCRUB AND PLAY BUTTONS for single-state entries
           const scrubBtn = grab('scrub_sequence_button');
@@ -2243,7 +2316,7 @@ $('input', {
           if (particles.transform) selectedVisualAtome.style.transform = particles.transform;
           
           grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
-            ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || historyEntry.timestamp || 'unknown');
+            ' - Punctual change - Position ' + Math.round(sliderPosition * 100) + '%';
         }
         
         // Hide exit scrub button in history mode
