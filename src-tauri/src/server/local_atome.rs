@@ -486,8 +486,13 @@ async fn handle_list(
     };
 
     // Determine effective owner - if anonymous or not specified, query by type only
-    let effective_owner = match owner_id.or(Some(user_id)) {
-        Some(id) if id != "anonymous" && !id.is_empty() => Some(id),
+    // SPECIAL CASE: For atome_type = 'user', always query all users regardless of owner
+    let effective_owner = match (owner_id.or(Some(user_id)), atome_type) {
+        (Some(_), Some("user")) => {
+            // For user listing, ignore owner filtering to get all users
+            None
+        }
+        (Some(id), _) if id != "anonymous" && !id.is_empty() => Some(id),
         _ => None,
     };
 

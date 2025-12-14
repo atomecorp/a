@@ -265,8 +265,8 @@ async function delete_user(phone, password, username, callback) {
 }
 
 /**
- * List all users via WebSocket
- * Uses atome.list to get user-type atomes
+ * List all users via WebSocket - FIXED VERSION
+ * Uses atome.list to get user-type atomes - Fixed server-side bug in Tauri
  */
 async function user_list() {
   const results = {
@@ -1550,6 +1550,127 @@ async function open_project_selector(callback) {
 }
 
 /**
+ * TEST ONLY - Open a user selector dialog
+ * @param {Function} callback - Callback with selected user { user_id, username, phone }
+ */
+async function open_user_selector(callback) {
+  const usersResult = await user_list();
+  const users = usersResult.tauri.users.length > 0
+    ? usersResult.tauri.users
+    : usersResult.fastify.users;
+
+  if (users.length === 0) {
+    if (typeof callback === 'function') {
+      callback({ user_id: null, username: null, phone: null, cancelled: true });
+    }
+    return;
+  }
+
+  const existingSelector = grab('user_selector_overlay');
+  if (existingSelector) existingSelector.remove();
+
+  const overlay = $('div', {
+    id: 'user_selector_overlay',
+    css: {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: '1000'
+    }
+  });
+
+  const modal = $('div', {
+    id: 'user_selector_modal',
+    parent: overlay,
+    css: {
+      backgroundColor: '#fff',
+      padding: '20px',
+      borderRadius: '8px',
+      minWidth: '300px',
+      maxHeight: '400px',
+      overflowY: 'auto'
+    }
+  });
+
+  $('div', {
+    parent: modal,
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: '#333' },
+    text: 'Select a User'
+  });
+
+  users.forEach((user, index) => {
+    const userId = user.atome_id || user.id;
+    const username = user.username || user.data?.username || 'Unknown User';
+    const phone = user.phone || user.data?.phone || 'No phone';
+
+    $('div', {
+      id: 'user_item_' + index,
+      parent: modal,
+      css: {
+        padding: '10px',
+        margin: '5px 0',
+        backgroundColor: '#f0f0f0',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        color: '#333'
+      },
+      text: username + ' (' + phone + ')',
+      onClick: async () => {
+        overlay.remove();
+        if (phone && phone !== 'No phone') {
+          const loginResult = await log_user(phone, phone, '');
+          if (loginResult.tauri.success || loginResult.fastify.success) {
+            const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
+            const loggedUsername = userData?.user?.username || userData?.username || username;
+            puts('✅ Switched to user: ' + loggedUsername);
+            grab('logged_user').textContent = loggedUsername;
+            if (typeof callback === 'function') {
+              callback({ user_id: userId, username: loggedUsername, phone: phone, cancelled: false });
+            }
+          } else {
+            puts('❌ Failed to switch user');
+            if (typeof callback === 'function') {
+              callback({ user_id: null, username: null, phone: null, cancelled: false, error: 'Login failed' });
+            }
+          }
+        } else {
+          puts('❌ User has no phone number');
+          if (typeof callback === 'function') {
+            callback({ user_id: null, username: null, phone: null, cancelled: false, error: 'No phone number' });
+          }
+        }
+      }
+    });
+  });
+
+  $('div', {
+    parent: modal,
+    css: {
+      padding: '10px',
+      marginTop: '15px',
+      backgroundColor: '#ccc',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      textAlign: 'center',
+      color: '#333'
+    },
+    text: 'Cancel',
+    onClick: () => {
+      overlay.remove();
+      if (typeof callback === 'function') {
+        callback({ user_id: null, username: null, phone: null, cancelled: true });
+      }
+    }
+  });
+}
+
+/**
  * TEST ONLY - Open an atome selector dialog
  * @param {Object} options - Filter options { type, projectId }
  * @param {Function} callback - Callback with selected atome { atome_id, atome }
@@ -1917,38 +2038,38 @@ $('span', {
       modifiedOnFastify: result.modifiedOnFastify.length,
       deletedOnTauri: result.deletedOnTauri.length,
       deletedOnFastify: result.deletedOnFastify.length,
-        conflicts: result.conflicts.length,
-        synced: result.synced.length,
-        error: result.error
-      };
+      conflicts: result.conflicts.length,
+      synced: result.synced.length,
+      error: result.error
+    };
 
-      // Check if there's anything to sync (including deletions)
-      const hasUnsyncedItems = summary.onlyOnTauri > 0 || summary.onlyOnFastify > 0 ||
-        summary.modifiedOnTauri > 0 || summary.modifiedOnFastify > 0 ||
-        summary.deletedOnTauri > 0 || summary.deletedOnFastify > 0 ||
-        summary.conflicts > 0;
+    // Check if there's anything to sync (including deletions)
+    const hasUnsyncedItems = summary.onlyOnTauri > 0 || summary.onlyOnFastify > 0 ||
+      summary.modifiedOnTauri > 0 || summary.modifiedOnFastify > 0 ||
+      summary.deletedOnTauri > 0 || summary.deletedOnFastify > 0 ||
+      summary.conflicts > 0;
 
-      if (hasUnsyncedItems) {
-        puts('Unsynced atomes: ' + JSON.stringify(summary));
-        // Show IDs of items needing sync
-        if (result.onlyOnTauri.length > 0) {
-          puts('  To push: ' + result.onlyOnTauri.map(a => a.atome_id).join(', '));
-        }
-        if (result.onlyOnFastify.length > 0) {
-          puts('  To pull: ' + result.onlyOnFastify.map(a => a.atome_id).join(', '));
-        }
-        if (result.deletedOnTauri.length > 0) {
-          puts('  Deleted on Tauri (propagate to Fastify): ' + result.deletedOnTauri.map(d => d.id).join(', '));
-        }
-        if (result.deletedOnFastify.length > 0) {
-          puts('  Deleted on Fastify (propagate to Tauri): ' + result.deletedOnFastify.map(d => d.id).join(', '));
-        }
-        if (result.conflicts.length > 0) {
-          puts('  Conflicts: ' + result.conflicts.map(c => c.id).join(', '));
-        }
-      } else {
-        puts('✅ All ' + summary.synced + ' atomes are synchronized');
+    if (hasUnsyncedItems) {
+      puts('Unsynced atomes: ' + JSON.stringify(summary));
+      // Show IDs of items needing sync
+      if (result.onlyOnTauri.length > 0) {
+        puts('  To push: ' + result.onlyOnTauri.map(a => a.atome_id).join(', '));
       }
+      if (result.onlyOnFastify.length > 0) {
+        puts('  To pull: ' + result.onlyOnFastify.map(a => a.atome_id).join(', '));
+      }
+      if (result.deletedOnTauri.length > 0) {
+        puts('  Deleted on Tauri (propagate to Fastify): ' + result.deletedOnTauri.map(d => d.id).join(', '));
+      }
+      if (result.deletedOnFastify.length > 0) {
+        puts('  Deleted on Fastify (propagate to Tauri): ' + result.deletedOnFastify.map(d => d.id).join(', '));
+      }
+      if (result.conflicts.length > 0) {
+        puts('  Conflicts: ' + result.conflicts.map(c => c.id).join(', '));
+      }
+    } else {
+      puts('✅ All ' + summary.synced + ' atomes are synchronized');
+    }
   },
 });
 
@@ -1988,19 +2109,16 @@ $('span', {
     display: 'inline-block'
   },
   text: 'log user',
-  onClick: async () => {
-    const phone = grab('phone_pass_input').value;
-    const results = await log_user(phone, phone, '');
-    
-    if (results.tauri.success || results.fastify.success) {
-      const userData = results.tauri.success ? results.tauri.data : results.fastify.data;
-      const loggedUsername = userData?.user?.username || userData?.username || 'unknown';
-      puts('Logged in as: ' + loggedUsername);
-      grab('logged_user').textContent = loggedUsername;
-    } else {
-      puts('❌ Login failed');
-      grab('logged_user').textContent = 'login failed';
-    }
+  onClick: () => {
+    open_user_selector((result) => {
+      if (!result.cancelled && !result.error) {
+        puts('User selection successful');
+      } else if (result.error) {
+        puts('User switch error: ' + result.error);
+      } else {
+        puts('User selection cancelled');
+      }
+    });
   },
 });
 
@@ -2017,7 +2135,7 @@ $('span', {
   text: 'unlog user',
   onClick: async () => {
     const results = await unlog_user();
-    
+
     if (results.tauri.success || results.fastify.success) {
       puts('User logged out');
       grab('logged_user').textContent = 'no user logged';
@@ -2044,7 +2162,7 @@ $('span', {
     puts('Deleting user...');
     const phone = grab('phone_pass_input').value;
     const user_name = grab('username_input').value;
-    
+
     const results = await delete_user(phone, phone, user_name);
     if (results.tauri.success || results.fastify.success) {
       puts('User deleted, logging out...');
@@ -2127,7 +2245,7 @@ $('span', {
   onClick: async () => {
     const projectName = grab('atome_project_name_input').value;
     const result = await create_project(projectName);
-    
+
     if (result.tauri.success || result.fastify.success) {
       const tauriData = result.tauri?.data?.data;
       const fastifyData = result.fastify?.data?.data;
@@ -2162,12 +2280,12 @@ $('span', {
     const selection = await new Promise(resolve => {
       open_project_selector(resolve);
     });
-    
+
     if (selection.cancelled) {
       puts('Loading cancelled');
       return;
     }
-    
+
     loadProjectView(selection.project_id, selection.project_name);
     puts('✅ Project loaded: ' + selection.project_name);
   },
@@ -2190,12 +2308,12 @@ $('span', {
     const selection = await new Promise(resolve => {
       open_project_selector(resolve);
     });
-    
+
     if (selection.cancelled) {
       puts('Deletion cancelled');
       return;
     }
-    
+
     const result = await delete_project(selection.project_id);
     if (result.tauri.success || result.fastify.success) {
       puts('✅ Project deleted: ' + selection.project_name);
@@ -2299,7 +2417,7 @@ $('span', {
     }
     puts('Deleting selected atome: ' + selectedAtomeId.substring(0, 8) + '...');
     const result = await delete_atome(selectedAtomeId);
-    
+
     if (result.tauri?.success || result.fastify?.success) {
       puts('✅ Atome deleted');
       // Remove visual element
@@ -2335,7 +2453,7 @@ $('span', {
     const newColor = colors[Math.floor(Math.random() * colors.length)];
     puts('Altering atome color to: ' + newColor);
     const result = await alter_atome(selectedAtomeId, { color: newColor });
-    
+
     if (result.tauri?.success || result.fastify?.success) {
       puts('✅ Atome altered');
       // Update visual element
