@@ -1275,23 +1275,23 @@ async function loadProjectView(projectId, projectName) {
     puts('❌ Cannot load project: Missing project ID');
     return;
   }
-  
+
   // SECURITY: Verify project belongs to current user
   const currentUserResult = await current_user();
   const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
-  
+
   if (!currentUserId) {
     puts('❌ SECURITY: Cannot load project - no user logged in');
     return;
   }
-  
+
   // Get project details to verify ownership
   try {
     const projectResult = await TauriAdapter.atome.get(projectId);
     if (projectResult.ok || projectResult.success) {
       const project = projectResult.atome || projectResult.data;
       const projectOwnerId = project?.owner_id || project?.ownerId || project?.particles?.owner_id;
-      
+
       if (projectOwnerId !== currentUserId) {
         puts('❌ SECURITY: Access denied - project belongs to another user');
         return;
@@ -1506,7 +1506,7 @@ function makeAtomeDraggable(atomeEl, atomeId) {
  */
 async function open_project_selector(callback) {
   const projectsResult = await list_projects();
-  
+
   // SECURITY: Check for authentication errors
   if (projectsResult.tauri.error && projectsResult.tauri.error.includes('SECURITY')) {
     puts('❌ ' + projectsResult.tauri.error);
@@ -1515,7 +1515,7 @@ async function open_project_selector(callback) {
     }
     return;
   }
-  
+
   const projects = projectsResult.tauri.projects.length > 0
     ? projectsResult.tauri.projects
     : projectsResult.fastify.projects;
