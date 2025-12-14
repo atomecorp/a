@@ -218,10 +218,17 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
 
   // Continue with project loading...
 
-  // Remove existing project div if any
+  // Remove existing project div and clear state if any
   if (currentProjectDiv) {
     currentProjectDiv.remove();
+    currentProjectDiv = null;
   }
+  
+  // Clear visual atome selection
+  selectedVisualAtome = null;
+  selectedAtomeId = null;
+  
+  puts('🔄 Creating new project view for: ' + projectName + ' (ID: ' + projectId + ')');
 
   // Create new project container directly in 'view' (no intermediate project_canvas)
   currentProjectDiv = $('div', {
@@ -260,17 +267,43 @@ async function loadProjectAtomes(projectId) {
     return;
   }
 
-  const result = await list_atomes({ parentId: projectId });
-  const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
-
-  // Filter to get only atomes that belong to this project
-  atomes.forEach(atome => {
+  puts('🔍 Loading atomes for project: ' + projectId);
+  
+  // Try different filter approaches
+  const result = await list_atomes({ projectId: projectId });
+  let atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
+  
+  puts('📊 Total atomes found: ' + atomes.length);
+  
+  // Filter to get only atomes that belong to this project and are not projects/users
+  const projectAtomes = atomes.filter(atome => {
+    const atomeType = atome.atome_type || atome.type;
+    const atomeProjectId = atome.project_id || atome.projectId || atome.parent_id || atome.parentId;
+    const particles = atome.particles || atome.data || {};
+    const particleProjectId = particles.projectId || particles.project_id;
+    
+    // Skip projects and users
+    if (atomeType === 'project' || atomeType === 'user') return false;
+    
+    // Check if atome belongs to this project
+    const belongsToProject = atomeProjectId === projectId || particleProjectId === projectId;
+    
+    puts('🔍 Atome ' + (atome.atome_id || atome.id).substring(0, 8) + 
+         ' type: ' + atomeType + 
+         ' projectId: ' + (atomeProjectId || 'none') + 
+         ' particleProjectId: ' + (particleProjectId || 'none') + 
+         ' belongs: ' + belongsToProject);
+    
+    return belongsToProject;
+  });
+  
+  puts('✅ Project atomes found: ' + projectAtomes.length);
+  
+  // Create visual elements for project atomes
+  projectAtomes.forEach(atome => {
     const atomeId = atome.atome_id || atome.id;
     const atomeType = atome.atome_type || atome.type;
     const particles = atome.particles || atome.data || {};
-
-    // Skip projects and users
-    if (atomeType === 'project' || atomeType === 'user') return;
 
     // Get stored position or default
     const left = particles.left || '50px';
@@ -595,6 +628,41 @@ async function open_user_selector(callback) {
             const loggedUsername = userData?.user?.username || userData?.username || username;
             puts('✅ Switched to user: ' + loggedUsername);
             grab('logged_user').textContent = loggedUsername;
+            
+            // Clear current project view when switching users
+            if (currentProjectDiv) {
+              currentProjectDiv.remove();
+              currentProjectDiv = null;
+            }
+            selectedProjectId = null;
+            currentProjectName = null;
+            grab('current_project').textContent = 'no project loaded';
+            
+            // Auto-load first project of new user
+            try {
+              const projectsResult = await list_projects();
+              const projects = projectsResult.tauri.projects.length > 0
+                ? projectsResult.tauri.projects
+                : projectsResult.fastify.projects;
+              
+              if (projects && projects.length > 0) {
+                const firstProject = projects[0];
+                const projectId = firstProject.atome_id || firstProject.id;
+                const projectName = firstProject.name || firstProject.data?.name || firstProject.particles?.name || 'Unnamed Project';
+                
+                // Get background color
+                const particles = firstProject.particles || firstProject.data || {};
+                const backgroundColor = particles.backgroundColor || firstProject.backgroundColor || '#333';
+                
+                await loadProjectView(projectId, projectName, backgroundColor);
+                puts('✅ Auto-loaded first project: ' + projectName);
+              } else {
+                puts('No projects found for this user');
+              }
+            } catch (error) {
+              puts('❌ Failed to auto-load project: ' + error);
+            }
+            
             if (typeof callback === 'function') {
               callback({ user_id: userId, username: loggedUsername, phone: phone, cancelled: false });
             }
@@ -1532,6 +1600,29 @@ $('span', {
     } else {
       puts('No atomes found');
     }
+  },
+});
+
+$('span', {
+  id: 'list_project_atomes',
+  parent: intuitionContainer,
+  css: {
+    backgroundColor: 'rgba(255, 165, 0, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'list project atomes',
+  onClick: async () => {
+    if (!selectedProjectId) {
+      puts('❌ No project loaded. Please load a project first.');
+      return;
+    }
+    
+    puts('🔍 Listing atomes for current project: ' + selectedProjectId);
+    await loadProjectAtomes(selectedProjectId);
   },
 });
 
