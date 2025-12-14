@@ -44,6 +44,7 @@ import './apis/essentials.js';
 import './apis/utils.js';
 import './apis/loader.js';
 import './apis/shortcut.js';
+import './apis/unified/adole_apis.js';
 import DragDrop from './apis/dragdrop.js';
 import { $, define, observeMutations } from './squirrel.js';
 
