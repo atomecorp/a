@@ -2633,6 +2633,125 @@ $('span', {
 // SIMPLE PROJECT TEST
 // ============================================
 
+// Project selection state
+let selectedProjectForSharing = null;
+
+function createProjectSquare(project, index) {
+  const name = project.name || project.data?.name || project.particles?.name || 'Unnamed';
+  const id = project.atome_id || project.id;
+  const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22'];
+  const color = colors[index % colors.length];
+  
+  const square = $('div', {
+    id: 'project_square_' + index,
+    parent: grab('project_selector_container'),
+    css: {
+      width: '40px',
+      height: '40px',
+      backgroundColor: color,
+      margin: '5px',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      border: '2px solid transparent',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '10px',
+      color: 'white',
+      fontWeight: 'bold',
+      textAlign: 'center',
+      lineHeight: '1.2'
+    },
+    text: name.substring(0, 3).toUpperCase(),
+    title: name + ' (' + id.substring(0, 8) + '...)',
+    onClick: () => selectProject(project, square)
+  });
+  
+  square.addEventListener('mouseenter', () => {
+    if (selectedProjectForSharing !== id) {
+      square.style.transform = 'scale(1.1)';
+      square.style.transition = 'transform 0.2s';
+    }
+  });
+  
+  square.addEventListener('mouseleave', () => {
+    if (selectedProjectForSharing !== id) {
+      square.style.transform = 'scale(1)';
+    }
+  });
+  
+  return square;
+}
+
+function selectProject(project, squareElement) {
+  const id = project.atome_id || project.id;
+  const name = project.name || project.data?.name || project.particles?.name || 'Unnamed';
+  
+  // Remove previous selection
+  const container = grab('project_selector_container');
+  const squares = container.querySelectorAll('[id^="project_square_"]');
+  squares.forEach(square => {
+    square.style.border = '2px solid transparent';
+    square.style.transform = 'scale(1)';
+  });
+  
+  // Mark new selection
+  selectedProjectForSharing = id;
+  squareElement.style.border = '2px solid yellow';
+  squareElement.style.transform = 'scale(1.2)';
+  
+  puts('Selected project for sharing: ' + name);
+  
+  // Save selection to localStorage
+  localStorage.setItem('selected_project_for_sharing', id);
+  localStorage.setItem('selected_project_name', name);
+}
+
+function loadProjectSelector() {
+  // Create or get container
+  let container = grab('project_selector_container');
+  if (!container) {
+    container = $('div', {
+      id: 'project_selector_container',
+      parent: document.body,
+      css: {
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        zIndex: '1000',
+        pointerEvents: 'auto'
+      }
+    });
+    
+    // Add refresh button
+    $('div', {
+      id: 'refresh_projects_button',
+      parent: container,
+      css: {
+        width: '40px',
+        height: '20px',
+        backgroundColor: '#95a5a6',
+        margin: '5px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '8px',
+        color: 'white',
+        fontWeight: 'bold'
+      },
+      text: 'REFRESH',
+      onClick: testListProjects
+    });
+  }
+  
+  return container;
+}
+
 async function testListProjects() {
   try {
     const result = await list_projects();
@@ -2640,12 +2759,32 @@ async function testListProjects() {
     // Use same structure as working button: result.tauri.projects or result.fastify.projects
     const projects = result.tauri.projects.length > 0 ? result.tauri.projects : result.fastify.projects;
     
-    console.log('[PROJECTS] Found:', projects.length);
+    puts('Found ' + projects.length + ' projects for selection');
+    
+    // Load or create container
+    const container = loadProjectSelector();
+    
+    // Clear existing project squares (keep refresh button)
+    const existingSquares = container.querySelectorAll('[id^="project_square_"]');
+    existingSquares.forEach(square => square.remove());
+    
+    // Create squares for each project
     projects.forEach((project, index) => {
-      const name = project.name || project.data?.name || project.particles?.name || 'Unnamed';
-      const id = (project.atome_id || project.id)?.substring(0, 8) || 'unknown';
-      console.log(`[PROJECTS] ${index + 1}. ${name} (${id}...)`);
+      createProjectSquare(project, index);
     });
+    
+    // Restore previous selection
+    const savedProjectId = localStorage.getItem('selected_project_for_sharing');
+    if (savedProjectId) {
+      const matchingProject = projects.find(p => (p.atome_id || p.id) === savedProjectId);
+      if (matchingProject) {
+        const squareIndex = projects.indexOf(matchingProject);
+        const square = grab('project_square_' + squareIndex);
+        if (square) {
+          selectProject(matchingProject, square);
+        }
+      }
+    }
     
   } catch (error) {
     console.error('[PROJECTS] Error:', error);
