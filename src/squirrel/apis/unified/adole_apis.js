@@ -1221,7 +1221,9 @@ async function get_atome(atomeId, callback) {
 
     // Try Tauri
     try {
+        console.log('🔍 Calling TauriAdapter.atome.get with ID:', atomeId);
         const tauriResult = await TauriAdapter.atome.get(atomeId);
+        console.log('🔍 Tauri raw result:', tauriResult);
         if (tauriResult.ok || tauriResult.success) {
             results.tauri.atome = tauriResult.atome || tauriResult.data || tauriResult;
         } else {
@@ -1233,7 +1235,9 @@ async function get_atome(atomeId, callback) {
 
     // Try Fastify
     try {
+        console.log('🔍 Calling FastifyAdapter.atome.get with ID:', atomeId);
         const fastifyResult = await FastifyAdapter.atome.get(atomeId);
+        console.log('🔍 Fastify raw result:', fastifyResult);
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify.atome = fastifyResult.atome || fastifyResult.data || fastifyResult;
         } else {
