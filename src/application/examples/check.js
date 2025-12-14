@@ -136,6 +136,9 @@ const intuition_content = {
 
 Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
 
+// Create a container for our test UI controls, separate from project space
+const intuitionContainer = grab('intuition')
+intuitionContainer.style.width = '100%';
 
 // ============================================
 // ADOLE v3.0 - PRODUCTION API ACCESS
@@ -219,35 +222,19 @@ async function loadProjectView(projectId, projectName) {
     currentProjectDiv.remove();
   }
 
-  // Check if project_canvas exists, create if not
-  let canvasContainer = grab('project_canvas');
-  if (!canvasContainer) {
-    canvasContainer = $('div', {
-      id: 'project_canvas',
-      parent: grab('view'),
-      css: {
-        position: 'fixed',
-        left: '0',
-        top: '0',
-        width: '100%',
-        height: '100%',
-        backgroundColor: '#333',
-        overflow: 'hidden',
-        zIndex: '-1'
-      }
-    });
-  }
-
-  // Create new project container inside the canvas
+  // Create new project container directly in 'view' (no intermediate project_canvas)
   currentProjectDiv = $('div', {
     id: 'project_view_' + projectId,
-    parent: canvasContainer,
+    parent: grab('view'),
     css: {
-      position: 'relative',
+      position: 'fixed',
+      left: '0',
+      top: '0',
       width: '100%',
       height: '100%',
-      backgroundColor: '#3a3a3a',
-      overflow: 'hidden'
+      backgroundColor: '#333',
+      overflow: 'hidden',
+      zIndex: '-1'  // Behind the UI tools but available for projects
     }
   });
 
@@ -820,6 +807,7 @@ const username = 'jeezs';
 
 $('input', {
   id: 'phone_pass_input',
+  parent: intuitionContainer,
   attrs: {
     type: 'text',
     placeholder: 'Phone / Password',
@@ -836,6 +824,7 @@ $('input', {
 
 $('input', {
   id: 'username_input',
+  parent: intuitionContainer,
   attrs: {
     type: 'text',
     placeholder: 'Username',
@@ -851,6 +840,7 @@ $('input', {
 });
 $('span', {
   id: 'clear_console',
+  parent: intuitionContainer,
   css: {
     backgroundColor: 'rgba(247, 0, 255, 1)',
     marginLeft: '0',
@@ -867,6 +857,7 @@ $('span', {
 });
 $('span', {
   id: 'logged_user',
+  parent: intuitionContainer,
   css: {
     backgroundColor: 'rgba(0, 255, 98, 1)',
     marginLeft: '0',
@@ -881,6 +872,7 @@ $('span', {
 
 $('span', {
   id: 'current_project',
+  parent: intuitionContainer,
   css: {
     backgroundColor: 'rgba(0, 255, 98, 1)',
     marginLeft: '0',
@@ -892,10 +884,11 @@ $('span', {
   text: 'no project loaded',
 });
 
-$('br', {});
+$('br', { parent: intuitionContainer });
 
 $('span', {
   id: 'current_user',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -923,6 +916,7 @@ $('span', {
 
 $('span', {
   id: 'user_list',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -965,6 +959,7 @@ $('span', {
 
 $('span', {
   id: 'list_tables',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -994,6 +989,7 @@ $('span', {
 
 $('span', {
   id: 'list_unsynced',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1054,6 +1050,7 @@ $('br', {});
 
 $('span', {
   id: 'create_user',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1075,6 +1072,7 @@ $('span', {
 
 $('span', {
   id: 'log_user',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1099,6 +1097,7 @@ $('span', {
 
 $('span', {
   id: 'unlog_user',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1124,6 +1123,7 @@ $('span', {
 
 $('span', {
   id: 'delete_user',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1147,13 +1147,14 @@ $('span', {
   },
 });
 
-$('br', {});
+$('br', { parent: intuitionContainer });
 const atome_type = 'shape';
-const atome_color = 'blue';
+const atome_color = 'orange';
 const atome_project_name = 'my project';
 
 $('input', {
   id: 'atome_project_name_input',
+  parent: intuitionContainer,
   attrs: {
     type: 'text',
     placeholder: 'Atome Type',
@@ -1172,6 +1173,7 @@ $('input', {
 
 $('input', {
   id: 'atome_type_input',
+  parent: intuitionContainer,
   attrs: {
     type: 'text',
     placeholder: 'Atome Type',
@@ -1189,6 +1191,7 @@ $('input', {
 
 $('input', {
   id: 'atome_color_input',
+  parent: intuitionContainer,
   attrs: {
     type: 'text',
     placeholder: 'Atome Color',
@@ -1202,12 +1205,13 @@ $('input', {
     width: '100px'
   }
 });
-$('br', {});
+$('br', { parent: intuitionContainer });
 
 
 
 $('span', {
   id: 'create_project',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1241,6 +1245,7 @@ $('span', {
 
 $('span', {
   id: 'load_project',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1269,6 +1274,7 @@ $('span', {
 
 $('span', {
   id: 'delete_project',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1300,6 +1306,7 @@ $('span', {
 
 $('span', {
   id: 'list_projects',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1326,10 +1333,11 @@ $('span', {
   },
 });
 
-$('br', {});
+$('br', { parent: intuitionContainer });
 
 $('span', {
   id: 'create_atome',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1376,6 +1384,7 @@ $('span', {
 
 $('span', {
   id: 'delete_atome',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1409,6 +1418,7 @@ $('span', {
 
 $('span', {
   id: 'alter_atome',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1441,6 +1451,7 @@ $('span', {
 
 $('span', {
   id: 'list_atomes',
+  parent: intuitionContainer,
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -1469,10 +1480,11 @@ $('span', {
   },
 });
 
-$('br', {});
+$('br', { parent: intuitionContainer });
 
 $('span', {
   id: 'sync_atomes',
+  parent: intuitionContainer,
   css: {
     backgroundColor: 'rgba(233, 146, 6, 1)',
     marginLeft: '0',
