@@ -1045,7 +1045,7 @@ $('span', {
 });
 
 
-$('br', {});
+$('br', { parent: intuitionContainer });
 
 
 $('span', {
