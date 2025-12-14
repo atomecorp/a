@@ -1246,12 +1246,8 @@ let selectedVisualAtome = null;
  * @param {string} projectName - The project name
  */
 function loadProjectView(projectId, projectName) {
-  console.log('[loadProjectView] Loading project:', projectId, projectName);
-
-  // Validate project ID
-  if (!projectId || projectId === 'undefined') {
-    console.error('[loadProjectView] Invalid project ID:', projectId);
-    puts('❌ Cannot load project: Invalid project ID');
+  if (!projectId) {
+    puts('❌ Cannot load project: Missing project ID');
     return;
   }
 
@@ -1263,7 +1259,6 @@ function loadProjectView(projectId, projectName) {
   // Check if project_canvas exists, create if not
   let canvasContainer = grab('project_canvas');
   if (!canvasContainer) {
-    console.log('[loadProjectView] Creating project_canvas container');
     canvasContainer = $('div', {
       id: 'project_canvas',
       parent: grab('view'),
@@ -1280,8 +1275,6 @@ function loadProjectView(projectId, projectName) {
     });
   }
 
-  console.log('[loadProjectView] canvasContainer:', canvasContainer);
-
   // Create new project container inside the canvas
   currentProjectDiv = $('div', {
     id: 'project_view_' + projectId,
@@ -1295,15 +1288,15 @@ function loadProjectView(projectId, projectName) {
     }
   });
 
-  console.log('[loadProjectView] Created currentProjectDiv:', currentProjectDiv);
-
   // Update state
   selectedProjectId = projectId;
   currentProjectName = projectName;
   grab('current_project').textContent = projectName;
 
   // Load atomes for this project and display them
-  loadProjectAtomes(projectId);
+  loadProjectAtomes(projectId).catch(error => {
+    puts('❌ Failed to load atomes: ' + error);
+  });
 }
 
 /**
@@ -1311,10 +1304,8 @@ function loadProjectView(projectId, projectName) {
  * @param {string} projectId - The project ID
  */
 async function loadProjectAtomes(projectId) {
-  // Validate project ID
-  if (!projectId || projectId === 'undefined') {
-    console.error('[loadProjectAtomes] Invalid project ID:', projectId);
-    puts('❌ Cannot load atomes: Invalid project ID');
+  if (!projectId) {
+    puts('❌ Cannot load atomes: Missing project ID');
     return;
   }
 
@@ -1349,9 +1340,6 @@ async function loadProjectAtomes(projectId) {
  * @returns {HTMLElement} The created element
  */
 function createVisualAtome(atomeId, type, color, left, top) {
-  console.log('[createVisualAtome] Creating visual atome:', atomeId, type, color, left, top);
-  console.log('[createVisualAtome] currentProjectDiv:', currentProjectDiv);
-
   if (!currentProjectDiv) {
     puts('No project loaded. Please load a project first.');
     return null;
@@ -1385,8 +1373,6 @@ function createVisualAtome(atomeId, type, color, left, top) {
       selectVisualAtome(atomeEl, atomeId);
     }
   });
-
-  console.log('[createVisualAtome] Created element:', atomeEl);
 
   // Make draggable
   makeAtomeDraggable(atomeEl, atomeId);
@@ -1449,10 +1435,12 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     const newLeft = atomeEl.style.left;
     const newTop = atomeEl.style.top;
 
-    alter_atome(atomeId, { left: newLeft, top: newTop }, (result) => {
+    alter_atome(atomeId, { left: newLeft, top: newTop }).then(result => {
       if (result.tauri.success || result.fastify.success) {
         puts('Position saved: ' + newLeft + ', ' + newTop);
       }
+    }).catch(error => {
+      puts('❌ Failed to save position: ' + error);
     });
   });
 }
@@ -1462,15 +1450,12 @@ function makeAtomeDraggable(atomeEl, atomeId) {
  * @param {Function} callback - Callback with selected project { project_id, project_name }
  */
 async function open_project_selector(callback) {
-  console.log('[open_project_selector] Opening project selector...');
-
   const projectsResult = await list_projects();
   const projects = projectsResult.tauri.projects.length > 0
     ? projectsResult.tauri.projects
     : projectsResult.fastify.projects;
 
   if (projects.length === 0) {
-    console.log('[open_project_selector] No projects found');
     if (typeof callback === 'function') {
       callback({ project_id: null, project_name: null, cancelled: true });
     }
@@ -1536,7 +1521,6 @@ async function open_project_selector(callback) {
         currentProjectName = projectName;
         overlay.remove();
         grab('current_project').textContent = projectName;
-        console.log('[open_project_selector] Selected project:', projectName, '(' + projectId + ')');
         if (typeof callback === 'function') {
           callback({ project_id: projectId, project_name: projectName, cancelled: false });
         }
@@ -1699,7 +1683,8 @@ async function open_atome_selector(options, callback) {
 
 
 
-current_user((result) => {
+(async () => {
+  const result = await current_user();
   if (result.logged && result.user) {
     const user_found = result.user.username;
     puts(user_found);
@@ -1708,63 +1693,31 @@ current_user((result) => {
     puts('no user logged');
     grab('logged_user').textContent = 'no user logged';
   }
-});
+})();
 
 // Load current project on startup
-list_projects((result) => {
-  console.log('[DEBUG] list_projects result:', result);
+(async () => {
+  const result = await list_projects();
   const projects = result.tauri.projects.length > 0
     ? result.tauri.projects
     : result.fastify.projects;
 
-  console.log('[DEBUG] Found projects:', projects);
-
   if (projects && projects.length > 0) {
-    // Auto-select first project if none selected
     const firstProject = projects[0];
-    console.log('[DEBUG] First project structure:', firstProject);
-    const projectId = firstProject.atome_id || firstProject.id;
-    const projectName = firstProject.name || firstProject.data?.name || firstProject.particles?.name || 'Unnamed Project';
+    const projectId = firstProject.atome_id;
+    const projectName = firstProject.data?.name || 'Unnamed Project';
 
-    // Validate project ID
-    if (projectId && projectId !== 'undefined') {
+    if (projectId) {
       puts('Project loaded: ' + projectName);
-      // Use loadProjectView to properly initialize the visual container
       loadProjectView(projectId, projectName);
     } else {
-      puts('⚠️  Project found but has invalid ID, creating new project: ' + projectName);
-      // Create a new project if the ID is invalid
-      create_project(projectName, (result) => {
-        console.log('[DEBUG] Fallback create_project result:', result);
-        if (result.tauri.success || result.fastify.success) {
-          // Try multiple paths to find the ID
-          const tauriData = result.tauri?.data;
-          const fastifyData = result.fastify?.data;
-
-          const newId = tauriData?.atome_id || tauriData?.id || tauriData?.project_id ||
-            fastifyData?.atome_id || fastifyData?.id || fastifyData?.project_id;
-
-          console.log('[DEBUG] Fallback extracted ID:', newId);
-          if (newId && newId !== 'undefined') {
-            puts('✅ New project created with valid ID: ' + newId);
-            loadProjectView(newId, projectName);
-          } else {
-            puts('❌ Failed to create project with valid ID');
-            console.log('[DEBUG] Fallback data structure - Tauri:', tauriData);
-            console.log('[DEBUG] Fallback data structure - Fastify:', fastifyData);
-            grab('current_project').textContent = 'project creation failed';
-          }
-        } else {
-          puts('❌ Failed to create fallback project');
-          grab('current_project').textContent = 'project creation failed';
-        }
-      });
+      puts('❌ Project found but missing ID');
     }
   } else {
     puts('no project available');
     grab('current_project').textContent = 'no project loaded';
   }
-});
+})();
 
 const phone_pass = '11111111';
 const username = 'jeezs';
@@ -1856,17 +1809,16 @@ $('span', {
     display: 'inline-block'
   },
   text: 'get current user',
-  onClick: () => {
-    current_user((result) => {
-      if (result.logged && result.user) {
-        const user_found = result.user.username;
-        puts(user_found);
-        grab('logged_user').textContent = user_found;
-      } else {
-        puts('no user logged');
-        grab('logged_user').textContent = 'no user logged';
-      }
-    });
+  onClick: async () => {
+    const result = await current_user();
+    if (result.logged && result.user) {
+      const user_found = result.user.username;
+      puts(user_found);
+      grab('logged_user').textContent = user_found;
+    } else {
+      puts('no user logged');
+      grab('logged_user').textContent = 'no user logged';
+    }
   },
 });
 
@@ -1955,16 +1907,16 @@ $('span', {
     display: 'inline-block'
   },
   text: 'list unsynced',
-  onClick: () => {
-    list_unsynced_atomes((result) => {
-      // Create a concise summary including deletion states
-      const summary = {
-        onlyOnTauri: result.onlyOnTauri.length,
-        onlyOnFastify: result.onlyOnFastify.length,
-        modifiedOnTauri: result.modifiedOnTauri.length,
-        modifiedOnFastify: result.modifiedOnFastify.length,
-        deletedOnTauri: result.deletedOnTauri.length,
-        deletedOnFastify: result.deletedOnFastify.length,
+  onClick: async () => {
+    const result = await list_unsynced_atomes();
+    // Create a concise summary including deletion states
+    const summary = {
+      onlyOnTauri: result.onlyOnTauri.length,
+      onlyOnFastify: result.onlyOnFastify.length,
+      modifiedOnTauri: result.modifiedOnTauri.length,
+      modifiedOnFastify: result.modifiedOnFastify.length,
+      deletedOnTauri: result.deletedOnTauri.length,
+      deletedOnFastify: result.deletedOnFastify.length,
         conflicts: result.conflicts.length,
         synced: result.synced.length,
         error: result.error
@@ -1997,7 +1949,6 @@ $('span', {
       } else {
         puts('✅ All ' + summary.synced + ' atomes are synchronized');
       }
-    });
   },
 });
 
@@ -2016,16 +1967,13 @@ $('span', {
     display: 'inline-block'
   },
   text: 'create user',
-  onClick: () => {
-
+  onClick: async () => {
     const user_phone = grab('phone_pass_input').value;
     const user_name = grab('username_input').value;
 
-    create_user(user_phone, user_phone, user_name, (results) => {
-      grab('logged_user').textContent = user_name;
-      puts('user created: ' + user_name + ' user phone created: ' + user_phone);
-      // puts('user created: ' + user_name + 'user phone created: ' + user_phone);
-    });
+    const results = await create_user(user_phone, user_phone, user_name);
+    grab('logged_user').textContent = user_name;
+    puts('user created: ' + user_name + ' user phone created: ' + user_phone);
   },
 });
 
@@ -2040,20 +1988,19 @@ $('span', {
     display: 'inline-block'
   },
   text: 'log user',
-  onClick: () => {
+  onClick: async () => {
     const phone = grab('phone_pass_input').value;
-    log_user(phone, phone, '', (results) => {
-      if (results.tauri.success || results.fastify.success) {
-        // Get username from the successful result
-        const userData = results.tauri.success ? results.tauri.data : results.fastify.data;
-        const loggedUsername = userData?.user?.username || userData?.username || 'unknown';
-        puts('Logged in as: ' + loggedUsername);
-        grab('logged_user').textContent = loggedUsername;
-      } else {
-        puts('no user logged');
-        grab('logged_user').textContent = 'no user logged';
-      }
-    });
+    const results = await log_user(phone, phone, '');
+    
+    if (results.tauri.success || results.fastify.success) {
+      const userData = results.tauri.success ? results.tauri.data : results.fastify.data;
+      const loggedUsername = userData?.user?.username || userData?.username || 'unknown';
+      puts('Logged in as: ' + loggedUsername);
+      grab('logged_user').textContent = loggedUsername;
+    } else {
+      puts('❌ Login failed');
+      grab('logged_user').textContent = 'login failed';
+    }
   },
 });
 
@@ -2068,15 +2015,15 @@ $('span', {
     display: 'inline-block'
   },
   text: 'unlog user',
-  onClick: () => {
-    unlog_user((results) => {
-      if (results.tauri.success || results.fastify.success) {
-        puts('User logged out');
-        grab('logged_user').textContent = 'no user logged';
-      } else {
-        puts('Logout failed');
-      }
-    });
+  onClick: async () => {
+    const results = await unlog_user();
+    
+    if (results.tauri.success || results.fastify.success) {
+      puts('User logged out');
+      grab('logged_user').textContent = 'no user logged';
+    } else {
+      puts('Logout failed');
+    }
   },
 });
 
@@ -2093,17 +2040,17 @@ $('span', {
     display: 'inline-block'
   },
   text: 'delete user',
-  onClick: () => {
+  onClick: async () => {
     puts('Deleting user...');
     const phone = grab('phone_pass_input').value;
     const user_name = grab('username_input').value;
-    delete_user(phone, phone, user_name, (results) => {
-      if (results.tauri.success || results.fastify.success) {
-        puts('User deleted, logging out...');
-        unlog_user();
-        grab('logged_user').textContent = 'no user logged';
-      }
-    });
+    
+    const results = await delete_user(phone, phone, user_name);
+    if (results.tauri.success || results.fastify.success) {
+      puts('User deleted, logging out...');
+      await unlog_user();
+      grab('logged_user').textContent = 'no user logged';
+    }
   },
 });
 
@@ -2177,40 +2124,25 @@ $('span', {
     display: 'inline-block'
   },
   text: 'create project',
-  onClick: () => {
+  onClick: async () => {
     const projectName = grab('atome_project_name_input').value;
-    create_project(projectName, (result) => {
-      console.log('[DEBUG] create_project result:', result);
-      console.log('[DEBUG] tauri data:', result.tauri?.data);
-      console.log('[DEBUG] fastify data:', result.fastify?.data);
+    const result = await create_project(projectName);
+    
+    if (result.tauri.success || result.fastify.success) {
+      const tauriData = result.tauri?.data?.data;
+      const fastifyData = result.fastify?.data?.data;
 
-      if (result.tauri.success || result.fastify.success) {
-        // Try multiple paths to find the ID
-        const tauriData = result.tauri?.data;
-        const fastifyData = result.fastify?.data;
+      const newId = tauriData?.atome_id || fastifyData?.atome_id;
 
-        const newId = tauriData?.atome_id || tauriData?.id || tauriData?.project_id ||
-          fastifyData?.atome_id || fastifyData?.id || fastifyData?.project_id ||
-          (tauriData && Object.keys(tauriData)[0]) ||
-          (fastifyData && Object.keys(fastifyData)[0]);
-
-        console.log('[DEBUG] Extracted ID:', newId);
-
-        if (newId && newId !== 'undefined') {
-          puts('✅ Project created: ' + projectName + ' (ID: ' + newId + ')');
-          // Load the new project view
-          loadProjectView(newId, projectName);
-        } else {
-          puts('❌ Project created but with invalid ID: ' + newId);
-          puts('Available data keys - Tauri: ' + (tauriData ? Object.keys(tauriData).join(', ') : 'none'));
-          puts('Available data keys - Fastify: ' + (fastifyData ? Object.keys(fastifyData).join(', ') : 'none'));
-          grab('current_project').textContent = 'project ID error';
-        }
+      if (newId) {
+        puts('✅ Project created: ' + projectName);
+        loadProjectView(newId, projectName);
       } else {
-        puts('❌ Failed to create project');
-        console.log('[DEBUG] Creation failed:', result);
+        puts('❌ Project creation failed: Invalid response');
       }
-    });
+    } else {
+      puts('❌ Failed to create project');
+    }
   },
 });
 
@@ -2225,16 +2157,19 @@ $('span', {
     display: 'inline-block'
   },
   text: 'load project',
-  onClick: () => {
+  onClick: async () => {
     puts('Select a project to load...');
-    open_project_selector((selection) => {
-      if (selection.cancelled) {
-        puts('Loading cancelled');
-        return;
-      }
-      loadProjectView(selection.project_id, selection.project_name);
-      puts('✅ Project loaded: ' + selection.project_name);
+    const selection = await new Promise(resolve => {
+      open_project_selector(resolve);
     });
+    
+    if (selection.cancelled) {
+      puts('Loading cancelled');
+      return;
+    }
+    
+    loadProjectView(selection.project_id, selection.project_name);
+    puts('✅ Project loaded: ' + selection.project_name);
   },
 });
 
@@ -2250,21 +2185,23 @@ $('span', {
     display: 'inline-block'
   },
   text: 'delete project',
-  onClick: () => {
+  onClick: async () => {
     puts('Select a project to delete...');
-    open_project_selector((selection) => {
-      if (selection.cancelled) {
-        puts('Deletion cancelled');
-        return;
-      }
-      delete_project(selection.project_id, (result) => {
-        if (result.tauri.success || result.fastify.success) {
-          puts('✅ Project deleted: ' + selection.project_name);
-        } else {
-          puts('❌ Failed to delete project');
-        }
-      });
+    const selection = await new Promise(resolve => {
+      open_project_selector(resolve);
     });
+    
+    if (selection.cancelled) {
+      puts('Deletion cancelled');
+      return;
+    }
+    
+    const result = await delete_project(selection.project_id);
+    if (result.tauri.success || result.fastify.success) {
+      puts('✅ Project deleted: ' + selection.project_name);
+    } else {
+      puts('❌ Failed to delete project');
+    }
   },
 });
 
@@ -2355,25 +2292,25 @@ $('span', {
     display: 'inline-block'
   },
   text: 'delete atome',
-  onClick: () => {
+  onClick: async () => {
     if (!selectedAtomeId || !selectedVisualAtome) {
       puts('❌ No atome selected. Click on an atome to select it first.');
       return;
     }
     puts('Deleting selected atome: ' + selectedAtomeId.substring(0, 8) + '...');
-    delete_atome(selectedAtomeId, (result) => {
-      if (result.tauri?.success || result.fastify?.success) {
-        puts('✅ Atome deleted');
-        // Remove visual element
-        if (selectedVisualAtome) {
-          selectedVisualAtome.remove();
-          selectedVisualAtome = null;
-          selectedAtomeId = null;
-        }
-      } else {
-        puts('❌ Failed to delete atome');
+    const result = await delete_atome(selectedAtomeId);
+    
+    if (result.tauri?.success || result.fastify?.success) {
+      puts('✅ Atome deleted');
+      // Remove visual element
+      if (selectedVisualAtome) {
+        selectedVisualAtome.remove();
+        selectedVisualAtome = null;
+        selectedAtomeId = null;
       }
-    });
+    } else {
+      puts('❌ Failed to delete atome');
+    }
   },
 });
 
@@ -2388,7 +2325,7 @@ $('span', {
     display: 'inline-block'
   },
   text: 'alter atome',
-  onClick: () => {
+  onClick: async () => {
     if (!selectedAtomeId || !selectedVisualAtome) {
       puts('❌ No atome selected. Click on an atome to select it first.');
       return;
@@ -2397,15 +2334,15 @@ $('span', {
     const colors = ['red', 'green', 'blue', 'purple', 'orange', 'cyan', 'magenta'];
     const newColor = colors[Math.floor(Math.random() * colors.length)];
     puts('Altering atome color to: ' + newColor);
-    alter_atome(selectedAtomeId, { color: newColor }, (result) => {
-      if (result.tauri?.success || result.fastify?.success) {
-        puts('✅ Atome altered');
-        // Update visual element
-        selectedVisualAtome.style.backgroundColor = newColor;
-      } else {
-        puts('❌ Failed to alter atome');
-      }
-    });
+    const result = await alter_atome(selectedAtomeId, { color: newColor });
+    
+    if (result.tauri?.success || result.fastify?.success) {
+      puts('✅ Atome altered');
+      // Update visual element
+      selectedVisualAtome.style.backgroundColor = newColor;
+    } else {
+      puts('❌ Failed to alter atome');
+    }
   },
 });
 
@@ -2452,10 +2389,9 @@ $('span', {
     display: 'inline-block'
   },
   text: 'sync atomes',
-  onClick: () => {
-    sync_atomes((result) => {
-      puts('sync atomes: ' + JSON.stringify(result));
-    });
+  onClick: async () => {
+    const result = await sync_atomes();
+    puts('sync atomes: ' + JSON.stringify(result));
   },
 });
 
