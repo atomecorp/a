@@ -1248,6 +1248,13 @@ let selectedVisualAtome = null;
 function loadProjectView(projectId, projectName) {
   console.log('[loadProjectView] Loading project:', projectId, projectName);
 
+  // Validate project ID
+  if (!projectId || projectId === 'undefined') {
+    console.error('[loadProjectView] Invalid project ID:', projectId);
+    puts('❌ Cannot load project: Invalid project ID');
+    return;
+  }
+
   // Remove existing project div if any
   if (currentProjectDiv) {
     currentProjectDiv.remove();
@@ -1304,6 +1311,13 @@ function loadProjectView(projectId, projectName) {
  * @param {string} projectId - The project ID
  */
 async function loadProjectAtomes(projectId) {
+  // Validate project ID
+  if (!projectId || projectId === 'undefined') {
+    console.error('[loadProjectAtomes] Invalid project ID:', projectId);
+    puts('❌ Cannot load atomes: Invalid project ID');
+    return;
+  }
+
   const result = await list_atomes({ parentId: projectId });
   const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
 
@@ -1698,18 +1712,54 @@ current_user((result) => {
 
 // Load current project on startup
 list_projects((result) => {
+  console.log('[DEBUG] list_projects result:', result);
   const projects = result.tauri.projects.length > 0
     ? result.tauri.projects
     : result.fastify.projects;
 
+  console.log('[DEBUG] Found projects:', projects);
+
   if (projects && projects.length > 0) {
     // Auto-select first project if none selected
     const firstProject = projects[0];
+    console.log('[DEBUG] First project structure:', firstProject);
     const projectId = firstProject.atome_id || firstProject.id;
     const projectName = firstProject.name || firstProject.data?.name || firstProject.particles?.name || 'Unnamed Project';
-    puts('Project loaded: ' + projectName);
-    // Use loadProjectView to properly initialize the visual container
-    loadProjectView(projectId, projectName);
+
+    // Validate project ID
+    if (projectId && projectId !== 'undefined') {
+      puts('Project loaded: ' + projectName);
+      // Use loadProjectView to properly initialize the visual container
+      loadProjectView(projectId, projectName);
+    } else {
+      puts('⚠️  Project found but has invalid ID, creating new project: ' + projectName);
+      // Create a new project if the ID is invalid
+      create_project(projectName, (result) => {
+        console.log('[DEBUG] Fallback create_project result:', result);
+        if (result.tauri.success || result.fastify.success) {
+          // Try multiple paths to find the ID
+          const tauriData = result.tauri?.data;
+          const fastifyData = result.fastify?.data;
+
+          const newId = tauriData?.atome_id || tauriData?.id || tauriData?.project_id ||
+            fastifyData?.atome_id || fastifyData?.id || fastifyData?.project_id;
+
+          console.log('[DEBUG] Fallback extracted ID:', newId);
+          if (newId && newId !== 'undefined') {
+            puts('✅ New project created with valid ID: ' + newId);
+            loadProjectView(newId, projectName);
+          } else {
+            puts('❌ Failed to create project with valid ID');
+            console.log('[DEBUG] Fallback data structure - Tauri:', tauriData);
+            console.log('[DEBUG] Fallback data structure - Fastify:', fastifyData);
+            grab('current_project').textContent = 'project creation failed';
+          }
+        } else {
+          puts('❌ Failed to create fallback project');
+          grab('current_project').textContent = 'project creation failed';
+        }
+      });
+    }
   } else {
     puts('no project available');
     grab('current_project').textContent = 'no project loaded';
@@ -2130,14 +2180,35 @@ $('span', {
   onClick: () => {
     const projectName = grab('atome_project_name_input').value;
     create_project(projectName, (result) => {
+      console.log('[DEBUG] create_project result:', result);
+      console.log('[DEBUG] tauri data:', result.tauri?.data);
+      console.log('[DEBUG] fastify data:', result.fastify?.data);
+
       if (result.tauri.success || result.fastify.success) {
-        const newId = result.tauri.data?.atome_id || result.tauri.data?.id ||
-          result.fastify.data?.atome_id || result.fastify.data?.id;
-        puts('✅ Project created: ' + projectName);
-        // Load the new project view
-        loadProjectView(newId, projectName);
+        // Try multiple paths to find the ID
+        const tauriData = result.tauri?.data;
+        const fastifyData = result.fastify?.data;
+
+        const newId = tauriData?.atome_id || tauriData?.id || tauriData?.project_id ||
+          fastifyData?.atome_id || fastifyData?.id || fastifyData?.project_id ||
+          (tauriData && Object.keys(tauriData)[0]) ||
+          (fastifyData && Object.keys(fastifyData)[0]);
+
+        console.log('[DEBUG] Extracted ID:', newId);
+
+        if (newId && newId !== 'undefined') {
+          puts('✅ Project created: ' + projectName + ' (ID: ' + newId + ')');
+          // Load the new project view
+          loadProjectView(newId, projectName);
+        } else {
+          puts('❌ Project created but with invalid ID: ' + newId);
+          puts('Available data keys - Tauri: ' + (tauriData ? Object.keys(tauriData).join(', ') : 'none'));
+          puts('Available data keys - Fastify: ' + (fastifyData ? Object.keys(fastifyData).join(', ') : 'none'));
+          grab('current_project').textContent = 'project ID error';
+        }
       } else {
         puts('❌ Failed to create project');
+        console.log('[DEBUG] Creation failed:', result);
       }
     });
   },
