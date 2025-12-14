@@ -193,8 +193,9 @@ let selectedVisualAtome = null;
  * TEST ONLY - Create or replace the project visual container in 'view' - SECURE VERSION
  * @param {string} projectId - The project ID
  * @param {string} projectName - The project name
+ * @param {string} backgroundColor - Optional background color (defaults to '#333')
  */
-async function loadProjectView(projectId, projectName) {
+async function loadProjectView(projectId, projectName, backgroundColor = '#333') {
   if (!projectId) {
     puts('❌ Cannot load project: Missing project ID');
     return;
@@ -232,7 +233,7 @@ async function loadProjectView(projectId, projectName) {
       top: '0',
       width: '100%',
       height: '100%',
-      backgroundColor: '#333',
+      backgroundColor: backgroundColor,
       overflow: 'hidden',
       zIndex: '-1'  // Behind the UI tools but available for projects
     }
@@ -794,8 +795,18 @@ async function open_atome_selector(options, callback) {
     const projectName = firstProject.data?.name || 'Unnamed Project';
 
     if (projectId) {
-      puts('Project loaded: ' + projectName);
-      await loadProjectView(projectId, projectName);
+      // Retrieve background color from project data
+      const projectResult = await get_atome(projectId);
+      let backgroundColor = '#333'; // Default color
+      
+      if (projectResult.tauri.success || projectResult.fastify.success) {
+        const projectData = projectResult.tauri.atome || projectResult.fastify.atome;
+        const particles = projectData?.particles || projectData?.data || {};
+        backgroundColor = particles.backgroundColor || '#333';
+      }
+      
+      puts('Project loaded: ' + projectName + ' (color: ' + backgroundColor + ')');
+      await loadProjectView(projectId, projectName, backgroundColor);
     } else {
       puts('❌ Project found but missing ID');
     }
@@ -1226,6 +1237,12 @@ $('span', {
   text: 'create project',
   onClick: async () => {
     const projectName = grab('atome_project_name_input').value;
+    
+    // Generate random background color for the project
+    const colors = ['#2c3e50', '#8e44ad', '#3498db', '#e67e22', '#27ae60', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#34495e', '#16a085', '#f1c40f', '#d35400'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    // Step 1: Create project using standard API
     const result = await create_project(projectName);
 
     if (result.tauri.success || result.fastify.success) {
@@ -1235,8 +1252,16 @@ $('span', {
       const newId = tauriData?.atome_id || fastifyData?.atome_id;
 
       if (newId) {
-        puts('✅ Project created: ' + projectName);
-        await loadProjectView(newId, projectName);
+        // Step 2: Add backgroundColor using standard alter_atome API for proper historization
+        const alterResult = await alter_atome(newId, { backgroundColor: randomColor });
+        
+        if (alterResult.tauri.success || alterResult.fastify.success) {
+          puts('✅ Project created with background color: ' + projectName + ' (color: ' + randomColor + ')');
+        } else {
+          puts('⚠️ Project created but failed to set background color: ' + projectName);
+        }
+        
+        await loadProjectView(newId, projectName, randomColor);
       } else {
         puts('❌ Project creation failed: Invalid response');
       }
@@ -1269,8 +1294,35 @@ $('span', {
       return;
     }
 
-    await loadProjectView(selection.project_id, selection.project_name);
-    puts('✅ Project loaded: ' + selection.project_name);
+    // For now, get background color from the projects list since get_atome has issues
+    let backgroundColor = '#333'; // Default color
+    
+    try {
+      const projectsResult = await list_projects();
+      const projects = projectsResult.tauri.projects.length > 0
+        ? projectsResult.tauri.projects
+        : projectsResult.fastify.projects;
+      
+      const selectedProject = projects.find(p => 
+        (p.atome_id || p.id) === selection.project_id
+      );
+      
+      if (selectedProject) {
+        const particles = selectedProject.particles || selectedProject.data || {};
+        backgroundColor = particles.backgroundColor || 
+                         selectedProject.backgroundColor ||
+                         selectedProject.color ||
+                         '#333';
+        puts('✅ Found background color from projects list: ' + backgroundColor);
+      } else {
+        puts('⚠️ Project not found in list, using default color');
+      }
+    } catch (error) {
+      puts('⚠️ Failed to get background color: ' + error + ', using default');
+    }
+
+    await loadProjectView(selection.project_id, selection.project_name, backgroundColor);
+    puts('✅ Project loaded: ' + selection.project_name + ' with color: ' + backgroundColor);
   },
 });
 
