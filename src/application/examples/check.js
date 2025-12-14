@@ -563,11 +563,20 @@ function makeAtomeDraggable(atomeEl, atomeId) {
   atomeEl.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Left click only
     isDragging = true;
+    
     startX = e.clientX;
     startY = e.clientY;
     initialLeft = parseInt(atomeEl.style.left) || 0;
     initialTop = parseInt(atomeEl.style.top) || 0;
     atomeEl.style.zIndex = '100';
+    
+    // Start continuous recording for drag
+    startContinuousRecording(atomeId, 'drag movement');
+    recordContinuousState(atomeId, {
+      left: initialLeft + 'px',
+      top: initialTop + 'px'
+    });
+    
     e.preventDefault();
   });
 
@@ -575,8 +584,17 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     if (!isDragging) return;
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
-    atomeEl.style.left = (initialLeft + dx) + 'px';
-    atomeEl.style.top = (initialTop + dy) + 'px';
+    const newLeft = (initialLeft + dx) + 'px';
+    const newTop = (initialTop + dy) + 'px';
+    
+    atomeEl.style.left = newLeft;
+    atomeEl.style.top = newTop;
+    
+    // Record continuous position changes
+    recordContinuousState(atomeId, {
+      left: newLeft,
+      top: newTop
+    });
   });
 
   document.addEventListener('mouseup', (e) => {
@@ -584,20 +602,20 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     isDragging = false;
     atomeEl.style.zIndex = '';
 
-    // Save new position to database
     const newLeft = atomeEl.style.left;
     const newTop = atomeEl.style.top;
 
     // Don't save if this is a temporary ID
     if (atomeId.startsWith('temp_atome_') || atomeId.startsWith('atome_')) {
       puts('⚠️ Skipping save for temporary atome ID: ' + atomeId.substring(0, 8));
+      stopContinuousRecording(atomeId, { left: newLeft, top: newTop }, 'drag movement');
       return;
     }
 
-    puts('💾 Saving position for atome ' + atomeId.substring(0, 8) + ': ' + newLeft + ', ' + newTop);
+    puts('💾 Saving drag sequence for atome ' + atomeId.substring(0, 8));
     
-    // Save to manual history first
-    saveHistoryEntry(atomeId, { left: newLeft, top: newTop }, 'Position changed');
+    // Stop continuous recording which will save to history
+    stopContinuousRecording(atomeId, { left: newLeft, top: newTop }, 'drag movement');
     
     alter_atome(atomeId, { left: newLeft, top: newTop }).then(async result => {
       if (result.tauri.success || result.fastify.success) {
@@ -618,6 +636,136 @@ function makeAtomeDraggable(atomeEl, atomeId) {
       console.error('[Position Save] Error:', error);
     });
   });
+}
+
+/**
+ * Play drag animation from a stored sequence
+ * @param {HTMLElement} atomeEl - The atome element to animate
+ * @param {Array} dragSequence - Array of position objects with timestamp
+ * @param {number} speedMultiplier - Speed multiplier (1=normal, 2=2x speed, 0.5=half speed)
+ */
+function playDragAnimation(atomeEl, dragSequence, speedMultiplier = 1) {
+  if (!dragSequence || dragSequence.length < 2 || isPlayingAnimation) {
+    return;
+  }
+  
+  isPlayingAnimation = true;
+  let currentFrame = 0;
+  
+  // Show stop button
+  const stopBtn = grab('stop_animation_button');
+  if (stopBtn) stopBtn.style.display = 'inline-block';
+  
+  function animateNextFrame() {
+    if (currentFrame >= dragSequence.length || !isPlayingAnimation) {
+      isPlayingAnimation = false;
+      if (stopBtn) stopBtn.style.display = 'none';
+      return;
+    }
+    
+    const frame = dragSequence[currentFrame];
+    atomeEl.style.left = frame.left;
+    atomeEl.style.top = frame.top;
+    
+    currentFrame++;
+    
+    if (currentFrame < dragSequence.length) {
+      const nextFrame = dragSequence[currentFrame];
+      const delay = (nextFrame.relativeTime - frame.relativeTime) / speedMultiplier;
+      setTimeout(animateNextFrame, Math.max(1, delay));
+    } else {
+      isPlayingAnimation = false;
+      if (stopBtn) stopBtn.style.display = 'none';
+    }
+  }
+  
+  // Start from first position
+  if (dragSequence.length > 0) {
+    atomeEl.style.left = dragSequence[0].left;
+    atomeEl.style.top = dragSequence[0].top;
+    setTimeout(animateNextFrame, 50);
+  }
+}
+
+/**
+ * Start continuous recording for any property changes
+ * @param {string} atomeId - The atome ID
+ * @param {string} changeType - Type of change (drag, resize, color, etc.)
+ */
+function startContinuousRecording(atomeId, changeType = 'unknown') {
+  if (isRecordingContinuous) return; // Already recording
+  
+  isRecordingContinuous = true;
+  continuousStartTime = Date.now();
+  lastContinuousRecordTime = continuousStartTime;
+  currentContinuousSequence = [];
+  
+  puts('🎬 Started continuous recording for ' + changeType);
+}
+
+/**
+ * Record current state during continuous changes
+ * @param {string} atomeId - The atome ID
+ * @param {Object} properties - Current properties to record
+ * @param {number} throttleMs - Minimum time between recordings (default 50ms)
+ */
+function recordContinuousState(atomeId, properties, throttleMs = 50) {
+  if (!isRecordingContinuous) return;
+  
+  const now = Date.now();
+  if (now - lastContinuousRecordTime >= throttleMs) {
+    currentContinuousSequence.push({
+      timestamp: now,
+      relativeTime: now - continuousStartTime,
+      ...properties
+    });
+    lastContinuousRecordTime = now;
+  }
+}
+
+/**
+ * Stop continuous recording and save to history
+ * @param {string} atomeId - The atome ID
+ * @param {Object} finalProperties - Final properties
+ * @param {string} changeDescription - Description of the change
+ */
+function stopContinuousRecording(atomeId, finalProperties, changeDescription) {
+  if (!isRecordingContinuous || currentContinuousSequence.length === 0) {
+    isRecordingContinuous = false;
+    return;
+  }
+  
+  isRecordingContinuous = false;
+  const endTime = Date.now();
+  
+  // Add final state
+  currentContinuousSequence.push({
+    timestamp: endTime,
+    relativeTime: endTime - continuousStartTime,
+    ...finalProperties
+  });
+  
+  puts('🎬 Stopped continuous recording: ' + currentContinuousSequence.length + ' frames over ' + (endTime - continuousStartTime) + 'ms');
+  
+  // Save complete sequence to history
+  saveHistoryEntry(atomeId, {
+    ...finalProperties,
+    continuousSequence: currentContinuousSequence,
+    continuousDuration: endTime - continuousStartTime,
+    changeType: changeDescription
+  }, changeDescription + ' (' + currentContinuousSequence.length + ' frames)');
+  
+  // Clear sequence
+  currentContinuousSequence = [];
+}
+
+/**
+ * Stop any currently playing animation
+ */
+function stopDragAnimation() {
+  isPlayingAnimation = false;
+  const stopBtn = grab('stop_animation_button');
+  if (stopBtn) stopBtn.style.display = 'none';
 }
 
 /**
@@ -1938,6 +2086,11 @@ $('span', {
 // History navigation slider
 let currentAtomeHistory = [];
 let currentHistoryIndex = 0;
+let isRecordingDrag = false;
+let dragStartTime = 0;
+let lastRecordTime = 0;
+let currentDragSequence = [];
+let isPlayingAnimation = false;
 
 // Add CSS rule to ensure all UI elements are clickable
 const uiStyle = document.createElement('style');
@@ -1970,6 +2123,15 @@ $('div', {
   text: 'Atome History Navigation (select an atome first)'
 });
 
+// History navigation slider - add variable for current drag sequence
+let currentDragSequenceForScrub = null;
+let isInScrubMode = false;
+let currentScrubEntry = null;
+let isRecordingContinuous = false;
+let continuousStartTime = 0;
+let lastContinuousRecordTime = 0;
+let currentContinuousSequence = [];
+
 $('input', {
   id: 'history_slider',
   parent: grab('history_slider_container'),
@@ -1985,52 +2147,145 @@ $('input', {
     margin: '5px 0'
   },
   onInput: (e) => {
-    // Real-time preview while dragging (without releasing mouse)
     if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
     
-    const historyIndex = parseInt(e.target.value);
-    const historyEntry = currentAtomeHistory[historyIndex];
+    // Stop any playing animation first
+    stopDragAnimation();
     
-    if (historyEntry && selectedVisualAtome) {
-      // Apply visual changes from history for preview
-      const particles = historyEntry.particles || historyEntry.data || {};
+    const sliderValue = parseInt(e.target.value);
+    
+    if (isInScrubMode && currentDragSequenceForScrub && currentScrubEntry) {
+      // SCRUB MODE: Navigate through continuous sequence frames
+      const frameIndex = Math.max(0, Math.min(currentDragSequenceForScrub.length - 1, sliderValue));
+      const currentFrame = currentDragSequenceForScrub[frameIndex];
       
-      if (particles.left) selectedVisualAtome.style.left = particles.left;
-      if (particles.top) selectedVisualAtome.style.top = particles.top;
-      if (particles.color) selectedVisualAtome.style.backgroundColor = particles.color;
-      if (particles.borderRadius) selectedVisualAtome.style.borderRadius = particles.borderRadius;
-      if (particles.opacity !== undefined) selectedVisualAtome.style.opacity = particles.opacity;
+      // Ensure exit button is visible
+      const exitBtn = grab('exit_scrub_button');
+      if (exitBtn) exitBtn.style.display = 'inline-block';
       
-      // Update info display in real-time
-      grab('history_info').textContent = 'Preview ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
-        ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || historyEntry.timestamp || 'unknown');
+      // Ensure play button is visible
+      const playBtn = grab('play_animation_button');
+      if (playBtn) {
+        playBtn.style.display = 'inline-block';
+        playBtn.dragSequence = currentDragSequenceForScrub;
+      }
+      
+      if (currentFrame && selectedVisualAtome) {
+        // Apply all recorded properties
+        if (currentFrame.left) selectedVisualAtome.style.left = currentFrame.left;
+        if (currentFrame.top) selectedVisualAtome.style.top = currentFrame.top;
+        if (currentFrame.color) selectedVisualAtome.style.backgroundColor = currentFrame.color;
+        if (currentFrame.borderRadius) selectedVisualAtome.style.borderRadius = currentFrame.borderRadius;
+        if (currentFrame.opacity !== undefined) selectedVisualAtome.style.opacity = currentFrame.opacity;
+        if (currentFrame.width) selectedVisualAtome.style.width = currentFrame.width;
+        if (currentFrame.height) selectedVisualAtome.style.height = currentFrame.height;
+        if (currentFrame.transform) selectedVisualAtome.style.transform = currentFrame.transform;
+        
+        grab('history_info').textContent = 'SCRUB: Frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length + 
+          ' - Time: ' + currentFrame.relativeTime + 'ms';
+      }
+    } else {
+      // HISTORY MODE: Navigate between history entries and apply all changes
+      const historyIndex = sliderValue;
+      const historyEntry = currentAtomeHistory[historyIndex];
+      
+      if (historyEntry && selectedVisualAtome) {
+        const particles = historyEntry.particles || historyEntry.data || {};
+        
+        // Auto-detect continuous sequences for potential scrubbing
+        const continuousSeq = particles.continuousSequence || particles.dragSequence;
+        
+        if (continuousSeq && continuousSeq.length > 1) {
+          // SHOW SCRUB BUTTON but don't auto-enter scrub mode
+          const scrubBtn = grab('scrub_sequence_button');
+          if (scrubBtn) {
+            scrubBtn.style.display = 'inline-block';
+            scrubBtn.dragSequence = continuousSeq;
+            scrubBtn.historyEntry = historyEntry;
+          }
+          
+          // SHOW PLAY BUTTON for this sequence
+          const playBtn = grab('play_animation_button');
+          if (playBtn) {
+            playBtn.style.display = 'inline-block';
+            playBtn.dragSequence = continuousSeq;
+          }
+          
+          // Apply FINAL state of the sequence (not auto-scrub)
+          const finalFrame = continuousSeq[continuousSeq.length - 1];
+          if (finalFrame.left) selectedVisualAtome.style.left = finalFrame.left;
+          if (finalFrame.top) selectedVisualAtome.style.top = finalFrame.top;
+          if (finalFrame.color) selectedVisualAtome.style.backgroundColor = finalFrame.color;
+          if (finalFrame.borderRadius) selectedVisualAtome.style.borderRadius = finalFrame.borderRadius;
+          if (finalFrame.opacity !== undefined) selectedVisualAtome.style.opacity = finalFrame.opacity;
+          if (finalFrame.width) selectedVisualAtome.style.width = finalFrame.width;
+          if (finalFrame.height) selectedVisualAtome.style.height = finalFrame.height;
+          if (finalFrame.transform) selectedVisualAtome.style.transform = finalFrame.transform;
+          
+          const changeType = particles.changeType || 'continuous change';
+          grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
+            ' - ' + changeType + ' (' + continuousSeq.length + ' frames, ' + particles.continuousDuration + 'ms)';
+        } else {
+          // HIDE SCRUB AND PLAY BUTTONS for single-state entries
+          const scrubBtn = grab('scrub_sequence_button');
+          if (scrubBtn) scrubBtn.style.display = 'none';
+          const playBtn = grab('play_animation_button');
+          if (playBtn) playBtn.style.display = 'none';
+          
+          // Apply single state change for punctual entries
+          if (particles.left) selectedVisualAtome.style.left = particles.left;
+          if (particles.top) selectedVisualAtome.style.top = particles.top;
+          if (particles.color) selectedVisualAtome.style.backgroundColor = particles.color;
+          if (particles.borderRadius) selectedVisualAtome.style.borderRadius = particles.borderRadius;
+          if (particles.opacity !== undefined) selectedVisualAtome.style.opacity = particles.opacity;
+          if (particles.width) selectedVisualAtome.style.width = particles.width;
+          if (particles.height) selectedVisualAtome.style.height = particles.height;
+          if (particles.transform) selectedVisualAtome.style.transform = particles.transform;
+          
+          grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
+            ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || historyEntry.timestamp || 'unknown');
+        }
+        
+        // Hide exit scrub button in history mode
+        const exitBtn = grab('exit_scrub_button');
+        if (exitBtn) exitBtn.style.display = 'none';
+      }
     }
   },
   onChange: async (e) => {
-    // Final selection when mouse is released
     if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
     
-    const historyIndex = parseInt(e.target.value);
-    currentHistoryIndex = historyIndex;
+    // Stop any playing animation first
+    stopDragAnimation();
     
-    const historyEntry = currentAtomeHistory[historyIndex];
-    if (historyEntry && selectedVisualAtome) {
-      puts('📊 Applying history entry ' + historyIndex + ' to atome');
+    const sliderValue = parseInt(e.target.value);
+    
+    if (isInScrubMode && currentDragSequenceForScrub && currentScrubEntry) {
+      // STAY in scrub mode and on current frame - don't exit
+      const frameIndex = Math.max(0, Math.min(currentDragSequenceForScrub.length - 1, sliderValue));
+      const currentFrame = currentDragSequenceForScrub[frameIndex];
       
-      // Apply visual changes from history (final)
-      const particles = historyEntry.particles || historyEntry.data || {};
+      if (currentFrame && selectedVisualAtome) {
+        // Apply the selected frame properties
+        if (currentFrame.left) selectedVisualAtome.style.left = currentFrame.left;
+        if (currentFrame.top) selectedVisualAtome.style.top = currentFrame.top;
+        if (currentFrame.color) selectedVisualAtome.style.backgroundColor = currentFrame.color;
+        if (currentFrame.borderRadius) selectedVisualAtome.style.borderRadius = currentFrame.borderRadius;
+        if (currentFrame.opacity !== undefined) selectedVisualAtome.style.opacity = currentFrame.opacity;
+        if (currentFrame.width) selectedVisualAtome.style.width = currentFrame.width;
+        if (currentFrame.height) selectedVisualAtome.style.height = currentFrame.height;
+        if (currentFrame.transform) selectedVisualAtome.style.transform = currentFrame.transform;
+        
+        grab('history_info').textContent = 'SCRUB: Selected frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length + 
+          ' - Time: ' + currentFrame.relativeTime + 'ms (Release mouse to exit scrub mode)';
+        puts('🎯 Selected frame ' + (frameIndex + 1) + '/' + currentDragSequenceForScrub.length);
+      }
+    } else {
+      // Normal history mode selection
+      const historyIndex = sliderValue;
+      currentHistoryIndex = historyIndex;
       
-      if (particles.left) selectedVisualAtome.style.left = particles.left;
-      if (particles.top) selectedVisualAtome.style.top = particles.top;
-      if (particles.color) selectedVisualAtome.style.backgroundColor = particles.color;
-      if (particles.borderRadius) selectedVisualAtome.style.borderRadius = particles.borderRadius;
-      if (particles.opacity !== undefined) selectedVisualAtome.style.opacity = particles.opacity;
-      
-      // Update info display to show final selection
-      grab('history_info').textContent = 'Entry ' + historyIndex + '/' + (currentAtomeHistory.length - 1) + 
-        ' - Date: ' + (historyEntry.created_at || historyEntry.updated_at || historyEntry.timestamp || 'unknown');
-      
-      console.log('[History] Applied entry:', historyEntry);
+      console.log('[History] Selected entry:', currentAtomeHistory[historyIndex]);
     }
   }
 });
@@ -2040,6 +2295,127 @@ $('div', {
   parent: grab('history_slider_container'),
   css: { color: 'white', fontSize: '11px', marginTop: '5px' },
   text: 'No history loaded'
+});
+
+$('span', {
+  id: 'stop_animation_button',
+  parent: grab('history_slider_container'),
+  css: {
+    backgroundColor: '#f44',
+    padding: '5px 8px',
+    color: 'white',
+    margin: '5px 2px 5px 0',
+    fontSize: '10px',
+    cursor: 'pointer',
+    borderRadius: '3px',
+    display: 'none' // Hidden by default
+  },
+  text: 'Stop',
+  onClick: () => {
+    stopDragAnimation();
+    puts('⏹️ Animation stopped');
+  }
+});
+
+$('span', {
+  id: 'exit_scrub_button',
+  parent: grab('history_slider_container'),
+  css: {
+    backgroundColor: '#c44',
+    padding: '5px 8px',
+    color: 'white',
+    margin: '5px 0',
+    fontSize: '10px',
+    cursor: 'pointer',
+    borderRadius: '3px',
+    display: 'none' // Hidden by default, shown only in scrub mode
+  },
+  text: 'Exit Scrub',
+  onClick: () => {
+    if (isInScrubMode) {
+      // Exit scrub mode, return to history mode
+      isInScrubMode = false;
+      const slider = grab('history_slider');
+      
+      // Reset slider to history mode
+      slider.max = currentAtomeHistory.length - 1;
+      slider.value = currentHistoryIndex; // Return to the history entry we were on
+      
+      // Hide exit button
+      grab('exit_scrub_button').style.display = 'none';
+      
+      grab('history_info').textContent = 'Exited scrub mode - Back to history navigation';
+      puts('⬅️ Exited scrub mode manually');
+      
+      // Reset scrub variables
+      currentDragSequenceForScrub = null;
+      currentScrubEntry = null;
+    }
+  }
+});
+
+$('span', {
+  id: 'play_animation_button',
+  parent: grab('history_slider_container'),
+  css: {
+    backgroundColor: '#4a4',
+    padding: '5px 8px',
+    color: 'white',
+    margin: '5px 2px 5px 0',
+    fontSize: '10px',
+    cursor: 'pointer',
+    borderRadius: '3px',
+    display: 'none' // Hidden by default, shown for continuous sequences
+  },
+  text: 'Play',
+  dragSequence: null, // Will be set by slider
+  onClick: () => {
+    const playBtn = grab('play_animation_button');
+    if (playBtn && playBtn.dragSequence && selectedVisualAtome) {
+      puts('🎬 Playing continuous animation at original speed...');
+      playDragAnimation(selectedVisualAtome, playBtn.dragSequence, 1); // Original speed
+    }
+  }
+});
+
+$('span', {
+  id: 'exit_scrub_button',
+  parent: grab('history_slider_container'),
+  css: {
+    backgroundColor: '#c44',
+    padding: '5px 8px',
+    color: 'white',
+    margin: '5px 0',
+    fontSize: '10px',
+    cursor: 'pointer',
+    borderRadius: '3px',
+    display: 'none' // Hidden by default, shown only in scrub mode
+  },
+  text: 'Exit Scrub',
+  onClick: () => {
+    if (isInScrubMode) {
+      // Exit scrub mode, return to history mode
+      isInScrubMode = false;
+      const slider = grab('history_slider');
+      
+      // Reset slider to history mode
+      slider.max = currentAtomeHistory.length - 1;
+      slider.value = currentHistoryIndex; // Return to the history entry we were on
+      
+      // Hide exit button and play button, show scrub button again
+      grab('exit_scrub_button').style.display = 'none';
+      grab('play_animation_button').style.display = 'none';
+      const scrubBtn = grab('scrub_sequence_button');
+      if (scrubBtn) scrubBtn.style.display = 'inline-block';
+      
+      grab('history_info').textContent = 'Exited scrub mode - Back to history navigation';
+      puts('⬅️ Exited scrub mode manually');
+      
+      // Reset scrub variables
+      currentDragSequenceForScrub = null;
+      currentScrubEntry = null;
+    }
+  }
 });
 
 $('span', {
