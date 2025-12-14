@@ -305,10 +305,17 @@ async function loadProjectAtomes(projectId) {
     const atomeType = atome.atome_type || atome.type;
     const particles = atome.particles || atome.data || {};
 
-    // Get stored position or default
-    const left = particles.left || '50px';
-    const top = particles.top || '50px';
+    // Get stored position or default with detailed logging
+    const savedLeft = particles.left;
+    const savedTop = particles.top;
+    const left = savedLeft || '50px';
+    const top = savedTop || '50px';
     const color = particles.color || atome.color || 'blue';
+    
+    puts('📍 Loading atome ' + atomeId.substring(0, 8) + 
+         ' - saved position: (' + (savedLeft || 'none') + ', ' + (savedTop || 'none') + ')' +
+         ' - using position: (' + left + ', ' + top + ')');
+    console.log('[Position Load] Atome data:', { atomeId: atomeId.substring(0, 8), particles, savedLeft, savedTop, left, top });
 
     createVisualAtome(atomeId, atomeType, color, left, top);
   });
@@ -419,12 +426,25 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     const newLeft = atomeEl.style.left;
     const newTop = atomeEl.style.top;
 
+    // Don't save if this is a temporary ID
+    if (atomeId.startsWith('temp_atome_') || atomeId.startsWith('atome_')) {
+      puts('⚠️ Skipping save for temporary atome ID: ' + atomeId.substring(0, 8));
+      return;
+    }
+
+    puts('💾 Saving position for atome ' + atomeId.substring(0, 8) + ': ' + newLeft + ', ' + newTop);
+    
     alter_atome(atomeId, { left: newLeft, top: newTop }).then(result => {
       if (result.tauri.success || result.fastify.success) {
-        puts('Position saved: ' + newLeft + ', ' + newTop);
+        puts('✅ Position saved: ' + newLeft + ', ' + newTop);
+        console.log('[Position Save] Success result:', result);
+      } else {
+        puts('❌ Position save failed');
+        console.log('[Position Save] Failed result:', result);
       }
     }).catch(error => {
       puts('❌ Failed to save position: ' + error);
+      console.error('[Position Save] Error:', error);
     });
   });
 }
@@ -1470,38 +1490,82 @@ $('span', {
     display: 'inline-block'
   },
   text: 'create atome',
-  onClick: () => {
+  onClick: async () => {
     if (!selectedProjectId) {
       puts('❌ No project loaded. Please load a project first.');
       return;
     }
     const atomeType = grab('atome_type_input').value;
     const atomeColor = grab('atome_color_input').value;
-    // puts('Creating atome: ' + atomeType + ' (' + atomeColor + ')');
-    create_atome({
+    const initialLeft = '100px';
+    const initialTop = '100px';
+    
+    puts('🔄 Creating atome: ' + atomeType + ' (' + atomeColor + ') at position: ' + initialLeft + ', ' + initialTop);
+    
+    const result = await create_atome({
       type: atomeType,
       color: atomeColor,
       projectId: selectedProjectId,
-      particles: { left: '100px', top: '100px' }
-    }, (result) => {
-      console.log('[create_atome button] Full result:', result);
-      if (result.tauri.success || result.fastify.success) {
-        // Try multiple paths to extract the ID
-        const tauriData = result.tauri.data || {};
-        const fastifyData = result.fastify.data || {};
-        const newId = tauriData.atome_id || tauriData.id || tauriData.atomeId ||
-          fastifyData.atome_id || fastifyData.id || fastifyData.atomeId ||
-          (typeof tauriData === 'string' ? tauriData : null) ||
-          (typeof fastifyData === 'string' ? fastifyData : null) ||
-          'atome_' + Date.now();
-        console.log('[create_atome button] Extracted ID:', newId);
-        puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
-        // Create visual element
-        createVisualAtome(newId, atomeType, atomeColor, '100px', '100px');
-      } else {
-        puts('❌ Failed to create atome');
-      }
+      particles: { left: initialLeft, top: initialTop }
     });
+    
+    console.log('[create_atome button] Full result:', result);
+    
+    // Debug: Let's see the exact structure
+    puts('🔍 DEBUG create_atome result structure:');
+    puts('  Tauri: ' + JSON.stringify(result.tauri));
+    puts('  Fastify: ' + JSON.stringify(result.fastify));
+    
+    if (result.tauri.success || result.fastify.success) {
+      // Try to extract the real ID from the API response
+      const tauriData = result.tauri.data || {};
+      const fastifyData = result.fastify.data || {};
+      
+      // Try different possible paths for the ID
+      let newId = null;
+      
+      // Check Tauri response first
+      if (result.tauri.success && tauriData) {
+        newId = tauriData.atome_id || tauriData.id || tauriData.atomeId ||
+                (tauriData.data && tauriData.data.atome_id) ||
+                (tauriData.atome && tauriData.atome.atome_id) ||
+                (typeof tauriData === 'string' ? tauriData : null);
+      }
+      
+      // If not found in Tauri, check Fastify
+      if (!newId && result.fastify.success && fastifyData) {
+        newId = fastifyData.atome_id || fastifyData.id || fastifyData.atomeId ||
+                (fastifyData.data && fastifyData.data.atome_id) ||
+                (fastifyData.atome && fastifyData.atome.atome_id) ||
+                (typeof fastifyData === 'string' ? fastifyData : null);
+      }
+      
+      // If still no ID, generate temporary one as fallback
+      if (!newId) {
+        newId = 'temp_atome_' + Date.now();
+        puts('⚠️ Warning: Could not extract real atome ID, using temporary: ' + newId);
+      } else {
+        puts('✅ Extracted real atome ID: ' + newId);
+      }
+      
+      console.log('[create_atome button] Final ID:', newId);
+      puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
+      
+      // Create visual element with initial position
+      createVisualAtome(newId, atomeType, atomeColor, initialLeft, initialTop);
+      
+      // If we got a real ID, try to reload project to ensure consistency
+      if (!newId.startsWith('temp_')) {
+        puts('🔄 Reloading project to ensure consistency...');
+        setTimeout(() => {
+          loadProjectAtomes(selectedProjectId);
+        }, 500);
+      }
+    } else {
+      puts('❌ Failed to create atome');
+      puts('  Tauri error: ' + (result.tauri.error || 'none'));
+      puts('  Fastify error: ' + (result.fastify.error || 'none'));
+    }
   },
 });
 
@@ -1623,6 +1687,39 @@ $('span', {
     
     puts('🔍 Listing atomes for current project: ' + selectedProjectId);
     await loadProjectAtomes(selectedProjectId);
+  },
+});
+
+$('span', {
+  id: 'debug_positions',
+  parent: intuitionContainer,
+  css: {
+    backgroundColor: 'rgba(255, 20, 147, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'debug positions',
+  onClick: async () => {
+    if (!selectedProjectId) {
+      puts('❌ No project loaded. Please load a project first.');
+      return;
+    }
+    
+    puts('🔍 DEBUG: Checking saved positions for project: ' + selectedProjectId);
+    const result = await list_atomes({ projectId: selectedProjectId });
+    const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
+    
+    atomes.forEach(atome => {
+      const atomeType = atome.atome_type || atome.type;
+      if (atomeType === 'project' || atomeType === 'user') return;
+      
+      const atomeId = atome.atome_id || atome.id;
+      const particles = atome.particles || atome.data || {};
+      puts('🔍 Atome ' + atomeId.substring(0, 8) + ' particles: ' + JSON.stringify(particles));
+    });
   },
 });
 
