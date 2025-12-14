@@ -429,6 +429,7 @@ async function open_project_selector(callback) {
 
   const overlay = $('div', {
     id: 'project_selector_overlay',
+    parent: intuitionContainer,
     css: {
       position: 'fixed',
       top: '0',
@@ -533,6 +534,7 @@ async function open_user_selector(callback) {
 
   const overlay = $('div', {
     id: 'user_selector_overlay',
+    parent: intuitionContainer,
     css: {
       position: 'fixed',
       top: '0',
@@ -668,6 +670,7 @@ async function open_atome_selector(options, callback) {
 
   const overlay = $('div', {
     id: 'atome_selector_overlay',
+    parent: intuitionContainer,
     css: {
       position: 'fixed',
       top: '0',
