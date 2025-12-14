@@ -479,14 +479,19 @@ async function loadAtomeHistory(atomeId) {
       // Set to most recent entry
       currentHistoryIndex = Math.max(0, currentAtomeHistory.length - 1);
       
+      // Recalculate proportional positions after loading history
+      currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
+      
     } else {
       puts('❌ Atome not found in project atomes list');
       currentAtomeHistory = [];
+      currentProportionalPositions = [];
     }
   } catch (error) {
     puts('❌ Error loading atome history: ' + error);
     console.error('History loading error:', error);
     currentAtomeHistory = [];
+    currentProportionalPositions = [];
   }
   
   updateHistorySlider();
@@ -2554,6 +2559,47 @@ $('span', {
     if (result.tauri?.success || result.fastify?.success) {
       puts('✅ History entry applied permanently');
       console.log('[History Apply] Success result:', result);
+      
+      // Add the new applied state to history
+      const newHistoryEntry = {
+        timestamp: Date.now(),
+        type: 'applied_state',
+        particles: { ...updates },
+        data: { ...updates }
+      };
+      
+      // Add to history
+      currentAtomeHistory.push(newHistoryEntry);
+      
+      // Update localStorage
+      const storageKey = 'atome_history_' + selectedAtomeId;
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(currentAtomeHistory));
+      } catch (e) {
+        console.warn('[History] Failed to save to localStorage:', e);
+      }
+      
+      // Recalculate proportional positions
+      currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
+      
+      // Update slider to point to the new latest state
+      const slider = grab('history_slider');
+      if (slider) {
+        slider.value = 1000; // Move to end (latest state)
+      }
+      
+      // Update current atome with the new state visually
+      const atome = grab(selectedAtomeId);
+      if (atome) {
+        if (updates.left !== undefined) atome.left = updates.left;
+        if (updates.top !== undefined) atome.top = updates.top;
+        if (updates.color !== undefined) atome.color = updates.color;
+        if (updates.borderRadius !== undefined) atome.borderRadius = updates.borderRadius;
+        if (updates.opacity !== undefined) atome.opacity = updates.opacity;
+      }
+      
+      puts('🔄 History updated with new applied state (' + currentAtomeHistory.length + ' total entries)');
+      
     } else {
       puts('❌ Failed to apply history entry');
       console.log('[History Apply] Failed result:', result);
@@ -2582,5 +2628,33 @@ $('span', {
     puts('sync atomes: ' + JSON.stringify(result));
   },
 });
+
+// ============================================
+// SIMPLE PROJECT TEST
+// ============================================
+
+async function testListProjects() {
+  try {
+    const result = await list_projects();
+    
+    // Use same structure as working button: result.tauri.projects or result.fastify.projects
+    const projects = result.tauri.projects.length > 0 ? result.tauri.projects : result.fastify.projects;
+    
+    console.log('[PROJECTS] Found:', projects.length);
+    projects.forEach((project, index) => {
+      const name = project.name || project.data?.name || project.particles?.name || 'Unnamed';
+      const id = (project.atome_id || project.id)?.substring(0, 8) || 'unknown';
+      console.log(`[PROJECTS] ${index + 1}. ${name} (${id}...)`);
+    });
+    
+  } catch (error) {
+    console.error('[PROJECTS] Error:', error);
+  }
+}
+
+// Test projects after loading
+setTimeout(() => {
+  testListProjects();
+}, 2000);
 
 
