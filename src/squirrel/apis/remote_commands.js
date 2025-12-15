@@ -391,13 +391,13 @@ async function connect() {
  */
 async function start(userId) {
     log('Starting remote commands listener...');
-    
+
     // Store the actual user ID passed from the app (not from WebSocket auth)
     if (userId) {
         currentUserId = userId;
         log(`Using app user ID: ${userId}`);
     }
-    
+
     const connected = await connect();
     if (connected) {
         log('✅ Remote commands listener active');
