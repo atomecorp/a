@@ -3392,9 +3392,9 @@ async function startFastifyBroadcastProbe() {
   }
 
   const targetUser = {
-    user_id: '1c6fcc39-ec11-5efe-aca6-c14b19e10fab',
+    user_id: 'd4fcf7e4-1fd5-5f5a-be26-955e40ef39a7',
     username: 'Dummy',
-    phone: '22222222',
+    phone: '33333333',
     created_at: '2025-12-14T13:31:23.400171+00:00'
   };
 
