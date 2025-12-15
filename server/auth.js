@@ -1674,22 +1674,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(401).send({ success: false, error: 'No token provided' });
             }
 
-            // Verify the current token (allow expired tokens for refresh)
+            // Verify the current token (allow expired tokens for refresh, but ALWAYS verify signature)
             let decoded;
             try {
-                decoded = server.jwt.verify(token);
-            } catch (err) {
-                // If token is expired, try to decode without verification
-                if (err.message.includes('expired')) {
-                    try {
-                        const [, payload] = token.split('.');
-                        decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
-                    } catch {
-                        return reply.code(401).send({ success: false, error: 'Invalid token format' });
-                    }
-                } else {
-                    return reply.code(401).send({ success: false, error: 'Invalid token' });
-                }
+                decoded = server.jwt.verify(token, { ignoreExpiration: true });
+            } catch (_) {
+                return reply.code(401).send({ success: false, error: 'Invalid token' });
             }
 
             // ADOLE v3.0: Verify user atome still exists

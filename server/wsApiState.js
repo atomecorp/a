@@ -68,6 +68,7 @@ export function detachWsApiClient(connection) {
         if (set.size === 0) wsApiClientsByUserId.delete(userId);
     }
     connection._wsApiUserId = null;
+    connection._wsApiAuthExpMs = null;
 }
 
 export function wsSendJsonToUser(userId, payload, meta = null) {

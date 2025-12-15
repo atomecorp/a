@@ -1,4 +1,4 @@
-
+console.warn('[check.js] FILE LOADED AT', new Date().toISOString());
 
 const shadowLeft = 0,
   shadowTop = 0,
@@ -2801,12 +2801,26 @@ async function send_message_to_jeezs({ fromSelectedUser } = {}) {
     const ws = new WebSocket(wsUrl);
 
     ws.addEventListener('open', async () => {
+      const authRequestId = `auth_me_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const authResponse = await wsSendAndWait(
+        ws,
+        { type: 'auth', action: 'me', requestId: authRequestId, token },
+        (m) => m?.type === 'auth-response' && (m.requestId === authRequestId || m.request_id === authRequestId),
+        8000
+      );
+
+      if (!authResponse?.success) {
+        console.warn('[check.js] ws/api auth(me) failed; cannot send direct-message', authResponse);
+        try { ws.close(); } catch (e) { }
+        resolve();
+        return;
+      }
+
       const response = await wsSendAndWait(
         ws,
         {
           type: 'direct-message',
           requestId,
-          token,
           toUserId,
           toPhone,
           message
@@ -3374,70 +3388,125 @@ setTimeout(() => {
 async function startFastifyBroadcastProbe() {
   const wsUrl = await loadFastifyWsApiUrl();
   if (!wsUrl) {
-    console.warn('[check.js] Fastify ws/api URL unavailable; cannot start direct-message probe');
+    puts('[probe] Fastify ws/api URL unavailable; cannot start direct-message probe');
     return;
   }
 
-  const token = getFastifyToken();
-  if (!token) {
-    console.warn('[check.js] Missing auth token; login first');
+  const initialToken = getFastifyToken();
+  if (!initialToken) {
+    puts('[probe] Missing auth token; login first');
     return;
   }
 
-  const current = await current_user();
-  const senderPhone = current?.user?.phone || current?.user?.data?.phone || null;
-  if (!current?.logged || !senderPhone) {
-    console.warn('[check.js] Missing sender phone; cannot start direct-message probe');
-    return;
-  }
-
+  // Target a DIFFERENT user than the sender to avoid self-delivery duplicates
   const targetUser = {
-    user_id: 'd4fcf7e4-1fd5-5f5a-be26-955e40ef39a7',
-    username: 'Dummy',
-    phone: '33333333',
-    created_at: '2025-12-14T13:31:23.400171+00:00'
+    user_id: 'e25b813b-810f-5871-b503-aef5f188e137',
+    username: 'Jeezs',
+    phone: '11111111'
   };
 
   const ws = new WebSocket(wsUrl);
 
+  let lastAuthedToken = null;
+  let probeTimer = null;
+
+  // Only log direct-message-response (ACK from server), ignore console-message
+  // (which is delivered to ALL connections of this user, causing "duplicates")
   ws.onmessage = function (event) {
     try {
       const parsed = JSON.parse(event.data);
-      console.log('[ws/api] message', parsed);
+      // Filter: only show ACKs, not broadcast messages
+      if (parsed.type === 'direct-message-response') {
+        console.log('[probe] ACK', parsed);
+      }
+      // Silently ignore console-message and auth-response
     } catch (_) {
       console.log('[ws/api] message (raw)', event.data);
     }
   };
 
-  ws.addEventListener('open', async () => {
-    const authRequestId = `auth_me_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    const authResponse = await wsSendAndWait(
-      ws,
-      { type: 'auth', action: 'me', requestId: authRequestId, token },
-      (m) => m?.type === 'auth-response' && (m.requestId === authRequestId || m.request_id === authRequestId),
-      8000
-    );
+  ws.addEventListener('error', () => {
+    puts('[probe] ws/api socket error');
+  });
 
-    if (!authResponse?.success) {
-      console.warn('[check.js] ws/api auth(me) failed; direct-message probe will not start', authResponse);
+  ws.addEventListener('open', async () => {
+    puts('[probe] ws/api socket open');
+    console.log('[probe] ws/api socket open');
+
+    const doAuthMe = async (tokenToUse) => {
+      const authRequestId = `auth_me_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const authResponse = await wsSendAndWait(
+        ws,
+        { type: 'auth', action: 'me', requestId: authRequestId, token: tokenToUse },
+        (m) => m?.type === 'auth-response' && (m.requestId === authRequestId || m.request_id === authRequestId),
+        8000
+      );
+      return authResponse;
+    };
+
+    const firstAuth = await doAuthMe(initialToken);
+    if (!firstAuth?.success) {
+      puts('[probe] ws/api auth(me) failed; direct-message probe will not start');
+      console.warn('[probe] ws/api auth(me) failed', firstAuth);
       try { ws.close(); } catch (_) { }
       return;
     }
+    lastAuthedToken = initialToken;
 
-    setInterval(function () {
-      const requestId = `dm_probe_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-      const sentAtIso = new Date().toISOString();
+    puts('[probe] ws/api authenticated; starting probe loop');
+    console.log('[probe] ws/api authenticated; starting probe loop');
 
-      ws.send(JSON.stringify({
-        type: 'direct-message',
-        requestId,
-        token,
-        toUserId: targetUser.user_id,
-        toPhone: targetUser.phone,
-        from: senderPhone,
-        message: `debug test message @ ${sentAtIso} (requestId: ${requestId})`
-      }));
-    }, 3000);
+    const tick = async () => {
+      try {
+        const tokenNow = getFastifyToken();
+        if (!tokenNow) {
+          puts('[probe] Missing auth token; stopping probe');
+          try { clearInterval(probeTimer); } catch (_) { }
+          try { ws.close(); } catch (_) { }
+          return;
+        }
+
+        if (tokenNow !== lastAuthedToken) {
+          const reAuth = await doAuthMe(tokenNow);
+          if (!reAuth?.success) {
+            puts('[probe] ws/api re-auth(me) failed; stopping probe');
+            console.warn('[probe] ws/api re-auth(me) failed', reAuth);
+            try { clearInterval(probeTimer); } catch (_) { }
+            try { ws.close(); } catch (_) { }
+            return;
+          }
+          lastAuthedToken = tokenNow;
+        }
+
+        const requestId = `dm_probe_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        const sentAtIso = new Date().toISOString();
+        puts('-----------');
+        puts(grab('logged_user').textContent);
+        console.log('-----------');
+        ws.send(JSON.stringify({
+          type: 'direct-message',
+          requestId,
+          toUserId: targetUser.user_id,
+          toPhone: targetUser.phone,
+          message: `debug test message @ ${sentAtIso} (requestId: ${requestId})`
+        }));
+      } catch (error) {
+        puts('[probe] Probe loop error: ' + (error?.message || String(error)));
+        console.error('[probe] Probe loop error', error);
+      }
+    };
+
+    // Run once immediately, then every 12s.
+    await tick();
+    probeTimer = setInterval(() => { tick(); }, 12000);
+  });
+
+  ws.addEventListener('close', () => {
+    if (probeTimer) {
+      try { clearInterval(probeTimer); } catch (_) { }
+      probeTimer = null;
+    }
+    puts('[probe] ws/api socket closed');
   });
 }
 

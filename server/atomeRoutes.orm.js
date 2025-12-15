@@ -107,8 +107,9 @@ async function validateToken(request) {
     const token = authHeader.substring(7);
 
     try {
-        const [, payload] = token.split('.');
-        const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
+        const jwt = await import('jsonwebtoken');
+        const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+        const decoded = jwt.default.verify(token, jwtSecret);
         return {
             id: decoded.sub || decoded.id || decoded.userId,
             userId: decoded.sub || decoded.id || decoded.userId,
@@ -116,7 +117,7 @@ async function validateToken(request) {
             phone: decoded.phone
         };
     } catch (e) {
-        console.error('[Atome] Token decode error:', e.message);
+        console.error('[Atome] Token verify error:', e.message);
         return null;
     }
 }

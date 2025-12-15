@@ -351,26 +351,37 @@ async function startServer() {
     // ===========================
 
     // Helper function to validate token (for sharing routes)
+    // SECURITY: always verify JWT signatures (never trust base64-decoded payload).
     const validateToken = async (request) => {
+      const verifyJwt = async (token, options = {}) => {
+        if (!token) return null;
+
+        if (server.jwt && typeof server.jwt.verify === 'function') {
+          return server.jwt.verify(token, options);
+        }
+
+        const jwt = await import('jsonwebtoken');
+        const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+        return jwt.default.verify(token, jwtSecret, options);
+      };
+
       // Try Bearer token first
       const authHeader = request.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
         try {
-          const [, payload] = token.split('.');
-          const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
-          return decoded;
-        } catch (e) {
+          return await verifyJwt(token);
+        } catch (_) {
           // Fall through to cookie check
         }
       }
 
       // Try cookie
       const cookieToken = request.cookies?.access_token;
-      if (cookieToken && server.jwt) {
+      if (cookieToken) {
         try {
-          return server.jwt.verify(cookieToken);
-        } catch (e) {
+          return await verifyJwt(cookieToken);
+        } catch (_) {
           return null;
         }
       }
@@ -731,6 +742,14 @@ async function startServer() {
     // Route WebSocket pour API calls (replaces HTTP fetch)
     server.register(async function (fastify) {
       fastify.get('/ws/api', { websocket: true }, async (connection) => {
+        // Assign a stable connection id for audit/debugging (server-side only)
+        try {
+          const crypto = await import('crypto');
+          connection._wsApiConnectionId = crypto.randomUUID();
+        } catch (_) {
+          connection._wsApiConnectionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        }
+
         console.log('🔗 New WebSocket API connection');
 
         try { wsApiConnections.add(connection); } catch (_) { }
@@ -777,17 +796,19 @@ async function startServer() {
           // Handle direct messages (targeted, console-only)
           if (data.type === 'direct-message') {
             const requestId = data.requestId || data.request_id;
-            const token = data.token;
             const toPhone = data.toPhone;
             const toUserId = data.toUserId || data.to_user_id;
             const msgText = data.message;
 
-            if (!token || (!toPhone && !toUserId) || !msgText) {
+            // STRICT MODE: require an authenticated ws/api connection.
+            // We do NOT accept per-message tokens for direct-message.
+            const attachedSenderUserId = connection && connection._wsApiUserId ? String(connection._wsApiUserId) : null;
+            if (!attachedSenderUserId) {
               safeSend({
                 type: 'direct-message-response',
                 requestId,
                 success: false,
-                error: 'Missing required fields: token, (toPhone or toUserId), message',
+                error: 'Unauthenticated ws/api connection (auth required before direct-message)',
                 sender_id: null,
                 sender_phone: null,
                 sender_name: null,
@@ -800,15 +821,60 @@ async function startServer() {
               return;
             }
 
-            try {
-              const jwt = await import('jsonwebtoken');
-              const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
-              const decoded = jwt.default.verify(token, jwtSecret);
-              let senderUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
-              let senderPhone = decoded.phone || decoded.phone_number || decoded.userPhone || null;
-              let senderUsername = decoded.username || decoded.userName || decoded.name || null;
+            // Reject stale/expired attached identity.
+            // We only authenticate once per connection for performance, but we still enforce token expiry.
+            const authExpMs = connection && typeof connection._wsApiAuthExpMs === 'number' ? connection._wsApiAuthExpMs : null;
+            if (authExpMs && Date.now() >= authExpMs) {
+              safeSend({
+                type: 'direct-message-response',
+                requestId,
+                success: false,
+                error: 'ws/api authentication expired (re-auth required)',
+                sender_id: attachedSenderUserId,
+                sender_phone: null,
+                sender_name: null,
+                receiver_id: toUserId ? String(toUserId) : null,
+                receiver_phone: toPhone ? String(toPhone) : null,
+                receiver_name: null,
+                recipientConnections: 0,
+                queueSize: 0
+              });
+              return;
+            }
 
+            if ((!toPhone && !toUserId) || !msgText) {
+              safeSend({
+                type: 'direct-message-response',
+                requestId,
+                success: false,
+                error: 'Missing required fields: (toPhone or toUserId), message',
+                sender_id: attachedSenderUserId,
+                sender_phone: null,
+                sender_name: null,
+                receiver_id: toUserId ? String(toUserId) : null,
+                receiver_phone: toPhone ? String(toPhone) : null,
+                receiver_name: null,
+                recipientConnections: 0,
+                queueSize: 0
+              });
+              return;
+            }
+
+            try {
               const dataSource = db.getDataSourceAdapter();
+
+              // Sender is the authenticated, attached user.
+              let senderUserId = attachedSenderUserId;
+              let senderPhone = null;
+              let senderUsername = null;
+
+              try {
+                const senderUser = await findUserById(dataSource, String(senderUserId));
+                if (senderUser) {
+                  senderPhone = senderUser.phone || null;
+                  senderUsername = senderUser.username || null;
+                }
+              } catch (_) { }
 
               // If token payload is missing username, enrich from DB.
               // This keeps `from.username` reliable even for older tokens.
@@ -881,6 +947,10 @@ async function startServer() {
                 to: { userId: targetUserId, phone: targetUser ? targetUser.phone : (toPhone ? String(toPhone) : null) },
                 timestamp: new Date().toISOString()
               };
+
+              // DEBUG: log routing info
+              const registrySize = wsApiClientsByUserId.get(targetUserId)?.size || 0;
+              console.log(`[direct-message] sender=${senderUserId} target=${targetUserId} toPhone=${toPhone} toUserId=${toUserId} registrySize=${registrySize}`);
 
               let queued = false;
               let queueSize = 0;
@@ -1193,6 +1263,18 @@ async function startServer() {
 
                 // Associate this ws/api connection with the authenticated user.
                 attachWsApiClientToUser(connection, user.user_id);
+
+                // Cache expiry on the connection to prevent stale identity usage.
+                try {
+                  const decoded = jwt.default.verify(token, jwtSecret);
+                  if (decoded && typeof decoded.exp === 'number') {
+                    connection._wsApiAuthExpMs = decoded.exp * 1000;
+                  } else {
+                    connection._wsApiAuthExpMs = null;
+                  }
+                } catch (_) {
+                  connection._wsApiAuthExpMs = null;
+                }
               } else if (action === 'me') {
                 const { token } = data;
 
@@ -1210,7 +1292,8 @@ async function startServer() {
                   const jwt = await import('jsonwebtoken');
                   const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
                   const decoded = jwt.default.verify(token, jwtSecret);
-                  const user = await findUserById(dataSource, decoded.userId);
+                  const decodedUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
+                  const user = decodedUserId ? await findUserById(dataSource, String(decodedUserId)) : null;
 
                   if (!user) {
                     safeSend({
@@ -1236,6 +1319,13 @@ async function startServer() {
 
                   // Associate this ws/api connection with the authenticated user.
                   attachWsApiClientToUser(connection, user.user_id);
+
+                  // Cache expiry on the connection to prevent stale identity usage.
+                  if (decoded && typeof decoded.exp === 'number') {
+                    connection._wsApiAuthExpMs = decoded.exp * 1000;
+                  } else {
+                    connection._wsApiAuthExpMs = null;
+                  }
                 } catch (jwtError) {
                   safeSend({
                     type: 'auth-response',
