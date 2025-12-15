@@ -3401,10 +3401,29 @@ async function startFastifyBroadcastProbe() {
   const ws = new WebSocket(wsUrl);
 
   ws.onmessage = function (event) {
-    console.log(event.data);
+    try {
+      const parsed = JSON.parse(event.data);
+      console.log('[ws/api] message', parsed);
+    } catch (_) {
+      console.log('[ws/api] message (raw)', event.data);
+    }
   };
 
-  ws.onopen = function () {
+  ws.addEventListener('open', async () => {
+    const authRequestId = `auth_me_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const authResponse = await wsSendAndWait(
+      ws,
+      { type: 'auth', action: 'me', requestId: authRequestId, token },
+      (m) => m?.type === 'auth-response' && (m.requestId === authRequestId || m.request_id === authRequestId),
+      8000
+    );
+
+    if (!authResponse?.success) {
+      console.warn('[check.js] ws/api auth(me) failed; direct-message probe will not start', authResponse);
+      try { ws.close(); } catch (_) { }
+      return;
+    }
+
     setInterval(function () {
       const requestId = `dm_probe_${Date.now()}_${Math.random().toString(16).slice(2)}`;
       const sentAtIso = new Date().toISOString();
@@ -3419,7 +3438,7 @@ async function startFastifyBroadcastProbe() {
         message: `debug test message @ ${sentAtIso} (requestId: ${requestId})`
       }));
     }, 3000);
-  };
+  });
 }
 
 setTimeout(startFastifyBroadcastProbe, 2500);
