@@ -77,6 +77,7 @@ import {
 import { wsSendJson, wsBroadcastJson } from './wsSend.js';
 import {
   wsApiConnections,
+  wsApiClientsByUserId,
   enqueuePendingConsoleMessage,
   attachWsApiClientToUser,
   detachWsApiClient,

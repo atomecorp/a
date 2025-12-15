@@ -1385,6 +1385,27 @@ $('span', {
     console.clear();
   },
 });
+
+// Button to send a command to user 'atome' to create a red div
+$('span', {
+  id: 'send_red_div_to_atome',
+  parent: intuitionContainer,
+  css: {
+    backgroundColor: 'rgba(0, 200, 0, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block',
+    cursor: 'pointer'
+  },
+  text: 'red div → atome',
+  onClick: async () => {
+    puts('Sending red div command to atome...');
+    await sendRedDivToAtome();
+  },
+});
+
 $('span', {
   id: 'logged_user',
   parent: intuitionContainer,
@@ -2748,6 +2769,84 @@ function getFastifyToken() {
   } catch (_) {
     return null;
   }
+}
+
+// Send a command to user 'atome' to create a red div on their screen
+async function sendRedDivToAtome() {
+  const wsUrl = await loadFastifyWsApiUrl();
+  if (!wsUrl) {
+    puts('[sendRedDivToAtome] Fastify ws/api URL unavailable');
+    return;
+  }
+
+  const token = getFastifyToken();
+  if (!token) {
+    puts('[sendRedDivToAtome] Missing auth token; login first');
+    return;
+  }
+
+  // Target user 'atome'
+  const targetUserId = 'd4fcf7e4-1fd5-5f5a-be26-955e40ef39a7';
+  const targetPhone = '33333333';
+
+  const requestId = `red_div_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  await new Promise((resolve) => {
+    const ws = new WebSocket(wsUrl);
+
+    ws.addEventListener('open', async () => {
+      // Authenticate first
+      const authRequestId = `auth_${Date.now()}`;
+      const authResponse = await wsSendAndWait(
+        ws,
+        { type: 'auth', action: 'me', requestId: authRequestId, token },
+        (m) => m?.type === 'auth-response' && m.requestId === authRequestId,
+        8000
+      );
+
+      if (!authResponse?.success) {
+        puts('[sendRedDivToAtome] Auth failed');
+        ws.close();
+        resolve();
+        return;
+      }
+
+      // Send the command to create a red div
+      const response = await wsSendAndWait(
+        ws,
+        {
+          type: 'direct-message',
+          requestId,
+          toUserId: targetUserId,
+          toPhone: targetPhone,
+          message: JSON.stringify({
+            command: 'create-div',
+            params: {
+              width: 333,
+              height: 666,
+              backgroundColor: 'red'
+            }
+          })
+        },
+        (m) => m?.type === 'direct-message-response' && m.requestId === requestId,
+        8000
+      );
+
+      if (response?.success) {
+        puts('[sendRedDivToAtome] Command sent! delivered=' + response.delivered);
+      } else {
+        puts('[sendRedDivToAtome] Failed: ' + (response?.error || 'unknown'));
+      }
+
+      ws.close();
+      resolve();
+    });
+
+    ws.addEventListener('error', () => {
+      puts('[sendRedDivToAtome] WebSocket error');
+      resolve();
+    });
+  });
 }
 
 function wsSendAndWait(ws, payload, matchFn, timeoutMs = 8000) {
