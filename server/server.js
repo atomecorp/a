@@ -787,7 +787,15 @@ async function startServer() {
                 type: 'direct-message-response',
                 requestId,
                 success: false,
-                error: 'Missing required fields: token, (toPhone or toUserId), message'
+                error: 'Missing required fields: token, (toPhone or toUserId), message',
+                sender_id: null,
+                sender_phone: null,
+                sender_name: null,
+                receiver_id: toUserId ? String(toUserId) : null,
+                receiver_phone: toPhone ? String(toPhone) : null,
+                receiver_name: null,
+                recipientConnections: 0,
+                queueSize: 0
               });
               return;
             }
@@ -796,11 +804,31 @@ async function startServer() {
               const jwt = await import('jsonwebtoken');
               const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
               const decoded = jwt.default.verify(token, jwtSecret);
-              const senderUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
-              const senderPhone = decoded.phone || decoded.phone_number || decoded.userPhone || null;
-              const senderUsername = decoded.username || decoded.userName || decoded.name || null;
+              let senderUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
+              let senderPhone = decoded.phone || decoded.phone_number || decoded.userPhone || null;
+              let senderUsername = decoded.username || decoded.userName || decoded.name || null;
 
               const dataSource = db.getDataSourceAdapter();
+
+              // If token payload is missing username, enrich from DB.
+              // This keeps `from.username` reliable even for older tokens.
+              let senderUser = null;
+              if (!senderUsername) {
+                try {
+                  if (senderUserId) {
+                    senderUser = await findUserById(dataSource, String(senderUserId));
+                  } else if (senderPhone) {
+                    senderUser = await findUserByPhone(dataSource, String(senderPhone));
+                  }
+                } catch (_) {
+                  senderUser = null;
+                }
+                if (senderUser) {
+                  if (!senderUsername) senderUsername = senderUser.username || null;
+                  if (!senderPhone) senderPhone = senderUser.phone || null;
+                  if (!senderUserId) senderUserId = senderUser.user_id || null;
+                }
+              }
               let targetUser = null;
               let targetUserId = toUserId ? String(toUserId) : null;
 
@@ -834,7 +862,14 @@ async function startServer() {
                   requestId,
                   success: false,
                   error: 'Target user id could not be resolved',
-                  from: { userId: senderUserId, phone: senderPhone, username: senderUsername }
+                  sender_id: senderUserId,
+                  sender_phone: senderPhone,
+                  sender_name: senderUsername,
+                  receiver_id: null,
+                  receiver_phone: toPhone ? String(toPhone) : null,
+                  receiver_name: targetUser ? targetUser.username : null,
+                  recipientConnections: 0,
+                  queueSize: 0
                 });
                 return;
               }
@@ -867,10 +902,14 @@ async function startServer() {
                 success: true,
                 delivered,
                 queued,
-                targetUserId,
+                receiver_id: targetUserId,
+                receiver_phone: targetUser ? targetUser.phone : (toPhone ? String(toPhone) : null),
+                receiver_name: targetUser ? targetUser.username : null,
+                sender_id: senderUserId,
+                sender_phone: senderPhone,
+                sender_name: senderUsername,
                 recipientConnections,
-                queueSize,
-                from: { userId: senderUserId, phone: senderPhone, username: senderUsername }
+                queueSize
               });
             } catch (error) {
               safeSend({
@@ -878,7 +917,14 @@ async function startServer() {
                 requestId,
                 success: false,
                 error: error.message,
-                from: { userId: null, phone: null, username: null }
+                sender_id: null,
+                sender_phone: null,
+                sender_name: null,
+                receiver_id: null,
+                receiver_phone: toPhone ? String(toPhone) : null,
+                receiver_name: null,
+                recipientConnections: 0,
+                queueSize: 0
               });
             }
             return;
