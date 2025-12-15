@@ -1,4 +1,4 @@
-console.warn('[check.js] FILE LOADED AT', new Date().toISOString());
+
 
 const shadowLeft = 0,
   shadowTop = 0,
