@@ -1306,6 +1306,10 @@ async function startServer() {
                     return;
                   }
 
+                  // Support registerAs: allows client to specify which user ID to register under
+                  // (e.g., when multiple apps share the same token in localStorage)
+                  const registerAsUserId = data.registerAs || user.user_id;
+
                   safeSend({
                     type: 'auth-response',
                     requestId,
@@ -1315,11 +1319,13 @@ async function startServer() {
                       id: user.user_id,
                       username: user.username,
                       phone: user.phone
-                    }
+                    },
+                    registeredAs: registerAsUserId
                   });
 
-                  // Associate this ws/api connection with the authenticated user.
-                  attachWsApiClientToUser(connection, user.user_id);
+                  // Associate this ws/api connection with the requested user ID.
+                  attachWsApiClientToUser(connection, registerAsUserId);
+                  console.log(`[ws/api] Auth: token=${user.user_id.substring(0, 8)}, registerAs=${registerAsUserId.substring(0, 8)}`);
 
                   // Cache expiry on the connection to prevent stale identity usage.
                   if (decoded && typeof decoded.exp === 'number') {

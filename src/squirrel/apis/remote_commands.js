@@ -28,7 +28,6 @@
 
 const CONFIG = {
     WS_URL: 'ws://127.0.0.1:3001/ws/api',
-    TOKEN_KEY: 'fastify_auth_token',
     RECONNECT_DELAY: 5000,
     AUTH_TIMEOUT: 8000,
     DEBUG: true
@@ -59,10 +58,26 @@ function log(...args) {
 
 /**
  * Get auth token from localStorage
+ * Uses the same logic as check.js getFastifyToken()
  */
 function getToken() {
     try {
-        return localStorage.getItem(CONFIG.TOKEN_KEY);
+        const hostname = window.location?.hostname || '';
+        const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+        const isLocalDev = isTauriRuntime
+            || hostname === 'localhost'
+            || hostname === '127.0.0.1'
+            || hostname === ''
+            || hostname.startsWith('192.168.')
+            || hostname.startsWith('10.');
+
+        // For Fastify ws/api calls we must prefer the Fastify-issued JWT.
+        // local_auth_token may come from Tauri and can be signed with a different secret.
+        const token = isLocalDev
+            ? (localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('local_auth_token'))
+            : (localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('local_auth_token'));
+
+        return token && token.length > 10 ? token : null;
     } catch {
         return null;
     }
@@ -117,7 +132,10 @@ function handleMessage(data) {
         // Ignore pong
         if (message.type === 'pong') return;
 
-        // Handle console-message (this is how direct-messages arrive)
+        // Ignore direct-message-response (ACKs from our own sends)
+        if (message.type === 'direct-message-response') return;
+
+        // Handle console-message (this is how incoming direct-messages arrive)
         if (message.type === 'console-message') {
             processCommand(message);
             return;
@@ -138,10 +156,18 @@ function handleMessage(data) {
  * Process a potential command from a console-message
  */
 function processCommand(message) {
-    const senderId = message.from?.userId;
-    const senderPhone = message.from?.phone;
-    const senderUsername = message.from?.username;
+    // Extract sender info - check various possible field names
+    const senderId = message.from?.userId || message.from?.user_id || message.senderId || message.sender_id;
+    const senderPhone = message.from?.phone || message.senderPhone || message.sender_phone;
+    const senderUsername = message.from?.username || message.senderUsername || message.sender_username;
     const messageText = message.message;
+
+    // Ignore probe messages (from check.js probe loop)
+    if (messageText && typeof messageText === 'string' && messageText.includes('dm_probe')) {
+        return;
+    }
+
+    log('Processing message:', { senderId, currentUserId, from: message.from, type: message.type });
 
     // Validate sender
     if (!isSenderAllowed(senderId)) {
@@ -150,7 +176,7 @@ function processCommand(message) {
     }
 
     // Don't process commands from self (avoid loops)
-    if (senderId === currentUserId) {
+    if (senderId && senderId === currentUserId) {
         log('Ignoring command from self');
         return;
     }
@@ -223,8 +249,12 @@ function authenticate() {
                     resolved = true;
                     if (m.success) {
                         isAuthenticated = true;
-                        currentUserId = m.user?.userId || m.user?.user_id;
-                        log(`Authenticated as: ${m.user?.username} (${currentUserId})`);
+                        // Only set from auth if not already set by start()
+                        const authUserId = m.user?.user_id || m.user?.userId || m.user?.atome_id || m.user?.id || m.user?.sub;
+                        if (!currentUserId) {
+                            currentUserId = authUserId;
+                        }
+                        log(`Authenticated (WS user: ${m.user?.username}/${authUserId}, using: ${currentUserId})`);
                         resolve(true);
                     } else {
                         log('Authentication failed:', m.error);
@@ -236,11 +266,14 @@ function authenticate() {
 
         socket.addEventListener('message', onMessage);
 
+        // Include registerAs to tell server which user ID to use for message routing
+        // (important when multiple apps share the same token in localStorage)
         socket.send(JSON.stringify({
             type: 'auth',
             action: 'me',
             requestId: authId,
-            token
+            token,
+            registerAs: currentUserId || undefined
         }));
 
         // Timeout
@@ -354,9 +387,17 @@ async function connect() {
 /**
  * Start the remote commands listener
  * Call this after user login
+ * @param {string} userId - The actual logged-in user ID (not from WebSocket auth)
  */
-async function start() {
+async function start(userId) {
     log('Starting remote commands listener...');
+    
+    // Store the actual user ID passed from the app (not from WebSocket auth)
+    if (userId) {
+        currentUserId = userId;
+        log(`Using app user ID: ${userId}`);
+    }
+    
     const connected = await connect();
     if (connected) {
         log('✅ Remote commands listener active');

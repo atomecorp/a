@@ -1287,14 +1287,14 @@ function logUserDetails(user, context = 'current_user') {
 /// input box below
 
 // Initialize Remote Commands after user login
-async function initRemoteCommands() {
+async function initRemoteCommands(userId) {
   // Register built-in handlers
   BuiltinHandlers.registerAll();
 
-  // Start listening for commands
-  const started = await RemoteCommands.start();
+  // Start listening for commands with the actual user ID
+  const started = await RemoteCommands.start(userId);
   if (started) {
-    puts('[RemoteCommands] ✅ Listener active');
+    puts('[RemoteCommands] ✅ Listener active for user: ' + userId);
     updateRemoteCommandsStatus(true);
   } else {
     puts('[RemoteCommands] ❌ Failed to start');
@@ -1318,8 +1318,9 @@ function updateRemoteCommandsStatus(active) {
     grab('logged_user').textContent = label;
     logUserDetails(result.user, 'current_user');
 
-    // Start remote commands listener after login
-    await initRemoteCommands();
+    // Start remote commands listener after login with actual user ID
+    const userId = result.user.user_id || result.user.atome_id || result.user.id;
+    await initRemoteCommands(userId);
   } else {
     puts('no user logged');
     grab('logged_user').textContent = 'no user logged';
@@ -1435,7 +1436,10 @@ $('span', {
       updateRemoteCommandsStatus(false);
       puts('[RemoteCommands] Stopped');
     } else {
-      await initRemoteCommands();
+      // Get current user ID to pass to initRemoteCommands
+      const userResult = await current_user();
+      const userId = userResult.user?.user_id || userResult.user?.atome_id || userResult.user?.id;
+      await initRemoteCommands(userId);
     }
   },
 });
@@ -1550,6 +1554,35 @@ $('input', {
     type: 'text',
     placeholder: 'Target User ID (e.g., d4fcf7e4-...)'
   }
+});
+
+// Copy Current User ID Button
+$('span', {
+  id: 'copy_user_id_btn',
+  parent: intuitionContainer,
+  css: {
+    backgroundColor: 'rgba(100, 100, 200, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block',
+    cursor: 'pointer'
+  },
+  text: '📋 Copy My ID',
+  onClick: async () => {
+    const myId = RemoteCommands.getCurrentUserId();
+    if (!myId) {
+      puts('[RemoteCommands] No user ID available');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(myId);
+      puts(`[RemoteCommands] Copied: ${myId}`);
+    } catch (e) {
+      puts(`[RemoteCommands] Copy failed: ${e.message}`);
+    }
+  },
 });
 
 $('span', {
