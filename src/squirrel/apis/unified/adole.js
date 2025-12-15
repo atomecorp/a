@@ -452,6 +452,13 @@ class TauriWebSocket {
             // Handle pong
             if (message.type === 'pong') return;
 
+            // Handle server-pushed console-only messages
+            if (message.type === 'console-message') {
+                const from = message.from?.phone || message.from?.userId || 'unknown';
+                console.log('[Fastify Console Message]', { from, message: message.message, payload: message });
+                return;
+            }
+
             // Handle auth-response
             if (message.type === 'auth-response' && (message.request_id || message.requestId)) {
                 const pending = this.pendingRequests.get(message.request_id || message.requestId);
@@ -502,6 +509,23 @@ class TauriWebSocket {
                         status: message.success ? 200 : 400,
                         error: message.error,
                         tables: message.tables
+                    });
+                }
+                return;
+            }
+
+            // Handle direct-message-response
+            if (message.type === 'direct-message-response' && (message.request_id || message.requestId)) {
+                const pending = this.pendingRequests.get(message.request_id || message.requestId);
+                if (pending) {
+                    this.pendingRequests.delete(message.request_id || message.requestId);
+                    clearTimeout(pending.timeout);
+                    pending.resolve({
+                        ok: message.success,
+                        success: message.success,
+                        status: message.success ? 200 : 400,
+                        error: message.error,
+                        delivered: message.delivered
                     });
                 }
                 return;

@@ -122,6 +122,57 @@ async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse
     }))
 }
 
+async fn server_config_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let static_dir = state.static_dir.as_ref();
+
+    // In Tauri dev/bundled layouts, static_dir is often inside something like:
+    // .../src-tauri/target/debug/_up_/src
+    // The real repo root may be several parents above.
+    // We walk up a few levels to locate the nearest server_config.json.
+    let mut dir = static_dir.to_path_buf();
+    let mut config_path: Option<std::path::PathBuf> = None;
+    for _ in 0..12u8 {
+        let candidate = dir.join("server_config.json");
+        if fs::metadata(&candidate).await.is_ok() {
+            config_path = Some(candidate);
+            break;
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+
+    let Some(config_path) = config_path else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "success": false, "error": "server_config.json not found" })),
+        )
+            .into_response();
+    };
+
+    match fs::read_to_string(&config_path).await {
+        Ok(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
+            Ok(json_value) => {
+                let mut response = Json(json_value).into_response();
+                response
+                    .headers_mut()
+                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                response
+            }
+            Err(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Invalid server_config.json" })),
+            )
+                .into_response(),
+        },
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "error": "Failed to read server_config.json" })),
+        )
+            .into_response(),
+    }
+}
+
 /// Debug log handler - receives logs from frontend to survive page reloads
 async fn debug_log_handler(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
     // Print to terminal with timestamp
@@ -1148,6 +1199,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
+        .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
         .route(
             "/api/uploads",

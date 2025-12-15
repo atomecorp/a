@@ -67,8 +67,16 @@ function resolveAtomeConfig() {
     if (typeof window !== 'undefined') {
         const hostname = window.location?.hostname;
         const port = window.location?.port;
-        if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
-            return { base: 'http://localhost:3001', isLocal: false, isTauri: false };
+        // Local dev (browser):
+        // - If served from Tauri (3000), Atomes still live on Fastify (3001)
+        // - If served directly from Fastify (3001), use same-origin for API calls
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            if (port === '3000') {
+                return { base: 'http://localhost:3001', isLocal: true, isTauri: false };
+            }
+            if (port === '3001' || port === '' || port == null) {
+                return { base: '', isLocal: true, isTauri: false };
+            }
         }
     }
     return { base: '', isLocal: false, isTauri: false };

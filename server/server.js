@@ -74,6 +74,14 @@ import {
   getConnectedClients,
   getLocalVersion
 } from './githubSync.js';
+import { wsSendJson, wsBroadcastJson } from './wsSend.js';
+import {
+  wsApiConnections,
+  enqueuePendingConsoleMessage,
+  attachWsApiClientToUser,
+  detachWsApiClient,
+  wsSendJsonToUser
+} from './wsApiState.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
@@ -85,6 +93,7 @@ const DB_CONFIGURED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 const staticRoot = path.join(projectRoot, 'src');
+const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
 const uploadsDir = (() => {
   try {
     return resolveUploadsDir();
@@ -251,11 +260,30 @@ async function startServer() {
   try {
     console.log('🚀 Démarrage du serveur Fastify v5...');
 
+    const replyJson = (reply, statusCode, payload) => {
+      reply.code(statusCode);
+      return payload;
+    };
+
     SERVER_VERSION = await loadServerVersion();
     console.log(`📦 Version applicative: ${SERVER_VERSION}`);
 
     await fs.mkdir(uploadsDir, { recursive: true });
     console.log('📁 Uploads directory:', uploadsDir);
+
+    // Serve server_config.json from the real project root.
+    // Static assets are served from `src/`, so we need an explicit route.
+    server.get('/server_config.json', async (request, reply) => {
+      try {
+        const raw = await fs.readFile(SERVER_CONFIG_FILE, 'utf8');
+        reply.header('content-type', 'application/json; charset=utf-8');
+        reply.header('cache-control', 'no-store');
+        return raw;
+      } catch (error) {
+        reply.code(404);
+        return { success: false, error: 'server_config.json not found' };
+      }
+    });
 
     // Initialize user files tracking
     await initUserFiles(uploadsDir);
@@ -368,13 +396,13 @@ async function startServer() {
       registerSharingRoutes(server, validateToken);
     } else {
       // Provide stub routes that return 503 when DB is not configured
-      server.post('/api/auth/register', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/login', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/logout', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
-      server.get('/api/auth/me', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
-      server.put('/api/auth/update', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/request-otp', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/reset-password', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/register', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/login', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/logout', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
+      server.get('/api/auth/me', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
+      server.put('/api/auth/update', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/request-otp', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/reset-password', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
     }
 
     server.get('/api/server-info', async () => {
@@ -448,7 +476,7 @@ async function startServer() {
     server.get('/api/files/my-files', async (request, reply) => {
       const user = await validateToken(request);
       if (!user) {
-        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
       const userId = user.id || user.userId;
@@ -461,7 +489,7 @@ async function startServer() {
     server.get('/api/files/accessible', async (request, reply) => {
       const user = await validateToken(request);
       if (!user) {
-        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
       const userId = user.id || user.userId;
@@ -474,20 +502,20 @@ async function startServer() {
     server.post('/api/files/share', async (request, reply) => {
       const user = await validateToken(request);
       if (!user) {
-        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
       const { fileName, targetUserId, permission } = request.body || {};
 
       if (!fileName || !targetUserId) {
-        return reply.status(400).send({ success: false, error: 'Missing fileName or targetUserId' });
+        return replyJson(reply, 400, { success: false, error: 'Missing fileName or targetUserId' });
       }
 
       const userId = user.id || user.userId;
       const result = await shareFile(fileName, userId, targetUserId, permission || 'read');
 
       if (!result.success) {
-        return reply.status(403).send(result);
+        return replyJson(reply, 403, result);
       }
 
       return result;
@@ -497,20 +525,20 @@ async function startServer() {
     server.post('/api/files/unshare', async (request, reply) => {
       const user = await validateToken(request);
       if (!user) {
-        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
       const { fileName, targetUserId } = request.body || {};
 
       if (!fileName || !targetUserId) {
-        return reply.status(400).send({ success: false, error: 'Missing fileName or targetUserId' });
+        return replyJson(reply, 400, { success: false, error: 'Missing fileName or targetUserId' });
       }
 
       const userId = user.id || user.userId;
       const result = await unshareFile(fileName, userId, targetUserId);
 
       if (!result.success) {
-        return reply.status(403).send(result);
+        return replyJson(reply, 403, result);
       }
 
       return result;
@@ -520,20 +548,20 @@ async function startServer() {
     server.post('/api/files/visibility', async (request, reply) => {
       const user = await validateToken(request);
       if (!user) {
-        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
       const { fileName, isPublic } = request.body || {};
 
       if (!fileName || typeof isPublic !== 'boolean') {
-        return reply.status(400).send({ success: false, error: 'Missing fileName or isPublic' });
+        return replyJson(reply, 400, { success: false, error: 'Missing fileName or isPublic' });
       }
 
       const userId = user.id || user.userId;
       const result = await setFilePublic(fileName, userId, isPublic);
 
       if (!result.success) {
-        return reply.status(403).send(result);
+        return replyJson(reply, 403, result);
       }
 
       return result;
@@ -543,7 +571,7 @@ async function startServer() {
     server.get('/api/files/stats', async (request, reply) => {
       const user = await validateToken(request);
       if (!user) {
-        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
       // TODO: Check if user is admin
@@ -705,13 +733,11 @@ async function startServer() {
       fastify.get('/ws/api', { websocket: true }, async (connection) => {
         console.log('🔗 New WebSocket API connection');
 
-        const safeSend = (payload) => {
-          try {
-            connection.send(JSON.stringify(payload));
-          } catch (error) {
-            console.error('❌ WebSocket send error:', error);
-          }
-        };
+        try { wsApiConnections.add(connection); } catch (_) { }
+
+        const unknownMessageTypesSeen = new Set();
+
+        const safeSend = (payload) => wsSendJson(connection, payload, { scope: 'ws/api', op: 'reply' });
 
         connection.on('message', async (message) => {
           let data;
@@ -719,6 +745,142 @@ async function startServer() {
             data = JSON.parse(message.toString());
           } catch (e) {
             safeSend({ type: 'error', message: 'Invalid JSON' });
+            return;
+          }
+
+          // Debug: broadcast probe (no auth) - echoes to ALL ws/api clients
+          // if (data && data.type === 'broadcast-probe') {
+          //   const nowIso = new Date().toISOString();
+          //   const payload = {
+          //     ...data,
+          //     type: 'broadcast-probe',
+          //     serverReceivedAt: nowIso
+          //   };
+
+          //   const broadcastedTo = wsBroadcastJson(
+          //     wsApiConnections,
+          //     payload,
+          //     { scope: 'ws/api', op: 'broadcast-probe' }
+          //   );
+
+          //   // Also acknowledge to sender (useful if broadcast fails)
+          //   safeSend({
+          //     type: 'broadcast-probe-ack',
+          //     poil: 'poilu',
+          //     probeId: data.probeId || data.requestId || null,
+          //     serverReceivedAt: nowIso,
+          //     broadcastedTo
+          //   });
+          //   return;
+          // }
+
+          // Handle direct messages (targeted, console-only)
+          if (data.type === 'direct-message') {
+            const requestId = data.requestId || data.request_id;
+            const token = data.token;
+            const toPhone = data.toPhone;
+            const toUserId = data.toUserId || data.to_user_id;
+            const msgText = data.message;
+
+            if (!token || (!toPhone && !toUserId) || !msgText) {
+              safeSend({
+                type: 'direct-message-response',
+                requestId,
+                success: false,
+                error: 'Missing required fields: token, (toPhone or toUserId), message'
+              });
+              return;
+            }
+
+            try {
+              const jwt = await import('jsonwebtoken');
+              const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+              const decoded = jwt.default.verify(token, jwtSecret);
+              const senderUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
+              const senderPhone = decoded.phone || decoded.phone_number || decoded.userPhone || null;
+              const senderUsername = decoded.username || decoded.userName || decoded.name || null;
+
+              const dataSource = db.getDataSourceAdapter();
+              let targetUser = null;
+              let targetUserId = toUserId ? String(toUserId) : null;
+
+              // If a phone is provided, try DB lookup first (gives us phone/username),
+              // but if not present in DB we can still route by deterministic userId.
+              if (!targetUserId && toPhone) {
+                targetUser = await findUserByPhone(dataSource, String(toPhone));
+                if (targetUser && targetUser.user_id) {
+                  targetUserId = String(targetUser.user_id);
+                } else {
+                  try {
+                    targetUserId = generateDeterministicUserId(String(toPhone));
+                  } catch (_) {
+                    targetUserId = null;
+                  }
+                }
+              }
+
+              // If userId was provided, optionally enrich with DB data.
+              if (targetUserId && !targetUser) {
+                try {
+                  targetUser = await findUserById(dataSource, targetUserId);
+                } catch (_) {
+                  targetUser = null;
+                }
+              }
+
+              if (!targetUserId) {
+                safeSend({
+                  type: 'direct-message-response',
+                  requestId,
+                  success: false,
+                  error: 'Target user id could not be resolved',
+                  from: { userId: senderUserId, phone: senderPhone, username: senderUsername }
+                });
+                return;
+              }
+
+              const payload = {
+                type: 'console-message',
+                message: String(msgText),
+                from: { userId: senderUserId, phone: senderPhone, username: senderUsername },
+                to: { userId: targetUserId, phone: targetUser ? targetUser.phone : (toPhone ? String(toPhone) : null) },
+                timestamp: new Date().toISOString()
+              };
+
+              let queued = false;
+              let queueSize = 0;
+
+              const { delivered, recipientConnections } = wsSendJsonToUser(
+                targetUserId,
+                payload,
+                { scope: 'ws/api', op: 'direct-message', targetUserId }
+              );
+
+              if (!delivered) {
+                queueSize = enqueuePendingConsoleMessage(targetUserId, payload);
+                queued = true;
+              }
+
+              safeSend({
+                type: 'direct-message-response',
+                requestId,
+                success: true,
+                delivered,
+                queued,
+                targetUserId,
+                recipientConnections,
+                queueSize,
+                from: { userId: senderUserId, phone: senderPhone, username: senderUsername }
+              });
+            } catch (error) {
+              safeSend({
+                type: 'direct-message-response',
+                requestId,
+                success: false,
+                error: error.message,
+                from: { userId: null, phone: null, username: null }
+              });
+            }
             return;
           }
 
@@ -982,6 +1144,9 @@ async function startServer() {
                     phone: user.phone
                   }
                 });
+
+                // Associate this ws/api connection with the authenticated user.
+                attachWsApiClientToUser(connection, user.user_id);
               } else if (action === 'me') {
                 const { token } = data;
 
@@ -1022,6 +1187,9 @@ async function startServer() {
                       phone: user.phone
                     }
                   });
+
+                  // Associate this ws/api connection with the authenticated user.
+                  attachWsApiClientToUser(connection, user.user_id);
                 } catch (jwtError) {
                   safeSend({
                     type: 'auth-response',
@@ -1352,8 +1520,13 @@ async function startServer() {
             return;
           }
 
-          // Unknown message type
-          safeSend({ type: 'error', message: `Unknown message type: ${data.type}` });
+          // Unknown message type: do not notify any client, log server-side only
+          const unknownType = String(data?.type || '');
+          if (!unknownMessageTypesSeen.has(unknownType)) {
+            unknownMessageTypesSeen.add(unknownType);
+            console.warn(`[ws/api] Unknown message type: ${unknownType}`);
+          }
+          return;
         });
 
         connection.on('close', () => {
@@ -1362,6 +1535,12 @@ async function startServer() {
 
         connection.on('error', (error) => {
           console.error('❌ WebSocket API error:', error);
+        });
+
+        // Cleanup
+        connection.on('close', () => {
+          try { wsApiConnections.delete(connection); } catch (_) { }
+          detachWsApiClient(connection);
         });
       });
     });
@@ -1374,13 +1553,7 @@ async function startServer() {
         console.log('🔗 Nouvelle connexion sync:', clientId);
 
         // Helper for safe sending
-        const safeSend = (payload) => {
-          try {
-            connection.send(JSON.stringify(payload));
-          } catch (error) {
-            console.error('❌ Impossible d\'envoyer un événement sync:', error);
-          }
-        };
+        const safeSend = (payload) => wsSendJson(connection, payload, { scope: 'ws/sync', op: 'send' });
 
         // Register client
         registerClient(clientId, connection, 'unknown');

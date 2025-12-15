@@ -1042,9 +1042,11 @@ async function open_user_selector(callback) {
           const loginResult = await log_user(phone, phone, '');
           if (loginResult.tauri.success || loginResult.fastify.success) {
             const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
-            const loggedUsername = userData?.user?.username || userData?.username || username;
-            puts('✅ Switched to user: ' + loggedUsername);
-            grab('logged_user').textContent = loggedUsername;
+            const userObj = userData?.user || userData || { username, phone };
+            const label = formatUserSummary(userObj);
+            puts('✅ Switched to user: ' + label);
+            grab('logged_user').textContent = label;
+            logUserDetails(userObj, 'switch_user');
 
             // Clear current project view when switching users
             if (currentProjectDiv) {
@@ -1250,6 +1252,29 @@ async function open_atome_selector(options, callback) {
 // UI BUTTONS & tests
 // ============================================
 
+function formatUserSummary(user) {
+  const username = user?.username || user?.data?.username || 'unknown';
+  const userId = user?.user_id || user?.atome_id || user?.id || null;
+  const phone = user?.phone || user?.data?.phone || null;
+
+  const parts = [String(username)];
+  if (userId) parts.push(`(${userId})`);
+  if (phone) parts.push(`phone:${phone}`);
+  return parts.join(' ');
+}
+
+function logUserDetails(user, context = 'current_user') {
+  try {
+    console.log(`[check.js] ${context} details`, user);
+  } catch (_) { }
+
+  try {
+    puts(`[${context}] user details: ` + JSON.stringify(user));
+  } catch (_) {
+    puts(`[${context}] user details: [unserializable]`);
+  }
+}
+
 //todo: share atomes both atome project type and atome width other user user
 
 //todo: restore atomes from it's history to and bring back the new state to present
@@ -1263,9 +1288,10 @@ async function open_atome_selector(options, callback) {
 (async () => {
   const result = await current_user();
   if (result.logged && result.user) {
-    const user_found = result.user.username;
-    puts(user_found);
-    grab('logged_user').textContent = user_found;
+    const label = formatUserSummary(result.user);
+    puts('Logged user: ' + label);
+    grab('logged_user').textContent = label;
+    logUserDetails(result.user, 'current_user');
   } else {
     puts('no user logged');
     grab('logged_user').textContent = 'no user logged';
@@ -1405,9 +1431,10 @@ $('span', {
   onClick: async () => {
     const result = await current_user();
     if (result.logged && result.user) {
-      const user_found = result.user.username;
-      puts(user_found);
-      grab('logged_user').textContent = user_found;
+      const label = formatUserSummary(result.user);
+      puts('Logged user: ' + label);
+      grab('logged_user').textContent = label;
+      logUserDetails(result.user, 'current_user_click');
     } else {
       puts('no user logged');
       grab('logged_user').textContent = 'no user logged';
@@ -1569,7 +1596,7 @@ $('span', {
     const user_name = grab('username_input').value;
 
     const results = await create_user(user_phone, user_phone, user_name);
-    grab('logged_user').textContent = user_name;
+    grab('logged_user').textContent = `${user_name} phone:${user_phone}`;
     puts('user created: ' + user_name + ' user phone created: ' + user_phone);
   },
 });
@@ -2669,6 +2696,138 @@ $('span', {
 // SIMPLE PROJECT TEST
 // ============================================
 
+async function loadFastifyWsApiUrl() {
+  try {
+    const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3000;
+    const localBase = isTauriRuntime ? `http://127.0.0.1:${localPort}` : '';
+    const configUrl = isTauriRuntime ? `${localBase}/server_config.json` : 'server_config.json';
+
+    const response = await fetch(configUrl, { cache: 'no-store' });
+    if (!response || !response.ok) {
+      console.warn('[check.js] Cannot load server_config.json', { status: response ? response.status : 'no-response', configUrl });
+      return null;
+    }
+
+    const config = await response.json();
+    const host = config?.fastify?.host;
+    const port = config?.fastify?.port;
+    const apiWsPath = config?.fastify?.apiWsPath;
+
+    if (!host || !port || !apiWsPath) {
+      console.warn('[check.js] Invalid fastify config for ws/api', { host, port, apiWsPath });
+      return null;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${protocol}://${host}:${port}${apiWsPath}`;
+  } catch (error) {
+    console.warn('[check.js] Failed to read server_config.json', error);
+    return null;
+  }
+}
+
+function getFastifyToken() {
+  try {
+    const hostname = window.location?.hostname || '';
+    const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    const isLocalDev = isTauriRuntime
+      || hostname === 'localhost'
+      || hostname === '127.0.0.1'
+      || hostname === ''
+      || hostname.startsWith('192.168.')
+      || hostname.startsWith('10.');
+
+    // For Fastify ws/api calls we must prefer the Fastify-issued JWT.
+    // local_auth_token may come from Tauri and can be signed with a different secret.
+    const token = isLocalDev
+      ? (localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('local_auth_token'))
+      : (localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('local_auth_token'));
+
+    return token && token.length > 10 ? token : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function wsSendAndWait(ws, payload, matchFn, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve({ ok: false, error: 'timeout' });
+    }, timeoutMs);
+
+    const onMessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (matchFn(message)) {
+          cleanup();
+          resolve(message);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      ws.removeEventListener('message', onMessage);
+    };
+
+    ws.addEventListener('message', onMessage);
+    ws.send(JSON.stringify(payload));
+  });
+}
+
+async function send_message_to_jeezs({ fromSelectedUser } = {}) {
+  const wsUrl = await loadFastifyWsApiUrl();
+  if (!wsUrl) {
+    console.warn('[check.js] Fastify ws/api URL unavailable; cannot send message');
+    return;
+  }
+
+  const token = getFastifyToken();
+  if (!token) {
+    console.warn('[check.js] Missing auth token; login first');
+    return;
+  }
+
+  const toUserId = 'e25b813b-810f-5871-b503-aef5f188e137';
+  const toPhone = '11111111';
+  const requestId = `dm_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const message = `console-only message (selected: ${fromSelectedUser?.username || fromSelectedUser?.userId || 'unknown'})`;
+
+  await new Promise((resolve) => {
+    const ws = new WebSocket(wsUrl);
+
+    ws.addEventListener('open', async () => {
+      const response = await wsSendAndWait(
+        ws,
+        {
+          type: 'direct-message',
+          requestId,
+          token,
+          toUserId,
+          toPhone,
+          message
+        },
+        (m) => m?.type === 'direct-message-response' && (m.requestId === requestId || m.request_id === requestId),
+        8000
+      );
+
+      console.log('[check.js] direct-message response', response);
+      try { ws.close(); } catch (e) { }
+      resolve();
+    });
+
+    ws.addEventListener('error', (e) => {
+      console.warn('[check.js] WebSocket error sending direct-message', e);
+      try { ws.close(); } catch (err) { }
+      resolve();
+    });
+  });
+}
+
 /**
  * Open user selector (copied from sharing UI) and log DB-style info for the selected user.
  * Logs: user id, username, phone, total atomes, and breakdown by atome_type.
@@ -2758,6 +2917,7 @@ async function openUserSelectorForUserDbInfo() {
       onClick: async () => {
         overlay.remove();
         await logSelectedUserDbInfo({ userId, username, phone, raw: user });
+        await send_message_to_jeezs({ fromSelectedUser: { userId, username, phone } });
       }
     });
 
@@ -3204,3 +3364,62 @@ async function testListProjects() {
 setTimeout(() => {
   testListProjects();
 }, 2000);
+
+// ============================================================================
+// FASTIFY BROADCAST PROBE (debug)
+// Sends a message every second to Fastify /ws/api; server rebroadcasts it to ALL
+// connected /ws/api clients so we can verify reception.
+// ============================================================================
+
+async function startFastifyBroadcastProbe() {
+  const wsUrl = await loadFastifyWsApiUrl();
+  if (!wsUrl) {
+    console.warn('[check.js] Fastify ws/api URL unavailable; cannot start direct-message probe');
+    return;
+  }
+
+  const token = getFastifyToken();
+  if (!token) {
+    console.warn('[check.js] Missing auth token; login first');
+    return;
+  }
+
+  const current = await current_user();
+  const senderPhone = current?.user?.phone || current?.user?.data?.phone || null;
+  if (!current?.logged || !senderPhone) {
+    console.warn('[check.js] Missing sender phone; cannot start direct-message probe');
+    return;
+  }
+
+  const targetUser = {
+    user_id: '1c6fcc39-ec11-5efe-aca6-c14b19e10fab',
+    username: 'Dummy',
+    phone: '22222222',
+    created_at: '2025-12-14T13:31:23.400171+00:00'
+  };
+
+  const ws = new WebSocket(wsUrl);
+
+  ws.onmessage = function (event) {
+    console.log(event.data);
+  };
+
+  ws.onopen = function () {
+    setInterval(function () {
+      const requestId = `dm_probe_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const sentAtIso = new Date().toISOString();
+
+      ws.send(JSON.stringify({
+        type: 'direct-message',
+        requestId,
+        token,
+        toUserId: targetUser.user_id,
+        toPhone: targetUser.phone,
+        from: senderPhone,
+        message: `debug test message @ ${sentAtIso} (requestId: ${requestId})`
+      }));
+    }, 3000);
+  };
+}
+
+setTimeout(startFastifyBroadcastProbe, 2500);

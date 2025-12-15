@@ -102,7 +102,9 @@ async function logServerInfo() {
     try {
       const platform = typeof current_platform === 'function' ? current_platform() : '';
       if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
-        return ['http://127.0.0.1:3000', 'http://127.0.0.1:3001', ''];
+        // In Tauri, prefer local Axum server for version info.
+        // Avoid probing Fastify here to prevent noisy 'Failed to load resource' entries.
+        return ['http://127.0.0.1:3000', ''];
       }
     } catch (_) { }
     return [''];
