@@ -1,6 +1,5 @@
 
 
-
 const shadowLeft = 0,
   shadowTop = 0,
   shadowBlur = 12;
@@ -2649,9 +2648,206 @@ $('span', {
   },
 });
 
+$('span', {
+  id: 'message_button',
+  parent: intuitionContainer,
+  css: {
+    backgroundColor: 'rgba(52, 152, 219, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'message',
+  onClick: () => {
+    openUserSelectorForUserDbInfo();
+  },
+});
+
 // ============================================
 // SIMPLE PROJECT TEST
 // ============================================
+
+/**
+ * Open user selector (copied from sharing UI) and log DB-style info for the selected user.
+ * Logs: user id, username, phone, total atomes, and breakdown by atome_type.
+ */
+async function openUserSelectorForUserDbInfo() {
+  puts('🔄 Opening user selector (DB debug)');
+
+  const usersResult = await user_list();
+  const users = usersResult.tauri.users.length > 0
+    ? usersResult.tauri.users
+    : usersResult.fastify.users;
+
+  if (users.length === 0) {
+    puts('❌ No users found');
+    return;
+  }
+
+  const existingSelector = grab('message_user_selector_overlay');
+  if (existingSelector) existingSelector.remove();
+
+  const overlay = $('div', {
+    id: 'message_user_selector_overlay',
+    parent: intuitionContainer,
+    css: {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: '1000',
+      pointerEvents: 'auto'
+    }
+  });
+
+  const modal = $('div', {
+    id: 'message_user_selector_modal',
+    parent: overlay,
+    css: {
+      backgroundColor: '#fff',
+      padding: '20px',
+      borderRadius: '12px',
+      maxWidth: '400px',
+      maxHeight: '500px',
+      overflowY: 'auto',
+      pointerEvents: 'auto'
+    }
+  });
+
+  $('div', {
+    parent: modal,
+    css: {
+      fontSize: '18px',
+      fontWeight: 'bold',
+      marginBottom: '15px',
+      color: '#2c3e50',
+      pointerEvents: 'auto'
+    },
+    text: 'Select a user (DB debug)'
+  });
+
+  users.forEach((user, index) => {
+    const userId = user.atome_id || user.id;
+    const username = user.username || user.data?.username || 'Unknown User';
+    const phone = user.phone || user.data?.phone || 'No phone';
+
+    if (phone === 'No phone') return;
+
+    const userDiv = $('div', {
+      id: 'message_user_item_' + index,
+      parent: modal,
+      css: {
+        padding: '15px',
+        margin: '8px 0',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        color: '#2c3e50',
+        border: '2px solid transparent',
+        transition: 'all 0.2s',
+        pointerEvents: 'auto'
+      },
+      text: '👤 ' + username + ' (' + phone + ')',
+      onClick: async () => {
+        overlay.remove();
+        await logSelectedUserDbInfo({ userId, username, phone, raw: user });
+      }
+    });
+
+    userDiv.addEventListener('mouseenter', () => {
+      userDiv.style.backgroundColor = '#e3f2fd';
+      userDiv.style.border = '2px solid #2196f3';
+    });
+
+    userDiv.addEventListener('mouseleave', () => {
+      userDiv.style.backgroundColor = '#f8f9fa';
+      userDiv.style.border = '2px solid transparent';
+    });
+  });
+
+  $('div', {
+    parent: modal,
+    css: {
+      padding: '12px',
+      marginTop: '20px',
+      backgroundColor: '#95a5a6',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      textAlign: 'center',
+      color: 'white',
+      fontWeight: 'bold',
+      pointerEvents: 'auto'
+    },
+    text: 'Cancel',
+    onClick: () => {
+      overlay.remove();
+      puts('DB debug cancelled');
+    }
+  });
+}
+
+async function logSelectedUserDbInfo(selection) {
+  const userId = selection.userId;
+  const username = selection.username;
+  const phone = selection.phone;
+
+  puts('🔎 DB debug for user: ' + username + ' (' + phone + ')');
+
+  console.log('[User DB Info] Selected user:', {
+    userId,
+    username,
+    phone,
+    raw: selection.raw
+  });
+
+  if (!phone || phone === 'No phone') {
+    puts('❌ Selected user has no phone');
+    return;
+  }
+
+  puts('🔐 Switching session to selected user to count atomes');
+
+  try {
+    const loginResult = await log_user(phone, phone, '');
+    if (!(loginResult.tauri.success || loginResult.fastify.success)) {
+      puts('❌ Login failed for selected user');
+      console.log('[User DB Info] Login failed:', loginResult);
+      return;
+    }
+
+    const atomesResult = await list_atomes({});
+    const atomes = atomesResult.tauri.atomes.length > 0
+      ? atomesResult.tauri.atomes
+      : atomesResult.fastify.atomes;
+
+    const byType = {};
+    atomes.forEach(a => {
+      const type = a.atome_type || a.type || 'unknown';
+      byType[type] = (byType[type] || 0) + 1;
+    });
+
+    const report = {
+      user: { id: userId, username, phone },
+      atomes: {
+        total: atomes.length,
+        byType: byType
+      }
+    };
+
+    console.log('[User DB Info] Report:', report);
+    puts('✅ Logged user DB info to console (total atomes: ' + atomes.length + ')');
+  } catch (error) {
+    puts('❌ DB debug error: ' + error.message);
+    console.error('[User DB Info] Error:', error);
+  }
+}
 
 /**
  * Open user selector for sharing current selection

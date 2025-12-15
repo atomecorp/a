@@ -40,12 +40,12 @@
                 resolve(true);
                 return;
             }
-            
+
             // Only check on localhost (dev environment)
             var hostname = window.location.hostname || '';
-            var isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1' || 
-                             hostname === '' || hostname.startsWith('192.168.') || hostname.startsWith('10.');
-            
+            var isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1' ||
+                hostname === '' || hostname.startsWith('192.168.') || hostname.startsWith('10.');
+
             if (!isLocalDev) {
                 tauriAvailable = false;
                 window._tauriAvailable = false;
@@ -55,7 +55,7 @@
 
             // Use fetch with timeout to check if Tauri server is running
             var controller = new AbortController();
-            var timeoutId = setTimeout(function() { controller.abort(); }, 2000);
+            var timeoutId = setTimeout(function () { controller.abort(); }, 2000);
 
             fetch('http://127.0.0.1:3000/api/auth/local/me', {
                 method: 'GET',
@@ -63,39 +63,39 @@
                 credentials: 'omit',
                 headers: { 'Accept': 'application/json' }
             })
-            .then(function() {
-                clearTimeout(timeoutId);
-                var wasOffline = tauriAvailable === false && window._tauriInitLogged !== true;
-                tauriAvailable = true;
-                window._tauriAvailable = true;
+                .then(function () {
+                    clearTimeout(timeoutId);
+                    var wasOffline = tauriAvailable === false && window._tauriInitLogged !== true;
+                    tauriAvailable = true;
+                    window._tauriAvailable = true;
 
-                if (!window._tauriInitLogged) {
-                    window._tauriInitLogged = true;
-                    console.log('[Squirrel] ✅ Tauri server detected');
-                } else if (wasOffline) {
-                    console.log('[Squirrel] 🔄 Tauri server reconnected');
-                    window.dispatchEvent(new CustomEvent('squirrel:tauri-reconnected'));
-                }
+                    if (!window._tauriInitLogged) {
+                        window._tauriInitLogged = true;
+                        console.log('[Squirrel] ✅ Tauri server detected');
+                    } else if (wasOffline) {
+                        console.log('[Squirrel] 🔄 Tauri server reconnected');
+                        window.dispatchEvent(new CustomEvent('squirrel:tauri-reconnected'));
+                    }
 
-                // Stop checking interval since server is available
-                if (tauriCheckInterval) {
-                    clearInterval(tauriCheckInterval);
-                    tauriCheckInterval = null;
-                }
+                    // Stop checking interval since server is available
+                    if (tauriCheckInterval) {
+                        clearInterval(tauriCheckInterval);
+                        tauriCheckInterval = null;
+                    }
 
-                resolve(true);
-            })
-            .catch(function() {
-                clearTimeout(timeoutId);
-                tauriAvailable = false;
-                window._tauriAvailable = false;
+                    resolve(true);
+                })
+                .catch(function () {
+                    clearTimeout(timeoutId);
+                    tauriAvailable = false;
+                    window._tauriAvailable = false;
 
-                // Start periodic check if not running
-                if (!tauriCheckInterval) {
-                    tauriCheckInterval = setInterval(checkTauriViaHttp, 30000);
-                }
-                resolve(false);
-            });
+                    // Start periodic check if not running
+                    if (!tauriCheckInterval) {
+                        tauriCheckInterval = setInterval(checkTauriViaHttp, 30000);
+                    }
+                    resolve(false);
+                });
         });
     }
 
@@ -198,6 +198,113 @@
     var fastifyWs = null;
     var pendingFastifyRequests = []; // Queue of pending requests when Fastify is offline
     var fastifyCheckInterval = null;
+    var fastifyPingInterval = null;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SERVER CONFIG (external)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Loaded from `/server_config.json` (served from `src/server_config.json`).
+    // This file is the single source of truth for Fastify host/port/paths.
+    var serverConfig = null;
+    var serverConfigLoaded = false;
+    var serverConfigPromise = null;
+
+    function loadServerConfigOnce() {
+        if (serverConfigPromise) return serverConfigPromise;
+        serverConfigPromise = fetch('/server_config.json', { cache: 'no-store' })
+            .then(function (res) {
+                if (!res || !res.ok) return null;
+                return res.json();
+            })
+            .then(function (json) {
+                serverConfigLoaded = true;
+                serverConfig = json;
+                return json;
+            })
+            .catch(function () {
+                serverConfigLoaded = true;
+                serverConfig = null;
+                return null;
+            });
+        return serverConfigPromise;
+    }
+
+    function getFastifyConfig() {
+        return serverConfig && serverConfig.fastify ? serverConfig.fastify : null;
+    }
+
+    function getFastifyHttpBase() {
+        var cfg = getFastifyConfig();
+        if (!cfg || !cfg.host || !cfg.port) return null;
+        return 'http://' + cfg.host + ':' + cfg.port;
+    }
+
+    function getFastifyWsBase() {
+        var cfg = getFastifyConfig();
+        if (!cfg || !cfg.host || !cfg.port) return null;
+        return 'ws://' + cfg.host + ':' + cfg.port;
+    }
+
+    function isTauriRuntime() {
+        return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    }
+
+    /**
+     * Quiet Fastify availability ping (no console spam).
+     * In Tauri runtime we prefer HTTP ping to avoid noisy WebSocket connection errors.
+     */
+    function checkFastifyViaHttp() {
+        return new Promise(function (resolve) {
+            if (!serverConfigLoaded) {
+                loadServerConfigOnce().then(function () {
+                    checkFastifyViaHttp().then(resolve);
+                });
+                return;
+            }
+
+            var cfg = getFastifyConfig();
+            var httpBase = getFastifyHttpBase();
+            var serverInfoPath = cfg && typeof cfg.serverInfoPath === 'string' ? cfg.serverInfoPath : null;
+            if (!httpBase || !serverInfoPath) {
+                fastifyAvailable = false;
+                resolve(false);
+                return;
+            }
+
+            // Only check on localhost (dev environment)
+            if (!isLocalDev) {
+                fastifyAvailable = false;
+                resolve(false);
+                return;
+            }
+
+            var controller = new AbortController();
+            var timeoutId = setTimeout(function () { controller.abort(); }, 1200);
+
+            fetch(httpBase + serverInfoPath, {
+                method: 'GET',
+                signal: controller.signal,
+                credentials: 'omit',
+                cache: 'no-store',
+                headers: { 'Accept': 'application/json' }
+            })
+                .then(function (res) {
+                    clearTimeout(timeoutId);
+                    if (!res || !res.ok) {
+                        fastifyAvailable = false;
+                        resolve(false);
+                        return;
+                    }
+                    fastifyAvailable = true;
+                    resolve(true);
+                })
+                .catch(function () {
+                    clearTimeout(timeoutId);
+                    fastifyAvailable = false;
+                    resolve(false);
+                });
+        });
+    }
 
     /**
      * Check Fastify availability using WebSocket (silent - no console errors)
@@ -205,6 +312,29 @@
      */
     function checkFastifyViaWebSocket() {
         return new Promise(function (resolve) {
+            if (!serverConfigLoaded) {
+                loadServerConfigOnce().then(function () {
+                    checkFastifyViaWebSocket().then(resolve);
+                });
+                return;
+            }
+
+            var cfg = getFastifyConfig();
+            var wsBase = getFastifyWsBase();
+            var syncWsPath = cfg && typeof cfg.syncWsPath === 'string' ? cfg.syncWsPath : null;
+            if (!wsBase || !syncWsPath) {
+                fastifyAvailable = false;
+                resolve(false);
+                return;
+            }
+
+            // In Tauri runtime we avoid WS probes when Fastify is offline (they can be noisy).
+            // If Fastify is already known online, WS is allowed (so we can reconnect quickly).
+            if (isTauriRuntime() && fastifyAvailable !== true) {
+                resolve(false);
+                return;
+            }
+
             // If already connected, just return true
             if (fastifyWs && fastifyWs.readyState === WebSocket.OPEN) {
                 resolve(true);
@@ -218,7 +348,7 @@
             }
 
             try {
-                fastifyWs = new WebSocket('ws://127.0.0.1:3001/ws/sync');
+                fastifyWs = new WebSocket(wsBase + syncWsPath);
 
                 var timeout = setTimeout(function () {
                     if (fastifyWs) {
@@ -315,7 +445,19 @@
         var urlStr = typeof url === 'string' ? url : (url && url.url) || String(url);
 
         var isTauriRequest = urlStr.includes('127.0.0.1:3000') || urlStr.includes('localhost:3000');
-        var isFastifyRequest = urlStr.includes('127.0.0.1:3001') || urlStr.includes('localhost:3001');
+        var isFastifyRequest = false;
+        try {
+            var cfg = getFastifyConfig();
+            if (cfg && cfg.host && cfg.port) {
+                var hostPort = String(cfg.host) + ':' + String(cfg.port);
+                isFastifyRequest = urlStr.includes(hostPort);
+            } else {
+                // Before config is loaded we cannot reliably identify Fastify requests
+                isFastifyRequest = false;
+            }
+        } catch (_) {
+            isFastifyRequest = false;
+        }
         var isPingRequest = urlStr.includes('/api/server-info');
 
         // ALWAYS allow ping requests - they're used to check server availability
@@ -367,8 +509,10 @@
                     fastifyAvailable = false;
                     lastFastifyCheck = Date.now();
                     // Start periodic check
-                    if (!fastifyCheckInterval) {
-                        fastifyCheckInterval = setInterval(checkFastifySilently, 10000);
+                    if (!(window.__TAURI__ || window.__TAURI_INTERNALS__)) {
+                        if (!fastifyCheckInterval) {
+                            fastifyCheckInterval = setInterval(checkFastifyViaWebSocket, 10000);
+                        }
                     }
                 }
                 throw error;
@@ -382,6 +526,39 @@
 
     // Expose function to manually trigger reconnection check
     window._recheckFastify = checkFastifyViaWebSocket;
+
+    // In Tauri runtime: keep Fastify status fresh via quiet HTTP pings.
+    // When the ping turns online, trigger a WS connection once.
+    if (isTauriRuntime() && isLocalDev) {
+        // Don't hammer: check every 2s until online, then slow down.
+        var currentDelay = 2000;
+        var schedule = function () {
+            if (fastifyPingInterval) {
+                clearInterval(fastifyPingInterval);
+                fastifyPingInterval = null;
+            }
+            fastifyPingInterval = setInterval(function () {
+                checkFastifyViaHttp().then(function (online) {
+                    if (online) {
+                        // Try to establish the WS connection now that Fastify is reachable.
+                        checkFastifyViaWebSocket();
+                        // Slow down pings once online.
+                        if (currentDelay !== 15000) {
+                            currentDelay = 15000;
+                            schedule();
+                        }
+                    } else {
+                        // Speed up when offline.
+                        if (currentDelay !== 2000) {
+                            currentDelay = 2000;
+                            schedule();
+                        }
+                    }
+                });
+            }, currentDelay);
+        };
+        schedule();
+    }
 
     // Expose WebSocket connection for other modules
     window._getFastifyWs = function () {
