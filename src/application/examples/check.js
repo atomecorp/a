@@ -151,6 +151,10 @@ intuitionContainer.style.background = 'transparent';
 // AdoleAPI is now available globally via spark.js
 // No need to import manually - use window.AdoleAPI or simply AdoleAPI
 
+// Remote Commands System
+import { RemoteCommands } from '/squirrel/apis/remote_commands.js';
+import { BuiltinHandlers } from '/squirrel/apis/remote_command_handlers.js';
+
 // Authentication functions - Use AdoleAPI.auth.*
 const create_user = AdoleAPI.auth.create;
 const log_user = AdoleAPI.auth.login;
@@ -1282,8 +1286,29 @@ function logUserDetails(user, context = 'current_user') {
 
 /// input box below
 
+// Initialize Remote Commands after user login
+async function initRemoteCommands() {
+  // Register built-in handlers
+  BuiltinHandlers.registerAll();
 
+  // Start listening for commands
+  const started = await RemoteCommands.start();
+  if (started) {
+    puts('[RemoteCommands] ✅ Listener active');
+    updateRemoteCommandsStatus(true);
+  } else {
+    puts('[RemoteCommands] ❌ Failed to start');
+    updateRemoteCommandsStatus(false);
+  }
+}
 
+function updateRemoteCommandsStatus(active) {
+  const statusEl = grab('remote_commands_status');
+  if (statusEl) {
+    statusEl.textContent = active ? '📡 RC: ON' : '📡 RC: OFF';
+    statusEl.style.backgroundColor = active ? 'rgba(0, 200, 0, 1)' : 'rgba(200, 0, 0, 1)';
+  }
+}
 
 (async () => {
   const result = await current_user();
@@ -1292,6 +1317,9 @@ function logUserDetails(user, context = 'current_user') {
     puts('Logged user: ' + label);
     grab('logged_user').textContent = label;
     logUserDetails(result.user, 'current_user');
+
+    // Start remote commands listener after login
+    await initRemoteCommands();
   } else {
     puts('no user logged');
     grab('logged_user').textContent = 'no user logged';
@@ -1386,12 +1414,38 @@ $('span', {
   },
 });
 
-// Button to send a command to user 'atome' to create a red div
+// Remote Commands Status Indicator
 $('span', {
-  id: 'send_red_div_to_atome',
+  id: 'remote_commands_status',
   parent: intuitionContainer,
   css: {
-    backgroundColor: 'rgba(0, 200, 0, 1)',
+    backgroundColor: 'rgba(200, 0, 0, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  },
+  text: '📡 RC: OFF',
+  onClick: async () => {
+    if (RemoteCommands.isActive()) {
+      RemoteCommands.stop();
+      updateRemoteCommandsStatus(false);
+      puts('[RemoteCommands] Stopped');
+    } else {
+      await initRemoteCommands();
+    }
+  },
+});
+
+// Send Test Command Button
+$('span', {
+  id: 'send_test_command',
+  parent: intuitionContainer,
+  css: {
+    backgroundColor: 'rgba(0, 150, 200, 1)',
     marginLeft: '0',
     padding: '10px',
     color: 'white',
@@ -1399,11 +1453,103 @@ $('span', {
     display: 'inline-block',
     cursor: 'pointer'
   },
-  text: 'red div → atome',
+  text: '📤 Send Div',
   onClick: async () => {
-    puts('Sending red div command to atome...');
-    await sendRedDivToAtome();
+    const targetInput = grab('remote_target_input');
+    const targetUserId = targetInput?.value?.trim();
+
+    if (!targetUserId) {
+      puts('[RemoteCommands] Enter a target user ID first');
+      return;
+    }
+
+    if (!RemoteCommands.isActive()) {
+      puts('[RemoteCommands] Not connected');
+      return;
+    }
+
+    puts(`[RemoteCommands] Sending create-element to ${targetUserId}...`);
+
+    const result = await RemoteCommands.sendCommand(targetUserId, 'create-element', {
+      tag: 'div',
+      css: {
+        width: '200px',
+        height: '200px',
+        backgroundColor: 'red',
+        top: '100px',
+        left: '100px',
+        borderRadius: '10px'
+      }
+    });
+
+    if (result.success) {
+      puts(`[RemoteCommands] Command sent! delivered=${result.delivered}`);
+    } else {
+      puts(`[RemoteCommands] Failed: ${result.error}`);
+    }
   },
+});
+
+// Send Notification Button
+$('span', {
+  id: 'send_notification_command',
+  parent: intuitionContainer,
+  css: {
+    backgroundColor: 'rgba(200, 100, 0, 1)',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block',
+    cursor: 'pointer'
+  },
+  text: '🔔 Send Notif',
+  onClick: async () => {
+    const targetInput = grab('remote_target_input');
+    const targetUserId = targetInput?.value?.trim();
+
+    if (!targetUserId) {
+      puts('[RemoteCommands] Enter a target user ID first');
+      return;
+    }
+
+    if (!RemoteCommands.isActive()) {
+      puts('[RemoteCommands] Not connected');
+      return;
+    }
+
+    puts(`[RemoteCommands] Sending notification to ${targetUserId}...`);
+
+    const result = await RemoteCommands.sendCommand(targetUserId, 'show-notification', {
+      message: 'Hello from remote! 👋',
+      type: 'success',
+      duration: 5000
+    });
+
+    if (result.success) {
+      puts(`[RemoteCommands] Notification sent! delivered=${result.delivered}`);
+    } else {
+      puts(`[RemoteCommands] Failed: ${result.error}`);
+    }
+  },
+});
+
+// Target User ID Input
+$('input', {
+  id: 'remote_target_input',
+  parent: intuitionContainer,
+  css: {
+    padding: '8px',
+    margin: '10px',
+    border: '1px solid #666',
+    borderRadius: '4px',
+    width: '280px',
+    fontSize: '12px'
+  },
+  attr: {
+    type: 'text',
+    placeholder: 'Target User ID (e.g., d4fcf7e4-...)'
+  }
 });
 
 $('span', {
@@ -2769,84 +2915,6 @@ function getFastifyToken() {
   } catch (_) {
     return null;
   }
-}
-
-// Send a command to user 'atome' to create a red div on their screen
-async function sendRedDivToAtome() {
-  const wsUrl = await loadFastifyWsApiUrl();
-  if (!wsUrl) {
-    puts('[sendRedDivToAtome] Fastify ws/api URL unavailable');
-    return;
-  }
-
-  const token = getFastifyToken();
-  if (!token) {
-    puts('[sendRedDivToAtome] Missing auth token; login first');
-    return;
-  }
-
-  // Target user 'atome'
-  const targetUserId = 'd4fcf7e4-1fd5-5f5a-be26-955e40ef39a7';
-  const targetPhone = '33333333';
-
-  const requestId = `red_div_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
-  await new Promise((resolve) => {
-    const ws = new WebSocket(wsUrl);
-
-    ws.addEventListener('open', async () => {
-      // Authenticate first
-      const authRequestId = `auth_${Date.now()}`;
-      const authResponse = await wsSendAndWait(
-        ws,
-        { type: 'auth', action: 'me', requestId: authRequestId, token },
-        (m) => m?.type === 'auth-response' && m.requestId === authRequestId,
-        8000
-      );
-
-      if (!authResponse?.success) {
-        puts('[sendRedDivToAtome] Auth failed');
-        ws.close();
-        resolve();
-        return;
-      }
-
-      // Send the command to create a red div
-      const response = await wsSendAndWait(
-        ws,
-        {
-          type: 'direct-message',
-          requestId,
-          toUserId: targetUserId,
-          toPhone: targetPhone,
-          message: JSON.stringify({
-            command: 'create-div',
-            params: {
-              width: 333,
-              height: 666,
-              backgroundColor: 'red'
-            }
-          })
-        },
-        (m) => m?.type === 'direct-message-response' && m.requestId === requestId,
-        8000
-      );
-
-      if (response?.success) {
-        puts('[sendRedDivToAtome] Command sent! delivered=' + response.delivered);
-      } else {
-        puts('[sendRedDivToAtome] Failed: ' + (response?.error || 'unknown'));
-      }
-
-      ws.close();
-      resolve();
-    });
-
-    ws.addEventListener('error', () => {
-      puts('[sendRedDivToAtome] WebSocket error');
-      resolve();
-    });
-  });
 }
 
 function wsSendAndWait(ws, payload, matchFn, timeoutMs = 8000) {

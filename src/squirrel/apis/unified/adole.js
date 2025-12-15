@@ -299,51 +299,15 @@ export function clearToken(key) {
  * Single connection shared across all requests
  */
 class TauriWebSocket {
-    constructor(url, tokenKey = null) {
+    constructor(url) {
         this.url = url;
-        this.tokenKey = tokenKey; // For auto-auth on connect
         this.socket = null;
         this.isConnected = false;
         this.isConnecting = false;
-        this.isAuthenticated = false;
         this.pendingRequests = new Map();
         this.requestCounter = 0;
         this.reconnectTimer = null;
         this.pingTimer = null;
-    }
-
-    // Auto-authenticate after connecting
-    async autoAuthenticate() {
-        if (this.isAuthenticated || !this.tokenKey) return true;
-        const token = getToken(this.tokenKey);
-        if (!token) return false;
-
-        return new Promise((resolve) => {
-            const authId = `auth_auto_${Date.now()}`;
-            const authMsg = { type: 'auth', action: 'me', requestId: authId, token };
-
-            const onMessage = (event) => {
-                try {
-                    const m = JSON.parse(event.data);
-                    if (m.type === 'auth-response' && m.requestId === authId) {
-                        this.socket.removeEventListener('message', onMessage);
-                        if (m.success) {
-                            this.isAuthenticated = true;
-                            console.log('[TauriWS] Auto-authenticated as:', m.user?.username || m.user?.userId);
-                        }
-                        resolve(m.success);
-                    }
-                } catch (_) { }
-            };
-
-            this.socket.addEventListener('message', onMessage);
-            this.socket.send(JSON.stringify(authMsg));
-
-            setTimeout(() => {
-                this.socket.removeEventListener('message', onMessage);
-                resolve(false);
-            }, 5000);
-        });
     }
 
     connect() {
@@ -372,12 +336,10 @@ class TauriWebSocket {
             try {
                 this.socket = new WebSocket(this.url);
 
-                this.socket.onopen = async () => {
+                this.socket.onopen = () => {
                     this.isConnecting = false;
                     this.isConnected = true;
                     this.startPing();
-                    // Auto-authenticate if we have a tokenKey
-                    await this.autoAuthenticate();
                     resolve(true);
                 };
 
@@ -444,12 +406,10 @@ class TauriWebSocket {
         try {
             this.socket = new WebSocket(this.url);
 
-            this.socket.onopen = async () => {
+            this.socket.onopen = () => {
                 this.isConnecting = false;
                 this.isConnected = true;
                 this.startPing();
-                // Auto-authenticate on reconnect
-                await this.autoAuthenticate();
                 console.log('[TauriWS] ✅ Reconnected');
             };
 
@@ -495,35 +455,7 @@ class TauriWebSocket {
             // Handle server-pushed console-only messages
             if (message.type === 'console-message') {
                 const from = message.from?.phone || message.from?.userId || 'unknown';
-                console.log('[adole.js] RECEIVED console-message!', { from, msgText: message.message });
                 console.log('[Fastify Console Message]', { from, message: message.message, payload: message });
-
-                // Try to parse the message as a command
-                try {
-                    const cmd = JSON.parse(message.message);
-                    if (cmd && cmd.command === 'create-div' && cmd.params) {
-                        const { width, height, backgroundColor } = cmd.params;
-                        console.log('[Fastify Console Message] Creating div:', cmd.params);
-                        // Use Squirrel $ syntax to create the div, attached to #view
-                        if (typeof window.$ === 'function') {
-                            window.$('div', {
-                                id: 'remote_div_' + Date.now(),
-                                parent: '#view',
-                                css: {
-                                    position: 'absolute',
-                                    top: '50px',
-                                    left: '50px',
-                                    width: (width || 100) + 'px',
-                                    height: (height || 100) + 'px',
-                                    backgroundColor: backgroundColor || 'red',
-                                    zIndex: '9999'
-                                }
-                            });
-                        }
-                    }
-                } catch (_) {
-                    // Not a JSON command, just a regular message
-                }
                 return;
             }
 
@@ -659,14 +591,14 @@ let _fastifyWs = null;
 
 function getTauriWs() {
     if (!_tauriWs) {
-        _tauriWs = new TauriWebSocket('ws://127.0.0.1:3000/ws/api', CONFIG.TAURI_TOKEN_KEY);
+        _tauriWs = new TauriWebSocket('ws://127.0.0.1:3000/ws/api');
     }
     return _tauriWs;
 }
 
 function getFastifyWs() {
     if (!_fastifyWs) {
-        _fastifyWs = new TauriWebSocket('ws://127.0.0.1:3001/ws/api', CONFIG.FASTIFY_TOKEN_KEY);
+        _fastifyWs = new TauriWebSocket('ws://127.0.0.1:3001/ws/api');
     }
     return _fastifyWs;
 }
@@ -879,17 +811,6 @@ export const TauriAdapter = createWebSocketAdapter(CONFIG.TAURI_TOKEN_KEY, 'taur
  * Uses createWebSocketAdapter for full ADOLE v3.0 compliance
  */
 export const FastifyAdapter = createWebSocketAdapter(CONFIG.FASTIFY_TOKEN_KEY, 'fastify');
-
-// Eagerly connect the Fastify WebSocket so it can receive incoming messages (like console-message)
-// This runs after a short delay to ensure the page has loaded and tokens are available
-setTimeout(() => {
-    const ws = getFastifyWs();
-    ws.connect().then((connected) => {
-        if (connected) {
-            console.log('[adole.js] Fastify ws/api connected & ready to receive messages');
-        }
-    });
-}, 1000);
 
 export default {
     CONFIG,
