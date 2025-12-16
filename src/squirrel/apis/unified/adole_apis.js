@@ -7,12 +7,24 @@
 import { TauriAdapter, FastifyAdapter, CONFIG } from './adole.js';
 
 // ============================================
-// CURRENT PROJECT STATE
+// CURRENT STATE (Project, User, Machine)
 // ============================================
 
 // Global current project state (accessible everywhere)
 let _currentProjectId = null;
 let _currentProjectName = null;
+
+// Global current user state
+let _currentUserId = null;
+let _currentUserName = null;
+let _currentUserPhone = null;
+
+// Global current machine state
+let _currentMachineId = null;
+let _currentMachinePlatform = null;
+
+// Machine ID key in localStorage
+const MACHINE_ID_KEY = 'squirrel_machine_id';
 
 // Also expose on window for easy access
 if (typeof window !== 'undefined') {
@@ -20,6 +32,276 @@ if (typeof window !== 'undefined') {
         get id() { return _currentProjectId; },
         get name() { return _currentProjectName; }
     };
+    
+    window.__currentUser = {
+        get id() { return _currentUserId; },
+        get name() { return _currentUserName; },
+        get phone() { return _currentUserPhone; }
+    };
+    
+    window.__currentMachine = {
+        get id() { return _currentMachineId; },
+        get platform() { return _currentMachinePlatform; }
+    };
+}
+
+// ============================================
+// MACHINE IDENTIFICATION
+// ============================================
+
+/**
+ * Detect the current platform
+ * @returns {string} Platform identifier
+ */
+function detectPlatform() {
+    if (typeof window === 'undefined') return 'node';
+    
+    const isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    const userAgent = navigator.userAgent || '';
+    
+    if (isTauri) {
+        if (/Mac/.test(userAgent)) return 'tauri_mac';
+        if (/Win/.test(userAgent)) return 'tauri_windows';
+        if (/Linux/.test(userAgent)) return 'tauri_linux';
+        if (/iPhone|iPad/.test(userAgent)) return 'tauri_ios';
+        if (/Android/.test(userAgent)) return 'tauri_android';
+        return 'tauri_unknown';
+    }
+    
+    if (/iPhone|iPad/.test(userAgent)) return 'safari_ios';
+    if (/Android/.test(userAgent)) return 'browser_android';
+    if (/Mac/.test(userAgent)) return 'safari_mac';
+    if (/Win/.test(userAgent)) return 'browser_windows';
+    if (/Linux/.test(userAgent)) return 'browser_linux';
+    
+    return 'browser_unknown';
+}
+
+/**
+ * Get or create a unique machine ID
+ * Stored in localStorage, persists across sessions
+ * @returns {string} Machine ID (UUID format)
+ */
+function getOrCreateMachineId() {
+    if (typeof localStorage === 'undefined') {
+        return 'no_storage_' + Date.now();
+    }
+    
+    let machineId = localStorage.getItem(MACHINE_ID_KEY);
+    
+    if (!machineId) {
+        // Generate new UUID v4
+        machineId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+        localStorage.setItem(MACHINE_ID_KEY, machineId);
+        console.log(`[AdoleAPI] New machine ID generated: ${machineId.substring(0, 8)}...`);
+    }
+    
+    return machineId;
+}
+
+/**
+ * Get current machine info
+ * @returns {{id: string, platform: string}}
+ */
+function get_current_machine() {
+    if (!_currentMachineId) {
+        _currentMachineId = getOrCreateMachineId();
+        _currentMachinePlatform = detectPlatform();
+    }
+    return {
+        id: _currentMachineId,
+        platform: _currentMachinePlatform
+    };
+}
+
+/**
+ * Register or update machine in database
+ * Called at startup and login
+ * @param {string} [userId] - User ID to associate with this machine
+ * @returns {Promise<boolean>} Success status
+ */
+async function register_machine(userId = null) {
+    const machineId = getOrCreateMachineId();
+    const platform = detectPlatform();
+    
+    _currentMachineId = machineId;
+    _currentMachinePlatform = platform;
+    
+    const particleData = {
+        platform: platform,
+        last_seen: new Date().toISOString(),
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
+    };
+    
+    if (userId) {
+        particleData.last_user_id = userId;
+        particleData.last_login = new Date().toISOString();
+    }
+    
+    try {
+        // Try to create machine atome if not exists, or update it
+        // First try to get existing machine
+        const existingResult = await get_atome(machineId);
+        const exists = existingResult?.tauri?.success || existingResult?.fastify?.success;
+        
+        if (exists) {
+            // Update existing machine
+            try { await TauriAdapter.atome.alter(machineId, particleData); } catch (e) { }
+            try { await FastifyAdapter.atome.alter(machineId, particleData); } catch (e) { }
+            console.log(`[AdoleAPI] Machine updated: ${machineId.substring(0, 8)}... (${platform})`);
+        } else {
+            // Create new machine atome
+            try {
+                await TauriAdapter.atome.create({
+                    atomeId: machineId,
+                    atomeType: 'machine',
+                    parentId: null,
+                    data: particleData
+                });
+            } catch (e) {
+                console.warn('[AdoleAPI] Tauri create machine failed:', e.message);
+            }
+            
+            try {
+                await FastifyAdapter.atome.create({
+                    atomeId: machineId,
+                    atomeType: 'machine',
+                    parentId: null,
+                    data: particleData
+                });
+            } catch (e) {
+                console.warn('[AdoleAPI] Fastify create machine failed:', e.message);
+            }
+            console.log(`[AdoleAPI] Machine registered: ${machineId.substring(0, 8)}... (${platform})`);
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('[AdoleAPI] Failed to register machine:', e);
+        return false;
+    }
+}
+
+/**
+ * Get last user who logged in on this machine
+ * @returns {Promise<{userId: string|null, lastLogin: string|null}>}
+ */
+async function get_machine_last_user() {
+    const machineId = getOrCreateMachineId();
+    
+    try {
+        const result = await get_atome(machineId);
+        const particles = result?.tauri?.data?.particles ||
+                         result?.fastify?.data?.particles ||
+                         result?.tauri?.atome?.particles ||
+                         result?.fastify?.atome?.particles ||
+                         {};
+        
+        return {
+            userId: particles.last_user_id || null,
+            lastLogin: particles.last_login || null
+        };
+    } catch (e) {
+        console.warn('[AdoleAPI] Could not get machine last user:', e.message);
+        return { userId: null, lastLogin: null };
+    }
+}
+
+// ============================================
+// CURRENT USER STATE
+// ============================================
+
+/**
+ * Get current user info from memory
+ * @returns {{id: string|null, name: string|null, phone: string|null}}
+ */
+function get_current_user_info() {
+    return {
+        id: _currentUserId,
+        name: _currentUserName,
+        phone: _currentUserPhone
+    };
+}
+
+/**
+ * Set current user in memory and optionally persist machine association
+ * @param {string} userId - User ID
+ * @param {string} [userName] - Username
+ * @param {string} [userPhone] - Phone number
+ * @param {boolean} [persistMachine=true] - Whether to update machine's last_user
+ * @returns {Promise<boolean>}
+ */
+async function set_current_user_state(userId, userName = null, userPhone = null, persistMachine = true) {
+    _currentUserId = userId;
+    _currentUserName = userName;
+    _currentUserPhone = userPhone;
+    
+    console.log(`[AdoleAPI] Current user set: ${userName || 'unnamed'} (${userId ? userId.substring(0, 8) + '...' : 'none'})`);
+    
+    if (persistMachine && userId) {
+        // Update machine with this user
+        await register_machine(userId);
+        
+        // Update user with this machine
+        const machineId = getOrCreateMachineId();
+        const particleData = {
+            current_machine_id: machineId,
+            last_machine_login: new Date().toISOString()
+        };
+        
+        try {
+            await TauriAdapter.atome.alter(userId, particleData);
+        } catch (e) { }
+        
+        try {
+            await FastifyAdapter.atome.alter(userId, particleData);
+        } catch (e) { }
+        
+        console.log(`[AdoleAPI] User-machine association updated`);
+    }
+    
+    return true;
+}
+
+/**
+ * Try to auto-login based on machine's last user
+ * Called at app startup before manual login
+ * @returns {Promise<{success: boolean, userId: string|null, userName: string|null}>}
+ */
+async function try_auto_login() {
+    try {
+        // First check if already logged in via token
+        const currentResult = await current_user();
+        if (currentResult.logged && currentResult.user) {
+            const user = currentResult.user;
+            await set_current_user_state(
+                user.user_id || user.id,
+                user.username,
+                user.phone,
+                true
+            );
+            console.log(`[AdoleAPI] Already logged in: ${user.username}`);
+            return { success: true, userId: user.user_id || user.id, userName: user.username };
+        }
+        
+        // Check machine's last user
+        const machineUser = await get_machine_last_user();
+        if (machineUser.userId) {
+            console.log(`[AdoleAPI] Machine's last user: ${machineUser.userId.substring(0, 8)}... (${machineUser.lastLogin})`);
+            // Note: We don't auto-login here, just return the info
+            // The app can decide whether to auto-login or show login screen
+            return { success: false, userId: machineUser.userId, userName: null, hint: 'last_user_known' };
+        }
+        
+        return { success: false, userId: null, userName: null };
+    } catch (e) {
+        console.warn('[AdoleAPI] Auto-login check failed:', e.message);
+        return { success: false, userId: null, userName: null };
+    }
 }
 
 /**
@@ -232,6 +514,18 @@ async function log_user(phone, password, username, callback) {
         }
     } catch (e) {
         results.fastify = { success: false, data: null, error: e.message };
+    }
+
+    // If login succeeded, update current user state and machine association
+    if (results.tauri.success || results.fastify.success) {
+        const userData = results.tauri.data?.user || results.fastify.data?.user || {};
+        const userId = userData.user_id || userData.id || userData.userId;
+        const userName = userData.username || username;
+        const userPhone = userData.phone || phone;
+        
+        if (userId) {
+            await set_current_user_state(userId, userName, userPhone, true);
+        }
     }
 
     // Call callback if provided
@@ -1870,7 +2164,11 @@ export const AdoleAPI = {
         logout: unlog_user,
         current: current_user,
         delete: delete_user,
-        list: user_list
+        list: user_list,
+        // Current user state management
+        getCurrentInfo: get_current_user_info,
+        setCurrentState: set_current_user_state,
+        tryAutoLogin: try_auto_login
     },
     projects: {
         create: create_project,
@@ -1895,6 +2193,11 @@ export const AdoleAPI = {
     sync: {
         sync: sync_atomes,
         listUnsynced: list_unsynced_atomes
+    },
+    machine: {
+        getCurrent: get_current_machine,
+        register: register_machine,
+        getLastUser: get_machine_last_user
     },
     debug: {
         listTables: list_tables

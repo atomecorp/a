@@ -352,8 +352,126 @@ AdoleAPI.auth.current((result) => {
 
 1. **Dual Backend**: Operations run on both Tauri (local) and Fastify (remote) for redundancy
 2. **User-Scoped Data**: Current project is stored per-user, not globally
-3. **WebSocket Communication**: Uses WebSocket for real-time operations
-4. **Token Management**: Auth tokens stored in localStorage (`local_auth_token`, `cloud_auth_token`)
+3. **Machine Identification**: Each device gets a unique ID stored in localStorage
+4. **User-Machine Association**: Bidirectional relationship for session restoration
+5. **WebSocket Communication**: Uses WebSocket for real-time operations
+6. **Token Management**: Auth tokens stored in localStorage (`local_auth_token`, `cloud_auth_token`)
+
+---
+
+## Machine Identification (`AdoleAPI.machine`)
+
+Each device/browser gets a unique persistent machine ID stored in localStorage.
+
+### `getCurrent()`
+
+Get current machine info (synchronous).
+
+```javascript
+const machine = AdoleAPI.machine.getCurrent();
+// { id: 'abc123-...', platform: 'tauri_mac' }
+```
+
+**Platform values:**
+- `tauri_mac`, `tauri_windows`, `tauri_linux`, `tauri_ios`, `tauri_android`
+- `safari_mac`, `safari_ios`
+- `browser_windows`, `browser_linux`, `browser_android`
+- `browser_unknown`
+
+### `register(userId?)`
+
+Register or update machine in database. Called automatically on login.
+
+```javascript
+await AdoleAPI.machine.register('user-id');
+```
+
+### `getLastUser()`
+
+Get the last user who logged in on this machine.
+
+```javascript
+const result = await AdoleAPI.machine.getLastUser();
+// { userId: 'xxx', lastLogin: '2025-12-16T10:30:00.000Z' }
+```
+
+---
+
+## Global State Access
+
+Three global objects are exposed on `window` for easy access:
+
+```javascript
+// Current project
+window.__currentProject.id      // Project ID
+window.__currentProject.name    // Project name
+
+// Current user
+window.__currentUser.id         // User ID
+window.__currentUser.name       // Username
+window.__currentUser.phone      // Phone number
+
+// Current machine
+window.__currentMachine.id      // Machine ID (persisted in localStorage)
+window.__currentMachine.platform // Platform (tauri_mac, safari_ios, etc.)
+```
+
+---
+
+## Data Model: Machine ↔ User Relationship
+
+```
+Machine (atome)                    User (atome)
+┌────────────────────────┐        ┌────────────────────────┐
+│ atome_type: "machine"  │        │ atome_type: "user"     │
+│ particles: {           │        │ particles: {           │
+│   last_user_id ────────┼───────►│   current_machine_id ──┼───┐
+│   platform             │        │   current_project_id   │   │
+│   last_login           │        │   ...                  │   │
+│   last_seen            │        │ }                      │   │
+│ }                      │◄───────┼────────────────────────┼───┘
+└────────────────────────┘        └────────────────────────┘
+```
+
+- **1 Machine → 1 last_user_id**: The last user who logged in on this machine
+- **1 User → 1 current_machine_id**: The last machine this user logged in from
+- **1 User → N machines**: A user can use multiple machines (tracked via login history)
+- **1 Machine → N users**: Multiple users can use the same machine
+
+---
+
+## Additional Auth Functions
+
+### `getCurrentInfo()`
+
+Get current user info from memory (synchronous).
+
+```javascript
+const user = AdoleAPI.auth.getCurrentInfo();
+// { id: 'xxx', name: 'john', phone: '33333333' }
+```
+
+### `setCurrentState(userId, userName?, userPhone?, persistMachine?)`
+
+Set current user state and optionally update machine association.
+
+```javascript
+await AdoleAPI.auth.setCurrentState('user-id', 'john', '33333333', true);
+```
+
+### `tryAutoLogin()`
+
+Try to auto-login based on machine's last user. Called at app startup.
+
+```javascript
+const result = await AdoleAPI.auth.tryAutoLogin();
+if (result.success) {
+    console.log('Auto-logged in as:', result.userName);
+} else if (result.hint === 'last_user_known') {
+    console.log('Last user on this machine:', result.userId);
+    // Show "Welcome back, tap to login" UI
+}
+```
 
 ---
 
