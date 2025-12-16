@@ -39,14 +39,24 @@ AdoleAPI = {
 
 ## Authentication (`AdoleAPI.auth`)
 
-### `create(phone, password, username, callback?)`
+### `create(phone, password, username, options?, callback?)`
 
 Create a new user account.
 
 ```javascript
+// Create a public account (default - user is visible in user list)
 const result = await AdoleAPI.auth.create('33333333', 'mypassword', 'john');
+
+// Create a private account (hidden from user list)
+const result = await AdoleAPI.auth.create('33333333', 'mypassword', 'john', { visibility: 'private' });
 // result: { tauri: { success, data, error }, fastify: { success, data, error } }
 ```
+
+**Options:**
+
+- `visibility`: `'public'` or `'private'` (default: `'public'`)
+  - **public**: User appears in `AdoleAPI.auth.list()`, others can see phone and username (default)
+  - **private**: User is hidden, must be contacted by phone number directly
 
 ### `login(phone, password, username?, callback?)`
 
@@ -86,11 +96,24 @@ await AdoleAPI.auth.delete();
 
 ### `list(callback?)`
 
-List all users (admin/debug function).
+List all **public** users. Private users are hidden and must be contacted by phone number.
 
 ```javascript
 const result = await AdoleAPI.auth.list();
 // result.tauri.users or result.fastify.users
+// Only returns users with visibility = 'public'
+```
+
+### `setVisibility(visibility, callback?)`
+
+Change the current user's account visibility.
+
+```javascript
+// Make account public (visible in user list)
+await AdoleAPI.auth.setVisibility('public');
+
+// Make account private (hidden from user list)
+await AdoleAPI.auth.setVisibility('private');
 ```
 
 ---

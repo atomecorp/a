@@ -149,10 +149,13 @@ export async function sendSMS(phone, message) {
  * @param {string} username - User's display name
  * @param {string} phone - User's phone number
  * @param {string} passwordHash - Bcrypt hashed password
+ * @param {string} [visibility='public'] - Account visibility: 'public' or 'private'
  * @returns {Promise<Object>} Created user data
  */
-async function createUserAtome(dataSource, userId, username, phone, passwordHash) {
+async function createUserAtome(dataSource, userId, username, phone, passwordHash, visibility = 'public') {
     const now = new Date().toISOString();
+    // Normalize visibility value
+    const normalizedVisibility = (visibility === 'private') ? 'private' : 'public';
 
     // Check if user exists (including soft-deleted)
     const existingRows = await dataSource.query(
@@ -209,7 +212,8 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
     const particles = [
         { key: 'phone', value: JSON.stringify(phone) },
         { key: 'username', value: JSON.stringify(username) },
-        { key: 'password_hash', value: JSON.stringify(passwordHash) }
+        { key: 'password_hash', value: JSON.stringify(passwordHash) },
+        { key: 'visibility', value: JSON.stringify(normalizedVisibility) }
     ];
 
     for (const p of particles) {
@@ -302,18 +306,26 @@ async function findUserById(dataSource, userId) {
 }
 
 /**
- * List all users (query atomes with type='user')
+ * List all PUBLIC users (query atomes with type='user' and visibility='public')
+ * Private users are hidden and must be contacted by phone number directly.
  * @param {Object} dataSource - Database connection
+ * @param {boolean} [includePrivate=false] - If true, include private users (admin only)
  * @returns {Promise<Array>} Array of user objects
  */
-async function listAllUsers(dataSource) {
+async function listAllUsers(dataSource, includePrivate = false) {
+    // Build query with visibility filter
+    const visibilityFilter = includePrivate
+        ? ''
+        : `AND EXISTS (SELECT 1 FROM particles pv WHERE pv.atome_id = a.atome_id AND pv.particle_key = 'visibility' AND pv.particle_value = '"public"')`;
+
     const rows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
-                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username
+                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
+                MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
          FROM atomes a
          LEFT JOIN particles p ON a.atome_id = p.atome_id
-         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
+         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL ${visibilityFilter}
          GROUP BY a.atome_id
          ORDER BY a.created_at DESC`
     );
@@ -322,6 +334,7 @@ async function listAllUsers(dataSource) {
         user_id: user.user_id,
         username: user.username ? JSON.parse(user.username) : null,
         phone: user.phone ? JSON.parse(user.phone) : null,
+        visibility: user.visibility ? JSON.parse(user.visibility) : 'private',
         created_at: user.created_at,
         updated_at: user.updated_at,
         last_sync: user.last_sync,
@@ -553,7 +566,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      * ADOLE v3.0: Users are atomes with atome_type='user', properties in particles
      */
     server.post('/api/auth/register', async (request, reply) => {
-        const { username, phone, password, optional = {} } = request.body || {};
+        const { username, phone, password, visibility = 'private', optional = {} } = request.body || {};
 
         // Validation
         if (!username || typeof username !== 'string' || username.trim().length < 2) {
@@ -589,7 +602,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             const now = new Date().toISOString();
 
             // Create user atome with particles (ADOLE v3.0)
-            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash);
+            // visibility: 'public' = visible in user_list, 'private' = hidden (default)
+            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash, visibility);
 
             console.log(`✅ User registered (ADOLE atome): ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 

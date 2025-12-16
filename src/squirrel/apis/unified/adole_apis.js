@@ -32,13 +32,13 @@ if (typeof window !== 'undefined') {
         get id() { return _currentProjectId; },
         get name() { return _currentProjectName; }
     };
-    
+
     window.__currentUser = {
         get id() { return _currentUserId; },
         get name() { return _currentUserName; },
         get phone() { return _currentUserPhone; }
     };
-    
+
     window.__currentMachine = {
         get id() { return _currentMachineId; },
         get platform() { return _currentMachinePlatform; }
@@ -55,10 +55,10 @@ if (typeof window !== 'undefined') {
  */
 function detectPlatform() {
     if (typeof window === 'undefined') return 'node';
-    
+
     const isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
     const userAgent = navigator.userAgent || '';
-    
+
     if (isTauri) {
         if (/Mac/.test(userAgent)) return 'tauri_mac';
         if (/Win/.test(userAgent)) return 'tauri_windows';
@@ -67,13 +67,13 @@ function detectPlatform() {
         if (/Android/.test(userAgent)) return 'tauri_android';
         return 'tauri_unknown';
     }
-    
+
     if (/iPhone|iPad/.test(userAgent)) return 'safari_ios';
     if (/Android/.test(userAgent)) return 'browser_android';
     if (/Mac/.test(userAgent)) return 'safari_mac';
     if (/Win/.test(userAgent)) return 'browser_windows';
     if (/Linux/.test(userAgent)) return 'browser_linux';
-    
+
     return 'browser_unknown';
 }
 
@@ -86,12 +86,12 @@ function getOrCreateMachineId() {
     if (typeof localStorage === 'undefined') {
         return 'no_storage_' + Date.now();
     }
-    
+
     let machineId = localStorage.getItem(MACHINE_ID_KEY);
-    
+
     if (!machineId) {
         // Generate new UUID v4
-        machineId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        machineId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             const r = Math.random() * 16 | 0;
             const v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
@@ -99,7 +99,7 @@ function getOrCreateMachineId() {
         localStorage.setItem(MACHINE_ID_KEY, machineId);
         console.log(`[AdoleAPI] New machine ID generated: ${machineId.substring(0, 8)}...`);
     }
-    
+
     return machineId;
 }
 
@@ -127,27 +127,27 @@ function get_current_machine() {
 async function register_machine(userId = null) {
     const machineId = getOrCreateMachineId();
     const platform = detectPlatform();
-    
+
     _currentMachineId = machineId;
     _currentMachinePlatform = platform;
-    
+
     const particleData = {
         platform: platform,
         last_seen: new Date().toISOString(),
         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
     };
-    
+
     if (userId) {
         particleData.last_user_id = userId;
         particleData.last_login = new Date().toISOString();
     }
-    
+
     try {
         // Try to create machine atome if not exists, or update it
         // First try to get existing machine
         const existingResult = await get_atome(machineId);
         const exists = existingResult?.tauri?.success || existingResult?.fastify?.success;
-        
+
         if (exists) {
             // Update existing machine
             try { await TauriAdapter.atome.alter(machineId, particleData); } catch (e) { }
@@ -165,7 +165,7 @@ async function register_machine(userId = null) {
             } catch (e) {
                 console.warn('[AdoleAPI] Tauri create machine failed:', e.message);
             }
-            
+
             try {
                 await FastifyAdapter.atome.create({
                     atomeId: machineId,
@@ -178,7 +178,7 @@ async function register_machine(userId = null) {
             }
             console.log(`[AdoleAPI] Machine registered: ${machineId.substring(0, 8)}... (${platform})`);
         }
-        
+
         return true;
     } catch (e) {
         console.error('[AdoleAPI] Failed to register machine:', e);
@@ -192,15 +192,15 @@ async function register_machine(userId = null) {
  */
 async function get_machine_last_user() {
     const machineId = getOrCreateMachineId();
-    
+
     try {
         const result = await get_atome(machineId);
         const particles = result?.tauri?.data?.particles ||
-                         result?.fastify?.data?.particles ||
-                         result?.tauri?.atome?.particles ||
-                         result?.fastify?.atome?.particles ||
-                         {};
-        
+            result?.fastify?.data?.particles ||
+            result?.tauri?.atome?.particles ||
+            result?.fastify?.atome?.particles ||
+            {};
+
         return {
             userId: particles.last_user_id || null,
             lastLogin: particles.last_login || null
@@ -239,31 +239,31 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
     _currentUserId = userId;
     _currentUserName = userName;
     _currentUserPhone = userPhone;
-    
+
     console.log(`[AdoleAPI] Current user set: ${userName || 'unnamed'} (${userId ? userId.substring(0, 8) + '...' : 'none'})`);
-    
+
     if (persistMachine && userId) {
         // Update machine with this user
         await register_machine(userId);
-        
+
         // Update user with this machine
         const machineId = getOrCreateMachineId();
         const particleData = {
             current_machine_id: machineId,
             last_machine_login: new Date().toISOString()
         };
-        
+
         try {
             await TauriAdapter.atome.alter(userId, particleData);
         } catch (e) { }
-        
+
         try {
             await FastifyAdapter.atome.alter(userId, particleData);
         } catch (e) { }
-        
+
         console.log(`[AdoleAPI] User-machine association updated`);
     }
-    
+
     return true;
 }
 
@@ -287,7 +287,7 @@ async function try_auto_login() {
             console.log(`[AdoleAPI] Already logged in: ${user.username}`);
             return { success: true, userId: user.user_id || user.id, userName: user.username };
         }
-        
+
         // Check machine's last user
         const machineUser = await get_machine_last_user();
         if (machineUser.userId) {
@@ -296,7 +296,7 @@ async function try_auto_login() {
             // The app can decide whether to auto-login or show login screen
             return { success: false, userId: machineUser.userId, userName: null, hint: 'last_user_known' };
         }
-        
+
         return { success: false, userId: null, userName: null };
     } catch (e) {
         console.warn('[AdoleAPI] Auto-login check failed:', e.message);
@@ -423,10 +423,22 @@ async function load_saved_current_project() {
  * @param {string} phone - Phone number
  * @param {string} password - Password
  * @param {string} username - Username
+ * @param {Object} [options] - Additional options
+ * @param {string} [options.visibility='private'] - Account visibility: 'public' or 'private'
+ *        - 'public': User appears in user_list, others can see phone and username
+ *        - 'private': User is hidden, must be contacted by phone number directly
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
-async function create_user(phone, password, username, callback) {
+async function create_user(phone, password, username, options = {}, callback) {
+    // Handle legacy signature where 4th param is callback
+    if (typeof options === 'function') {
+        callback = options;
+        options = {};
+    }
+
+    const visibility = options.visibility || 'public';
+
     const results = {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
@@ -437,7 +449,8 @@ async function create_user(phone, password, username, callback) {
         const tauriResult = await TauriAdapter.auth.register({
             phone,
             password,
-            username
+            username,
+            visibility
         });
         if (tauriResult.ok || tauriResult.success) {
             results.tauri = { success: true, data: tauriResult, error: null };
@@ -453,7 +466,8 @@ async function create_user(phone, password, username, callback) {
         const fastifyResult = await FastifyAdapter.auth.register({
             phone,
             password,
-            username
+            username,
+            visibility
         });
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
@@ -469,6 +483,68 @@ async function create_user(phone, password, username, callback) {
         callback(results);
     }
 
+    return results;
+}
+
+/**
+ * Change user account visibility
+ * @param {string} visibility - New visibility: 'public' or 'private'
+ *        - 'public': User appears in user_list, others can see phone and username
+ *        - 'private': User is hidden, must be contacted by phone number directly
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
+ */
+async function set_user_visibility(visibility, callback) {
+    const normalizedVisibility = (visibility === 'public') ? 'public' : 'private';
+    const userId = _currentUserId;
+
+    if (!userId) {
+        const error = { success: false, error: 'No user logged in' };
+        if (typeof callback === 'function') callback(error);
+        return { tauri: error, fastify: error };
+    }
+
+    const results = {
+        tauri: { success: false, error: null },
+        fastify: { success: false, error: null }
+    };
+
+    // Update visibility particle on user atome
+    // Try Tauri
+    try {
+        const tauriResult = await TauriAdapter.atome.alter({
+            atomeId: userId,
+            particles: { visibility: normalizedVisibility }
+        });
+        if (tauriResult.ok || tauriResult.success) {
+            results.tauri = { success: true, error: null };
+        } else {
+            results.tauri = { success: false, error: tauriResult.error };
+        }
+    } catch (e) {
+        results.tauri = { success: false, error: e.message };
+    }
+
+    // Try Fastify
+    try {
+        const fastifyResult = await FastifyAdapter.atome.alter({
+            atomeId: userId,
+            particles: { visibility: normalizedVisibility }
+        });
+        if (fastifyResult.ok || fastifyResult.success) {
+            results.fastify = { success: true, error: null };
+        } else {
+            results.fastify = { success: false, error: fastifyResult.error };
+        }
+    } catch (e) {
+        results.fastify = { success: false, error: e.message };
+    }
+
+    if (results.tauri.success || results.fastify.success) {
+        console.log(`[AdoleAPI] User visibility changed to: ${normalizedVisibility}`);
+    }
+
+    if (typeof callback === 'function') callback(results);
     return results;
 }
 
@@ -522,7 +598,7 @@ async function log_user(phone, password, username, callback) {
         const userId = userData.user_id || userData.id || userData.userId;
         const userName = userData.username || username;
         const userPhone = userData.phone || phone;
-        
+
         if (userId) {
             await set_current_user_state(userId, userName, userPhone, true);
         }
@@ -2168,7 +2244,9 @@ export const AdoleAPI = {
         // Current user state management
         getCurrentInfo: get_current_user_info,
         setCurrentState: set_current_user_state,
-        tryAutoLogin: try_auto_login
+        tryAutoLogin: try_auto_login,
+        // Visibility management
+        setVisibility: set_user_visibility
     },
     projects: {
         create: create_project,

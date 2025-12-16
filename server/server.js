@@ -1087,7 +1087,7 @@ async function startServer() {
 
             try {
               if (action === 'register' || action === 'create-user') {
-                const { username, phone, password } = data;
+                const { username, phone, password, visibility } = data;
                 if (!username || !phone || !password) {
                   safeSend({
                     type: 'auth-response',
@@ -1111,9 +1111,10 @@ async function startServer() {
                 }
 
                 // Hash password and create user
+                // visibility: 'public' = visible in user_list (default), 'private' = hidden
                 const passwordHash = await hashPassword(password);
                 const userId = generateDeterministicUserId(phone);
-                await createUserAtome(dataSource, userId, username, phone, passwordHash);
+                await createUserAtome(dataSource, userId, username, phone, passwordHash, visibility || 'public');
 
                 safeSend({
                   type: 'auth-response',

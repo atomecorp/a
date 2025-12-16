@@ -628,7 +628,8 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     action: 'register',
                     username: data.username,
                     phone: data.phone,
-                    password: data.password
+                    password: data.password,
+                    visibility: data.visibility || 'public' // 'public' (default) or 'private'
                 });
                 if (result.token) setToken(tokenKey, result.token);
                 return result;
