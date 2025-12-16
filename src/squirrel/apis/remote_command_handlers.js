@@ -31,6 +31,8 @@ import { RemoteCommands } from './remote_commands.js';
  *   - html: string (optional)
  */
 function handleCreateElement(params, sender) {
+    console.log('[BuiltinHandlers] create-element called with:', params);
+
     if (typeof window.$ !== 'function') {
         console.error('[BuiltinHandlers] Squirrel $ not available');
         return;
@@ -39,32 +41,36 @@ function handleCreateElement(params, sender) {
     const {
         tag = 'div',
         id = `remote_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        parent = '#view',
+        parent,
         css = {},
         text,
         html
     } = params;
 
-    // Validate parent exists
-    const parentEl = document.querySelector(parent);
-    if (!parentEl) {
-        console.error(`[BuiltinHandlers] Parent "${parent}" not found`);
-        return;
-    }
-
+    // Build config - don't set parent if not specified, let Squirrel use its default (#view)
     const config = {
         id,
-        parent,
         css: {
             position: 'absolute',
+            zIndex: '9999',
+            pointerEvents: 'auto',
             ...css
         }
     };
 
+    // Only set parent if explicitly provided
+    if (parent) {
+        config.parent = parent;
+    }
+
     if (text !== undefined) config.text = text;
     if (html !== undefined) config.html = html;
 
+    console.log('[BuiltinHandlers] Creating element with config:', config);
+
     const element = window.$(tag, config);
+
+    console.log('[BuiltinHandlers] Element created:', element, 'parent:', element?.parentElement?.id);
 
     console.log(`[BuiltinHandlers] Created element #${id} from ${sender.username || sender.userId}`);
 
