@@ -10,6 +10,32 @@ import { AdoleAPI } from '../../squirrel/apis/unified/adole_apis.js';
 import { RemoteCommands } from '/squirrel/apis/remote_commands.js';
 
 // ============================================
+// HELPER: Get current logged user
+// ============================================
+async function getCurrentUser() {
+    try {
+        if (!window.AdoleAPI?.auth?.current) {
+            return null;
+        }
+        const result = await window.AdoleAPI.auth.current();
+        if (result.logged && result.user) {
+            // Normalize user object to have consistent id property
+            return {
+                id: result.user.user_id || result.user.atome_id || result.user.id,
+                user_id: result.user.user_id,
+                username: result.user.username,
+                phone: result.user.phone,
+                ...result.user
+            };
+        }
+        return null;
+    } catch (e) {
+        console.error('[MessagingAPI] Error getting current user:', e);
+        return null;
+    }
+}
+
+// ============================================
 // CONSTANTS
 // ============================================
 
@@ -40,7 +66,7 @@ const ContactsAPI = {
      * @returns {Promise<{success: boolean, contactId?: string, error?: string}>}
      */
     async add(targetPhone, targetName = null) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -99,7 +125,7 @@ const ContactsAPI = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async remove(targetPhone) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -121,7 +147,7 @@ const ContactsAPI = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async block(targetPhone) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -163,7 +189,7 @@ const ContactsAPI = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async unblock(targetPhone) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -193,7 +219,7 @@ const ContactsAPI = {
      * @returns {Promise<{success: boolean, contacts?: Array, error?: string}>}
      */
     async list(options = {}) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -227,7 +253,7 @@ const ContactsAPI = {
      * @returns {Promise<{isContact: boolean, status?: string}>}
      */
     async isContact(targetPhone) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { isContact: false };
         }
@@ -267,7 +293,7 @@ const MessagesAPI = {
      * @returns {Promise<{success: boolean, messageId?: string, isRequest?: boolean, error?: string}>}
      */
     async send(toPhone, content, options = {}) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -290,10 +316,37 @@ const MessagesAPI = {
         let toUserId = null;
         try {
             const users = await AdoleAPI.auth.list();
-            const allUsers = users.tauri?.users || users.fastify?.users || [];
-            const targetUser = allUsers.find(u => u.phone === toPhone);
+            console.log('[Messaging] Users list result:', users);
+
+            // Get users from tauri or fastify - they are atomes with data.particles
+            const tauriUsers = users.tauri?.users || [];
+            const fastifyUsers = users.fastify?.users || [];
+            const allUsers = [...tauriUsers, ...fastifyUsers];
+
+            // Log the structure of first user to understand the format
+            if (allUsers.length > 0) {
+                console.log('[Messaging] Sample user structure:', JSON.stringify(allUsers[0], null, 2));
+            }
+
+            // Extract user info from atome structure
+            // User atomes have: atome_id (=user_id), data.particles.phone, data.particles.username
+            const normalizedUsers = allUsers.map(u => {
+                const particles = u.data?.particles || u.particles || u.data || {};
+                return {
+                    user_id: u.atome_id || u.user_id || u.id,
+                    phone: particles.phone || u.phone,
+                    username: particles.username || u.username
+                };
+            });
+
+            console.log('[Messaging] Normalized users:', normalizedUsers.map(u => ({ phone: u.phone, user_id: u.user_id })));
+
+            const targetUser = normalizedUsers.find(u => u.phone === toPhone);
             if (targetUser) {
                 toUserId = targetUser.user_id;
+                console.log(`[Messaging] Found recipient: ${toPhone} -> ${toUserId}`);
+            } else {
+                console.log(`[Messaging] Recipient not found for phone: ${toPhone}`);
             }
         } catch (e) {
             console.warn('[Messaging] Could not look up recipient:', e.message);
@@ -361,20 +414,25 @@ const MessagesAPI = {
         console.log(`[Messaging] Message stored: ${messageId}`);
 
         // Send real-time notification if recipient is online
-        // Use RemoteCommands to notify
-        try {
-            await RemoteCommands.sendCommand(toPhone, 'new-message', {
-                messageId: recipientMessageId,
-                from: currentUser.phone,
-                fromName: currentUser.name,
-                preview: content.substring(0, 100),
-                subject: options.subject,
-                sentAt: now
-            });
-            console.log(`[Messaging] Real-time notification sent to ${toPhone}`);
-        } catch (e) {
-            // Notification failed, but message is stored - that's OK
-            console.log(`[Messaging] Could not send real-time notification (user may be offline)`);
+        // Use RemoteCommands to notify - MUST use user ID, not phone
+        if (toUserId) {
+            try {
+                await RemoteCommands.sendCommand(toUserId, 'new-message', {
+                    messageId: recipientMessageId,
+                    from: currentUser.phone,
+                    fromId: currentUser.id,
+                    fromName: currentUser.username || currentUser.name,
+                    preview: content.substring(0, 100),
+                    subject: options.subject,
+                    sentAt: now
+                });
+                console.log(`[Messaging] Real-time notification sent to ${toUserId} (phone: ${toPhone})`);
+            } catch (e) {
+                // Notification failed, but message is stored - that's OK
+                console.log(`[Messaging] Could not send real-time notification: ${e.message}`);
+            }
+        } else {
+            console.log(`[Messaging] Could not send real-time notification: recipient user ID not found for phone ${toPhone}`);
         }
 
         return {
@@ -574,7 +632,7 @@ const MessagesAPI = {
      * @returns {Promise<{success: boolean, messages?: Array, error?: string}>}
      */
     async list(options = {}) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -721,7 +779,7 @@ const RequestsAPI = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async accept(messageId) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -775,7 +833,7 @@ const RequestsAPI = {
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async reject(messageId, block = false) {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -855,7 +913,7 @@ const InboxAPI = {
      * @returns {Promise<{success: boolean, summary?: Object, error?: string}>}
      */
     async getSummary() {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -948,7 +1006,7 @@ const InboxAPI = {
      * @returns {Promise<{success: boolean, unreadCount?: number, requestCount?: number, error?: string}>}
      */
     async syncOnLogin() {
-        const currentUser = window.__currentUser;
+        const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
             return { success: false, error: 'No user logged in' };
         }
@@ -981,7 +1039,13 @@ const InboxAPI = {
 function registerMessageHandlers() {
     // Handler for new incoming message notification
     RemoteCommands.register('new-message', async (data) => {
-        console.log(`[Messaging] New message from ${data.fromName || data.from}`);
+        console.log(`[Messaging] New message from ${data.fromName || data.from}`, data);
+
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.id) {
+            console.log('[Messaging] Cannot process message: no user logged in');
+            return { success: false, reason: 'no_user' };
+        }
 
         // Check if sender is in contacts
         const contactCheck = await ContactsAPI.isContact(data.from);
@@ -991,27 +1055,50 @@ function registerMessageHandlers() {
             return { success: false, reason: 'blocked' };
         }
 
-        // If not a contact, mark as request
-        if (!contactCheck.isContact) {
-            console.log(`[Messaging] Connection request from ${data.from}`);
-            await AdoleAPI.atomes.alter({
-                atomeId: data.messageId,
-                particles: {
-                    state: MESSAGE_STATES.REQUEST,
-                    is_request: true
-                }
-            });
-        }
+        // Create the message locally in recipient's database
+        const isRequest = !contactCheck.isContact;
+        const messageState = isRequest ? MESSAGE_STATES.REQUEST : MESSAGE_STATES.UNREAD;
 
-        // Mark as displayed
-        await MessagesAPI.markAsDisplayed(data.messageId);
+        console.log(`[Messaging] Creating message locally: ${data.messageId}`);
+
+        const createResult = await AdoleAPI.atomes.create({
+            id: data.messageId,
+            type: 'message',
+            ownerId: currentUser.id,
+            particles: {
+                from_user_id: data.fromId,
+                from_phone: data.from,
+                from_name: data.fromName,
+                to_user_id: currentUser.id,
+                to_phone: currentUser.phone,
+                content: data.preview, // Full content should be passed
+                subject: data.subject || null,
+                state: messageState,
+                is_request: isRequest,
+                inbox_type: 'received',
+                sent_at: data.sentAt,
+                displayed_at: new Date().toISOString(),
+                read_at: null,
+                archived_at: null,
+                deleted_at: null,
+                tags: [],
+                priority: 3,
+                flags: []
+            }
+        });
+
+        if (createResult.tauri?.success || createResult.fastify?.success) {
+            console.log(`[Messaging] Message stored locally: ${data.messageId}`);
+        } else {
+            console.error('[Messaging] Failed to store message locally:', createResult);
+        }
 
         // Emit event for UI to handle
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('adole-new-message', {
                 detail: {
                     ...data,
-                    isRequest: !contactCheck.isContact
+                    isRequest
                 }
             }));
         }
@@ -1061,7 +1148,7 @@ function registerMessageHandlers() {
  * @param {boolean} [isTyping=true] - Whether user is typing
  */
 async function sendTypingIndicator(toPhone, isTyping = true) {
-    const currentUser = window.__currentUser;
+    const currentUser = await getCurrentUser();
     if (!currentUser?.id) return;
 
     try {
@@ -1093,5 +1180,25 @@ export const MessagingAPI = {
     MESSAGE_STATES,
     CONTACT_STATUS
 };
+
+// Auto-register handlers when module loads
+// Wait for RemoteCommands to be ready
+setTimeout(() => {
+    if (typeof RemoteCommands !== 'undefined' && RemoteCommands.isActive?.()) {
+        registerMessageHandlers();
+        console.log('[MessagingAPI] Handlers registered automatically');
+    } else {
+        // Retry after connection is established
+        const checkInterval = setInterval(() => {
+            if (typeof RemoteCommands !== 'undefined' && RemoteCommands.isActive?.()) {
+                registerMessageHandlers();
+                console.log('[MessagingAPI] Handlers registered after connection');
+                clearInterval(checkInterval);
+            }
+        }, 1000);
+        // Stop trying after 30 seconds
+        setTimeout(() => clearInterval(checkInterval), 30000);
+    }
+}, 500);
 
 export default MessagingAPI;

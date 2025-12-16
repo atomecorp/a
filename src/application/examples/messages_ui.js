@@ -202,7 +202,7 @@ function createSendTab(container) {
     $('div', { parent: padding, text: 'To (phone):', css: { color: '#aaa', fontSize: '12px' } });
     const toInput = $('input', {
         parent: padding,
-        attrs: { type: 'text', placeholder: '0612345678' },
+        attrs: { type: 'text', placeholder: '0612345678', value: '33333333' },
         css: {
             height: '36px',
             padding: '0 12px',
@@ -211,7 +211,8 @@ function createSendTab(container) {
             backgroundColor: '#2a2a4e',
             color: '#fff',
             fontSize: '14px',
-            outline: 'none'
+            outline: 'none',
+            pointerEvents: 'auto'
         }
     });
 
@@ -219,7 +220,7 @@ function createSendTab(container) {
     $('div', { parent: padding, text: 'Subject (optional):', css: { color: '#aaa', fontSize: '12px' } });
     const subjectInput = $('input', {
         parent: padding,
-        attrs: { type: 'text', placeholder: 'Subject...' },
+        attrs: { type: 'text', placeholder: 'Subject...', value: 'great news' },
         css: {
             height: '36px',
             padding: '0 12px',
@@ -228,7 +229,8 @@ function createSendTab(container) {
             backgroundColor: '#2a2a4e',
             color: '#fff',
             fontSize: '14px',
-            outline: 'none'
+            outline: 'none',
+            pointerEvents: 'auto'
         }
     });
 
@@ -237,6 +239,7 @@ function createSendTab(container) {
     const messageInput = $('textarea', {
         parent: padding,
         attrs: { placeholder: 'Type your message here...' },
+        text: 'super you have a wonderfull message!',
         css: {
             flex: '1',
             padding: '12px',
@@ -247,46 +250,63 @@ function createSendTab(container) {
             fontSize: '14px',
             resize: 'none',
             outline: 'none',
-            minHeight: '100px'
+            minHeight: '100px',
+            pointerEvents: 'auto'
         }
     });
 
-    // Send button
-    Button({
-        parent: padding,
-        onText: '📤 Send Message',
-        offText: '📤 Send Message',
-        onAction: async () => {
-            const to = toInput.value.trim();
-            const subject = subjectInput.value.trim();
-            const content = messageInput.value.trim();
+    // Send button - use vanilla JS for reliable click handling
+    const sendBtn = document.createElement('button');
+    sendBtn.textContent = '📤 Send Message';
+    sendBtn.style.cssText = `
+        height: 44px;
+        background-color: #4a7fff;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+        pointer-events: auto;
+    `;
 
-            if (!to || !content) {
-                debugLog('Phone and message are required', 'error');
-                return;
-            }
+    // Get actual DOM element from Squirrel proxy
+    const paddingEl = padding.element || padding;
+    paddingEl.appendChild(sendBtn);
 
-            debugLog(`Sending to ${to}...`);
+    sendBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[MessagingUI] Send button clicked!');
+
+        const to = toInput.value?.trim() || toInput.element?.value?.trim();
+        const subject = subjectInput.value?.trim() || subjectInput.element?.value?.trim();
+        const content = messageInput.value?.trim() || messageInput.element?.value?.trim();
+
+        console.log('[MessagingUI] Values:', { to, subject, content });
+
+        if (!to || !content) {
+            debugLog('Phone and message are required', 'error');
+            return;
+        }
+
+        debugLog(`Sending to ${to}...`);
+        try {
             const result = await MessagingAPI.messages.send(to, content, { subject: subject || undefined });
+            console.log('[MessagingUI] Send result:', result);
 
             if (result.success) {
                 debugLog(`Message sent! ID: ${result.messageId}`, 'success');
-                messageInput.value = '';
-                subjectInput.value = '';
+                if (messageInput.element) messageInput.element.value = '';
+                else messageInput.value = '';
+                if (subjectInput.element) subjectInput.element.value = '';
+                else subjectInput.value = '';
             } else {
                 debugLog(`Send failed: ${result.error}`, 'error');
             }
-        },
-        offAction: () => { },
-        css: {
-            height: '44px',
-            backgroundColor: '#4a7fff',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold'
+        } catch (e) {
+            debugLog(`Send error: ${e.message}`, 'error');
+            console.error('[MessagingUI] Send error:', e);
         }
     });
 
@@ -300,7 +320,7 @@ function createSendTab(container) {
     // Update user info using AdoleAPI - poll until user is found
     let checkAttempts = 0;
     const maxAttempts = 30; // 30 attempts = ~30 seconds max wait
-    
+
     const checkUserInterval = setInterval(async () => {
         checkAttempts++;
         try {
@@ -395,12 +415,17 @@ function createInboxTab(container) {
  * Refresh inbox
  */
 async function refreshInbox() {
-    if (!messagesList) return;
+    if (!messagesList) {
+        console.log('[MessagingUI] refreshInbox: messagesList not ready');
+        return;
+    }
 
     debugLog('Refreshing inbox...');
+    console.log('[MessagingUI] Refreshing inbox...');
 
     // Get summary
     const summaryResult = await MessagingAPI.inbox.getSummary();
+    console.log('[MessagingUI] Inbox summary:', summaryResult);
     const summaryEl = document.getElementById('inbox-summary');
     if (summaryResult.success && summaryEl) {
         const s = summaryResult.summary;
@@ -412,6 +437,7 @@ async function refreshInbox() {
 
     // Get messages
     const result = await MessagingAPI.messages.list({ inboxType: 'received', limit: 20 });
+    console.log('[MessagingUI] Messages list result:', result);
 
     if (!result.success) {
         debugLog(`Failed to load inbox: ${result.error}`, 'error');
