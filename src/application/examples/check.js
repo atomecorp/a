@@ -1538,7 +1538,7 @@ $('span', {
   },
 });
 
-// Target User ID Input
+// Target User ID or Phone Input
 $('input', {
   id: 'remote_target_input',
   parent: intuitionContainer,
@@ -1547,12 +1547,12 @@ $('input', {
     margin: '10px',
     border: '1px solid #666',
     borderRadius: '4px',
-    width: '280px',
+    width: '200px',
     fontSize: '12px'
   },
   attr: {
     type: 'text',
-    placeholder: 'Target User ID (e.g., d4fcf7e4-...)'
+    placeholder: 'Phone or User ID'
   }
 });
 

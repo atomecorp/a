@@ -494,17 +494,20 @@ function getCurrentUserId() {
 
 /**
  * Send a command to another user
- * @param {string} targetUserId - Target user ID
+ * @param {string} target - Target user ID or phone number
  * @param {string} commandName - Command name
  * @param {object} params - Command parameters
  */
-async function sendCommand(targetUserId, commandName, params = {}) {
+async function sendCommand(target, commandName, params = {}) {
     if (!isAuthenticated || !socket || socket.readyState !== WebSocket.OPEN) {
         log('Cannot send command: not connected');
         return { success: false, error: 'not_connected' };
     }
 
     const requestId = `rc_cmd_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+    // Detect if target is a phone number (digits only) or user ID (contains letters/dashes)
+    const isPhone = /^\d+$/.test(target);
 
     return new Promise((resolve) => {
         let resolved = false;
@@ -528,15 +531,23 @@ async function sendCommand(targetUserId, commandName, params = {}) {
 
         socket.addEventListener('message', onMessage);
 
-        socket.send(JSON.stringify({
+        const payload = {
             type: 'direct-message',
             requestId,
-            toUserId: targetUserId,
             message: JSON.stringify({
                 command: commandName,
                 params
             })
-        }));
+        };
+
+        // Use toPhone or toUserId based on target format
+        if (isPhone) {
+            payload.toPhone = target;
+        } else {
+            payload.toUserId = target;
+        }
+
+        socket.send(JSON.stringify(payload));
 
         // Timeout
         setTimeout(() => {
