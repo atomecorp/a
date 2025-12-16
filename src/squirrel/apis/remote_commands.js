@@ -27,7 +27,7 @@
  */
 
 const CONFIG = {
-    WS_URL: 'ws://127.0.0.1:3001/ws/api',
+    WS_URL: null, // Will be loaded from server_config.json
     RECONNECT_DELAY: 5000,
     AUTH_TIMEOUT: 8000,
     DEBUG: true
@@ -46,6 +46,48 @@ let isAuthenticated = false;
 let currentUserId = null;
 let reconnectTimer = null;
 let pingTimer = null;
+let configLoaded = false;
+
+/**
+ * Load WebSocket URL from server_config.json
+ * Single source of truth for server configuration
+ */
+async function loadConfigOnce() {
+    if (configLoaded && CONFIG.WS_URL) return CONFIG.WS_URL;
+
+    try {
+        const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+        const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3001;
+        const localBase = isTauriRuntime ? `http://127.0.0.1:${localPort}` : '';
+        const configUrl = isTauriRuntime ? `${localBase}/server_config.json` : 'server_config.json';
+
+        const response = await fetch(configUrl, { cache: 'no-store' });
+        if (!response || !response.ok) {
+            log('Cannot load server_config.json, using fallback');
+            CONFIG.WS_URL = `ws://127.0.0.1:${localPort}/ws/api`;
+            configLoaded = true;
+            return CONFIG.WS_URL;
+        }
+
+        const config = await response.json();
+        const host = config?.fastify?.host || '127.0.0.1';
+        const port = config?.fastify?.port || localPort;
+        const apiWsPath = config?.fastify?.apiWsPath || '/ws/api';
+
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        CONFIG.WS_URL = `${protocol}://${host}:${port}${apiWsPath}`;
+        configLoaded = true;
+
+        log('Loaded config from server_config.json:', CONFIG.WS_URL);
+        return CONFIG.WS_URL;
+    } catch (error) {
+        log('Failed to load server_config.json:', error.message);
+        const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3001;
+        CONFIG.WS_URL = `ws://127.0.0.1:${localPort}/ws/api`;
+        configLoaded = true;
+        return CONFIG.WS_URL;
+    }
+}
 
 /**
  * Debug log helper
@@ -334,6 +376,9 @@ async function connect() {
         log('Cannot connect: no auth token');
         return false;
     }
+
+    // Load config from server_config.json before connecting
+    await loadConfigOnce();
 
     return new Promise((resolve) => {
         try {
