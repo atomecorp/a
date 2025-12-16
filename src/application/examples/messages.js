@@ -655,10 +655,10 @@ const MessagesAPI = {
         // Prefer Tauri (local) over Fastify (server) as local is more up-to-date
         const tauriMessages = result.tauri?.atomes || [];
         const fastifyMessages = result.fastify?.atomes || [];
-        
+
         // Create a map to deduplicate by atome_id
         const messageMap = new Map();
-        
+
         // Add Tauri messages first (they take priority)
         for (const msg of tauriMessages) {
             const id = msg.atome_id || msg.id;
@@ -666,7 +666,7 @@ const MessagesAPI = {
                 messageMap.set(id, msg);
             }
         }
-        
+
         // Add Fastify messages only if not already present
         for (const msg of fastifyMessages) {
             const id = msg.atome_id || msg.id;
@@ -674,7 +674,7 @@ const MessagesAPI = {
                 messageMap.set(id, msg);
             }
         }
-        
+
         let messages = Array.from(messageMap.values());
 
         console.log('[MessagesAPI.list] Tauri:', tauriMessages.length, 'Fastify:', fastifyMessages.length, 'Deduplicated:', messages.length);
