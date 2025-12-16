@@ -58,6 +58,9 @@
 // import('./examples/apis.js');
 import('./examples/check.js');
 import('./examples/messages.js');
+import('./examples/messages_ui.js');
+
+
 
 // import('./lyrix/index.js');
 // import('./examples/input_file.js');
