@@ -6,7 +6,8 @@
 // ============================================
 
 import { AdoleAPI } from '../../squirrel/apis/unified/adole_apis.js';
-import RemoteCommands from '../../squirrel/apis/remote_commands.js';
+// Use absolute path to ensure same module instance as check.js
+import { RemoteCommands } from '/squirrel/apis/remote_commands.js';
 
 // ============================================
 // CONSTANTS
@@ -979,7 +980,7 @@ const InboxAPI = {
  */
 function registerMessageHandlers() {
     // Handler for new incoming message notification
-    RemoteCommands.registerHandler('new-message', async (data) => {
+    RemoteCommands.register('new-message', async (data) => {
         console.log(`[Messaging] New message from ${data.fromName || data.from}`);
 
         // Check if sender is in contacts
@@ -1019,7 +1020,7 @@ function registerMessageHandlers() {
     });
 
     // Handler for read receipt
-    RemoteCommands.registerHandler('message-read', (data) => {
+    RemoteCommands.register('message-read', (data) => {
         console.log(`[Messaging] Message ${data.messageId} read at ${data.readAt}`);
 
         if (typeof window !== 'undefined') {
@@ -1030,7 +1031,7 @@ function registerMessageHandlers() {
     });
 
     // Handler for connection request accepted
-    RemoteCommands.registerHandler('request-accepted', async (data) => {
+    RemoteCommands.register('request-accepted', async (data) => {
         console.log(`[Messaging] Connection request accepted by ${data.byName || data.by}`);
 
         // Add them to our contacts too
@@ -1044,7 +1045,7 @@ function registerMessageHandlers() {
     });
 
     // Handler for typing indicator
-    RemoteCommands.registerHandler('typing', (data) => {
+    RemoteCommands.register('typing', (data) => {
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('adole-typing', { detail: data }));
         }
