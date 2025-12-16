@@ -432,7 +432,8 @@ async fn handle_get(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    let atome_id = match message.get("atome_id").and_then(|v| v.as_str()) {
+    // Support both camelCase (atomeId) and snake_case (atome_id)
+    let atome_id = match message.get("atomeId").or_else(|| message.get("atome_id")).and_then(|v| v.as_str()) {
         Some(id) => id,
         None => return error_response(request_id, "Missing atome_id"),
     };

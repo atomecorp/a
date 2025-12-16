@@ -651,13 +651,33 @@ const MessagesAPI = {
 
         console.log('[MessagesAPI.list] Raw result:', result);
 
-        // Combine messages from both sources
-        let messages = [];
+        // Combine messages from both sources, deduplicating by ID
+        // Prefer Tauri (local) over Fastify (server) as local is more up-to-date
         const tauriMessages = result.tauri?.atomes || [];
         const fastifyMessages = result.fastify?.atomes || [];
-        messages = [...tauriMessages, ...fastifyMessages];
+        
+        // Create a map to deduplicate by atome_id
+        const messageMap = new Map();
+        
+        // Add Tauri messages first (they take priority)
+        for (const msg of tauriMessages) {
+            const id = msg.atome_id || msg.id;
+            if (id) {
+                messageMap.set(id, msg);
+            }
+        }
+        
+        // Add Fastify messages only if not already present
+        for (const msg of fastifyMessages) {
+            const id = msg.atome_id || msg.id;
+            if (id && !messageMap.has(id)) {
+                messageMap.set(id, msg);
+            }
+        }
+        
+        let messages = Array.from(messageMap.values());
 
-        console.log('[MessagesAPI.list] Tauri:', tauriMessages.length, 'Fastify:', fastifyMessages.length, 'Total:', messages.length);
+        console.log('[MessagesAPI.list] Tauri:', tauriMessages.length, 'Fastify:', fastifyMessages.length, 'Deduplicated:', messages.length);
 
         // Log first message structure for debugging
         if (messages.length > 0) {
@@ -1088,11 +1108,21 @@ const InboxAPI = {
 // REAL-TIME HANDLERS
 // ============================================
 
+// Guard to prevent multiple handler registrations
+let handlersRegistered = false;
+
 /**
  * Register handlers for incoming real-time messages
  * Call this at app startup
  */
 function registerMessageHandlers() {
+    // Prevent registering handlers multiple times
+    if (handlersRegistered) {
+        console.log('[Messaging] Handlers already registered, skipping');
+        return;
+    }
+    handlersRegistered = true;
+
     // Handler for new incoming message notification
     RemoteCommands.register('new-message', async (data) => {
         console.log(`[Messaging] New message notification from ${data.fromName || data.from}`, data);

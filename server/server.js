@@ -1406,10 +1406,12 @@ async function startServer() {
                 const atomeId = data.atomeId || data.id;
                 const atome = await db.getAtome(atomeId);
 
+                // Return success: false if atome not found
                 safeSend({
                   type: 'atome-response',
                   requestId,
-                  success: true,
+                  success: !!atome,
+                  ok: !!atome,
                   atome
                 });
               } else if (action === 'update') {

@@ -390,6 +390,7 @@ function createInboxTab(container) {
         offText: '🔄 Refresh',
         onAction: refreshInbox,
         offAction: refreshInbox,
+        forceText: true,
         css: {
             height: '28px',
             padding: '0 12px',
@@ -527,6 +528,7 @@ async function refreshInbox() {
                 parent: actions,
                 onText: '✓ Accept',
                 offText: '✓ Accept',
+                forceText: true,
                 onAction: async () => {
                     const r = await MessagingAPI.requests.accept(msg.atome_id || msg.id);
                     debugLog(r.success ? 'Request accepted' : `Accept failed: ${r.error}`, r.success ? 'success' : 'error');
@@ -540,6 +542,7 @@ async function refreshInbox() {
                 parent: actions,
                 onText: '✕ Reject',
                 offText: '✕ Reject',
+                forceText: true,
                 onAction: async () => {
                     const r = await MessagingAPI.requests.reject(msg.atome_id || msg.id);
                     debugLog(r.success ? 'Request rejected' : `Reject failed: ${r.error}`, r.success ? 'success' : 'error');
@@ -553,6 +556,7 @@ async function refreshInbox() {
                 parent: actions,
                 onText: '✓ Mark Read',
                 offText: '✓ Mark Read',
+                forceText: true,
                 onAction: async () => {
                     const r = await MessagingAPI.messages.markAsRead(msg.atome_id || msg.id);
                     debugLog(r.success ? 'Marked as read' : `Failed: ${r.error}`, r.success ? 'success' : 'error');
@@ -567,6 +571,7 @@ async function refreshInbox() {
             parent: actions,
             onText: '🗑️',
             offText: '🗑️',
+            forceText: true,
             onAction: async () => {
                 const r = await MessagingAPI.messages.delete(msg.atome_id || msg.id);
                 debugLog(r.success ? 'Message deleted' : `Delete failed: ${r.error}`, r.success ? 'success' : 'error');
@@ -603,6 +608,7 @@ function createSentTab(container) {
         offText: '🔄 Refresh',
         onAction: refreshSent,
         offAction: () => { },
+        forceText: true,
         css: {
             height: '28px',
             backgroundColor: '#4a4a6a',
@@ -815,6 +821,7 @@ function createContactsTab(container) {
         offText: '🔄 Refresh Contacts',
         onAction: refreshContacts,
         offAction: refreshContacts,
+        forceText: true,
         css: {
             height: '32px',
             backgroundColor: '#3a3a5e',
@@ -896,6 +903,7 @@ async function refreshContacts() {
                 parent: actions,
                 onText: 'Unblock',
                 offText: 'Unblock',
+                forceText: true,
                 onAction: async () => {
                     const r = await MessagingAPI.contacts.unblock(particles.target_phone);
                     debugLog(r.success ? 'Unblocked' : `Failed: ${r.error}`, r.success ? 'success' : 'error');
@@ -909,6 +917,7 @@ async function refreshContacts() {
                 parent: actions,
                 onText: 'Block',
                 offText: 'Block',
+                forceText: true,
                 onAction: async () => {
                     const r = await MessagingAPI.contacts.block(particles.target_phone);
                     debugLog(r.success ? 'Blocked' : `Failed: ${r.error}`, r.success ? 'success' : 'error');
@@ -923,6 +932,7 @@ async function refreshContacts() {
             parent: actions,
             onText: '🗑️',
             offText: '🗑️',
+            forceText: true,
             onAction: async () => {
                 const r = await MessagingAPI.contacts.remove(particles.target_phone);
                 debugLog(r.success ? 'Removed' : `Failed: ${r.error}`, r.success ? 'success' : 'error');
@@ -1000,10 +1010,20 @@ function makeDraggable(element, handle) {
     }
 }
 
+// Guard to prevent multiple event handler registrations
+let uiHandlersRegistered = false;
+
 /**
  * Register event handlers for real-time updates
  */
 function registerEventHandlers() {
+    // Prevent registering handlers multiple times
+    if (uiHandlersRegistered) {
+        console.log('[MessagingUI] Event handlers already registered, skipping');
+        return;
+    }
+    uiHandlersRegistered = true;
+
     window.addEventListener('adole-new-message', (e) => {
         const data = e.detail;
         debugLog(`📬 New message from ${data.fromName || data.from}${data.isRequest ? ' (REQUEST)' : ''}`, 'success');

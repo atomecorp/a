@@ -709,6 +709,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     token,
                     atomeType: params.type || params.kind,
                     parentId: params.parentId || params.parent,
+                    ownerId: params.owner_id || params.ownerId,
                     includeDeleted: params.includeDeleted || false,
                     limit: params.limit,
                     offset: params.offset || ((params.page || 0) * (params.limit || 50))

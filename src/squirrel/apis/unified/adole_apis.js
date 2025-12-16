@@ -1546,13 +1546,17 @@ async function list_atomes(options = {}, callback) {
     }
 
     const atomeType = options.type || null;
+    const ownerId = options.ownerId || null;
 
     const results = {
         tauri: { atomes: [], error: null },
         fastify: { atomes: [], error: null }
     };
 
-    const queryOptions = atomeType ? { type: atomeType } : {};
+    // Build query options with type and ownerId if provided
+    const queryOptions = {};
+    if (atomeType) queryOptions.type = atomeType;
+    if (ownerId) queryOptions.owner_id = ownerId;
 
     // Try Tauri
     try {
@@ -1726,60 +1730,38 @@ async function get_atome(atomeId, callback) {
 
     // Try Tauri
     try {
-        console.log('🔍 Calling TauriAdapter.atome.list to find atome ID:', atomeId);
-        // FIX: Use list API instead of get API to find the atome
-        const tauriResult = await TauriAdapter.atome.list({ id: atomeId });
+        console.log('🔍 Calling TauriAdapter.atome.get for atome ID:', atomeId);
+        // Use the proper get API to find the atome by ID
+        const tauriResult = await TauriAdapter.atome.get(atomeId);
         console.log('🔍 Tauri raw result:', tauriResult);
         console.log('🔍 Tauri result structure:', {
-            hasAtomes: !!tauriResult.atomes,
-            atomesLength: tauriResult.atomes?.length || 0,
+            hasAtome: !!tauriResult.atome,
             hasData: !!tauriResult.data,
-            dataHasAtomes: !!tauriResult.data?.atomes,
-            dataAtomesLength: tauriResult.data?.atomes?.length || 0,
-            dataKeys: tauriResult.data ? Object.keys(tauriResult.data) : [],
-            allKeys: Object.keys(tauriResult),
-            fullResponse: tauriResult
+            allKeys: Object.keys(tauriResult)
         });
 
         if (tauriResult.ok || tauriResult.success) {
-            // ENHANCED: More detailed extraction logic with debugging
+            // Extract atome from response
             let extractedAtome = null;
 
-            // Check if we actually have atomes before trying to extract
-            if (tauriResult.atomes && Array.isArray(tauriResult.atomes)) {
-                if (tauriResult.atomes.length > 0) {
-                    extractedAtome = tauriResult.atomes[0];
-                    console.log('🔍 Tauri: Found atome in .atomes[0]');
-                } else {
-                    console.log('🔍 Tauri: No atomes found in response (empty array)');
-                    results.tauri.error = 'No atomes found with this ID';
-                }
-            } else if (tauriResult.data && tauriResult.data.atomes && Array.isArray(tauriResult.data.atomes)) {
-                if (tauriResult.data.atomes.length > 0) {
-                    extractedAtome = tauriResult.data.atomes[0];
-                    console.log('🔍 Tauri: Found atome in .data.atomes[0]');
-                } else {
-                    console.log('🔍 Tauri: No atomes found in .data.atomes (empty array)');
-                    results.tauri.error = 'No atomes found with this ID';
-                }
-            } else if (tauriResult.data && !tauriResult.data.atomes) {
-                extractedAtome = tauriResult.data;
-                console.log('🔍 Tauri: Using .data as atome');
-            } else if (tauriResult.atome) {
+            if (tauriResult.atome) {
                 extractedAtome = tauriResult.atome;
                 console.log('🔍 Tauri: Found atome in .atome');
-            } else {
-                console.log('🔍 Tauri: No atome data found in response structure');
-                results.tauri.error = 'No atome data found in response';
+            } else if (tauriResult.data && typeof tauriResult.data === 'object') {
+                extractedAtome = tauriResult.data;
+                console.log('🔍 Tauri: Found atome in .data');
             }
 
             if (extractedAtome) {
-                console.log('🔍 Tauri: Extracted atome keys:', Object.keys(extractedAtome));
                 console.log('🔍 Tauri: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
                 results.tauri.atome = extractedAtome;
+                results.tauri.success = true;
+            } else {
+                console.log('🔍 Tauri: No atome found with ID:', atomeId);
+                results.tauri.error = 'Atome not found';
             }
         } else {
-            results.tauri.error = tauriResult.error;
+            results.tauri.error = tauriResult.error || 'Atome not found';
         }
     } catch (e) {
         results.tauri.error = e.message;
@@ -1787,60 +1769,38 @@ async function get_atome(atomeId, callback) {
 
     // Try Fastify
     try {
-        console.log('🔍 Calling FastifyAdapter.atome.list to find atome ID:', atomeId);
-        // FIX: Use list API instead of get API to find the atome
-        const fastifyResult = await FastifyAdapter.atome.list({ id: atomeId });
+        console.log('🔍 Calling FastifyAdapter.atome.get for atome ID:', atomeId);
+        // Use the proper get API to find the atome by ID
+        const fastifyResult = await FastifyAdapter.atome.get(atomeId);
         console.log('🔍 Fastify raw result:', fastifyResult);
         console.log('🔍 Fastify result structure:', {
-            hasAtomes: !!fastifyResult.atomes,
-            atomesLength: fastifyResult.atomes?.length || 0,
+            hasAtome: !!fastifyResult.atome,
             hasData: !!fastifyResult.data,
-            dataHasAtomes: !!fastifyResult.data?.atomes,
-            dataAtomesLength: fastifyResult.data?.atomes?.length || 0,
-            dataKeys: fastifyResult.data ? Object.keys(fastifyResult.data) : [],
-            allKeys: Object.keys(fastifyResult),
-            fullResponse: fastifyResult
+            allKeys: Object.keys(fastifyResult)
         });
 
         if (fastifyResult.ok || fastifyResult.success) {
-            // ENHANCED: More detailed extraction logic with debugging
+            // Extract atome from response
             let extractedAtome = null;
 
-            // Check if we actually have atomes before trying to extract
-            if (fastifyResult.atomes && Array.isArray(fastifyResult.atomes)) {
-                if (fastifyResult.atomes.length > 0) {
-                    extractedAtome = fastifyResult.atomes[0];
-                    console.log('🔍 Fastify: Found atome in .atomes[0]');
-                } else {
-                    console.log('🔍 Fastify: No atomes found in response (empty array)');
-                    results.fastify.error = 'No atomes found with this ID';
-                }
-            } else if (fastifyResult.data && fastifyResult.data.atomes && Array.isArray(fastifyResult.data.atomes)) {
-                if (fastifyResult.data.atomes.length > 0) {
-                    extractedAtome = fastifyResult.data.atomes[0];
-                    console.log('🔍 Fastify: Found atome in .data.atomes[0]');
-                } else {
-                    console.log('🔍 Fastify: No atomes found in .data.atomes (empty array)');
-                    results.fastify.error = 'No atomes found with this ID';
-                }
-            } else if (fastifyResult.data && !fastifyResult.data.atomes) {
-                extractedAtome = fastifyResult.data;
-                console.log('🔍 Fastify: Using .data as atome');
-            } else if (fastifyResult.atome) {
+            if (fastifyResult.atome) {
                 extractedAtome = fastifyResult.atome;
                 console.log('🔍 Fastify: Found atome in .atome');
-            } else {
-                console.log('🔍 Fastify: No atome data found in response structure');
-                results.fastify.error = 'No atome data found in response';
+            } else if (fastifyResult.data && typeof fastifyResult.data === 'object') {
+                extractedAtome = fastifyResult.data;
+                console.log('🔍 Fastify: Found atome in .data');
             }
 
             if (extractedAtome) {
-                console.log('🔍 Fastify: Extracted atome keys:', Object.keys(extractedAtome));
                 console.log('🔍 Fastify: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
                 results.fastify.atome = extractedAtome;
+                results.fastify.success = true;
+            } else {
+                console.log('🔍 Fastify: No atome found with ID:', atomeId);
+                results.fastify.error = 'Atome not found';
             }
         } else {
-            results.fastify.error = fastifyResult.error;
+            results.fastify.error = fastifyResult.error || 'Atome not found';
         }
     } catch (e) {
         results.fastify.error = e.message;
