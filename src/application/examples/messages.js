@@ -642,12 +642,25 @@ const MessagesAPI = {
             ownerId: currentUser.id
         });
 
+        console.log('[MessagesAPI.list] Raw result:', result);
+
+        // Combine messages from both sources
         let messages = [];
-        if (result.tauri?.success) {
-            messages = result.tauri.atomes || [];
-        } else if (result.fastify?.success) {
-            messages = result.fastify.atomes || [];
-        }
+        const tauriMessages = result.tauri?.atomes || [];
+        const fastifyMessages = result.fastify?.atomes || [];
+        messages = [...tauriMessages, ...fastifyMessages];
+
+        console.log('[MessagesAPI.list] Tauri:', tauriMessages.length, 'Fastify:', fastifyMessages.length, 'Total:', messages.length);
+
+        // Normalize particles access (atomes have data.particles or data directly)
+        messages = messages.map(m => {
+            const particles = m.data?.particles || m.particles || m.data || {};
+            return {
+                ...m,
+                particles, // Expose particles at top level for filtering
+                atome_id: m.atome_id
+            };
+        });
 
         // Apply filters
         if (options.state) {

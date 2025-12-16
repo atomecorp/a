@@ -13,6 +13,7 @@ const BASE_Z_INDEX = 50000;
 // State
 let debugPanel = null;
 let messagesList = null;
+let sentMessagesList = null;
 let contactsList = null;
 let logArea = null;
 
@@ -165,6 +166,7 @@ function createDebugPanel() {
     // Create tabs
     const sendTab = createTab('send', '📤 Send');
     const inboxTab = createTab('inbox', '📥 Inbox');
+    const sentTab = createTab('sent', '📨 Sent');
     const contactsTab = createTab('contacts', '👥 Contacts');
     const logTab = createTab('log', '📋 Log');
 
@@ -173,6 +175,9 @@ function createDebugPanel() {
 
     // === INBOX TAB ===
     createInboxTab(inboxTab);
+
+    // === SENT TAB ===
+    createSentTab(sentTab);
 
     // === CONTACTS TAB ===
     createContactsTab(contactsTab);
@@ -564,6 +569,145 @@ async function refreshInbox() {
     }
 
     debugLog(`Loaded ${result.messages.length} messages`, 'success');
+}
+
+/**
+ * Create Sent (Outbox) tab content
+ */
+function createSentTab(container) {
+    const padding = $('div', {
+        parent: container,
+        css: { padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', flex: '1' }
+    });
+
+    // Header with refresh button
+    const header = $('div', {
+        parent: padding,
+        css: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
+    });
+
+    $('div', { parent: header, text: 'Sent Messages:', css: { color: '#aaa', fontSize: '12px' } });
+
+    Button({
+        parent: header,
+        onText: '🔄 Refresh',
+        offText: '🔄 Refresh',
+        onAction: refreshSent,
+        offAction: () => { },
+        css: {
+            height: '28px',
+            backgroundColor: '#4a4a6a',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '11px',
+            padding: '0 10px',
+            pointerEvents: 'auto'
+        }
+    });
+
+    // Sent messages list
+    sentMessagesList = $('div', {
+        id: 'sent-messages-list',
+        parent: padding,
+        css: {
+            flex: '1',
+            overflowY: 'auto',
+            backgroundColor: '#1a1a2e',
+            borderRadius: '8px',
+            padding: '8px'
+        }
+    });
+
+    $('div', {
+        parent: sentMessagesList,
+        text: 'Click refresh to load sent messages',
+        css: { color: '#666', textAlign: 'center', padding: '20px' }
+    });
+}
+
+/**
+ * Refresh sent messages
+ */
+async function refreshSent() {
+    if (!sentMessagesList) {
+        console.log('[MessagingUI] refreshSent: sentMessagesList not ready');
+        return;
+    }
+
+    debugLog('Refreshing sent messages...');
+    console.log('[MessagingUI] Refreshing sent messages...');
+
+    // Clear list
+    sentMessagesList.innerHTML = '';
+
+    // Get sent messages
+    const result = await MessagingAPI.messages.list({ inboxType: 'sent', limit: 20 });
+    console.log('[MessagingUI] Sent messages result:', result);
+
+    if (!result.success) {
+        debugLog(`Failed to load sent: ${result.error}`, 'error');
+        return;
+    }
+
+    if (result.messages.length === 0) {
+        $('div', {
+            parent: sentMessagesList,
+            text: 'No sent messages',
+            css: { color: '#666', textAlign: 'center', padding: '20px' }
+        });
+        return;
+    }
+
+    // Render messages
+    for (const msg of result.messages) {
+        const particles = msg.particles || {};
+
+        const item = $('div', {
+            parent: sentMessagesList,
+            css: {
+                padding: '10px',
+                marginBottom: '6px',
+                backgroundColor: '#2a3a2e',
+                borderRadius: '8px',
+                borderLeft: '3px solid #6a6',
+                cursor: 'pointer'
+            }
+        });
+
+        // To
+        $('div', {
+            parent: item,
+            text: `To: ${particles.to_phone || 'Unknown'}`,
+            css: { color: '#fff', fontSize: '13px' }
+        });
+
+        // Subject
+        if (particles.subject) {
+            $('div', {
+                parent: item,
+                text: particles.subject,
+                css: { color: '#aaa', fontSize: '12px', marginTop: '2px' }
+            });
+        }
+
+        // Preview
+        $('div', {
+            parent: item,
+            text: (particles.content || '').substring(0, 50) + '...',
+            css: { color: '#888', fontSize: '11px', marginTop: '4px' }
+        });
+
+        // Time
+        $('div', {
+            parent: item,
+            text: new Date(particles.sent_at).toLocaleString(),
+            css: { color: '#666', fontSize: '10px', marginTop: '4px' }
+        });
+    }
+
+    debugLog(`Loaded ${result.messages.length} sent messages`, 'success');
 }
 
 /**
