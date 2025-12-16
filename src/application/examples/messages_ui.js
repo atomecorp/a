@@ -58,7 +58,8 @@ function createDebugPanel() {
             flexDirection: 'column',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
             overflow: 'hidden',
-            fontFamily: 'system-ui, -apple-system, sans-serif'
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            pointerEvents: 'auto'
         }
     });
 
@@ -292,16 +293,42 @@ function createSendTab(container) {
     // Current user info
     const userInfo = $('div', {
         parent: padding,
-        css: { color: '#666', fontSize: '11px', textAlign: 'center' }
+        css: { color: '#999', fontSize: '11px', textAlign: 'center' },
+        text: 'Checking login...'
     });
 
-    // Update user info
-    setInterval(() => {
-        const user = window.__currentUser;
-        if (user?.id) {
-            userInfo.textContent = `Logged as: ${user.name || user.phone || user.id.substring(0, 8)}`;
-        } else {
-            userInfo.textContent = 'Not logged in';
+    // Update user info using AdoleAPI - poll until user is found
+    let checkAttempts = 0;
+    const maxAttempts = 30; // 30 attempts = ~30 seconds max wait
+    
+    const checkUserInterval = setInterval(async () => {
+        checkAttempts++;
+        try {
+            if (!window.AdoleAPI?.auth?.current) {
+                userInfo.textContent = 'Waiting for API...';
+                return;
+            }
+            const result = await window.AdoleAPI.auth.current();
+            // Use result.logged (not result.success) as per adole_apis.js
+            if (result.logged && result.user) {
+                const user = result.user;
+                userInfo.textContent = `Logged as: ${user.username || user.phone || user.user_id?.substring(0, 8)}`;
+                userInfo.style.color = '#6f6';
+                clearInterval(checkUserInterval); // Stop polling once user is found
+                console.log('[MessagingUI] User detected:', user.username || user.user_id);
+            } else if (checkAttempts >= maxAttempts) {
+                userInfo.textContent = 'Not logged in';
+                userInfo.style.color = '#f66';
+                clearInterval(checkUserInterval);
+            } else {
+                userInfo.textContent = `Checking login... (${checkAttempts})`;
+            }
+        } catch (e) {
+            if (checkAttempts >= maxAttempts) {
+                userInfo.textContent = 'Not logged in';
+                userInfo.style.color = '#f66';
+                clearInterval(checkUserInterval);
+            }
         }
     }, 1000);
 }
@@ -863,9 +890,10 @@ if (typeof window !== 'undefined') {
                 justify-content: center;
                 font-size: 24px;
                 cursor: pointer;
-                z-index: ${BASE_Z_INDEX - 1};
+                z-index: ${BASE_Z_INDEX + 1};
                 box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                 transition: transform 0.2s;
+                pointer-events: auto;
             `;
 
             parentElement.appendChild(toggleBtn);
