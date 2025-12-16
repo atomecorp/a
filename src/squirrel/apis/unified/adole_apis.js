@@ -6,6 +6,136 @@
 
 import { TauriAdapter, FastifyAdapter, CONFIG } from './adole.js';
 
+// ============================================
+// CURRENT PROJECT STATE
+// ============================================
+
+// Global current project state (accessible everywhere)
+let _currentProjectId = null;
+let _currentProjectName = null;
+
+// Also expose on window for easy access
+if (typeof window !== 'undefined') {
+    window.__currentProject = {
+        get id() { return _currentProjectId; },
+        get name() { return _currentProjectName; }
+    };
+}
+
+/**
+ * Get the current project ID
+ * @returns {string|null} Current project ID or null
+ */
+function get_current_project_id() {
+    return _currentProjectId;
+}
+
+/**
+ * Get the current project info
+ * @returns {{id: string|null, name: string|null}} Current project info
+ */
+function get_current_project() {
+    return {
+        id: _currentProjectId,
+        name: _currentProjectName
+    };
+}
+
+/**
+ * Set the current project (in memory and persist to user particle)
+ * @param {string} projectId - Project ID
+ * @param {string} [projectName] - Project name (optional)
+ * @param {boolean} [persist=true] - Whether to save to database
+ * @returns {Promise<boolean>} Success status
+ */
+async function set_current_project(projectId, projectName = null, persist = true) {
+    _currentProjectId = projectId;
+    _currentProjectName = projectName;
+
+    console.log(`[AdoleAPI] Current project set: ${projectName || 'unnamed'} (${projectId ? projectId.substring(0, 8) + '...' : 'none'})`);
+
+    if (!persist || !projectId) {
+        return true;
+    }
+
+    // Persist to user's particle (current_project_id)
+    try {
+        // Get current user ID
+        const userResult = await current_user();
+        const userId = userResult?.user?.user_id || userResult?.user?.id;
+
+        if (!userId) {
+            console.warn('[AdoleAPI] Cannot persist current project: no user logged in');
+            return false;
+        }
+
+        // Update user's current_project_id particle via alter_atome
+        // We use the user's atome to store this preference
+        const particleData = {
+            current_project_id: projectId,
+            current_project_name: projectName || null
+        };
+
+        // Try to update via both adapters
+        try {
+            await TauriAdapter.atome.alter(userId, particleData);
+        } catch (e) {
+            console.warn('[AdoleAPI] Tauri persist current project failed:', e.message);
+        }
+
+        try {
+            await FastifyAdapter.atome.alter(userId, particleData);
+        } catch (e) {
+            console.warn('[AdoleAPI] Fastify persist current project failed:', e.message);
+        }
+
+        console.log('[AdoleAPI] Current project persisted to user particle');
+        return true;
+    } catch (e) {
+        console.error('[AdoleAPI] Failed to persist current project:', e);
+        return false;
+    }
+}
+
+/**
+ * Load the current project from user's saved preference
+ * Called after login to restore last used project
+ * @returns {Promise<{id: string|null, name: string|null}>} Last saved project info
+ */
+async function load_saved_current_project() {
+    try {
+        // Get current user
+        const userResult = await current_user();
+        const userId = userResult?.user?.user_id || userResult?.user?.id;
+
+        if (!userId) {
+            return { id: null, name: null };
+        }
+
+        // Get user atome to read current_project_id particle
+        const atomeResult = await get_atome(userId);
+        const particles = atomeResult?.tauri?.data?.particles ||
+            atomeResult?.fastify?.data?.particles ||
+            atomeResult?.tauri?.particles ||
+            atomeResult?.fastify?.particles ||
+            {};
+
+        const savedProjectId = particles.current_project_id || null;
+        const savedProjectName = particles.current_project_name || null;
+
+        if (savedProjectId) {
+            _currentProjectId = savedProjectId;
+            _currentProjectName = savedProjectName;
+            console.log(`[AdoleAPI] Restored saved project: ${savedProjectName || 'unnamed'} (${savedProjectId.substring(0, 8)}...)`);
+        }
+
+        return { id: savedProjectId, name: savedProjectName };
+    } catch (e) {
+        console.warn('[AdoleAPI] Could not load saved current project:', e.message);
+        return { id: null, name: null };
+    }
+}
+
 /**
  * Create a user via WebSocket
  * @param {string} phone - Phone number
@@ -1745,7 +1875,12 @@ export const AdoleAPI = {
     projects: {
         create: create_project,
         list: list_projects,
-        delete: delete_project
+        delete: delete_project,
+        // Current project management
+        getCurrent: get_current_project,
+        getCurrentId: get_current_project_id,
+        setCurrent: set_current_project,
+        loadSaved: load_saved_current_project
     },
     atomes: {
         create: create_atome,

@@ -58,9 +58,22 @@ function handleCreateElement(params, sender) {
         }
     };
 
-    // Only set parent if explicitly provided
+    // Determine parent: explicit > current project container > default (#view)
     if (parent) {
         config.parent = parent;
+    } else {
+        // Try to attach to current project container if available
+        const currentProjectId = window.__currentProject?.id ||
+            (typeof AdoleAPI !== 'undefined' && AdoleAPI.projects?.getCurrentId?.());
+
+        if (currentProjectId) {
+            const projectContainer = document.getElementById('project_view_' + currentProjectId);
+            if (projectContainer) {
+                config.parent = '#project_view_' + currentProjectId;
+                console.log('[BuiltinHandlers] Attaching to current project:', currentProjectId.substring(0, 8) + '...');
+            }
+        }
+        // If no current project, Squirrel will use default #view
     }
 
     if (text !== undefined) config.text = text;

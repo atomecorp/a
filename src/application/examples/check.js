@@ -263,6 +263,11 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
   currentProjectName = projectName;
   grab('current_project').textContent = projectName;
 
+  // Persist current project to database (for restoration at next login)
+  if (typeof AdoleAPI !== 'undefined' && AdoleAPI.projects?.setCurrent) {
+    AdoleAPI.projects.setCurrent(projectId, projectName, true);
+  }
+
   // Load atomes for this project and display them
   loadProjectAtomes(projectId).catch(error => {
     puts('❌ Failed to load atomes: ' + error);
@@ -1327,17 +1332,36 @@ function updateRemoteCommandsStatus(active) {
   }
 })();
 
-// Load current project on startup
+// Load current project on startup (prefer saved project, fallback to first project)
 (async () => {
+  // First, try to load the user's saved/last used project
+  let savedProject = null;
+  if (typeof AdoleAPI !== 'undefined' && AdoleAPI.projects?.loadSaved) {
+    savedProject = await AdoleAPI.projects.loadSaved();
+  }
+
   const result = await list_projects();
   const projects = result.tauri.projects.length > 0
     ? result.tauri.projects
     : result.fastify.projects;
 
   if (projects && projects.length > 0) {
-    const firstProject = projects[0];
-    const projectId = firstProject.atome_id;
-    const projectName = firstProject.data?.name || 'Unnamed Project';
+    // Find the saved project in the list, or use first project as fallback
+    let targetProject = null;
+
+    if (savedProject?.id) {
+      targetProject = projects.find(p => p.atome_id === savedProject.id);
+      if (targetProject) {
+        puts('🔄 Restoring saved project: ' + (savedProject.name || 'unnamed'));
+      }
+    }
+
+    if (!targetProject) {
+      targetProject = projects[0];
+    }
+
+    const projectId = targetProject.atome_id;
+    const projectName = targetProject.data?.name || savedProject?.name || 'Unnamed Project';
 
     if (projectId) {
       // Retrieve background color from project data
