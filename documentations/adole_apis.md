@@ -373,6 +373,7 @@ const machine = AdoleAPI.machine.getCurrent();
 ```
 
 **Platform values:**
+
 - `tauri_mac`, `tauri_windows`, `tauri_linux`, `tauri_ios`, `tauri_android`
 - `safari_mac`, `safari_ios`
 - `browser_windows`, `browser_linux`, `browser_android`
