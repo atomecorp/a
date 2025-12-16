@@ -841,32 +841,42 @@ if (typeof window !== 'undefined') {
     };
 
     // Create toggle button in corner
+    // Use longer delay and fallback to document.body if #intuition not found
     setTimeout(() => {
-        const toggleBtn = $('div', {
-            id: 'messaging-debug-toggle',
-            parent: '#intuition',
-            text: '📬',
-            css: {
-                position: 'fixed',
-                bottom: '20px',
-                left: '20px',
-                width: '50px',
-                height: '50px',
-                backgroundColor: '#4a7fff',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '24px',
-                cursor: 'pointer',
-                zIndex: BASE_Z_INDEX - 1,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                transition: 'transform 0.2s'
-            }
-        });
+        try {
+            // Check if #intuition exists, otherwise use body
+            const parentElement = document.getElementById('intuition') || document.body;
 
-        toggleBtn.onmouseenter = () => { toggleBtn.style.transform = 'scale(1.1)'; };
-        toggleBtn.onmouseleave = () => { toggleBtn.style.transform = 'scale(1)'; };
-        toggleBtn.onclick = toggleDebugPanel;
-    }, 200);
+            const toggleBtn = document.createElement('div');
+            toggleBtn.id = 'messaging-debug-toggle';
+            toggleBtn.textContent = '📬';
+            toggleBtn.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                width: 50px;
+                height: 50px;
+                background-color: #4a7fff;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+                cursor: pointer;
+                z-index: ${BASE_Z_INDEX - 1};
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                transition: transform 0.2s;
+            `;
+
+            parentElement.appendChild(toggleBtn);
+
+            toggleBtn.onmouseenter = () => { toggleBtn.style.transform = 'scale(1.1)'; };
+            toggleBtn.onmouseleave = () => { toggleBtn.style.transform = 'scale(1)'; };
+            toggleBtn.onclick = toggleDebugPanel;
+
+            console.log('[MessagingUI] Toggle button created');
+        } catch (e) {
+            console.error('[MessagingUI] Failed to create toggle button:', e);
+        }
+    }, 500);
 }
