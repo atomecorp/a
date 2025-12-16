@@ -1479,9 +1479,9 @@ async function create_atome(options, callback) {
 
     // Get current user
     const currentUserResult = await current_user();
-    const ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+    const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
 
-    if (!ownerId) {
+    if (!currentUserId) {
         const error = 'No user logged in. Please log in first.';
         results.tauri.error = error;
         results.fastify.error = error;
@@ -1489,7 +1489,12 @@ async function create_atome(options, callback) {
         return results;
     }
 
+    // Use provided ownerId if specified, otherwise use current user
+    // This allows creating atomes for other users (e.g., messages to recipients)
+    const ownerId = options.ownerId || currentUserId;
+
     const atomeData = {
+        id: options.id || undefined, // Use provided ID if specified
         type: atomeType,
         ownerId: ownerId,
         parentId: projectId, // Link to project if provided

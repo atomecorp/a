@@ -393,7 +393,7 @@ const MessagesAPI = {
 
         // Store message for sender (sent folder)
         const senderMessageId = `${messageId}_from`;
-        await AdoleAPI.atomes.create({
+        const senderResult = await AdoleAPI.atomes.create({
             id: senderMessageId,
             type: 'message',
             ownerId: currentUser.id,
@@ -402,6 +402,13 @@ const MessagesAPI = {
                 inbox_type: 'sent',
                 state: 'sent' // Sender's copy is always 'sent'
             }
+        });
+
+        console.log('[MessagesAPI.send] Sender message created:', {
+            id: senderMessageId,
+            inbox_type: 'sent',
+            tauri: senderResult.tauri?.success,
+            fastify: senderResult.fastify?.success
         });
 
         if (!(recipientResult.tauri?.success || recipientResult.fastify?.success)) {
@@ -652,9 +659,29 @@ const MessagesAPI = {
 
         console.log('[MessagesAPI.list] Tauri:', tauriMessages.length, 'Fastify:', fastifyMessages.length, 'Total:', messages.length);
 
+        // Log first message structure for debugging
+        if (messages.length > 0) {
+            console.log('[MessagesAPI.list] Sample message structure:', JSON.stringify(messages[0], null, 2));
+        }
+
         // Normalize particles access (atomes have data.particles or data directly)
         messages = messages.map(m => {
-            const particles = m.data?.particles || m.particles || m.data || {};
+            // The particles could be in: m.data (direct), m.data.particles, or m.particles
+            let particles = {};
+            if (m.data && typeof m.data === 'object') {
+                // Check if data has nested particles or is particles directly
+                if (m.data.inbox_type !== undefined || m.data.from_phone !== undefined) {
+                    // data IS the particles
+                    particles = m.data;
+                } else if (m.data.particles) {
+                    particles = m.data.particles;
+                } else {
+                    particles = m.data;
+                }
+            } else if (m.particles) {
+                particles = m.particles;
+            }
+
             return {
                 ...m,
                 particles, // Expose particles at top level for filtering
@@ -662,13 +689,29 @@ const MessagesAPI = {
             };
         });
 
+        // Log normalized first message
+        if (messages.length > 0) {
+            console.log('[MessagesAPI.list] Normalized first message inbox_type:', messages[0].particles?.inbox_type);
+            // Log all inbox_types to debug
+            const inboxTypes = messages.map(m => ({
+                id: m.atome_id || m.id,
+                inbox_type: m.particles?.inbox_type,
+                from: m.particles?.from_phone,
+                to: m.particles?.to_phone
+            }));
+            console.log('[MessagesAPI.list] All message inbox_types:', JSON.stringify(inboxTypes, null, 2));
+        }
+
         // Apply filters
         if (options.state) {
             messages = messages.filter(m => m.particles?.state === options.state);
         }
 
         if (options.inboxType) {
+            console.log('[MessagesAPI.list] Filtering by inboxType:', options.inboxType);
+            const beforeFilter = messages.length;
             messages = messages.filter(m => m.particles?.inbox_type === options.inboxType);
+            console.log('[MessagesAPI.list] After inboxType filter:', beforeFilter, '->', messages.length);
         }
 
         if (options.fromPhone) {
@@ -1052,7 +1095,7 @@ const InboxAPI = {
 function registerMessageHandlers() {
     // Handler for new incoming message notification
     RemoteCommands.register('new-message', async (data) => {
-        console.log(`[Messaging] New message from ${data.fromName || data.from}`, data);
+        console.log(`[Messaging] New message notification from ${data.fromName || data.from}`, data);
 
         const currentUser = await getCurrentUser();
         if (!currentUser?.id) {
@@ -1068,45 +1111,55 @@ function registerMessageHandlers() {
             return { success: false, reason: 'blocked' };
         }
 
-        // Create the message locally in recipient's database
-        const isRequest = !contactCheck.isContact;
-        const messageState = isRequest ? MESSAGE_STATES.REQUEST : MESSAGE_STATES.UNREAD;
+        // Check if message already exists (it may have been created server-side)
+        const existingCheck = await AdoleAPI.atomes.get(data.messageId);
+        const messageExists = existingCheck.tauri?.success || existingCheck.fastify?.success;
 
-        console.log(`[Messaging] Creating message locally: ${data.messageId}`);
-
-        const createResult = await AdoleAPI.atomes.create({
-            id: data.messageId,
-            type: 'message',
-            ownerId: currentUser.id,
-            particles: {
-                from_user_id: data.fromId,
-                from_phone: data.from,
-                from_name: data.fromName,
-                to_user_id: currentUser.id,
-                to_phone: currentUser.phone,
-                content: data.preview, // Full content should be passed
-                subject: data.subject || null,
-                state: messageState,
-                is_request: isRequest,
-                inbox_type: 'received',
-                sent_at: data.sentAt,
-                displayed_at: new Date().toISOString(),
-                read_at: null,
-                archived_at: null,
-                deleted_at: null,
-                tags: [],
-                priority: 3,
-                flags: []
-            }
-        });
-
-        if (createResult.tauri?.success || createResult.fastify?.success) {
-            console.log(`[Messaging] Message stored locally: ${data.messageId}`);
+        if (messageExists) {
+            console.log(`[Messaging] Message already exists: ${data.messageId}`);
         } else {
-            console.error('[Messaging] Failed to store message locally:', createResult);
+            // Create the message locally in recipient's database (for offline support)
+            const isRequest = !contactCheck.isContact;
+            const messageState = isRequest ? MESSAGE_STATES.REQUEST : MESSAGE_STATES.UNREAD;
+
+            console.log(`[Messaging] Creating message locally: ${data.messageId}`);
+
+            const createResult = await AdoleAPI.atomes.create({
+                id: data.messageId,
+                type: 'message',
+                ownerId: currentUser.id,
+                particles: {
+                    from_user_id: data.fromId,
+                    from_phone: data.from,
+                    from_name: data.fromName,
+                    to_user_id: currentUser.id,
+                    to_phone: currentUser.phone,
+                    content: data.preview, // Full content should be passed
+                    subject: data.subject || null,
+                    state: messageState,
+                    is_request: isRequest,
+                    inbox_type: 'received',
+                    sent_at: data.sentAt,
+                    displayed_at: new Date().toISOString(),
+                    read_at: null,
+                    archived_at: null,
+                    deleted_at: null,
+                    tags: [],
+                    priority: 3,
+                    flags: []
+                }
+            });
+
+            if (createResult.tauri?.success || createResult.fastify?.success) {
+                console.log(`[Messaging] Message stored locally: ${data.messageId}`);
+            } else {
+                console.error('[Messaging] Failed to store message locally:', createResult);
+            }
         }
 
-        // Emit event for UI to handle
+        const isRequest = !contactCheck.isContact;
+
+        // Emit event for UI to handle (refresh inbox, show notification, etc.)
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('adole-new-message', {
                 detail: {

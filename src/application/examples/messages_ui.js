@@ -157,6 +157,15 @@ function createDebugPanel() {
             tab.style.borderBottom = '2px solid #6a6aff';
             content.style.display = 'flex';
             activeTab = name;
+
+            // Auto-refresh content based on tab
+            if (name === 'inbox') {
+                refreshInbox();
+            } else if (name === 'sent') {
+                refreshSent();
+            } else if (name === 'contacts') {
+                refreshContacts();
+            }
         };
 
         tabContents[name] = { tab, content };
