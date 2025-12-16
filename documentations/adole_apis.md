@@ -15,6 +15,7 @@ import { AdoleAPI } from './src/squirrel/apis/unified/adole_apis.js';
 ```
 
 Or use individual functions:
+
 ```javascript
 import { create_user, log_user, current_user } from './src/squirrel/apis/unified/adole_apis.js';
 ```
@@ -262,6 +263,7 @@ await AdoleAPI.sharing.share(
 ```
 
 **Sharing modes:**
+
 - `copy`: Creates independent copies for the recipient
 - `reference`: Creates linked references (changes sync)
 
