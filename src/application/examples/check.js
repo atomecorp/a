@@ -2204,16 +2204,9 @@ $('span', {
       console.log('[create_atome button] Final ID:', newId);
       puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
 
-      // Create visual element with initial position and default style
-      createVisualAtome(newId, atomeType, atomeColor, initialLeft, initialTop, '8px', 1.0);
-
-      // If we got a real ID, try to reload project to ensure consistency
-      if (!newId.startsWith('temp_')) {
-        puts('🔄 Reloading project to ensure consistency...');
-        setTimeout(() => {
-          loadProjectAtomes(selectedProjectId);
-        }, 500);
-      }
+      // Reload project to display the new atome
+      puts('🔄 Reloading project atomes...');
+      await loadProjectAtomes(selectedProjectId);
     } else {
       puts('❌ Failed to create atome');
       puts('  Tauri error: ' + (result.tauri.error || 'none'));
