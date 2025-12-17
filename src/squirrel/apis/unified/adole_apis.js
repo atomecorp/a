@@ -1116,6 +1116,34 @@ async function sync_atomes(callback) {
 
     result.alreadySynced = unsyncedResult.synced.length;
 
+    // Helper: extract particles from an atome object
+    // - Prefers atome.data / atome.particles when present
+    // - Falls back to inline fields (Fastify list returns particles inline)
+    const extractParticles = (atome) => {
+        if (!atome || typeof atome !== 'object') return {};
+
+        if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
+            return atome.data;
+        }
+        if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
+            return atome.particles;
+        }
+
+        const metadataFields = [
+            'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
+            'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
+            'created_source', 'id', 'type', 'data', 'particles'
+        ];
+
+        const inlineParticles = {};
+        for (const [key, value] of Object.entries(atome)) {
+            if (!metadataFields.includes(key) && value !== null && value !== undefined) {
+                inlineParticles[key] = value;
+            }
+        }
+        return inlineParticles;
+    };
+
     // Topological sort helper - orders atomes so parents/owners come before children
     const topologicalSort = (atomes) => {
         // Build lookup map
@@ -1178,12 +1206,13 @@ async function sync_atomes(callback) {
 
     for (const atome of sortedToPush) {
         try {
+            const particles = extractParticles(atome);
             const createResult = await FastifyAdapter.atome.create({
                 id: atome.atome_id,
                 type: atome.atome_type,
                 ownerId: atome.owner_id,
                 parentId: atome.parent_id,
-                particles: atome.data || atome.particles || {}
+                particles
             });
 
             if (createResult.ok || createResult.success) {
@@ -1204,12 +1233,13 @@ async function sync_atomes(callback) {
 
     for (const atome of sortedToPull) {
         try {
+            const particles = extractParticles(atome);
             const createResult = await TauriAdapter.atome.create({
                 id: atome.atome_id,
                 type: atome.atome_type,
                 ownerId: atome.owner_id,
                 parentId: atome.parent_id,
-                particles: atome.data || atome.particles || {}
+                particles
             });
 
             if (createResult.ok || createResult.success) {
@@ -1223,30 +1253,6 @@ async function sync_atomes(callback) {
             result.pulled.errors.push({ id: atome.atome_id, error: e.message });
         }
     }
-
-    // Helper function to extract particles from an atome object
-    const extractParticles = (atome) => {
-        if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
-            return atome.data;
-        }
-        if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
-            return atome.particles;
-        }
-
-        const metadataFields = [
-            'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
-            'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
-            'created_source', 'id', 'type', 'data', 'particles'
-        ];
-
-        const inlineParticles = {};
-        for (const [key, value] of Object.entries(atome)) {
-            if (!metadataFields.includes(key) && value !== null && value !== undefined) {
-                inlineParticles[key] = value;
-            }
-        }
-        return inlineParticles;
-    };
 
     // 3. Update Fastify with newer Tauri modifications
     for (const item of unsyncedResult.modifiedOnTauri) {
