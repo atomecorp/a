@@ -3,6 +3,8 @@
 ## Code Generation Rules
 
 - **Always use JavaScript** when creating code
+- **Never use TypeScript, Python,or any other programming language except JavaScript and ruby if needed**
+- **Never hide, mask, or patch a code problem.Always identify the root cause and fix it properly to ensure long-term stability and correctness.**
 - **Never create or modify any `.html` or `.css` files** (unless the prompt explicitly specifies creating an HTML file)
 - When creating HTML elements, **always use Squirrel syntax**:
   ```javascript
