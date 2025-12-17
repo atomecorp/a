@@ -885,12 +885,14 @@ async function list_unsynced_atomes(callback) {
     let fastifyAtomes = [];
 
     // Helper to fetch all atomes of all types from an adapter (including deleted for sync)
+    // Uses ownerId: "*" to get ALL atomes, not just current user's
     const fetchAllAtomes = async (adapter, name) => {
         const allAtomes = [];
         for (const type of atomeTypes) {
             try {
                 // Include deleted atomes for sync comparison
-                const result = await adapter.atome.list({ type, includeDeleted: true });
+                // Use ownerId: "*" to get all atomes regardless of owner
+                const result = await adapter.atome.list({ type, includeDeleted: true, ownerId: '*' });
                 if (result.ok || result.success) {
                     const atomes = result.atomes || result.data || [];
                     allAtomes.push(...atomes);
@@ -1114,8 +1116,67 @@ async function sync_atomes(callback) {
 
     result.alreadySynced = unsyncedResult.synced.length;
 
-    // 1. Push local-only atomes to Fastify
-    for (const atome of unsyncedResult.onlyOnTauri) {
+    // Topological sort helper - orders atomes so parents/owners come before children
+    const topologicalSort = (atomes) => {
+        // Build lookup map
+        const atomeMap = new Map();
+        atomes.forEach(a => {
+            const id = a.atome_id || a.id;
+            atomeMap.set(id, a);
+        });
+
+        // Priority order by type (users first, then projects, then others)
+        const typePriority = {
+            'user': 0,
+            'tenant': 1,
+            'project': 2
+        };
+
+        // Calculate depth for each atome based on dependencies
+        const getDepth = (atome, visited = new Set()) => {
+            const id = atome.atome_id || atome.id;
+            if (visited.has(id)) return 0; // Prevent cycles
+            visited.add(id);
+
+            let depth = 0;
+
+            // Check parent dependency
+            const parentId = atome.parent_id || atome.parentId;
+            if (parentId && atomeMap.has(parentId)) {
+                depth = Math.max(depth, 1 + getDepth(atomeMap.get(parentId), visited));
+            }
+
+            // Check owner dependency
+            const ownerId = atome.owner_id || atome.ownerId;
+            if (ownerId && atomeMap.has(ownerId)) {
+                depth = Math.max(depth, 1 + getDepth(atomeMap.get(ownerId), visited));
+            }
+
+            return depth;
+        };
+
+        // Sort: first by type priority, then by depth (roots first)
+        return [...atomes].sort((a, b) => {
+            const typeA = a.atome_type || a.type || 'generic';
+            const typeB = b.atome_type || b.type || 'generic';
+            const priorityA = typePriority[typeA] ?? 10;
+            const priorityB = typePriority[typeB] ?? 10;
+
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+            }
+
+            const depthA = getDepth(a);
+            const depthB = getDepth(b);
+            return depthA - depthB;
+        });
+    };
+
+    // 1. Push local-only atomes to Fastify (in topological order)
+    const sortedToPush = topologicalSort(unsyncedResult.onlyOnTauri);
+    console.log('[sync_atomes] Push order:', sortedToPush.map(a => `${a.atome_type}:${(a.atome_id || a.id).substring(0, 8)}`).join(' → '));
+
+    for (const atome of sortedToPush) {
         try {
             const createResult = await FastifyAdapter.atome.create({
                 id: atome.atome_id,
@@ -1137,8 +1198,11 @@ async function sync_atomes(callback) {
         }
     }
 
-    // 2. Pull remote-only atomes to Tauri
-    for (const atome of unsyncedResult.onlyOnFastify) {
+    // 2. Pull remote-only atomes to Tauri (in topological order)
+    const sortedToPull = topologicalSort(unsyncedResult.onlyOnFastify);
+    console.log('[sync_atomes] Pull order:', sortedToPull.map(a => `${a.atome_type}:${(a.atome_id || a.id).substring(0, 8)}`).join(' → '));
+
+    for (const atome of sortedToPull) {
         try {
             const createResult = await TauriAdapter.atome.create({
                 id: atome.atome_id,

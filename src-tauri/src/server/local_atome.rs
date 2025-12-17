@@ -353,6 +353,16 @@ async fn handle_create(
         .or_else(|| message.get("parent_id"))
         .and_then(|v| v.as_str());
 
+    // Support multiple field names for owner: userId, ownerId, owner_id
+    // This allows sync operations to preserve the original owner
+    let owner_id = message
+        .get("userId")
+        .or_else(|| message.get("ownerId"))
+        .or_else(|| message.get("owner_id"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty() && *s != "anonymous")
+        .unwrap_or(user_id);
+
     // Support multiple field names for data: particles, data
     let data = message
         .get("particles")
@@ -367,10 +377,11 @@ async fn handle_create(
     };
 
     // Insert or replace atome (upsert for sync operations)
+    // Uses owner_id from message if provided, otherwise uses the logged-in user
     if let Err(e) = db.execute(
         "INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
          VALUES (?1, ?2, ?3, ?4, ?4, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?5), ?5, NULL, 'tauri', 'pending')",
-        rusqlite::params![&atome_id, atome_type, parent_id, user_id, &now],
+        rusqlite::params![&atome_id, atome_type, parent_id, owner_id, &now],
     ) {
         println!("[Create Debug] Insert error: {}", e);
         return error_response(request_id, &e.to_string());
@@ -396,15 +407,15 @@ async fn handle_create(
     }
 
     println!(
-        "[Create Debug] Successfully created/updated atome: {}",
-        atome_id
+        "[Create Debug] Successfully created/updated atome: {} with owner: {}",
+        atome_id, owner_id
     );
 
     let atome = AtomeData {
         atome_id: atome_id.clone(),
         atome_type: atome_type.into(),
         parent_id: parent_id.map(String::from),
-        owner_id: Some(user_id.into()),
+        owner_id: Some(owner_id.into()),
         creator_id: Some(user_id.into()),
         data,
         sync_status: "pending".into(),
@@ -492,12 +503,16 @@ async fn handle_list(
 
     // Determine effective owner - if anonymous or not specified, query by type only
     // SPECIAL CASE: For atome_type = 'user', always query all users regardless of owner
-    let effective_owner = match (owner_id.or(Some(user_id)), atome_type) {
-        (Some(_), Some("user")) => {
-            // For user listing, ignore owner filtering to get all users
-            None
-        }
-        (Some(id), _) if id != "anonymous" && !id.is_empty() => Some(id),
+    // SPECIAL CASE: If ownerId = "*" or "all", query all atomes regardless of owner (for sync)
+    let effective_owner = match (owner_id, atome_type) {
+        // Sync mode: "*" or "all" means list all atomes
+        (Some("*"), _) | (Some("all"), _) => None,
+        // For user listing, ignore owner filtering to get all users
+        (_, Some("user")) => None,
+        // If ownerId is explicitly provided (not "*" or "all"), use it
+        (Some(id), _) if !id.is_empty() && id != "anonymous" => Some(id),
+        // No ownerId provided - default to logged-in user
+        (None, _) => Some(user_id),
         _ => None,
     };
 

@@ -89,15 +89,53 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     const ownerId = owner;
     const creatorId = creator || owner;
 
-    console.log('[createAtome Debug] Creating with id:', atomeId, 'type:', type, 'owner:', ownerId);
+    console.log('[createAtome Debug] Creating with id:', atomeId, 'type:', type, 'owner:', ownerId, 'parent:', parent);
 
-    // Use INSERT OR REPLACE for sync operations (upsert)
+    const parentId = parent || null;
+    const selfOwner = ownerId && ownerId === atomeId;
+    const selfParent = parentId && parentId === atomeId;
+
+    // FK-safe strategy:
+    // - If owner/parent reference is missing (or self-reference), insert with NULL for that FK.
+    // - Store deferred references in particles to be resolved once targets exist.
+    // - Then resolve self-references immediately via UPDATE (now FK target exists).
+
+    let insertOwnerId = ownerId || null;
+    let insertParentId = parentId;
+
+    if (selfOwner) insertOwnerId = null;
+    if (selfParent) insertParentId = null;
+
+    if (insertOwnerId) {
+        const ownerExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [insertOwnerId]);
+        if (!ownerExists) {
+            insertOwnerId = null;
+            await setParticle(atomeId, '_pending_owner_id', ownerId, creatorId);
+        }
+    }
+
+    if (insertParentId) {
+        const parentExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [insertParentId]);
+        if (!parentExists) {
+            insertParentId = null;
+            await setParticle(atomeId, '_pending_parent_id', parentId, creatorId);
+        }
+    }
+
     await query('run', `
-        INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, 
+        INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id,
                            sync_status, created_source, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'local', 'fastify', 
+        VALUES (?, ?, ?, ?, ?, 'local', 'fastify',
                 COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?), ?)
-    `, [atomeId, type, parent || null, ownerId, creatorId, atomeId, now, now]);
+    `, [atomeId, type, insertParentId, insertOwnerId, creatorId, atomeId, now, now]);
+
+    // Resolve self-references now that the row exists
+    if (selfOwner) {
+        await query('run', 'UPDATE atomes SET owner_id = ?, updated_at = ? WHERE atome_id = ?', [atomeId, now, atomeId]);
+    }
+    if (selfParent) {
+        await query('run', 'UPDATE atomes SET parent_id = ?, updated_at = ? WHERE atome_id = ?', [atomeId, now, atomeId]);
+    }
 
     // Store kind as a particle if provided
     if (kind) {
@@ -122,6 +160,51 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
         created_at: now,
         updated_at: now
     };
+}
+
+/**
+ * Resolve pending owner_id references after sync
+ * This fixes atomes that were created with NULL owner_id due to FK constraints
+ */
+export async function resolvePendingOwners() {
+    const now = new Date().toISOString();
+
+    // Find all atomes with deferred FK references
+    const pending = await query('all', `
+        SELECT p.atome_id, p.particle_key, p.particle_value
+        FROM particles p
+        WHERE p.particle_key IN ('_pending_owner_id', '_pending_parent_id')
+    `);
+
+    let resolved = 0;
+    let failed = 0;
+
+    for (const row of pending) {
+        try {
+            const pendingId = JSON.parse(row.particle_value);
+            const exists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [pendingId]);
+
+            if (exists) {
+                if (row.particle_key === '_pending_owner_id') {
+                    await query('run', 'UPDATE atomes SET owner_id = ?, updated_at = ? WHERE atome_id = ?', [pendingId, now, row.atome_id]);
+                } else if (row.particle_key === '_pending_parent_id') {
+                    await query('run', 'UPDATE atomes SET parent_id = ?, updated_at = ? WHERE atome_id = ?', [pendingId, now, row.atome_id]);
+                }
+
+                await query('run', 'DELETE FROM particles WHERE atome_id = ? AND particle_key = ?', [row.atome_id, row.particle_key]);
+                console.log('[resolvePendingOwners] Resolved', row.particle_key, 'for:', row.atome_id);
+                resolved++;
+            } else {
+                console.log('[resolvePendingOwners] Reference still missing for:', row.atome_id, row.particle_key, '->', pendingId);
+                failed++;
+            }
+        } catch (e) {
+            console.error('[resolvePendingOwners] Error:', e.message);
+            failed++;
+        }
+    }
+
+    return { resolved, failed, total: pending.length };
 }
 
 /**
@@ -799,6 +882,7 @@ export default {
     updateSyncState,
     getPendingForSync,
     markAsSynced,
+    resolvePendingOwners,
 
     // Legacy compatibility
     createObject,

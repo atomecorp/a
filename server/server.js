@@ -1395,6 +1395,17 @@ async function startServer() {
                   properties: particles
                 });
 
+                // After creating an atome, try to resolve any pending owner references
+                // This handles FK constraints for sync operations
+                try {
+                  const resolveResult = await db.resolvePendingOwners();
+                  if (resolveResult.resolved > 0) {
+                    console.log('[WS] Resolved', resolveResult.resolved, 'pending owner references');
+                  }
+                } catch (resolveErr) {
+                  console.log('[WS] Could not resolve pending owners:', resolveErr.message);
+                }
+
                 safeSend({
                   type: 'atome-response',
                   requestId,
@@ -1494,10 +1505,10 @@ async function startServer() {
               } else if (action === 'list') {
                 const { ownerId, userId, atomeType, limit, offset, includeDeleted } = data;
                 const effectiveType = atomeType;
-                const effectiveOwner = ownerId || userId;
+                const effectiveOwner = (ownerId === '*' || ownerId === 'all') ? null : (ownerId || userId);
 
                 console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}, includeDeleted=${includeDeleted}`);
-                console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner}, effectiveType=${effectiveType}`);
+                console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner || 'none'}, effectiveType=${effectiveType || 'none'}`);
 
                 // Build WHERE clause for deleted_at
                 const deletedClause = includeDeleted ? '' : 'AND a.deleted_at IS NULL';
