@@ -1092,7 +1092,7 @@ async function open_user_selector(callback) {
             }
 
             if (typeof callback === 'function') {
-              callback({ user_id: userId, username: loggedUsername, phone: phone, cancelled: false });
+              callback({ user_id: userId, username: username, phone: phone, cancelled: false });
             }
           } else {
             puts('❌ Failed to switch user');
