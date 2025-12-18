@@ -200,6 +200,18 @@ let currentProjectName = null;
 let currentProjectDiv = null;
 let selectedVisualAtome = null;
 
+function publishSelectedAtome(atomeId) {
+  selectedAtomeId = atomeId || null;
+  if (typeof window === 'undefined') return;
+
+  window.__selectedAtomeId = selectedAtomeId;
+  try {
+    window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: selectedAtomeId } }));
+  } catch (e) {
+    console.warn('[check.js] Failed to dispatch selection event:', e);
+  }
+}
+
 /**
  * TEST ONLY - Create or replace the project visual container in 'view' - SECURE VERSION
  * @param {string} projectId - The project ID
@@ -237,7 +249,7 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
 
   // Clear visual atome selection
   selectedVisualAtome = null;
-  selectedAtomeId = null;
+  publishSelectedAtome(null);
 
   puts('🔄 Creating new project view for: ' + projectName + ' (ID: ' + projectId + ')');
 
@@ -418,7 +430,7 @@ async function selectVisualAtome(atomeEl, atomeId) {
 
   // Select new
   selectedVisualAtome = atomeEl;
-  selectedAtomeId = atomeId;
+  publishSelectedAtome(atomeId);
   atomeEl.style.border = '2px solid yellow';
   puts('Selected atome: ' + atomeId.substring(0, 8) + '...');
 
@@ -1225,7 +1237,7 @@ async function open_atome_selector(options, callback) {
       },
       text: displayText,
       onClick: () => {
-        selectedAtomeId = atomeId;
+        publishSelectedAtome(atomeId);
         overlay.remove();
         console.log('[open_atome_selector] Selected atome:', atomeId);
         if (typeof callback === 'function') {
@@ -2241,7 +2253,7 @@ $('span', {
       if (selectedVisualAtome) {
         selectedVisualAtome.remove();
         selectedVisualAtome = null;
-        selectedAtomeId = null;
+        publishSelectedAtome(null);
       }
     } else {
       puts('❌ Failed to delete atome');
@@ -3098,6 +3110,10 @@ async function logSelectedUserDbInfo(selection) {
 /**
  * Share with selected user using share_atome function
  */
+
+// Project selection state for sharing target project.
+// Must be defined at module scope because it is used by event handlers.
+let selectedProjectForSharing = null;
 
 
 function createProjectSquare(project, index) {

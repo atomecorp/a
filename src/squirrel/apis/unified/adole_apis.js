@@ -2051,7 +2051,9 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
         );
 
         if (targetUser) {
-            targetUserId = targetUser.atome_id || targetUser.id;
+            // IMPORTANT: use the same canonical user id as `auth.current()` (user_id)
+            // otherwise inbox records can be created under a different id and never show up for the recipient.
+            targetUserId = targetUser.user_id || targetUser.atome_id || targetUser.id;
             const targetUsername = targetUser.username || targetUser.data?.username || targetUser.particles?.username || 'unknown';
             console.log('✅ Found target user:', targetUsername, 'ID:', targetUserId.substring(0, 8) + '...');
         } else {
@@ -2075,6 +2077,10 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
     const currentUserResult = await current_user();
     const sharerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
     console.log('🔍 Sharer ID:', sharerId?.substring(0, 8) + '...');
+
+    // Enrich request payload for mailbox/outbox persistence
+    shareRequest.sharerId = sharerId;
+    shareRequest.targetUserId = targetUserId;
 
     // ENHANCED: Determine target project for shared atomes
     let targetProjectId = null;
@@ -2241,23 +2247,48 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
 
     console.log('🎯 Total shared atomes:', sharedAtomes.length + '/' + normalizedAtomeIds.length);
 
-    // Try Tauri first (local SQLite) - Create sharing request record
-    try {
-        const tauriResult = await TauriAdapter.atome.create({
-            type: 'share_request',
-            particles: {
-                ...shareRequest,
-                sharedAtomes: sharedAtomes,
-                targetUserId: targetUserId,
-                status: 'completed'
-            }
-        });
-        console.log('🔍 Tauri sharing result:', tauriResult);
+    // Share requests must always be approvable by the recipient.
+    // Previously, real-time shares were created as `active` which bypassed the Pending panel in the Share UI.
+    // We always start as `pending`; the receiver can then accept/import or reject.
+    const requestStatus = 'pending';
 
-        if (tauriResult.ok || tauriResult.success) {
+    const inboxRequestRecord = {
+        type: 'share_request',
+        ownerId: targetUserId,
+        particles: {
+            ...shareRequest,
+            sharedAtomes: sharedAtomes,
+            status: requestStatus,
+            box: 'inbox'
+        }
+    };
+
+    const outboxRequestRecord = {
+        type: 'share_request',
+        ownerId: sharerId,
+        particles: {
+            ...shareRequest,
+            sharedAtomes: sharedAtomes,
+            status: requestStatus,
+            box: 'outbox'
+        }
+    };
+
+    // Try Tauri first (local SQLite) - Create inbox/outbox sharing request records
+    try {
+        const tauriInboxResult = await TauriAdapter.atome.create(inboxRequestRecord);
+        const tauriOutboxResult = await TauriAdapter.atome.create(outboxRequestRecord);
+
+        console.log('🔍 Tauri sharing inbox result:', tauriInboxResult);
+        console.log('🔍 Tauri sharing outbox result:', tauriOutboxResult);
+
+        const inboxOk = !!(tauriInboxResult?.ok || tauriInboxResult?.success);
+        const outboxOk = !!(tauriOutboxResult?.ok || tauriOutboxResult?.success);
+
+        if (inboxOk || outboxOk) {
             results.tauri = {
                 success: true,
-                data: tauriResult,
+                data: { inbox: tauriInboxResult, outbox: tauriOutboxResult },
                 shareRequest: shareRequest,
                 sharedAtomes: sharedAtomes,
                 error: null
@@ -2266,7 +2297,7 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
             results.tauri = {
                 success: false,
                 data: null,
-                error: tauriResult.error || 'Tauri sharing failed'
+                error: (tauriInboxResult?.error || tauriOutboxResult?.error) || 'Tauri sharing failed'
             };
         }
     } catch (e) {
@@ -2274,23 +2305,21 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
         results.tauri = { success: false, data: null, error: e.message };
     }
 
-    // Try Fastify (LibSQL) - Create sharing request record
+    // Try Fastify (LibSQL) - Create inbox/outbox sharing request records
     try {
-        const fastifyResult = await FastifyAdapter.atome.create({
-            type: 'share_request',
-            particles: {
-                ...shareRequest,
-                sharedAtomes: sharedAtomes,
-                targetUserId: targetUserId,
-                status: 'completed'
-            }
-        });
-        console.log('🔍 Fastify sharing result:', fastifyResult);
+        const fastifyInboxResult = await FastifyAdapter.atome.create(inboxRequestRecord);
+        const fastifyOutboxResult = await FastifyAdapter.atome.create(outboxRequestRecord);
 
-        if (fastifyResult.ok || fastifyResult.success) {
+        console.log('🔍 Fastify sharing inbox result:', fastifyInboxResult);
+        console.log('🔍 Fastify sharing outbox result:', fastifyOutboxResult);
+
+        const inboxOk = !!(fastifyInboxResult?.ok || fastifyInboxResult?.success);
+        const outboxOk = !!(fastifyOutboxResult?.ok || fastifyOutboxResult?.success);
+
+        if (inboxOk || outboxOk) {
             results.fastify = {
                 success: true,
-                data: fastifyResult,
+                data: { inbox: fastifyInboxResult, outbox: fastifyOutboxResult },
                 shareRequest: shareRequest,
                 sharedAtomes: sharedAtomes,
                 error: null
@@ -2299,7 +2328,7 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
             results.fastify = {
                 success: false,
                 data: null,
-                error: fastifyResult.error || 'Fastify sharing failed'
+                error: (fastifyInboxResult?.error || fastifyOutboxResult?.error) || 'Fastify sharing failed'
             };
         }
     } catch (e) {
