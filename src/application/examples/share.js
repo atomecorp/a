@@ -5,6 +5,242 @@
 import { AdoleAPI } from '../../squirrel/apis/unified/adole_apis.js';
 import { RemoteCommands } from '/squirrel/apis/remote_commands.js';
 
+const SHARE_SYNC_COMMAND = 'share-sync';
+const SHARE_ACCEPTED_COMMAND = 'share-accepted';
+
+let _realtimeInstalled = false;
+let _wrappedAlterInstalled = false;
+let _suppressSyncForAtomeIds = new Set();
+let _outboxIndexCache = { builtAt: 0, index: new Map() };
+
+function _withSuppressedSync(atomeId, fn) {
+    if (!atomeId) return fn();
+    _suppressSyncForAtomeIds.add(String(atomeId));
+    const cleanup = () => {
+        try { _suppressSyncForAtomeIds.delete(String(atomeId)); } catch (_) { }
+    };
+    try {
+        const p = fn();
+        if (p && typeof p.finally === 'function') return p.finally(cleanup);
+        cleanup();
+        return p;
+    } catch (e) {
+        cleanup();
+        throw e;
+    }
+}
+
+function _extractShareTypeFromRequestParticles(particles) {
+    const po = particles?.propertyOverrides || {};
+    return po?.__shareType || particles?.shareType || 'linked';
+}
+
+async function _buildOutboxIndex(api, currentUserId) {
+    const now = Date.now();
+    if (_outboxIndexCache.index && (now - _outboxIndexCache.builtAt) < 5000) {
+        return _outboxIndexCache.index;
+    }
+
+    const index = new Map();
+    try {
+        const result = await api.atomes.list({ type: 'share_request', ownerId: currentUserId });
+        const all = normalizeDualListResult(result, 'atomes');
+        for (const raw of all) {
+            const particles = raw?.particles || raw?.data || {};
+            if ((particles.box || null) !== 'outbox') continue;
+            if ((particles.status || null) !== 'active') continue;
+            const shareType = _extractShareTypeFromRequestParticles(particles);
+            if (shareType !== 'linked') continue;
+            if ((particles.mode || null) !== 'real-time') continue;
+
+            const targetUserId = particles.targetUserId || null;
+            if (!targetUserId) continue;
+
+            const sharedAtomes = Array.isArray(particles.sharedAtomes) ? particles.sharedAtomes : [];
+            for (const item of sharedAtomes) {
+                const originalAtomeId = item?.originalId || item?.original_atome_id || item?.originalAtomeId;
+                const sharedAtomeId = item?.sharedAtomeId || item?.shared_atome_id || item?.createdAtomeId;
+                if (!originalAtomeId || !sharedAtomeId) continue;
+                const key = String(originalAtomeId);
+                if (!index.has(key)) index.set(key, []);
+                index.get(key).push({
+                    targetUserId: String(targetUserId),
+                    sharedAtomeId: String(sharedAtomeId),
+                    requestId: particles.requestId || null
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('[ShareAPI] Failed to build outbox index:', e.message);
+    }
+
+    _outboxIndexCache = { builtAt: now, index };
+    return index;
+}
+
+async function _registerRealtimeHandlers() {
+    if (_realtimeInstalled) return;
+    _realtimeInstalled = true;
+
+    try {
+        RemoteCommands.register(SHARE_SYNC_COMMAND, async (params, sender) => {
+            try {
+                const api = window.AdoleAPI || AdoleAPI;
+                const current = await getCurrentUser();
+                if (!current?.id) return;
+
+                const direction = params?.direction || null;
+                const originalAtomeId = params?.originalAtomeId || null;
+                const sharedAtomeId = params?.sharedAtomeId || null;
+                const particlesPatch = params?.particles || null;
+
+                if (!particlesPatch || typeof particlesPatch !== 'object') return;
+
+                // Update receiver copy
+                if (direction === 'to-copy') {
+                    let targetId = sharedAtomeId;
+
+                    // Fallback lookup for legacy payloads
+                    if (!targetId && originalAtomeId && sender?.userId) {
+                        const listRes = await api.atomes.list({ ownerId: current.id });
+                        const atomes = normalizeAtomesFromListResult(listRes);
+                        const found = atomes.find(a => {
+                            const p = a.particles || {};
+                            return String(p.originalAtomeId || '') === String(originalAtomeId) &&
+                                String(p.sharedFrom || '') === String(sender.userId) &&
+                                String(p.shareType || 'linked') === 'linked';
+                        });
+                        if (found?.id) targetId = found.id;
+                    }
+
+                    if (!targetId) return;
+                    await _withSuppressedSync(targetId, () => api.atomes.alter(targetId, particlesPatch));
+                    return;
+                }
+
+                // Update origin (sender side)
+                if (direction === 'to-origin') {
+                    if (!originalAtomeId) return;
+                    await _withSuppressedSync(originalAtomeId, () => api.atomes.alter(originalAtomeId, particlesPatch));
+                    return;
+                }
+            } catch (e) {
+                console.warn('[ShareAPI] share-sync handler error:', e.message);
+            }
+        });
+
+        RemoteCommands.register(SHARE_ACCEPTED_COMMAND, async (params, sender) => {
+            try {
+                const api = window.AdoleAPI || AdoleAPI;
+                const current = await getCurrentUser();
+                if (!current?.id) return;
+
+                const requestId = params?.requestId || null;
+                if (!requestId) return;
+
+                // Mark matching outbox request as active so realtime sync can use it
+                const listRes = await api.atomes.list({ type: 'share_request', ownerId: current.id });
+                const all = normalizeDualListResult(listRes, 'atomes');
+                const outbox = all.filter(a => {
+                    const p = a.particles || a.data || {};
+                    return (p.box === 'outbox') && (p.requestId === requestId);
+                });
+
+                for (const req of outbox) {
+                    const id = req.atome_id || req.id;
+                    if (!id) continue;
+                    await api.atomes.alter(id, {
+                        status: 'active',
+                        acceptedAt: new Date().toISOString(),
+                        acceptedBy: sender?.userId || null,
+                        linkMappings: params?.mappings || null
+                    });
+                }
+
+                // Invalidate cache
+                _outboxIndexCache.builtAt = 0;
+            } catch (e) {
+                console.warn('[ShareAPI] share-accepted handler error:', e.message);
+            }
+        });
+    } catch (e) {
+        console.warn('[ShareAPI] Failed to register realtime handlers:', e.message);
+    }
+}
+
+async function _installAlterWrapper() {
+    if (_wrappedAlterInstalled) return;
+    _wrappedAlterInstalled = true;
+
+    const api = window.AdoleAPI || AdoleAPI;
+    if (!api?.atomes?.alter) return;
+
+    // Avoid double-wrapping
+    if (api.atomes.alter && api.atomes.alter.__shareWrapped) return;
+
+    const originalAlter = api.atomes.alter.bind(api.atomes);
+    const wrapped = async (atomeId, newParticles, callback) => {
+        const res = await originalAlter(atomeId, newParticles, callback);
+
+        try {
+            const id = String(atomeId || '');
+            if (!id) return res;
+            if (_suppressSyncForAtomeIds.has(id)) return res;
+
+            const current = await getCurrentUser();
+            if (!current?.id) return res;
+
+            // Only attempt sync when local update actually succeeded
+            const ok = !!(res?.tauri?.success || res?.fastify?.success);
+            if (!ok) return res;
+
+            // Load atome to detect if it's a linked shared copy
+            const got = await api.atomes.get(id);
+            const atome = got?.tauri?.atome || got?.fastify?.atome;
+            const particles = atome?.particles || atome?.data || {};
+
+            const shareType = particles.shareType || 'linked';
+
+            // Receiver copy -> send patch back to origin
+            if (shareType === 'linked' && particles.originalAtomeId && particles.sharedFrom) {
+                await RemoteCommands.sendCommand(String(particles.sharedFrom), SHARE_SYNC_COMMAND, {
+                    direction: 'to-origin',
+                    originalAtomeId: String(particles.originalAtomeId),
+                    particles: newParticles,
+                    fromUserId: current.id,
+                    at: new Date().toISOString()
+                });
+                return res;
+            }
+
+            // Origin atome -> push patch to all active linked copies
+            const outboxIndex = await _buildOutboxIndex(api, current.id);
+            const targets = outboxIndex.get(id) || [];
+            if (!targets.length) return res;
+
+            for (const t of targets) {
+                if (!t?.targetUserId || !t?.sharedAtomeId) continue;
+                await RemoteCommands.sendCommand(String(t.targetUserId), SHARE_SYNC_COMMAND, {
+                    direction: 'to-copy',
+                    originalAtomeId: id,
+                    sharedAtomeId: String(t.sharedAtomeId),
+                    particles: newParticles,
+                    fromUserId: current.id,
+                    requestId: t.requestId || null,
+                    at: new Date().toISOString()
+                });
+            }
+        } catch (e) {
+            console.warn('[ShareAPI] Realtime sync send failed:', e.message);
+        }
+
+        return res;
+    };
+
+    wrapped.__shareWrapped = true;
+    api.atomes.alter = wrapped;
+}
+
 async function getCurrentUser() {
     try {
         const api = window.AdoleAPI || AdoleAPI;
@@ -275,6 +511,10 @@ const ShareAPI = {
     async share_with(users_cible, type_de_partage_or_options, duree_du_partage = null, condition = null) {
         const api = window.AdoleAPI || AdoleAPI;
 
+        // Ensure realtime handlers are ready as early as possible
+        _registerRealtimeHandlers().catch(() => { });
+        _installAlterWrapper().catch(() => { });
+
         const options = (type_de_partage_or_options && typeof type_de_partage_or_options === 'object')
             ? type_de_partage_or_options
             : {
@@ -288,8 +528,13 @@ const ShareAPI = {
         const duration = options?.duration || null;
         const cond = options?.condition || null;
 
+        const shareType = options?.shareType || options?.linkType || 'linked';
+
         const permissions = options?.permissions || { read: true, alter: true, delete: false, create: false };
-        const propertyOverrides = { __shareMeta: buildShareMeta({ duration, condition: cond }) };
+        const propertyOverrides = {
+            __shareMeta: buildShareMeta({ duration, condition: cond }),
+            __shareType: String(shareType)
+        };
 
         if (!Array.isArray(users_cible) || users_cible.length === 0) {
             return { ok: false, error: 'No targets provided' };
@@ -391,6 +636,10 @@ const ShareAPI = {
         try {
             if (!requestAtomeId) return { ok: false, error: 'Missing requestAtomeId' };
 
+            // Ensure realtime handlers are ready as early as possible
+            _registerRealtimeHandlers().catch(() => { });
+            _installAlterWrapper().catch(() => { });
+
             const api = window.AdoleAPI || AdoleAPI;
             const current = await getCurrentUser();
             if (!current?.id) return { ok: false, error: 'Not logged in' };
@@ -406,50 +655,85 @@ const ShareAPI = {
             const status = particles.status || 'pending';
             const box = particles.box || 'inbox';
 
+            const shareType = _extractShareTypeFromRequestParticles(particles);
+
             if (box !== 'inbox') return { ok: false, error: 'Not an inbox request' };
-            if (status === 'accepted') return { ok: true, alreadyAccepted: true };
+            if (status === 'accepted' || status === 'active') return { ok: true, alreadyAccepted: true };
             if (status === 'rejected') return { ok: false, error: 'Request already rejected' };
 
             const sharedAtomes = Array.isArray(particles.sharedAtomes) ? particles.sharedAtomes : [];
             if (!sharedAtomes.length) return { ok: false, error: 'Request has no payload to import' };
 
-            const createdIds = [];
+            const importedIds = [];
+            const mappings = [];
+
+            // Preload recipient atomes once for legacy requests
+            const listRes = await api.atomes.list({ ownerId: current.id });
+            const recipientAtomes = normalizeAtomesFromListResult(listRes);
+
             for (const item of sharedAtomes) {
-                const sharedData = item?.sharedData || item?.shared_data || null;
-                if (!sharedData) continue;
-                const type = sharedData.type || 'shape';
-                const p = sharedData.particles || {};
+                const originalAtomeId = item?.originalId || item?.original_atome_id || item?.originalAtomeId || null;
+                let sharedAtomeId = item?.sharedAtomeId || item?.shared_atome_id || item?.createdAtomeId || null;
 
-                // Remove inbox markers if present
-                const particlesClean = { ...p };
-                delete particlesClean.inboxItem;
-                delete particlesClean.assignedToProject;
+                // Legacy fallback: find existing shared copy created by the sharer
+                if (!sharedAtomeId && originalAtomeId) {
+                    const found = recipientAtomes.find(a => {
+                        const p = a.particles || {};
+                        return String(p.originalAtomeId || '') === String(originalAtomeId) &&
+                            String(p.sharedFrom || '') === String(particles.sharerId || '') &&
+                            String(p.shareType || 'linked') === String(shareType);
+                    });
+                    if (found?.id) sharedAtomeId = found.id;
+                }
 
-                const created = await api.atomes.create({
-                    type,
-                    ownerId: current.id,
+                if (!sharedAtomeId) continue;
+
+                // Assign shared atome into the currently opened project
+                await api.atomes.alter(sharedAtomeId, {
                     projectId,
-                    particles: {
-                        ...particlesClean,
-                        inboxItem: false,
-                        assignedToProject: true,
-                        importedFromShareRequest: requestAtomeId,
-                        importedAt: new Date().toISOString()
-                    }
+                    project_id: projectId,
+                    assignedToProject: true,
+                    inboxItem: false,
+                    acceptedAt: new Date().toISOString(),
+                    importedFromShareRequest: requestAtomeId
                 });
 
-                const createdId = created?.tauri?.data?.id || created?.fastify?.data?.id || created?.tauri?.data?.atome_id || created?.fastify?.data?.atome_id;
-                if (createdId) createdIds.push(createdId);
+                importedIds.push(String(sharedAtomeId));
+                if (originalAtomeId) mappings.push({ originalAtomeId: String(originalAtomeId), sharedAtomeId: String(sharedAtomeId) });
             }
 
+            const newStatus = (shareType === 'linked' && (particles.mode || '') === 'real-time') ? 'active' : 'accepted';
+
             await api.atomes.alter(requestAtomeId, {
-                status: 'accepted',
+                status: newStatus,
                 acceptedAt: new Date().toISOString(),
-                importedAtomesCount: createdIds.length,
-                importedAtomeIds: createdIds
+                importedAtomesCount: importedIds.length,
+                importedAtomeIds: importedIds,
+                linkMappings: mappings
             });
 
-            return { ok: true, imported: createdIds.length, importedIds: createdIds };
+            // Notify sharer so they can activate outbox record for realtime sync
+            try {
+                if (particles.sharerId && particles.requestId && newStatus === 'active') {
+                    await RemoteCommands.sendCommand(String(particles.sharerId), SHARE_ACCEPTED_COMMAND, {
+                        requestId: particles.requestId,
+                        mappings,
+                        targetUserId: current.id,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (_) { }
+
+            // Trigger UI/project refresh without a full page reload
+            try {
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('adole-share-imported', {
+                        detail: { projectId, importedIds, requestAtomeId }
+                    }));
+                }
+            } catch (_) { }
+
+            return { ok: true, imported: importedIds.length, importedIds };
         } catch (e) {
             return { ok: false, error: e.message };
         }
@@ -489,6 +773,10 @@ const ShareAPI = {
         return getSelectedAtomeId();
     }
 };
+
+// Install realtime plumbing eagerly (safe no-op if RemoteCommands not started yet)
+_registerRealtimeHandlers().catch(() => { });
+_installAlterWrapper().catch(() => { });
 
 window.ShareAPI = ShareAPI;
 

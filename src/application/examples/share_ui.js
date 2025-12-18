@@ -18,6 +18,7 @@ let usersList = null;
 let sharedContainer = null;
 let selectedTarget = null; // { phone, username, userId }
 let modeDropDown = null;
+let shareTypeDropDown = null;
 let atomeIdInput = null;
 let durationInput = null;
 let conditionInput = null;
@@ -27,6 +28,21 @@ let statusLineEl = null;
 
 let refreshAtomesInFlight = false;
 let refreshSharedInFlight = false;
+
+let shareUiEventHandlersRegistered = false;
+
+function registerShareUiEventHandlers() {
+    if (shareUiEventHandlersRegistered) return;
+    shareUiEventHandlersRegistered = true;
+
+    window.addEventListener('adole-share-imported', async () => {
+        try {
+            // Keep the dialog in sync when an import happens
+            await refreshShared();
+            await refreshAtomes();
+        } catch (_) { }
+    });
+}
 
 function uniqueUiId(prefix) {
     try {
@@ -79,6 +95,7 @@ function destroyDialog() {
     sharedContainer = null;
     selectedTarget = null;
     modeDropDown = null;
+    shareTypeDropDown = null;
     atomeIdInput = null;
     durationInput = null;
     conditionInput = null;
@@ -461,6 +478,8 @@ async function openDialog() {
     if (dialogIsOpening) return;
     dialogIsOpening = true;
 
+    try { registerShareUiEventHandlers(); } catch (_) { }
+
     try {
         destroyDialog();
 
@@ -492,8 +511,8 @@ async function openDialog() {
             parent: shareOverlay,
             id: 'share_modal',
             css: {
-                width: '900px',
-                maxWidth: '95vw',
+                width: '1100px',
+                maxWidth: '98vw',
                 height: '600px',
                 maxHeight: '90vh',
                 backgroundColor: '#121212',
@@ -542,7 +561,7 @@ async function openDialog() {
                 padding: '12px',
                 minHeight: '0',
                 overflowY: 'auto',
-                overflowX: 'hidden'
+                overflowX: 'auto'
             }
         });
 
@@ -584,11 +603,12 @@ async function openDialog() {
             parent: body,
             css: {
                 flex: '1',
+                minWidth: '0',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
                 minHeight: '0',
-                overflow: 'visible'
+                overflow: 'hidden'
             }
         });
 
@@ -625,6 +645,22 @@ async function openDialog() {
                 { label: 'Manual (push)', value: 'validation-based' }
             ],
             value: 'real-time'
+        });
+
+        const shareTypeHolder = $('div', {
+            parent: controls,
+            css: { width: '220px', height: '30px' }
+        });
+
+        shareTypeDropDown = dropDown({
+            parent: shareTypeHolder,
+            id: 'share_type',
+            theme: 'dark',
+            options: [
+                { label: 'Linked (sync)', value: 'linked' },
+                { label: 'Copy (independent)', value: 'copy' }
+            ],
+            value: 'linked'
         });
 
         const atomeWrap = $('div', {
@@ -737,6 +773,7 @@ async function openDialog() {
             onAction: async () => {
                 setStatus('', 'info');
                 const mode = modeDropDown?.getValue ? modeDropDown.getValue() : 'real-time';
+                const shareType = shareTypeDropDown?.getValue ? shareTypeDropDown.getValue() : 'linked';
                 const atomeId = atomeIdInput?.value ? String(atomeIdInput.value).trim() : '';
                 const duration = durationInput?.value || null;
                 const condition = conditionInput?.value || null;
@@ -757,6 +794,7 @@ async function openDialog() {
                     { phone: selectedTarget.phone, userId: selectedTarget.userId, username: selectedTarget.username }
                 ], {
                     mode,
+                    shareType,
                     atomeIds: [atomeId],
                     duration,
                     condition
@@ -774,6 +812,7 @@ async function openDialog() {
             offAction: async () => {
                 setStatus('', 'info');
                 const mode = modeDropDown?.getValue ? modeDropDown.getValue() : 'real-time';
+                const shareType = shareTypeDropDown?.getValue ? shareTypeDropDown.getValue() : 'linked';
                 const atomeId = atomeIdInput?.value ? String(atomeIdInput.value).trim() : '';
                 const duration = durationInput?.value || null;
                 const condition = conditionInput?.value || null;
@@ -794,6 +833,7 @@ async function openDialog() {
                     { phone: selectedTarget.phone, userId: selectedTarget.userId, username: selectedTarget.username }
                 ], {
                     mode,
+                    shareType,
                     atomeIds: [atomeId],
                     duration,
                     condition

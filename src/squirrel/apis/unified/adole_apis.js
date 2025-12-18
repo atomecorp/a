@@ -2122,9 +2122,69 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
     // Now share each atome by creating copies for the target user
     const sharedAtomes = [];
 
+    // Determine share type (linked vs copy) from propertyOverrides
+    const shareType = String((propertyOverrides && propertyOverrides.__shareType) ? propertyOverrides.__shareType : 'linked');
+
+    async function findExistingSharedCopyIds(originalId) {
+        try {
+            const existing = { tauriId: null, fastifyId: null };
+
+            // Only dedupe for linked shares; copy mode should create a new independent copy
+            if (shareType !== 'linked') return existing;
+
+            const match = (a) => {
+                const p = a?.particles || a?.data || {};
+                const o = p.originalAtomeId || p.original_atome_id || null;
+                const sf = p.sharedFrom || p.shared_from || null;
+                const st = p.shareType || p.share_type || 'linked';
+                return String(o || '') === String(originalId) &&
+                    String(sf || '') === String(sharerId || '') &&
+                    String(st || 'linked') === 'linked';
+            };
+
+            try {
+                const tauriList = await TauriAdapter.atome.list({ ownerId: targetUserId });
+                const tauriAtomes = tauriList?.atomes || tauriList?.data || [];
+                const found = Array.isArray(tauriAtomes) ? tauriAtomes.find(match) : null;
+                if (found) existing.tauriId = found.atome_id || found.id;
+            } catch (_) { }
+
+            try {
+                const fastifyList = await FastifyAdapter.atome.list({ ownerId: targetUserId });
+                const fastifyAtomes = fastifyList?.atomes || fastifyList?.data || [];
+                const found = Array.isArray(fastifyAtomes) ? fastifyAtomes.find(match) : null;
+                if (found) existing.fastifyId = found.atome_id || found.id;
+            } catch (_) { }
+
+            return existing;
+        } catch (_) {
+            return { tauriId: null, fastifyId: null };
+        }
+    }
+
     for (const atomeId of normalizedAtomeIds) {
         try {
             console.log('🔄 Sharing atome:', atomeId.substring(0, 8) + '...');
+
+            // Dedupe: if linked share copy already exists for this target user, reuse it
+            const existingIds = await findExistingSharedCopyIds(atomeId);
+            if (existingIds.tauriId || existingIds.fastifyId) {
+                console.log('♻️ Reusing existing shared copy for linked share:', {
+                    tauri: existingIds.tauriId ? existingIds.tauriId.substring(0, 8) + '...' : null,
+                    fastify: existingIds.fastifyId ? existingIds.fastifyId.substring(0, 8) + '...' : null
+                });
+
+                sharedAtomes.push({
+                    originalId: atomeId,
+                    sharedData: null,
+                    sharedAtomeId: existingIds.tauriId || existingIds.fastifyId,
+                    sharedAtomeIds: existingIds,
+                    createdOnTauri: !!existingIds.tauriId,
+                    createdOnFastify: !!existingIds.fastifyId,
+                    reused: true
+                });
+                continue;
+            }
 
             // Get the original atome
             const originalAtome = await get_atome(atomeId);
@@ -2190,6 +2250,7 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
                     sharedAt: new Date().toISOString(),
                     originalAtomeId: atomeId,
                     isShared: true,
+                    shareType: shareType,
                     // Add project assignment info
                     assignedToProject: targetProjectId ? true : false,
                     inboxItem: targetProjectId ? false : true
@@ -2203,12 +2264,15 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
             // Create the shared atome copy on both backends
             let createdOnTauri = false;
             let createdOnFastify = false;
+            let createdTauriId = null;
+            let createdFastifyId = null;
 
             try {
                 const tauriResult = await TauriAdapter.atome.create(sharedAtomeData);
                 if (tauriResult.ok || tauriResult.success) {
                     console.log('✅ Created shared atome copy on Tauri');
                     createdOnTauri = true;
+                    createdTauriId = tauriResult?.atome_id || tauriResult?.id || tauriResult?.data?.atome_id || tauriResult?.data?.id || null;
                 } else {
                     console.error('❌ Tauri creation failed:', tauriResult.error);
                 }
@@ -2221,6 +2285,7 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
                 if (fastifyResult.ok || fastifyResult.success) {
                     console.log('✅ Created shared atome copy on Fastify');
                     createdOnFastify = true;
+                    createdFastifyId = fastifyResult?.atome_id || fastifyResult?.id || fastifyResult?.data?.atome_id || fastifyResult?.data?.id || null;
                 } else {
                     console.error('❌ Fastify creation failed:', fastifyResult.error);
                 }
@@ -2232,6 +2297,8 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
                 sharedAtomes.push({
                     originalId: atomeId,
                     sharedData: sharedAtomeData,
+                    sharedAtomeId: createdTauriId || createdFastifyId,
+                    sharedAtomeIds: { tauriId: createdTauriId, fastifyId: createdFastifyId },
                     createdOnTauri,
                     createdOnFastify
                 });

@@ -200,6 +200,17 @@ let currentProjectName = null;
 let currentProjectDiv = null;
 let selectedVisualAtome = null;
 
+// When Share imports/assigns atomes to the current project, refresh the project view.
+if (typeof window !== 'undefined') {
+  window.addEventListener('adole-share-imported', async (e) => {
+    try {
+      const projectId = e?.detail?.projectId || selectedProjectId;
+      if (!projectId) return;
+      await loadProjectAtomes(projectId);
+    } catch (_) { }
+  });
+}
+
 function publishSelectedAtome(atomeId) {
   selectedAtomeId = atomeId || null;
   if (typeof window === 'undefined') return;
