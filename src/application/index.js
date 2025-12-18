@@ -59,6 +59,7 @@
 import('./examples/check.js');
 import('./examples/messages.js');
 import('./examples/messages_ui.js');
+import('./examples/share.js');
 
 
 
