@@ -498,6 +498,8 @@ async function runPlatformTests(baseUrl, platform) {
 /**
  * Run complete test suite for both platforms
  */
+import { getCloudServerUrl, getLocalServerUrl } from '../../serverUrls.js';
+
 async function runAllTests() {
     console.log(`
 ╔════════════════════════════════════════════════════════════╗
@@ -515,10 +517,20 @@ async function runAllTests() {
     const startTime = Date.now();
 
     // Test Tauri (Axum) backend
-    await runPlatformTests('http://localhost:3000', 'Tauri');
+    const tauriBase = getLocalServerUrl();
+    if (tauriBase) {
+        await runPlatformTests(tauriBase, 'Tauri');
+    } else {
+        skipTest('[Tauri] All tests', 'Tauri base URL not available');
+    }
 
     // Test Fastify backend
-    await runPlatformTests('http://localhost:3001', 'Fastify');
+    const fastifyBase = getCloudServerUrl();
+    if (fastifyBase) {
+        await runPlatformTests(fastifyBase, 'Fastify');
+    } else {
+        skipTest('[Fastify] All tests', 'Fastify base URL not configured');
+    }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 

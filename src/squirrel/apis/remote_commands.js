@@ -55,18 +55,25 @@ let configLoaded = false;
 async function loadConfigOnce() {
     if (configLoaded && CONFIG.WS_URL) return CONFIG.WS_URL;
 
+    if (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_WS_API_URL__ === 'string') {
+        const wsUrl = window.__SQUIRREL_FASTIFY_WS_API_URL__.trim();
+        if (wsUrl) {
+            CONFIG.WS_URL = wsUrl;
+            configLoaded = true;
+            return CONFIG.WS_URL;
+        }
+    }
+
     try {
         const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
         const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3001;
         const localBase = isTauriRuntime ? `http://127.0.0.1:${localPort}` : '';
-        const configUrl = isTauriRuntime ? `${localBase}/server_config.json` : 'server_config.json';
+        const configUrl = isTauriRuntime ? `${localBase}/server_config.json` : '/server_config.json';
 
         const response = await fetch(configUrl, { cache: 'no-store' });
         if (!response || !response.ok) {
-            log('Cannot load server_config.json, using fallback');
-            CONFIG.WS_URL = `ws://127.0.0.1:${localPort}/ws/api`;
             configLoaded = true;
-            return CONFIG.WS_URL;
+            return null;
         }
 
         const config = await response.json();
@@ -82,10 +89,8 @@ async function loadConfigOnce() {
         return CONFIG.WS_URL;
     } catch (error) {
         log('Failed to load server_config.json:', error.message);
-        const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3001;
-        CONFIG.WS_URL = `ws://127.0.0.1:${localPort}/ws/api`;
         configLoaded = true;
-        return CONFIG.WS_URL;
+        return null;
     }
 }
 

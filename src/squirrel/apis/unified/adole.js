@@ -13,7 +13,7 @@
 
 export const CONFIG = {
     TAURI_BASE_URL: 'http://127.0.0.1:3000',
-    FASTIFY_BASE_URL: 'http://127.0.0.1:3001',
+    FASTIFY_BASE_URL: null,
     TAURI_TOKEN_KEY: 'local_auth_token',
     FASTIFY_TOKEN_KEY: 'cloud_auth_token',
     CHECK_INTERVAL: 30000,      // 30 seconds backend check cache
@@ -80,6 +80,49 @@ function isInTauri() {
     return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 }
 
+function getTauriHttpBaseUrl() {
+    if (typeof window === 'undefined') return CONFIG.TAURI_BASE_URL;
+
+    const port = window.__ATOME_LOCAL_HTTP_PORT__;
+    if (port) return `http://127.0.0.1:${port}`;
+
+    return CONFIG.TAURI_BASE_URL;
+}
+
+function getTauriWsUrl() {
+    const httpBase = getTauriHttpBaseUrl();
+    return httpBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/api';
+}
+
+function getFastifyHttpBaseUrl() {
+    if (typeof window === 'undefined') return null;
+
+    const custom = window.__SQUIRREL_FASTIFY_URL__;
+    if (typeof custom === 'string' && custom.trim()) {
+        return custom.trim().replace(/\/$/, '');
+    }
+
+    const loc = window.location;
+    if (loc && loc.hostname && loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
+        return loc.origin;
+    }
+
+    return null;
+}
+
+function getFastifyWsApiUrl() {
+    if (typeof window === 'undefined') return null;
+
+    const explicit = window.__SQUIRREL_FASTIFY_WS_API_URL__;
+    if (typeof explicit === 'string' && explicit.trim()) {
+        return explicit.trim();
+    }
+
+    const httpBase = getFastifyHttpBaseUrl();
+    if (!httpBase) return null;
+    return httpBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/api';
+}
+
 /**
  * Check if we're on localhost (dev environment)
  */
@@ -101,37 +144,24 @@ export async function checkConnection(backend) {
     const state = _connectionState[backend];
     const now = Date.now();
 
-    // TAURI: Check if we're in Tauri environment OR on localhost (dev mode)
-    // In dev mode, we might want to test cross-server from browser
+    // TAURI: Only consider Tauri available inside a real Tauri runtime.
+    // Browser/production must never assume localhost Tauri exists.
     if (backend === 'tauri') {
         if (isInTauri()) {
             // In Tauri app, assume Tauri server is available
             state.online = true;
             state.lastCheck = now;
             return true;
-        } else if (isLocalDev()) {
-            // On localhost - try to ping Tauri server (might be running for dev)
-            // Use cached state if recently checked
-            const cacheMultiplier = Math.min(state.failCount + 1, 6);
-            const effectiveCacheDuration = CONFIG.OFFLINE_CACHE_DURATION * cacheMultiplier;
-            if (state.lastCheck && (now - state.lastCheck < effectiveCacheDuration)) {
-                return state.online;
-            }
-            const isOnline = await silentPing(CONFIG.TAURI_BASE_URL);
-            state.online = isOnline;
-            state.lastCheck = now;
-            state.failCount = isOnline ? 0 : state.failCount + 1;
-            return isOnline;
         } else {
-            // Not in Tauri and not on localhost - don't try to ping
+            // Not in Tauri: don't try to ping/connect
             state.online = false;
             state.lastCheck = now;
             return false;
         }
     }
 
-    // FASTIFY: Only check if on localhost
-    if (backend === 'fastify' && !isLocalDev()) {
+    // FASTIFY: allow same-origin production OR configured URL; avoid localhost assumptions
+    if (backend === 'fastify' && !getFastifyHttpBaseUrl()) {
         state.online = false;
         state.lastCheck = now;
         return false;
@@ -151,7 +181,12 @@ export async function checkConnection(backend) {
     }
 
     // Perform silent ping (only for Fastify at this point)
-    const baseUrl = CONFIG.FASTIFY_BASE_URL;
+    const baseUrl = getFastifyHttpBaseUrl();
+    if (!baseUrl) {
+        state.online = false;
+        state.lastCheck = now;
+        return false;
+    }
     const isOnline = await silentPing(baseUrl);
 
     // Update state
@@ -489,7 +524,9 @@ class TauriWebSocket {
                         success: message.success,
                         status: message.success ? 200 : 400,
                         error: message.error,
-                        data: message.data,
+                        // Server may reply with { atome } for create/get
+                        atome: message.atome,
+                        data: message.data ?? message.atome,
                         atomes: message.atomes,
                         count: message.count
                     });
@@ -589,17 +626,55 @@ class TauriWebSocket {
 let _tauriWs = null;
 let _fastifyWs = null;
 
+const _noTauriWs = {
+    async connect() { return false; },
+    async isAvailable() { return false; },
+    async send() {
+        return {
+            ok: false,
+            success: false,
+            status: 0,
+            offline: true,
+            error: 'Tauri backend is not available in this runtime'
+        };
+    }
+};
+
+const _noFastifyWs = {
+    async connect() { return false; },
+    async isAvailable() { return false; },
+    async send() {
+        return {
+            ok: false,
+            success: false,
+            status: 0,
+            offline: true,
+            error: 'Fastify backend is not configured (missing Fastify WebSocket URL)'
+        };
+    }
+};
+
 function getTauriWs() {
+    if (!isInTauri()) {
+        return _noTauriWs;
+    }
+
     if (!_tauriWs) {
-        _tauriWs = new TauriWebSocket('ws://127.0.0.1:3000/ws/api');
+        _tauriWs = new TauriWebSocket(getTauriWsUrl());
     }
     return _tauriWs;
 }
 
 function getFastifyWs() {
-    if (!_fastifyWs) {
-        _fastifyWs = new TauriWebSocket('ws://127.0.0.1:3001/ws/api');
+    const wsUrl = getFastifyWsApiUrl();
+    if (!wsUrl) {
+        return _noFastifyWs;
     }
+
+    if (!_fastifyWs) {
+        _fastifyWs = new TauriWebSocket(wsUrl);
+    }
+
     return _fastifyWs;
 }
 
@@ -609,21 +684,33 @@ function getFastifyWs() {
  * @param {string} backend - 'tauri' (port 3000) or 'fastify' (port 3001)
  */
 export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
-    const ws = backend === 'fastify' ? getFastifyWs() : getTauriWs();
-    const baseUrl = backend === 'fastify' ? 'ws://127.0.0.1:3001' : 'ws://127.0.0.1:3000';
+    const resolvedBackend = backend || (isInTauri() ? 'tauri' : 'fastify');
+
+    // IMPORTANT:
+    // Do NOT capture the WebSocket instance at module load time.
+    // In browser mode, server_config.json is loaded asynchronously and the Fastify WS URL
+    // may not exist yet. If we capture a no-op WS too early, the adapter stays broken forever.
+    const getWs = () => (resolvedBackend === 'fastify' ? getFastifyWs() : getTauriWs());
+    const getBaseUrl = () => {
+        if (resolvedBackend === 'fastify') {
+            const wsApi = getFastifyWsApiUrl();
+            return wsApi ? wsApi.replace(/\/ws\/api$/, '') : '';
+        }
+        return getTauriWsUrl().replace(/\/ws\/api$/, '');
+    };
 
     return {
-        baseUrl,
+        get baseUrl() { return getBaseUrl(); },
         tokenKey,
 
-        isAvailable: () => ws.isAvailable(),
+        isAvailable: () => getWs().isAvailable(),
         getToken: () => getToken(tokenKey),
         setToken: (token) => setToken(tokenKey, token),
         clearToken: () => clearToken(tokenKey),
 
         auth: {
             async register(data) {
-                const result = await ws.send({
+                const result = await getWs().send({
                     type: 'auth',
                     action: 'register',
                     username: data.username,
@@ -635,7 +722,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 return result;
             },
             async login(data) {
-                const result = await ws.send({
+                const result = await getWs().send({
                     type: 'auth',
                     action: 'login',
                     phone: data.phone,
@@ -646,16 +733,16 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async logout() {
                 clearToken(tokenKey);
-                await ws.send({ type: 'auth', action: 'logout' });
+                await getWs().send({ type: 'auth', action: 'logout' });
                 return { ok: true, success: true };
             },
             async me() {
                 const token = getToken(tokenKey);
-                return ws.send({ type: 'auth', action: 'me', token });
+                return getWs().send({ type: 'auth', action: 'me', token });
             },
             async changePassword(data) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'auth',
                     action: 'change-password',
                     token,
@@ -665,7 +752,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async deleteAccount(data) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'auth',
                     action: 'delete',
                     token,
@@ -680,7 +767,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         atome: {
             async create(data) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'atome',
                     action: 'create',
                     token,
@@ -694,7 +781,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async get(id) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'atome',
                     action: 'get',
                     token,
@@ -703,7 +790,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async list(params = {}) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'atome',
                     action: 'list',
                     token,
@@ -717,7 +804,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async softDelete(id) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'atome',
                     action: 'soft-delete',
                     token,
@@ -726,7 +813,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async alter(id, data) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'atome',
                     action: 'alter',
                     token,
@@ -736,7 +823,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async update(id, data) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'atome',
                     action: 'update',
                     token,
@@ -746,7 +833,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async delete(id) {
                 const token = getToken(tokenKey);
-                return ws.send({
+                return getWs().send({
                     type: 'atome',
                     action: 'delete',
                     token,
@@ -789,7 +876,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
 
         debug: {
             async listTables() {
-                return ws.send({
+                return getWs().send({
                     type: 'debug',
                     action: 'list-tables'
                 });
@@ -809,7 +896,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
 export const TauriAdapter = createWebSocketAdapter(CONFIG.TAURI_TOKEN_KEY, 'tauri');
 
 /**
- * Fastify adapter (localhost:3001, LibSQL) - WebSocket-only
+ * Fastify adapter (config-driven, WebSocket-only)
  * Uses createWebSocketAdapter for full ADOLE v3.0 compliance
  */
 export const FastifyAdapter = createWebSocketAdapter(CONFIG.FASTIFY_TOKEN_KEY, 'fastify');

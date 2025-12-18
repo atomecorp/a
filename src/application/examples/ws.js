@@ -143,8 +143,8 @@ const disconnectBtn = $('button', {
 // Input message avec la nouvelle API Squirrel améliorée
 messageInputElement = $('input', {
   id: 'message-input',
-  attrs: { 
-    type: 'text', 
+  attrs: {
+    type: 'text',
     placeholder: 'Message à envoyer...'
   },
   css: {
@@ -188,10 +188,38 @@ const messagesLog = $('div', {
   parent: wsSection
 });
 
+function getFastifyHttpBase() {
+  try {
+    const base = typeof window !== 'undefined' ? window.__SQUIRREL_FASTIFY_URL__ : '';
+    if (typeof base === 'string' && base.trim()) return base.trim().replace(/\/$/, '');
+  } catch (e) { }
+  return null;
+}
+
+function getFastifyWsApiUrl() {
+  try {
+    const explicit = typeof window !== 'undefined' ? window.__SQUIRREL_FASTIFY_WS_API_URL__ : '';
+    if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  } catch (e) { }
+
+  const httpBase = getFastifyHttpBase();
+  if (!httpBase) return null;
+  return httpBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/api';
+}
+
 // === FONCTIONS ===
 
 function checkHealth() {
-  fetch('http://localhost:3001/health')
+  const base = getFastifyHttpBase();
+  if (!base) {
+    healthResult.innerHTML = `
+        <div style="color: #dc3545; font-weight: bold;">❌ Error</div>
+        <div>Fastify URL is not configured (server_config.json)</div>
+      `;
+    return;
+  }
+
+  fetch(`${base}/health`)
     .then(response => response.json())
     .then(data => {
       healthResult.innerHTML = `
@@ -204,22 +232,28 @@ function checkHealth() {
     .catch(error => {
       healthResult.innerHTML = `
         <div style="color: #dc3545; font-weight: bold;">❌ Erreur</div>
-        <div>Serveur inaccessible sur localhost:3001</div>
+        <div>Serveur inaccessible: ${base}</div>
       `;
     });
 }
 
 function connectWS() {
   if (isConnected) return;
-  
-  websocket = new WebSocket('ws://localhost:3001/ws');
-  
+
+  const wsUrl = getFastifyWsApiUrl();
+  if (!wsUrl) {
+    logMessage('❌ Error', 'Fastify WebSocket URL is not configured (server_config.json)');
+    return;
+  }
+
+  websocket = new WebSocket(wsUrl);
+
   websocket.onopen = () => {
     isConnected = true;
     updateStatus(true);
     logMessage('🔗 Connexion', 'WebSocket connecté !');
   };
-  
+
   websocket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
@@ -228,13 +262,13 @@ function connectWS() {
       logMessage('📥 Reçu', event.data);
     }
   };
-  
+
   websocket.onclose = () => {
     isConnected = false;
     updateStatus(false);
     logMessage('🔌 Fermé', 'WebSocket déconnecté');
   };
-  
+
   websocket.onerror = (error) => {
     logMessage('❌ Erreur', 'Erreur WebSocket');
   };
@@ -251,21 +285,21 @@ function sendMessage() {
     logMessage('⚠️ Attention', 'Pas de connexion WebSocket');
     return;
   }
-  
+
   if (!messageInputElement || !messageInputElement.value) {
     logMessage('❌ Erreur', 'Input de message non disponible');
     return;
   }
-  
+
   const msg = messageInputElement.value.trim();
   if (!msg) return;
-  
+
   const data = {
     type: 'message',
     content: msg,
     timestamp: new Date().toISOString()
   };
-  
+
   websocket.send(JSON.stringify(data));
   logMessage('📤 Envoyé', JSON.stringify(data));
   messageInputElement.value = '';
@@ -295,19 +329,19 @@ function logMessage(type, content) {
     },
     parent: messagesLog
   });
-  
+
   $('strong', {
     text: `[${time}] ${type}: `,
     css: { color: '#495057' },
     parent: entry
   });
-  
+
   $('span', {
     text: content,
     css: { color: '#6c757d' },
     parent: entry
   });
-  
+
   messagesLog.scrollTop = messagesLog.scrollHeight;
 }
 

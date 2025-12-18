@@ -45,6 +45,7 @@ import './apis/utils.js';
 import './apis/loader.js';
 import './apis/shortcut.js';
 import { AdoleAPI } from './apis/unified/adole_apis.js';
+import { loadServerConfigOnce } from './apis/loadServerConfig.js';
 import DragDrop from './apis/dragdrop.js';
 import { $, define, observeMutations } from './squirrel.js';
 
@@ -165,7 +166,43 @@ Unit.getAllUnits = getAllUnits;
 
 
 // === IMPORT KICKSTART AFTER EXPOSURE ===
-import('./kickstart.js').then(() => {
+import('./kickstart.js').then(async () => {
+  // Load server_config.json early to avoid hardcoded localhost endpoints
+  try {
+    const cfg = await loadServerConfigOnce();
+    if (cfg) {
+      // Debug: confirm globals exist (helps diagnose "missing Fastify WebSocket URL")
+      console.log('[Squirrel] server_config.json loaded');
+      console.log('[Squirrel] __SQUIRREL_FASTIFY_URL__:', window.__SQUIRREL_FASTIFY_URL__);
+      console.log('[Squirrel] __SQUIRREL_FASTIFY_WS_API_URL__:', window.__SQUIRREL_FASTIFY_WS_API_URL__);
+      console.log('[Squirrel] __SQUIRREL_FASTIFY_WS_SYNC_URL__:', window.__SQUIRREL_FASTIFY_WS_SYNC_URL__);
+    } else {
+      console.warn('[Squirrel] server_config.json not loaded (Fastify endpoints may be unavailable)');
+    }
+  } catch (e) {
+    // Silent: config may not be available in some contexts
+  }
+
+  // Token key migration (legacy -> current)
+  // Some older builds stored the Fastify JWT under 'auth_token'. The unified Fastify adapter
+  // expects 'cloud_auth_token'. Copy once to avoid breaking current_user(), projects, etc.
+  try {
+    const cloud = localStorage.getItem('cloud_auth_token');
+    const legacy = localStorage.getItem('auth_token');
+    if (!cloud || cloud.length < 10) {
+      if (legacy && legacy.length > 10) {
+        localStorage.setItem('cloud_auth_token', legacy);
+      } else {
+        const local = localStorage.getItem('local_auth_token');
+        if (local && local.length > 10) {
+          localStorage.setItem('cloud_auth_token', local);
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore storage errors
+  }
+
   // Toggle optional integrations once core runtime is ready
   try { initIPlugWeb(); } catch (e) { console.warn('iPlug init failed', e); }
   try { initSyncEngine(); } catch (e) { console.warn('SyncEngine init failed', e); }

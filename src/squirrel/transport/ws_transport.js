@@ -25,8 +25,8 @@ const CONFIG = {
         httpBase: 'http://127.0.0.1:3000'
     },
     fastify: {
-        wsUrl: 'ws://127.0.0.1:3001/ws/api',
-        httpBase: 'http://127.0.0.1:3001'
+        wsUrl: null,
+        httpBase: null
     },
     CONNECT_TIMEOUT: 3000,
     REQUEST_TIMEOUT: 30000,
@@ -34,6 +34,34 @@ const CONFIG = {
     MAX_RECONNECT_DELAY: 60000,
     HEARTBEAT_INTERVAL: 25000
 };
+
+function isInTauriRuntime() {
+    if (typeof window === 'undefined') return false;
+    return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+}
+
+function getFastifyHttpBaseUrl() {
+    if (typeof window === 'undefined') return null;
+    const custom = window.__SQUIRREL_FASTIFY_URL__;
+    if (typeof custom === 'string' && custom.trim()) return custom.trim().replace(/\/$/, '');
+
+    const loc = window.location;
+    if (loc && loc.hostname && loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
+        return loc.origin;
+    }
+
+    return null;
+}
+
+function getFastifyWsApiUrl() {
+    if (typeof window === 'undefined') return null;
+    const explicit = window.__SQUIRREL_FASTIFY_WS_API_URL__;
+    if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+
+    const httpBase = getFastifyHttpBaseUrl();
+    if (!httpBase) return null;
+    return httpBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/api';
+}
 
 // =============================================================================
 // WEBSOCKET TRANSPORT CLASS
@@ -66,7 +94,12 @@ class WSTransport {
 
     constructor(backend) {
         this.backend = backend;
-        this.config = CONFIG[backend];
+        this.config = { ...CONFIG[backend] };
+
+        if (backend === 'fastify') {
+            this.config.httpBase = getFastifyHttpBaseUrl();
+            this.config.wsUrl = getFastifyWsApiUrl();
+        }
         this.socket = null;
         this.state = {
             connected: false,
@@ -100,6 +133,16 @@ class WSTransport {
      * @returns {Promise<object>} Response data
      */
     async request(method, path, body = null, headers = {}) {
+        if (this.backend === 'tauri' && !isInTauriRuntime()) {
+            this.state.available = false;
+            throw new Error('Tauri backend is not available in this runtime');
+        }
+
+        if (this.backend === 'fastify' && (!this.config.wsUrl || typeof this.config.wsUrl !== 'string')) {
+            this.state.available = false;
+            throw new Error('Fastify backend URL is not configured');
+        }
+
         const requestId = ++this.requestId;
 
         const message = {
@@ -198,6 +241,20 @@ class WSTransport {
     // =========================================================================
 
     connect() {
+        if (this.backend === 'tauri' && !isInTauriRuntime()) {
+            this.state.connecting = false;
+            this.state.connected = false;
+            this.state.available = false;
+            return;
+        }
+
+        if (this.backend === 'fastify' && (!this.config.wsUrl || typeof this.config.wsUrl !== 'string')) {
+            this.state.connecting = false;
+            this.state.connected = false;
+            this.state.available = false;
+            return;
+        }
+
         if (this.state.connecting || this.state.connected) return;
 
         this.state.connecting = true;

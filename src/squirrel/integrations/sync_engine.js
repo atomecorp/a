@@ -95,7 +95,16 @@ async function checkFastifyAvailable() {
     // Use WebSocket for silent check (no console errors)
     return new Promise((resolve) => {
         try {
-            const ws = new WebSocket('ws://127.0.0.1:3001/ws/sync');
+            const wsUrl = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ === 'string')
+                ? window.__SQUIRREL_FASTIFY_WS_SYNC_URL__
+                : '';
+
+            if (!wsUrl) {
+                resolve(false);
+                return;
+            }
+
+            const ws = new WebSocket(wsUrl);
             const timeout = setTimeout(() => {
                 try { ws.close(); } catch (e) { }
                 resolve(false);
@@ -155,7 +164,17 @@ function resolveWsUrl() {
         return `${protocol}//${host}${CONFIG.WS_PATH}`;
     }
 
-    return `ws://localhost:3001${CONFIG.WS_PATH}`;
+    // Local/dev: require explicit config (server_config.json -> globals)
+    if (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string') {
+        const wsBase = window.__SQUIRREL_FASTIFY_URL__
+            .trim()
+            .replace(/^https:/, 'wss:')
+            .replace(/^http:/, 'ws:')
+            .replace(/\/$/, '');
+        return `${wsBase}${CONFIG.WS_PATH}`;
+    }
+
+    return '';
 }
 
 /**
@@ -274,6 +293,11 @@ class UnifiedSyncClient {
     connect() {
         const url = resolveWsUrl();
         this.state.endpoint = url;
+
+        if (!url) {
+            this.handleConnectionError();
+            return;
+        }
 
         try {
             this.socket = new WebSocket(url);

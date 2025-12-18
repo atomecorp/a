@@ -17,6 +17,7 @@
 
 // Import shared utilities from sync_engine
 import { isProductionEnvironment, detectRuntime } from './sync_engine.js';
+import { getCloudServerUrl } from '../apis/serverUrls.js';
 
 // ============================================================================
 // ENVIRONMENT DETECTION
@@ -54,11 +55,13 @@ function resolveAtomeConfig() {
     // Use shared Tauri detection
     const isTauri = isTauriEnvironment();
 
+    const cloudBase = getCloudServerUrl();
+
     // IMPORTANT: Atome API is ALWAYS on Fastify (3001), even in Tauri mode
     // Only auth goes to Axum (3000) in Tauri mode
     if (isTauri) {
         return {
-            base: 'http://localhost:3001',  // Atomes go to Fastify
+            base: cloudBase || '',
             isLocal: true,  // But we still use local_auth_token
             isTauri: true
         };
@@ -72,7 +75,7 @@ function resolveAtomeConfig() {
         // - If served directly from Fastify (3001), use same-origin for API calls
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
             if (port === '3000') {
-                return { base: 'http://localhost:3001', isLocal: true, isTauri: false };
+                return { base: cloudBase || '', isLocal: true, isTauri: false };
             }
             if (port === '3001' || port === '' || port == null) {
                 return { base: '', isLocal: true, isTauri: false };
@@ -84,7 +87,10 @@ function resolveAtomeConfig() {
 
 const atomeConfig = resolveAtomeConfig();
 const ATOME_API_BASE = atomeConfig.base + '/api/atome';
-const TOKEN_KEY = atomeConfig.isLocal ? 'local_auth_token' : 'cloud_auth_token';
+// Token storage:
+// - Tauri runtime uses local auth (local_auth_token)
+// - Browser runtime uses Fastify auth (cloud_auth_token)
+const TOKEN_KEY = atomeConfig.isTauri ? 'local_auth_token' : 'cloud_auth_token';
 
 console.log('[Atome] Config:', {
     base: atomeConfig.base,

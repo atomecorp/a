@@ -121,9 +121,12 @@ async function logServerInfo() {
       continue;
     }
     // Skip Fastify if explicitly marked offline
-    if (base.includes('127.0.0.1:3001') && window._checkFastifyAvailable && window._checkFastifyAvailable() === false) {
-      continue;
-    }
+    try {
+      const fastifyBase = typeof window !== 'undefined' ? window.__SQUIRREL_FASTIFY_URL__ : '';
+      if (fastifyBase && base && base === fastifyBase && window._checkFastifyAvailable && window._checkFastifyAvailable() === false) {
+        continue;
+      }
+    } catch (_) { }
 
     const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
     try {

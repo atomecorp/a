@@ -66,12 +66,7 @@ export const TRUSTED_SERVERS = {
     'squirrel-server-dev': {
         name: 'Squirrel Development Server',
         fingerprint: 'sha256:90bc6840e76d120ec751f323bd4ab578b3c69aa1b310a98a1ae3350d4a77ef50',
-        urls: [
-            'http://localhost:3001',
-            'http://127.0.0.1:3001',
-            'https://localhost:3001',
-            'https://127.0.0.1:3001'
-        ],
+        urls: [],
         environment: 'development',
         publicKey: `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk9tPEuFhdWmpBQ88zIKT
@@ -158,12 +153,30 @@ export function findServerByUrl(url) {
     // Normalize URL
     const normalizedUrl = url.replace(/\/$/, '').toLowerCase();
 
+    const getDynamicTrustedUrls = (serverId, server) => {
+        const urls = [];
+
+        if (Array.isArray(server.urls)) {
+            urls.push(...server.urls);
+        }
+
+        if (typeof window !== 'undefined' && serverId === 'squirrel-server-dev') {
+            const configured = window.__SQUIRREL_FASTIFY_URL__;
+            if (typeof configured === 'string' && configured.trim()) {
+                const base = configured.trim().replace(/\/$/, '');
+                urls.push(base);
+                urls.push(base.replace(/^http:/, 'https:'));
+                urls.push(base.replace(/^https:/, 'http:'));
+            }
+        }
+
+        return urls;
+    };
+
     for (const [serverId, server] of Object.entries(TRUSTED_SERVERS)) {
-        if (server.urls) {
-            for (const trustedUrl of server.urls) {
-                if (normalizedUrl === trustedUrl.replace(/\/$/, '').toLowerCase()) {
-                    return { serverId, ...server };
-                }
+        for (const trustedUrl of getDynamicTrustedUrls(serverId, server)) {
+            if (normalizedUrl === trustedUrl.replace(/\/$/, '').toLowerCase()) {
+                return { serverId, ...server };
             }
         }
     }

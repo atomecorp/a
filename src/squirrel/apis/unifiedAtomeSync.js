@@ -22,8 +22,8 @@ import { getLocalServerUrl, getCloudServerUrl, isTauri } from './serverUrls.js';
 // Use getters to ensure URLs are resolved at call time, not import time
 const CONFIG = {
     // Server URLs - use getters for dynamic resolution
-    get TAURI_SERVER() { return getLocalServerUrl() || 'http://127.0.0.1:3000'; },
-    get FASTIFY_SERVER() { return getCloudServerUrl() || 'http://localhost:3001'; },
+    get TAURI_SERVER() { return getLocalServerUrl(); },
+    get FASTIFY_SERVER() { return getCloudServerUrl(); },
 
     // Timing
     SERVER_CHECK_TIMEOUT: 800,      // Fast check timeout
@@ -71,6 +71,10 @@ const state = {
  * Uses a combination of techniques to avoid CORS/network error spam
  */
 async function checkServerSilently(url) {
+    if (!url || typeof url !== 'string') {
+        return false;
+    }
+
     // Skip if we're not in the right environment
     if (url === CONFIG.TAURI_SERVER && !shouldCheckTauri()) {
         return false;

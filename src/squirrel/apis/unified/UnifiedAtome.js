@@ -9,7 +9,7 @@
  * 
  * Works seamlessly with both:
  * - Tauri/Axum backend (localhost:3000, SQLite)
- * - Fastify backend (localhost:3001, PostgreSQL)
+ * - Fastify backend (config-driven)
  * 
  * Real-time sync via WebSocket when both backends are connected
  * 

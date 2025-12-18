@@ -17,12 +17,69 @@
 
 const WS_CONFIG = {
     TAURI_URL: 'ws://127.0.0.1:3000/ws/api',
-    FASTIFY_URL: 'ws://127.0.0.1:3001/ws/api',
+    FASTIFY_URL: null,
     RECONNECT_INTERVAL: 5000,      // 5 seconds between reconnect attempts
     PING_INTERVAL: 30000,          // 30 seconds heartbeat
     REQUEST_TIMEOUT: 10000,        // 10 seconds request timeout
     MAX_QUEUE_SIZE: 100,           // Max pending requests
     MAX_QUEUE_AGE: 300000          // 5 minutes max age for queued requests
+};
+
+function isInTauriRuntime() {
+    if (typeof window === 'undefined') return false;
+    return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+}
+
+function getTauriWsUrl() {
+    if (!isInTauriRuntime()) return '';
+
+    const port = window.__ATOME_LOCAL_HTTP_PORT__;
+    if (port) return `ws://127.0.0.1:${port}/ws/api`;
+
+    return WS_CONFIG.TAURI_URL;
+}
+
+function getFastifyWsUrl() {
+    if (typeof window === 'undefined') return '';
+    const explicit = window.__SQUIRREL_FASTIFY_WS_API_URL__;
+    if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+
+    const httpBase = window.__SQUIRREL_FASTIFY_URL__;
+    if (typeof httpBase !== 'string' || !httpBase.trim()) return '';
+
+    return httpBase
+        .trim()
+        .replace(/^https:/, 'wss:')
+        .replace(/^http:/, 'ws:')
+        .replace(/\/$/, '') + '/ws/api';
+}
+
+const _disabledTauriTransport = {
+    name: 'tauri',
+    get available() { return false; },
+    connect() { },
+    reconnect() { },
+    disconnect() { },
+    on() { return () => { }; },
+    off() { },
+    emit() { },
+    async request() {
+        throw new Error('Tauri backend is not available in this runtime');
+    }
+};
+
+const _disabledFastifyTransport = {
+    name: 'fastify',
+    get available() { return false; },
+    connect() { },
+    reconnect() { },
+    disconnect() { },
+    on() { return () => { }; },
+    off() { },
+    emit() { },
+    async request() {
+        throw new Error('Fastify backend URL is not configured');
+    }
 };
 
 // =============================================================================
@@ -400,8 +457,12 @@ let fastifyTransport = null;
  * Get Tauri WebSocket transport
  */
 export function getTauriTransport() {
+    if (!isInTauriRuntime()) {
+        return _disabledTauriTransport;
+    }
+
     if (!tauriTransport) {
-        tauriTransport = new WSTransport('tauri', WS_CONFIG.TAURI_URL);
+        tauriTransport = new WSTransport('tauri', getTauriWsUrl());
     }
     return tauriTransport;
 }
@@ -410,8 +471,13 @@ export function getTauriTransport() {
  * Get Fastify WebSocket transport
  */
 export function getFastifyTransport() {
+    const wsUrl = getFastifyWsUrl();
+    if (!wsUrl) {
+        return _disabledFastifyTransport;
+    }
+
     if (!fastifyTransport) {
-        fastifyTransport = new WSTransport('fastify', WS_CONFIG.FASTIFY_URL);
+        fastifyTransport = new WSTransport('fastify', wsUrl);
     }
     return fastifyTransport;
 }

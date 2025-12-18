@@ -15,27 +15,29 @@
  * @version 2.0.0
  */
 
+import { getCloudServerUrl, getLocalServerUrl } from '../apis/serverUrls.js';
+
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
 const SYNC_CONFIG = {
   // Server endpoints
-  TAURI_BASE: 'http://127.0.0.1:3000',
-  FASTIFY_BASE: 'http://localhost:3001',
-  
+  TAURI_BASE: null,
+  FASTIFY_BASE: null,
+
   // Timing
   SYNC_INTERVAL_MS: 30000,        // Auto-sync every 30 seconds
   DEBOUNCE_MS: 1000,              // Debounce rapid operations
   SERVER_TIMEOUT_MS: 5000,        // Server request timeout
   RETRY_DELAY_MS: 5000,           // Retry failed operations after 5s
   MAX_RETRIES: 3,                 // Maximum retry attempts
-  
+
   // Storage keys
   SYNC_QUEUE_KEY: 'adole_sync_queue',
   DEVICE_ID_KEY: 'adole_device_id',
   LAST_SYNC_KEY: 'adole_last_sync',
-  
+
   // Feature flags
   ENABLE_AUTO_SYNC: true,
   ENABLE_CONFLICT_RESOLUTION: true,
@@ -98,28 +100,28 @@ const SYNC_CONFIG = {
 const state = {
   // Device identification
   deviceId: null,
-  
+
   // Server availability
   tauriAvailable: null,
   fastifyAvailable: null,
   lastServerCheck: 0,
-  
+
   // Authentication
   tauriToken: null,
   fastifyToken: null,
   tenantId: null,
-  
+
   // Sync queue (persisted)
   queue: [],
-  
+
   // Sync state
   syncInProgress: false,
   lastSyncTime: 0,
   syncTimer: null,
-  
+
   // Event listeners
   listeners: new Map(),
-  
+
   // Initialization flag
   initialized: false
 };
@@ -136,7 +138,7 @@ function generateUUID() {
     return crypto.randomUUID();
   }
   // Fallback for older browsers
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -148,7 +150,7 @@ function generateUUID() {
  */
 function getDeviceId() {
   if (state.deviceId) return state.deviceId;
-  
+
   try {
     let deviceId = localStorage.getItem(SYNC_CONFIG.DEVICE_ID_KEY);
     if (!deviceId) {
@@ -201,7 +203,7 @@ function loadTokens() {
   try {
     state.tauriToken = localStorage.getItem('local_auth_token');
     state.fastifyToken = localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token');
-    
+
     // Extract tenant_id from token (UUID from phone number)
     const token = state.tauriToken || state.fastifyToken;
     if (token) {
@@ -230,16 +232,17 @@ function isAuthenticated() {
  * Check if a server is reachable
  */
 async function checkServer(baseUrl) {
+  if (!baseUrl) return false;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), SYNC_CONFIG.SERVER_TIMEOUT_MS);
-    
+
     const response = await fetch(`${baseUrl}/api/server-info`, {
       method: 'GET',
       signal: controller.signal,
       cache: 'no-store'
     });
-    
+
     clearTimeout(timeoutId);
     return response.ok;
   } catch {
@@ -255,19 +258,22 @@ async function updateServerAvailability(forceRefresh = false) {
   if (!forceRefresh && cacheAge < 5000) {
     return { tauri: state.tauriAvailable, fastify: state.fastifyAvailable };
   }
-  
+
+  const tauriBase = getLocalServerUrl();
+  const fastifyBase = getCloudServerUrl();
+
   // Check in parallel
   const [tauri, fastify] = await Promise.all([
-    isTauriEnvironment() ? checkServer(SYNC_CONFIG.TAURI_BASE) : Promise.resolve(false),
-    checkServer(SYNC_CONFIG.FASTIFY_BASE)
+    isTauriEnvironment() ? checkServer(tauriBase) : Promise.resolve(false),
+    checkServer(fastifyBase)
   ]);
-  
+
   state.tauriAvailable = tauri;
   state.fastifyAvailable = fastify;
   state.lastServerCheck = Date.now();
-  
+
   console.debug('[SyncManager] Server availability:', { tauri, fastify });
-  
+
   return { tauri, fastify };
 }
 
@@ -283,7 +289,7 @@ async function apiRequest(baseUrl, token, method, endpoint, data = null) {
     console.debug('[SyncManager] No token for', baseUrl);
     return null;
   }
-  
+
   try {
     const options = {
       method,
@@ -293,19 +299,19 @@ async function apiRequest(baseUrl, token, method, endpoint, data = null) {
         'X-Device-ID': getDeviceId()
       }
     };
-    
+
     if (data && ['POST', 'PUT', 'PATCH'].includes(method)) {
       options.body = JSON.stringify(data);
     }
-    
+
     const response = await fetch(`${baseUrl}${endpoint}`, options);
-    
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Unknown error' }));
       console.debug(`[SyncManager] ${method} ${endpoint} failed:`, error);
       return { success: false, error: error.error || error.message || 'Request failed' };
     }
-    
+
     return await response.json();
   } catch (error) {
     console.debug(`[SyncManager] Request error:`, error.message);
@@ -318,7 +324,9 @@ async function apiRequest(baseUrl, token, method, endpoint, data = null) {
  */
 async function tauriRequest(method, endpoint, data = null) {
   if (!state.tauriAvailable) return null;
-  return apiRequest(SYNC_CONFIG.TAURI_BASE, state.tauriToken, method, endpoint, data);
+  const baseUrl = getLocalServerUrl();
+  if (!baseUrl) return null;
+  return apiRequest(baseUrl, state.tauriToken, method, endpoint, data);
 }
 
 /**
@@ -326,7 +334,9 @@ async function tauriRequest(method, endpoint, data = null) {
  */
 async function fastifyRequest(method, endpoint, data = null) {
   if (!state.fastifyAvailable) return null;
-  return apiRequest(SYNC_CONFIG.FASTIFY_BASE, state.fastifyToken, method, endpoint, data);
+  const baseUrl = getCloudServerUrl();
+  if (!baseUrl) return null;
+  return apiRequest(baseUrl, state.fastifyToken, method, endpoint, data);
 }
 
 // =============================================================================
@@ -381,20 +391,20 @@ function enqueue(action, objectId, payload, target = 'both') {
     device_id: getDeviceId(),
     created_at: now()
   };
-  
+
   // Remove any pending operation for the same object (supersede)
-  state.queue = state.queue.filter(op => 
+  state.queue = state.queue.filter(op =>
     !(op.object_id === objectId && op.status === 'pending')
   );
-  
+
   state.queue.push(operation);
   saveQueue();
-  
+
   console.debug('[SyncManager] Enqueued:', action, objectId);
-  
+
   // Trigger sync if servers are available
   debouncedProcessQueue();
-  
+
   return operation;
 }
 
@@ -452,7 +462,7 @@ function cleanupQueue() {
 function formatADOLEObject(data) {
   const deviceId = getDeviceId();
   const timestamp = now();
-  
+
   return {
     object_id: data.object_id || data.id || generateUUID(),
     tenant_id: data.tenant_id || state.tenantId,
@@ -524,17 +534,17 @@ function resolveConflict(local, remote) {
     const loser = local.logical_clock > remote.logical_clock ? remote : local;
     return { winner, loser, strategy: 'logical_clock' };
   }
-  
+
   // Fall back to timestamp comparison
   const localTime = new Date(local.updated_at).getTime();
   const remoteTime = new Date(remote.updated_at).getTime();
-  
+
   if (localTime !== remoteTime) {
     const winner = localTime > remoteTime ? local : remote;
     const loser = localTime > remoteTime ? remote : local;
     return { winner, loser, strategy: 'timestamp' };
   }
-  
+
   // Same version and timestamp - prefer remote (server is authoritative)
   return { winner: remote, loser: local, strategy: 'server_authority' };
 }
@@ -565,25 +575,25 @@ async function processQueue() {
     console.debug('[SyncManager] Sync already in progress, skipping');
     return;
   }
-  
+
   const pending = state.queue.filter(op => op.status === 'pending');
   if (pending.length === 0) {
     return;
   }
-  
+
   state.syncInProgress = true;
-  
+
   try {
     await updateServerAvailability(true);
     loadTokens();
-    
+
     if (!state.tauriAvailable && !state.fastifyAvailable) {
       console.debug('[SyncManager] No servers available, operations remain queued');
       return;
     }
-    
+
     console.debug(`[SyncManager] Processing ${pending.length} pending operations`);
-    
+
     for (const op of pending) {
       try {
         await processOperation(op);
@@ -592,10 +602,10 @@ async function processQueue() {
         markFailed(op.id, error.message);
       }
     }
-    
+
     // Clean up old operations
     cleanupQueue();
-    
+
   } finally {
     state.syncInProgress = false;
     state.lastSyncTime = Date.now();
@@ -607,22 +617,22 @@ async function processQueue() {
  */
 async function processOperation(op) {
   const { action, object_id, payload, target } = op;
-  
+
   let tauriSuccess = false;
   let fastifySuccess = false;
-  
+
   // Determine which servers to target
   const sendToTauri = (target === 'tauri' || target === 'both') && state.tauriAvailable;
   const sendToFastify = (target === 'fastify' || target === 'both') && state.fastifyAvailable;
-  
+
   if (!sendToTauri && !sendToFastify) {
     console.debug('[SyncManager] No target servers available for operation');
     return;
   }
-  
+
   const adolePayload = formatADOLEObject(payload);
   const legacyPayload = toLegacyFormat(adolePayload);
-  
+
   // Execute operation on each server
   if (sendToTauri) {
     let result;
@@ -642,7 +652,7 @@ async function processOperation(op) {
       console.debug(`[SyncManager] ${action} on Tauri successful:`, object_id);
     }
   }
-  
+
   if (sendToFastify) {
     let result;
     switch (action) {
@@ -661,7 +671,7 @@ async function processOperation(op) {
       console.debug(`[SyncManager] ${action} on Fastify successful:`, object_id);
     }
   }
-  
+
   // Mark operation status
   if ((sendToTauri && tauriSuccess) || (sendToFastify && fastifySuccess)) {
     markCompleted(op.id);
@@ -679,44 +689,44 @@ async function synchronize() {
     console.debug('[SyncManager] Sync already in progress');
     return { success: false, error: 'Sync in progress' };
   }
-  
+
   await updateServerAvailability(true);
-  
+
   if (!state.tauriAvailable || !state.fastifyAvailable) {
     console.debug('[SyncManager] Both servers required for full sync');
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: 'Both servers required for bidirectional sync',
       tauriAvailable: state.tauriAvailable,
       fastifyAvailable: state.fastifyAvailable
     };
   }
-  
+
   state.syncInProgress = true;
-  
+
   try {
     console.log('[SyncManager] Starting bidirectional sync...');
-    
+
     // Fetch objects from both servers
     const [tauriResult, fastifyResult] = await Promise.all([
       tauriRequest('GET', '/api/atome/list'),
       fastifyRequest('GET', '/api/atome/list')
     ]);
-    
+
     if (!tauriResult?.data || !fastifyResult?.data) {
       return { success: false, error: 'Failed to fetch objects from servers' };
     }
-    
+
     const tauriObjects = new Map(tauriResult.data.map(o => [o.id, fromLegacyFormat(o)]));
     const fastifyObjects = new Map(fastifyResult.data.map(o => [o.id, fromLegacyFormat(o)]));
-    
+
     const stats = {
       syncedToFastify: 0,
       syncedToTauri: 0,
       conflictsResolved: 0,
       errors: []
     };
-    
+
     // Find objects only on Tauri → sync to Fastify
     for (const [id, obj] of tauriObjects) {
       if (!fastifyObjects.has(id)) {
@@ -729,7 +739,7 @@ async function synchronize() {
         }
       }
     }
-    
+
     // Find objects only on Fastify → sync to Tauri
     for (const [id, obj] of fastifyObjects) {
       if (!tauriObjects.has(id)) {
@@ -742,20 +752,20 @@ async function synchronize() {
         }
       }
     }
-    
+
     // Resolve conflicts (objects on both with different versions)
     for (const [id, tauriObj] of tauriObjects) {
       if (fastifyObjects.has(id)) {
         const fastifyObj = fastifyObjects.get(id);
-        
+
         // Check if versions differ
         if (tauriObj.logical_clock !== fastifyObj.logical_clock ||
-            tauriObj.updated_at !== fastifyObj.updated_at) {
-          
+          tauriObj.updated_at !== fastifyObj.updated_at) {
+
           const { winner, loser, strategy } = resolveConflict(tauriObj, fastifyObj);
-          
+
           console.debug(`[SyncManager] Conflict resolved for ${id} using ${strategy}`);
-          
+
           // Update the loser's server with the winner's data
           const winnerData = toLegacyFormat(winner);
           if (winner === tauriObj) {
@@ -763,22 +773,22 @@ async function synchronize() {
           } else {
             await tauriRequest('PUT', `/api/atome/${id}`, winnerData);
           }
-          
+
           stats.conflictsResolved++;
         }
       }
     }
-    
+
     // Save last sync time
     try {
       localStorage.setItem(SYNC_CONFIG.LAST_SYNC_KEY, now());
     } catch { /* localStorage not available */ }
-    
+
     console.log('[SyncManager] Sync complete:', stats);
     emitEvent('sync:complete', stats);
-    
+
     return { success: true, stats };
-    
+
   } catch (error) {
     console.error('[SyncManager] Sync error:', error);
     return { success: false, error: error.message };
@@ -800,7 +810,7 @@ function emitEvent(type, data) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(`sync:${type}`, { detail: data }));
   }
-  
+
   // Call registered listeners
   const listeners = state.listeners.get(type) || [];
   for (const listener of listeners) {
@@ -825,31 +835,31 @@ const SyncManager = {
       console.debug('[SyncManager] Already initialized');
       return;
     }
-    
+
     // Load persistent state
     getDeviceId();
     loadTokens();
     loadQueue();
-    
+
     // Check server availability
     await updateServerAvailability(true);
-    
+
     // Process any pending operations
     await processQueue();
-    
+
     // Set up auto-sync timer
     if (SYNC_CONFIG.ENABLE_AUTO_SYNC) {
       state.syncTimer = setInterval(() => {
         processQueue().catch(console.error);
       }, SYNC_CONFIG.SYNC_INTERVAL_MS);
-      
+
       // Listen for online event
       window.addEventListener('online', () => {
         console.log('[SyncManager] Network online, triggering sync');
         processQueue().catch(console.error);
       });
     }
-    
+
     state.initialized = true;
     console.log('[SyncManager] Initialized', {
       deviceId: state.deviceId,
@@ -858,7 +868,7 @@ const SyncManager = {
       pendingOperations: state.queue.filter(o => o.status === 'pending').length
     });
   },
-  
+
   /**
    * Create a new ADOLE object
    * @param {Object} data - Object data
@@ -868,22 +878,22 @@ const SyncManager = {
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated' };
     }
-    
+
     const adoleObject = formatADOLEObject(data);
-    
+
     // Queue the operation
     enqueue('create', adoleObject.object_id, adoleObject, 'both');
-    
+
     // Emit creation event
     emitEvent('created', { data: adoleObject });
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       data: adoleObject,
       queued: true
     };
   },
-  
+
   /**
    * Update an existing ADOLE object
    * @param {string} objectId - Object UUID
@@ -894,26 +904,26 @@ const SyncManager = {
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated' };
     }
-    
+
     const adoleObject = formatADOLEObject({
       ...data,
       object_id: objectId,
       logical_clock: (data.logical_clock || data.version || 0) + 1
     });
-    
+
     // Queue the operation
     enqueue('update', objectId, adoleObject, 'both');
-    
+
     // Emit update event
     emitEvent('updated', { id: objectId, data: adoleObject });
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       data: adoleObject,
       queued: true
     };
   },
-  
+
   /**
    * Delete an ADOLE object (soft delete)
    * @param {string} objectId - Object UUID
@@ -923,20 +933,20 @@ const SyncManager = {
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated' };
     }
-    
+
     // Queue the operation
     enqueue('delete', objectId, { object_id: objectId, deleted: true }, 'both');
-    
+
     // Emit delete event
     emitEvent('deleted', { id: objectId });
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       id: objectId,
       queued: true
     };
   },
-  
+
   /**
    * Get an object by ID
    * @param {string} objectId - Object UUID
@@ -946,9 +956,9 @@ const SyncManager = {
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated' };
     }
-    
+
     await updateServerAvailability();
-    
+
     // Try Tauri first (local is faster)
     if (state.tauriAvailable) {
       const result = await tauriRequest('GET', `/api/atome/${objectId}`);
@@ -956,7 +966,7 @@ const SyncManager = {
         return { success: true, data: fromLegacyFormat(result.data) };
       }
     }
-    
+
     // Fall back to Fastify
     if (state.fastifyAvailable) {
       const result = await fastifyRequest('GET', `/api/atome/${objectId}`);
@@ -964,10 +974,10 @@ const SyncManager = {
         return { success: true, data: fromLegacyFormat(result.data) };
       }
     }
-    
+
     return { success: false, error: 'Object not found' };
   },
-  
+
   /**
    * List all objects
    * @param {Object} [filters] - Optional filters (kind, parent_id, etc.)
@@ -977,39 +987,39 @@ const SyncManager = {
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated' };
     }
-    
+
     await updateServerAvailability();
-    
+
     const query = new URLSearchParams(filters).toString();
     const endpoint = `/api/atome/list${query ? '?' + query : ''}`;
-    
+
     // Try Tauri first
     if (state.tauriAvailable) {
       const result = await tauriRequest('GET', endpoint);
       if (result?.success) {
-        return { 
-          success: true, 
+        return {
+          success: true,
           data: result.data.map(fromLegacyFormat),
           source: 'tauri'
         };
       }
     }
-    
+
     // Fall back to Fastify
     if (state.fastifyAvailable) {
       const result = await fastifyRequest('GET', endpoint);
       if (result?.success) {
-        return { 
-          success: true, 
+        return {
+          success: true,
           data: result.data.map(fromLegacyFormat),
           source: 'fastify'
         };
       }
     }
-    
+
     return { success: false, error: 'Failed to list objects' };
   },
-  
+
   /**
    * Trigger full bidirectional sync
    * @returns {Promise<SyncResult>}
@@ -1017,14 +1027,14 @@ const SyncManager = {
   async sync() {
     return synchronize();
   },
-  
+
   /**
    * Force process the sync queue
    */
   async flush() {
     return processQueue();
   },
-  
+
   /**
    * Register event listener
    * @param {string} event - Event type
@@ -1036,7 +1046,7 @@ const SyncManager = {
     }
     state.listeners.get(event).push(callback);
   },
-  
+
   /**
    * Remove event listener
    * @param {string} event - Event type
@@ -1051,7 +1061,7 @@ const SyncManager = {
       }
     }
   },
-  
+
   /**
    * Get current sync status
    */
@@ -1068,14 +1078,14 @@ const SyncManager = {
       syncInProgress: state.syncInProgress
     };
   },
-  
+
   /**
    * Get the sync queue (for debugging)
    */
   getQueue() {
     return [...state.queue];
   },
-  
+
   /**
    * Clear all failed operations from queue
    */
@@ -1083,7 +1093,7 @@ const SyncManager = {
     state.queue = state.queue.filter(o => o.status !== 'failed');
     saveQueue();
   },
-  
+
   // Expose config for external modification
   config: SYNC_CONFIG
 };

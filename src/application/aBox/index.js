@@ -101,7 +101,10 @@ function resolveApiBases() {
     try {
         const platform = typeof current_platform === 'function' ? current_platform() : '';
         if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
-            return ['http://127.0.0.1:3000', 'http://127.0.0.1:3001', ''];
+            const fastifyBase = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+                ? window.__SQUIRREL_FASTIFY_URL__.trim().replace(/\/$/, '')
+                : '';
+            return ['http://127.0.0.1:3000', fastifyBase, ''].filter(v => v !== null && v !== undefined);
         }
     } catch (_) { }
     return [''];

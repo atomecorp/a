@@ -72,6 +72,15 @@ export function getCloudServerUrl() {
             return customUrl.trim().replace(/\/$/, '');
         }
 
+        // If server_config.json was loaded into a global, derive from it
+        const cfg = window.__SQUIRREL_SERVER_CONFIG__;
+        if (cfg && cfg.fastify && cfg.fastify.host && cfg.fastify.port) {
+            const protocol = window.location?.protocol || 'http:';
+            const host = cfg.fastify.host;
+            const port = cfg.fastify.port;
+            return `${protocol}//${host}:${port}`;
+        }
+
         // Auto-detect from current page URL (production mode)
         // If we're on https://atome.one, use that as the server
         const loc = window.location;
@@ -85,8 +94,8 @@ export function getCloudServerUrl() {
         }
     }
 
-    // Default Fastify URL (local development)
-    return 'http://localhost:3001';
+    // No implicit localhost fallback: Fastify URL must be configured
+    return null;
 }
 
 /**

@@ -3,7 +3,7 @@
  * 
  * Unified Authentication API that works seamlessly with both:
  * - Tauri/Axum backend (localhost:3000, SQLite)
- * - Fastify backend (localhost:3001, PostgreSQL)
+ * - Fastify backend (config-driven)
  * 
  * Features:
  * - Automatic backend detection

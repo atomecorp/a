@@ -6,6 +6,62 @@
 
 import { TauriAdapter, FastifyAdapter, CONFIG } from './adole.js';
 
+function normalizeAtomeRecord(raw) {
+    if (!raw || typeof raw !== 'object') return raw;
+
+    const particlesFromParticlesField = (raw.particles && typeof raw.particles === 'object')
+        ? raw.particles
+        : null;
+
+    // Tauri returns dynamic properties under `data` (legacy naming).
+    // Fastify typically returns them flattened at top-level.
+    const particlesFromDataField = (!particlesFromParticlesField && raw.data && typeof raw.data === 'object')
+        ? raw.data
+        : null;
+
+    const coreKeys = new Set([
+        'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
+        'created_at', 'updated_at', 'deleted_at',
+        // common aliases
+        'id', 'type', 'kind', 'parent', 'parentId', 'owner', 'ownerId', 'userId',
+        // response/meta
+        'data', 'particles', 'atomes', 'count'
+    ]);
+
+    // Fastify WS list flattens particles at top-level (e.g. atome.left/top/color).
+    // Rehydrate them into `particles` so UI persistence works.
+    const particles = particlesFromParticlesField
+        ? { ...particlesFromParticlesField }
+        : (particlesFromDataField ? { ...particlesFromDataField } : {});
+
+    // If both exist, merge them (prefer explicit `particles` over `data`).
+    if (particlesFromParticlesField && raw.data && typeof raw.data === 'object') {
+        for (const [k, v] of Object.entries(raw.data)) {
+            if (particles[k] === undefined) particles[k] = v;
+        }
+    }
+
+    for (const key of Object.keys(raw)) {
+        if (coreKeys.has(key)) continue;
+        const val = raw[key];
+        if (val === undefined) continue;
+        particles[key] = val;
+    }
+
+    return {
+        ...raw,
+        id: raw.id || raw.atome_id,
+        atome_id: raw.atome_id || raw.id,
+        type: raw.type || raw.atome_type,
+        atome_type: raw.atome_type || raw.type,
+        parentId: raw.parentId || raw.parent_id || raw.parent,
+        parent_id: raw.parent_id || raw.parentId || raw.parent,
+        ownerId: raw.ownerId || raw.owner_id || raw.owner || raw.userId,
+        owner_id: raw.owner_id || raw.ownerId || raw.owner || raw.userId,
+        particles
+    };
+}
+
 // ============================================
 // CURRENT STATE (Project, User, Machine)
 // ============================================
@@ -1616,12 +1672,27 @@ async function list_atomes(options = {}, callback) {
     }
 
     const atomeType = options.type || null;
-    const ownerId = options.ownerId || null;
+    let ownerId = options.ownerId || null;
 
     const results = {
         tauri: { atomes: [], error: null },
         fastify: { atomes: [], error: null }
     };
+
+    // Default behavior: list current user's atomes.
+    // Fastify WS list requires ownerId/userId or atomeType; otherwise it returns [].
+    // Exception: when listing global users, do not force owner filtering.
+    if (!ownerId && atomeType !== 'user') {
+        try {
+            const currentUserResult = await current_user();
+            const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+            if (currentUserId) {
+                ownerId = currentUserId;
+            }
+        } catch (e) {
+            // Silent; will fallback to server behavior
+        }
+    }
 
     // Build query options with type and ownerId if provided
     const queryOptions = {};
@@ -1632,7 +1703,8 @@ async function list_atomes(options = {}, callback) {
     try {
         const tauriResult = await TauriAdapter.atome.list(queryOptions);
         if (tauriResult.ok || tauriResult.success) {
-            results.tauri.atomes = tauriResult.atomes || tauriResult.data || [];
+            const rawAtomes = tauriResult.atomes || tauriResult.data || [];
+            results.tauri.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
         } else {
             results.tauri.error = tauriResult.error;
         }
@@ -1644,7 +1716,8 @@ async function list_atomes(options = {}, callback) {
     try {
         const fastifyResult = await FastifyAdapter.atome.list(queryOptions);
         if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify.atomes = fastifyResult.atomes || fastifyResult.data || [];
+            const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
+            results.fastify.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
         } else {
             results.fastify.error = fastifyResult.error;
         }

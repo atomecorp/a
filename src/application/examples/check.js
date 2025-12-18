@@ -2918,7 +2918,7 @@ async function loadFastifyWsApiUrl() {
     const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
     const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3000;
     const localBase = isTauriRuntime ? `http://127.0.0.1:${localPort}` : '';
-    const configUrl = isTauriRuntime ? `${localBase}/server_config.json` : 'server_config.json';
+    const configUrl = isTauriRuntime ? `${localBase}/server_config.json` : '/server_config.json';
 
     const response = await fetch(configUrl, { cache: 'no-store' });
     if (!response || !response.ok) {

@@ -143,8 +143,8 @@ const disconnectBtn = $('button', {
 // Input message avec la nouvelle API Squirrel améliorée
 messageInputElement = $('input', {
   id: 'message-input',
-  attrs: { 
-    type: 'text', 
+  attrs: {
+    type: 'text',
     placeholder: 'Message à envoyer...'
   },
   css: {
@@ -226,8 +226,8 @@ $('h3', {
 
 // Name input
 const nameInput = $('input', {
-  attrs: { 
-    type: 'text', 
+  attrs: {
+    type: 'text',
     placeholder: 'Enter user name...',
     id: 'user-name-input'
   },
@@ -244,8 +244,8 @@ const nameInput = $('input', {
 
 // Password input
 const passwordInput = $('input', {
-  attrs: { 
-    type: 'password', 
+  attrs: {
+    type: 'password',
     placeholder: 'Enter password...',
     id: 'user-password-input'
   },
@@ -357,10 +357,38 @@ const statusDisplay2 = $('div', {
   parent: dbSection
 });
 
+function getFastifyHttpBase() {
+  try {
+    const base = typeof window !== 'undefined' ? window.__SQUIRREL_FASTIFY_URL__ : '';
+    if (typeof base === 'string' && base.trim()) return base.trim().replace(/\/$/, '');
+  } catch (e) { }
+  return null;
+}
+
+function getFastifyWsApiUrl() {
+  try {
+    const explicit = typeof window !== 'undefined' ? window.__SQUIRREL_FASTIFY_WS_API_URL__ : '';
+    if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  } catch (e) { }
+
+  const httpBase = getFastifyHttpBase();
+  if (!httpBase) return null;
+  return httpBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/api';
+}
+
 // === FONCTIONS ===
 
 function checkHealth() {
-  fetch('http://localhost:3001/health')
+  const base = getFastifyHttpBase();
+  if (!base) {
+    healthResult.innerHTML = `
+        <div style="color: #dc3545; font-weight: bold;">❌ Error</div>
+        <div>Fastify URL is not configured (server_config.json)</div>
+      `;
+    return;
+  }
+
+  fetch(`${base}/health`)
     .then(response => response.json())
     .then(data => {
       healthResult.innerHTML = `
@@ -373,22 +401,28 @@ function checkHealth() {
     .catch(error => {
       healthResult.innerHTML = `
         <div style="color: #dc3545; font-weight: bold;">❌ Erreur</div>
-        <div>Serveur inaccessible sur localhost:3001</div>
+        <div>Serveur inaccessible: ${base}</div>
       `;
     });
 }
 
 function connectWS() {
   if (isConnected) return;
-  
-  websocket = new WebSocket('ws://localhost:3001/ws');
-  
+
+  const wsUrl = getFastifyWsApiUrl();
+  if (!wsUrl) {
+    logMessage('❌ Error', 'Fastify WebSocket URL is not configured (server_config.json)');
+    return;
+  }
+
+  websocket = new WebSocket(wsUrl);
+
   websocket.onopen = () => {
     isConnected = true;
     updateStatus(true);
     logMessage('🔗 Connexion', 'WebSocket connecté !');
   };
-  
+
   websocket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
@@ -397,13 +431,13 @@ function connectWS() {
       logMessage('📥 Reçu', event.data);
     }
   };
-  
+
   websocket.onclose = () => {
     isConnected = false;
     updateStatus(false);
     logMessage('🔌 Fermé', 'WebSocket déconnecté');
   };
-  
+
   websocket.onerror = (error) => {
     logMessage('❌ Erreur', 'Erreur WebSocket');
   };
@@ -420,21 +454,21 @@ function sendMessage() {
     logMessage('⚠️ Attention', 'Pas de connexion WebSocket');
     return;
   }
-  
+
   if (!messageInputElement || !messageInputElement.value) {
     logMessage('❌ Erreur', 'Input de message non disponible');
     return;
   }
-  
+
   const msg = messageInputElement.value.trim();
   if (!msg) return;
-  
+
   const data = {
     type: 'message',
     content: msg,
     timestamp: new Date().toISOString()
   };
-  
+
   websocket.send(JSON.stringify(data));
   logMessage('📤 Envoyé', JSON.stringify(data));
   messageInputElement.value = '';
@@ -464,19 +498,19 @@ function logMessage(type, content) {
     },
     parent: messagesLog
   });
-  
+
   $('strong', {
     text: `[${time}] ${type}: `,
     css: { color: '#495057' },
     parent: entry
   });
-  
+
   $('span', {
     text: content,
     css: { color: '#6c757d' },
     parent: entry
   });
-  
+
   messagesLog.scrollTop = messagesLog.scrollHeight;
 }
 
@@ -486,15 +520,21 @@ async function addNewUser() {
   const name = nameInput.value.trim();
   const password = passwordInput.value.trim();
   const role = roleSelect.value;
-    if (!name || !password) {
+  if (!name || !password) {
     updateUserStatus('❌ Please fill in both name and password', 'error');
     return;
   }
-  
+
   try {
     updateUserStatus('⏳ Creating user...', 'info');
-    
-    const response = await fetch('http://localhost:3001/api/users', {
+
+    const base = getFastifyHttpBase();
+    if (!base) {
+      updateUserStatus('❌ Fastify URL is not configured (server_config.json)', 'error');
+      return;
+    }
+
+    const response = await fetch(`${base}/api/users`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -505,19 +545,19 @@ async function addNewUser() {
         autorisation: role
       })
     });
-    
+
     const data = await response.json();
-      if (data.success) {
+    if (data.success) {
       updateUserStatus(`✅ User "${name}" created successfully!`, 'success');
-      
+
       // Clear form
       nameInput.value = '';
       passwordInput.value = '';
       roleSelect.value = 'read';
-      
+
       // Refresh users list
       await loadUsersList();
-      
+
       // Send WebSocket notification if connected
       if (isConnected && websocket) {
         websocket.send(JSON.stringify({
@@ -526,7 +566,7 @@ async function addNewUser() {
           timestamp: new Date().toISOString()
         }));
       }
-        } else {
+    } else {
       updateUserStatus(`❌ Error creating user: ${data.error}`, 'error');
     }
   } catch (error) {
@@ -662,20 +702,26 @@ function showDeleteConfirmation(userId, userName) {
 }
 
 async function performDeleteUser(userId, userName) {
-    try {
+  try {
     updateUserStatus(`⏳ Deleting user "${userName}"...`, 'info');
-    
-    const response = await fetch(`http://localhost:3001/api/users/${userId}`, {
+
+    const base = getFastifyHttpBase();
+    if (!base) {
+      updateUserStatus('❌ Fastify URL is not configured (server_config.json)', 'error');
+      return;
+    }
+
+    const response = await fetch(`${base}/api/users/${userId}`, {
       method: 'DELETE'
     });
-    
+
     const data = await response.json();
-      if (data.success) {
+    if (data.success) {
       updateUserStatus(`✅ User "${userName}" deleted successfully!`, 'success');
-      
+
       // Refresh users list
       await loadUsersList();
-      
+
       // Send WebSocket notification if connected
       if (isConnected && websocket) {
         websocket.send(JSON.stringify({
@@ -685,7 +731,7 @@ async function performDeleteUser(userId, userName) {
           timestamp: new Date().toISOString()
         }));
       }
-        } else {
+    } else {
       updateUserStatus(`❌ Error deleting user: ${data.error}`, 'error');
     }
   } catch (error) {
@@ -693,12 +739,20 @@ async function performDeleteUser(userId, userName) {
   }
 }
 
-async function loadUsersList() {  try {
+async function loadUsersList() {
+  try {
     updateUserStatus('⏳ Loading users...', 'info');
-    
-    const response = await fetch('http://localhost:3001/api/users');
+
+    const base = getFastifyHttpBase();
+    if (!base) {
+      updateUserStatus('❌ Fastify URL is not configured (server_config.json)', 'error');
+      usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">Fastify URL not configured</div>';
+      return;
+    }
+
+    const response = await fetch(`${base}/api/users`);
     const data = await response.json();
-      if (data.success) {
+    if (data.success) {
       displayUsers(data.data);
       updateUserStatus(`✅ Loaded ${data.data.length} users`, 'success');
     } else {
@@ -716,9 +770,9 @@ function displayUsers(users) {
     usersContainer.innerHTML = '<div style="padding: 15px; color: #6c757d;">No users found</div>';
     return;
   }
-  
+
   usersContainer.innerHTML = '';
-  
+
   users.forEach(user => {
     const userRow = $('div', {
       css: {
@@ -733,14 +787,14 @@ function displayUsers(users) {
       },
       parent: usersContainer
     });
-    
+
     const userInfo = $('div', {
       css: {
         flex: '1'
       },
       parent: userRow
     });
-    
+
     $('div', {
       text: `👤 ${user.name}`,
       css: {
@@ -749,7 +803,7 @@ function displayUsers(users) {
       },
       parent: userInfo
     });
-    
+
     $('div', {
       text: `ID: ${user.id} | Role: ${user.autorisation} | Created: ${new Date(user.created_at).toLocaleDateString()}`,
       css: {
@@ -758,7 +812,7 @@ function displayUsers(users) {
       },
       parent: userInfo
     });
-    
+
     const actionsDiv = $('div', {
       css: {
         display: 'flex',
@@ -766,7 +820,7 @@ function displayUsers(users) {
       },
       parent: userRow
     });
-    
+
     $('button', {
       text: '🗑️ Delete',
       css: {
@@ -791,15 +845,15 @@ function updateUserStatus(message, type = 'info') {
     info: '#17a2b8',
     warning: '#ffc107'
   };
-  
+
   const timestamp = new Date().toLocaleTimeString();
-  
+
   statusDisplay2.innerHTML = `
     <div style="color: ${colors[type]}; font-weight: bold;">
       [${timestamp}] ${message}
     </div>
   `;
-  
+
   // Auto clear after 5 seconds for non-error messages
   if (type !== 'error') {
     setTimeout(() => {
