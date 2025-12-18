@@ -149,10 +149,63 @@ All clients must eventually converge to the same final state.
 
 ---
 
-## 9. Core Guarantees
+## 9. Conditional Sharing (Rules-Based Access)
+
+The sharing system must support **conditional sharing**, where access and permissions are granted **only if one or more conditions are satisfied** at evaluation time.
+
+Conditions may apply:
+
+* at share creation time,
+* at access time,
+* continuously (re‑evaluated over time).
+
+Examples of supported conditions (non‑exhaustive):
+
+* user attributes (e.g. `user.age > 18`),
+* geographic constraints (e.g. country = France),
+* temporal constraints (e.g. date > 30/01/2026),
+* time windows (e.g. after 18:00 and before 19:00),
+* project state, Atome metadata, or custom flags,
+* any future condition defined by the system.
+
+Conditions are:
+
+* explicit,
+* stored in the database,
+* evaluated deterministically,
+* extensible via a rule engine or condition DSL.
+
+If conditions are no longer met, access is automatically suspended or revoked according to policy.
+
+---
+
+## 10. Share Duration and Expiration
+
+Every share may define a **duration**, after which the share automatically expires.
+
+Share duration may be expressed as:
+
+* a fixed end date,
+* a relative duration (e.g. 7 days),
+* a recurring or bounded time window,
+* a condition-based rule (treated as a conditional share).
+
+Expiration behavior:
+
+* access is revoked automatically when the duration ends,
+* no manual action is required,
+* expiration is persisted and auditable.
+
+Duration is conceptually a **specialized condition** and uses the same evaluation and enforcement mechanism as conditional sharing.
+
+---
+
+## 11. Core Guarantees
 
 * No share without explicit consent.
 * No lost messages or requests.
 * No silent synchronization.
 * No hidden conflicts.
+* Conditional rules are explicit and enforceable.
+* Expired shares cannot leak access.
 * Every action is stored, explicit, and auditable.

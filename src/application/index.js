@@ -60,7 +60,7 @@ import('./examples/check.js');
 import('./examples/messages.js');
 import('./examples/messages_ui.js');
 import('./examples/share.js');
-
+import('./examples/share_ui.js');
 
 
 // import('./lyrix/index.js');
