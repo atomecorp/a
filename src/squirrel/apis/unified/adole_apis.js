@@ -2031,6 +2031,7 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
     // First, get the target user by phone number to get their user ID.
     // Optimization: if caller already knows the canonical userId, accept it.
     let targetUserId = null;
+    let targetUserRecord = null;
 
     try {
         const hinted = propertyOverrides?.__targetUserId;
@@ -2042,6 +2043,11 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
 
     if (targetUserId) {
         // Skip phone lookup.
+        try {
+            // Best-effort fetch so we can read the target's current project selection.
+            const got = await FastifyAdapter.atome.get(targetUserId);
+            targetUserRecord = got?.atome || got?.data || got?.user || null;
+        } catch (_) { }
     } else {
         try {
             console.log('🔍 Searching for user with phone:', phoneNumber);
@@ -2066,6 +2072,7 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
             );
 
             if (targetUser) {
+                targetUserRecord = targetUser;
                 // IMPORTANT: use the same canonical user id as `auth.current()` (user_id)
                 // otherwise inbox records can be created under a different id and never show up for the recipient.
                 targetUserId = targetUser.user_id || targetUser.atome_id || targetUser.id;
@@ -2106,23 +2113,16 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
         targetProjectId = currentProjectId;
         console.log('📁 Using provided current project ID:', targetProjectId.substring(0, 8) + '...');
     } else {
-        // Try to find the target user's current/default project
+        // Try to find the target user's current/default project.
+        // NOTE: We cannot use `list_projects()` here because it lists the CURRENT USER (the sharer),
+        // not the target user. Instead we rely on the target user's persisted selection.
         try {
-            const targetUserProjects = await list_projects();
-            const allProjects = [...(targetUserProjects.tauri.projects || []), ...(targetUserProjects.fastify.projects || [])];
-
-            // Filter projects owned by target user
-            const targetUserProjectsList = allProjects.filter(project => {
-                const projectOwnerId = project.owner_id || project.ownerId || project.particles?.owner_id;
-                return projectOwnerId === targetUserId;
-            });
-
-            if (targetUserProjectsList.length > 0) {
-                // Use the first project found for the target user
-                targetProjectId = targetUserProjectsList[0].atome_id || targetUserProjectsList[0].id;
-                console.log('📁 Found target user project:', targetUserProjectsList[0].particles?.name || 'unnamed', 'ID:', targetProjectId.substring(0, 8) + '...');
+            const p = targetUserRecord?.particles || targetUserRecord?.data || {};
+            const candidate = p.currentProjectId || p.current_project_id || p.projectId || p.project_id || p.selectedProjectId || null;
+            if (candidate && typeof candidate === 'string' && candidate.trim().length > 10) {
+                targetProjectId = candidate.trim();
+                console.log('📁 Using target user current project ID:', targetProjectId.substring(0, 8) + '...');
             } else {
-                // No project found - implement inbox system later
                 console.log('📬 INBOX SYSTEM: No current project for target user. Shared atomes will be placed in inbox.');
                 console.log('📬 TODO: Implement inbox/mailbox system for orphaned shared atomes');
                 console.log('📬 For now, creating standalone shared atomes (parentId: null)');

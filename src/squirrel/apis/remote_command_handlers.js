@@ -284,6 +284,97 @@ function handlePong(params, sender) {
     console.log(`[BuiltinHandlers] Pong from ${sender.username || sender.userId} - latency: ${latency}ms`);
 }
 
+const _shareSyncDedup = new Map();
+
+/**
+ * Handler: share-sync
+ * Applies incoming particle changes for an atome (linked-share realtime)
+ *
+ * Params:
+ *   - atomeId: string
+ *   - particles: object
+ */
+function handleShareSync(params, sender) {
+    const atomeId = params?.atomeId || params?.atome_id || params?.id;
+    const particles = params?.particles || params?.patch || null;
+
+    // Some apps may send legacy direction-based payloads (handled elsewhere).
+    // Builtin handler should ignore those quietly.
+    if (!atomeId) return;
+    if (!particles || typeof particles !== 'object') {
+        return;
+    }
+
+    // Dedupe identical patches arriving close together (e.g. server broadcast + direct message)
+    try {
+        const payload = JSON.stringify(particles);
+        const now = Date.now();
+        const last = _shareSyncDedup.get(String(atomeId));
+        if (last && last.payload === payload && (now - last.at) < 100) return;
+        _shareSyncDedup.set(String(atomeId), { payload, at: now });
+    } catch (_) { }
+
+    const candidates = [
+        document.getElementById('atome_' + atomeId),
+        document.getElementById(atomeId)
+    ].filter(Boolean);
+
+    if (candidates.length === 0) {
+        // Atome might not be currently rendered in this view; don't force reload.
+        return;
+    }
+
+    const normalizeCssValue = (key, value) => {
+        if (value === null || value === undefined) return null;
+
+        // Numbers should be px for positional/dimensions.
+        const pxKeys = new Set(['left', 'top', 'right', 'bottom', 'width', 'height', 'margin', 'marginLeft', 'marginTop']);
+        if (typeof value === 'number' && pxKeys.has(key)) return `${value}px`;
+
+        return String(value);
+    };
+
+    for (const el of candidates) {
+        if ('left' in particles) {
+            const v = normalizeCssValue('left', particles.left);
+            if (v !== null) el.style.left = v;
+        }
+        if ('top' in particles) {
+            const v = normalizeCssValue('top', particles.top);
+            if (v !== null) el.style.top = v;
+        }
+
+        // Color can arrive as `color` (Adole particle) or `backgroundColor` (some UIs)
+        if ('color' in particles) {
+            const v = normalizeCssValue('backgroundColor', particles.color);
+            if (v !== null) el.style.backgroundColor = v;
+        }
+        if ('backgroundColor' in particles) {
+            const v = normalizeCssValue('backgroundColor', particles.backgroundColor);
+            if (v !== null) el.style.backgroundColor = v;
+        }
+
+        if ('borderRadius' in particles) {
+            const v = normalizeCssValue('borderRadius', particles.borderRadius);
+            if (v !== null) el.style.borderRadius = v;
+        }
+
+        if ('opacity' in particles) {
+            const raw = particles.opacity;
+            const v = (typeof raw === 'number') ? String(raw) : normalizeCssValue('opacity', raw);
+            if (v !== null) el.style.opacity = v;
+        }
+    }
+
+    if (window.__SHARE_SYNC_DEBUG__ === true) {
+        console.log('[BuiltinHandlers] share-sync applied', {
+            atomeId: String(atomeId).substring(0, 8),
+            from: sender?.userId || sender?.username || 'unknown',
+            keys: Object.keys(particles)
+        });
+    }
+}
+
 // Handler registry
 const handlers = {
     'create-element': handleCreateElement,
@@ -292,7 +383,8 @@ const handlers = {
     'show-notification': handleShowNotification,
     'execute-code': handleExecuteCode,
     'ping': handlePing,
-    'pong': handlePong
+    'pong': handlePong,
+    'share-sync': handleShareSync
 };
 
 // Safe handlers (enabled by default with registerAll)
@@ -302,7 +394,8 @@ const safeHandlers = [
     'update-element',
     'show-notification',
     'ping',
-    'pong'
+    'pong',
+    'share-sync'
 ];
 
 /**
@@ -372,7 +465,8 @@ export const BuiltinHandlers = {
         updateElement: handleUpdateElement,
         showNotification: handleShowNotification,
         ping: handlePing,
-        pong: handlePong
+        pong: handlePong,
+        shareSync: handleShareSync
     }
 };
 

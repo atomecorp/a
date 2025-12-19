@@ -30,7 +30,7 @@ const CONFIG = {
     WS_URL: null, // Will be loaded from server_config.json
     RECONNECT_DELAY: 5000,
     AUTH_TIMEOUT: 8000,
-    DEBUG: true
+    DEBUG: false
 };
 
 // Command handler registry

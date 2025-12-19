@@ -173,7 +173,10 @@ const create_atome = AdoleAPI.atomes.create;
 const list_atomes = AdoleAPI.atomes.list;
 const get_atome = AdoleAPI.atomes.get;
 const delete_atome = AdoleAPI.atomes.delete;
-const alter_atome = AdoleAPI.atomes.alter;
+const alter_atome = (...args) => {
+  const api = window.AdoleAPI || AdoleAPI;
+  return api.atomes.alter(...args);
+};
 
 // Sharing functions - Use AdoleAPI.sharing.*
 const share_atome = AdoleAPI.sharing.share;
@@ -340,10 +343,34 @@ async function loadProjectAtomes(projectId) {
   puts('✅ Project atomes found: ' + projectAtomes.length);
 
   // Create visual elements for project atomes
-  projectAtomes.forEach(atome => {
-    const atomeId = atome.atome_id || atome.id;
-    const atomeType = atome.atome_type || atome.type;
-    const particles = atome.particles || atome.data || {};
+  for (const atome of projectAtomes) {
+    let atomeId = atome.atome_id || atome.id;
+    let atomeType = atome.atome_type || atome.type;
+    let particles = atome.particles || atome.data || {};
+
+    // Linked share placeholder: `share_link` is a local atome inside the receiver project
+    // that references the real shared atome id.
+    if (String(atomeType) === 'share_link') {
+      const linkedId = particles.linkedAtomeId || particles.linked_atome_id || null;
+      if (!linkedId) continue;
+
+      try {
+        const linked = await get_atome(String(linkedId));
+        const linkedAtome = linked?.tauri?.atome || linked?.fastify?.atome;
+        if (linkedAtome) {
+          atomeId = linkedAtome.atome_id || linkedAtome.id || linkedId;
+          atomeType = linkedAtome.atome_type || linkedAtome.type || 'shape';
+          particles = linkedAtome.particles || linkedAtome.data || particles;
+        } else {
+          // Fallback: still render a placeholder square at the linked id.
+          atomeId = String(linkedId);
+          atomeType = 'shape';
+        }
+      } catch (e) {
+        atomeId = String(linkedId);
+        atomeType = 'shape';
+      }
+    }
 
     // Get stored position or default with detailed logging
     const savedLeft = particles.left;
@@ -358,19 +385,19 @@ async function loadProjectAtomes(projectId) {
     const borderRadius = savedBorderRadius || '8px';
     const opacity = savedOpacity !== undefined ? savedOpacity : 1.0;
 
-    puts('📍 Loading atome ' + atomeId.substring(0, 8) +
+    puts('📍 Loading atome ' + String(atomeId).substring(0, 8) +
       ' - saved position: (' + (savedLeft || 'none') + ', ' + (savedTop || 'none') + ')' +
       ' - using position: (' + left + ', ' + top + ')' +
       ' - saved style: borderRadius=' + (savedBorderRadius || 'default') + ', opacity=' + (savedOpacity !== undefined ? savedOpacity : 'default'));
     console.log('[Position Load] Atome data:', {
-      atomeId: atomeId.substring(0, 8),
+      atomeId: String(atomeId).substring(0, 8),
       particles,
       savedLeft, savedTop, left, top,
       savedBorderRadius, savedOpacity, borderRadius, opacity
     });
 
     createVisualAtome(atomeId, atomeType, color, left, top, borderRadius, opacity);
-  });
+  }
 }
 
 /**

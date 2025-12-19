@@ -17,6 +17,32 @@ let _peersIndexCache = { builtAt: 0, index: new Map() };
 
 let _builtinHandlersRegistered = false;
 
+// Runtime peer discovery for linked-share realtime.
+// This enables bidirectional collaboration even when a device doesn't have
+// local share_request inbox records (e.g. Tauri-only / single-DB setups).
+const _runtimePeersByAtomeId = new Map();
+
+function _rememberRuntimePeer(atomeId, peerUserId) {
+    const a = String(atomeId || '');
+    const p = String(peerUserId || '');
+    if (!a || !p) return;
+    if (!_runtimePeersByAtomeId.has(a)) _runtimePeersByAtomeId.set(a, new Map());
+    _runtimePeersByAtomeId.get(a).set(p, Date.now());
+}
+
+function _getRuntimePeers(atomeId, maxAgeMs = 15 * 60 * 1000) {
+    const a = String(atomeId || '');
+    if (!a) return [];
+    const m = _runtimePeersByAtomeId.get(a);
+    if (!m) return [];
+    const now = Date.now();
+    const out = [];
+    for (const [peerId, lastSeenAt] of m.entries()) {
+        if ((now - lastSeenAt) <= maxAgeMs) out.push(peerId);
+    }
+    return out;
+}
+
 async function ensureRemoteCommandsReady(explicitUserId = null) {
     try {
         if (!_builtinHandlersRegistered) {
@@ -130,7 +156,9 @@ async function _buildRealtimePeersIndex(api, currentUserId) {
 
             if (shareType !== 'linked') continue;
             if (mode !== 'real-time') continue;
-            if (status !== 'active') continue;
+            // Linked-share realtime should start immediately after share creation.
+            // Share requests are created as `pending` for UI approval, but permissions are already granted.
+            if (status !== 'active' && status !== 'pending') continue;
 
             const atomeIds = Array.isArray(particles.atomeIds) ? particles.atomeIds : [];
             if (!atomeIds.length) continue;
@@ -179,7 +207,19 @@ async function _registerRealtimeHandlers() {
                 const atomeId = params?.atomeId || params?.atome_id || null;
                 const directPatch = params?.particles || null;
                 if (atomeId && directPatch && typeof directPatch === 'object') {
-                    await _withSuppressedSync(String(atomeId), () => api.atomes.alter(String(atomeId), directPatch));
+                    // Linked share uses the same atome_id: DB is already updated by the author.
+                    // Here we only apply a UI patch to reflect changes in realtime.
+                    try {
+                        const ui = BuiltinHandlers?.handlers?.shareSync;
+                        if (typeof ui === 'function') {
+                            ui({ atomeId: String(atomeId), particles: directPatch }, sender);
+                        }
+                    } catch (_) { }
+
+                    // Learn peer so we can sync back in Tauri-only scenarios.
+                    try {
+                        if (sender?.userId) _rememberRuntimePeer(String(atomeId), String(sender.userId));
+                    } catch (_) { }
                     return;
                 }
 
@@ -208,6 +248,15 @@ async function _registerRealtimeHandlers() {
                     }
 
                     if (!targetId) return;
+
+                    // Apply UI patch immediately when possible
+                    try {
+                        const ui = BuiltinHandlers?.handlers?.shareSync;
+                        if (typeof ui === 'function') {
+                            ui({ atomeId: String(targetId), particles: particlesPatch }, sender);
+                        }
+                    } catch (_) { }
+
                     await _withSuppressedSync(targetId, () => api.atomes.alter(targetId, particlesPatch));
                     return;
                 }
@@ -215,6 +264,15 @@ async function _registerRealtimeHandlers() {
                 // Update origin (sender side)
                 if (direction === 'to-origin') {
                     if (!originalAtomeId) return;
+
+                    // Apply UI patch immediately when possible
+                    try {
+                        const ui = BuiltinHandlers?.handlers?.shareSync;
+                        if (typeof ui === 'function') {
+                            ui({ atomeId: String(originalAtomeId), particles: particlesPatch }, sender);
+                        }
+                    } catch (_) { }
+
                     await _withSuppressedSync(originalAtomeId, () => api.atomes.alter(originalAtomeId, particlesPatch));
                     return;
                 }
@@ -294,7 +352,7 @@ async function _installAlterWrapper() {
 
             // Linked-share realtime: send patch to peers for the same atome ID
             const peersIndex = await _buildRealtimePeersIndex(api, current.id);
-            const peers = peersIndex.get(id) || [];
+            const peers = new Set([...(peersIndex.get(id) || []), ..._getRuntimePeers(id)]);
             for (const peerUserId of peers) {
                 if (!peerUserId) continue;
                 if (String(peerUserId) === String(current.id)) continue;
@@ -818,18 +876,61 @@ const ShareAPI = {
 
                 if (!sharedAtomeId) continue;
 
-                // Assign shared atome into the currently opened project
-                await api.atomes.alter(sharedAtomeId, {
-                    projectId,
-                    project_id: projectId,
-                    assignedToProject: true,
-                    inboxItem: false,
-                    acceptedAt: new Date().toISOString(),
-                    importedFromShareRequest: requestAtomeId
-                });
+                if (shareType === 'linked') {
+                    // Linked share keeps the same atome_id; we must NOT move it between projects.
+                    // Instead, create a local link inside the receiver's current project.
+                    const linkParticles = {
+                        type: 'share_link',
+                        projectId: String(projectId),
+                        project_id: String(projectId),
+                        linkedAtomeId: String(sharedAtomeId),
+                        originalAtomeId: originalAtomeId ? String(originalAtomeId) : null,
+                        shareRequestId: String(requestAtomeId),
+                        sharerId: particles.sharerId || null,
+                        mode: particles.mode || null,
+                        inboxItem: false,
+                        assignedToProject: true,
+                        acceptedAt: new Date().toISOString()
+                    };
 
-                importedIds.push(String(sharedAtomeId));
-                if (originalAtomeId) mappings.push({ originalAtomeId: String(originalAtomeId), sharedAtomeId: String(sharedAtomeId) });
+                    // Avoid duplicates: if a link already exists in this project for the same linkedAtomeId, reuse it.
+                    let existingLinkId = null;
+                    try {
+                        const existing = await api.atomes.list({ type: 'share_link', ownerId: current.id });
+                        const links = normalizeAtomesFromListResult(existing);
+                        const found = links.find(a => {
+                            const p = a.particles || a.data || {};
+                            const pid = a.project_id || a.projectId || a.parent_id || a.parentId;
+                            return String(p.linkedAtomeId || '') === String(sharedAtomeId) && String(pid || '') === String(projectId);
+                        });
+                        if (found?.id) existingLinkId = String(found.id);
+                    } catch (_) { }
+
+                    if (!existingLinkId) {
+                        await api.atomes.create({
+                            type: 'share_link',
+                            ownerId: current.id,
+                            projectId: projectId,
+                            particles: linkParticles
+                        });
+                    }
+
+                    importedIds.push(String(sharedAtomeId));
+                    if (originalAtomeId) mappings.push({ originalAtomeId: String(originalAtomeId), sharedAtomeId: String(sharedAtomeId) });
+                } else {
+                    // Copy-based share: assign shared atome into the currently opened project
+                    await api.atomes.alter(sharedAtomeId, {
+                        projectId,
+                        project_id: projectId,
+                        assignedToProject: true,
+                        inboxItem: false,
+                        acceptedAt: new Date().toISOString(),
+                        importedFromShareRequest: requestAtomeId
+                    });
+
+                    importedIds.push(String(sharedAtomeId));
+                    if (originalAtomeId) mappings.push({ originalAtomeId: String(originalAtomeId), sharedAtomeId: String(sharedAtomeId) });
+                }
             }
 
             const newStatus = (shareType === 'linked' && (particles.mode || '') === 'real-time') ? 'active' : 'accepted';

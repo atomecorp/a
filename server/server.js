@@ -88,6 +88,85 @@ import {
 import db from '../database/adole.js';
 import { v4 as uuidv4 } from 'uuid';
 
+async function getEffectiveOwnerIdForAtome(atomeId) {
+  try {
+    const ownerRow = await db.query('get', 'SELECT owner_id FROM atomes WHERE atome_id = ?', [atomeId]);
+    const ownerId = ownerRow?.owner_id ? String(ownerRow.owner_id) : null;
+    if (ownerId) return ownerId;
+
+    const pendingRow = await db.query(
+      'get',
+      "SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = '_pending_owner_id' ORDER BY updated_at DESC LIMIT 1",
+      [atomeId]
+    );
+
+    return pendingRow?.particle_value ? String(pendingRow.particle_value) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function listAtomeRealtimeRecipients(atomeId) {
+  try {
+    const recipients = new Set();
+
+    const ownerId = await getEffectiveOwnerIdForAtome(atomeId);
+    if (ownerId) recipients.add(ownerId);
+
+    const permRows = await db.query(
+      'all',
+      "SELECT DISTINCT principal_id FROM permissions WHERE atome_id = ? AND can_read = 1 AND (expires_at IS NULL OR expires_at > datetime('now'))",
+      [atomeId]
+    );
+
+    for (const row of permRows || []) {
+      if (row?.principal_id) recipients.add(String(row.principal_id));
+    }
+
+    return Array.from(recipients);
+  } catch (_) {
+    return [];
+  }
+}
+
+async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId }) {
+  if (!DATABASE_ENABLED) return;
+  if (!atomeId || !particles || typeof particles !== 'object') return;
+  if (!senderUserId) return;
+
+  const recipients = await listAtomeRealtimeRecipients(atomeId);
+  if (!recipients || recipients.length === 0) return;
+
+  const nowIso = new Date().toISOString();
+  const msgText = JSON.stringify({
+    command: 'share-sync',
+    params: {
+      atomeId,
+      particles,
+      updatedAt: nowIso,
+      authorId: String(senderUserId)
+    }
+  });
+
+  for (const recipientId of recipients) {
+    if (!recipientId) continue;
+    if (String(recipientId) === String(senderUserId)) continue;
+
+    const payload = {
+      type: 'console-message',
+      message: msgText,
+      from: { userId: String(senderUserId), phone: null, username: null },
+      to: { userId: String(recipientId), phone: null },
+      timestamp: nowIso
+    };
+
+    // Send only if online; do not queue (share-sync patches can become stale).
+    try {
+      wsSendJsonToUser(String(recipientId), payload, { scope: 'ws/api', op: 'share-sync', targetUserId: String(recipientId) });
+    } catch (_) { }
+  }
+}
+
 // Check if database is configured (SQLite path or libSQL URL)
 const DB_CONFIGURED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL);
 
@@ -1449,9 +1528,11 @@ async function startServer() {
                 const particles = data.particles || data.properties;
                 const author = data.author;
 
-                console.log('[WS Update Debug] atomeId:', atomeId);
-                console.log('[WS Update Debug] particles:', JSON.stringify(particles));
-                console.log('[WS Update Debug] data keys:', Object.keys(data));
+                if (process.env.WS_UPDATE_DEBUG === '1') {
+                  console.log('[WS Update Debug] atomeId:', atomeId);
+                  console.log('[WS Update Debug] particles:', JSON.stringify(particles));
+                  console.log('[WS Update Debug] data keys:', Object.keys(data));
+                }
 
                 if (!atomeId) {
                   safeSend({
@@ -1488,6 +1569,11 @@ async function startServer() {
                 }
 
                 await db.updateAtome(atomeId, particles, author);
+
+                // Realtime collaboration: broadcast patch to share recipients
+                try {
+                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId });
+                } catch (_) { }
 
                 safeSend({
                   type: 'atome-response',
@@ -1526,6 +1612,11 @@ async function startServer() {
 
                 // Alter uses updateAtome with partial particles
                 await db.updateAtome(atomeId, particles);
+
+                // Realtime collaboration: broadcast patch to share recipients
+                try {
+                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId });
+                } catch (_) { }
 
                 safeSend({
                   type: 'atome-response',
