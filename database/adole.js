@@ -103,6 +103,9 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     let insertOwnerId = ownerId || null;
     let insertParentId = parentId;
 
+    let pendingOwnerId = null;
+    let pendingParentId = null;
+
     if (selfOwner) insertOwnerId = null;
     if (selfParent) insertParentId = null;
 
@@ -110,7 +113,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
         const ownerExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [insertOwnerId]);
         if (!ownerExists) {
             insertOwnerId = null;
-            await setParticle(atomeId, '_pending_owner_id', ownerId, creatorId);
+            pendingOwnerId = ownerId;
         }
     }
 
@@ -118,7 +121,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
         const parentExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [insertParentId]);
         if (!parentExists) {
             insertParentId = null;
-            await setParticle(atomeId, '_pending_parent_id', parentId, creatorId);
+            pendingParentId = parentId;
         }
     }
 
@@ -128,6 +131,14 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
         VALUES (?, ?, ?, ?, ?, 'local', 'fastify',
                 COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?), ?)
     `, [atomeId, type, insertParentId, insertOwnerId, creatorId, atomeId, now, now]);
+
+    // Store deferred FK references AFTER the atome row exists (particles.atome_id FK)
+    if (pendingOwnerId) {
+        await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, creatorId);
+    }
+    if (pendingParentId) {
+        await setParticle(atomeId, '_pending_parent_id', pendingParentId, creatorId);
+    }
 
     // Resolve self-references now that the row exists
     if (selfOwner) {
@@ -220,6 +231,28 @@ export async function getAtomeById(id) {
     return row || null;
 }
 
+async function getPendingOwnerId(atomeId) {
+    try {
+        const row = await query('get', `
+            SELECT particle_value
+            FROM particles
+            WHERE atome_id = ? AND particle_key = '_pending_owner_id'
+            LIMIT 1
+        `, [atomeId]);
+        if (!row?.particle_value) return null;
+        return JSON.parse(row.particle_value);
+    } catch (_) {
+        return null;
+    }
+}
+
+async function getEffectiveOwnerId(atomeId) {
+    const atome = await getAtomeById(atomeId);
+    if (!atome) return null;
+    if (atome.owner_id) return atome.owner_id;
+    return await getPendingOwnerId(atomeId);
+}
+
 /**
  * Get atome with all its particles (full data)
  */
@@ -303,6 +336,46 @@ export async function getAtomesByOwner(ownerId, options = {}) {
 }
 
 /**
+ * Get atomes accessible to a user (owned OR shared via permissions.can_read)
+ */
+export async function getAtomesAccessibleToUser(userId, options = {}) {
+    const { type, parent, limit = 100, offset = 0 } = options;
+
+    let sql = `
+        SELECT DISTINCT a.*
+        FROM atomes a
+        LEFT JOIN permissions p
+          ON p.atome_id = a.atome_id
+         AND p.principal_id = ?
+         AND p.can_read = 1
+         AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))
+        WHERE a.deleted_at IS NULL
+          AND (a.owner_id = ? OR p.permission_id IS NOT NULL)
+    `;
+
+    const params = [userId, userId];
+
+    if (type) {
+        sql += ' AND a.atome_type = ?';
+        params.push(type);
+    }
+
+    if (parent !== undefined) {
+        if (parent === null) {
+            sql += ' AND a.parent_id IS NULL';
+        } else {
+            sql += ' AND a.parent_id = ?';
+            params.push(parent);
+        }
+    }
+
+    sql += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    return await query('all', sql, params);
+}
+
+/**
  * Get children of an atome
  */
 export async function getAtomeChildren(parentId) {
@@ -357,7 +430,8 @@ export async function deleteAtome(id) {
  * List atomes for a user with full data
  */
 export async function listAtomes(ownerId, options = {}) {
-    const atomes = await getAtomesByOwner(ownerId, options);
+    // For multi-user sharing, listing must include atomes shared with the user.
+    const atomes = await getAtomesAccessibleToUser(ownerId, options);
 
     // Load particles for each atome
     const result = [];
@@ -643,9 +717,9 @@ export async function setPermission(atomeId, principalId, canRead = true, canWri
  * Check if user can read an atome/particle
  */
 export async function canRead(atomeId, principalId, particleKey = null) {
-    // Owner always has access
-    const atome = await getAtomeById(atomeId);
-    if (atome && atome.owner_id === principalId) return true;
+    // Owner always has access (including pending owner when FK prevented setting owner_id)
+    const ownerId = await getEffectiveOwnerId(atomeId);
+    if (ownerId && ownerId === principalId) return true;
 
     // Check specific permission
     const perm = await query('get', `
@@ -661,9 +735,9 @@ export async function canRead(atomeId, principalId, particleKey = null) {
  * Check if user can write an atome/particle
  */
 export async function canWrite(atomeId, principalId, particleKey = null) {
-    // Owner always has access
-    const atome = await getAtomeById(atomeId);
-    if (atome && atome.owner_id === principalId) return true;
+    // Owner always has access (including pending owner when FK prevented setting owner_id)
+    const ownerId = await getEffectiveOwnerId(atomeId);
+    if (ownerId && ownerId === principalId) return true;
 
     // Check specific permission
     const perm = await query('get', `
@@ -673,6 +747,40 @@ export async function canWrite(atomeId, principalId, particleKey = null) {
     `, [atomeId, principalId, particleKey]);
 
     return perm ? perm.can_write === 1 : false;
+}
+
+/**
+ * Check if user can delete an atome/particle
+ */
+export async function canDelete(atomeId, principalId, particleKey = null) {
+    // Owner always has access (including pending owner when FK prevented setting owner_id)
+    const ownerId = await getEffectiveOwnerId(atomeId);
+    if (ownerId && ownerId === principalId) return true;
+
+    const perm = await query('get', `
+        SELECT can_delete FROM permissions
+        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
+        ORDER BY particle_key DESC LIMIT 1
+    `, [atomeId, principalId, particleKey]);
+
+    return perm ? perm.can_delete === 1 : false;
+}
+
+/**
+ * Check if user can share an atome/particle
+ */
+export async function canShare(atomeId, principalId, particleKey = null) {
+    // Owner always has access (including pending owner when FK prevented setting owner_id)
+    const ownerId = await getEffectiveOwnerId(atomeId);
+    if (ownerId && ownerId === principalId) return true;
+
+    const perm = await query('get', `
+        SELECT can_share FROM permissions
+        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
+        ORDER BY particle_key DESC LIMIT 1
+    `, [atomeId, principalId, particleKey]);
+
+    return perm ? perm.can_share === 1 : false;
 }
 
 // ============================================================================
@@ -707,10 +815,19 @@ export async function updateSyncState(atomeId, localHash = null, remoteHash = nu
  */
 export async function getPendingForSync(ownerId) {
     const atomes = await query('all', `
-        SELECT * FROM atomes 
-        WHERE owner_id = ? AND sync_status = 'pending'
-        ORDER BY updated_at ASC
-    `, [ownerId]);
+                SELECT DISTINCT a.*
+                FROM atomes a
+                LEFT JOIN particles po
+                    ON po.atome_id = a.atome_id
+                 AND po.particle_key = '_pending_owner_id'
+                WHERE a.sync_status = 'pending'
+                    AND a.deleted_at IS NULL
+                    AND (
+                        a.owner_id = ?
+                        OR json_extract(po.particle_value, '$') = ?
+                    )
+                ORDER BY a.updated_at ASC
+        `, [ownerId, ownerId]);
 
     const result = [];
     for (const atome of atomes) {

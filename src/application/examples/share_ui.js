@@ -270,8 +270,18 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
             try {
                 if (kind === 'pending') {
                     // Checked = allow (accept/import). Unchecked = deny (reject).
-                    if (checkboxEl.checked) await ShareAPI.accept_request(entry.atomeId);
-                    else await ShareAPI.reject_request(entry.atomeId);
+                    if (checkboxEl.checked) {
+                        const res = await ShareAPI.accept_request(entry.atomeId);
+                        if (!res?.ok) {
+                            setStatus(res?.error || 'Accept failed.', 'error');
+                        } else {
+                            setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
+                        }
+                    } else {
+                        const res = await ShareAPI.reject_request(entry.atomeId);
+                        if (!res?.ok) setStatus(res?.error || 'Reject failed.', 'error');
+                        else setStatus('Request rejected.', 'success');
+                    }
                 } else {
                     const next = checkboxEl.checked
                         ? (entry.mode === 'validation-based' ? 'pending' : 'active')
@@ -295,11 +305,15 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
             forceText: true,
             css: { position: 'relative', height: '34px' },
             onAction: async () => {
-                await ShareAPI.accept_request(entry.atomeId);
+                const res = await ShareAPI.accept_request(entry.atomeId);
+                if (!res?.ok) setStatus(res?.error || 'Accept failed.', 'error');
+                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
                 await refreshShared();
             },
             offAction: async () => {
-                await ShareAPI.accept_request(entry.atomeId);
+                const res = await ShareAPI.accept_request(entry.atomeId);
+                if (!res?.ok) setStatus(res?.error || 'Accept failed.', 'error');
+                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
                 await refreshShared();
             }
         });
@@ -312,11 +326,15 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
             forceText: true,
             css: { position: 'relative', height: '34px' },
             onAction: async () => {
-                await ShareAPI.reject_request(entry.atomeId);
+                const res = await ShareAPI.reject_request(entry.atomeId);
+                if (!res?.ok) setStatus(res?.error || 'Reject failed.', 'error');
+                else setStatus('Request rejected.', 'success');
                 await refreshShared();
             },
             offAction: async () => {
-                await ShareAPI.reject_request(entry.atomeId);
+                const res = await ShareAPI.reject_request(entry.atomeId);
+                if (!res?.ok) setStatus(res?.error || 'Reject failed.', 'error');
+                else setStatus('Request rejected.', 'success');
                 await refreshShared();
             }
         });
@@ -332,11 +350,15 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
             forceText: true,
             css: { position: 'relative', height: '34px' },
             onAction: async () => {
-                await ShareAPI.accept_request(entry.atomeId);
+                const res = await ShareAPI.accept_request(entry.atomeId);
+                if (!res?.ok) setStatus(res?.error || 'Import failed.', 'error');
+                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
                 await refreshShared();
             },
             offAction: async () => {
-                await ShareAPI.accept_request(entry.atomeId);
+                const res = await ShareAPI.accept_request(entry.atomeId);
+                if (!res?.ok) setStatus(res?.error || 'Import failed.', 'error');
+                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
                 await refreshShared();
             }
         });

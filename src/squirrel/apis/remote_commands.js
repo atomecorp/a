@@ -72,7 +72,7 @@ async function loadConfigOnce() {
 
         const response = await fetch(configUrl, { cache: 'no-store' });
         if (!response || !response.ok) {
-            configLoaded = true;
+            // Do not permanently cache a failure: server may be starting up.
             return null;
         }
 
@@ -89,7 +89,7 @@ async function loadConfigOnce() {
         return CONFIG.WS_URL;
     } catch (error) {
         log('Failed to load server_config.json:', error.message);
-        configLoaded = true;
+        // Do not permanently cache a failure.
         return null;
     }
 }
@@ -385,6 +385,11 @@ async function connect() {
     // Load config from server_config.json before connecting
     await loadConfigOnce();
 
+    if (!CONFIG.WS_URL) {
+        log('Cannot connect: missing WS_URL (server_config.json not available yet)');
+        return false;
+    }
+
     return new Promise((resolve) => {
         try {
             socket = new WebSocket(CONFIG.WS_URL);
@@ -443,9 +448,12 @@ async function start(userId) {
     log('Starting remote commands listener...');
 
     // Store the actual user ID passed from the app (not from WebSocket auth)
-    if (userId) {
-        currentUserId = userId;
-        log(`Using app user ID: ${userId}`);
+    // Fallback to global current user state if available.
+    const resolvedUserId = userId || (typeof window !== 'undefined' ? window.__currentUser?.id : null);
+
+    if (resolvedUserId) {
+        currentUserId = resolvedUserId;
+        log(`Using app user ID: ${resolvedUserId}`);
     }
 
     const connected = await connect();

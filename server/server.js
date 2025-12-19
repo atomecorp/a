@@ -53,7 +53,7 @@ import {
 } from './aBoxServer.js';
 import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId } from './auth.js';
 import { registerAtomeRoutes } from './atomeRoutes.orm.js';
-import { registerSharingRoutes } from './sharing.js';
+import { registerSharingRoutes, handleShareMessage } from './sharing.js';
 import {
   initUserFiles,
   registerFileUpload,
@@ -1375,6 +1375,7 @@ async function startServer() {
           if (data.type === 'atome') {
             const action = data.action || '';
             const requestId = data.requestId;
+            const requesterId = connection?._wsApiUserId || data.userId || data.ownerId || data.owner_id || null;
 
             try {
               if (action === 'create') {
@@ -1415,6 +1416,21 @@ async function startServer() {
               } else if (action === 'get') {
                 // Support both: { id } and { atomeId }
                 const atomeId = data.atomeId || data.id;
+
+                if (requesterId && atomeId) {
+                  const allowed = await db.canRead(atomeId, requesterId);
+                  if (!allowed) {
+                    safeSend({
+                      type: 'atome-response',
+                      requestId,
+                      success: false,
+                      ok: false,
+                      error: 'Access denied'
+                    });
+                    return;
+                  }
+                }
+
                 const atome = await db.getAtome(atomeId);
 
                 // Return success: false if atome not found
@@ -1458,6 +1474,19 @@ async function startServer() {
                   return;
                 }
 
+                if (requesterId) {
+                  const allowed = await db.canWrite(atomeId, requesterId);
+                  if (!allowed) {
+                    safeSend({
+                      type: 'atome-response',
+                      requestId,
+                      success: false,
+                      error: 'Access denied'
+                    });
+                    return;
+                  }
+                }
+
                 await db.updateAtome(atomeId, particles, author);
 
                 safeSend({
@@ -1481,6 +1510,20 @@ async function startServer() {
                   return;
                 }
 
+                if (requesterId) {
+                  const allowed = await db.canWrite(atomeId, requesterId);
+                  if (!allowed) {
+                    safeSend({
+                      type: 'atome-response',
+                      requestId,
+                      success: false,
+                      ok: false,
+                      error: 'Access denied'
+                    });
+                    return;
+                  }
+                }
+
                 // Alter uses updateAtome with partial particles
                 await db.updateAtome(atomeId, particles);
 
@@ -1494,6 +1537,21 @@ async function startServer() {
                 // Support both: { id } and { atomeId }
                 // Note: This is a SOFT delete (sets deleted_at)
                 const atomeId = data.atomeId || data.id;
+
+                if (requesterId && atomeId) {
+                  const allowed = await db.canDelete(atomeId, requesterId);
+                  if (!allowed) {
+                    safeSend({
+                      type: 'atome-response',
+                      requestId,
+                      success: false,
+                      ok: false,
+                      error: 'Access denied'
+                    });
+                    return;
+                  }
+                }
+
                 await db.deleteAtome(atomeId);
 
                 safeSend({
@@ -1505,7 +1563,8 @@ async function startServer() {
               } else if (action === 'list') {
                 const { ownerId, userId, atomeType, limit, offset, includeDeleted } = data;
                 const effectiveType = atomeType;
-                const effectiveOwner = (ownerId === '*' || ownerId === 'all') ? null : (ownerId || userId);
+                const requestedOwner = (ownerId === '*' || ownerId === 'all') ? null : (ownerId || userId);
+                const effectiveOwner = requesterId || requestedOwner;
 
                 console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}, includeDeleted=${includeDeleted}`);
                 console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner || 'none'}, effectiveType=${effectiveType || 'none'}`);
@@ -1515,21 +1574,27 @@ async function startServer() {
 
                 let atomes;
                 if (effectiveOwner && effectiveOwner !== 'anonymous') {
-                  // List atomes for a specific owner
-                  // Note: db.listAtomes doesn't support includeDeleted, so we do a direct query
+                  // List atomes accessible to this user (owned OR shared via permissions)
                   const dataSource = db.getDataSourceAdapter();
                   const rows = await dataSource.query(
                     `SELECT a.*, 
                             GROUP_CONCAT(p.particle_key || ':' || p.particle_value, '||') as particles_raw
                      FROM atomes a
                      LEFT JOIN particles p ON a.atome_id = p.atome_id
-                     WHERE a.owner_id = ? ${deletedClause} ${effectiveType ? 'AND a.atome_type = ?' : ''}
+                     LEFT JOIN permissions perm
+                       ON perm.atome_id = a.atome_id
+                      AND perm.principal_id = ?
+                      AND perm.can_read = 1
+                      AND (perm.expires_at IS NULL OR perm.expires_at > datetime('now'))
+                     WHERE (a.owner_id = ? OR perm.permission_id IS NOT NULL)
+                       ${deletedClause}
+                       ${effectiveType ? 'AND a.atome_type = ?' : ''}
                      GROUP BY a.atome_id
                      ORDER BY a.created_at DESC
                      LIMIT ? OFFSET ?`,
                     effectiveType
-                      ? [effectiveOwner, effectiveType, limit || 100, offset || 0]
-                      : [effectiveOwner, limit || 100, offset || 0]
+                      ? [effectiveOwner, effectiveOwner, effectiveType, limit || 100, offset || 0]
+                      : [effectiveOwner, effectiveOwner, limit || 100, offset || 0]
                   );
 
                   // Parse particles
@@ -1669,6 +1734,25 @@ async function startServer() {
               console.error(`❌ Atome WebSocket error: ${error.message}`);
               safeSend({
                 type: 'atome-response',
+                requestId,
+                success: false,
+                error: error.message
+              });
+            }
+            return;
+          }
+
+          // Handle share requests (permissions) over ws/api
+          if (data.type === 'share') {
+            const requestId = data.requestId;
+            const userId = connection?._wsApiUserId || data.userId || null;
+
+            try {
+              const response = await handleShareMessage(data, userId);
+              safeSend({ type: 'share-response', ...response });
+            } catch (error) {
+              safeSend({
+                type: 'share-response',
                 requestId,
                 success: false,
                 error: error.message

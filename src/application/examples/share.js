@@ -4,6 +4,7 @@
 
 import { AdoleAPI } from '../../squirrel/apis/unified/adole_apis.js';
 import { RemoteCommands } from '/squirrel/apis/remote_commands.js';
+import { BuiltinHandlers } from '/squirrel/apis/remote_command_handlers.js';
 
 const SHARE_SYNC_COMMAND = 'share-sync';
 const SHARE_ACCEPTED_COMMAND = 'share-accepted';
@@ -12,6 +13,37 @@ let _realtimeInstalled = false;
 let _wrappedAlterInstalled = false;
 let _suppressSyncForAtomeIds = new Set();
 let _outboxIndexCache = { builtAt: 0, index: new Map() };
+let _peersIndexCache = { builtAt: 0, index: new Map() };
+
+let _builtinHandlersRegistered = false;
+
+async function ensureRemoteCommandsReady(explicitUserId = null) {
+    try {
+        if (!_builtinHandlersRegistered) {
+            BuiltinHandlers.registerAll();
+            _builtinHandlersRegistered = true;
+        }
+    } catch (e) {
+        console.warn('[ShareAPI] Failed to register builtin remote handlers:', e.message);
+    }
+
+    try {
+        if (RemoteCommands?.isActive?.()) return true;
+    } catch (_) { }
+
+    try {
+        const userId = explicitUserId
+            || (await getCurrentUser())?.id
+            || (typeof window !== 'undefined' ? window.__currentUser?.id : null);
+
+        if (!userId) return false;
+        const started = await RemoteCommands.start(userId);
+        return !!started;
+    } catch (e) {
+        console.warn('[ShareAPI] Failed to start RemoteCommands:', e.message);
+        return false;
+    }
+}
 
 function _withSuppressedSync(atomeId, fn) {
     if (!atomeId) return fn();
@@ -78,16 +110,78 @@ async function _buildOutboxIndex(api, currentUserId) {
     return index;
 }
 
+async function _buildRealtimePeersIndex(api, currentUserId) {
+    const now = Date.now();
+    if (_peersIndexCache.index && (now - _peersIndexCache.builtAt) < 5000) {
+        return _peersIndexCache.index;
+    }
+
+    const index = new Map();
+    try {
+        const result = await api.atomes.list({ type: 'share_request', ownerId: currentUserId });
+        const all = normalizeDualListResult(result, 'atomes');
+
+        for (const raw of all) {
+            const particles = raw?.particles || raw?.data || {};
+            const box = particles.box || null;
+            const status = particles.status || null;
+            const mode = particles.mode || null;
+            const shareType = _extractShareTypeFromRequestParticles(particles);
+
+            if (shareType !== 'linked') continue;
+            if (mode !== 'real-time') continue;
+            if (status !== 'active') continue;
+
+            const atomeIds = Array.isArray(particles.atomeIds) ? particles.atomeIds : [];
+            if (!atomeIds.length) continue;
+
+            let peerUserId = null;
+            if (box === 'outbox') peerUserId = particles.targetUserId || null;
+            if (box === 'inbox') peerUserId = particles.sharerId || null;
+            if (!peerUserId) continue;
+
+            for (const atomeId of atomeIds) {
+                if (!atomeId) continue;
+                const key = String(atomeId);
+                if (!index.has(key)) index.set(key, new Set());
+                index.get(key).add(String(peerUserId));
+            }
+        }
+    } catch (e) {
+        console.warn('[ShareAPI] Failed to build realtime peers index:', e.message);
+    }
+
+    // Convert Sets to Arrays for stable iteration
+    const normalized = new Map();
+    for (const [k, set] of index.entries()) {
+        normalized.set(k, Array.from(set));
+    }
+
+    _peersIndexCache = { builtAt: now, index: normalized };
+    return normalized;
+}
+
 async function _registerRealtimeHandlers() {
     if (_realtimeInstalled) return;
     _realtimeInstalled = true;
 
     try {
+        // Ensure we can receive share-sync and notifications
+        await ensureRemoteCommandsReady();
+
         RemoteCommands.register(SHARE_SYNC_COMMAND, async (params, sender) => {
             try {
                 const api = window.AdoleAPI || AdoleAPI;
                 const current = await getCurrentUser();
                 if (!current?.id) return;
+
+                // New linked-share payload: patch a shared atome (same ID) for realtime collaboration
+                const atomeId = params?.atomeId || params?.atome_id || null;
+                const directPatch = params?.particles || null;
+                if (atomeId && directPatch && typeof directPatch === 'object') {
+                    await _withSuppressedSync(String(atomeId), () => api.atomes.alter(String(atomeId), directPatch));
+                    return;
+                }
 
                 const direction = params?.direction || null;
                 const originalAtomeId = params?.originalAtomeId || null;
@@ -159,6 +253,7 @@ async function _registerRealtimeHandlers() {
 
                 // Invalidate cache
                 _outboxIndexCache.builtAt = 0;
+                _peersIndexCache.builtAt = 0;
             } catch (e) {
                 console.warn('[ShareAPI] share-accepted handler error:', e.message);
             }
@@ -190,9 +285,26 @@ async function _installAlterWrapper() {
             const current = await getCurrentUser();
             if (!current?.id) return res;
 
+            // Ensure we can send realtime patches
+            await ensureRemoteCommandsReady(current.id);
+
             // Only attempt sync when local update actually succeeded
             const ok = !!(res?.tauri?.success || res?.fastify?.success);
             if (!ok) return res;
+
+            // Linked-share realtime: send patch to peers for the same atome ID
+            const peersIndex = await _buildRealtimePeersIndex(api, current.id);
+            const peers = peersIndex.get(id) || [];
+            for (const peerUserId of peers) {
+                if (!peerUserId) continue;
+                if (String(peerUserId) === String(current.id)) continue;
+                await RemoteCommands.sendCommand(String(peerUserId), SHARE_SYNC_COMMAND, {
+                    atomeId: id,
+                    particles: newParticles,
+                    fromUserId: current.id,
+                    at: new Date().toISOString()
+                });
+            }
 
             // Load atome to detect if it's a linked shared copy
             const got = await api.atomes.get(id);
@@ -375,6 +487,7 @@ async function resolveUserByPhone(phone) {
 async function notifyUser(userId, payload) {
     try {
         if (!userId) return { ok: false, error: 'Missing userId' };
+        await ensureRemoteCommandsReady();
         const result = await RemoteCommands.sendCommand(userId, 'show-notification', payload);
         return { ok: true, result };
     } catch (e) {
@@ -556,6 +669,9 @@ const ShareAPI = {
             return { ok: false, error: 'Not logged in' };
         }
 
+        // Needed for notifications + realtime commands in this example
+        await ensureRemoteCommandsReady(current.id);
+
         const results = [];
         for (const target of users_cible) {
             const phone = target?.phone;
@@ -564,7 +680,13 @@ const ShareAPI = {
                 continue;
             }
 
-            const shareResult = await api.sharing.share(phone, atomeIds, permissions, mode, propertyOverrides, null);
+            // Hint the underlying API with the canonical userId to avoid slow phone lookup.
+            const perTargetOverrides = {
+                ...propertyOverrides,
+                __targetUserId: target?.userId ? String(target.userId) : undefined
+            };
+
+            const shareResult = await api.sharing.share(phone, atomeIds, permissions, mode, perTargetOverrides, null);
             const backendOk = !!(shareResult?.tauri?.success || shareResult?.fastify?.success);
             results.push({
                 ok: backendOk,
@@ -573,12 +695,13 @@ const ShareAPI = {
                 error: backendOk ? null : (shareResult?.tauri?.error || shareResult?.fastify?.error || 'Share failed')
             });
 
-            const resolved = await resolveUserByPhone(phone);
-            if (resolved?.id) {
+            // Notify immediately if userId is known; fallback to phone lookup only if needed.
+            const notifyId = target?.userId ? String(target.userId) : (await resolveUserByPhone(phone))?.id;
+            if (notifyId) {
                 const msg = (mode === 'validation-based')
                     ? `A share request was created (${mode}). Open Share to accept/reject.`
                     : `A share was created (${mode}). Open Share to import into a project.`;
-                await notifyUser(resolved.id, {
+                await notifyUser(notifyId, {
                     title: 'New share',
                     message: msg,
                     duration: 3500
@@ -644,6 +767,8 @@ const ShareAPI = {
             const current = await getCurrentUser();
             if (!current?.id) return { ok: false, error: 'Not logged in' };
 
+            await ensureRemoteCommandsReady(current.id);
+
             const projectId = getCurrentProjectIdFromGlobals();
             if (!projectId) return { ok: false, error: 'No current project selected' };
 
@@ -667,13 +792,18 @@ const ShareAPI = {
             const importedIds = [];
             const mappings = [];
 
-            // Preload recipient atomes once for legacy requests
+            // Preload recipient atomes once for legacy requests (copy-based)
             const listRes = await api.atomes.list({ ownerId: current.id });
             const recipientAtomes = normalizeAtomesFromListResult(listRes);
 
             for (const item of sharedAtomes) {
                 const originalAtomeId = item?.originalId || item?.original_atome_id || item?.originalAtomeId || null;
                 let sharedAtomeId = item?.sharedAtomeId || item?.shared_atome_id || item?.createdAtomeId || null;
+
+                // Permission-based linked share: shared atome is the original atome (same ID)
+                if (!sharedAtomeId && shareType === 'linked' && originalAtomeId) {
+                    sharedAtomeId = originalAtomeId;
+                }
 
                 // Legacy fallback: find existing shared copy created by the sharer
                 if (!sharedAtomeId && originalAtomeId) {
@@ -723,6 +853,8 @@ const ShareAPI = {
                     });
                 }
             } catch (_) { }
+
+            _peersIndexCache.builtAt = 0;
 
             // Trigger UI/project refresh without a full page reload
             try {

@@ -31,7 +31,16 @@ export const PERMISSION = {
  * Convert permission level to granular flags
  */
 function permissionToFlags(level) {
-    if (typeof level === 'object') return level;
+    if (typeof level === 'object' && level) {
+        // Normalize booleans/strings to SQLite-friendly integers.
+        // sqlite3 does not accept boolean values as bound parameters.
+        return {
+            can_read: level.can_read ? 1 : 0,
+            can_write: level.can_write ? 1 : 0,
+            can_delete: level.can_delete ? 1 : 0,
+            can_share: level.can_share ? 1 : 0
+        };
+    }
 
     return {
         can_read: (level & PERMISSION.READ) ? 1 : 0,
@@ -96,6 +105,36 @@ export async function createShare(grantorId, atomeId, principalId, permission, o
     // Verify grantor has permission to share
     const canShare = await checkCanShare(grantorId, atomeId);
     if (!canShare) {
+        try {
+            const atome = await db.query('get', `SELECT owner_id FROM atomes WHERE atome_id = ?`, [atomeId]);
+            let pendingOwner = null;
+            try {
+                const pending = await db.query('get', `
+                    SELECT particle_value
+                    FROM particles
+                    WHERE atome_id = ? AND particle_key = '_pending_owner_id'
+                    LIMIT 1
+                `, [atomeId]);
+                if (pending?.particle_value) pendingOwner = JSON.parse(pending.particle_value);
+            } catch (_) { }
+
+            const hasSharePermission = await db.query('get', `
+                SELECT can_share
+                FROM permissions
+                WHERE atome_id = ? AND principal_id = ?
+                AND (expires_at IS NULL OR expires_at > datetime('now'))
+                LIMIT 1
+            `, [atomeId, grantorId]);
+
+            console.warn('[sharing] createShare denied', {
+                grantorId,
+                atomeId,
+                principalId,
+                owner_id: atome?.owner_id || null,
+                pending_owner_id: pendingOwner,
+                grantor_can_share: hasSharePermission?.can_share || 0
+            });
+        } catch (_) { }
         return { success: false, error: 'You do not have permission to share this resource' };
     }
 
@@ -209,9 +248,25 @@ export async function revokeShare(grantorId, permissionId) {
  * Check if user can share an atome (is owner or has can_share permission)
  */
 async function checkCanShare(userId, atomeId) {
-    // Check if user is owner
+    // Check if user is owner (including pending owner when FK prevented setting owner_id)
     const atome = await db.query('get', `SELECT owner_id FROM atomes WHERE atome_id = ?`, [atomeId]);
-    if (atome?.owner_id === userId) return true;
+    let ownerId = atome?.owner_id || null;
+
+    if (!ownerId) {
+        try {
+            const pending = await db.query('get', `
+                SELECT particle_value
+                FROM particles
+                WHERE atome_id = ? AND particle_key = '_pending_owner_id'
+                LIMIT 1
+            `, [atomeId]);
+            if (pending?.particle_value) {
+                ownerId = JSON.parse(pending.particle_value);
+            }
+        } catch (_) { }
+    }
+
+    if (ownerId === userId) return true;
 
     // Check if user has share permission
     const permission = await db.query('get', `

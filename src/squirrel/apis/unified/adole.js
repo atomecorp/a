@@ -551,6 +551,27 @@ class TauriWebSocket {
                 return;
             }
 
+            // Handle share-response (permissions system)
+            if (message.type === 'share-response' && (message.request_id || message.requestId)) {
+                const pending = this.pendingRequests.get(message.request_id || message.requestId);
+                if (pending) {
+                    this.pendingRequests.delete(message.request_id || message.requestId);
+                    clearTimeout(pending.timeout);
+                    pending.resolve({
+                        ok: message.success,
+                        success: message.success,
+                        status: message.success ? 200 : 400,
+                        error: message.error,
+                        data: message.data,
+                        count: message.count,
+                        atome_id: message.atome_id,
+                        permission: message.permission,
+                        granted: message.granted
+                    });
+                }
+                return;
+            }
+
             // Handle direct-message-response
             if (message.type === 'direct-message-response' && (message.request_id || message.requestId)) {
                 const pending = this.pendingRequests.get(message.request_id || message.requestId);
@@ -847,6 +868,53 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             async restore(id, data) {
                 // Not implemented in WebSocket version yet
                 return { ok: false, success: false, error: 'Not implemented' };
+            }
+        },
+
+        share: {
+            async create(data) {
+                // Permissions sharing is handled server-side; token auth binds ws identity.
+                return getWs().send({
+                    type: 'share',
+                    action: 'create',
+                    userId: data.userId || data.user_id,
+                    atome_id: data.atomeId || data.atome_id,
+                    principal_id: data.principalId || data.principal_id,
+                    permission: data.permission,
+                    particle_key: data.particleKey || data.particle_key || null,
+                    expires_at: data.expiresAt || data.expires_at || null
+                });
+            },
+            async revoke(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'revoke',
+                    userId: data.userId || data.user_id,
+                    permission_id: data.permissionId || data.permission_id
+                });
+            },
+            async accessible(data = {}) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'accessible',
+                    userId: data.userId || data.user_id,
+                    atome_type: data.atomeType || data.atome_type || null
+                });
+            },
+            async sharedWithMe() {
+                return getWs().send({ type: 'share', action: 'shared-with-me' });
+            },
+            async myShares() {
+                return getWs().send({ type: 'share', action: 'my-shares' });
+            },
+            async check(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'check',
+                    userId: data.userId || data.user_id,
+                    atome_id: data.atomeId || data.atome_id,
+                    permission: data.permission || 'read'
+                });
             }
         },
 
