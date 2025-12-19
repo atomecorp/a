@@ -629,6 +629,10 @@ function updateHistorySlider() {
 function makeAtomeDraggable(atomeEl, atomeId) {
   let isDragging = false;
   let startX, startY, initialLeft, initialTop;
+  let dragRafId = null;
+  let dragLastSentAt = 0;
+  let dragLastSentKey = '';
+  let dragPendingPos = null;
 
   atomeEl.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Left click only
@@ -665,12 +669,56 @@ function makeAtomeDraggable(atomeEl, atomeId) {
       left: newLeft,
       top: newTop
     });
+
+    // Realtime: push position during drag (no DB write) so receivers see continuous movement.
+    // Throttle to avoid flooding the network.
+    const realtimePush = window.__SHARE_REALTIME_PUSH__;
+    if (typeof realtimePush === 'function') {
+      if (atomeId.startsWith('temp_atome_') || atomeId.startsWith('atome_')) return;
+      dragPendingPos = { left: newLeft, top: newTop };
+      if (dragRafId) return;
+
+      dragRafId = requestAnimationFrame(() => {
+        dragRafId = null;
+        if (!isDragging || !dragPendingPos) return;
+
+        const now = performance.now();
+        // ~30fps throttle
+        if ((now - dragLastSentAt) < 33) {
+          // Keep pending pos and schedule next frame
+          if (!dragRafId) dragRafId = requestAnimationFrame(() => {
+            dragRafId = null;
+            if (!isDragging || !dragPendingPos) return;
+            const key = dragPendingPos.left + '|' + dragPendingPos.top;
+            if (key === dragLastSentKey) return;
+            dragLastSentKey = key;
+            dragLastSentAt = performance.now();
+            Promise.resolve(realtimePush(atomeId, { left: dragPendingPos.left, top: dragPendingPos.top }))
+              .catch(() => { });
+          });
+          return;
+        }
+
+        const key = dragPendingPos.left + '|' + dragPendingPos.top;
+        if (key === dragLastSentKey) return;
+        dragLastSentKey = key;
+        dragLastSentAt = now;
+        Promise.resolve(realtimePush(atomeId, { left: dragPendingPos.left, top: dragPendingPos.top }))
+          .catch(() => { });
+      });
+    }
   });
 
   document.addEventListener('mouseup', (e) => {
     if (!isDragging) return;
     isDragging = false;
     atomeEl.style.zIndex = '';
+
+    // Cancel any pending realtime frame
+    if (dragRafId) {
+      cancelAnimationFrame(dragRafId);
+      dragRafId = null;
+    }
 
     const newLeft = atomeEl.style.left;
     const newTop = atomeEl.style.top;

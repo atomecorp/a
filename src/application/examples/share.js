@@ -332,25 +332,18 @@ async function _installAlterWrapper() {
     if (api.atomes.alter && api.atomes.alter.__shareWrapped) return;
 
     const originalAlter = api.atomes.alter.bind(api.atomes);
-    const wrapped = async (atomeId, newParticles, callback) => {
-        const res = await originalAlter(atomeId, newParticles, callback);
 
+    const pushRealtimePatch = async (atomeId, newParticles, currentUserId = null) => {
         try {
             const id = String(atomeId || '');
-            if (!id) return res;
-            if (_suppressSyncForAtomeIds.has(id)) return res;
+            if (!id) return;
+            if (_suppressSyncForAtomeIds.has(id)) return;
 
-            const current = await getCurrentUser();
-            if (!current?.id) return res;
+            const current = currentUserId ? { id: currentUserId } : await getCurrentUser();
+            if (!current?.id) return;
 
-            // Ensure we can send realtime patches
             await ensureRemoteCommandsReady(current.id);
 
-            // Only attempt sync when local update actually succeeded
-            const ok = !!(res?.tauri?.success || res?.fastify?.success);
-            if (!ok) return res;
-
-            // Linked-share realtime: send patch to peers for the same atome ID
             const peersIndex = await _buildRealtimePeersIndex(api, current.id);
             const peers = new Set([...(peersIndex.get(id) || []), ..._getRuntimePeers(id)]);
             for (const peerUserId of peers) {
@@ -363,6 +356,32 @@ async function _installAlterWrapper() {
                     at: new Date().toISOString()
                 });
             }
+        } catch (e) {
+            // Keep this silent by default to avoid drag spam.
+        }
+    };
+
+    // Allow UI code (like check.js drag) to push realtime updates without persisting to DB.
+    // Fire-and-forget usage: window.__SHARE_REALTIME_PUSH__(atomeId, { left, top })
+    window.__SHARE_REALTIME_PUSH__ = (atomeId, particles) => pushRealtimePatch(atomeId, particles);
+
+    const wrapped = async (atomeId, newParticles, callback) => {
+        const res = await originalAlter(atomeId, newParticles, callback);
+
+        try {
+            const id = String(atomeId || '');
+            if (!id) return res;
+            if (_suppressSyncForAtomeIds.has(id)) return res;
+
+            const current = await getCurrentUser();
+            if (!current?.id) return res;
+
+            // Only attempt sync when local update actually succeeded
+            const ok = !!(res?.tauri?.success || res?.fastify?.success);
+            if (!ok) return res;
+
+            // Linked-share realtime: send patch to peers for the same atome ID
+            await pushRealtimePatch(id, newParticles, current.id);
 
             // Load atome to detect if it's a linked shared copy
             const got = await api.atomes.get(id);
