@@ -151,6 +151,42 @@ Any occurrence of these is a **design error**.
 
 ---
 
+## User Accounts vs User Directory (Important)
+
+Atome distinguishes between:
+
+1. **An account** (credentials + ability to authenticate)
+2. **A user directory entry** (public identity data used for discovery and sharing)
+
+This is required to keep the offline/online contract consistent and to avoid unsafe propagation of secrets.
+
+### Directory rules
+
+* The **authoritative public directory** is the Fastify server.
+* Browser clients can only see the directory online.
+* Tauri clients can cache the directory locally for offline visibility.
+* The directory cache stores **safe fields only** (e.g. `user_id`, `username`, `phone`, `visibility`).
+* The directory cache must **never** store password hashes.
+
+### Real-time directory updates
+
+Fastify broadcasts account creation/deletion events on the sync channel (`/ws/sync`).
+
+* Event: `sync:account-created`
+* Event: `sync:account-deleted`
+
+Clients may update their local directory cache from these events.
+
+### Account rules
+
+* An account created on one backend may not exist on the other backend immediately.
+* A Tauri client may **bootstrap** the local account on first login if the account exists on Fastify.
+* If a user is created while a backend is offline, the client queues a **pending register operation** and retries automatically when sync becomes ready.
+
+This ensures bidirectional convergence without violating the invariant that Fastify never connects to Tauri.
+
+---
+
 ## Runtime Environment Detection
 
 Every Atome runtime must explicitly declare its execution context.

@@ -1,5 +1,14 @@
 
 
+const CHECK_DEBUG = (typeof window !== 'undefined' && window.__CHECK_DEBUG__ === true);
+function checkDebugPuts(message) {
+  if (!CHECK_DEBUG) return;
+  if (typeof puts === 'function') puts(message);
+}
+function checkDebugLog(...args) {
+  if (!CHECK_DEBUG) return;
+  console.log(...args);
+}
 const shadowLeft = 0,
   shadowTop = 0,
   shadowBlur = 12;
@@ -251,7 +260,7 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
   // If the user can access the project via list_projects(), they already have permission.
   // The get_atome() API correctly filters by owner, so getting undefined means access denied.
 
-  puts('✅ SECURITY: Skipping redundant ownership check - user accessed project via list_projects()');
+  checkDebugPuts('✅ SECURITY: Skipping redundant ownership check - user accessed project via list_projects()');
 
   // Continue with project loading...
 
@@ -265,7 +274,7 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
   selectedVisualAtome = null;
   publishSelectedAtome(null);
 
-  puts('🔄 Creating new project view for: ' + projectName + ' (ID: ' + projectId + ')');
+  checkDebugPuts('🔄 Creating new project view for: ' + projectName + ' (ID: ' + projectId + ')');
 
   // Create new project container directly in 'view' (no intermediate project_canvas)
   currentProjectDiv = $('div', {
@@ -310,13 +319,13 @@ async function loadProjectAtomes(projectId) {
     return;
   }
 
-  puts('🔍 Loading atomes for project: ' + projectId);
+  checkDebugPuts('🔍 Loading atomes for project: ' + projectId);
 
   // Try different filter approaches
   const result = await list_atomes({ projectId: projectId });
   let atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
 
-  puts('📊 Total atomes found: ' + atomes.length);
+  checkDebugPuts('📊 Total atomes found: ' + atomes.length);
 
   // Filter to get only atomes that belong to this project and are not projects/users
   const projectAtomes = atomes.filter(atome => {
@@ -331,7 +340,7 @@ async function loadProjectAtomes(projectId) {
     // Check if atome belongs to this project
     const belongsToProject = atomeProjectId === projectId || particleProjectId === projectId;
 
-    puts('🔍 Atome ' + (atome.atome_id || atome.id).substring(0, 8) +
+    checkDebugPuts('🔍 Atome ' + (atome.atome_id || atome.id).substring(0, 8) +
       ' type: ' + atomeType +
       ' projectId: ' + (atomeProjectId || 'none') +
       ' particleProjectId: ' + (particleProjectId || 'none') +
@@ -340,7 +349,7 @@ async function loadProjectAtomes(projectId) {
     return belongsToProject;
   });
 
-  puts('✅ Project atomes found: ' + projectAtomes.length);
+  checkDebugPuts('✅ Project atomes found: ' + projectAtomes.length);
 
   // Create visual elements for project atomes
   for (const atome of projectAtomes) {
@@ -629,10 +638,50 @@ function updateHistorySlider() {
 function makeAtomeDraggable(atomeEl, atomeId) {
   let isDragging = false;
   let startX, startY, initialLeft, initialTop;
-  let dragRafId = null;
-  let dragLastSentAt = 0;
-  let dragLastSentKey = '';
-  let dragPendingPos = null;
+
+  const dragRealtime = (() => {
+    let rafId = null;
+    let lastSentAt = 0;
+    let lastKey = '';
+    let pending = null;
+
+    const flush = () => {
+      rafId = null;
+      if (!isDragging || !pending) return;
+
+      const realtimePush = window.__SHARE_REALTIME_PUSH__;
+      if (typeof realtimePush !== 'function') return;
+
+      const now = performance.now();
+      // ~30fps throttle to avoid flooding
+      if ((now - lastSentAt) < 33) {
+        rafId = requestAnimationFrame(flush);
+        return;
+      }
+
+      const key = pending.left + '|' + pending.top;
+      if (key === lastKey) return;
+
+      lastKey = key;
+      lastSentAt = now;
+      Promise.resolve(realtimePush(atomeId, { left: pending.left, top: pending.top }))
+        .catch(() => { });
+    };
+
+    return {
+      push(pos) {
+        if (!pos) return;
+        if (atomeId.startsWith('temp_atome_') || atomeId.startsWith('atome_')) return;
+        pending = pos;
+        if (!rafId) rafId = requestAnimationFrame(flush);
+      },
+      cancel() {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = null;
+        pending = null;
+      }
+    };
+  })();
 
   atomeEl.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Left click only
@@ -671,42 +720,7 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     });
 
     // Realtime: push position during drag (no DB write) so receivers see continuous movement.
-    // Throttle to avoid flooding the network.
-    const realtimePush = window.__SHARE_REALTIME_PUSH__;
-    if (typeof realtimePush === 'function') {
-      if (atomeId.startsWith('temp_atome_') || atomeId.startsWith('atome_')) return;
-      dragPendingPos = { left: newLeft, top: newTop };
-      if (dragRafId) return;
-
-      dragRafId = requestAnimationFrame(() => {
-        dragRafId = null;
-        if (!isDragging || !dragPendingPos) return;
-
-        const now = performance.now();
-        // ~30fps throttle
-        if ((now - dragLastSentAt) < 33) {
-          // Keep pending pos and schedule next frame
-          if (!dragRafId) dragRafId = requestAnimationFrame(() => {
-            dragRafId = null;
-            if (!isDragging || !dragPendingPos) return;
-            const key = dragPendingPos.left + '|' + dragPendingPos.top;
-            if (key === dragLastSentKey) return;
-            dragLastSentKey = key;
-            dragLastSentAt = performance.now();
-            Promise.resolve(realtimePush(atomeId, { left: dragPendingPos.left, top: dragPendingPos.top }))
-              .catch(() => { });
-          });
-          return;
-        }
-
-        const key = dragPendingPos.left + '|' + dragPendingPos.top;
-        if (key === dragLastSentKey) return;
-        dragLastSentKey = key;
-        dragLastSentAt = now;
-        Promise.resolve(realtimePush(atomeId, { left: dragPendingPos.left, top: dragPendingPos.top }))
-          .catch(() => { });
-      });
-    }
+    dragRealtime.push({ left: newLeft, top: newTop });
   });
 
   document.addEventListener('mouseup', (e) => {
@@ -715,10 +729,7 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     atomeEl.style.zIndex = '';
 
     // Cancel any pending realtime frame
-    if (dragRafId) {
-      cancelAnimationFrame(dragRafId);
-      dragRafId = null;
-    }
+    dragRealtime.cancel();
 
     const newLeft = atomeEl.style.left;
     const newTop = atomeEl.style.top;

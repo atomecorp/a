@@ -830,7 +830,9 @@ async function startServer() {
           connection._wsApiConnectionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         }
 
-        console.log('🔗 New WebSocket API connection');
+        if (process.env.WS_CONNECTION_DEBUG === '1') {
+          console.log('🔗 New WebSocket API connection');
+        }
 
         try { wsApiConnections.add(connection); } catch (_) { }
 
@@ -1030,7 +1032,9 @@ async function startServer() {
 
               // DEBUG: log routing info
               const registrySize = wsApiClientsByUserId.get(targetUserId)?.size || 0;
-              console.log(`[direct-message] sender=${senderUserId} target=${targetUserId} toPhone=${toPhone} toUserId=${toUserId} registrySize=${registrySize}`);
+              if (process.env.DIRECT_MESSAGE_DEBUG === '1') {
+                console.log(`[direct-message] sender=${senderUserId} target=${targetUserId} toPhone=${toPhone} toUserId=${toUserId} registrySize=${registrySize}`);
+              }
 
               let queued = false;
               let queueSize = 0;
@@ -1195,12 +1199,93 @@ async function startServer() {
                 const userId = generateDeterministicUserId(phone);
                 await createUserAtome(dataSource, userId, username, phone, passwordHash, visibility || 'public');
 
+                // Broadcast account creation for real-time directory sync (ws/sync)
+                try {
+                  if (syncEventBus) {
+                    const now = new Date().toISOString();
+                    syncEventBus.emit('event', {
+                      type: 'sync:account-created',
+                      timestamp: now,
+                      runtime: 'Fastify',
+                      payload: {
+                        userId,
+                        username,
+                        phone,
+                        optional: data.optional || {}
+                      }
+                    });
+
+                    // Legacy compatibility
+                    syncEventBus.emit('event', {
+                      type: 'sync:user-created',
+                      timestamp: now,
+                      runtime: 'Fastify',
+                      payload: {
+                        userId,
+                        username,
+                        phone,
+                        source: 'fastify'
+                      }
+                    });
+                  }
+                } catch (_) { }
+
                 safeSend({
                   type: 'auth-response',
                   requestId,
                   success: true,
                   userId,
                   message: 'User created successfully'
+                });
+              } else if (action === 'lookup-phone') {
+                const rawPhone = data.phone;
+                if (!rawPhone || typeof rawPhone !== 'string') {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing required field: phone'
+                  });
+                  return;
+                }
+
+                const cleanPhone = rawPhone.trim().replace(/\s+/g, '');
+                const user = await findUserByPhone(dataSource, cleanPhone);
+                if (!user) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'User not found'
+                  });
+                  return;
+                }
+
+                // Read visibility without leaking other particles.
+                let visibility = 'private';
+                try {
+                  const rows = await dataSource.query(
+                    `SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = 'visibility' LIMIT 1`,
+                    [user.user_id]
+                  );
+                  if (rows && rows[0] && rows[0].particle_value) {
+                    try { visibility = JSON.parse(rows[0].particle_value); } catch { visibility = rows[0].particle_value; }
+                  }
+                } catch (_) { }
+
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  ok: true,
+                  user: {
+                    id: user.user_id,
+                    user_id: user.user_id,
+                    username: user.username,
+                    phone: user.phone,
+                    visibility: visibility === 'public' ? 'public' : 'private'
+                  }
                 });
               } else if (action === 'delete' || action === 'delete-user') {
                 const { userId, phone, token, password } = data;
@@ -1229,6 +1314,21 @@ async function startServer() {
                 }
 
                 await deleteUserAtome(dataSource, targetUserId);
+
+                // Broadcast account deletion for real-time directory sync
+                try {
+                  if (syncEventBus) {
+                    const now = new Date().toISOString();
+                    syncEventBus.emit('event', {
+                      type: 'sync:account-deleted',
+                      timestamp: now,
+                      runtime: 'Fastify',
+                      payload: {
+                        userId: targetUserId
+                      }
+                    });
+                  }
+                } catch (_) { }
 
                 safeSend({
                   type: 'auth-response',
@@ -1405,7 +1505,9 @@ async function startServer() {
 
                   // Associate this ws/api connection with the requested user ID.
                   attachWsApiClientToUser(connection, registerAsUserId);
-                  console.log(`[ws/api] Auth: token=${user.user_id.substring(0, 8)}, registerAs=${registerAsUserId.substring(0, 8)}`);
+                  if (process.env.WS_CONNECTION_DEBUG === '1') {
+                    console.log(`[ws/api] Auth: token=${user.user_id.substring(0, 8)}, registerAs=${registerAsUserId.substring(0, 8)}`);
+                  }
 
                   // Cache expiry on the connection to prevent stale identity usage.
                   if (decoded && typeof decoded.exp === 'number') {
@@ -1652,19 +1754,80 @@ async function startServer() {
                   message: 'Atome deleted'
                 });
               } else if (action === 'list') {
-                const { ownerId, userId, atomeType, limit, offset, includeDeleted } = data;
+                const { ownerId, userId, atomeType, limit, offset, includeDeleted, since } = data;
                 const effectiveType = atomeType;
                 const requestedOwner = (ownerId === '*' || ownerId === 'all') ? null : (ownerId || userId);
                 const effectiveOwner = requesterId || requestedOwner;
 
-                console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}, includeDeleted=${includeDeleted}`);
-                console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner || 'none'}, effectiveType=${effectiveType || 'none'}`);
+                // Special-case: public user directory listing
+                // If the client requests atomeType='user' with no explicit owner filter,
+                // return all PUBLIC users (visibility='public') instead of "only my own user".
+                // This is critical for sharing workflows (recipient discovery) and must work
+                // even when authenticated.
+                const isUserDirectoryRequest = effectiveType === 'user' && !requestedOwner;
+
+                if (process.env.ATOME_LIST_DEBUG === '1') {
+                  console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}, includeDeleted=${includeDeleted}`);
+                  console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner || 'none'}, effectiveType=${effectiveType || 'none'}`);
+                }
 
                 // Build WHERE clause for deleted_at
                 const deletedClause = includeDeleted ? '' : 'AND a.deleted_at IS NULL';
 
                 let atomes;
-                if (effectiveOwner && effectiveOwner !== 'anonymous') {
+                if (isUserDirectoryRequest) {
+                  const dataSource = db.getDataSourceAdapter();
+                  const directoryLimit = Number.isFinite(Number(limit)) ? Number(limit) : 1000;
+                  const directoryOffset = Number.isFinite(Number(offset)) ? Number(offset) : 0;
+                  const sinceIso = (typeof since === 'string' && since.trim()) ? since.trim() : null;
+
+                  const sinceClause = sinceIso ? "AND (a.updated_at > ? OR a.created_at > ?)" : '';
+                  const params = sinceIso
+                    ? [sinceIso, sinceIso, directoryLimit, directoryOffset]
+                    : [directoryLimit, directoryOffset];
+
+                  const rows = await dataSource.query(
+                    `SELECT a.atome_id, a.atome_type, a.parent_id, a.owner_id, a.creator_id, a.created_at, a.updated_at, a.deleted_at,
+                            MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
+                            MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
+                            MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
+                     FROM atomes a
+                     LEFT JOIN particles p ON a.atome_id = p.atome_id
+                     WHERE a.atome_type = 'user'
+                       ${deletedClause}
+                       ${sinceClause}
+                       AND EXISTS (
+                         SELECT 1 FROM particles pv
+                         WHERE pv.atome_id = a.atome_id
+                           AND pv.particle_key = 'visibility'
+                           AND pv.particle_value = '"public"'
+                       )
+                     GROUP BY a.atome_id
+                     ORDER BY a.created_at DESC
+                     LIMIT ? OFFSET ?`,
+                    params
+                  );
+
+                  atomes = rows.map((row) => {
+                    const parse = (val) => {
+                      if (!val) return null;
+                      try { return JSON.parse(val); } catch { return val; }
+                    };
+                    return {
+                      atome_id: row.atome_id,
+                      atome_type: row.atome_type,
+                      parent_id: row.parent_id,
+                      owner_id: row.owner_id,
+                      creator_id: row.creator_id,
+                      created_at: row.created_at,
+                      updated_at: row.updated_at,
+                      deleted_at: row.deleted_at,
+                      phone: parse(row.phone),
+                      username: parse(row.username),
+                      visibility: parse(row.visibility) || 'public'
+                    };
+                  });
+                } else if (effectiveOwner && effectiveOwner !== 'anonymous') {
                   // List atomes accessible to this user (owned OR shared via permissions)
                   const dataSource = db.getDataSourceAdapter();
                   const rows = await dataSource.query(
@@ -1862,7 +2025,9 @@ async function startServer() {
         });
 
         connection.on('close', () => {
-          console.log('🔌 WebSocket API connection closed');
+          if (process.env.WS_CONNECTION_DEBUG === '1') {
+            console.log('🔌 WebSocket API connection closed');
+          }
         });
 
         connection.on('error', (error) => {
@@ -1882,7 +2047,9 @@ async function startServer() {
       // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser
       fastify.get('/ws/sync', { websocket: true }, async (connection) => {
         const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        console.log('🔗 Nouvelle connexion sync:', clientId);
+        if (process.env.WS_CONNECTION_DEBUG === '1') {
+          console.log('🔗 Nouvelle connexion sync:', clientId);
+        }
 
         // Helper for safe sending
         const safeSend = (payload) => wsSendJson(connection, payload, { scope: 'ws/sync', op: 'send' });
@@ -1902,12 +2069,33 @@ async function startServer() {
           watcherConfig: fileSyncWatcherHandle?.config ?? null
         });
 
-        // Forward file watcher events to this client
+        // Forward selected sync events to this client.
+        // IMPORTANT: do not depend on the file watcher being enabled.
+        // We also use the same event bus to broadcast account and other sync events.
         let fileEventForwarder = null;
-        if (fileSyncWatcherHandle) {
-          fileEventForwarder = (payload) => safeSend(payload);
-          syncEventBus.on('event', fileEventForwarder);
-        }
+        fileEventForwarder = (payload) => {
+          const type = payload && typeof payload.type === 'string' ? payload.type : '';
+          if (!type) return;
+
+          // File events (only meaningful if watcher is enabled)
+          if (type === 'sync:file-event' || type === 'file-event') {
+            if (fileSyncWatcherHandle) safeSend(payload);
+            return;
+          }
+
+          // Account events (always forward)
+          if (type === 'sync:account-created' || type === 'sync:account-deleted' || type === 'account-created' || type === 'account-deleted') {
+            safeSend(payload);
+            return;
+          }
+
+          // Legacy compatibility
+          if (type === 'sync:user-created' || type === 'sync:user-deleted') {
+            safeSend(payload);
+            return;
+          }
+        };
+        syncEventBus.on('event', fileEventForwarder);
 
         connection.on('message', async (message) => {
           try {

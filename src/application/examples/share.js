@@ -550,6 +550,23 @@ function safeString(v) {
 async function resolveUserByPhone(phone) {
     if (!phone) return null;
     const api = window.AdoleAPI || AdoleAPI;
+
+    // Scalable path: O(1) lookup, avoids enumerating large public directories.
+    try {
+        if (api?.auth?.lookupPhone) {
+            const found = await api.auth.lookupPhone(phone);
+            if (found && (found.id || found.user_id)) {
+                return {
+                    id: found.id || found.user_id,
+                    username: found.username,
+                    phone: found.phone
+                };
+            }
+        }
+    } catch {
+        // Ignore and fallback to directory list.
+    }
+
     const usersResult = await api.auth.list();
     const users = normalizeDualListResult(usersResult, 'users');
     const found = users.find(u => (u.phone || u.data?.phone || u.particles?.phone) === phone);

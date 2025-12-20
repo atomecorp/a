@@ -18,6 +18,11 @@
 
 import { RemoteCommands } from './remote_commands.js';
 
+const REMOTE_COMMAND_HANDLERS_DEBUG = (typeof window !== 'undefined' && window.__REMOTE_COMMAND_HANDLERS_DEBUG__ === true);
+function _rcDebugLog(...args) {
+    if (REMOTE_COMMAND_HANDLERS_DEBUG) console.log(...args);
+}
+
 /**
  * Handler: create-element
  * Creates a DOM element using Squirrel $ syntax
@@ -31,7 +36,7 @@ import { RemoteCommands } from './remote_commands.js';
  *   - html: string (optional)
  */
 function handleCreateElement(params, sender) {
-    console.log('[BuiltinHandlers] create-element called with:', params);
+    _rcDebugLog('[BuiltinHandlers] create-element called with:', params);
 
     if (typeof window.$ !== 'function') {
         console.error('[BuiltinHandlers] Squirrel $ not available');
@@ -70,7 +75,7 @@ function handleCreateElement(params, sender) {
             const projectContainer = document.getElementById('project_view_' + currentProjectId);
             if (projectContainer) {
                 config.parent = '#project_view_' + currentProjectId;
-                console.log('[BuiltinHandlers] Attaching to current project:', currentProjectId.substring(0, 8) + '...');
+                _rcDebugLog('[BuiltinHandlers] Attaching to current project:', currentProjectId.substring(0, 8) + '...');
             }
         }
         // If no current project, Squirrel will use default #view
@@ -79,13 +84,13 @@ function handleCreateElement(params, sender) {
     if (text !== undefined) config.text = text;
     if (html !== undefined) config.html = html;
 
-    console.log('[BuiltinHandlers] Creating element with config:', config);
+    _rcDebugLog('[BuiltinHandlers] Creating element with config:', config);
 
     const element = window.$(tag, config);
 
-    console.log('[BuiltinHandlers] Element created:', element, 'parent:', element?.parentElement?.id);
+    _rcDebugLog('[BuiltinHandlers] Element created:', element, 'parent:', element?.parentElement?.id);
 
-    console.log(`[BuiltinHandlers] Created element #${id} from ${sender.username || sender.userId}`);
+    _rcDebugLog(`[BuiltinHandlers] Created element #${id} from ${sender.username || sender.userId}`);
 
     return element;
 }
@@ -107,7 +112,7 @@ function handleRemoveElement(params, sender) {
     const element = document.getElementById(id);
     if (element) {
         element.remove();
-        console.log(`[BuiltinHandlers] Removed element #${id} from ${sender.username || sender.userId}`);
+        _rcDebugLog(`[BuiltinHandlers] Removed element #${id} from ${sender.username || sender.userId}`);
     } else {
         console.warn(`[BuiltinHandlers] Element #${id} not found`);
     }
@@ -148,7 +153,7 @@ function handleUpdateElement(params, sender) {
         element.innerHTML = html;
     }
 
-    console.log(`[BuiltinHandlers] Updated element #${id} from ${sender.username || sender.userId}`);
+    _rcDebugLog(`[BuiltinHandlers] Updated element #${id} from ${sender.username || sender.userId}`);
 }
 
 /**

@@ -79,6 +79,279 @@ let _currentUserPhone = null;
 let _currentMachineId = null;
 let _currentMachinePlatform = null;
 
+// Public user directory cache (safe fields only; never store password hashes here)
+const PUBLIC_USER_DIRECTORY_CACHE_KEY = 'public_user_directory_cache_v1';
+const AUTH_PENDING_SYNC_KEY = 'auth_pending_sync';
+const PUBLIC_USER_DIRECTORY_LAST_SYNC_KEY = 'public_user_directory_last_sync_iso_v1';
+
+function is_tauri_runtime() {
+    try {
+        return typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    } catch {
+        return false;
+    }
+}
+
+function safe_parse_json(value) {
+    if (value === null || value === undefined) return value;
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+    if (!((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('"') && trimmed.endsWith('"')))) {
+        return value;
+    }
+    try { return JSON.parse(trimmed); } catch { return value; }
+}
+
+function normalize_user_entry(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const particles = raw.particles || raw.data?.particles || raw;
+    const userId = raw.user_id || raw.userId || raw.atome_id || raw.id || null;
+    const username = safe_parse_json(particles?.username) || raw.username || null;
+    const phone = safe_parse_json(particles?.phone) || raw.phone || null;
+    const visibility = safe_parse_json(particles?.visibility) || raw.visibility || 'public';
+
+    // Phone number is the stable lookup key for sharing/discovery.
+    // Drop entries that do not have a usable phone.
+    const phoneStr = (phone === null || phone === undefined) ? '' : String(phone).trim();
+    if (!phoneStr || phoneStr.toLowerCase() === 'unknown') return null;
+
+    return {
+        user_id: userId,
+        username: (username && String(username).trim()) ? username : 'Unknown',
+        phone: phoneStr,
+        visibility: visibility === 'private' ? 'private' : 'public'
+    };
+}
+
+function get_public_user_directory_last_sync() {
+    try {
+        if (typeof localStorage === 'undefined') return null;
+        const raw = localStorage.getItem(PUBLIC_USER_DIRECTORY_LAST_SYNC_KEY);
+        return raw ? String(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+function set_public_user_directory_last_sync(isoString) {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        if (!isoString) return;
+        localStorage.setItem(PUBLIC_USER_DIRECTORY_LAST_SYNC_KEY, String(isoString));
+    } catch {
+        // Ignore
+    }
+}
+
+async function sync_public_user_directory_delta({ limit = 500 } = {}) {
+    const lastSync = get_public_user_directory_last_sync();
+    const nowIso = new Date().toISOString();
+
+    let fastifyUsers = [];
+    try {
+        const res = await FastifyAdapter.atome.list({ type: 'user', limit, offset: 0, since: lastSync });
+        if (res && (res.ok || res.success)) {
+            fastifyUsers = res.atomes || res.data || [];
+        }
+    } catch {
+        // Ignore
+    }
+
+    if (fastifyUsers.length === 0) {
+        // Only advance the sync cursor if Fastify is actually reachable.
+        try {
+            const reachable = await FastifyAdapter.isAvailable();
+            if (reachable) set_public_user_directory_last_sync(nowIso);
+        } catch { }
+        return { ok: true, added: 0 };
+    }
+
+    const existing = load_public_user_directory_cache();
+    const merged = merge_user_directories(existing, fastifyUsers);
+    save_public_user_directory_cache(merged);
+    set_public_user_directory_last_sync(nowIso);
+    return { ok: true, added: fastifyUsers.length };
+}
+
+async function seed_public_user_directory_if_needed() {
+    try {
+        const cache = load_public_user_directory_cache();
+        if (cache.length > 0) return;
+        // Pull a first delta page only to avoid heavy operations in large directories.
+        await sync_public_user_directory_delta({ limit: 500 });
+    } catch {
+        // Ignore
+    }
+}
+
+async function lookup_user_by_phone(phone) {
+    if (!phone) return null;
+    const clean = String(phone).trim().replace(/\s+/g, '');
+    if (!clean) return null;
+
+    try {
+        if (FastifyAdapter?.auth?.lookupPhone) {
+            const res = await FastifyAdapter.auth.lookupPhone({ phone: clean });
+            if (res && (res.ok || res.success) && res.user) {
+                const entry = normalize_user_entry(res.user);
+                if (entry) {
+                    const existing = load_public_user_directory_cache();
+                    existing.push(entry);
+                    save_public_user_directory_cache(existing);
+                }
+                return {
+                    id: res.user.user_id || res.user.id,
+                    user_id: res.user.user_id || res.user.id,
+                    username: res.user.username,
+                    phone: res.user.phone,
+                    visibility: res.user.visibility
+                };
+            }
+        }
+    } catch {
+        // Ignore
+    }
+
+    // Offline-only: use directory cache.
+    const cache = load_public_user_directory_cache();
+    const hit = cache.find(u => String(u.phone).trim() === clean);
+    if (!hit) return null;
+    return { id: hit.user_id, user_id: hit.user_id, username: hit.username, phone: hit.phone, visibility: hit.visibility };
+}
+
+function load_public_user_directory_cache() {
+    try {
+        if (typeof localStorage === 'undefined') return [];
+        const raw = localStorage.getItem(PUBLIC_USER_DIRECTORY_CACHE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+function save_public_user_directory_cache(users) {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        const unique = new Map();
+        for (const u of (Array.isArray(users) ? users : [])) {
+            const nu = normalize_user_entry(u);
+            if (!nu) continue;
+            const key = String(nu.phone || nu.user_id || '').trim();
+            if (!key) continue;
+            unique.set(key, nu);
+        }
+        localStorage.setItem(PUBLIC_USER_DIRECTORY_CACHE_KEY, JSON.stringify(Array.from(unique.values())));
+    } catch {
+        // Ignore
+    }
+}
+
+function merge_user_directories(tauriUsers, fastifyUsers) {
+    const byPhoneOrId = new Map();
+    const add = (u) => {
+        const nu = normalize_user_entry(u);
+        if (!nu) return;
+        const key = String(nu.phone || nu.user_id || '').trim();
+        if (!key) return;
+        const existing = byPhoneOrId.get(key);
+        if (!existing) {
+            byPhoneOrId.set(key, nu);
+            return;
+        }
+        // Prefer entries with a user_id and non-Unknown username
+        const merged = {
+            user_id: existing.user_id || nu.user_id,
+            username: (existing.username && existing.username !== 'Unknown') ? existing.username : nu.username,
+            phone: existing.phone || nu.phone,
+            visibility: existing.visibility || nu.visibility
+        };
+        byPhoneOrId.set(key, merged);
+    };
+
+    (Array.isArray(tauriUsers) ? tauriUsers : []).forEach(add);
+    (Array.isArray(fastifyUsers) ? fastifyUsers : []).forEach(add);
+
+    return Array.from(byPhoneOrId.values());
+}
+
+function queue_pending_register({ username, phone, password, createdOn }) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        const queue = JSON.parse(localStorage.getItem(AUTH_PENDING_SYNC_KEY) || '[]');
+        queue.push({
+            operation: 'register',
+            data: { username, phone, password, createdOn },
+            queuedAt: new Date().toISOString()
+        });
+        localStorage.setItem(AUTH_PENDING_SYNC_KEY, JSON.stringify(queue));
+    } catch {
+        // Ignore
+    }
+}
+
+async function process_pending_registers() {
+    if (typeof localStorage === 'undefined') return { processed: 0, remaining: 0 };
+    let queue;
+    try {
+        queue = JSON.parse(localStorage.getItem(AUTH_PENDING_SYNC_KEY) || '[]');
+    } catch {
+        queue = [];
+    }
+    if (!Array.isArray(queue) || queue.length === 0) return { processed: 0, remaining: 0 };
+
+    const remaining = [];
+    let processed = 0;
+
+    for (const item of queue) {
+        if (!item || item.operation !== 'register' || !item.data) {
+            continue;
+        }
+
+        const data = item.data;
+        const username = data.username;
+        const phone = data.phone;
+        const password = data.password;
+        const createdOn = data.createdOn;
+
+        if (!username || !phone || !password) {
+            continue;
+        }
+
+        // Only sync to the opposite backend.
+        try {
+            if (createdOn === 'tauri') {
+                const r = await FastifyAdapter.auth.register({ username, phone, password, visibility: 'public' });
+                if (r && (r.ok || r.success)) {
+                    processed += 1;
+                    continue;
+                }
+            } else if (createdOn === 'fastify') {
+                const r = await TauriAdapter.auth.register({ username, phone, password, visibility: 'public' });
+                if (r && (r.ok || r.success)) {
+                    processed += 1;
+                    continue;
+                }
+            }
+        } catch {
+            // Keep in remaining.
+        }
+
+        remaining.push(item);
+    }
+
+    try {
+        localStorage.setItem(AUTH_PENDING_SYNC_KEY, JSON.stringify(remaining));
+    } catch {
+        // Ignore
+    }
+
+    return { processed, remaining: remaining.length };
+}
+
 // Machine ID key in localStorage
 const MACHINE_ID_KEY = 'squirrel_machine_id';
 
@@ -330,6 +603,12 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
  */
 async function try_auto_login() {
     try {
+        // Opportunistically process queued register operations when the app starts.
+        try { await process_pending_registers(); } catch { }
+
+        // Seed directory cache if empty (lightweight: one page).
+        try { await seed_public_user_directory_if_needed(); } catch { }
+
         // First check if already logged in via token
         const currentResult = await current_user();
         if (currentResult.logged && currentResult.user) {
@@ -494,11 +773,23 @@ async function create_user(phone, password, username, options = {}, callback) {
     }
 
     const visibility = options.visibility || 'public';
+    const autoLogin = options.autoLogin !== false;
+    const clearAuthTokens = options.clearAuthTokens !== false;
 
     const results = {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+
+    if (clearAuthTokens) {
+        try { TauriAdapter.clearToken?.(); } catch { }
+        try { FastifyAdapter.clearToken?.(); } catch { }
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem('auth_token');
+            }
+        } catch { }
+    }
 
     // Try Tauri first (local SQLite)
     try {
@@ -532,6 +823,25 @@ async function create_user(phone, password, username, options = {}, callback) {
         }
     } catch (e) {
         results.fastify = { success: false, data: null, error: e.message };
+    }
+
+    // Bidirectional reliability: if one backend was offline, queue a register for later.
+    // This keeps "created offline in Tauri" and "created in Fastify" converging over time.
+    if (results.tauri.success && !results.fastify.success) {
+        queue_pending_register({ username, phone, password, createdOn: 'tauri' });
+    } else if (results.fastify.success && !results.tauri.success) {
+        queue_pending_register({ username, phone, password, createdOn: 'fastify' });
+    }
+
+    // IMPORTANT (browser/Fastify): auth.register may not issue a usable JWT for ws/api.
+    // Ensure we explicitly login to get a token and set current user state.
+    if (autoLogin && (results.tauri.success || results.fastify.success)) {
+        try {
+            const loginResults = await log_user(phone, password, username);
+            results.login = loginResults;
+        } catch (e) {
+            results.login = { error: e.message };
+        }
     }
 
     // Call callback if provided
@@ -648,6 +958,51 @@ async function log_user(phone, password, username, callback) {
         results.fastify = { success: false, data: null, error: e.message };
     }
 
+    // If running in Tauri and the account exists on Fastify but not yet locally,
+    // bootstrap the local account on first login using the provided credentials.
+    // This makes "created in browser/Fastify" accounts usable in Tauri without manual re-creation.
+    try {
+        const isTauriRuntime = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+        const tauriLoginError = String(results.tauri?.error || '').toLowerCase();
+        const canBootstrap = isTauriRuntime
+            && results.fastify.success
+            && !results.tauri.success
+            && (tauriLoginError.includes('user not found') || tauriLoginError.includes('no user') || tauriLoginError.includes('not found'));
+
+        if (canBootstrap) {
+            const fastifyUser = results.fastify.data?.user || {};
+            const registerUsername = fastifyUser.username || username;
+
+            try {
+                const reg = await TauriAdapter.auth.register({
+                    phone,
+                    password,
+                    username: registerUsername,
+                    visibility: 'public'
+                });
+
+                const regOk = reg && (reg.ok || reg.success);
+                const regErr = String(reg?.error || '').toLowerCase();
+                if (!regOk && regErr && !(regErr.includes('already') || regErr.includes('exists') || regErr.includes('registered'))) {
+                    // Keep original tauri error; bootstrap failed.
+                }
+            } catch (_) {
+                // Ignore bootstrap errors; we'll return original login results.
+            }
+
+            try {
+                const tauriRetry = await TauriAdapter.auth.login({ phone, password });
+                if (tauriRetry && (tauriRetry.ok || tauriRetry.success)) {
+                    results.tauri = { success: true, data: tauriRetry, error: null };
+                }
+            } catch (_) {
+                // Ignore
+            }
+        }
+    } catch (_) {
+        // Never fail login flow because of bootstrap attempt.
+    }
+
     // If login succeeded, update current user state and machine association
     if (results.tauri.success || results.fastify.success) {
         const userData = results.tauri.data?.user || results.fastify.data?.user || {};
@@ -695,6 +1050,12 @@ async function current_user(callback) {
                 return result;
             }
         }
+        if (tauriResult?.error && typeof tauriResult.error === 'string') {
+            const msg = tauriResult.error.toLowerCase();
+            if (msg.includes('user not found') || msg.includes('invalid token') || msg.includes('token')) {
+                try { TauriAdapter.clearToken?.(); } catch { }
+            }
+        }
     } catch (e) {
         // Silent failure
     }
@@ -712,6 +1073,17 @@ async function current_user(callback) {
                     callback(result);
                 }
                 return result;
+            }
+        }
+        if (fastifyResult?.error && typeof fastifyResult.error === 'string') {
+            const msg = fastifyResult.error.toLowerCase();
+            if (msg.includes('user not found') || msg.includes('invalid token') || msg.includes('token')) {
+                try { FastifyAdapter.clearToken?.(); } catch { }
+                try {
+                    if (typeof localStorage !== 'undefined') {
+                        localStorage.removeItem('auth_token');
+                    }
+                } catch { }
             }
         }
     } catch (e) {
@@ -828,9 +1200,12 @@ async function user_list() {
         fastify: { users: [], error: null }
     };
 
+    // Scalable: refresh public directory cache using deltas first.
+    try { await sync_public_user_directory_delta({ limit: 500 }); } catch { }
+
     // Try Tauri
     try {
-        const tauriResult = await TauriAdapter.atome.list({ type: 'user' });
+        const tauriResult = await TauriAdapter.atome.list({ type: 'user', limit: 500, offset: 0 });
         if (tauriResult.ok || tauriResult.success) {
             results.tauri.users = tauriResult.atomes || tauriResult.data || [];
         } else {
@@ -842,7 +1217,7 @@ async function user_list() {
 
     // Try Fastify
     try {
-        const fastifyResult = await FastifyAdapter.atome.list({ type: 'user' });
+        const fastifyResult = await FastifyAdapter.atome.list({ type: 'user', limit: 500, offset: 0 });
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify.users = fastifyResult.atomes || fastifyResult.data || [];
         } else {
@@ -852,7 +1227,59 @@ async function user_list() {
         results.fastify.error = e.message;
     }
 
+    // Merge + cache (safe directory) so Tauri can still "see" Fastify-created users offline.
+    try {
+        const merged = merge_user_directories(results.tauri.users, results.fastify.users);
+        // Cache only if we got something meaningful from any backend.
+        if (merged.length > 0) {
+            save_public_user_directory_cache(merged);
+        }
+
+        // If Tauri backend is unavailable (or empty) but we have cache, use it as a directory fallback.
+        // This is a visibility feature only; it does not create local accounts.
+        if (is_tauri_runtime()) {
+            const cache = load_public_user_directory_cache();
+            if ((results.tauri.users.length === 0) && cache.length > 0) {
+                results.tauri.users = cache;
+            }
+
+            // In Tauri, expose the merged directory through the Tauri slot so UI code that
+            // expects to read "Tauri users" also sees Fastify-created users.
+            results.tauri.users = merge_user_directories(results.tauri.users, results.fastify.users);
+        }
+    } catch {
+        // Ignore
+    }
+
     return results;
+}
+
+// Keep user directory fresh when the sync engine reports new accounts.
+// This is intentionally lightweight: it updates the local cache, it does not create accounts.
+try {
+    if (typeof window !== 'undefined' && !window.__ADOLE_USER_DIRECTORY_LISTENERS__) {
+        window.__ADOLE_USER_DIRECTORY_LISTENERS__ = true;
+        window.addEventListener('squirrel:account-created', async (evt) => {
+            try {
+                const detail = evt?.detail || {};
+                const entry = normalize_user_entry({ user_id: detail.userId, username: detail.username, phone: detail.phone, visibility: 'public' });
+                if (!entry) return;
+                const existing = load_public_user_directory_cache();
+                existing.push(entry);
+                save_public_user_directory_cache(existing);
+            } catch {
+                // Ignore
+            }
+        });
+
+        window.addEventListener('squirrel:sync-ready', async () => {
+            try { await process_pending_registers(); } catch { }
+            try { await seed_public_user_directory_if_needed(); } catch { }
+            try { await sync_public_user_directory_delta({ limit: 500 }); } catch { }
+        });
+    }
+} catch {
+    // Ignore
 }
 
 /**
@@ -1871,13 +2298,15 @@ async function get_atome(atomeId, callback) {
         fastify: { atome: null, error: null }
     };
 
+    const DEBUG = (typeof window !== 'undefined' && window.__ADOLE_API_DEBUG__ === true);
+
     // Try Tauri
     try {
-        console.log('🔍 Calling TauriAdapter.atome.get for atome ID:', atomeId);
+        if (DEBUG) console.log('🔍 Calling TauriAdapter.atome.get for atome ID:', atomeId);
         // Use the proper get API to find the atome by ID
         const tauriResult = await TauriAdapter.atome.get(atomeId);
-        console.log('🔍 Tauri raw result:', tauriResult);
-        console.log('🔍 Tauri result structure:', {
+        if (DEBUG) console.log('🔍 Tauri raw result:', tauriResult);
+        if (DEBUG) console.log('🔍 Tauri result structure:', {
             hasAtome: !!tauriResult.atome,
             hasData: !!tauriResult.data,
             allKeys: Object.keys(tauriResult)
@@ -1889,18 +2318,18 @@ async function get_atome(atomeId, callback) {
 
             if (tauriResult.atome) {
                 extractedAtome = tauriResult.atome;
-                console.log('🔍 Tauri: Found atome in .atome');
+                if (DEBUG) console.log('🔍 Tauri: Found atome in .atome');
             } else if (tauriResult.data && typeof tauriResult.data === 'object') {
                 extractedAtome = tauriResult.data;
-                console.log('🔍 Tauri: Found atome in .data');
+                if (DEBUG) console.log('🔍 Tauri: Found atome in .data');
             }
 
             if (extractedAtome) {
-                console.log('🔍 Tauri: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
+                if (DEBUG) console.log('🔍 Tauri: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
                 results.tauri.atome = extractedAtome;
                 results.tauri.success = true;
             } else {
-                console.log('🔍 Tauri: No atome found with ID:', atomeId);
+                if (DEBUG) console.log('🔍 Tauri: No atome found with ID:', atomeId);
                 results.tauri.error = 'Atome not found';
             }
         } else {
@@ -1912,11 +2341,11 @@ async function get_atome(atomeId, callback) {
 
     // Try Fastify
     try {
-        console.log('🔍 Calling FastifyAdapter.atome.get for atome ID:', atomeId);
+        if (DEBUG) console.log('🔍 Calling FastifyAdapter.atome.get for atome ID:', atomeId);
         // Use the proper get API to find the atome by ID
         const fastifyResult = await FastifyAdapter.atome.get(atomeId);
-        console.log('🔍 Fastify raw result:', fastifyResult);
-        console.log('🔍 Fastify result structure:', {
+        if (DEBUG) console.log('🔍 Fastify raw result:', fastifyResult);
+        if (DEBUG) console.log('🔍 Fastify result structure:', {
             hasAtome: !!fastifyResult.atome,
             hasData: !!fastifyResult.data,
             allKeys: Object.keys(fastifyResult)
@@ -1928,18 +2357,18 @@ async function get_atome(atomeId, callback) {
 
             if (fastifyResult.atome) {
                 extractedAtome = fastifyResult.atome;
-                console.log('🔍 Fastify: Found atome in .atome');
+                if (DEBUG) console.log('🔍 Fastify: Found atome in .atome');
             } else if (fastifyResult.data && typeof fastifyResult.data === 'object') {
                 extractedAtome = fastifyResult.data;
-                console.log('🔍 Fastify: Found atome in .data');
+                if (DEBUG) console.log('🔍 Fastify: Found atome in .data');
             }
 
             if (extractedAtome) {
-                console.log('🔍 Fastify: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
+                if (DEBUG) console.log('🔍 Fastify: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
                 results.fastify.atome = extractedAtome;
                 results.fastify.success = true;
             } else {
-                console.log('🔍 Fastify: No atome found with ID:', atomeId);
+                if (DEBUG) console.log('🔍 Fastify: No atome found with ID:', atomeId);
                 results.fastify.error = 'Atome not found';
             }
         } else {
@@ -2585,6 +3014,7 @@ export const AdoleAPI = {
         current: current_user,
         delete: delete_user,
         list: user_list,
+        lookupPhone: lookup_user_by_phone,
         // Current user state management
         getCurrentInfo: get_current_user_info,
         setCurrentState: set_current_user_state,

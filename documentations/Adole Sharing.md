@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The Atome sharing system defines how Atomes (including projects) can be shared between users in a controlled, explicit, and auditable way. It supports both **real-time collaboration** and **manual (non‑real‑time) publishing**, with strict user approval, offline tolerance, and deterministic synchronization.
+The Atome sharing system defines how Atomes (including projects) can be shared between users in a controlled, explicit, and auditable way. It supports **real-time collaboration**, **manual (non‑real‑time) publishing**, and **detached copy sharing**, with strict user approval, offline tolerance, and deterministic behavior.
 
 No sharing is implicit. No update is silent. Every decision is persisted.
 
@@ -18,6 +18,40 @@ A mailbox system is required to handle sharing requests and Atome messages when 
 * Optional Atome messages can be attached to a sharing request.
 
 This guarantees that no request or message is ever lost.
+
+---
+
+## User Discovery (Directory)
+
+Sharing requires the sender to identify a recipient (typically by phone number).
+
+To make this work consistently across runtimes:
+
+* **Fastify is the authoritative public user directory**.
+* Browser clients fetch the directory online only.
+* Tauri clients cache the directory locally so that recipients remain discoverable offline.
+
+Real-time behavior:
+
+* When a new account is created, Fastify emits `sync:account-created` over `/ws/sync`.
+* Clients update their directory cache from that event so the new user becomes shareable immediately.
+
+Directory listing behavior:
+
+* The user directory is exposed as a **public listing** (visibility = `public`).
+* The directory listing is **paginated** (limit/offset) to avoid heavy operations with large user bases.
+* For production sharing flows, prefer direct lookup by phone number rather than enumerating the entire directory.
+
+Security constraints:
+
+* The directory cache stores **safe identity fields only** (example: `user_id`, `username`, `phone`, `visibility`).
+* The directory cache must **never** store password hashes.
+
+Account bootstrap rule:
+
+* If a user was created in the Browser (Fastify) and later logs in from Tauri, Tauri may bootstrap the local account on first login using the provided credentials.
+
+This keeps user discovery bidirectional and offline-tolerant without requiring any forbidden Fastify → Tauri connection.
 
 ---
 
@@ -46,9 +80,9 @@ The system must store:
 
 ## 4. Share Modes
 
-Each share explicitly defines **how updates propagate**.
+Each share explicitly defines **how data propagates and how authority is handled**.
 
-### 4.1 Real‑time share mode
+### 4.1 Real‑time share mode (Linked)
 
 In real‑time mode:
 
@@ -68,7 +102,7 @@ In real‑time mode:
 
 ---
 
-### 4.2 Manual (non‑real‑time) share mode
+### 4.2 Manual (non‑real‑time) share mode (Linked)
 
 In manual push mode:
 
@@ -86,6 +120,33 @@ In manual push mode:
 * Full creative freedom without interference
 * Versioned, intentional publishing
 * No accidental or partial sync
+
+---
+
+### 4.3 Detached copy share mode (Unlinked / Forked)
+
+In detached copy mode:
+
+* The shared Atome is **copied at share time**.
+* The recipient receives a **new Atome with its own identity, timeline, and authority**.
+* There is **no synchronization** with the original Atome after the copy is created.
+* Modifications on either side **never propagate** back to the other.
+* The copied Atome evolves independently and has its **own lifecycle**.
+
+Creator rule:
+
+* The **original creator identity is preserved** as immutable metadata on the copied Atome.
+* Functional ownership and authority belong to the recipient once the copy is created.
+
+**What it is (simple sentence):**
+
+> A sharing mode where an Atome is duplicated into an independent object that evolves freely, without any link to the original.
+
+**Advantages:**
+
+* Safe distribution without collaboration constraints
+* No conflicts, no convergence requirements
+* Ideal for templates, presets, examples, or educational sharing
 
 ---
 
@@ -108,7 +169,7 @@ Permissions are enforced at runtime and during conflict resolution.
 
 ## 6. Offline Support and Resynchronization
 
-* Users may modify shared Atomes while offline.
+* Users may modify **linked shared Atomes** while offline.
 * All offline actions are stored locally as ordered deltas.
 * When connectivity returns:
 
@@ -116,13 +177,13 @@ Permissions are enforced at runtime and during conflict resolution.
   * conflicts are resolved deterministically,
   * accepted changes are propagated (depending on share mode).
 
-Resynchronization is automatic and transparent.
+Detached copy Atomes never participate in resynchronization, as they are fully autonomous.
 
 ---
 
 ## 7. Conflict Resolution
 
-Conflicts are resolved deterministically and never silently.
+Conflicts apply **only to linked share modes**.
 
 Rules:
 
@@ -136,20 +197,24 @@ All resolutions are:
 * traceable,
 * reproducible.
 
+Detached copy shares cannot generate conflicts by design.
+
 ---
 
 ## 8. Authoritative Source and Convergence
 
-* Each shared Atome or project has a single authoritative source.
+* Each **linked shared Atome or project** has a single authoritative source.
 * All operations are timestamped, versioned, and strictly ordered.
 * Clients may render optimistically.
 * The authority validates, reorders, or rejects operations if needed.
 
-All clients must eventually converge to the same final state.
+All linked clients must eventually converge to the same final state.
+
+Detached copy Atomes have their **own independent authority** and do not participate in convergence.
 
 ---
 
-## 9. Conditional Sharing (Rules-Based Access)
+## 9. Conditional Sharing (Rules‑Based Access)
 
 The sharing system must support **conditional sharing**, where access and permissions are granted **only if one or more conditions are satisfied** at evaluation time.
 
@@ -188,7 +253,7 @@ Share duration may be expressed as:
 * a fixed end date,
 * a relative duration (e.g. 7 days),
 * a recurring or bounded time window,
-* a condition-based rule (treated as a conditional share).
+* a condition‑based rule (treated as a conditional share).
 
 Expiration behavior:
 
@@ -198,6 +263,8 @@ Expiration behavior:
 
 Duration is conceptually a **specialized condition** and uses the same evaluation and enforcement mechanism as conditional sharing.
 
+Detached copy Atomes are unaffected by expiration once created.
+
 ---
 
 ## 11. Core Guarantees
@@ -206,6 +273,7 @@ Duration is conceptually a **specialized condition** and uses the same evaluatio
 * No lost messages or requests.
 * No silent synchronization.
 * No hidden conflicts.
+* Clear separation between linked and detached sharing.
 * Conditional rules are explicit and enforceable.
 * Expired shares cannot leak access.
 * Every action is stored, explicit, and auditable.

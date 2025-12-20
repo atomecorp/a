@@ -782,6 +782,14 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async refreshToken() {
                 return { ok: true, success: true }; // JWT doesn't need refresh for local
+            },
+            async lookupPhone(data) {
+                const phone = data?.phone;
+                return getWs().send({
+                    type: 'auth',
+                    action: 'lookup-phone',
+                    phone
+                });
             }
         },
 
@@ -818,6 +826,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     atomeType: params.type || params.kind,
                     parentId: params.parentId || params.parent,
                     ownerId: params.owner_id || params.ownerId,
+                    since: params.since || params.updatedSince || params.updated_since || null,
                     includeDeleted: params.includeDeleted || false,
                     limit: params.limit,
                     offset: params.offset || ((params.page || 0) * (params.limit || 50))
