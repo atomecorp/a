@@ -475,4 +475,13 @@ export const BuiltinHandlers = {
     }
 };
 
+// Expose handlers on globalThis so other runtimes (e.g. Unified ws/api adapter)
+// can dispatch incoming console-message commands without importing this module.
+// This is intentionally side-effect-light (no auto-registering).
+try {
+    if (typeof globalThis !== 'undefined') {
+        globalThis.BuiltinHandlers = BuiltinHandlers;
+    }
+} catch (_) { }
+
 export default BuiltinHandlers;

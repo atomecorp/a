@@ -573,6 +573,54 @@ function combineBindings(...bindings) {
     };
 }
 
+const _realtimePatchStateByInstance = new WeakMap();
+const REALTIME_MIN_INTERVAL_MS = 33;
+
+function getAtomeIdFromInstance(instance) {
+    if (!instance) return null;
+    const direct = instance.atomeId || instance.atome_id || instance.id || instance.uuid || instance.uid;
+    if (direct !== undefined && direct !== null && String(direct).trim()) return String(direct);
+    const elId = instance.element && instance.element.id ? String(instance.element.id) : '';
+    if (!elId) return null;
+    if (elId.startsWith('atome_')) return elId.slice('atome_'.length);
+    return elId;
+}
+
+function queueRealtimePatch(instance, particles) {
+    if (!instance || !particles || typeof particles !== 'object') return;
+
+    const api = globalThis.AdoleAPI;
+    if (!api || !api.atomes || typeof api.atomes.realtimePatch !== 'function') return;
+
+    const atomeId = getAtomeIdFromInstance(instance);
+    if (!atomeId) return;
+
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const state = _realtimePatchStateByInstance.get(instance) || { lastAt: 0, timer: null, pending: null };
+
+    state.pending = state.pending ? { ...state.pending, ...particles } : { ...particles };
+
+    const flush = () => {
+        state.timer = null;
+        const payload = state.pending;
+        state.pending = null;
+        state.lastAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        try {
+            api.atomes.realtimePatch(atomeId, payload);
+        } catch (_) { }
+    };
+
+    const elapsed = now - state.lastAt;
+    if (elapsed >= REALTIME_MIN_INTERVAL_MS && !state.timer) {
+        flush();
+    } else if (!state.timer) {
+        const delay = Math.max(0, REALTIME_MIN_INTERVAL_MS - elapsed);
+        state.timer = setTimeout(flush, delay);
+    }
+
+    _realtimePatchStateByInstance.set(instance, state);
+}
+
 function bindGenericEventGroup(instance, groupName, config) {
     if (!instance || !instance.element) return null;
     if (!config || typeof config !== 'object') return null;
@@ -677,6 +725,10 @@ function bindDraggableEvents(instance, groupName, config) {
         }
         instance.left = left;
         instance.top = top;
+
+        if (config.realtime !== false) {
+            queueRealtimePatch(instance, { left, top });
+        }
     };
 
     const handleMove = (event) => {
@@ -1013,6 +1065,13 @@ function bindResizableEvents(instance, groupName, config) {
                     if (instance._styles) instance._styles.height = height;
                     instance.height = height;
                     changed = true;
+                }
+
+                if (changed && config.realtime !== false) {
+                    const patch = {};
+                    if (allowWidth && Number.isFinite(width)) patch.width = width;
+                    if (allowHeight && Number.isFinite(height)) patch.height = height;
+                    queueRealtimePatch(instance, patch);
                 }
                 return changed;
             };

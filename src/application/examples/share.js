@@ -15,6 +15,10 @@ let _suppressSyncForAtomeIds = new Set();
 let _outboxIndexCache = { builtAt: 0, index: new Map() };
 let _peersIndexCache = { builtAt: 0, index: new Map() };
 
+// Backpressure/coalescing for high-frequency realtime patches (e.g. drag)
+// atomeId -> { inFlight: boolean, pending: object|null, lastKey: string }
+const _realtimePatchStateByAtomeId = new Map();
+
 let _builtinHandlersRegistered = false;
 
 // Runtime peer discovery for linked-share realtime.
@@ -333,30 +337,59 @@ async function _installAlterWrapper() {
 
     const originalAlter = api.atomes.alter.bind(api.atomes);
 
-    const pushRealtimePatch = async (atomeId, newParticles, currentUserId = null) => {
+    const pushRealtimePatch = (atomeId, newParticles) => {
         try {
             const id = String(atomeId || '');
             if (!id) return;
             if (_suppressSyncForAtomeIds.has(id)) return;
+            if (!newParticles || typeof newParticles !== 'object') return;
 
-            const current = currentUserId ? { id: currentUserId } : await getCurrentUser();
-            if (!current?.id) return;
+            // Clean/unified realtime:
+            // send a broadcast-only patch to the server (ws/api action='realtime'),
+            // which then fan-outs to all share recipients.
+            if (!api?.atomes?.realtimePatch) return;
 
-            await ensureRemoteCommandsReady(current.id);
+            const key = (() => {
+                try { return JSON.stringify(newParticles); } catch { return String(Date.now()); }
+            })();
 
-            const peersIndex = await _buildRealtimePeersIndex(api, current.id);
-            const peers = new Set([...(peersIndex.get(id) || []), ..._getRuntimePeers(id)]);
-            for (const peerUserId of peers) {
-                if (!peerUserId) continue;
-                if (String(peerUserId) === String(current.id)) continue;
-                await RemoteCommands.sendCommand(String(peerUserId), SHARE_SYNC_COMMAND, {
-                    atomeId: id,
-                    particles: newParticles,
-                    fromUserId: current.id,
-                    at: new Date().toISOString()
-                });
-            }
-        } catch (e) {
+            const existing = _realtimePatchStateByAtomeId.get(id) || { inFlight: false, pending: null, lastKey: '' };
+            // Skip duplicates when not in-flight
+            if (!existing.inFlight && existing.lastKey === key) return;
+
+            existing.pending = newParticles;
+            _realtimePatchStateByAtomeId.set(id, existing);
+
+            if (existing.inFlight) return;
+            existing.inFlight = true;
+
+            const loop = async () => {
+                try {
+                    while (true) {
+                        const state = _realtimePatchStateByAtomeId.get(id);
+                        if (!state || !state.pending) break;
+
+                        const payload = state.pending;
+                        state.pending = null;
+                        try {
+                            state.lastKey = JSON.stringify(payload);
+                        } catch (_) {
+                            state.lastKey = String(Date.now());
+                        }
+
+                        // Await to apply backpressure and keep the websocket buffer healthy
+                        await api.atomes.realtimePatch(id, payload);
+                    }
+                } catch (_) {
+                    // silent
+                } finally {
+                    const state = _realtimePatchStateByAtomeId.get(id);
+                    if (state) state.inFlight = false;
+                }
+            };
+
+            loop();
+        } catch (_) {
             // Keep this silent by default to avoid drag spam.
         }
     };

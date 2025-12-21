@@ -490,6 +490,37 @@ class TauriWebSocket {
             // Handle server-pushed console-only messages
             if (message.type === 'console-message') {
                 const from = message.from?.phone || message.from?.userId || 'unknown';
+
+                // Some console-messages are actually RemoteCommands encoded as JSON (e.g. share-sync realtime).
+                // In browser Fastify runtimes, the ws/api adapter receives these messages; dispatch them here so
+                // realtime collaboration works Fastify->Fastify without requiring a page refresh.
+                try {
+                    const text = message.message;
+                    if (typeof text === 'string' && text.trim().startsWith('{')) {
+                        const cmd = JSON.parse(text);
+                        if (cmd && typeof cmd.command === 'string') {
+                            const commandName = cmd.command;
+                            const params = cmd.params || {};
+
+                            const senderInfo = {
+                                userId: message.from?.userId || message.from?.user_id || null,
+                                phone: message.from?.phone || null,
+                                username: message.from?.username || null,
+                                timestamp: message.timestamp || null
+                            };
+
+                            const camel = String(commandName)
+                                .replace(/-([a-z])/g, (_, c) => String(c).toUpperCase());
+
+                            const handler = (globalThis.BuiltinHandlers?.handlers?.[camel]) || null;
+                            if (typeof handler === 'function') {
+                                handler(params, senderInfo);
+                                return;
+                            }
+                        }
+                    }
+                } catch (_) { }
+
                 console.log('[Fastify Console Message]', { from, message: message.message, payload: message });
                 return;
             }
@@ -637,6 +668,20 @@ class TauriWebSocket {
         });
     }
 
+    async sendFireAndForget(message) {
+        const connected = await this.connect();
+        if (!connected) {
+            return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
+        }
+
+        try {
+            this.socket.send(JSON.stringify(message));
+            return { ok: true, success: true };
+        } catch (e) {
+            return { ok: false, success: false, error: e.message, status: 0 };
+        }
+    }
+
     async isAvailable() {
         if (this.isConnected) return true;
         return await this.connect();
@@ -658,6 +703,15 @@ const _noTauriWs = {
             offline: true,
             error: 'Tauri backend is not available in this runtime'
         };
+    },
+    async sendFireAndForget() {
+        return {
+            ok: false,
+            success: false,
+            status: 0,
+            offline: true,
+            error: 'Tauri backend is not available in this runtime'
+        };
     }
 };
 
@@ -665,6 +719,15 @@ const _noFastifyWs = {
     async connect() { return false; },
     async isAvailable() { return false; },
     async send() {
+        return {
+            ok: false,
+            success: false,
+            status: 0,
+            offline: true,
+            error: 'Fastify backend is not configured (missing Fastify WebSocket URL)'
+        };
+    },
+    async sendFireAndForget() {
         return {
             ok: false,
             success: false,
@@ -860,6 +923,25 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     atomeId: id,
                     particles: data
                 });
+            },
+
+            // Broadcast-only realtime patch (no DB write)
+            async realtime(atomeId, particles) {
+                const token = getToken(tokenKey);
+                const ws = getWs();
+                const message = {
+                    type: 'atome',
+                    action: 'realtime',
+                    token,
+                    atomeId,
+                    particles,
+                    noReply: true
+                };
+
+                if (ws && typeof ws.sendFireAndForget === 'function') {
+                    return ws.sendFireAndForget(message);
+                }
+                return ws.send(message);
             },
             async delete(id) {
                 const token = getToken(tokenKey);

@@ -81,7 +81,8 @@ import {
   enqueuePendingConsoleMessage,
   attachWsApiClientToUser,
   detachWsApiClient,
-  wsSendJsonToUser
+  wsSendJsonToUser,
+  wsSendJsonToUserExcept
 } from './wsApiState.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
@@ -129,7 +130,7 @@ async function listAtomeRealtimeRecipients(atomeId) {
   }
 }
 
-async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId }) {
+async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId, senderConnection = null }) {
   if (!DATABASE_ENABLED) return;
   if (!atomeId || !particles || typeof particles !== 'object') return;
   if (!senderUserId) return;
@@ -150,7 +151,6 @@ async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId })
 
   for (const recipientId of recipients) {
     if (!recipientId) continue;
-    if (String(recipientId) === String(senderUserId)) continue;
 
     const payload = {
       type: 'console-message',
@@ -162,7 +162,21 @@ async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId })
 
     // Send only if online; do not queue (share-sync patches can become stale).
     try {
-      wsSendJsonToUser(String(recipientId), payload, { scope: 'ws/api', op: 'share-sync', targetUserId: String(recipientId) });
+      const targetUserId = String(recipientId);
+
+      // Important: in multi-tab scenarios the sender and receiver may be the same user.
+      // We still want realtime updates in the other tab(s), but we must not echo back
+      // to the originating connection.
+      if (String(recipientId) === String(senderUserId)) {
+        wsSendJsonToUserExcept(
+          targetUserId,
+          payload,
+          senderConnection,
+          { scope: 'ws/api', op: 'share-sync', targetUserId }
+        );
+      } else {
+        wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
+      }
     } catch (_) { }
   }
 }
@@ -882,6 +896,10 @@ async function startServer() {
             const toUserId = data.toUserId || data.to_user_id;
             const msgText = data.message;
 
+            const normalizedToPhone = (typeof toPhone === 'string')
+              ? toPhone.trim().replace(/\s+/g, '')
+              : toPhone;
+
             // STRICT MODE: require an authenticated ws/api connection.
             // We do NOT accept per-message tokens for direct-message.
             const attachedSenderUserId = connection && connection._wsApiUserId ? String(connection._wsApiUserId) : null;
@@ -924,7 +942,7 @@ async function startServer() {
               return;
             }
 
-            if ((!toPhone && !toUserId) || !msgText) {
+            if ((!normalizedToPhone && !toUserId) || !msgText) {
               safeSend({
                 type: 'direct-message-response',
                 requestId,
@@ -934,7 +952,7 @@ async function startServer() {
                 sender_phone: null,
                 sender_name: null,
                 receiver_id: toUserId ? String(toUserId) : null,
-                receiver_phone: toPhone ? String(toPhone) : null,
+                receiver_phone: normalizedToPhone ? String(normalizedToPhone) : null,
                 receiver_name: null,
                 recipientConnections: 0,
                 queueSize: 0
@@ -982,13 +1000,13 @@ async function startServer() {
 
               // If a phone is provided, try DB lookup first (gives us phone/username),
               // but if not present in DB we can still route by deterministic userId.
-              if (!targetUserId && toPhone) {
-                targetUser = await findUserByPhone(dataSource, String(toPhone));
+              if (!targetUserId && normalizedToPhone) {
+                targetUser = await findUserByPhone(dataSource, String(normalizedToPhone));
                 if (targetUser && targetUser.user_id) {
                   targetUserId = String(targetUser.user_id);
                 } else {
                   try {
-                    targetUserId = generateDeterministicUserId(String(toPhone));
+                    targetUserId = generateDeterministicUserId(String(normalizedToPhone));
                   } catch (_) {
                     targetUserId = null;
                   }
@@ -1014,7 +1032,7 @@ async function startServer() {
                   sender_phone: senderPhone,
                   sender_name: senderUsername,
                   receiver_id: null,
-                  receiver_phone: toPhone ? String(toPhone) : null,
+                  receiver_phone: normalizedToPhone ? String(normalizedToPhone) : null,
                   receiver_name: targetUser ? targetUser.username : null,
                   recipientConnections: 0,
                   queueSize: 0
@@ -1026,14 +1044,14 @@ async function startServer() {
                 type: 'console-message',
                 message: String(msgText),
                 from: { userId: senderUserId, phone: senderPhone, username: senderUsername },
-                to: { userId: targetUserId, phone: targetUser ? targetUser.phone : (toPhone ? String(toPhone) : null) },
+                to: { userId: targetUserId, phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null) },
                 timestamp: new Date().toISOString()
               };
 
               // DEBUG: log routing info
               const registrySize = wsApiClientsByUserId.get(targetUserId)?.size || 0;
               if (process.env.DIRECT_MESSAGE_DEBUG === '1') {
-                console.log(`[direct-message] sender=${senderUserId} target=${targetUserId} toPhone=${toPhone} toUserId=${toUserId} registrySize=${registrySize}`);
+                console.log(`[direct-message] sender=${senderUserId} target=${targetUserId} toPhone=${normalizedToPhone} toUserId=${toUserId} registrySize=${registrySize}`);
               }
 
               let queued = false;
@@ -1057,7 +1075,7 @@ async function startServer() {
                 delivered,
                 queued,
                 receiver_id: targetUserId,
-                receiver_phone: targetUser ? targetUser.phone : (toPhone ? String(toPhone) : null),
+                receiver_phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null),
                 receiver_name: targetUser ? targetUser.username : null,
                 sender_id: senderUserId,
                 sender_phone: senderPhone,
@@ -1663,6 +1681,76 @@ async function startServer() {
                   ok: !!atome,
                   atome
                 });
+              } else if (action === 'realtime') {
+                // ADOLE v3.0: broadcast-only realtime patch (no DB write)
+                // Used for continuous drag so other collaborators see movement immediately.
+                const atomeId = data.atomeId || data.id;
+                const particles = data.particles || data.properties;
+
+                if (!atomeId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing atome id'
+                  });
+                  return;
+                }
+
+                if (!particles || typeof particles !== 'object') {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing or invalid particles data'
+                  });
+                  return;
+                }
+
+                if (!requesterId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'Unauthenticated (token required)'
+                  });
+                  return;
+                }
+
+                const allowed = await db.canWrite(atomeId, requesterId);
+                if (!allowed) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'Access denied'
+                  });
+                  return;
+                }
+
+                // Broadcast to recipients (including other tabs of the same user)
+                try {
+                  await broadcastAtomeRealtimePatch({
+                    atomeId,
+                    particles,
+                    senderUserId: requesterId,
+                    senderConnection: connection
+                  });
+                } catch (_) { }
+
+                if (data.noReply === true) {
+                  return;
+                }
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  message: 'Realtime patch broadcasted'
+                });
+                return;
               } else if (action === 'update') {
                 // Support both formats: 
                 // - Legacy: { id, properties, author }
@@ -1724,7 +1812,7 @@ async function startServer() {
 
                 // Realtime collaboration: broadcast patch to share recipients
                 try {
-                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId });
+                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
                 } catch (_) { }
 
                 safeSend({
@@ -1776,7 +1864,7 @@ async function startServer() {
 
                 // Realtime collaboration: broadcast patch to share recipients
                 try {
-                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId });
+                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
                 } catch (_) { }
 
                 safeSend({

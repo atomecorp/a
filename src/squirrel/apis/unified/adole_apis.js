@@ -2275,6 +2275,77 @@ async function alter_atome(atomeId, newParticles, callback) {
 }
 
 /**
+ * Broadcast-only realtime patch for an atome (no DB write)
+ * Used for continuous drag so collaborators see movement immediately.
+ * @param {string} atomeId
+ * @param {Object} particles
+ * @param {Function} [callback]
+ */
+async function realtime_patch(atomeId, particles, callback) {
+    if (typeof particles === 'function') {
+        callback = particles;
+        particles = null;
+    }
+
+    if (!atomeId || !particles || typeof particles !== 'object') {
+        const error = !atomeId ? 'atomeId parameter is required' : 'particles object is required';
+        const results = {
+            tauri: { success: false, data: null, error },
+            fastify: { success: false, data: null, error }
+        };
+        if (typeof callback === 'function') callback(results);
+        return results;
+    }
+
+    const results = {
+        tauri: { success: false, data: null, error: null },
+        fastify: { success: false, data: null, error: null }
+    };
+
+    const isTauriRuntime = !!(typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__));
+
+    const tasks = [];
+
+    // Only call Tauri realtime when actually inside Tauri.
+    if (isTauriRuntime && TauriAdapter?.atome?.realtime) {
+        tasks.push((async () => {
+            try {
+                const tauriResult = await TauriAdapter.atome.realtime(atomeId, particles);
+                if (tauriResult.ok || tauriResult.success) {
+                    results.tauri = { success: true, data: tauriResult, error: null };
+                } else {
+                    results.tauri = { success: false, data: null, error: tauriResult.error };
+                }
+            } catch (e) {
+                results.tauri = { success: false, data: null, error: e.message };
+            }
+        })());
+    }
+
+    if (FastifyAdapter?.atome?.realtime) {
+        tasks.push((async () => {
+            try {
+                const fastifyResult = await FastifyAdapter.atome.realtime(atomeId, particles);
+                if (fastifyResult.ok || fastifyResult.success) {
+                    results.fastify = { success: true, data: fastifyResult, error: null };
+                } else {
+                    results.fastify = { success: false, data: null, error: fastifyResult.error };
+                }
+            } catch (e) {
+                results.fastify = { success: false, data: null, error: e.message };
+            }
+        })());
+    }
+
+    if (tasks.length > 0) {
+        try { await Promise.allSettled(tasks); } catch { }
+    }
+
+    if (typeof callback === 'function') callback(results);
+    return results;
+}
+
+/**
  * Get an atome with all its particles and history
  * @param {string} atomeId - ID of the atome to retrieve (REQUIRED)
  * @param {Function} [callback] - Optional callback function(result)
@@ -3037,7 +3108,8 @@ export const AdoleAPI = {
         list: list_atomes,
         get: get_atome,
         delete: delete_atome,
-        alter: alter_atome
+        alter: alter_atome,
+        realtimePatch: realtime_patch
     },
     sharing: {
         share: share_atome

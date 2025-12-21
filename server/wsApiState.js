@@ -75,3 +75,21 @@ export function wsSendJsonToUser(userId, payload, meta = null) {
     const targets = wsApiClientsByUserId.get(userId);
     return wsSendJsonToTargets(targets, payload, meta);
 }
+
+// Same as wsSendJsonToUser but allows excluding the sender connection (multi-tab).
+export function wsSendJsonToUserExcept(userId, payload, excludeConnection, meta = null) {
+    const targets = wsApiClientsByUserId.get(userId);
+    if (!targets || targets.size === 0) {
+        return { delivered: false, recipientConnections: 0 };
+    }
+
+    if (!excludeConnection) {
+        return wsSendJsonToTargets(targets, payload, meta);
+    }
+
+    const filtered = new Set();
+    targets.forEach((conn) => {
+        if (conn && conn !== excludeConnection) filtered.add(conn);
+    });
+    return wsSendJsonToTargets(filtered, payload, meta);
+}
