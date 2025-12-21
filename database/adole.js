@@ -993,6 +993,8 @@ export default {
     setPermission,
     canRead,
     canWrite,
+    canDelete,
+    canShare,
 
     // Sync
     getSyncState,

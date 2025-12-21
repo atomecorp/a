@@ -1928,7 +1928,41 @@ $('span', {
     const user_phone = grab('phone_pass_input').value;
     const user_name = grab('username_input').value;
 
-    const results = await create_user(user_phone, user_phone, user_name);
+    const results = await create_user(user_phone, user_phone, user_name, (result) => {
+      if (result?.tauri?.success || result?.fastify?.success) {
+        console.log('user: ' + user_name + ' created');
+      }
+    });
+
+    if (results?.tauri?.success || results?.fastify?.success) {
+      const projectName = 'untitled';
+
+      // Generate random background color for the project
+      const colors = ['#2c3e50', '#8e44ad', '#3498db', '#e67e22', '#27ae60', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#34495e', '#16a085', '#f1c40f', '#d35400'];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+      const projectResult = await create_project(projectName);
+      if (projectResult?.tauri?.success || projectResult?.fastify?.success) {
+        console.log('project: ' + projectName + ' created');
+
+        const tauriData = projectResult?.tauri?.data?.data;
+        const fastifyData = projectResult?.fastify?.data?.data;
+        const newId = tauriData?.atome_id || fastifyData?.atome_id;
+
+        if (newId) {
+          const alterResult = await alter_atome(newId, { backgroundColor: randomColor });
+          if (!(alterResult?.tauri?.success || alterResult?.fastify?.success)) {
+            console.warn('project backgroundColor update failed:', alterResult?.tauri?.error || alterResult?.fastify?.error || alterResult);
+          }
+
+          await loadProjectView(newId, projectName, randomColor);
+        } else {
+          console.warn('project creation succeeded but no project id found:', projectResult);
+        }
+      } else {
+        console.warn('project creation failed:', projectResult?.tauri?.error || projectResult?.fastify?.error || projectResult);
+      }
+    }
     grab('logged_user').textContent = `${user_name} phone:${user_phone}`;
     puts('user created: ' + user_name + ' user phone created: ' + user_phone);
   },
@@ -2354,6 +2388,12 @@ $('span', {
       }
     } else {
       puts('❌ Failed to delete atome');
+      try {
+        const tauriErr = result?.tauri?.error || (result?.tauri?.data && result?.tauri?.data?.error) || null;
+        const fastifyErr = result?.fastify?.error || (result?.fastify?.data && result?.fastify?.data?.error) || null;
+        if (tauriErr) puts('  Tauri error: ' + tauriErr);
+        if (fastifyErr) puts('  Fastify error: ' + fastifyErr);
+      } catch (_) { }
     }
   },
 });

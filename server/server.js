@@ -1486,9 +1486,13 @@ async function startServer() {
                     return;
                   }
 
-                  // Support registerAs: allows client to specify which user ID to register under
-                  // (e.g., when multiple apps share the same token in localStorage)
-                  const registerAsUserId = data.registerAs || user.user_id;
+                  // Support registerAs ONLY when it matches the authenticated user id.
+                  // This prevents attaching the ws/api connection under an arbitrary identifier
+                  // (e.g. a phone number), which would break ACL checks and is unsafe.
+                  const requestedRegisterAs = data.registerAs ? String(data.registerAs) : null;
+                  const registerAsUserId = (requestedRegisterAs && requestedRegisterAs === String(user.user_id))
+                    ? requestedRegisterAs
+                    : String(user.user_id);
 
                   safeSend({
                     type: 'auth-response',
@@ -1556,7 +1560,44 @@ async function startServer() {
           if (data.type === 'atome') {
             const action = data.action || '';
             const requestId = data.requestId;
-            const requesterId = connection?._wsApiUserId || data.userId || data.ownerId || data.owner_id || null;
+
+            // Resolve requester identity:
+            // - Prefer the attached ws identity (fast path)
+            // - Enforce expiry
+            // - If missing (or expired), verify JWT from the message and attach the connection
+            let requesterId = connection?._wsApiUserId || null;
+
+            try {
+              const authExpMs = connection && typeof connection._wsApiAuthExpMs === 'number' ? connection._wsApiAuthExpMs : null;
+              if (requesterId && authExpMs && Date.now() >= authExpMs) {
+                // Stale connection identity
+                detachWsApiClient(connection);
+                requesterId = null;
+              }
+            } catch (_) { }
+
+            if (!requesterId && data.token) {
+              try {
+                const jwt = await import('jsonwebtoken');
+                const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                const decoded = jwt.default.verify(String(data.token), jwtSecret);
+                const decodedUserId = decoded?.userId || decoded?.id || decoded?.user_id || decoded?.sub || null;
+                if (decodedUserId) {
+                  requesterId = String(decodedUserId);
+                  attachWsApiClientToUser(connection, requesterId);
+                  if (decoded && typeof decoded.exp === 'number') {
+                    connection._wsApiAuthExpMs = decoded.exp * 1000;
+                  }
+                }
+              } catch (_) {
+                requesterId = null;
+              }
+            }
+
+            // Last-resort fallback (legacy callers). Prefer not to rely on this.
+            if (!requesterId) {
+              requesterId = data.userId || data.ownerId || data.owner_id || null;
+            }
 
             try {
               if (action === 'create') {
@@ -1657,17 +1698,26 @@ async function startServer() {
                   return;
                 }
 
-                if (requesterId) {
-                  const allowed = await db.canWrite(atomeId, requesterId);
-                  if (!allowed) {
-                    safeSend({
-                      type: 'atome-response',
-                      requestId,
-                      success: false,
-                      error: 'Access denied'
-                    });
-                    return;
-                  }
+                if (!requesterId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'Unauthenticated (token required)'
+                  });
+                  return;
+                }
+
+                const allowed = await db.canWrite(atomeId, requesterId);
+                if (!allowed) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Access denied'
+                  });
+                  return;
                 }
 
                 await db.updateAtome(atomeId, particles, author);
@@ -1698,18 +1748,27 @@ async function startServer() {
                   return;
                 }
 
-                if (requesterId) {
-                  const allowed = await db.canWrite(atomeId, requesterId);
-                  if (!allowed) {
-                    safeSend({
-                      type: 'atome-response',
-                      requestId,
-                      success: false,
-                      ok: false,
-                      error: 'Access denied'
-                    });
-                    return;
-                  }
+                if (!requesterId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'Unauthenticated (token required)'
+                  });
+                  return;
+                }
+
+                const allowed = await db.canWrite(atomeId, requesterId);
+                if (!allowed) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'Access denied'
+                  });
+                  return;
                 }
 
                 // Alter uses updateAtome with partial particles
@@ -1731,7 +1790,18 @@ async function startServer() {
                 // Note: This is a SOFT delete (sets deleted_at)
                 const atomeId = data.atomeId || data.id;
 
-                if (requesterId && atomeId) {
+                if (!requesterId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'Unauthenticated (token required)'
+                  });
+                  return;
+                }
+
+                if (atomeId) {
                   const allowed = await db.canDelete(atomeId, requesterId);
                   if (!allowed) {
                     safeSend({
