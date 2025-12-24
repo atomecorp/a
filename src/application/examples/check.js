@@ -181,7 +181,10 @@ const delete_project = AdoleAPI.projects.delete;
 const create_atome = AdoleAPI.atomes.create;
 const list_atomes = AdoleAPI.atomes.list;
 const get_atome = AdoleAPI.atomes.get;
-const delete_atome = AdoleAPI.atomes.delete;
+const delete_atome = (...args) => {
+  const api = window.AdoleAPI || AdoleAPI;
+  return api.atomes.delete(...args);
+};
 const alter_atome = (...args) => {
   const api = window.AdoleAPI || AdoleAPI;
   return api.atomes.alter(...args);

@@ -310,6 +310,19 @@ function handleShareSync(params, sender) {
         return;
     }
 
+    // Deletion broadcast (realtimePatch uses { __deleted: true })
+    if (particles.__deleted === true || particles.deleted === true || particles.__action === 'delete') {
+        const candidatesToRemove = [
+            document.getElementById('atome_' + atomeId),
+            document.getElementById(atomeId)
+        ].filter(Boolean);
+
+        for (const el of candidatesToRemove) {
+            try { el.remove(); } catch (_) { }
+        }
+        return;
+    }
+
     // Dedupe identical patches arriving close together (e.g. server broadcast + direct message)
     try {
         const payload = JSON.stringify(particles);

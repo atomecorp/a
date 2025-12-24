@@ -8,12 +8,16 @@ import { BuiltinHandlers } from '/squirrel/apis/remote_command_handlers.js';
 
 const SHARE_SYNC_COMMAND = 'share-sync';
 const SHARE_ACCEPTED_COMMAND = 'share-accepted';
+const SHARE_DELETE_COMMAND = 'share-delete';
 
 let _realtimeInstalled = false;
 let _wrappedAlterInstalled = false;
+let _wrappedDeleteInstalled = false;
+let _wrappedRealtimePatchInstalled = false;
 let _suppressSyncForAtomeIds = new Set();
 let _outboxIndexCache = { builtAt: 0, index: new Map() };
 let _peersIndexCache = { builtAt: 0, index: new Map() };
+let _realtimeSharesCache = { builtAt: 0, items: [] };
 
 // Backpressure/coalescing for high-frequency realtime patches (e.g. drag)
 // atomeId -> { inFlight: boolean, pending: object|null, lastKey: string }
@@ -95,6 +99,143 @@ function _withSuppressedSync(atomeId, fn) {
 function _extractShareTypeFromRequestParticles(particles) {
     const po = particles?.propertyOverrides || {};
     return po?.__shareType || particles?.shareType || 'linked';
+}
+
+function _normalizeProtectedGroupKey(particleKey) {
+    const key = String(particleKey || '');
+    if (!key) return '';
+    if (['left', 'top', 'right', 'bottom'].includes(key)) return 'position';
+    if (['color', 'backgroundColor'].includes(key)) return 'color';
+    return key;
+}
+
+function _extractRuleAllowList(rule) {
+    if (!rule) return null;
+    if (rule === true) return ['owner'];
+    if (typeof rule === 'string') {
+        const s = rule.trim();
+        if (!s) return null;
+        if (s === 'owner' || s === 'owner-only') return ['owner'];
+        return [s];
+    }
+    if (Array.isArray(rule)) return rule.map(String);
+    if (typeof rule === 'object') {
+        const allow = rule.allow || rule.allowed || null;
+        if (Array.isArray(allow)) return allow.map(String);
+        if (rule.ownerOnly === true) return ['owner'];
+    }
+    return null;
+}
+
+function _isUserAllowedByRule({ userId, ownerId, rule }) {
+    const u = String(userId || '');
+    const o = String(ownerId || '');
+    if (!u) return false;
+    if (u === o) return true;
+    const allow = _extractRuleAllowList(rule);
+    if (!allow) return null; // no rule => no extra restriction
+    if (allow.includes('owner')) return false;
+    return allow.includes(u);
+}
+
+function _filterParticlesByPermissions({ particles, actorUserId, ownerUserId, permissions }) {
+    if (!particles || typeof particles !== 'object') return {};
+    const actor = String(actorUserId || '');
+    const owner = String(ownerUserId || '');
+    if (!actor) return { ...particles };
+    if (actor === owner) return { ...particles };
+
+    // Base alter permission
+    if (permissions && permissions.alter === false) return {};
+
+    const rules = (permissions && (permissions.particles || permissions.protectedParticles || permissions.propertyRules)) || null;
+    if (!rules || typeof rules !== 'object') return { ...particles };
+
+    const out = {};
+    for (const [k, v] of Object.entries(particles)) {
+        const groupKey = _normalizeProtectedGroupKey(k);
+        const rule = (groupKey && rules[groupKey] !== undefined) ? rules[groupKey] : rules[k];
+        const allowed = _isUserAllowedByRule({ userId: actor, ownerId: owner, rule });
+        if (allowed === false) continue;
+        out[k] = v;
+    }
+    return out;
+}
+
+async function _listRealtimeShares(api, currentUserId) {
+    const now = Date.now();
+    if (Array.isArray(_realtimeSharesCache.items) && (now - _realtimeSharesCache.builtAt) < 5000) {
+        return _realtimeSharesCache.items;
+    }
+
+    const items = [];
+    try {
+        const result = await api.atomes.list({ type: 'share_request', ownerId: currentUserId });
+        const all = normalizeDualListResult(result, 'atomes');
+        for (const raw of all) {
+            const particles = raw?.particles || raw?.data || {};
+            const shareType = _extractShareTypeFromRequestParticles(particles);
+            if (shareType !== 'linked') continue;
+            if ((particles.mode || null) !== 'real-time') continue;
+            const status = particles.status || null;
+            if (status !== 'active' && status !== 'pending') continue;
+            const atomeIds = Array.isArray(particles.atomeIds) ? particles.atomeIds.map(String) : [];
+            if (!atomeIds.length) continue;
+            items.push({
+                requestId: particles.requestId || null,
+                box: particles.box || null,
+                status,
+                mode: particles.mode || null,
+                shareType,
+                sharerId: particles.sharerId || null,
+                targetUserId: particles.targetUserId || null,
+                atomeIds,
+                permissions: particles.permissions || null
+            });
+        }
+    } catch (e) {
+        console.warn('[ShareAPI] Failed to list realtime shares:', e.message);
+    }
+
+    _realtimeSharesCache = { builtAt: now, items };
+    return items;
+}
+
+async function _getPermissionContextForOutboundMutation(api, currentUserId, atomeId) {
+    const id = String(atomeId || '');
+    if (!id) return { ownerUserId: null, permissions: null };
+
+    const shares = await _listRealtimeShares(api, currentUserId);
+
+    // If current user is receiver, there should be an inbox entry.
+    const inbox = shares.find(s => s.box === 'inbox' && Array.isArray(s.atomeIds) && s.atomeIds.includes(id));
+    if (inbox && inbox.sharerId) {
+        return { ownerUserId: String(inbox.sharerId), permissions: inbox.permissions || null };
+    }
+
+    // Default: treat current as owner.
+    return { ownerUserId: String(currentUserId || ''), permissions: null };
+}
+
+async function _getPermissionContextForInboundCommand(api, currentUserId, atomeId, peerUserId) {
+    const id = String(atomeId || '');
+    const peer = String(peerUserId || '');
+    if (!id || !peer) return null;
+
+    const shares = await _listRealtimeShares(api, currentUserId);
+    const entry = shares.find(s => {
+        if (!Array.isArray(s.atomeIds) || !s.atomeIds.includes(id)) return false;
+        if (s.box === 'inbox') return String(s.sharerId || '') === peer;
+        if (s.box === 'outbox') return String(s.targetUserId || '') === peer;
+        return false;
+    });
+    if (!entry) return null;
+
+    const ownerUserId = (entry.box === 'inbox')
+        ? String(entry.sharerId || '')
+        : String(currentUserId || '');
+
+    return { ownerUserId, permissions: entry.permissions || null, entry };
 }
 
 async function _buildOutboxIndex(api, currentUserId) {
@@ -211,12 +352,27 @@ async function _registerRealtimeHandlers() {
                 const atomeId = params?.atomeId || params?.atome_id || null;
                 const directPatch = params?.particles || null;
                 if (atomeId && directPatch && typeof directPatch === 'object') {
+                    // Enforce per-property permissions (sender-based) when possible
+                    try {
+                        const ctx = await _getPermissionContextForInboundCommand(api, current.id, String(atomeId), sender?.userId);
+                        if (ctx && ctx.ownerUserId && ctx.permissions) {
+                            const filtered = _filterParticlesByPermissions({
+                                particles: directPatch,
+                                actorUserId: sender?.userId,
+                                ownerUserId: ctx.ownerUserId,
+                                permissions: ctx.permissions
+                            });
+                            if (!filtered || Object.keys(filtered).length === 0) return;
+                            params = { ...params, particles: filtered };
+                        }
+                    } catch (_) { }
+
                     // Linked share uses the same atome_id: DB is already updated by the author.
                     // Here we only apply a UI patch to reflect changes in realtime.
                     try {
                         const ui = BuiltinHandlers?.handlers?.shareSync;
                         if (typeof ui === 'function') {
-                            ui({ atomeId: String(atomeId), particles: directPatch }, sender);
+                            ui({ atomeId: String(atomeId), particles: params?.particles || directPatch }, sender);
                         }
                     } catch (_) { }
 
@@ -233,6 +389,24 @@ async function _registerRealtimeHandlers() {
                 const particlesPatch = params?.particles || null;
 
                 if (!particlesPatch || typeof particlesPatch !== 'object') return;
+
+                // Enforce per-property permissions (sender-based) when possible
+                try {
+                    const anchorAtomeId = direction === 'to-origin' ? String(originalAtomeId || '') : String(sharedAtomeId || '');
+                    if (anchorAtomeId) {
+                        const ctx = await _getPermissionContextForInboundCommand(api, current.id, anchorAtomeId, sender?.userId);
+                        if (ctx && ctx.ownerUserId && ctx.permissions) {
+                            const filtered = _filterParticlesByPermissions({
+                                particles: particlesPatch,
+                                actorUserId: sender?.userId,
+                                ownerUserId: ctx.ownerUserId,
+                                permissions: ctx.permissions
+                            });
+                            if (!filtered || Object.keys(filtered).length === 0) return;
+                            params = { ...params, particles: filtered };
+                        }
+                    }
+                } catch (_) { }
 
                 // Update receiver copy
                 if (direction === 'to-copy') {
@@ -257,11 +431,11 @@ async function _registerRealtimeHandlers() {
                     try {
                         const ui = BuiltinHandlers?.handlers?.shareSync;
                         if (typeof ui === 'function') {
-                            ui({ atomeId: String(targetId), particles: particlesPatch }, sender);
+                            ui({ atomeId: String(targetId), particles: params?.particles || particlesPatch }, sender);
                         }
                     } catch (_) { }
 
-                    await _withSuppressedSync(targetId, () => api.atomes.alter(targetId, particlesPatch));
+                    await _withSuppressedSync(targetId, () => api.atomes.alter(targetId, params?.particles || particlesPatch));
                     return;
                 }
 
@@ -273,15 +447,43 @@ async function _registerRealtimeHandlers() {
                     try {
                         const ui = BuiltinHandlers?.handlers?.shareSync;
                         if (typeof ui === 'function') {
-                            ui({ atomeId: String(originalAtomeId), particles: particlesPatch }, sender);
+                            ui({ atomeId: String(originalAtomeId), particles: params?.particles || particlesPatch }, sender);
                         }
                     } catch (_) { }
 
-                    await _withSuppressedSync(originalAtomeId, () => api.atomes.alter(originalAtomeId, particlesPatch));
+                    await _withSuppressedSync(originalAtomeId, () => api.atomes.alter(originalAtomeId, params?.particles || particlesPatch));
                     return;
                 }
             } catch (e) {
                 console.warn('[ShareAPI] share-sync handler error:', e.message);
+            }
+        });
+
+        RemoteCommands.register(SHARE_DELETE_COMMAND, async (params, sender) => {
+            try {
+                const targetId = String(params?.atomeId || params?.sharedAtomeId || params?.originalAtomeId || '');
+                if (!targetId) return;
+
+                const candidates = [
+                    document.getElementById('atome_' + targetId),
+                    document.getElementById(targetId)
+                ].filter(Boolean);
+
+                for (const el of candidates) {
+                    try { el.remove(); } catch (_) { }
+                }
+
+                try {
+                    window.dispatchEvent(new CustomEvent('adole-share-deleted', {
+                        detail: {
+                            atomeId: targetId,
+                            from: sender?.userId || null,
+                            at: params?.at || new Date().toISOString()
+                        }
+                    }));
+                } catch (_) { }
+            } catch (e) {
+                console.warn('[ShareAPI] share-delete handler error:', e.message);
             }
         });
 
@@ -337,12 +539,27 @@ async function _installAlterWrapper() {
 
     const originalAlter = api.atomes.alter.bind(api.atomes);
 
-    const pushRealtimePatch = (atomeId, newParticles) => {
+    const pushRealtimePatch = async (atomeId, newParticles) => {
         try {
             const id = String(atomeId || '');
             if (!id) return;
             if (_suppressSyncForAtomeIds.has(id)) return;
             if (!newParticles || typeof newParticles !== 'object') return;
+
+            // Enforce property-level permissions for the current user (outbound)
+            try {
+                const current = await getCurrentUser();
+                if (!current?.id) return;
+                const ctx = await _getPermissionContextForOutboundMutation(api, current.id, id);
+                const filtered = _filterParticlesByPermissions({
+                    particles: newParticles,
+                    actorUserId: current.id,
+                    ownerUserId: ctx?.ownerUserId || null,
+                    permissions: ctx?.permissions || null
+                });
+                if (!filtered || Object.keys(filtered).length === 0) return;
+                newParticles = filtered;
+            } catch (_) { }
 
             // Clean/unified realtime:
             // send a broadcast-only patch to the server (ws/api action='realtime'),
@@ -399,6 +616,31 @@ async function _installAlterWrapper() {
     window.__SHARE_REALTIME_PUSH__ = (atomeId, particles) => pushRealtimePatch(atomeId, particles);
 
     const wrapped = async (atomeId, newParticles, callback) => {
+        // Enforce property-level permissions before persisting
+        try {
+            const id = String(atomeId || '');
+            if (id && newParticles && typeof newParticles === 'object') {
+                const current = await getCurrentUser();
+                if (current?.id) {
+                    const ctx = await _getPermissionContextForOutboundMutation(api, current.id, id);
+                    const filtered = _filterParticlesByPermissions({
+                        particles: newParticles,
+                        actorUserId: current.id,
+                        ownerUserId: ctx?.ownerUserId || null,
+                        permissions: ctx?.permissions || null
+                    });
+                    if (!filtered || Object.keys(filtered).length === 0) {
+                        return {
+                            tauri: { success: false, data: null, error: 'Blocked by share permissions' },
+                            fastify: { success: false, data: null, error: 'Blocked by share permissions' },
+                            blocked: true
+                        };
+                    }
+                    newParticles = filtered;
+                }
+            }
+        } catch (_) { }
+
         const res = await originalAlter(atomeId, newParticles, callback);
 
         try {
@@ -461,6 +703,168 @@ async function _installAlterWrapper() {
 
     wrapped.__shareWrapped = true;
     api.atomes.alter = wrapped;
+}
+
+async function _installRealtimePatchWrapper() {
+    if (_wrappedRealtimePatchInstalled) return;
+    _wrappedRealtimePatchInstalled = true;
+
+    const api = window.AdoleAPI || AdoleAPI;
+    if (!api?.atomes?.realtimePatch) return;
+    if (api.atomes.realtimePatch && api.atomes.realtimePatch.__shareWrapped) return;
+
+    const original = api.atomes.realtimePatch.bind(api.atomes);
+
+    const wrapped = async (atomeId, particles, callback) => {
+        try {
+            const id = String(atomeId || '');
+            if (id && particles && typeof particles === 'object') {
+                const current = await getCurrentUser();
+                if (current?.id) {
+                    const ctx = await _getPermissionContextForOutboundMutation(api, current.id, id);
+                    const filtered = _filterParticlesByPermissions({
+                        particles,
+                        actorUserId: current.id,
+                        ownerUserId: ctx?.ownerUserId || null,
+                        permissions: ctx?.permissions || null
+                    });
+                    if (!filtered || Object.keys(filtered).length === 0) {
+                        return {
+                            tauri: { success: false, data: null, error: 'Blocked by share permissions' },
+                            fastify: { success: false, data: null, error: 'Blocked by share permissions' },
+                            blocked: true
+                        };
+                    }
+                    particles = filtered;
+                }
+            }
+        } catch (_) { }
+
+        return original(atomeId, particles, callback);
+    };
+
+    wrapped.__shareWrapped = true;
+    api.atomes.realtimePatch = wrapped;
+}
+
+async function _installDeleteWrapper() {
+    if (_wrappedDeleteInstalled) return;
+    _wrappedDeleteInstalled = true;
+
+    const api = window.AdoleAPI || AdoleAPI;
+    if (!api?.atomes?.delete) return;
+    if (api.atomes.delete && api.atomes.delete.__shareWrapped) return;
+
+    const originalDelete = api.atomes.delete.bind(api.atomes);
+
+    // Fire-and-forget usage: window.__SHARE_REALTIME_DELETE__(atomeId)
+    window.__SHARE_REALTIME_DELETE__ = async (atomeId) => {
+        try {
+            const id = String(atomeId || '');
+            if (!id) return;
+            const current = await getCurrentUser();
+            if (!current?.id) return;
+            await ensureRemoteCommandsReady(current.id);
+            await RemoteCommands.sendCommand('*', SHARE_DELETE_COMMAND, {
+                atomeId: id,
+                fromUserId: current.id,
+                at: new Date().toISOString()
+            });
+        } catch (_) {
+            // silent
+        }
+    };
+
+    const wrapped = async (atomeId, callback) => {
+        const id = String(atomeId || '');
+        if (!id) return originalDelete(atomeId, callback);
+
+        let currentUserId = null;
+        let precomputedTargets = [];
+        let precomputedRuntimePeers = [];
+
+        try {
+            const current = await getCurrentUser();
+            if (current?.id) {
+                currentUserId = String(current.id);
+                // If this user is the sharer, outbox index tells us who to notify.
+                const outboxIndex = await _buildOutboxIndex(api, currentUserId);
+                precomputedTargets = outboxIndex.get(id) || [];
+                precomputedRuntimePeers = _getRuntimePeers(id);
+            }
+        } catch (_) { }
+
+        // Enforce delete permission for receivers
+        try {
+            const current = await getCurrentUser();
+            if (current?.id) {
+                const ctx = await _getPermissionContextForOutboundMutation(api, current.id, id);
+                const ownerId = String(ctx?.ownerUserId || '');
+                const perms = ctx?.permissions || null;
+                if (ownerId && String(current.id) !== ownerId) {
+                    const allowed = !!(perms && perms.delete === true);
+                    if (!allowed) {
+                        return {
+                            tauri: { success: false, data: null, error: 'Blocked by share permissions' },
+                            fastify: { success: false, data: null, error: 'Blocked by share permissions' },
+                            blocked: true
+                        };
+                    }
+                }
+            }
+        } catch (_) { }
+
+        const res = await originalDelete(atomeId, callback);
+
+        try {
+            const current = await getCurrentUser();
+            if (!current?.id) return res;
+            currentUserId = String(current.id);
+
+            const ok = !!(res?.tauri?.success || res?.fastify?.success);
+            if (!ok) return res;
+
+            // 1) Broadcast a realtime "deleted" patch so linked-share participants remove immediately
+            try {
+                if (typeof api.atomes.realtimePatch === 'function') {
+                    await api.atomes.realtimePatch(id, { __deleted: true, deletedBy: current.id, at: new Date().toISOString() });
+                }
+            } catch (_) { }
+
+            // 2) Direct-message recipients (works even when ws/api realtime fanout isn't wired)
+            try {
+                await ensureRemoteCommandsReady(current.id);
+
+                // Notify outbox recipients
+                for (const t of precomputedTargets) {
+                    if (!t?.targetUserId) continue;
+                    const targetAtomeId = String(t.sharedAtomeId || id);
+                    await RemoteCommands.sendCommand(String(t.targetUserId), SHARE_DELETE_COMMAND, {
+                        atomeId: targetAtomeId,
+                        originalAtomeId: id,
+                        requestId: t.requestId || null,
+                        fromUserId: current.id,
+                        at: new Date().toISOString()
+                    });
+                }
+
+                // Notify runtime peers (bidirectional collaboration cases)
+                for (const peerId of precomputedRuntimePeers) {
+                    if (!peerId) continue;
+                    await RemoteCommands.sendCommand(String(peerId), SHARE_DELETE_COMMAND, {
+                        atomeId: id,
+                        fromUserId: current.id,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (_) { }
+        } catch (_) { }
+
+        return res;
+    };
+
+    wrapped.__shareWrapped = true;
+    api.atomes.delete = wrapped;
 }
 
 async function getCurrentUser() {
@@ -754,6 +1158,8 @@ const ShareAPI = {
         // Ensure realtime handlers are ready as early as possible
         _registerRealtimeHandlers().catch(() => { });
         _installAlterWrapper().catch(() => { });
+        _installRealtimePatchWrapper().catch(() => { });
+        _installDeleteWrapper().catch(() => { });
 
         const options = (type_de_partage_or_options && typeof type_de_partage_or_options === 'object')
             ? type_de_partage_or_options
@@ -1079,6 +1485,8 @@ const ShareAPI = {
 // Install realtime plumbing eagerly (safe no-op if RemoteCommands not started yet)
 _registerRealtimeHandlers().catch(() => { });
 _installAlterWrapper().catch(() => { });
+_installRealtimePatchWrapper().catch(() => { });
+_installDeleteWrapper().catch(() => { });
 
 window.ShareAPI = ShareAPI;
 
