@@ -509,6 +509,14 @@ class TauriWebSocket {
                                 timestamp: message.timestamp || null
                             };
 
+                            if (commandName === 'share-create' && typeof window !== 'undefined') {
+                                try {
+                                    const detail = { ...(params || {}), sender: senderInfo };
+                                    window.dispatchEvent(new CustomEvent('adole-share-create', { detail }));
+                                } catch (_) { }
+                                return;
+                            }
+
                             const camel = String(commandName)
                                 .replace(/-([a-z])/g, (_, c) => String(c).toUpperCase());
 
