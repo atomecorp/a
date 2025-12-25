@@ -963,6 +963,47 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         },
 
         share: {
+            async request(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'request',
+                    targetUserId: data.targetUserId || data.target_user_id || null,
+                    targetPhone: data.targetPhone || data.target_phone || null,
+                    atomeIds: data.atomeIds || data.atome_ids || [],
+                    permissions: data.permissions || {},
+                    mode: data.mode || 'real-time',
+                    shareType: data.shareType || data.share_type || null,
+                    propertyOverrides: data.propertyOverrides || data.property_overrides || {}
+                });
+            },
+            async respond(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'respond',
+                    status: data.status || data.decision || null,
+                    requestAtomeId: data.requestAtomeId || data.request_atome_id || data.atome_id || null,
+                    requestId: data.requestId || data.request_id || null,
+                    policy: data.policy || null,
+                    receiverProjectId: data.receiverProjectId || data.receiver_project_id || null
+                });
+            },
+            async publish(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'publish',
+                    requestAtomeId: data.requestAtomeId || data.request_atome_id || data.atome_id || null,
+                    requestId: data.requestId || data.request_id || null
+                });
+            },
+            async policy(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'policy',
+                    peerUserId: data.peerUserId || data.peer_user_id || null,
+                    policy: data.policy || null,
+                    permissions: data.permissions || null
+                });
+            },
             async create(data) {
                 // Permissions sharing is handled server-side; token auth binds ws identity.
                 return getWs().send({

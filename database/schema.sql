@@ -130,6 +130,9 @@ CREATE TABLE IF NOT EXISTS permissions (
     can_write INTEGER NOT NULL DEFAULT 0,           -- 1 = autorisé, 0 = refusé
     can_delete INTEGER NOT NULL DEFAULT 0,          -- 1 = autorisé, 0 = refusé
     can_share INTEGER NOT NULL DEFAULT 0,           -- 1 = peut partager, 0 = non
+    can_create INTEGER NOT NULL DEFAULT 0,          -- 1 = peut creer des enfants, 0 = non
+    share_mode TEXT DEFAULT 'real-time',            -- 'real-time' | 'validation-based'
+    conditions TEXT,                                -- JSON rules for conditional access
     granted_by TEXT,                                -- atome_id de celui qui a donné la permission
     granted_at TEXT NOT NULL DEFAULT (datetime('now')),
     expires_at TEXT,                                -- NULL = permanent, sinon = expiration

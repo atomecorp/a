@@ -84,102 +84,16 @@ import {
   wsSendJsonToUser,
   wsSendJsonToUserExcept
 } from './wsApiState.js';
+import {
+  inheritPermissionsFromParent,
+  broadcastAtomeCreate,
+  broadcastAtomeDelete,
+  broadcastAtomeRealtimePatch
+} from './atomeRealtime.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
 import { v4 as uuidv4 } from 'uuid';
-
-async function getEffectiveOwnerIdForAtome(atomeId) {
-  try {
-    const ownerRow = await db.query('get', 'SELECT owner_id FROM atomes WHERE atome_id = ?', [atomeId]);
-    const ownerId = ownerRow?.owner_id ? String(ownerRow.owner_id) : null;
-    if (ownerId) return ownerId;
-
-    const pendingRow = await db.query(
-      'get',
-      "SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = '_pending_owner_id' ORDER BY updated_at DESC LIMIT 1",
-      [atomeId]
-    );
-
-    return pendingRow?.particle_value ? String(pendingRow.particle_value) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function listAtomeRealtimeRecipients(atomeId) {
-  try {
-    const recipients = new Set();
-
-    const ownerId = await getEffectiveOwnerIdForAtome(atomeId);
-    if (ownerId) recipients.add(ownerId);
-
-    const permRows = await db.query(
-      'all',
-      "SELECT DISTINCT principal_id FROM permissions WHERE atome_id = ? AND can_read = 1 AND (expires_at IS NULL OR expires_at > datetime('now'))",
-      [atomeId]
-    );
-
-    for (const row of permRows || []) {
-      if (row?.principal_id) recipients.add(String(row.principal_id));
-    }
-
-    return Array.from(recipients);
-  } catch (_) {
-    return [];
-  }
-}
-
-async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId, senderConnection = null }) {
-  if (!DATABASE_ENABLED) return;
-  if (!atomeId || !particles || typeof particles !== 'object') return;
-  if (!senderUserId) return;
-
-  const recipients = await listAtomeRealtimeRecipients(atomeId);
-  if (!recipients || recipients.length === 0) return;
-
-  const nowIso = new Date().toISOString();
-  const msgText = JSON.stringify({
-    command: 'share-sync',
-    params: {
-      atomeId,
-      particles,
-      updatedAt: nowIso,
-      authorId: String(senderUserId)
-    }
-  });
-
-  for (const recipientId of recipients) {
-    if (!recipientId) continue;
-
-    const payload = {
-      type: 'console-message',
-      message: msgText,
-      from: { userId: String(senderUserId), phone: null, username: null },
-      to: { userId: String(recipientId), phone: null },
-      timestamp: nowIso
-    };
-
-    // Send only if online; do not queue (share-sync patches can become stale).
-    try {
-      const targetUserId = String(recipientId);
-
-      // Important: in multi-tab scenarios the sender and receiver may be the same user.
-      // We still want realtime updates in the other tab(s), but we must not echo back
-      // to the originating connection.
-      if (String(recipientId) === String(senderUserId)) {
-        wsSendJsonToUserExcept(
-          targetUserId,
-          payload,
-          senderConnection,
-          { scope: 'ws/api', op: 'share-sync', targetUserId }
-        );
-      } else {
-        wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
-      }
-    } catch (_) { }
-  }
-}
 
 // Check if database is configured (SQLite path or libSQL URL)
 const DB_CONFIGURED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL);
@@ -1626,6 +1540,19 @@ async function startServer() {
                 const ownerId = data.userId || data.ownerId || data.owner_id || data.owner;
                 const particles = data.particles || data.properties || data.data || {};
 
+                if (parentId && requesterId) {
+                  const allowedCreate = await db.canCreate(parentId, requesterId);
+                  if (!allowedCreate) {
+                    safeSend({
+                      type: 'atome-response',
+                      requestId,
+                      success: false,
+                      error: 'Access denied (create)'
+                    });
+                    return;
+                  }
+                }
+
                 const result = await db.createAtome({
                   id: atomeId,
                   type: atomeType,
@@ -1646,6 +1573,26 @@ async function startServer() {
                 } catch (resolveErr) {
                   console.log('[WS] Could not resolve pending owners:', resolveErr.message);
                 }
+
+                try {
+                  await inheritPermissionsFromParent({
+                    parentId,
+                    childId: atomeId,
+                    childOwnerId: ownerId || requesterId,
+                    grantorId: requesterId
+                  });
+                } catch (_) { }
+
+                try {
+                  await broadcastAtomeCreate({
+                    atomeId,
+                    atomeType,
+                    parentId: parentId || null,
+                    particles,
+                    senderUserId: requesterId,
+                    senderConnection: connection
+                  });
+                } catch (_) { }
 
                 safeSend({
                   type: 'atome-response',
@@ -1905,6 +1852,14 @@ async function startServer() {
 
                 await db.deleteAtome(atomeId);
 
+                try {
+                  await broadcastAtomeDelete({
+                    atomeId,
+                    senderUserId: requesterId,
+                    senderConnection: connection
+                  });
+                } catch (_) { }
+
                 safeSend({
                   type: 'atome-response',
                   requestId,
@@ -2039,6 +1994,18 @@ async function startServer() {
                     }
                     return atome;
                   });
+
+                  // Enforce conditional permissions (rules/expiry) at read time.
+                  if (requesterId) {
+                    const filtered = [];
+                    for (const atome of atomes) {
+                      const id = atome?.atome_id;
+                      if (!id) continue;
+                      const allowed = await db.canRead(id, requesterId);
+                      if (allowed) filtered.push(atome);
+                    }
+                    atomes = filtered;
+                  }
                 } else if (effectiveType) {
                   // List all atomes of a specific type (e.g., all users)
                   const dataSource = db.getDataSourceAdapter();

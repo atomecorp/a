@@ -4,7 +4,7 @@
 // ADOLE v3.0 - WebSocket API Functions
 // ============================================
 
-import { TauriAdapter, FastifyAdapter, CONFIG } from './adole.js';
+import { TauriAdapter, FastifyAdapter, CONFIG, generateUUID } from './adole.js';
 
 function normalizeAtomeRecord(raw) {
     if (!raw || typeof raw !== 'object') return raw;
@@ -60,6 +60,76 @@ function normalizeAtomeRecord(raw) {
         owner_id: raw.owner_id || raw.ownerId || raw.owner || raw.userId,
         particles
     };
+}
+
+/**
+ * Grant Fastify share permissions WITHOUT creating share_request atomes.
+ * Useful for project collaboration where children are added over time.
+ * @param {string} atomeId
+ * @param {string} principalId
+ * @param {{read?:boolean, alter?:boolean, delete?:boolean, create?:boolean}} sharePermissions
+ * @param {object} [options]
+ * @param {string|null} [options.particleKey]
+ * @param {string|null} [options.expiresAt]
+ */
+async function grant_share_permission(atomeId, principalId, sharePermissions, options = {}, callback) {
+    const results = {
+        tauri: { success: false, data: null, error: 'Not supported (permissions are managed on Fastify)' },
+        fastify: { success: false, data: null, error: null }
+    };
+
+    try {
+        const currentUserResult = await current_user();
+        const sharerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+        if (!sharerId) {
+            const error = 'No user logged in. Please log in first.';
+            results.fastify.error = error;
+            if (typeof callback === 'function') callback(results);
+            return results;
+        }
+
+        if (!atomeId || !principalId) {
+            results.fastify.error = 'Missing atomeId or principalId';
+            if (typeof callback === 'function') callback(results);
+            return results;
+        }
+
+        // Ensure the atome exists on Fastify before granting permissions.
+        const ensureRes = await ensureFastifyAtomeExists(String(atomeId));
+        if (!ensureRes.ok) {
+            results.fastify.error = ensureRes.error || 'Atome not present on Fastify';
+            if (typeof callback === 'function') callback(results);
+            return results;
+        }
+
+        const permissionPayload = {
+            can_read: !!sharePermissions?.read,
+            can_write: !!sharePermissions?.alter,
+            can_delete: !!sharePermissions?.delete,
+            can_share: false,
+            can_create: !!sharePermissions?.create
+        };
+
+        const particleKey = options?.particleKey || options?.particle_key || null;
+        const expiresAt = options?.expiresAt || options?.expires_at || null;
+
+        const res = await FastifyAdapter.share.create({
+            userId: sharerId,
+            atomeId: String(atomeId),
+            principalId: String(principalId),
+            permission: permissionPayload,
+            particleKey,
+            expiresAt
+        });
+
+        const ok = !!(res?.ok || res?.success);
+        results.fastify = { success: ok, data: res, error: ok ? null : (res?.error || res?.message || 'Permission grant failed') };
+    } catch (e) {
+        results.fastify.error = e.message;
+    }
+
+    if (typeof callback === 'function') callback(results);
+    return results;
 }
 
 // ============================================
@@ -293,6 +363,13 @@ function queue_pending_register({ username, phone, password, createdOn }) {
     }
 }
 
+function is_already_exists_error(payload) {
+    if (!payload) return false;
+    if (payload.alreadyExists === true) return true;
+    const msg = String(payload.error || payload.message || payload).toLowerCase();
+    return msg.includes('already') || msg.includes('exists') || msg.includes('registered');
+}
+
 async function process_pending_registers() {
     if (typeof localStorage === 'undefined') return { processed: 0, remaining: 0 };
     let queue;
@@ -325,13 +402,13 @@ async function process_pending_registers() {
         try {
             if (createdOn === 'tauri') {
                 const r = await FastifyAdapter.auth.register({ username, phone, password, visibility: 'public' });
-                if (r && (r.ok || r.success)) {
+                if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
                     continue;
                 }
             } else if (createdOn === 'fastify') {
                 const r = await TauriAdapter.auth.register({ username, phone, password, visibility: 'public' });
-                if (r && (r.ok || r.success)) {
+                if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
                     continue;
                 }
@@ -799,8 +876,10 @@ async function create_user(phone, password, username, options = {}, callback) {
             username,
             visibility
         });
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
+        const tauriOk = !!(tauriResult.ok || tauriResult.success);
+        const tauriAlready = is_already_exists_error(tauriResult);
+        if (tauriOk || tauriAlready) {
+            results.tauri = { success: true, data: tauriResult, error: null, alreadyExists: tauriAlready && !tauriOk };
         } else {
             results.tauri = { success: false, data: null, error: tauriResult.error };
         }
@@ -816,8 +895,10 @@ async function create_user(phone, password, username, options = {}, callback) {
             username,
             visibility
         });
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
+        const fastifyOk = !!(fastifyResult.ok || fastifyResult.success);
+        const fastifyAlready = is_already_exists_error(fastifyResult);
+        if (fastifyOk || fastifyAlready) {
+            results.fastify = { success: true, data: fastifyResult, error: null, alreadyExists: fastifyAlready && !fastifyOk };
         } else {
             results.fastify = { success: false, data: null, error: fastifyResult.error };
         }
@@ -1868,11 +1949,29 @@ async function create_project(projectName, callback) {
         }
     };
 
+    const extractCreatedAtomeId = (res) => {
+        try {
+            return (
+                res?.atome_id || res?.id ||
+                res?.data?.atome_id || res?.data?.id ||
+                res?.data?.data?.atome_id || res?.data?.data?.id ||
+                res?.atome?.atome_id || res?.atome?.id ||
+                res?.data?.atome?.atome_id || res?.data?.atome?.id ||
+                null
+            );
+        } catch (_) {
+            return null;
+        }
+    };
+
+    let tauriCreatedId = null;
+
     // Create on Tauri
     try {
         const tauriResult = await TauriAdapter.atome.create(projectData);
         if (tauriResult.ok || tauriResult.success) {
             results.tauri = { success: true, data: tauriResult, error: null };
+            tauriCreatedId = extractCreatedAtomeId(tauriResult);
         } else {
             results.tauri = { success: false, data: null, error: tauriResult.error };
         }
@@ -1880,9 +1979,13 @@ async function create_project(projectName, callback) {
         results.tauri = { success: false, data: null, error: e.message };
     }
 
-    // Create on Fastify
+    // Create on Fastify (reuse the Tauri-generated ID when available to avoid duplicates)
     try {
-        const fastifyResult = await FastifyAdapter.atome.create(projectData);
+        const fastifyPayload = tauriCreatedId
+            ? { ...projectData, id: tauriCreatedId, atome_id: tauriCreatedId }
+            : projectData;
+
+        const fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
         } else {
@@ -1897,8 +2000,7 @@ async function create_project(projectName, callback) {
 }
 
 /**
- * List all projects for the current user - SECURE VERSION
- * Only returns projects owned by the currently logged-in user
+ * List all projects accessible to the current user (owned + shared)
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<Object>} List of projects from both backends
  */
@@ -1908,53 +2010,22 @@ async function list_projects(callback) {
         fastify: { projects: [], error: null }
     };
 
-    // SECURITY: Verify user is logged in
     const currentUserResult = await current_user();
     const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
 
     if (!currentUserId || currentUserId === 'anonymous') {
-        const error = 'SECURITY: No user logged in. Cannot list projects.';
+        const error = 'No user logged in. Cannot list projects.';
         results.tauri.error = error;
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
         return results;
     }
 
-    // Try Tauri - Server automatically filters by owner_id
-    try {
-        const tauriResult = await TauriAdapter.atome.list({ type: 'project' });
-        if (tauriResult.ok || tauriResult.success) {
-            const projects = tauriResult.atomes || tauriResult.data || [];
-            // SECURITY: Double-check each project belongs to current user
-            const userProjects = projects.filter(project => {
-                const projectOwnerId = project.owner_id || project.ownerId || project.particles?.owner_id;
-                return projectOwnerId === currentUserId;
-            });
-            results.tauri.projects = userProjects;
-        } else {
-            results.tauri.error = tauriResult.error;
-        }
-    } catch (e) {
-        results.tauri.error = e.message;
-    }
-
-    // Try Fastify - Server automatically filters by owner_id
-    try {
-        const fastifyResult = await FastifyAdapter.atome.list({ type: 'project' });
-        if (fastifyResult.ok || fastifyResult.success) {
-            const projects = fastifyResult.atomes || fastifyResult.data || [];
-            // SECURITY: Double-check each project belongs to current user
-            const userProjects = projects.filter(project => {
-                const projectOwnerId = project.owner_id || project.ownerId || project.particles?.owner_id;
-                return projectOwnerId === currentUserId;
-            });
-            results.fastify.projects = userProjects;
-        } else {
-            results.fastify.error = fastifyResult.error;
-        }
-    } catch (e) {
-        results.fastify.error = e.message;
-    }
+    const listResult = await list_atomes({ type: 'project', ownerId: currentUserId });
+    results.tauri.projects = Array.isArray(listResult.tauri.atomes) ? listResult.tauri.atomes : [];
+    results.fastify.projects = Array.isArray(listResult.fastify.atomes) ? listResult.fastify.atomes : [];
+    results.tauri.error = listResult.tauri.error || null;
+    results.fastify.error = listResult.fastify.error || null;
 
     if (typeof callback === 'function') callback(results);
     return results;
@@ -2024,6 +2095,7 @@ async function create_atome(options, callback) {
     const atomeType = options.type || 'shape';
     const atomeColor = options.color || 'blue';
     const projectId = options.projectId || null;
+    const desiredId = options.id || generateUUID();
 
     const results = {
         tauri: { success: false, data: null, error: null },
@@ -2047,7 +2119,7 @@ async function create_atome(options, callback) {
     const ownerId = options.ownerId || currentUserId;
 
     const atomeData = {
-        id: options.id || undefined, // Use provided ID if specified
+        id: desiredId, // Always use a UUID so both backends match
         type: atomeType,
         ownerId: ownerId,
         parentId: projectId, // Link to project if provided
@@ -2058,11 +2130,29 @@ async function create_atome(options, callback) {
         }
     };
 
+    const extractCreatedAtomeId = (res) => {
+        try {
+            return (
+                res?.atome_id || res?.id ||
+                res?.data?.atome_id || res?.data?.id ||
+                res?.data?.data?.atome_id || res?.data?.data?.id ||
+                res?.atome?.atome_id || res?.atome?.id ||
+                res?.data?.atome?.atome_id || res?.data?.atome?.id ||
+                null
+            );
+        } catch (_) {
+            return null;
+        }
+    };
+
+    let tauriCreatedId = null;
+
     // Create on Tauri
     try {
         const tauriResult = await TauriAdapter.atome.create(atomeData);
         if (tauriResult.ok || tauriResult.success) {
             results.tauri = { success: true, data: tauriResult, error: null };
+            tauriCreatedId = extractCreatedAtomeId(tauriResult);
         } else {
             results.tauri = { success: false, data: null, error: tauriResult.error };
         }
@@ -2070,9 +2160,14 @@ async function create_atome(options, callback) {
         results.tauri = { success: false, data: null, error: e.message };
     }
 
-    // Create on Fastify
+    // Create on Fastify (reuse the Tauri-generated ID when available to avoid duplicates)
     try {
-        const fastifyResult = await FastifyAdapter.atome.create(atomeData);
+        const canonicalId = desiredId || tauriCreatedId || null;
+        const fastifyPayload = canonicalId
+            ? { ...atomeData, id: canonicalId, atome_id: canonicalId }
+            : atomeData;
+
+        const fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
         } else {
@@ -2099,6 +2194,7 @@ async function list_atomes(options = {}, callback) {
     }
 
     const atomeType = options.type || null;
+    const projectId = options.projectId || options.project_id || null;
     let ownerId = options.ownerId || null;
 
     const results = {
@@ -2125,6 +2221,11 @@ async function list_atomes(options = {}, callback) {
     const queryOptions = {};
     if (atomeType) queryOptions.type = atomeType;
     if (ownerId) queryOptions.owner_id = ownerId;
+    if (projectId) queryOptions.parentId = projectId;
+    if (options.limit !== undefined) queryOptions.limit = options.limit;
+    if (options.offset !== undefined) queryOptions.offset = options.offset;
+    if (options.includeDeleted !== undefined) queryOptions.includeDeleted = options.includeDeleted;
+    if (projectId && queryOptions.limit === undefined) queryOptions.limit = 1000;
 
     // Try Tauri
     try {
@@ -2464,26 +2565,23 @@ async function get_atome(atomeId, callback) {
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
+
 async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode, propertyOverrides = {}, currentProjectId = null, callback) {
     const results = {
-        tauri: { success: false, data: null, error: null },
+        tauri: { success: false, data: null, error: 'Share requests are handled by Fastify' },
         fastify: { success: false, data: null, error: null }
     };
 
-    let lastLinkedShareError = null;
-
-    // Validate inputs
     if (!phoneNumber) {
         const error = 'Phone number is required';
-        results.tauri.error = error;
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
         return results;
     }
 
-    if (!atomeIds || (Array.isArray(atomeIds) && atomeIds.length === 0)) {
+    const ids = Array.isArray(atomeIds) ? atomeIds.map(String).filter(Boolean) : (atomeIds ? [String(atomeIds)] : []);
+    if (!ids.length) {
         const error = 'At least one Atome ID is required';
-        results.tauri.error = error;
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
         return results;
@@ -2491,585 +2589,105 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
 
     if (!sharePermissions || typeof sharePermissions !== 'object') {
         const error = 'Share permissions object is required';
-        results.tauri.error = error;
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
         return results;
     }
 
-    if (!sharingMode || !['real-time', 'validation-based'].includes(sharingMode)) {
-        const error = 'Sharing mode must be "real-time" or "validation-based"';
-        results.tauri.error = error;
-        results.fastify.error = error;
-        if (typeof callback === 'function') callback(results);
-        return results;
-    }
+    const mode = sharingMode || 'real-time';
 
-    // Normalize atomeIds to array
-    const normalizedAtomeIds = Array.isArray(atomeIds) ? atomeIds : [atomeIds];
-
-    // Validate permissions structure
-    const validPermissions = ['read', 'alter', 'delete', 'create'];
-    for (const permission of validPermissions) {
-        if (sharePermissions[permission] === undefined) {
-            sharePermissions[permission] = false;
-        }
-    }
-
-    const shareRequest = {
-        targetPhone: phoneNumber,
-        atomeIds: normalizedAtomeIds,
-        permissions: sharePermissions,
-        mode: sharingMode,
-        propertyOverrides: propertyOverrides || {},
-        timestamp: new Date().toISOString(),
-        requestId: 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+    const permissions = {
+        read: !!sharePermissions.read,
+        alter: !!sharePermissions.alter,
+        delete: !!sharePermissions.delete,
+        create: !!sharePermissions.create
     };
 
-    console.log('🔄 Creating sharing request:', shareRequest);
+    const overrides = propertyOverrides && typeof propertyOverrides === 'object'
+        ? { ...propertyOverrides }
+        : {};
 
-    // First, get the target user by phone number to get their user ID.
-    // Optimization: if caller already knows the canonical userId, accept it.
-    let targetUserId = null;
-    let targetUserRecord = null;
+    const shareType = String(overrides.__shareType || overrides.shareType || 'linked');
+    if (!overrides.__shareType) overrides.__shareType = shareType;
 
-    try {
-        const hinted = propertyOverrides?.__targetUserId;
-        if (hinted && typeof hinted === 'string' && hinted.trim().length > 10) {
-            targetUserId = hinted.trim();
-            console.log('✅ Using hinted target user ID:', targetUserId.substring(0, 8) + '...');
-        }
-    } catch (_) { }
-
-    if (targetUserId) {
-        // Skip phone lookup.
+    let targetUserId = overrides.__targetUserId || null;
+    if (!targetUserId) {
         try {
-            // Best-effort fetch so we can read the target's current project selection.
-            const got = await FastifyAdapter.atome.get(targetUserId);
-            targetUserRecord = got?.atome || got?.data || got?.user || null;
-        } catch (_) { }
-    } else {
-        try {
-            console.log('🔍 Searching for user with phone:', phoneNumber);
-            const tauriUsers = await TauriAdapter.atome.list({ type: 'user' });
-            const fastifyUsers = await FastifyAdapter.atome.list({ type: 'user' });
-
-            console.log('🔍 Tauri users:', tauriUsers.atomes?.length || 0);
-            console.log('🔍 Fastify users:', fastifyUsers.atomes?.length || 0);
-
-            const allUsers = [
-                ...(tauriUsers.atomes || []),
-                ...(fastifyUsers.atomes || [])
-            ];
-
-            console.log('🔍 All users found:', allUsers.length);
-            allUsers.forEach(user => {
-                console.log('  User:', user.username || 'no-name', 'Phone:', user.phone || user.data?.phone || user.particles?.phone || 'no-phone');
-            });
-
-            const targetUser = allUsers.find(user =>
-                (user.phone || user.data?.phone || user.particles?.phone) === phoneNumber
-            );
-
-            if (targetUser) {
-                targetUserRecord = targetUser;
-                // IMPORTANT: use the same canonical user id as `auth.current()` (user_id)
-                // otherwise inbox records can be created under a different id and never show up for the recipient.
-                targetUserId = targetUser.user_id || targetUser.atome_id || targetUser.id;
-                const targetUsername = targetUser.username || targetUser.data?.username || targetUser.particles?.username || 'unknown';
-                console.log('✅ Found target user:', targetUsername, 'ID:', targetUserId.substring(0, 8) + '...');
-            } else {
-                const error = 'Target user not found with phone: ' + phoneNumber;
-                console.error('❌', error);
-                results.tauri.error = error;
-                results.fastify.error = error;
-                if (typeof callback === 'function') callback(results);
-                return results;
-            }
-        } catch (e) {
-            const error = 'Failed to find target user: ' + e.message;
-            console.error('❌', error);
-            results.tauri.error = error;
-            results.fastify.error = error;
-            if (typeof callback === 'function') callback(results);
-            return results;
-        }
-    }
-
-    // Get current user as the sharer
-    const currentUserResult = await current_user();
-    const sharerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
-    console.log('🔍 Sharer ID:', sharerId?.substring(0, 8) + '...');
-
-    // Enrich request payload for mailbox/outbox persistence
-    shareRequest.sharerId = sharerId;
-    shareRequest.targetUserId = targetUserId;
-
-    // ENHANCED: Determine target project for shared atomes
-    let targetProjectId = null;
-
-    if (currentProjectId) {
-        // Use provided current project ID
-        targetProjectId = currentProjectId;
-        console.log('📁 Using provided current project ID:', targetProjectId.substring(0, 8) + '...');
-    } else {
-        // Try to find the target user's current/default project.
-        // NOTE: We cannot use `list_projects()` here because it lists the CURRENT USER (the sharer),
-        // not the target user. Instead we rely on the target user's persisted selection.
-        try {
-            const p = targetUserRecord?.particles || targetUserRecord?.data || {};
-            const candidate = p.currentProjectId || p.current_project_id || p.projectId || p.project_id || p.selectedProjectId || null;
-            if (candidate && typeof candidate === 'string' && candidate.trim().length > 10) {
-                targetProjectId = candidate.trim();
-                console.log('📁 Using target user current project ID:', targetProjectId.substring(0, 8) + '...');
-            } else {
-                console.log('📬 INBOX SYSTEM: No current project for target user. Shared atomes will be placed in inbox.');
-                console.log('📬 TODO: Implement inbox/mailbox system for orphaned shared atomes');
-                console.log('📬 For now, creating standalone shared atomes (parentId: null)');
-                targetProjectId = null;
-            }
-        } catch (e) {
-            console.warn('⚠️ Could not determine target project:', e.message);
-            console.log('📬 INBOX SYSTEM: Fallback to inbox due to project lookup error');
-            targetProjectId = null;
-        }
-    }
-
-    // Now share each atome either as a permission-based link (same atome_id) or as a physical copy
-    const sharedAtomes = [];
-
-    // Determine share type (linked vs copy) from propertyOverrides
-    const shareType = String((propertyOverrides && propertyOverrides.__shareType) ? propertyOverrides.__shareType : 'linked');
-
-    const permissionPayload = {
-        can_read: !!sharePermissions.read,
-        can_write: !!sharePermissions.alter,
-        can_delete: !!sharePermissions.delete,
-        can_share: !!sharePermissions.create
-    };
-
-    // Extract particles from an atome object returned by either backend.
-    // Keep in sync with the copy-share extraction logic.
-    const extractParticles = (atome) => {
-        if (!atome || typeof atome !== 'object') return {};
-
-        if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
-            return atome.data;
-        }
-        if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
-            return atome.particles;
-        }
-
-        const metadataFields = [
-            'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
-            'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
-            'created_source', 'id', 'type', 'data', 'particles'
-        ];
-
-        const inlineParticles = {};
-        for (const [key, value] of Object.entries(atome)) {
-            if (!metadataFields.includes(key) && value !== null && value !== undefined) {
-                inlineParticles[key] = value;
-            }
-        }
-        return inlineParticles;
-    };
-
-    // Linked shares require the original atome to exist on Fastify so that permissions
-    // can be granted (Fastify enforces FKs to both atome_id and principal_id).
-    async function ensureFastifyAtomeExists(atomeId) {
-        try {
-            const fastifyGet = await FastifyAdapter.atome.get(atomeId);
-            if (fastifyGet?.ok || fastifyGet?.success) {
-                const hasAtome = !!(fastifyGet?.atome || fastifyGet?.data);
-                if (hasAtome) return { ok: true, existed: true };
-            }
-        } catch (_) { }
-
-        // If missing on Fastify, try to seed it from Tauri (or from whatever backend has it).
-        let sourceAtome = null;
-        try {
-            const tauriGet = await TauriAdapter.atome.get(atomeId);
-            if (tauriGet?.ok || tauriGet?.success) {
-                sourceAtome = tauriGet.atome || tauriGet.data || null;
-            }
-        } catch (_) { }
-
-        if (!sourceAtome) {
-            // As a last attempt, re-check Fastify result structure.
-            try {
-                const fastifyGet2 = await FastifyAdapter.atome.get(atomeId);
-                if (fastifyGet2?.ok || fastifyGet2?.success) {
-                    sourceAtome = fastifyGet2.atome || fastifyGet2.data || null;
-                }
-            } catch (_) { }
-        }
-
-        if (!sourceAtome) {
-            return { ok: false, existed: false, error: 'Atome not found on any backend' };
-        }
-
-        const type = sourceAtome.atome_type || sourceAtome.type || 'shape';
-        const ownerId = sourceAtome.owner_id || sourceAtome.ownerId || sharerId;
-        const parentId = sourceAtome.parent_id || sourceAtome.parentId || sourceAtome.parent || null;
-        const particles = extractParticles(sourceAtome);
-
-        try {
-            const createRes = await FastifyAdapter.atome.create({
-                id: atomeId,
-                type,
-                ownerId,
-                parentId,
-                particles
-            });
-
-            if (createRes?.ok || createRes?.success) {
-                console.log('✅ Seeded missing atome on Fastify for linked share:', atomeId.substring(0, 8) + '...');
-                return { ok: true, existed: false, created: true, data: createRes };
-            }
-
-            return { ok: false, existed: false, error: createRes?.error || 'Failed to create atome on Fastify' };
-        } catch (e) {
-            return { ok: false, existed: false, error: e.message };
-        }
-    }
-
-    async function findExistingSharedCopyIds(originalId) {
-        try {
-            const existing = { tauriId: null, fastifyId: null };
-
-            // Only dedupe for linked shares; copy mode should create a new independent copy
-            if (shareType !== 'linked') return existing;
-
-            const match = (a) => {
-                const p = a?.particles || a?.data || {};
-                const o = p.originalAtomeId || p.original_atome_id || null;
-                const sf = p.sharedFrom || p.shared_from || null;
-                const st = p.shareType || p.share_type || 'linked';
-                return String(o || '') === String(originalId) &&
-                    String(sf || '') === String(sharerId || '') &&
-                    String(st || 'linked') === 'linked';
-            };
-
-            try {
-                const tauriList = await TauriAdapter.atome.list({ ownerId: targetUserId });
-                const tauriAtomes = tauriList?.atomes || tauriList?.data || [];
-                const found = Array.isArray(tauriAtomes) ? tauriAtomes.find(match) : null;
-                if (found) existing.tauriId = found.atome_id || found.id;
-            } catch (_) { }
-
-            try {
-                const fastifyList = await FastifyAdapter.atome.list({ ownerId: targetUserId });
-                const fastifyAtomes = fastifyList?.atomes || fastifyList?.data || [];
-                const found = Array.isArray(fastifyAtomes) ? fastifyAtomes.find(match) : null;
-                if (found) existing.fastifyId = found.atome_id || found.id;
-            } catch (_) { }
-
-            return existing;
+            const found = await lookup_user_by_phone(phoneNumber);
+            targetUserId = found?.user_id || found?.id || null;
         } catch (_) {
-            return { tauriId: null, fastifyId: null };
+            targetUserId = null;
         }
     }
 
-    for (const atomeId of normalizedAtomeIds) {
-        try {
-            console.log('🔄 Sharing atome:', atomeId.substring(0, 8) + '...');
-
-            // LINKED (standard) share: grant permissions on the original atome (same ID)
-            if (shareType === 'linked') {
-                let fastifyOk = false;
-                let fastifyData = null;
-
-                // Ensure the atome exists on Fastify before granting permissions.
-                // Without this, the Fastify permission insert/check can fail (or be denied)
-                // and the linked share ends up with 0 shared atomes.
-                const ensureRes = await ensureFastifyAtomeExists(atomeId);
-                if (!ensureRes.ok) {
-                    console.error('❌ Linked share aborted: atome not present on Fastify:', ensureRes.error);
-                    continue;
-                }
-
-                try {
-                    const res = await FastifyAdapter.share.create({
-                        userId: sharerId,
-                        atomeId,
-                        principalId: targetUserId,
-                        permission: permissionPayload
-                    });
-                    fastifyOk = !!(res?.ok || res?.success);
-                    fastifyData = res;
-                } catch (_) { }
-
-                if (fastifyOk) {
-                    sharedAtomes.push({
-                        originalId: atomeId,
-                        sharedAtomeId: atomeId,
-                        sharedAtomeIds: { tauriId: atomeId, fastifyId: atomeId },
-                        createdOnTauri: false,
-                        createdOnFastify: fastifyOk,
-                        shareMode: 'permission',
-                        shareType
-                    });
-                    console.log('✅ Granted permissions for linked share');
-                } else {
-                    const err = fastifyData?.error || fastifyData?.message || 'Unknown error (no share-response)';
-                    lastLinkedShareError = String(err);
-                    console.error('❌ Failed to grant permissions (linked share)', {
-                        error: lastLinkedShareError,
-                        atomeId,
-                        principalId: targetUserId,
-                        response: fastifyData
-                    });
-                }
-
-                continue;
-            }
-
-            // Dedupe: if linked share copy already exists for this target user, reuse it
-            const existingIds = await findExistingSharedCopyIds(atomeId);
-            if (existingIds.tauriId || existingIds.fastifyId) {
-                console.log('♻️ Reusing existing shared copy for linked share:', {
-                    tauri: existingIds.tauriId ? existingIds.tauriId.substring(0, 8) + '...' : null,
-                    fastify: existingIds.fastifyId ? existingIds.fastifyId.substring(0, 8) + '...' : null
-                });
-
-                sharedAtomes.push({
-                    originalId: atomeId,
-                    sharedData: null,
-                    sharedAtomeId: existingIds.tauriId || existingIds.fastifyId,
-                    sharedAtomeIds: existingIds,
-                    createdOnTauri: !!existingIds.tauriId,
-                    createdOnFastify: !!existingIds.fastifyId,
-                    reused: true
-                });
-                continue;
-            }
-
-            // Get the original atome
-            const originalAtome = await get_atome(atomeId);
-            let atomeData = null;
-
-            if (originalAtome.tauri.atome) {
-                atomeData = originalAtome.tauri.atome;
-                console.log('✅ Found atome on Tauri');
-            } else if (originalAtome.fastify.atome) {
-                atomeData = originalAtome.fastify.atome;
-                console.log('✅ Found atome on Fastify');
-            }
-
-            if (!atomeData) {
-                console.warn('⚠️ Could not find atome:', atomeId);
-                continue;
-            }
-
-            console.log('🔍 Raw atome data structure:', Object.keys(atomeData));
-            console.log('🔍 Original atome type:', atomeData.atome_type || atomeData.type);
-
-            const originalParticles = extractParticles(atomeData);
-            console.log('🔍 Extracted particles:', Object.keys(originalParticles));
-            console.log('🔍 Particles content:', originalParticles);
-
-            // Create shared copy for target user with PROJECT ASSIGNMENT
-            const sharedAtomeData = {
-                type: atomeData.atome_type || atomeData.type || 'shape',
-                ownerId: targetUserId,
-                parentId: targetProjectId, // FIXED: Use target project ID instead of null
-                particles: {
-                    // Copy all original particles
-                    ...originalParticles,
-                    // Add sharing metadata
-                    sharedFrom: sharerId,
-                    sharedAt: new Date().toISOString(),
-                    originalAtomeId: atomeId,
-                    isShared: true,
-                    shareType: shareType,
-                    // Add project assignment info
-                    assignedToProject: targetProjectId ? true : false,
-                    inboxItem: targetProjectId ? false : true
-                }
-            };
-
-            console.log('🔄 Creating shared copy with type:', sharedAtomeData.type);
-            console.log('🔄 For user ID:', targetUserId.substring(0, 8) + '...');
-            console.log('📁 Assigned to project:', targetProjectId ? targetProjectId.substring(0, 8) + '...' : 'INBOX (no project)');
-
-            // Create the shared atome copy on both backends
-            let createdOnTauri = false;
-            let createdOnFastify = false;
-            let createdTauriId = null;
-            let createdFastifyId = null;
-
-            try {
-                const tauriResult = await TauriAdapter.atome.create(sharedAtomeData);
-                if (tauriResult.ok || tauriResult.success) {
-                    console.log('✅ Created shared atome copy on Tauri');
-                    createdOnTauri = true;
-                    createdTauriId = tauriResult?.atome_id || tauriResult?.id || tauriResult?.data?.atome_id || tauriResult?.data?.id || null;
-                } else {
-                    console.error('❌ Tauri creation failed:', tauriResult.error);
-                }
-            } catch (e) {
-                console.error('❌ Failed to create Tauri copy:', e.message);
-            }
-
-            try {
-                const fastifyResult = await FastifyAdapter.atome.create(sharedAtomeData);
-                if (fastifyResult.ok || fastifyResult.success) {
-                    console.log('✅ Created shared atome copy on Fastify');
-                    createdOnFastify = true;
-                    createdFastifyId = fastifyResult?.atome_id || fastifyResult?.id || fastifyResult?.data?.atome_id || fastifyResult?.data?.id || null;
-                } else {
-                    console.error('❌ Fastify creation failed:', fastifyResult.error);
-                }
-            } catch (e) {
-                console.error('❌ Failed to create Fastify copy:', e.message);
-            }
-
-            if (createdOnTauri || createdOnFastify) {
-                sharedAtomes.push({
-                    originalId: atomeId,
-                    sharedData: sharedAtomeData,
-                    sharedAtomeId: createdTauriId || createdFastifyId,
-                    sharedAtomeIds: { tauriId: createdTauriId, fastifyId: createdFastifyId },
-                    createdOnTauri,
-                    createdOnFastify
-                });
-                console.log('✅ Atome shared successfully');
-            } else {
-                console.error('❌ Failed to create shared atome on both backends');
-            }
-
-        } catch (e) {
-            console.error('❌ Failed to share atome:', atomeId, e.message);
-        }
-    }
-
-    console.log('🎯 Total shared atomes:', sharedAtomes.length + '/' + normalizedAtomeIds.length);
-
-    // If nothing was actually shared, do not create inbox/outbox requests.
-    // Otherwise the receiver ends up with a request that has no importable payload.
-    if (sharedAtomes.length === 0) {
-        const error = lastLinkedShareError || 'No atomes were shared (permissions grant failed)';
-        results.tauri = { success: false, data: null, error };
-        results.fastify = { success: false, data: null, error };
-        if (typeof callback === 'function') callback(results);
-        return results;
-    }
-
-    // Share requests must always be approvable by the recipient.
-    // Previously, real-time shares were created as `active` which bypassed the Pending panel in the Share UI.
-    // We always start as `pending`; the receiver can then accept/import or reject.
-    const requestStatus = 'pending';
-
-    const inboxRequestRecord = {
-        type: 'share_request',
-        ownerId: targetUserId,
-        particles: {
-            ...shareRequest,
-            sharedAtomes: sharedAtomes,
-            status: requestStatus,
-            box: 'inbox'
-        }
-    };
-
-    const outboxRequestRecord = {
-        type: 'share_request',
-        ownerId: sharerId,
-        particles: {
-            ...shareRequest,
-            sharedAtomes: sharedAtomes,
-            status: requestStatus,
-            box: 'outbox'
-        }
-    };
-
-    // Tauri (local SQLite): only the outbox record is meaningful on the sharer's device.
-    // Creating the recipient inbox locally can fail due to FK constraints (recipient user not present locally).
     try {
-        const tauriOutboxResult = await TauriAdapter.atome.create(outboxRequestRecord);
+        const payload = {
+            targetUserId: targetUserId || null,
+            targetPhone: phoneNumber,
+            atomeIds: ids,
+            permissions,
+            mode,
+            shareType,
+            propertyOverrides: overrides
+        };
 
-        console.log('🔍 Tauri sharing outbox result:', tauriOutboxResult);
-
-        const outboxOk = !!(tauriOutboxResult?.ok || tauriOutboxResult?.success);
-
-        if (outboxOk) {
-            results.tauri = {
-                success: true,
-                data: { inbox: null, outbox: tauriOutboxResult },
-                shareRequest: shareRequest,
-                sharedAtomes: sharedAtomes,
-                error: null
-            };
-        } else {
-            results.tauri = {
-                success: false,
-                data: null,
-                error: (tauriOutboxResult?.error) || 'Tauri sharing failed'
-            };
-        }
+        const fastifyResult = await FastifyAdapter.share.request(payload);
+        const ok = !!(fastifyResult?.ok || fastifyResult?.success);
+        results.fastify = {
+            success: ok,
+            data: fastifyResult,
+            error: ok ? null : (fastifyResult?.error || fastifyResult?.message || 'Share request failed')
+        };
     } catch (e) {
-        console.error('❌ Tauri sharing error:', e);
-        results.tauri = { success: false, data: null, error: e.message };
-    }
-
-    // Try Fastify (LibSQL) - Create inbox/outbox sharing request records
-    try {
-        const fastifyInboxResult = await FastifyAdapter.atome.create(inboxRequestRecord);
-        const fastifyOutboxResult = await FastifyAdapter.atome.create(outboxRequestRecord);
-
-        console.log('🔍 Fastify sharing inbox result:', fastifyInboxResult);
-        console.log('🔍 Fastify sharing outbox result:', fastifyOutboxResult);
-
-        const inboxOk = !!(fastifyInboxResult?.ok || fastifyInboxResult?.success);
-        const outboxOk = !!(fastifyOutboxResult?.ok || fastifyOutboxResult?.success);
-
-        if (inboxOk || outboxOk) {
-            results.fastify = {
-                success: true,
-                data: { inbox: fastifyInboxResult, outbox: fastifyOutboxResult },
-                shareRequest: shareRequest,
-                sharedAtomes: sharedAtomes,
-                error: null
-            };
-        } else {
-            results.fastify = {
-                success: false,
-                data: null,
-                error: (fastifyInboxResult?.error || fastifyOutboxResult?.error) || 'Fastify sharing failed'
-            };
-        }
-    } catch (e) {
-        console.error('❌ Fastify sharing error:', e);
-        results.fastify = { success: false, data: null, error: e.message };
-    }
-
-    // Log comprehensive sharing request details
-    if (results.tauri.success || results.fastify.success) {
-        console.log('✅ Sharing completed successfully');
-        console.log('📱 Target:', phoneNumber, '(' + targetUserId.substring(0, 8) + '...)');
-        console.log('🎯 Atomes shared:', sharedAtomes.length + '/' + normalizedAtomeIds.length);
-        console.log('� Project assignment:', targetProjectId ? targetProjectId.substring(0, 8) + '...' : 'INBOX SYSTEM');
-        console.log('🔐 Permissions:', Object.entries(sharePermissions)
-            .filter(([k, v]) => v)
-            .map(([k, v]) => k)
-            .join(', ') || 'none');
-        console.log('🔄 Mode:', sharingMode);
-        if (targetProjectId) {
-            console.log('📋 Shared atomes now available in target user\'s project');
-        } else {
-            console.log('📬 Shared atomes placed in inbox (no current project)');
-        }
-        if (Object.keys(propertyOverrides).length > 0) {
-            console.log('⚙️ Overrides:', Object.keys(propertyOverrides).length, 'properties');
-        }
-    } else {
-        console.error('❌ Sharing failed on both backends');
-        console.error('   Tauri error:', results.tauri.error);
-        console.error('   Fastify error:', results.fastify.error);
+        results.fastify.error = e.message;
     }
 
     if (typeof callback === 'function') callback(results);
     return results;
+}
+
+async function share_request(payload, callback) {
+    let result = null;
+    try {
+        result = await FastifyAdapter.share.request(payload || {});
+    } catch (e) {
+        result = { ok: false, success: false, error: e.message };
+    }
+    if (typeof callback === 'function') callback(result);
+    return result;
+}
+
+async function share_respond(payload, callback) {
+    let result = null;
+    try {
+        result = await FastifyAdapter.share.respond(payload || {});
+    } catch (e) {
+        result = { ok: false, success: false, error: e.message };
+    }
+    if (typeof callback === 'function') callback(result);
+    return result;
+}
+
+async function share_publish(payload, callback) {
+    let result = null;
+    try {
+        result = await FastifyAdapter.share.publish(payload || {});
+    } catch (e) {
+        result = { ok: false, success: false, error: e.message };
+    }
+    if (typeof callback === 'function') callback(result);
+    return result;
+}
+
+async function share_policy(payload, callback) {
+    let result = null;
+    try {
+        result = await FastifyAdapter.share.policy(payload || {});
+    } catch (e) {
+        result = { ok: false, success: false, error: e.message };
+    }
+    if (typeof callback === 'function') callback(result);
+    return result;
 }
 
 
@@ -3112,7 +2730,12 @@ export const AdoleAPI = {
         realtimePatch: realtime_patch
     },
     sharing: {
-        share: share_atome
+        share: share_atome,
+        request: share_request,
+        respond: share_respond,
+        publish: share_publish,
+        policy: share_policy,
+        grantPermission: grant_share_permission
     },
     sync: {
         sync: sync_atomes,

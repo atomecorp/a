@@ -12,6 +12,12 @@ import { broadcastMessage } from './githubSync.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import db from '../database/adole.js';
 import crypto from 'crypto';
+import {
+    inheritPermissionsFromParent,
+    broadcastAtomeCreate,
+    broadcastAtomeDelete,
+    broadcastAtomeRealtimePatch
+} from './atomeRealtime.js';
 
 // =============================================================================
 // WEBSOCKET SYNC - Using EventBus (replaces POST-based sync)
@@ -163,23 +169,62 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { id, type, kind, parentId, parent, data } = request.body;
+        const { id, type, kind, parentId, parent, data, ownerId, owner_id } = request.body;
         const objectId = id || uuidv4();
         const parentValue = parentId || parent || null;
+        const resolvedOwnerId = ownerId || owner_id || user.id;
 
         try {
+            if (parentValue) {
+                const allowedCreate = await db.canCreate(parentValue, user.id);
+                if (!allowedCreate) {
+                    return reply.code(403).send({
+                        success: false,
+                        error: 'Access denied (create)'
+                    });
+                }
+            }
+
             // Create object with properties
             const atome = await db.createAtome({
                 id: objectId,
                 type: type || 'shape',
                 kind: kind || null,
                 parent: parentValue,
-                owner: user.id,
+                owner: resolvedOwnerId,
                 properties: data || {},
-                author: user.id
+                creator: user.id
             });
 
             const formatted = formatAtome(atome);
+
+            try {
+                const resolveResult = await db.resolvePendingOwners();
+                if (resolveResult.resolved > 0) {
+                    console.log('[Atome] Resolved', resolveResult.resolved, 'pending owner references');
+                }
+            } catch (resolveErr) {
+                console.log('[Atome] Could not resolve pending owners:', resolveErr.message);
+            }
+
+            try {
+                await inheritPermissionsFromParent({
+                    parentId: parentValue,
+                    childId: objectId,
+                    childOwnerId: resolvedOwnerId,
+                    grantorId: user.id
+                });
+            } catch (_) { }
+
+            try {
+                await broadcastAtomeCreate({
+                    atomeId: objectId,
+                    atomeType: type || 'shape',
+                    parentId: parentValue,
+                    particles: data || {},
+                    senderUserId: user.id
+                });
+            } catch (_) { }
 
             // Broadcast to WebSocket clients
             broadcastMessage({
@@ -315,6 +360,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
         const { id } = request.params;
         const { data, type, kind, parentId } = request.body;
+        const patch = (data && typeof data === 'object') ? data : null;
 
         try {
             const existing = await db.getObjectById(id);
@@ -354,6 +400,16 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             // Sync via WebSocket to connected clients (real-time, non-blocking)
             syncAtomeViaWebSocket(formatted, 'update');
 
+            try {
+                if (patch) {
+                    await broadcastAtomeRealtimePatch({
+                        atomeId: id,
+                        particles: patch,
+                        senderUserId: user.id
+                    });
+                }
+            } catch (_) { }
+
             // Broadcast
             broadcastMessage({
                 type: 'atome-updated',
@@ -386,6 +442,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
         const { id } = request.params;
         const changes = request.body;
+        const patch = {};
 
         try {
             const existing = await db.getObjectById(id);
@@ -409,11 +466,22 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             for (const [key, value] of Object.entries(changes)) {
                 if (key !== 'id' && key !== 'type' && key !== 'kind') {
                     await db.setProperty(id, key, value, user.id);
+                    patch[key] = value;
                 }
             }
 
             const updated = await db.getAtome(id);
             const formatted = formatAtome(updated);
+
+            try {
+                if (Object.keys(patch).length) {
+                    await broadcastAtomeRealtimePatch({
+                        atomeId: id,
+                        particles: patch,
+                        senderUserId: user.id
+                    });
+                }
+            } catch (_) { }
 
             // Broadcast
             broadcastMessage({
@@ -473,6 +541,13 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             if (formattedForSync) {
                 syncAtomeViaWebSocket(formattedForSync, 'delete');
             }
+
+            try {
+                await broadcastAtomeDelete({
+                    atomeId: id,
+                    senderUserId: user.id
+                });
+            } catch (_) { }
 
             // Broadcast
             broadcastMessage({

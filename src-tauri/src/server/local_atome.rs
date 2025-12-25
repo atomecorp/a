@@ -6,9 +6,10 @@
 // =============================================================================
 
 use chrono::Utc;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -208,6 +209,9 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
             can_write INTEGER NOT NULL DEFAULT 0,
             can_delete INTEGER NOT NULL DEFAULT 0,
             can_share INTEGER NOT NULL DEFAULT 0,
+            can_create INTEGER NOT NULL DEFAULT 0,
+            share_mode TEXT DEFAULT 'real-time',
+            conditions TEXT,
             granted_by TEXT,
             granted_at TEXT NOT NULL DEFAULT (datetime('now')),
             expires_at TEXT,
@@ -225,6 +229,8 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         "CREATE INDEX IF NOT EXISTS idx_permissions_principal ON permissions(principal_id)",
         [],
     )?;
+
+    ensure_permissions_columns(&conn)?;
 
     // =========================================================================
     // Table 6: sync_queue - Persistent synchronization queue
@@ -277,6 +283,33 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     println!("ADOLE v3.0 database initialized (7 tables): {:?}", db_path);
 
     Ok(conn)
+}
+
+fn ensure_permissions_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let mut stmt = conn.prepare("PRAGMA table_info(permissions)")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    let mut names = HashSet::new();
+    for name in rows.filter_map(|r| r.ok()) {
+        names.insert(name);
+    }
+
+    if !names.contains("can_create") {
+        conn.execute(
+            "ALTER TABLE permissions ADD COLUMN can_create INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
+    if !names.contains("share_mode") {
+        conn.execute(
+            "ALTER TABLE permissions ADD COLUMN share_mode TEXT DEFAULT 'real-time'",
+            [],
+        )?;
+    }
+    if !names.contains("conditions") {
+        conn.execute("ALTER TABLE permissions ADD COLUMN conditions TEXT", [])?;
+    }
+
+    Ok(())
 }
 
 // =============================================================================
@@ -376,6 +409,12 @@ async fn handle_create(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
+    if let Some(parent) = parent_id {
+        if !can_create(&db, parent, user_id) {
+            return error_response(request_id, "Access denied");
+        }
+    }
+
     // Insert or replace atome (upsert for sync operations)
     // Uses owner_id from message if provided, otherwise uses the logged-in user
     if let Err(e) = db.execute(
@@ -403,6 +442,12 @@ async fn handle_create(
                  VALUES (?1, ?2, ?3, ?4, COALESCE((SELECT version + 1 FROM particles WHERE atome_id = ?1 AND particle_key = ?2), 1), COALESCE((SELECT created_at FROM particles WHERE atome_id = ?1 AND particle_key = ?2), ?5), ?5)",
                 rusqlite::params![&atome_id, key, &value_str, value_type, &now],
             );
+        }
+    }
+
+    if let Some(parent) = parent_id {
+        if let Err(err) = inherit_permissions_from_parent(&db, parent, &atome_id, Some(owner_id), user_id) {
+            println!("[Create Debug] Permission inheritance failed: {}", err);
         }
     }
 
@@ -458,7 +503,11 @@ async fn handle_get(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    match load_atome(&db, atome_id, Some(user_id)) {
+    if !can_read(&db, atome_id, user_id) {
+        return error_response(request_id, "Access denied");
+    }
+
+    match load_atome(&db, atome_id, None) {
         Ok(atome) => WsResponse {
             msg_type: "atome-response".into(),
             request_id,
@@ -484,6 +533,11 @@ async fn handle_list(
         .or_else(|| message.get("atome_type"))
         .and_then(|v| v.as_str());
     let owner_id = message.get("ownerId").and_then(|v| v.as_str());
+    let parent_id = message
+        .get("parentId")
+        .or_else(|| message.get("parent_id"))
+        .or_else(|| message.get("parent"))
+        .and_then(|v| v.as_str());
     let include_deleted = message
         .get("includeDeleted")
         .and_then(|v| v.as_bool())
@@ -524,40 +578,75 @@ async fn handle_list(
     };
 
     // Build query based on whether we have an owner or just a type
-    let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match (effective_owner, atome_type)
-    {
-        (Some(owner), Some(t)) => {
-            // Filter by both owner and type
-            (
-                format!(
-                    "SELECT atome_id, deleted_at FROM atomes WHERE owner_id = ?1 AND atome_type = ?2 {} ORDER BY updated_at DESC LIMIT {} OFFSET {}",
-                    deleted_clause, limit, offset
-                ),
-                vec![Box::new(owner.to_string()), Box::new(t.to_string())]
-            )
-        }
-        (Some(owner), None) => {
-            // Filter by owner only
-            (
-                format!(
-                    "SELECT atome_id, deleted_at FROM atomes WHERE owner_id = ?1 {} ORDER BY updated_at DESC LIMIT {} OFFSET {}",
-                    deleted_clause, limit, offset
-                ),
-                vec![Box::new(owner.to_string())]
-            )
+    let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match (effective_owner, atome_type) {
+        (Some(owner), atome_type) => {
+            let mut query = String::from(
+                "SELECT DISTINCT a.atome_id
+                 FROM atomes a
+                 LEFT JOIN permissions perm
+                   ON perm.atome_id = a.atome_id
+                  AND perm.principal_id = ?1
+                  AND perm.can_read = 1
+                  AND (perm.expires_at IS NULL OR perm.expires_at > datetime('now'))
+                 WHERE (a.owner_id = ?2 OR perm.permission_id IS NOT NULL)",
+            );
+            let mut params: Vec<Box<dyn rusqlite::ToSql>> =
+                vec![Box::new(owner.to_string()), Box::new(owner.to_string())];
+            if let Some(t) = atome_type {
+                query.push_str(" AND a.atome_type = ?");
+                params.push(Box::new(t.to_string()));
+            }
+            if let Some(parent) = parent_id {
+                query.push_str(" AND a.parent_id = ?");
+                params.push(Box::new(parent.to_string()));
+            }
+            if !include_deleted {
+                query.push_str(" AND a.deleted_at IS NULL");
+            }
+            query.push_str(&format!(
+                " ORDER BY a.updated_at DESC LIMIT {} OFFSET {}",
+                limit, offset
+            ));
+            (query, params)
         }
         (None, Some(t)) => {
-            // Filter by type only (e.g., list all users)
-            (
-                format!(
-                    "SELECT atome_id, deleted_at FROM atomes WHERE atome_type = ?1 {} ORDER BY updated_at DESC LIMIT {} OFFSET {}",
-                    deleted_clause, limit, offset
-                ),
-                vec![Box::new(t.to_string())]
-            )
+            if t == "user" {
+                let mut query = String::from(
+                    "SELECT DISTINCT a.atome_id
+                     FROM atomes a
+                     JOIN particles p ON a.atome_id = p.atome_id
+                     WHERE a.atome_type = 'user'
+                       AND p.particle_key = 'visibility'
+                       AND p.particle_value = '\"public\"'",
+                );
+                if !include_deleted {
+                    query.push_str(" AND a.deleted_at IS NULL");
+                }
+                query.push_str(&format!(
+                    " ORDER BY a.updated_at DESC LIMIT {} OFFSET {}",
+                    limit, offset
+                ));
+                (query, Vec::new())
+            } else {
+                let mut query = String::from("SELECT DISTINCT a.atome_id FROM atomes a WHERE 1=1");
+                let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+                query.push_str(" AND a.atome_type = ?");
+                params.push(Box::new(t.to_string()));
+                if let Some(parent) = parent_id {
+                    query.push_str(" AND a.parent_id = ?");
+                    params.push(Box::new(parent.to_string()));
+                }
+                if !include_deleted {
+                    query.push_str(" AND a.deleted_at IS NULL");
+                }
+                query.push_str(&format!(
+                    " ORDER BY a.updated_at DESC LIMIT {} OFFSET {}",
+                    limit, offset
+                ));
+                (query, params)
+            }
         }
         (None, None) => {
-            // No filter - return empty
             return WsResponse {
                 msg_type: "atome-response".into(),
                 request_id,
@@ -585,6 +674,11 @@ async fn handle_list(
 
     let mut atomes = Vec::new();
     for id in atome_ids {
+        if let Some(owner) = effective_owner {
+            if !can_read(&db, &id, owner) {
+                continue;
+            }
+        }
         if let Ok(atome) = load_atome_with_deleted(&db, &id, None, include_deleted) {
             atomes.push(atome);
         }
@@ -632,21 +726,19 @@ async fn handle_update(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Verify atome exists
-    let owner: Result<String, _> = db.query_row(
-        "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
+    let exists: Result<String, _> = db.query_row(
+        "SELECT atome_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
         rusqlite::params![atome_id],
         |row| row.get(0),
     );
 
-    // Only allow update if user is the owner
-    // user_id is extracted from JWT token in mod.rs, so it's verified
-    match owner {
-        Ok(o) if o != user_id => {
-            return error_response(request_id, "Access denied: only owner can modify")
-        }
+    match exists {
         Err(_) => return error_response(request_id, "Atome not found"),
-        _ => {}
+        Ok(_) => {}
+    }
+
+    if !can_write(&db, atome_id, user_id) {
+        return error_response(request_id, "Access denied");
     }
 
     // Update atome timestamp
@@ -707,11 +799,25 @@ async fn handle_delete(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Soft delete with ownership check
+    let exists: Result<String, _> = db.query_row(
+        "SELECT atome_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
+        rusqlite::params![atome_id],
+        |row| row.get(0),
+    );
+
+    match exists {
+        Err(_) => return error_response(request_id, "Atome not found"),
+        Ok(_) => {}
+    }
+
+    if !can_delete(&db, atome_id, user_id) {
+        return error_response(request_id, "Access denied");
+    }
+
     let result = db.execute(
-        "UPDATE atomes SET deleted_at = ?1, sync_status = 'pending' 
-         WHERE atome_id = ?2 AND owner_id = ?3 AND deleted_at IS NULL",
-        rusqlite::params![&now, atome_id, user_id],
+        "UPDATE atomes SET deleted_at = ?1, sync_status = 'pending'
+         WHERE atome_id = ?2 AND deleted_at IS NULL",
+        rusqlite::params![&now, atome_id],
     );
 
     match result {
@@ -757,17 +863,19 @@ async fn handle_alter(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Verify ownership
-    let owner: Result<String, _> = db.query_row(
-        "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
+    let exists: Result<String, _> = db.query_row(
+        "SELECT atome_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
         rusqlite::params![atome_id],
         |row| row.get(0),
     );
 
-    match owner {
-        Ok(o) if o != user_id => return error_response(request_id, "Access denied"),
+    match exists {
         Err(_) => return error_response(request_id, "Atome not found"),
-        _ => {}
+        Ok(_) => {}
+    }
+
+    if !can_write(&db, atome_id, user_id) {
+        return error_response(request_id, "Access denied");
     }
 
     // Update timestamp
@@ -972,6 +1080,503 @@ fn load_atome_with_deleted(
         updated_at: row.9,
         deleted_at: row.10,
     })
+}
+
+#[derive(Debug)]
+struct PermissionRow {
+    can_read: i64,
+    can_write: i64,
+    can_delete: i64,
+    can_share: i64,
+    can_create: i64,
+    expires_at: Option<String>,
+    conditions: Option<String>,
+}
+
+fn parse_conditions(raw: &Option<String>) -> Option<serde_json::Value> {
+    let value = raw.as_ref()?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    serde_json::from_str(value).ok()
+}
+
+fn coerce_number(value: &serde_json::Value) -> Option<f64> {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+        serde_json::Value::String(s) => {
+            if let Ok(num) = s.parse::<f64>() {
+                return Some(num);
+            }
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+                return Some(dt.timestamp_millis() as f64);
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn coerce_string(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        _ => value.to_string(),
+    }
+}
+
+fn resolve_path<'a>(path: &str, context: &'a serde_json::Value) -> Option<&'a serde_json::Value> {
+    let mut current = context;
+    for part in path.split('.') {
+        match current {
+            serde_json::Value::Object(map) => {
+                current = map.get(part)?;
+            }
+            _ => return None,
+        }
+    }
+    Some(current)
+}
+
+fn compare_values(actual: Option<&serde_json::Value>, op: &str, expected: &serde_json::Value) -> bool {
+    let actual = match actual {
+        Some(val) => val,
+        None => {
+            return match op {
+                "eq" => expected.is_null(),
+                "ne" => !expected.is_null(),
+                _ => false,
+            };
+        }
+    };
+
+    if op == "in" {
+        if let serde_json::Value::Array(values) = expected {
+            let left_num = coerce_number(actual);
+            if let Some(left) = left_num {
+                return values
+                    .iter()
+                    .filter_map(coerce_number)
+                    .any(|candidate| candidate == left);
+            }
+            let left_str = coerce_string(actual);
+            return values.iter().any(|candidate| coerce_string(candidate) == left_str);
+        }
+        return false;
+    }
+
+    let left_num = coerce_number(actual);
+    let right_num = coerce_number(expected);
+    if let (Some(left), Some(right)) = (left_num, right_num) {
+        return match op {
+            "eq" => left == right,
+            "ne" => left != right,
+            "gt" => left > right,
+            "gte" => left >= right,
+            "lt" => left < right,
+            "lte" => left <= right,
+            _ => false,
+        };
+    }
+
+    let left_str = coerce_string(actual);
+    let right_str = coerce_string(expected);
+    match op {
+        "eq" => left_str == right_str,
+        "ne" => left_str != right_str,
+        "gt" => left_str > right_str,
+        "gte" => left_str >= right_str,
+        "lt" => left_str < right_str,
+        "lte" => left_str <= right_str,
+        _ => false,
+    }
+}
+
+fn evaluate_condition_node(node: &serde_json::Value, context: &serde_json::Value) -> bool {
+    if node.is_null() {
+        return true;
+    }
+
+    if let serde_json::Value::Array(children) = node {
+        return children.iter().all(|child| evaluate_condition_node(child, context));
+    }
+
+    let obj = match node.as_object() {
+        Some(map) => map,
+        None => return true,
+    };
+
+    if let Some(serde_json::Value::Array(children)) = obj.get("all") {
+        return children.iter().all(|child| evaluate_condition_node(child, context));
+    }
+
+    if let Some(serde_json::Value::Array(children)) = obj.get("any") {
+        return children.iter().any(|child| evaluate_condition_node(child, context));
+    }
+
+    if obj.get("after").is_some() || obj.get("before").is_some() {
+        let now = Utc::now().timestamp_millis() as f64;
+        if let Some(after) = obj.get("after").and_then(coerce_number) {
+            if now < after {
+                return false;
+            }
+        }
+        if let Some(before) = obj.get("before").and_then(coerce_number) {
+            if now > before {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    if let (Some(field), Some(op)) = (obj.get("field"), obj.get("op")) {
+        if let (Some(field_str), Some(op_str)) = (field.as_str(), op.as_str()) {
+            let actual = resolve_path(field_str, context);
+            let expected = obj.get("value").unwrap_or(&serde_json::Value::Null);
+            return compare_values(actual, op_str, expected);
+        }
+    }
+
+    if let Some(serde_json::Value::Object(user_rules)) = obj.get("user") {
+        return user_rules.iter().all(|(key, rule)| {
+            let actual = resolve_path(&format!("user.{}", key), context);
+            if let Some(rule_obj) = rule.as_object() {
+                if let Some(op) = rule_obj.get("op").and_then(|v| v.as_str()) {
+                    let expected = rule_obj.get("value").unwrap_or(&serde_json::Value::Null);
+                    return compare_values(actual, op, expected);
+                }
+            }
+            compare_values(actual, "eq", rule)
+        });
+    }
+
+    if let Some(serde_json::Value::Object(atome_rules)) = obj.get("atome") {
+        return atome_rules.iter().all(|(key, rule)| {
+            let actual = resolve_path(&format!("atome.{}", key), context);
+            if let Some(rule_obj) = rule.as_object() {
+                if let Some(op) = rule_obj.get("op").and_then(|v| v.as_str()) {
+                    let expected = rule_obj.get("value").unwrap_or(&serde_json::Value::Null);
+                    return compare_values(actual, op, expected);
+                }
+            }
+            compare_values(actual, "eq", rule)
+        });
+    }
+
+    true
+}
+
+fn get_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
+    db.query_row(
+        "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
+        rusqlite::params![atome_id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .ok()
+    .flatten()
+}
+
+fn upsert_permission(
+    db: &Connection,
+    atome_id: &str,
+    principal_id: &str,
+    can_read: i64,
+    can_write: i64,
+    can_delete: i64,
+    can_share: i64,
+    can_create: i64,
+    share_mode: Option<String>,
+    conditions: Option<String>,
+    expires_at: Option<String>,
+    granted_by: &str,
+) -> Result<(), rusqlite::Error> {
+    let existing: Option<i64> = db
+        .query_row(
+            "SELECT permission_id FROM permissions
+             WHERE atome_id = ?1 AND principal_id = ?2
+               AND (particle_key IS NULL OR particle_key = '')
+             LIMIT 1",
+            rusqlite::params![atome_id, principal_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+
+    if let Some(permission_id) = existing {
+        db.execute(
+            "UPDATE permissions SET
+                can_read = ?1,
+                can_write = ?2,
+                can_delete = ?3,
+                can_share = ?4,
+                can_create = ?5,
+                share_mode = COALESCE(?6, share_mode),
+                conditions = COALESCE(?7, conditions),
+                expires_at = COALESCE(?8, expires_at)
+             WHERE permission_id = ?9",
+            rusqlite::params![
+                can_read,
+                can_write,
+                can_delete,
+                can_share,
+                can_create,
+                share_mode,
+                conditions,
+                expires_at,
+                permission_id
+            ],
+        )?;
+    } else {
+        let now = Utc::now().to_rfc3339();
+        db.execute(
+            "INSERT INTO permissions (
+                atome_id,
+                particle_key,
+                principal_id,
+                can_read,
+                can_write,
+                can_delete,
+                can_share,
+                can_create,
+                share_mode,
+                conditions,
+                granted_by,
+                granted_at,
+                expires_at
+            ) VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            rusqlite::params![
+                atome_id,
+                principal_id,
+                can_read,
+                can_write,
+                can_delete,
+                can_share,
+                can_create,
+                share_mode,
+                conditions,
+                granted_by,
+                now,
+                expires_at
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn inherit_permissions_from_parent(
+    db: &Connection,
+    parent_id: &str,
+    child_id: &str,
+    child_owner_id: Option<&str>,
+    grantor_id: &str,
+) -> Result<(), rusqlite::Error> {
+    let mut stmt = db.prepare(
+        "SELECT principal_id, can_read, can_write, can_delete, can_share, can_create,
+                share_mode, conditions, expires_at, granted_by
+         FROM permissions
+         WHERE atome_id = ?1
+           AND (expires_at IS NULL OR expires_at > datetime('now'))",
+    )?;
+
+    let rows = stmt.query_map(rusqlite::params![parent_id], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, i64>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)?,
+            row.get::<_, Option<String>>(6)?,
+            row.get::<_, Option<String>>(7)?,
+            row.get::<_, Option<String>>(8)?,
+            row.get::<_, Option<String>>(9)?,
+        ))
+    })?;
+
+    for row in rows {
+        let (
+            principal_id,
+            can_read,
+            can_write,
+            can_delete,
+            can_share,
+            can_create,
+            share_mode,
+            conditions,
+            expires_at,
+            granted_by,
+        ) = row?;
+
+        if child_owner_id.map(|id| id == principal_id).unwrap_or(false) {
+            continue;
+        }
+
+        let grantor = granted_by.as_deref().unwrap_or(grantor_id);
+        upsert_permission(
+            db,
+            child_id,
+            &principal_id,
+            can_read,
+            can_write,
+            can_delete,
+            can_share,
+            can_create,
+            share_mode,
+            conditions,
+            expires_at,
+            grantor,
+        )?;
+    }
+
+    if let Some(parent_owner_id) = get_owner_id(db, parent_id) {
+        if !child_owner_id.map(|id| id == parent_owner_id).unwrap_or(false) {
+            upsert_permission(
+                db,
+                child_id,
+                &parent_owner_id,
+                1,
+                1,
+                1,
+                1,
+                1,
+                Some("real-time".into()),
+                None,
+                None,
+                grantor_id,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn fetch_permission(db: &Connection, atome_id: &str, principal_id: &str) -> Option<PermissionRow> {
+    db.query_row(
+        "SELECT can_read, can_write, can_delete, can_share, can_create, expires_at, conditions
+         FROM permissions
+         WHERE atome_id = ?1 AND principal_id = ?2 AND (particle_key IS NULL OR particle_key = '')
+         ORDER BY particle_key DESC LIMIT 1",
+        rusqlite::params![atome_id, principal_id],
+        |row| {
+            Ok(PermissionRow {
+                can_read: row.get(0)?,
+                can_write: row.get(1)?,
+                can_delete: row.get(2)?,
+                can_share: row.get(3)?,
+                can_create: row.get(4)?,
+                expires_at: row.get(5)?,
+                conditions: row.get(6)?,
+            })
+        },
+    )
+    .ok()
+}
+
+fn is_permission_active(
+    db: &Connection,
+    permission: &PermissionRow,
+    principal_id: &str,
+    atome_id: &str,
+) -> bool {
+    if let Some(expires_at) = &permission.expires_at {
+        if let Ok(expiry) = chrono::DateTime::parse_from_rfc3339(expires_at) {
+            if Utc::now() > expiry.with_timezone(&Utc) {
+                return false;
+            }
+        }
+    }
+
+    let conditions = match parse_conditions(&permission.conditions) {
+        Some(value) => value,
+        None => return true,
+    };
+
+    let user_data = load_atome_with_deleted(db, principal_id, None, true)
+        .map(|atome| atome.data)
+        .unwrap_or_else(|_| serde_json::json!({}));
+    let atome_data = load_atome_with_deleted(db, atome_id, None, true)
+        .map(|atome| atome.data)
+        .unwrap_or_else(|_| serde_json::json!({}));
+
+    let context = serde_json::json!({
+        "now": Utc::now().timestamp_millis(),
+        "user": user_data,
+        "atome": atome_data
+    });
+
+    evaluate_condition_node(&conditions, &context)
+}
+
+fn can_read(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
+    if let Some(owner_id) = get_owner_id(db, atome_id) {
+        if owner_id == principal_id {
+            return true;
+        }
+    }
+
+    let perm = match fetch_permission(db, atome_id, principal_id) {
+        Some(row) => row,
+        None => return false,
+    };
+
+    if perm.can_read != 1 {
+        return false;
+    }
+    is_permission_active(db, &perm, principal_id, atome_id)
+}
+
+fn can_write(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
+    if let Some(owner_id) = get_owner_id(db, atome_id) {
+        if owner_id == principal_id {
+            return true;
+        }
+    }
+
+    let perm = match fetch_permission(db, atome_id, principal_id) {
+        Some(row) => row,
+        None => return false,
+    };
+
+    if perm.can_write != 1 {
+        return false;
+    }
+    is_permission_active(db, &perm, principal_id, atome_id)
+}
+
+fn can_delete(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
+    if let Some(owner_id) = get_owner_id(db, atome_id) {
+        if owner_id == principal_id {
+            return true;
+        }
+    }
+
+    let perm = match fetch_permission(db, atome_id, principal_id) {
+        Some(row) => row,
+        None => return false,
+    };
+
+    if perm.can_delete != 1 {
+        return false;
+    }
+    is_permission_active(db, &perm, principal_id, atome_id)
+}
+
+fn can_create(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
+    if let Some(owner_id) = get_owner_id(db, atome_id) {
+        if owner_id == principal_id {
+            return true;
+        }
+    }
+
+    let perm = match fetch_permission(db, atome_id, principal_id) {
+        Some(row) => row,
+        None => return false,
+    };
+
+    if perm.can_create != 1 && perm.can_share != 1 {
+        return false;
+    }
+    is_permission_active(db, &perm, principal_id, atome_id)
 }
 
 fn error_response(request_id: Option<String>, error: &str) -> WsResponse {

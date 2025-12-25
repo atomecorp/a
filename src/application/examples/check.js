@@ -164,6 +164,9 @@ intuitionContainer.style.background = 'transparent';
 import { RemoteCommands } from '/squirrel/apis/remote_commands.js';
 import { BuiltinHandlers } from '/squirrel/apis/remote_command_handlers.js';
 
+// Load Share logic (wrappers + handlers) for this test harness.
+import './share.js';
+
 // Authentication functions - Use AdoleAPI.auth.*
 const create_user = AdoleAPI.auth.create;
 const log_user = AdoleAPI.auth.login;
@@ -221,6 +224,66 @@ if (typeof window !== 'undefined') {
     try {
       const projectId = e?.detail?.projectId || selectedProjectId;
       if (!projectId) return;
+
+      const shouldSwitchProject = !currentProjectDiv || String(projectId) !== String(selectedProjectId || '');
+      if (!shouldSwitchProject) {
+        await loadProjectAtomes(projectId);
+        return;
+      }
+
+      let projectName = e?.detail?.projectName || null;
+      let backgroundColor = e?.detail?.backgroundColor || null;
+
+      try {
+        const projectResult = await get_atome(projectId);
+        if (projectResult?.tauri?.success || projectResult?.fastify?.success) {
+          const projectData = projectResult?.tauri?.atome || projectResult?.fastify?.atome;
+          const particles = projectData?.particles || projectData?.data || {};
+          projectName = projectName || particles.name || particles.projectName || particles.label || null;
+          backgroundColor = backgroundColor || particles.backgroundColor || null;
+        }
+      } catch (_) { }
+
+      await loadProjectView(
+        projectId,
+        projectName || 'Shared project',
+        backgroundColor || '#333'
+      );
+    } catch (_) { }
+  });
+
+  window.addEventListener('adole-share-create', async (e) => {
+    try {
+      const projectId = selectedProjectId;
+      if (!projectId) return;
+
+      const detail = e?.detail || {};
+      const parentId = detail.parentId || detail.parent_id || null;
+      const particles = detail.particles || {};
+      const particleProjectId = particles.projectId || particles.project_id || null;
+
+      if (String(parentId || '') !== String(projectId) &&
+          String(particleProjectId || '') !== String(projectId)) {
+        return;
+      }
+
+      await loadProjectAtomes(projectId);
+    } catch (_) { }
+  });
+
+  window.addEventListener('adole-share-publish', async (e) => {
+    try {
+      const projectId = selectedProjectId;
+      if (!projectId) return;
+
+      const detail = e?.detail || {};
+      const items = Array.isArray(detail.items) ? detail.items : [];
+      const matches = items.some(item => {
+        const parentId = item?.parentId || item?.parent_id || null;
+        return String(parentId || '') === String(projectId);
+      });
+
+      if (!matches && items.length) return;
       await loadProjectAtomes(projectId);
     } catch (_) { }
   });
@@ -236,6 +299,32 @@ function publishSelectedAtome(atomeId) {
   } catch (e) {
     console.warn('[check.js] Failed to dispatch selection event:', e);
   }
+}
+
+function pickAuthoritativeAtomes(result) {
+  const fastifyOk = result?.fastify && !result.fastify.error;
+  const tauriOk = result?.tauri && !result.tauri.error;
+
+  if (fastifyOk) {
+    return Array.isArray(result.fastify.atomes) ? result.fastify.atomes : [];
+  }
+  if (tauriOk) {
+    return Array.isArray(result.tauri.atomes) ? result.tauri.atomes : [];
+  }
+  return [];
+}
+
+function pickAuthoritativeProjects(result) {
+  const fastifyOk = result?.fastify && !result.fastify.error;
+  const tauriOk = result?.tauri && !result.tauri.error;
+
+  if (fastifyOk) {
+    return Array.isArray(result.fastify.projects) ? result.fastify.projects : [];
+  }
+  if (tauriOk) {
+    return Array.isArray(result.tauri.projects) ? result.tauri.projects : [];
+  }
+  return [];
 }
 
 /**
@@ -292,7 +381,19 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
       backgroundColor: backgroundColor,
       overflow: 'hidden',
       zIndex: '5',  // Above background but below UI
-      pointerEvents: 'none'  // Don't capture events, let children handle them
+      pointerEvents: 'auto'  // Allow bureau selection on click
+    },
+    onClick: (e) => {
+      // Clicking the bureau selects the current project so it can be shared.
+      // Child atomes stopPropagation() in their onClick.
+      try { e.stopPropagation(); } catch (_) { }
+
+      if (selectedVisualAtome) {
+        try { selectedVisualAtome.style.border = '2px solid transparent'; } catch (_) { }
+      }
+      selectedVisualAtome = null;
+      publishSelectedAtome(projectId);
+      puts('Selected bureau (project): ' + String(projectId).substring(0, 8) + '...');
     }
   });
 
@@ -324,11 +425,21 @@ async function loadProjectAtomes(projectId) {
 
   checkDebugPuts('🔍 Loading atomes for project: ' + projectId);
 
-  // Try different filter approaches
+  // Fastify is the authoritative source for shared atomes.
   const result = await list_atomes({ projectId: projectId });
-  let atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
+  const atomes = pickAuthoritativeAtomes(result);
 
   checkDebugPuts('📊 Total atomes found: ' + atomes.length);
+
+  // Clear previous visuals to avoid creating duplicate DOM nodes on reload
+  try {
+    if (currentProjectDiv) {
+      const olds = currentProjectDiv.querySelectorAll('[id^="atome_"]');
+      olds.forEach(el => {
+        try { el.remove(); } catch (_) { }
+      });
+    }
+  } catch (_) { }
 
   // Filter to get only atomes that belong to this project and are not projects/users
   const projectAtomes = atomes.filter(atome => {
@@ -359,30 +470,6 @@ async function loadProjectAtomes(projectId) {
     let atomeId = atome.atome_id || atome.id;
     let atomeType = atome.atome_type || atome.type;
     let particles = atome.particles || atome.data || {};
-
-    // Linked share placeholder: `share_link` is a local atome inside the receiver project
-    // that references the real shared atome id.
-    if (String(atomeType) === 'share_link') {
-      const linkedId = particles.linkedAtomeId || particles.linked_atome_id || null;
-      if (!linkedId) continue;
-
-      try {
-        const linked = await get_atome(String(linkedId));
-        const linkedAtome = linked?.tauri?.atome || linked?.fastify?.atome;
-        if (linkedAtome) {
-          atomeId = linkedAtome.atome_id || linkedAtome.id || linkedId;
-          atomeType = linkedAtome.atome_type || linkedAtome.type || 'shape';
-          particles = linkedAtome.particles || linkedAtome.data || particles;
-        } else {
-          // Fallback: still render a placeholder square at the linked id.
-          atomeId = String(linkedId);
-          atomeType = 'shape';
-        }
-      } catch (e) {
-        atomeId = String(linkedId);
-        atomeType = 'shape';
-      }
-    }
 
     // Get stored position or default with detailed logging
     const savedLeft = particles.left;
@@ -504,9 +591,9 @@ async function loadAtomeHistory(atomeId) {
   try {
     // Try to get current atome state from list_atomes since get_atome has issues
     const listResult = await list_atomes({ projectId: selectedProjectId });
-    const atomes = listResult.tauri.atomes.length > 0 ? listResult.tauri.atomes : listResult.fastify.atomes;
+    const atomes = pickAuthoritativeAtomes(listResult);
 
-    const currentAtome = atomes.find(a => (a.atome_id || a.id) === atomeId);
+    let currentAtome = atomes.find(a => (a.atome_id || a.id) === atomeId);
 
     if (currentAtome) {
       puts('✅ Found current atome state');
@@ -968,18 +1055,18 @@ function stopDragAnimation() {
 async function open_project_selector(callback) {
   const projectsResult = await list_projects();
 
-  // SECURITY: Check for authentication errors
-  if (projectsResult.tauri.error && projectsResult.tauri.error.includes('SECURITY')) {
-    puts('❌ ' + projectsResult.tauri.error);
+  // SECURITY: Check for authentication errors (only block if both backends failed)
+  const tauriSecurity = projectsResult.tauri.error && projectsResult.tauri.error.includes('SECURITY');
+  const fastifySecurity = projectsResult.fastify.error && projectsResult.fastify.error.includes('SECURITY');
+  if (tauriSecurity && fastifySecurity) {
+    puts('❌ ' + (projectsResult.fastify.error || projectsResult.tauri.error));
     if (typeof callback === 'function') {
       callback({ project_id: null, project_name: null, cancelled: true, error: 'Not logged in' });
     }
     return;
   }
 
-  const projects = projectsResult.tauri.projects.length > 0
-    ? projectsResult.tauri.projects
-    : projectsResult.fastify.projects;
+  const projects = pickAuthoritativeProjects(projectsResult);
 
   if (projects.length === 0) {
     puts('No projects found for current user');
@@ -1181,9 +1268,7 @@ async function open_user_selector(callback) {
             // Auto-load first project of new user
             try {
               const projectsResult = await list_projects();
-              const projects = projectsResult.tauri.projects.length > 0
-                ? projectsResult.tauri.projects
-                : projectsResult.fastify.projects;
+              const projects = pickAuthoritativeProjects(projectsResult);
 
               if (projects && projects.length > 0) {
                 const firstProject = projects[0];
@@ -1258,9 +1343,7 @@ async function open_atome_selector(options, callback) {
   console.log('[open_atome_selector] Opening atome selector...');
 
   const atomesResult = await list_atomes(options);
-  const atomes = atomesResult.tauri.atomes.length > 0
-    ? atomesResult.tauri.atomes
-    : atomesResult.fastify.atomes;
+  const atomes = pickAuthoritativeAtomes(atomesResult);
 
   const filteredAtomes = atomes.filter(a => {
     const type = a.atome_type || a.type;
@@ -1453,9 +1536,7 @@ function updateRemoteCommandsStatus(active) {
   }
 
   const result = await list_projects();
-  const projects = result.tauri.projects.length > 0
-    ? result.tauri.projects
-    : result.fastify.projects;
+  const projects = pickAuthoritativeProjects(result);
 
   if (projects && projects.length > 0) {
     // Find the saved project in the list, or use first project as fallback
@@ -2186,9 +2267,7 @@ $('span', {
 
     try {
       const projectsResult = await list_projects();
-      const projects = projectsResult.tauri.projects.length > 0
-        ? projectsResult.tauri.projects
-        : projectsResult.fastify.projects;
+      const projects = pickAuthoritativeProjects(projectsResult);
 
       const selectedProject = projects.find(p =>
         (p.atome_id || p.id) === selection.project_id
@@ -2261,7 +2340,7 @@ $('span', {
   onClick: async () => {
     puts('Fetching projects...');
     const result = await list_projects();
-    const projects = result.tauri.projects.length > 0 ? result.tauri.projects : result.fastify.projects;
+    const projects = pickAuthoritativeProjects(result);
     if (projects.length > 0) {
       puts('Projects found: ' + projects.length);
       projects.forEach(p => {
@@ -2479,7 +2558,7 @@ $('span', {
     const atomeType = grab('atome_type_input').value;
     puts('Fetching atomes of type: ' + atomeType);
     const result = await list_atomes({ type: atomeType });
-    const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
+    const atomes = pickAuthoritativeAtomes(result);
     if (atomes.length > 0) {
       puts('Atomes found: ' + atomes.length);
       atomes.forEach(a => {
@@ -2537,7 +2616,7 @@ $('span', {
 
     puts('🔍 DEBUG: Checking saved positions for project: ' + selectedProjectId);
     const result = await list_atomes({ projectId: selectedProjectId });
-    const atomes = result.tauri.atomes.length > 0 ? result.tauri.atomes : result.fastify.atomes;
+    const atomes = pickAuthoritativeAtomes(result);
 
     atomes.forEach(atome => {
       const atomeType = atome.atome_type || atome.type;
@@ -3217,9 +3296,7 @@ async function logSelectedUserDbInfo(selection) {
     }
 
     const atomesResult = await list_atomes({});
-    const atomes = atomesResult.tauri.atomes.length > 0
-      ? atomesResult.tauri.atomes
-      : atomesResult.fastify.atomes;
+    const atomes = pickAuthoritativeAtomes(atomesResult);
 
     const byType = {};
     atomes.forEach(a => {
@@ -3376,8 +3453,7 @@ async function testListProjects() {
   try {
     const result = await list_projects();
 
-    // Use same structure as working button: result.tauri.projects or result.fastify.projects
-    const projects = result.tauri.projects.length > 0 ? result.tauri.projects : result.fastify.projects;
+    const projects = pickAuthoritativeProjects(result);
 
     puts('Found ' + projects.length + ' projects for selection');
 
