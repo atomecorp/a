@@ -4,7 +4,7 @@ function formatTimecode(seconds) {
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
   const ms = Math.floor((seconds % 1) * 100);
-  
+
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
 }
 
@@ -29,7 +29,7 @@ const videoElement = $('video', {
   parent: '#view',
   id: 'demo-video',
   attrs: {
-    src: './assets/videos/avengers.mp4',
+    src: './assets/videos/superman.mp4',
     controls: true,
     width: 400,
     height: 225
@@ -61,22 +61,22 @@ const videoElement = $('video', {
     const currentTime = videoElement.currentTime;
     const duration = videoElement.duration || 0;
     const progress = duration > 0 ? Math.round((currentTime / duration) * 100) : 0;
-    
-    output.$({ 
+
+    output.$({
       text: `⏱️ Timecode: ${formatTimecode(currentTime)} / ${formatTimecode(duration)} (${progress}%)`
     });
   },
   onloadedmetadata: () => {
     // Affiche la durée totale une fois les métadonnées chargées
     console.log('Video metadata loaded');
-    output.$({ 
+    output.$({
       text: `📹 Vidéo chargée - Durée: ${formatTimecode(videoElement.duration)} - Prêt à jouer`
     });
   },
   onseeked: () => {
     // Mise à jour quand l'utilisateur navigue dans la vidéo
     console.log('Video seeked to:', videoElement.currentTime);
-    output.$({ 
+    output.$({
       text: `🎯 Position: ${formatTimecode(videoElement.currentTime)} / ${formatTimecode(videoElement.duration)}`
     });
   }
@@ -85,34 +85,34 @@ const videoElement = $('video', {
 
 
 function fct_to_trig(state) {
-    console.log('trig: ' + state);
+  console.log('trig: ' + state);
 }
 
 function fct_to_trig2(state) {
-    console.log('trigger 2 : ' + state);
+  console.log('trigger 2 : ' + state);
 }
 
 // === EXEMPLE 1: Votre bouton existant ===
 const toggle = Button({
-    onText: 'ON',
-    offText: 'OFF',
-    onAction: fct_to_trig,
-    offAction: fct_to_trig2,
-    parent: '#view', // parent direct
-    onStyle: { backgroundColor: '#28a745', color: 'white' },
-    offStyle: { backgroundColor: '#dc3545', color: 'white' },
-    css: {
-        width: '50px',
-        height: '24px',
-        left: '120px',
-        top: '120px',
-        borderRadius: '6px',
-        backgroundColor: 'orange',
-        position: 'relative',
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-        border: '3px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 2px 4px rgba(255,255,1,1)',
-    }
+  onText: 'ON',
+  offText: 'OFF',
+  onAction: fct_to_trig,
+  offAction: fct_to_trig2,
+  parent: '#view', // parent direct
+  onStyle: { backgroundColor: '#28a745', color: 'white' },
+  offStyle: { backgroundColor: '#dc3545', color: 'white' },
+  css: {
+    width: '50px',
+    height: '24px',
+    left: '120px',
+    top: '120px',
+    borderRadius: '6px',
+    backgroundColor: 'orange',
+    position: 'relative',
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'background-color 0.3s ease',
+    border: '3px solid rgba(255,255,255,0.3)',
+    boxShadow: '0 2px 4px rgba(255,255,1,1)',
+  }
 });

@@ -72,9 +72,9 @@ import('./examples/share_ui.js');
 
 // import('./examples/ios_file_browser.js');
 
-// // import('./iplug/audio.facade.js');
-// // import('./iplug/backend.iplug.js');
-// // import('./iplug/backend.html.js');
+// import('./iplug/audio.facade.js');
+// import('./iplug/backend.iplug.js');
+// import('./iplug/backend.html.js');
 // import('./examples/iplug_sampler.js');
 
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)
