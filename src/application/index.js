@@ -58,18 +58,18 @@
 // import('./examples/apis.js');
 
 /////  ==> create user - messge them ans share 
-import('./examples/user.js');
-import('./aBox/index.js');
-// import('./examples/messages.js');
-// import('./examples/messages_ui.js');
-// import('./examples/share.js');
-// import('./examples/share_ui.js');
+// import('./examples/user.js');
+// import('./aBox/index.js');
+// // import('./examples/messages.js');
+// // import('./examples/messages_ui.js');
+// // import('./examples/share.js');
+// // import('./examples/share_ui.js');
 
-// import('./examples/calendar.js');
+// // import('./examples/calendar.js');
 
-import('./examples/shell.js');
+// import('./examples/shell.js');
 
-import('./examples/shellUI.js');
+// import('./examples/shellUI.js');
 import('./examples/tools_code.js');
 
 // import('./examples/AI.js');
