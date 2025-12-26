@@ -39,6 +39,37 @@ This document specifies **what must be implemented**. The flexible/modular synta
 6. Execution (ADOLE) → **commit**
 7. Post‑action verification + logging
 
+### 1.3 Local Agent Gateway (AtomeAI)
+
+Squirrel exposes a local JS gateway for AI-driven tool calls:
+
+* Global: `window.AtomeAI`
+* Core methods: `registerTool`, `callTool`, `listTools`
+* Built-ins: `audit.get_recent_actions`
+
+Example:
+
+```js
+AtomeAI.registerTool({
+  name: 'demo.echo',
+  capabilities: ['demo.read'],
+  risk_level: 'LOW',
+  params_schema: {
+    required: ['text'],
+    properties: { text: { type: 'string' } }
+  },
+  handler: async ({ params }) => ({ result: { echo: params.text } })
+});
+
+const response = await AtomeAI.callTool({
+  tool_name: 'demo.echo',
+  params: { text: 'hello' },
+  actor: { user_id: 'user_1', agent_id: 'local_demo', session_id: 's1' },
+  signals: { overall_confidence: 0.95 },
+  idempotency_key: 'demo.echo:hello'
+});
+```
+
 ---
 
 ## 2) Security model
@@ -242,6 +273,26 @@ Every action (ALLOW or Proposal) must generate a log:
 * Separate read (AIS) and payment (PIS)
 * PIS → mandatory confirmation + SCA (bank‑dependent)
 * Never store raw credentials
+
+### 8.4 AI keys storage (per user)
+
+Provider keys are stored per user as a `type: secret` atome.
+
+* Keys are encrypted client-side before storage.
+* Secrets are never committed to git.
+* The UI selects a provider and saves the key to the user vault.
+* Decryption happens locally before calling the provider API.
+
+Suggested secret shape (particles):
+
+```jsonc
+{
+  "provider": "openai|anthropic|mistral|google|deepseek",
+  "payload": "{...encrypted...}",
+  "created_at": "iso",
+  "updated_at": "iso"
+}
+```
 
 ---
 

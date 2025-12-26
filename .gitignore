@@ -48,6 +48,7 @@ data/
 .env
 .env.local
 
+
 # Security - Private keys and certificates
 *.pem
 *.key

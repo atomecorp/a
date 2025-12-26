@@ -570,13 +570,6 @@ async fn handle_list(
         _ => None,
     };
 
-    // Build WHERE clause for deleted_at based on includeDeleted
-    let deleted_clause = if include_deleted {
-        ""
-    } else {
-        "AND deleted_at IS NULL"
-    };
-
     // Build query based on whether we have an owner or just a type
     let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match (effective_owner, atome_type) {
         (Some(owner), atome_type) => {

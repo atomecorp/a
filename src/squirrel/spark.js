@@ -38,6 +38,7 @@
 // atome imports
 import './atome/atome.js';
 import './atome/mcp.js';
+import './ai/agent_gateway.js';
 
 // === STATIC ES6 IMPORTS ===
 import './apis/essentials.js';
@@ -243,4 +244,3 @@ import('./kickstart.js').then(async () => {
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
 });
-

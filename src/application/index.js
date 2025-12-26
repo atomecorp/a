@@ -58,7 +58,7 @@
 // import('./examples/apis.js');
 
 /////  ==> create user - messge them ans share 
-// import('./examples/user.js');
+import('./examples/user.js');
 // import('./aBox/index.js');
 // // import('./examples/messages.js');
 // // import('./examples/messages_ui.js');
@@ -70,9 +70,9 @@
 // import('./examples/shell.js');
 
 // import('./examples/shellUI.js');
-import('./examples/tools_code.js');
+// import('./examples/tools_code.js');
 
-// import('./examples/AI.js');
+import('./examples/AI.js');
 //todos :
 // test and check DB apis
 // - event drag and drop
