@@ -46,6 +46,11 @@ fn main() {
                         dir.clone(),
                     ];
 
+                    // Prefer live repo assets in dev so new files are immediately served.
+                    if cfg!(debug_assertions) {
+                        candidates.insert(0, PathBuf::from("../src"));
+                    }
+
                     // Dev fallback (../src) checked last
                     candidates.push(PathBuf::from("../src"));
 

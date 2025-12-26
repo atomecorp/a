@@ -446,6 +446,10 @@ run_stable_updates() {
     "Tone.js.map|https://unpkg.com/tone@15.1.22/build/Tone.js.map"
     "leaflet.min.js|https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
     "leaflet.min.css|https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+    "event-calendar.min.js|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.min.js"
+    "event-calendar.css|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.css"
+    "event-calendar.min.map.json|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.min.map.json"
+    "event-calendar.css.map|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.css.map"
     "wavesurfer.min.js|https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.10.1/wavesurfer.min.js"
     "wavesurfer-v7/core/wavesurfer.esm.min.js|https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.10.1/wavesurfer.esm.min.js"
     "three.min.js|https://cdnjs.cloudflare.com/ajax/libs/three.js/0.179.1/three.module.min.js"
@@ -495,17 +499,20 @@ run_latest_updates() {
   local LEAFLET_VERSION
   local WAVESURFER_VERSION
   local THREE_VERSION
+  local EVENT_CALENDAR_VERSION
 
   GSAP_VERSION=$(get_latest_version "gsap") || return 1
   TONE_VERSION=$(get_latest_version "tone") || return 1
   LEAFLET_VERSION=$(get_latest_version "leaflet") || return 1
   WAVESURFER_VERSION=$(get_latest_version "wavesurfer.js") || return 1
   THREE_VERSION=$(get_latest_version "three") || return 1
+  EVENT_CALENDAR_VERSION=$(get_latest_version "event-calendar") || return 1
 
   log_info "📦 Latest versions:"
   log_info "   • GSAP:        $GSAP_VERSION"
   log_info "   • Tone.js:     $TONE_VERSION"
   log_info "   • Leaflet:     $LEAFLET_VERSION"
+  log_info "   • EventCalendar: $EVENT_CALENDAR_VERSION"
   log_info "   • Wavesurfer:  $WAVESURFER_VERSION"
   log_info "   • Three.js:    $THREE_VERSION"
 
@@ -535,6 +542,26 @@ run_latest_updates() {
 
   total=$((total + 1))
   if download_latest_asset "leaflet.min.css" "https://cdnjs.cloudflare.com/ajax/libs/leaflet/$LEAFLET_VERSION/leaflet.min.css" "leaflet" "$LEAFLET_VERSION" 64; then
+    success=$((success + 1))
+  fi
+
+  total=$((total + 1))
+  if download_latest_asset "event-calendar.min.js" "https://unpkg.com/event-calendar@$EVENT_CALENDAR_VERSION/dist/event-calendar.min.js" "event-calendar" "$EVENT_CALENDAR_VERSION"; then
+    success=$((success + 1))
+  fi
+
+  total=$((total + 1))
+  if download_latest_asset "event-calendar.css" "https://unpkg.com/event-calendar@$EVENT_CALENDAR_VERSION/dist/event-calendar.css" "event-calendar" "$EVENT_CALENDAR_VERSION"; then
+    success=$((success + 1))
+  fi
+
+  total=$((total + 1))
+  if download_latest_asset "event-calendar.min.map.json" "https://unpkg.com/event-calendar@$EVENT_CALENDAR_VERSION/dist/event-calendar.min.map.json" "event-calendar" "$EVENT_CALENDAR_VERSION"; then
+    success=$((success + 1))
+  fi
+
+  total=$((total + 1))
+  if download_latest_asset "event-calendar.css.map" "https://unpkg.com/event-calendar@$EVENT_CALENDAR_VERSION/dist/event-calendar.css.map" "event-calendar" "$EVENT_CALENDAR_VERSION"; then
     success=$((success + 1))
   fi
 
