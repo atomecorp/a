@@ -26,28 +26,35 @@ A `tool` defines:
 * links to **code atoms** for behavior
 * optional exposure to AI
 
-**Structure:**
+**Structure (canonical Atome object):**
 
 ```js
 atome({
+  id: 'tool_id',               // unique id
   type: 'tool',
-  id: 'tool_id',             // unique id
-  label: 'Scale',             // text label
-  icon: 'scale',              // icon reference or atome
-  group: 'transform',         // toolbar group/category
-
-  mode: 'continuous',         // 'one_shot' | 'continuous' | 'double_click'
-  gesture: 'drag_selection',  // interaction pattern
-
-  handlers: {
-    on_click: 'code_id_click',
-    on_drag_start: 'code_id_drag_start',
-    on_drag_move: 'code_id_drag_move',
-    on_drag_end: 'code_id_drag_end'
+  kind: 'tool',
+  meta: {
+    name: 'Scale'
   },
+  traits: ['ui.tool'],         // derived from type definition
+  props: {
+    label: 'Scale',             // text label
+    icon: 'scale',              // icon reference or atome
+    group: 'transform',         // toolbar group/category
 
-  ai_exposed: true,            // optional: available to AI
-  ai_name: 'ui.scale_selection'// alias used by AI/MCP
+    mode: 'continuous',         // 'one_shot' | 'continuous' | 'double_click'
+    gesture: 'drag_selection',  // interaction pattern
+
+    handlers: {
+      on_click: 'code_id_click',
+      on_drag_start: 'code_id_drag_start',
+      on_drag_move: 'code_id_drag_move',
+      on_drag_end: 'code_id_drag_end'
+    },
+
+    ai_exposed: true,            // optional: available to AI
+    ai_name: 'ui.scale_selection'// alias used by AI/MCP
+  }
 })
 ```
 
@@ -65,28 +72,35 @@ A `code` atome:
 * **never** modifies state directly
 * may hold internal state between interactions (optional)
 
-**Structure:**
+**Structure (canonical Atome object):**
 
 ```js
 atome({
-  type: 'code',
   id: 'code_id',
-  language: 'javascript',
+  type: 'code',
+  kind: 'code',
+  meta: {
+    name: 'Scale Drag'
+  },
+  traits: ['code.behavior'],
+  props: {
+    language: 'javascript',
 
-  capabilities: ['atome.write'], // optional: for policy engine
-  risk_level: 'LOW',              // optional: policy decision
+    capabilities: ['atome.write'], // optional: for policy engine
+    risk_level: 'LOW',              // optional: policy decision
 
-  code: async ({ ctx, event, input, state }) => {
-    // ctx: access to command bus, queries, etc.
-    // event: 'on_click', 'on_drag_move', etc.
-    // input: UI/AI payload (selection, drag, cursor, etc.)
-    // state: local memory for continuity (optional)
+    code: async ({ ctx, event, input, state }) => {
+      // ctx: access to command bus, queries, etc.
+      // event: 'on_click', 'on_drag_move', etc.
+      // input: normalized payload (selection, gesture, params, etc.)
+      // state: local memory for continuity (optional)
 
-    // RETURN INTENTIONS, not direct effects:
-    return {
-      action: 'BATCH' | 'PATCH' | 'NOOP',
-      commands: [...],
-      newState: {...} // optional
+      // RETURN INTENTIONS, not direct effects:
+      return {
+        action: 'BATCH',
+        commands: [...],
+        newState: {...} // optional
+      }
     }
   }
 })
@@ -119,6 +133,66 @@ State Change + Audit + Policy
 
 ---
 
+## Tool Code Protocol (requirements)
+
+This is the minimal contract for any code atom linked to a tool.
+
+### Input normalization (UI/AI/Voice)
+
+Every tool invocation must receive the same `input` shape:
+
+```jsonc
+{
+  "tool_id": "ui_scale_tool",
+  "event": "on_drag_move",
+  "input": {
+    "selection": ["id1", "id2"],
+    "gesture": { "type": "drag", "dx": 42, "dy": -10 },
+    "pivot": { "x": 100, "y": 50 },
+    "params": {}
+  },
+  "signals": {
+    "speech_confidence": 0.92,
+    "entity_confidence": 0.88,
+    "overall_confidence": 0.90
+  }
+}
+```
+
+### Execution contract
+
+* **Deterministic**: no direct time/random/IO (inject via `input` if needed).
+* **Sandboxed**: no raw FS/network/process access.
+* **Capability-gated**: `props.capabilities` + policy decision required.
+* **Idempotent**: include `idempotency_key` in emitted commands when effectful.
+* **Auditable**: every command must be traceable and logged.
+
+### Return format
+
+Code atoms must return **only** canonical Command Bus intentions:
+
+```jsonc
+{
+  "action": "BATCH",
+  "commands": [
+    {
+      "intent_id": "uuid",
+      "trace_id": "uuid",
+      "source": "ai|human|system",
+      "actor": { "user_id": "...", "agent_id": "...", "session_id": "..." },
+      "idempotency_key": "hash",
+      "action": "PATCH",
+      "target": { "atome_id": "logo" },
+      "patch": { "props": { "size": [300, 120] } },
+      "preconditions": { "etag": "..." }
+    }
+  ],
+  "newState": { }
+}
+```
+
+---
+
 ## Example — Scale Tool (drag to resize selection)
 
 ### Tool UI
@@ -127,16 +201,22 @@ State Change + Audit + Policy
 atome({
   id: 'ui_scale_tool',
   type: 'tool',
-  label: 'Scale',
-  icon: 'scale',
-  group: 'transform',
-  mode: 'continuous',
-  gesture: 'drag_selection',
-  handlers: {
-    on_drag_move: 'code_scale_drag'
+  kind: 'tool',
+  meta: {
+    name: 'Scale'
   },
-  ai_exposed: true,
-  ai_name: 'ui.scale_selection'
+  props: {
+    label: 'Scale',
+    icon: 'scale',
+    group: 'transform',
+    mode: 'continuous',
+    gesture: 'drag_selection',
+    handlers: {
+      on_drag_move: 'code_scale_drag'
+    },
+    ai_exposed: true,
+    ai_name: 'ui.scale_selection'
+  }
 })
 ```
 
@@ -146,39 +226,44 @@ atome({
 atome({
   id: 'code_scale_drag',
   type: 'code',
-  language: 'javascript',
+  kind: 'code',
+  props: {
+    language: 'javascript',
 
-  code: async ({ ctx, event, input }) => {
-    const { selection, drag, pivot } = input
-    if (!selection?.length) return { action: 'NOOP' }
+    code: async ({ ctx, input }) => {
+      const { selection, gesture, pivot } = input
+      if (!selection?.length) return { action: 'BATCH', commands: [] }
 
-    const scale = 1 + (drag.dx || 0) / 200
-    if (scale <= 0) return { action: 'NOOP' }
+      const scale = 1 + (gesture?.dx || 0) / 200
+      if (scale <= 0) return { action: 'BATCH', commands: [] }
 
-    const objs = await ctx.getMany(selection, ['id', 'position', 'size'])
-    const commands = []
+      const objs = await ctx.getMany(selection, ['id', 'props.position', 'props.size'])
+      const commands = []
 
-    for (const o of objs) {
-      const [w, h] = o.size || [0, 0]
-      const cx = o.position?.x || 0
-      const cy = o.position?.y || 0
-      const px = pivot?.x ?? cx
-      const py = pivot?.y ?? cy
+      for (const o of objs) {
+        const [w, h] = o.props?.size || [0, 0]
+        const cx = o.props?.position?.x || 0
+        const cy = o.props?.position?.y || 0
+        const px = pivot?.x ?? cx
+        const py = pivot?.y ?? cy
 
-      commands.push({
-        action: 'PATCH',
-        target: { atome_id: o.id },
-        patch: {
-          size: [w * scale, h * scale],
-          position: {
-            x: cx + (cx - px) * (scale - 1),
-            y: cy + (cy - py) * (scale - 1)
+        commands.push({
+          action: 'PATCH',
+          target: { atome_id: o.id },
+          patch: {
+            props: {
+              size: [w * scale, h * scale],
+              position: {
+                x: cx + (cx - px) * (scale - 1),
+                y: cy + (cy - py) * (scale - 1)
+              }
+            }
           }
-        }
-      })
-    }
+        })
+      }
 
-    return { action: 'BATCH', commands }
+      return { action: 'BATCH', commands }
+    }
   }
 })
 ```
@@ -198,9 +283,10 @@ tool.define({
   params: {
     tool_id: 'string',
     event: 'string',
-    payload: 'object'
+    input: 'object',
+    signals: 'object'
   },
-  handler(ctx, { tool_id, event, payload }) {
+  handler(ctx, { tool_id, event, input, signals }) {
     // resolve tool, find handler, run code
   }
 })
@@ -216,7 +302,8 @@ tool.define({
   "params": {
     "tool_id": "ui_scale_tool",
     "event": "on_drag_move",
-    "payload": { "selection": ["logo"], "drag": { "dx": 200 } }
+    "input": { "selection": ["logo"], "gesture": { "type": "drag", "dx": 200 } },
+    "signals": { "overall_confidence": 0.9 }
   }
 }
 ```
@@ -233,6 +320,17 @@ tool.define({
 * Works offline/local or remote/AI/cloud
 
 ---
+
+## Framework + Tooling Compliance Checklist
+
+These components must exist and be wired together to satisfy this spec.
+
+* **Type Registry**: `atomeType()` with schema validation + defaults.
+* **Command Bus (ADOLE)**: canonical actions, idempotency, audit logging.
+* **Policy Engine**: capability checks + ALLOW/REQUIRE_CONFIRM/DENY.
+* **Tool Runtime**: handler mapping, input normalization, state continuity.
+* **Code Runtime**: sandboxing + deterministic execution contract.
+* **AI/MCP Bridge**: `ui.tool_event` gateway using the same input schema.
 
 ## Future Extensions
 
