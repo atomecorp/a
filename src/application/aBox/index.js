@@ -1,14 +1,43 @@
 puts('aBox example loaded');
-// on mac files are stored here : ~/Library/Application Support/com.squirrel.app/uploads
+// uploads are stored in the current user's Downloads folder (server-side)
 const dropZoneId = 'aBox_drop_zone';
 const dropZoneDefaultBg = '#00f';
 const dropZoneHoverBg = '#ff8800';
 const uploadsListId = 'aBox_uploads_list';
 const uploadsListBodyId = `${uploadsListId}_body`;
 
+function getAuthToken() {
+    try {
+        if (window.AdoleAPI?.auth?.getToken) {
+            const token = window.AdoleAPI.auth.getToken();
+            if (token) return token;
+        }
+    } catch (_) { }
+
+    try {
+        if (typeof localStorage !== 'undefined') {
+            return localStorage.getItem('cloud_auth_token')
+                || localStorage.getItem('auth_token')
+                || localStorage.getItem('local_auth_token')
+                || '';
+        }
+    } catch (_) { }
+
+    try {
+        if (typeof sessionStorage !== 'undefined') {
+            return sessionStorage.getItem('auth_token') || '';
+        }
+    } catch (_) { }
+
+    return '';
+}
+
 $('div', {
     id: uploadsListId,
+    parent: '#view',
     css: {
+        position: 'relative',
+        zIndex: '9000',
         backgroundColor: '#111',
         color: '#fff',
         margin: '10px',
@@ -24,6 +53,7 @@ $('div', {
     parent: `#${uploadsListId}`,
     text: 'Uploaded files',
     css: {
+        zIndex: '9000',
         fontWeight: 'bold',
         marginBottom: '8px'
     }
@@ -33,6 +63,7 @@ $('div', {
     id: uploadsListBodyId,
     parent: `#${uploadsListId}`,
     css: {
+        zIndex: '9000',
         maxHeight: '240px',
         overflowY: 'auto',
         backgroundColor: '#1b1b1b',
@@ -43,7 +74,10 @@ $('div', {
 
 $('div', {
     id: dropZoneId,
+    parent: '#view',
     css: {
+        position: 'relative',
+        zIndex: '9000',
         backgroundColor: dropZoneDefaultBg,
         marginLeft: '0',
         width: '120px',
@@ -150,7 +184,13 @@ async function fetchUploadsMetadata() {
     for (const base of bases) {
         const endpoint = base ? `${base}/api/uploads` : '/api/uploads';
         try {
-            const response = await fetch(endpoint, { method: 'GET' });
+            const token = getAuthToken();
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers,
+                credentials: 'include'
+            });
             if (!response.ok) {
                 const text = await response.text().catch(() => '');
                 throw new Error(text || `HTTP ${response.status}`);
@@ -191,11 +231,16 @@ function renderUploadsList(files) {
     }
 
     files.forEach((file) => {
-        const fileName = typeof file.name === 'string' ? file.name : 'unknown';
-        const size = typeof file.size === 'number' ? file.size : 0;
+        const fileId = file && (file.id || file.atome_id || file.file_id);
+        const displayName = typeof file?.name === 'string'
+            ? file.name
+            : (typeof file?.original_name === 'string' ? file.original_name : (file?.file_name || 'unknown'));
+        const size = typeof file?.size === 'number' ? file.size : 0;
+        const access = typeof file?.access === 'string' && file.access !== 'owner' ? ` [${file.access}]` : '';
+        const legacy = file?.legacy ? ' [legacy]' : '';
         $('div', {
             parent: `#${uploadsListBodyId}`,
-            text: `${fileName} (${formatBytes(size)})`,
+            text: `${displayName}${access}${legacy} (${formatBytes(size)})`,
             css: {
                 padding: '6px',
                 marginBottom: '4px',
@@ -203,7 +248,7 @@ function renderUploadsList(files) {
                 borderRadius: '4px',
                 cursor: 'pointer'
             },
-            onClick: () => downloadUpload(fileName)
+            onClick: () => downloadUpload(fileId || displayName, displayName)
         });
     });
 }
@@ -229,15 +274,46 @@ async function refreshUploadsList() {
     }
 }
 
-function downloadUpload(fileName) {
+async function downloadUpload(fileId, fileName) {
     const bases = uniqueBaseCandidates();
-    const encoded = encodeURIComponent(fileName);
+    const encoded = encodeURIComponent(fileId || fileName);
     const base = bases.length ? bases[0] : '';
     const url = base ? `${base}/api/uploads/${encoded}` : `/api/uploads/${encoded}`;
 
+    const token = getAuthToken();
+    if (token) {
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { Authorization: `Bearer ${token}` },
+                credentials: 'include'
+            });
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(text || `HTTP ${response.status}`);
+            }
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = objectUrl;
+            anchor.download = fileName || fileId || '';
+            anchor.style.display = 'none';
+            document.body.appendChild(anchor);
+            anchor.click();
+            setTimeout(() => {
+                URL.revokeObjectURL(objectUrl);
+                document.body.removeChild(anchor);
+            }, 0);
+            return;
+        } catch (error) {
+            console.error('Download error:', error);
+            puts(`[download] échec pour ${fileName || fileId || 'fichier'} : ${error.message}`);
+        }
+    }
+
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = fileName;
+    anchor.download = fileName || fileId || '';
     anchor.style.display = 'none';
     document.body.appendChild(anchor);
     anchor.click();
@@ -258,6 +334,10 @@ async function sendFileToServer(entry) {
         'Content-Type': 'application/octet-stream',
         'X-Filename': encodeURIComponent(fileName)
     };
+    const token = getAuthToken();
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
 
     let lastError = null;
     for (const base of uniqueBaseCandidates()) {
@@ -266,7 +346,8 @@ async function sendFileToServer(entry) {
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers,
-                body: blob
+                body: blob,
+                credentials: 'include'
             });
 
             if (!response.ok) {

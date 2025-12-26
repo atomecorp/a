@@ -37,7 +37,7 @@ export async function registerFileUpload(fileName, userId, options = {}) {
         for (const [key, value] of Object.entries(particles)) {
             if (value !== null) {
                 await db.query('run', `
-                    INSERT INTO particles (atome_id, key, value, updated_at)
+                    INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
                     VALUES (?, ?, ?, ?)
                 `, [atomeId, key, JSON.stringify(value), now]);
             }
@@ -65,32 +65,62 @@ export async function registerFileUpload(fileName, userId, options = {}) {
 /**
  * Get file metadata by atome_id or file_name
  */
-export async function getFileMetadata(identifier) {
+export async function getFileMetadata(identifier, options = {}) {
     try {
+        const { ownerId = null, userId = null } = options;
         // Try by atome_id first
         let atome = await db.query('get', `
-            SELECT a.*, p.key, p.value
+            SELECT a.atome_id, a.owner_id, a.created_at
             FROM atomes a
-            LEFT JOIN particles p ON a.atome_id = p.atome_id
             WHERE a.atome_id = ? AND a.atome_type = 'file' AND a.deleted_at IS NULL
         `, [identifier]);
 
         // If not found, try by file_name particle
         if (!atome) {
-            atome = await db.query('get', `
-                SELECT a.atome_id, a.owner_id, a.created_at
-                FROM atomes a
-                JOIN particles p ON a.atome_id = p.atome_id
-                WHERE p.key = 'file_name' AND p.value = ?
-                AND a.atome_type = 'file' AND a.deleted_at IS NULL
-            `, [JSON.stringify(identifier)]);
+            if (ownerId) {
+                atome = await db.query('get', `
+                    SELECT a.atome_id, a.owner_id, a.created_at
+                    FROM atomes a
+                    JOIN particles p ON a.atome_id = p.atome_id
+                    WHERE p.particle_key = 'file_name' AND p.particle_value = ?
+                    AND a.owner_id = ?
+                    AND a.atome_type = 'file' AND a.deleted_at IS NULL
+                `, [JSON.stringify(identifier), ownerId]);
+
+                if (!atome) {
+                    atome = await db.query('get', `
+                        SELECT a.atome_id, a.owner_id, a.created_at
+                        FROM atomes a
+                        JOIN particles p ON a.atome_id = p.atome_id
+                        WHERE p.particle_key = 'original_name' AND p.particle_value = ?
+                        AND a.owner_id = ?
+                        AND a.atome_type = 'file' AND a.deleted_at IS NULL
+                    `, [JSON.stringify(identifier), ownerId]);
+                }
+            } else if (userId) {
+                const accessible = await getAccessibleFiles(userId);
+                const matches = (accessible || []).filter((file) => {
+                    return file.file_name === identifier || file.original_name === identifier;
+                });
+                if (matches.length === 1) {
+                    return matches[0];
+                }
+            } else {
+                atome = await db.query('get', `
+                    SELECT a.atome_id, a.owner_id, a.created_at
+                    FROM atomes a
+                    JOIN particles p ON a.atome_id = p.atome_id
+                    WHERE p.particle_key = 'file_name' AND p.particle_value = ?
+                    AND a.atome_type = 'file' AND a.deleted_at IS NULL
+                `, [JSON.stringify(identifier)]);
+            }
         }
 
         if (!atome) return null;
 
         // Get all particles for this file
         const particles = await db.query('all', `
-            SELECT key, value FROM particles WHERE atome_id = ?
+            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
         `, [atome.atome_id]);
 
         const meta = {
@@ -101,9 +131,9 @@ export async function getFileMetadata(identifier) {
 
         for (const p of (particles || [])) {
             try {
-                meta[p.key] = JSON.parse(p.value);
+                meta[p.particle_key] = JSON.parse(p.particle_value);
             } catch {
-                meta[p.key] = p.value;
+                meta[p.particle_key] = p.particle_value;
             }
         }
 
@@ -129,15 +159,15 @@ export async function getUserFiles(userId) {
     const result = [];
     for (const file of (files || [])) {
         const particles = await db.query('all', `
-            SELECT key, value FROM particles WHERE atome_id = ?
+            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
         `, [file.atome_id]);
 
         const meta = { ...file };
         for (const p of (particles || [])) {
             try {
-                meta[p.key] = JSON.parse(p.value);
+                meta[p.particle_key] = JSON.parse(p.particle_value);
             } catch {
-                meta[p.key] = p.value;
+                meta[p.particle_key] = p.particle_value;
             }
         }
         result.push(meta);
@@ -165,15 +195,15 @@ export async function getAccessibleFiles(userId) {
     const result = [];
     for (const file of (files || [])) {
         const particles = await db.query('all', `
-            SELECT key, value FROM particles WHERE atome_id = ?
+            SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
         `, [file.atome_id]);
 
         const meta = { ...file };
         for (const p of (particles || [])) {
             try {
-                meta[p.key] = JSON.parse(p.value);
+                meta[p.particle_key] = JSON.parse(p.particle_value);
             } catch {
-                meta[p.key] = p.value;
+                meta[p.particle_key] = p.particle_value;
             }
         }
         result.push(meta);
@@ -236,7 +266,7 @@ export async function setFilePublic(atomeId, ownerId, isPublic) {
         `, [JSON.stringify(isPublic), now, atomeId]);
     } else {
         await db.query('run', `
-            INSERT INTO particles (atome_id, key, value, updated_at)
+            INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
             VALUES (?, 'is_public', ?, ?)
         `, [atomeId, JSON.stringify(isPublic), now]);
     }
@@ -245,6 +275,37 @@ export async function setFilePublic(atomeId, ownerId, isPublic) {
     emitFileEvent('visibility', { atome_id: atomeId, is_public: isPublic });
 
     return { success: true };
+}
+
+function normalizeFileSharePermissions(permissions) {
+    if (typeof permissions === 'number') {
+        return permissions;
+    }
+
+    if (typeof permissions === 'string') {
+        const value = permissions.toLowerCase();
+        if (value === 'write') {
+            return { can_read: true, can_write: true, can_delete: false, can_share: false, can_create: false };
+        }
+        if (value === 'delete') {
+            return { can_read: true, can_write: true, can_delete: true, can_share: false, can_create: false };
+        }
+        if (value === 'admin') {
+            return { can_read: true, can_write: true, can_delete: true, can_share: true, can_create: true };
+        }
+        return { can_read: true, can_write: false, can_delete: false, can_share: false, can_create: false };
+    }
+
+    if (permissions && typeof permissions === 'object') {
+        const read = permissions.can_read ?? permissions.canRead ?? permissions.read ?? false;
+        const write = permissions.can_write ?? permissions.canWrite ?? permissions.write ?? false;
+        const del = permissions.can_delete ?? permissions.canDelete ?? permissions.delete ?? false;
+        const share = permissions.can_share ?? permissions.canShare ?? permissions.share ?? false;
+        const create = permissions.can_create ?? permissions.canCreate ?? permissions.create ?? false;
+        return { can_read: !!read, can_write: !!write, can_delete: !!del, can_share: !!share, can_create: !!create };
+    }
+
+    return { can_read: true, can_write: false, can_delete: false, can_share: false, can_create: false };
 }
 
 /**
@@ -288,7 +349,7 @@ export async function getFileStats() {
         SELECT COUNT(*) as count
         FROM particles p
         JOIN atomes a ON p.atome_id = a.atome_id
-        WHERE p.key = 'is_public' AND p.value = 'true'
+        WHERE p.particle_key = 'is_public' AND p.particle_value = 'true'
         AND a.atome_type = 'file' AND a.deleted_at IS NULL
     `);
 
@@ -350,7 +411,7 @@ export async function handleFileMessage(message, userId) {
 
             case 'get': {
                 const { atome_id, file_name } = message;
-                const meta = await getFileMetadata(atome_id || file_name);
+                const meta = await getFileMetadata(atome_id || file_name, { userId });
                 if (!meta) {
                     return { requestId, success: false, error: 'File not found' };
                 }
@@ -423,25 +484,47 @@ export async function initUserFiles(uploadsDir) {
 /**
  * Share a file with another user (backward compatibility wrapper)
  */
-export async function shareFile(fileId, targetUserId, granterId, permissions = { canRead: true }) {
+export async function shareFile(fileIdentifier, granterId, targetUserId, permissions) {
     const { createShare } = await import('./sharing.js');
-    return createShare({
-        atomeId: fileId,
-        principalId: targetUserId,
-        granterId,
-        canRead: permissions.canRead ?? true,
-        canWrite: permissions.canWrite ?? false,
-        canDelete: permissions.canDelete ?? false,
-        canShare: permissions.canShare ?? false
-    });
+    const meta = await getFileMetadata(fileIdentifier, { ownerId: granterId });
+    if (!meta) {
+        return { success: false, error: 'File not found' };
+    }
+    const payload = normalizeFileSharePermissions(permissions);
+    const result = await createShare(granterId, meta.atome_id, targetUserId, payload);
+    if (result?.success) {
+        return { ...result, file: meta };
+    }
+    return result;
 }
 
 /**
  * Revoke file sharing (backward compatibility wrapper)
  */
-export async function unshareFile(fileId, targetUserId) {
+export async function unshareFile(fileIdentifier, granterId, targetUserId) {
     const { revokeShare } = await import('./sharing.js');
-    return revokeShare(fileId, targetUserId);
+    const meta = await getFileMetadata(fileIdentifier, { ownerId: granterId });
+    if (!meta) {
+        return { success: false, error: 'File not found' };
+    }
+
+    const permission = await db.query('get', `
+        SELECT permission_id
+        FROM permissions
+        WHERE atome_id = ? AND principal_id = ?
+        ORDER BY permission_id DESC
+        LIMIT 1
+    `, [meta.atome_id, targetUserId]);
+
+    if (!permission?.permission_id) {
+        return { success: false, error: 'Permission not found' };
+    }
+
+    const result = await revokeShare(granterId, permission.permission_id);
+    if (result?.success) {
+        return { ...result, file: meta };
+    }
+    return result;
 }
 
 export default {

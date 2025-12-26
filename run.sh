@@ -13,9 +13,9 @@ PROJECT_ROOT="$SCRIPT_DIR"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 
 # --- Editable defaults -------------------------------------------------------
-# Change DEFAULT_UPLOADS_PATH to point uploads elsewhere. Use an absolute path
-# or a path relative to the project root (default keeps files inside the repo).
-DEFAULT_UPLOADS_PATH="src/assets/uploads"
+# Change DEFAULT_UPLOADS_PATH to point legacy uploads elsewhere (sync watcher).
+# Per-user uploads now live in each user's Downloads folder.
+DEFAULT_UPLOADS_PATH="data/users/anonymous/Downloads"
 # Change DEFAULT_MONITORED_PATH to pick the folder watched by chokidar.
 # Absolute paths are supported; relative values are resolved from the project root.
 DEFAULT_MONITORED_PATH="/Users/Shared/monitored"

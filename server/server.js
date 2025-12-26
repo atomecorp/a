@@ -57,6 +57,7 @@ import { registerSharingRoutes, handleShareMessage } from './sharing.js';
 import {
   initUserFiles,
   registerFileUpload,
+  getFileMetadata,
   getUserFiles,
   getAccessibleFiles,
   canAccessFile,
@@ -92,6 +93,14 @@ import {
 } from './atomeRealtime.js';
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
+import {
+  ensureUserDownloadsDir,
+  resolveUserUploadPath,
+  resolveUserFilePath,
+  sanitizeFileName,
+  ensureSharedFileLink,
+  removeSharedFileLink
+} from './fileStorage.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
@@ -104,13 +113,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 const staticRoot = path.join(projectRoot, 'src');
 const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
-const uploadsDir = (() => {
+const legacyUploadsDir = (() => {
   try {
     return resolveUploadsDir();
   } catch (error) {
     const message = error?.message || error;
-    console.error('❌ Unable to resolve uploads directory:', message);
-    process.exit(1);
+    console.warn('⚠️ Unable to resolve legacy uploads directory:', message);
+    return null;
   }
 })();
 const VERSION_FILE = path.join(projectRoot, 'version.txt');
@@ -139,7 +148,7 @@ function resolveUploadsDir() {
     : '';
 
   if (!customDir) {
-    throw new Error('SQUIRREL_UPLOADS_DIR is not defined. Set it via run.sh or export it before starting the server.');
+    return null;
   }
 
   const absolute = path.isAbsolute(customDir)
@@ -148,50 +157,22 @@ function resolveUploadsDir() {
   return path.resolve(absolute);
 }
 
-const sanitizeFileName = (name) => {
-  const base = typeof name === 'string' ? name : 'upload.bin';
-  const cleaned = path.basename(base).replace(/[^a-z0-9._-]/gi, '_');
-  return cleaned || 'upload.bin';
-};
-
-async function fileExists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function resolveUploadPath(rawName) {
-  const sanitized = sanitizeFileName(rawName);
-  const ext = path.extname(sanitized);
-  const stem = path.basename(sanitized, ext);
-  let candidate = sanitized;
-  let targetPath = path.join(uploadsDir, candidate);
-  let counter = 1;
-  while (await fileExists(targetPath)) {
-    candidate = `${stem}_${counter}${ext}`;
-    targetPath = path.join(uploadsDir, candidate);
-    counter += 1;
-  }
-  return { fileName: candidate, filePath: targetPath };
-}
-
-async function listUploads() {
-  const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
+async function listLegacyUploads() {
+  if (!legacyUploadsDir) return [];
+  const entries = await fs.readdir(legacyUploadsDir, { withFileTypes: true });
   const files = [];
 
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     const safeName = sanitizeFileName(entry.name);
-    const absolutePath = path.join(uploadsDir, safeName);
+    const absolutePath = path.join(legacyUploadsDir, safeName);
     try {
       const stats = await fs.stat(absolutePath);
       files.push({
         name: safeName,
         size: stats.size,
-        modified: stats.mtime.toISOString()
+        modified: stats.mtime.toISOString(),
+        origin: 'legacy'
       });
     } catch (error) {
       console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
@@ -200,6 +181,160 @@ async function listUploads() {
 
   files.sort((a, b) => b.modified.localeCompare(a.modified));
   return files;
+}
+
+function resolveUserId(user) {
+  return user?.id || user?.userId || user?.user_id || 'anonymous';
+}
+
+function pickDisplayName(file, fallbackName) {
+  if (typeof file?.original_name === 'string' && file.original_name.trim()) {
+    return file.original_name;
+  }
+  if (typeof file?.file_name === 'string' && file.file_name.trim()) {
+    return file.file_name;
+  }
+  if (typeof file?.name === 'string' && file.name.trim()) {
+    return file.name;
+  }
+  return fallbackName;
+}
+
+async function listUserDownloads(userId) {
+  const { downloadsDir } = await ensureUserDownloadsDir(projectRoot, { id: userId });
+  const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const safeName = sanitizeFileName(entry.name);
+    const absolutePath = path.join(downloadsDir, safeName);
+    try {
+      const stats = await fs.stat(absolutePath);
+      files.push({
+        name: safeName,
+        file_name: safeName,
+        size: stats.size,
+        modified: stats.mtime.toISOString(),
+        owner_id: userId,
+        access: 'owner',
+        shared: false
+      });
+    } catch (error) {
+      console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
+    }
+  }
+
+  files.sort((a, b) => b.modified.localeCompare(a.modified));
+  return files;
+}
+
+async function listUploadsForUser(userId) {
+  if (!DATABASE_ENABLED) {
+    return listUserDownloads(userId);
+  }
+
+  const accessible = await getAccessibleFiles(userId);
+  const files = [];
+
+  for (const entry of (accessible || [])) {
+    const ownerId = entry.owner_id || userId;
+    const safeName = typeof entry.file_name === 'string' && entry.file_name.trim()
+      ? entry.file_name
+      : sanitizeFileName(entry.original_name || entry.name || 'upload.bin');
+    let stats = null;
+    try {
+      const filePath = await resolveUserFilePath(projectRoot, ownerId, safeName);
+      stats = await fs.stat(filePath);
+    } catch (_) {
+      stats = null;
+    }
+
+    const parsedSize = typeof entry.size === 'number' ? entry.size : Number(entry.size);
+    files.push({
+      id: entry.atome_id,
+      name: pickDisplayName(entry, safeName),
+      file_name: safeName,
+      size: Number.isFinite(parsedSize) ? parsedSize : (stats?.size || 0),
+      modified: stats?.mtime?.toISOString() || entry.updated_at || entry.created_at || null,
+      owner_id: ownerId,
+      access: entry.access || (ownerId === userId ? 'owner' : 'read'),
+      shared: ownerId !== userId
+    });
+  }
+
+  if (userId === 'anonymous') {
+    const legacy = await listLegacyUploads();
+    const mapped = legacy.map((file) => ({
+      id: null,
+      name: file.name,
+      file_name: file.name,
+      size: file.size || 0,
+      modified: file.modified || null,
+      owner_id: userId,
+      access: 'owner',
+      shared: false,
+      legacy: true
+    }));
+    files.push(...mapped);
+  }
+
+  const toTimestamp = (value) => {
+    if (!value) return 0;
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+  files.sort((a, b) => toTimestamp(b.modified) - toTimestamp(a.modified));
+  return files;
+}
+
+async function resolveDownloadTarget(fileParam, userId) {
+  const raw = typeof fileParam === 'string' ? fileParam : String(fileParam || '');
+  const safeParam = raw.trim();
+
+  if (DATABASE_ENABLED && safeParam) {
+    let meta = await getFileMetadata(safeParam);
+    if (meta && meta.atome_id !== safeParam) {
+      meta = null;
+    }
+
+    if (!meta) {
+      meta = await getFileMetadata(safeParam, { userId });
+    }
+
+    if (meta) {
+      const canRead = await canAccessFile(meta.atome_id, userId);
+      if (!canRead) {
+        return { error: 'Access denied', status: 403 };
+      }
+      const safeName = typeof meta.file_name === 'string' && meta.file_name.trim()
+        ? meta.file_name
+        : sanitizeFileName(meta.original_name || safeParam);
+      const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
+      const downloadName = typeof meta.original_name === 'string' && meta.original_name.trim()
+        ? meta.original_name
+        : safeName;
+      return { filePath, downloadName, meta };
+    }
+  }
+
+  const fallbackName = sanitizeFileName(safeParam);
+
+  if (userId === 'anonymous' && legacyUploadsDir) {
+    const legacyPath = path.join(legacyUploadsDir, fallbackName);
+    try {
+      await fs.access(legacyPath);
+      return { filePath: legacyPath, downloadName: fallbackName, meta: null };
+    } catch (_) { }
+  }
+
+  try {
+    const userPath = await resolveUserFilePath(projectRoot, userId, fallbackName);
+    await fs.access(userPath);
+    return { filePath: userPath, downloadName: fallbackName, meta: null };
+  } catch (_) {
+    return null;
+  }
 }
 
 // HTTPS Configuration
@@ -278,8 +413,12 @@ async function startServer() {
     SERVER_VERSION = await loadServerVersion();
     console.log(`📦 Version applicative: ${SERVER_VERSION}`);
 
-    await fs.mkdir(uploadsDir, { recursive: true });
-    console.log('📁 Uploads directory:', uploadsDir);
+    if (legacyUploadsDir) {
+      await fs.mkdir(legacyUploadsDir, { recursive: true });
+      console.log('📁 Legacy uploads directory:', legacyUploadsDir);
+    } else {
+      console.log('📁 Legacy uploads directory: disabled');
+    }
 
     // Serve server_config.json from the real project root.
     // Static assets are served from `src/`, so we need an explicit route.
@@ -296,7 +435,7 @@ async function startServer() {
     });
 
     // Initialize user files tracking
-    await initUserFiles(uploadsDir);
+    await initUserFiles(legacyUploadsDir || 'per-user Downloads');
 
     if (process.env.SQUIRREL_DISABLE_WATCHER === '1') {
       console.log('🛑 File sync watcher disabled via SQUIRREL_DISABLE_WATCHER=1');
@@ -340,7 +479,7 @@ async function startServer() {
       origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Client-Id']
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Client-Id', 'X-Filename']
     });
 
     // Servir les fichiers statiques depuis staticRoot (../src en dev)
@@ -449,7 +588,7 @@ async function startServer() {
       try {
         // Get user info if authenticated (optional for uploads)
         const user = await validateToken(request);
-        const userId = user?.id || user?.userId || 'anonymous';
+        const userId = resolveUserId(user);
 
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
@@ -472,14 +611,21 @@ async function startServer() {
           return { success: false, error: 'Empty upload body' };
         }
 
-        const { fileName, filePath } = await resolveUploadPath(decodedName);
+        const { fileName, filePath } = await resolveUserUploadPath(
+          projectRoot,
+          { id: userId, username: user?.username },
+          decodedName
+        );
         await fs.writeFile(filePath, bodyBuffer);
 
-        // Register file ownership
-        await registerFileUpload(fileName, userId, {
-          originalName: decodedName,
-          size: bodyBuffer.length
-        });
+        if (DATABASE_ENABLED) {
+          // Register file ownership
+          await registerFileUpload(fileName, userId, {
+            originalName: decodedName,
+            mimeType: request.headers['content-type'] || null,
+            size: bodyBuffer.length
+          });
+        }
 
         return { success: true, file: fileName, owner: userId };
       } catch (error) {
@@ -500,8 +646,8 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const userId = user.id || user.userId;
-      const files = getUserFiles(userId);
+      const userId = resolveUserId(user);
+      const files = await getUserFiles(userId);
 
       return { success: true, data: files, count: files.length };
     });
@@ -513,8 +659,8 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const userId = user.id || user.userId;
-      const files = getAccessibleFiles(userId);
+      const userId = resolveUserId(user);
+      const files = await getAccessibleFiles(userId);
 
       return { success: true, data: files, count: files.length };
     });
@@ -526,17 +672,32 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const { fileName, targetUserId, permission } = request.body || {};
+      const { fileId, atomeId, fileName, targetUserId, permission } = request.body || {};
+      const fileIdentifier = fileId || atomeId || fileName;
 
-      if (!fileName || !targetUserId) {
-        return replyJson(reply, 400, { success: false, error: 'Missing fileName or targetUserId' });
+      if (!fileIdentifier || !targetUserId) {
+        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or targetUserId' });
       }
 
-      const userId = user.id || user.userId;
-      const result = await shareFile(fileName, userId, targetUserId, permission || 'read');
+      const userId = resolveUserId(user);
+      const result = await shareFile(fileIdentifier, userId, targetUserId, permission || 'read');
 
       if (!result.success) {
         return replyJson(reply, 403, result);
+      }
+
+      if (result.file?.file_name) {
+        const link = await ensureSharedFileLink({
+          projectRoot,
+          ownerId: result.file.owner_id,
+          targetUserId,
+          fileName: result.file.file_name
+        });
+        if (!link.ok) {
+          result.link_warning = link.error || 'Shared link not created';
+        } else {
+          result.link = link;
+        }
       }
 
       return result;
@@ -549,17 +710,32 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const { fileName, targetUserId } = request.body || {};
+      const { fileId, atomeId, fileName, targetUserId } = request.body || {};
+      const fileIdentifier = fileId || atomeId || fileName;
 
-      if (!fileName || !targetUserId) {
-        return replyJson(reply, 400, { success: false, error: 'Missing fileName or targetUserId' });
+      if (!fileIdentifier || !targetUserId) {
+        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or targetUserId' });
       }
 
-      const userId = user.id || user.userId;
-      const result = await unshareFile(fileName, userId, targetUserId);
+      const userId = resolveUserId(user);
+      const result = await unshareFile(fileIdentifier, userId, targetUserId);
 
       if (!result.success) {
         return replyJson(reply, 403, result);
+      }
+
+      if (result.file?.file_name) {
+        const link = await removeSharedFileLink({
+          projectRoot,
+          ownerId: result.file.owner_id,
+          targetUserId,
+          fileName: result.file.file_name
+        });
+        if (!link.ok) {
+          result.link_warning = link.error || 'Shared link not removed';
+        } else {
+          result.link = link;
+        }
       }
 
       return result;
@@ -572,14 +748,20 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const { fileName, isPublic } = request.body || {};
+      const { fileId, atomeId, fileName, isPublic } = request.body || {};
+      const fileIdentifier = fileId || atomeId || fileName;
 
-      if (!fileName || typeof isPublic !== 'boolean') {
-        return replyJson(reply, 400, { success: false, error: 'Missing fileName or isPublic' });
+      if (!fileIdentifier || typeof isPublic !== 'boolean') {
+        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or isPublic' });
       }
 
-      const userId = user.id || user.userId;
-      const result = await setFilePublic(fileName, userId, isPublic);
+      const userId = resolveUserId(user);
+      const meta = await getFileMetadata(fileIdentifier, { ownerId: userId });
+      if (!meta) {
+        return replyJson(reply, 404, { success: false, error: 'File not found' });
+      }
+
+      const result = await setFilePublic(meta.atome_id, userId, isPublic);
 
       if (!result.success) {
         return replyJson(reply, 403, result);
@@ -596,7 +778,7 @@ async function startServer() {
       }
 
       // TODO: Check if user is admin
-      const stats = getFileStats();
+      const stats = await getFileStats();
 
       return { success: true, data: stats };
     });
@@ -630,7 +812,9 @@ async function startServer() {
 
     server.get('/api/uploads', async (request, reply) => {
       try {
-        const files = await listUploads();
+        const user = await validateToken(request);
+        const userId = resolveUserId(user);
+        const files = await listUploadsForUser(userId);
         return { success: true, files };
       } catch (error) {
         request.log.error({ err: error }, 'Unable to list uploads');
@@ -641,18 +825,26 @@ async function startServer() {
 
     server.get('/api/uploads/:file', async (request, reply) => {
       try {
+        const user = await validateToken(request);
+        const userId = resolveUserId(user);
         const fileParam = request.params.file || '';
-        const safeName = sanitizeFileName(fileParam);
-        const filePath = path.join(uploadsDir, safeName);
+        const target = await resolveDownloadTarget(fileParam, userId);
 
-        await fs.access(filePath);
-        reply.header('Content-Disposition', `attachment; filename="${safeName}"`);
+        if (!target?.filePath) {
+          const status = target?.status || 404;
+          reply.code(status);
+          return { success: false, error: target?.error || 'File not found' };
+        }
+
+        await fs.access(target.filePath);
+        reply.header('Content-Disposition', `attachment; filename="${target.downloadName}"`);
         reply.type('application/octet-stream');
-        return reply.send(createReadStream(filePath));
+        return reply.send(createReadStream(target.filePath));
       } catch (error) {
         request.log.error({ err: error }, 'Unable to download upload');
-        reply.code(404);
-        return { success: false, error: 'File not found' };
+        const status = error?.status || 404;
+        reply.code(status);
+        return { success: false, error: error?.error || error?.message || 'File not found' };
       }
     });
 
