@@ -49,7 +49,7 @@
 //  import('./examples/audio_basic.js');
 ////////////////////
 // puts('synced!');
-// import('./aBox/index.js');
+
 // import('./examples/user_creation.js');
 // import('./examples/update.js');
 // import('./examples/socket_test.js');
@@ -59,6 +59,7 @@
 
 /////  ==> create user - messge them ans share 
 import('./examples/user.js');
+import('./aBox/index.js');
 // import('./examples/messages.js');
 // import('./examples/messages_ui.js');
 // import('./examples/share.js');
@@ -66,8 +67,8 @@ import('./examples/user.js');
 
 // import('./examples/calendar.js');
 
-import('./examples/shell.js');
-import('./examples/shellUI.js');
+// import('./examples/shell.js');
+// import('./examples/shellUI.js');
 // import('./examples/AI.js');
 //todos :
 // test and check DB apis
