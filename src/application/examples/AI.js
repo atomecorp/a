@@ -57,16 +57,20 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
         parent: '#view',
         id: 'ai-prompt-demo',
         css: {
-            position: 'relative',
-            zIndex: 20,
-            margin: '700px 16px 16px',
+            position: 'fixed',
+            top: '600px',
+            left: '16px',
+            right: '16px',
+            margin: '0',
             padding: '12px',
             border: '1px solid #2d2d2d',
             borderRadius: '8px',
             backgroundColor: '#101010',
             color: '#e6e6e6',
             fontFamily: 'monospace',
-            maxWidth: '680px'
+            maxWidth: '680px',
+            zIndex: 10000001,
+            pointerEvents: 'auto'
         }
     });
 
@@ -508,10 +512,14 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
     const getCurrentUserId = async () => {
         try {
             const result = await window.AdoleAPI?.auth?.current?.();
-            if (!result?.logged || !result.user) return null;
-            return result.user.user_id || result.user.atome_id || result.user.id || null;
+            if (result?.logged && result.user) {
+                return result.user.user_id || result.user.atome_id || result.user.id || null;
+            }
+            const fallback = window.AdoleAPI?.auth?.getCurrentInfo?.();
+            return fallback?.id || null;
         } catch (e) {
-            return null;
+            const fallback = window.AdoleAPI?.auth?.getCurrentInfo?.();
+            return fallback?.id || null;
         }
     };
 
@@ -526,16 +534,17 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
         return null;
     };
 
-    const loadProviderKey = async (providerId) => {
+    const loadProviderKey = async (providerId, userId) => {
         if (!window.AdoleAPI?.atomes?.get) return '';
-        const userId = await getCurrentUserId();
-        if (!userId) return '';
-        const secretId = normalizeSecretId(providerId, userId);
+        const resolvedUserId = userId || await getCurrentUserId();
+        if (!resolvedUserId) return '';
+        const secretId = normalizeSecretId(providerId, resolvedUserId);
         const result = await window.AdoleAPI.atomes.get(secretId);
         const atome = extractAtome(result);
-        if (!atome?.particles?.payload) return '';
+        const payload = atome?.particles?.payload ?? atome?.data?.payload;
+        if (!payload) return '';
         try {
-            return await decryptSecret(atome.particles.payload);
+            return await decryptSecret(payload);
         } catch (e) {
             updateStatus('Status: failed to decrypt key');
             return '';
@@ -814,10 +823,49 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
         });
     };
 
+    let keyReloadTimer = null;
+    let keyReloadAttempts = 0;
+    const scheduleKeyReload = (delay = 300) => {
+        if (keyReloadTimer) clearTimeout(keyReloadTimer);
+        keyReloadTimer = setTimeout(() => {
+            loadSelectedKey().catch(() => { });
+        }, delay);
+    };
+
     const loadSelectedKey = async () => {
         const providerId = providerSelect.value;
-        const keyValue = await loadProviderKey(providerId);
+        const userId = await getCurrentUserId();
+        if (!userId) {
+            keyReloadAttempts += 1;
+            if (keyReloadAttempts <= 30) {
+                scheduleKeyReload(1000);
+            }
+            updateStatus('Status: please log in to load key');
+            return;
+        }
+        keyReloadAttempts = 0;
+        const keyValue = await loadProviderKey(providerId, userId);
         keyInput.value = keyValue || '';
+        if (keyValue) {
+            updateStatus('Status: key loaded');
+        }
+    };
+
+    let keyWatchTimer = null;
+    const startKeyWatcher = () => {
+        if (keyWatchTimer) return;
+        keyWatchTimer = setInterval(async () => {
+            if (keyInput.value) return;
+            const userId = await getCurrentUserId();
+            if (!userId) return;
+            const keyValue = await loadProviderKey(providerSelect.value, userId);
+            if (keyValue) {
+                keyInput.value = keyValue;
+                updateStatus('Status: key loaded');
+                clearInterval(keyWatchTimer);
+                keyWatchTimer = null;
+            }
+        }, 2000);
     };
 
     providerSelect.value = 'openai';
@@ -826,7 +874,8 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
 
     providerSelect.addEventListener('change', () => {
         populateModels(providerSelect.value);
-        loadSelectedKey().catch(() => { });
+        keyInput.value = '';
+        scheduleKeyReload();
     });
 
     saveKeyButton.addEventListener('click', () => {
@@ -836,7 +885,9 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             updateStatus('Status: key is empty');
             return;
         }
-        saveProviderKey(providerId, keyValue).catch((error) => {
+        saveProviderKey(providerId, keyValue).then(() => {
+            scheduleKeyReload();
+        }).catch((error) => {
             updateStatus(`Status: ${error.message}`);
         });
     });
@@ -901,5 +952,8 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
         }
     });
 
-    loadSelectedKey().catch(() => { });
+    window.addEventListener('squirrel:user-logged-in', scheduleKeyReload);
+    window.addEventListener('squirrel:ready', scheduleKeyReload);
+    scheduleKeyReload();
+    startKeyWatcher();
 }
