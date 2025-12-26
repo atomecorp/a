@@ -67,8 +67,9 @@ import('./aBox/index.js');
 
 // import('./examples/calendar.js');
 
-// import('./examples/shell.js');
-// import('./examples/shellUI.js');
+import('./examples/shell.js');
+
+import('./examples/shellUI.js');
 // import('./examples/AI.js');
 //todos :
 // test and check DB apis

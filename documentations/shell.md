@@ -28,6 +28,19 @@ SQUIRREL_SHELL_ALLOW_INSTALL=0
 SQUIRREL_SHELL_ALLOW_ROOT=0
 ```
 
+Per-user policies (JSON map, keyed by `user.id`):
+
+```env
+SQUIRREL_SHELL_USER_POLICIES='{"<user-id>":{"allowedCommands":["*"],"allowInstall":true,"allowRoot":true}}'
+SQUIRREL_SHELL_ELEVATED_TOKEN=<elevated-token>
+SQUIRREL_SHELL_ROOT_TOKEN=<root-token>
+```
+
+Notes on per-user policies:
+- `allowedCommands: ["*"]` lets that user run any command that passes the safety checks.
+- Per-user policies override the global shell settings.
+- A user is allowed if they appear in `SQUIRREL_SHELL_ALLOWED_USERS` **or** have a per-user policy entry.
+
 ## Notes
 - Use `user.id` for the allowlist to guarantee uniqueness.
 - Do not add real credentials or secrets to `.env` in production.

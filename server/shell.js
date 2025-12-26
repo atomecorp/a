@@ -28,6 +28,7 @@ const DEFAULT_POLICY = {
   allowInstall: false,
   allowRoot: false,
   requireToken: false,
+  userPolicies: {},
   userRoot: 'data/users',
   maxDurationMs: 15000,
   maxOutputBytes: 64 * 1024
@@ -53,6 +54,17 @@ function toList(value) {
   return [];
 }
 
+function parseJson(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return null;
+  }
+}
+
 
 async function loadPolicy(projectRoot) {
   const envPolicyPath = process.env.SQUIRREL_SHELL_POLICY_PATH;
@@ -71,6 +83,7 @@ async function loadPolicy(projectRoot) {
   const envAllowedUsers = toList(process.env.SQUIRREL_SHELL_ALLOWED_USERS);
   const envAllowedCommands = toList(process.env.SQUIRREL_SHELL_ALLOWED_COMMANDS);
   const envInstallCommands = toList(process.env.SQUIRREL_SHELL_INSTALL_COMMANDS);
+  const envUserPolicies = parseJson(process.env.SQUIRREL_SHELL_USER_POLICIES);
 
   const policy = {
     ...DEFAULT_POLICY,
@@ -88,8 +101,57 @@ async function loadPolicy(projectRoot) {
   if (envAllowedUsers.length) policy.allowedUsers = envAllowedUsers;
   if (envAllowedCommands.length) policy.allowedCommands = envAllowedCommands;
   if (envInstallCommands.length) policy.installCommands = envInstallCommands;
+  if (filePolicy.userPolicies && typeof filePolicy.userPolicies === 'object') {
+    policy.userPolicies = filePolicy.userPolicies;
+  }
+  if (envUserPolicies && typeof envUserPolicies === 'object') {
+    policy.userPolicies = {
+      ...(policy.userPolicies || {}),
+      ...envUserPolicies
+    };
+  }
 
   return policy;
+}
+
+function normalizeUserPolicy(userPolicy) {
+  if (!userPolicy || typeof userPolicy !== 'object') return null;
+  const normalized = {};
+
+  if (userPolicy.allowedCommands !== undefined) {
+    normalized.allowedCommands = toList(userPolicy.allowedCommands);
+  }
+  if (userPolicy.installCommands !== undefined) {
+    normalized.installCommands = toList(userPolicy.installCommands);
+  }
+  if (userPolicy.allowInstall !== undefined) {
+    normalized.allowInstall = normalizeBoolean(userPolicy.allowInstall);
+  }
+  if (userPolicy.allowRoot !== undefined) {
+    normalized.allowRoot = normalizeBoolean(userPolicy.allowRoot);
+  }
+  if (userPolicy.requireToken !== undefined) {
+    normalized.requireToken = normalizeBoolean(userPolicy.requireToken);
+  }
+  if (userPolicy.maxDurationMs !== undefined) {
+    normalized.maxDurationMs = Number(userPolicy.maxDurationMs);
+  }
+  if (userPolicy.maxOutputBytes !== undefined) {
+    normalized.maxOutputBytes = Number(userPolicy.maxOutputBytes);
+  }
+  if (userPolicy.userRoot !== undefined) {
+    normalized.userRoot = String(userPolicy.userRoot);
+  }
+
+  return normalized;
+}
+
+function getUserPolicy(policy, user) {
+  if (!policy?.userPolicies || typeof policy.userPolicies !== 'object') return null;
+  const userId = String(user?.id || '');
+  if (userId && policy.userPolicies[userId]) return policy.userPolicies[userId];
+  if (user?.username && policy.userPolicies[user.username]) return policy.userPolicies[user.username];
+  return null;
 }
 
 function parseCommand(command) {
@@ -231,7 +293,8 @@ function validateTokens(tokens, policy, scope) {
   }
 
   const allowed = policy.allowedCommands || DEFAULT_ALLOWED_COMMANDS;
-  if (!allowed.includes(tokens[0])) {
+  const allowAll = Array.isArray(allowed) && allowed.includes('*');
+  if (!allowAll && !allowed.includes(tokens[0])) {
     return { ok: false, error: 'Command not allowed' };
   }
 
@@ -280,19 +343,25 @@ export async function executeShellCommand({
     return { success: false, error: 'Authenticated user required' };
   }
 
+  const userId = String(user.id);
+  const rawUserPolicy = getUserPolicy(policy, user);
+  const userOverrides = normalizeUserPolicy(rawUserPolicy);
   const allowedUsers = policy.allowedUsers || [];
+  const hasUserPolicy = Boolean(rawUserPolicy);
   if (!policy.allowAllUsers) {
-    if (!allowedUsers.length) {
+    if (!allowedUsers.length && !hasUserPolicy) {
       return { success: false, error: 'Shell allowlist is empty', userId: user.id };
     }
-    if (!allowedUsers.includes(String(user.id))) {
+    if (!allowedUsers.includes(userId) && !hasUserPolicy) {
       return { success: false, error: 'User is not allowed to run shell commands', userId: user.id };
     }
   }
 
+  const effectivePolicy = userOverrides ? { ...policy, ...userOverrides } : policy;
+
   const scope = resolveScope(payload?.scope);
   const tokens = normalizeTokens(payload || {});
-  const validation = validateTokens(tokens, policy, scope);
+  const validation = validateTokens(tokens, effectivePolicy, scope);
   if (!validation.ok) {
     return { success: false, error: validation.error || 'Command rejected' };
   }
@@ -305,7 +374,7 @@ export async function executeShellCommand({
     if (!payload?.token || payload.token !== requiredToken) {
       return { success: false, error: 'Shell token missing or invalid' };
     }
-  } else if (policy.requireToken) {
+  } else if (effectivePolicy.requireToken) {
     if (!requiredToken) {
       return { success: false, error: 'Shell token not configured' };
     }
@@ -314,7 +383,7 @@ export async function executeShellCommand({
     }
   }
 
-  const userHome = await ensureUserHome(projectRoot, { id: user.id, username: user.username }, policy.userRoot);
+  const userHome = await ensureUserHome(projectRoot, { id: user.id, username: user.username }, effectivePolicy.userRoot);
   const userRoot = userHome.home;
 
   let cwd;
@@ -328,10 +397,10 @@ export async function executeShellCommand({
   const args = tokens.slice(1);
   const startTime = Date.now();
   const timeoutMs = Math.min(
-    Number(payload?.timeoutMs || payload?.timeout_ms || policy.maxDurationMs || DEFAULT_POLICY.maxDurationMs),
-    policy.maxDurationMs || DEFAULT_POLICY.maxDurationMs
+    Number(payload?.timeoutMs || payload?.timeout_ms || effectivePolicy.maxDurationMs || DEFAULT_POLICY.maxDurationMs),
+    effectivePolicy.maxDurationMs || DEFAULT_POLICY.maxDurationMs
   );
-  const maxOutput = policy.maxOutputBytes || DEFAULT_POLICY.maxOutputBytes;
+  const maxOutput = effectivePolicy.maxOutputBytes || DEFAULT_POLICY.maxOutputBytes;
 
   return new Promise((resolve) => {
     let stdout = '';
