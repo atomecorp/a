@@ -56,12 +56,35 @@
 
 // import('./examples/ide_code_editor.js');
 // import('./examples/apis.js');
-import('./examples/check.js');
-import('./examples/messages.js');
-import('./examples/messages_ui.js');
-import('./examples/share.js');
-import('./examples/share_ui.js');
 
+/////  ==> create user - messge them ans share 
+// import('./examples/check.js');
+// import('./examples/messages.js');
+// import('./examples/messages_ui.js');
+// import('./examples/share.js');
+// import('./examples/share_ui.js');
+
+import('./examples/calendar.js');
+
+
+// import('./examples/AI.js');
+//todos :
+// test and check DB apis
+// - event drag and drop
+// - event resize
+// - multi calendar
+// - sync with external calendar (google?)
+// - reminders/alarms
+// - recurring events
+// - different views (day, week, month, agenda)
+// - event categories with colors
+// - search functionality
+// - integration with other app features (e.g., tasks, notes)
+// import('./examples/audio_recorder.js');
+// import('./examples/video_recorder.js');
+// import('./examples/videotrain.js');
+// import('./examples/videoconference.js');
+//end todos
 
 // import('./lyrix/index.js');
 // import('./examples/input_file.js');
