@@ -90,6 +90,8 @@ import {
   broadcastAtomeDelete,
   broadcastAtomeRealtimePatch
 } from './atomeRealtime.js';
+import { executeShellCommand } from './shell.js';
+import { ensureUserHome } from './userHome.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
@@ -1361,6 +1363,16 @@ async function startServer() {
                   { expiresIn: '7d' }
                 );
 
+                try {
+                  await ensureUserHome(projectRoot, {
+                    id: user.user_id,
+                    username: user.username,
+                    phone: user.phone
+                  });
+                } catch (e) {
+                  console.warn('[ws/api] Failed to prepare user home:', e.message);
+                }
+
                 safeSend({
                   type: 'auth-response',
                   requestId,
@@ -1416,6 +1428,16 @@ async function startServer() {
                       error: 'User not found'
                     });
                     return;
+                  }
+
+                  try {
+                    await ensureUserHome(projectRoot, {
+                      id: user.user_id,
+                      username: user.username,
+                      phone: user.phone
+                    });
+                  } catch (e) {
+                    console.warn('[ws/api] Failed to prepare user home:', e.message);
                   }
 
                   // Support registerAs ONLY when it matches the authenticated user id.
@@ -2132,6 +2154,48 @@ async function startServer() {
             } catch (error) {
               safeSend({
                 type: 'share-response',
+                requestId,
+                success: false,
+                error: error.message
+              });
+            }
+            return;
+          }
+
+          // Handle shell commands (highly restricted)
+          if (data.type === 'shell') {
+            const requestId = data.requestId || data.request_id;
+            const attachedUserId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+
+            const authExpMs = connection && typeof connection._wsApiAuthExpMs === 'number' ? connection._wsApiAuthExpMs : null;
+            if (!attachedUserId || (authExpMs && Date.now() >= authExpMs)) {
+              safeSend({
+                type: 'shell-response',
+                requestId,
+                success: false,
+                error: attachedUserId ? 'ws/api authentication expired (re-auth required)' : 'Unauthenticated ws/api connection'
+              });
+              return;
+            }
+
+            try {
+              const dataSource = db.getDataSourceAdapter();
+              const user = await findUserById(dataSource, attachedUserId);
+              const result = await executeShellCommand({
+                payload: data,
+                projectRoot,
+                user: user ? { id: user.user_id, username: user.username, phone: user.phone } : { id: attachedUserId },
+                connectionId: connection._wsApiConnectionId
+              });
+
+              safeSend({
+                type: 'shell-response',
+                requestId,
+                ...result
+              });
+            } catch (error) {
+              safeSend({
+                type: 'shell-response',
                 requestId,
                 success: false,
                 error: error.message

@@ -14,6 +14,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { ensureUserHome } from './userHome.js';
 
 // Get project root (parent of server/)
 const __filename = fileURLToPath(import.meta.url);
@@ -769,6 +770,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             });
 
             console.log(`✅ User logged in (ADOLE): ${user.username} (${user.phone})`);
+
+            try {
+                await ensureUserHome(PROJECT_ROOT, {
+                    id: user.user_id,
+                    username: user.username,
+                    phone: user.phone
+                });
+            } catch (e) {
+                console.warn('[auth] Failed to prepare user home:', e.message);
+            }
 
             return {
                 success: true,

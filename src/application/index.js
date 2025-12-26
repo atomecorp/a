@@ -58,15 +58,16 @@
 // import('./examples/apis.js');
 
 /////  ==> create user - messge them ans share 
-// import('./examples/check.js');
+import('./examples/user.js');
 // import('./examples/messages.js');
 // import('./examples/messages_ui.js');
 // import('./examples/share.js');
 // import('./examples/share_ui.js');
 
-import('./examples/calendar.js');
+// import('./examples/calendar.js');
 
-
+import('./examples/shell.js');
+import('./examples/shellUI.js');
 // import('./examples/AI.js');
 //todos :
 // test and check DB apis
