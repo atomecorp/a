@@ -4,7 +4,7 @@
 // ADOLE v3.0 - WebSocket API Functions
 // ============================================
 
-import { TauriAdapter, FastifyAdapter, CONFIG, generateUUID } from './adole.js';
+import { TauriAdapter, FastifyAdapter, CONFIG, generateUUID, checkBackends } from './adole.js';
 
 function normalizeAtomeRecord(raw) {
     if (!raw || typeof raw !== 'object') return raw;
@@ -176,7 +176,7 @@ function safe_parse_json(value) {
 function normalize_user_entry(raw) {
     if (!raw || typeof raw !== 'object') return null;
 
-    const particles = raw.particles || raw.data?.particles || raw;
+    const particles = raw.particles || raw.data?.particles || raw.data || raw;
     const userId = raw.user_id || raw.userId || raw.atome_id || raw.id || null;
     const username = safe_parse_json(particles?.username) || raw.username || null;
     const phone = safe_parse_json(particles?.phone) || raw.phone || null;
@@ -361,6 +361,39 @@ function queue_pending_register({ username, phone, password, createdOn }) {
     } catch {
         // Ignore
     }
+}
+
+function has_pending_registers() {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+        const raw = localStorage.getItem(AUTH_PENDING_SYNC_KEY);
+        if (!raw) return false;
+        const queue = JSON.parse(raw);
+        return Array.isArray(queue) && queue.length > 0;
+    } catch {
+        return false;
+    }
+}
+
+let pendingRegisterMonitorStarted = false;
+let pendingRegisterMonitorId = null;
+
+function start_pending_register_monitor() {
+    if (pendingRegisterMonitorStarted || typeof window === 'undefined') return;
+    pendingRegisterMonitorStarted = true;
+
+    const pollInterval = Math.max(CONFIG.CHECK_INTERVAL || 30000, 15000);
+    pendingRegisterMonitorId = setInterval(async () => {
+        if (!has_pending_registers()) return;
+        try {
+            const { fastify } = await checkBackends(true);
+            if (fastify) {
+                await process_pending_registers();
+            }
+        } catch {
+            // Ignore
+        }
+    }, pollInterval);
 }
 
 function is_already_exists_error(payload) {
@@ -1358,6 +1391,13 @@ try {
             try { await seed_public_user_directory_if_needed(); } catch { }
             try { await sync_public_user_directory_delta({ limit: 500 }); } catch { }
         });
+
+        window.addEventListener('squirrel:server-available', async (event) => {
+            if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
+            try { await process_pending_registers(); } catch { }
+        });
+
+        start_pending_register_monitor();
     }
 } catch {
     // Ignore

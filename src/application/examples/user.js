@@ -1179,8 +1179,34 @@ async function open_user_selector(callback) {
     : usersResult.fastify.users;
 
   if (users.length === 0) {
+    const phoneInput = grab('phone_pass_input');
+    const usernameInput = grab('username_input');
+    const phone = phoneInput?.value?.trim() || '';
+    const username = usernameInput?.value?.trim() || '';
+
+    if (phone) {
+      const loginResult = await log_user(phone, phone, username || '');
+      if (loginResult.tauri.success || loginResult.fastify.success) {
+        const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
+        const userObj = userData?.user || userData || { username, phone };
+        const label = formatUserSummary(userObj);
+        puts('✅ Logged user: ' + label);
+        grab('logged_user').textContent = label;
+        logUserDetails(userObj, 'manual_login');
+
+        const userId = userObj.user_id || userObj.atome_id || userObj.id;
+        if (userId) await initRemoteCommands(userId);
+
+        if (typeof callback === 'function') {
+          callback({ user_id: userId, username, phone, cancelled: false });
+        }
+        return;
+      }
+      puts('❌ Login failed (offline fallback)');
+    }
+
     if (typeof callback === 'function') {
-      callback({ user_id: null, username: null, phone: null, cancelled: true });
+      callback({ user_id: null, username: null, phone: null, cancelled: true, error: 'No users available' });
     }
     return;
   }
@@ -2064,7 +2090,27 @@ $('span', {
     display: 'inline-block'
   },
   text: 'log user',
-  onClick: () => {
+  onClick: async () => {
+    const phone = grab('phone_pass_input')?.value?.trim() || '';
+    const username = grab('username_input')?.value?.trim() || '';
+
+    if (phone) {
+      const loginResult = await log_user(phone, phone, username || '');
+      if (loginResult.tauri.success || loginResult.fastify.success) {
+        const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
+        const userObj = userData?.user || userData || { username, phone };
+        const label = formatUserSummary(userObj);
+        puts('✅ Logged user: ' + label);
+        grab('logged_user').textContent = label;
+        logUserDetails(userObj, 'manual_login');
+
+        const userId = userObj.user_id || userObj.atome_id || userObj.id;
+        if (userId) await initRemoteCommands(userId);
+        return;
+      }
+      puts('❌ Login failed; opening user selector');
+    }
+
     open_user_selector((result) => {
       if (!result.cancelled && !result.error) {
         puts('User selection successful');
@@ -3499,6 +3545,11 @@ setTimeout(() => {
 // ============================================================================
 
 async function startFastifyBroadcastProbe() {
+  const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+  if (isTauriRuntime && window.__SQUIRREL_FORCE_FASTIFY__ !== true) {
+    return;
+  }
+
   const wsUrl = await loadFastifyWsApiUrl();
   if (!wsUrl) {
     puts('[probe] Fastify ws/api URL unavailable; cannot start direct-message probe');
@@ -3623,4 +3674,9 @@ async function startFastifyBroadcastProbe() {
   });
 }
 
-setTimeout(startFastifyBroadcastProbe, 2500);
+(() => {
+  const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+  if (!isTauriRuntime || window.__SQUIRREL_FORCE_FASTIFY__ === true) {
+    setTimeout(startFastifyBroadcastProbe, 2500);
+  }
+})();

@@ -607,10 +607,11 @@ async fn handle_list(
                 let mut query = String::from(
                     "SELECT DISTINCT a.atome_id
                      FROM atomes a
-                     JOIN particles p ON a.atome_id = p.atome_id
+                     LEFT JOIN particles p
+                       ON a.atome_id = p.atome_id
+                      AND p.particle_key = 'visibility'
                      WHERE a.atome_type = 'user'
-                       AND p.particle_key = 'visibility'
-                       AND p.particle_value = '\"public\"'",
+                       AND (p.particle_value IS NULL OR p.particle_value = '\"public\"')",
                 );
                 if !include_deleted {
                     query.push_str(" AND a.deleted_at IS NULL");

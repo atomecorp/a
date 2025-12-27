@@ -1751,7 +1751,19 @@ async function startServer() {
                 const atomeId = data.id || data.atomeId || data.atome_id || uuidv4();
                 const atomeType = data.atomeType || data.atome_type || data.type || 'generic';
                 const parentId = data.parentId || data.parent_id || data.parent;
-                const ownerId = data.userId || data.ownerId || data.owner_id || data.owner;
+                let ownerId = data.userId || data.ownerId || data.owner_id || data.owner;
+                if (!ownerId || ownerId === 'anonymous') {
+                  ownerId = requesterId || null;
+                }
+                if (!ownerId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing owner (authentication required)'
+                  });
+                  return;
+                }
                 const particles = data.particles || data.properties || data.data || {};
 
                 if (parentId && requesterId) {

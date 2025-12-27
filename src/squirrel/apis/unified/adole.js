@@ -135,6 +135,33 @@ function isLocalDev() {
         hostname.startsWith('10.');
 }
 
+function shouldAttemptFastify() {
+    if (typeof window === 'undefined') return false;
+    if (window.__SQUIRREL_DISABLE_FASTIFY__ === true) return false;
+    return !!getFastifyHttpBaseUrl();
+}
+
+async function checkFastifyViaTauri() {
+    if (!isInTauri()) return null;
+    const localBase = getTauriHttpBaseUrl();
+    if (!localBase) return null;
+    try {
+        const res = await fetch(`${localBase}/api/fastify-status`, {
+            method: 'GET',
+            credentials: 'omit',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!res || !res.ok) return null;
+        const data = await res.json();
+        if (data && typeof data.available === 'boolean') {
+            return data.available;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
 /**
  * Check connection state with caching to avoid spamming
  * @param {'tauri'|'fastify'} backend - Backend to check
@@ -161,7 +188,7 @@ export async function checkConnection(backend) {
     }
 
     // FASTIFY: allow same-origin production OR configured URL; avoid localhost assumptions
-    if (backend === 'fastify' && !getFastifyHttpBaseUrl()) {
+    if (backend === 'fastify' && (!getFastifyHttpBaseUrl() || !shouldAttemptFastify())) {
         state.online = false;
         state.lastCheck = now;
         return false;
@@ -187,7 +214,13 @@ export async function checkConnection(backend) {
         state.lastCheck = now;
         return false;
     }
-    const isOnline = await silentPing(baseUrl);
+    let isOnline = false;
+    const tauriFastify = await checkFastifyViaTauri();
+    if (tauriFastify === true || tauriFastify === false) {
+        isOnline = tauriFastify;
+    } else {
+        isOnline = await silentPing(baseUrl);
+    }
 
     // Update state
     state.online = isOnline;
@@ -238,6 +271,8 @@ export async function checkBackends(force = false) {
         return { tauri: _backendState.tauri, fastify: _backendState.fastify };
     }
 
+    const previousFastify = _backendState.fastify;
+
     const [tauri, fastify] = await Promise.all([
         checkConnection('tauri'),
         checkConnection('fastify')
@@ -246,6 +281,10 @@ export async function checkBackends(force = false) {
     _backendState.tauri = tauri;
     _backendState.fastify = fastify;
     _backendState.lastCheck = now;
+
+    if (typeof window !== 'undefined' && fastify && !previousFastify) {
+        window.dispatchEvent(new CustomEvent('squirrel:server-available', { detail: { backend: 'fastify' } }));
+    }
 
     return { tauri, fastify };
 }
@@ -334,8 +373,9 @@ export function clearToken(key) {
  * Single connection shared across all requests
  */
 class TauriWebSocket {
-    constructor(url) {
+    constructor(url, backend = 'tauri') {
         this.url = url;
+        this.backend = backend;
         this.socket = null;
         this.isConnected = false;
         this.isConnecting = false;
@@ -345,7 +385,14 @@ class TauriWebSocket {
         this.pingTimer = null;
     }
 
-    connect() {
+    async connect() {
+        if (this.backend === 'fastify') {
+            const online = await checkConnection('fastify');
+            if (!online) {
+                return false;
+            }
+        }
+
         return new Promise((resolve) => {
             if (this.isConnected) {
                 resolve(true);
@@ -434,9 +481,17 @@ class TauriWebSocket {
     }
 
     // Silent connect - no error logging on failure
-    silentConnect() {
+    async silentConnect() {
         if (this.isConnected || this.isConnecting) return;
         this.isConnecting = true;
+
+        if (this.backend === 'fastify') {
+            const online = await checkConnection('fastify');
+            if (!online) {
+                this.isConnecting = false;
+                return;
+            }
+        }
 
         try {
             this.socket = new WebSocket(this.url);
@@ -752,7 +807,7 @@ function getTauriWs() {
     }
 
     if (!_tauriWs) {
-        _tauriWs = new TauriWebSocket(getTauriWsUrl());
+        _tauriWs = new TauriWebSocket(getTauriWsUrl(), 'tauri');
     }
     return _tauriWs;
 }
@@ -764,7 +819,7 @@ function getFastifyWs() {
     }
 
     if (!_fastifyWs) {
-        _fastifyWs = new TauriWebSocket(wsUrl);
+        _fastifyWs = new TauriWebSocket(wsUrl, 'fastify');
     }
 
     return _fastifyWs;
@@ -867,17 +922,22 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         atome: {
             async create(data) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                const ownerId = data.ownerId || data.owner_id || data.owner || null;
+                const payload = {
                     type: 'atome',
                     action: 'create',
                     token,
                     id: data.id,  // Allow specifying ID for sync operations
                     atomeId: data.id,  // Also send as atomeId for compatibility
-                    userId: data.ownerId || 'anonymous',
                     atomeType: data.type || data.kind,
                     parentId: data.parentId || data.parent,
                     particles: data.particles || data
-                });
+                };
+                if (ownerId) {
+                    payload.userId = ownerId;
+                    payload.ownerId = ownerId;
+                }
+                return getWs().send(payload);
             },
             async get(id) {
                 const token = getToken(tokenKey);

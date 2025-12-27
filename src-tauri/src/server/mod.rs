@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::fs;
+use tokio::{fs, net::TcpStream, time::{timeout, Duration}};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
 use zip::ZipArchive;
 
@@ -122,26 +122,23 @@ async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse
     }))
 }
 
-async fn server_config_handler(State(state): State<AppState>) -> impl IntoResponse {
-    let static_dir = state.static_dir.as_ref();
-
-    // In Tauri dev/bundled layouts, static_dir is often inside something like:
-    // .../src-tauri/target/debug/_up_/src
-    // The real repo root may be several parents above.
-    // We walk up a few levels to locate the nearest server_config.json.
+async fn locate_server_config(static_dir: &Path) -> Option<PathBuf> {
     let mut dir = static_dir.to_path_buf();
-    let mut config_path: Option<std::path::PathBuf> = None;
     for _ in 0..12u8 {
         let candidate = dir.join("server_config.json");
         if fs::metadata(&candidate).await.is_ok() {
-            config_path = Some(candidate);
-            break;
+            return Some(candidate);
         }
         if !dir.pop() {
             break;
         }
     }
+    None
+}
 
+async fn server_config_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let static_dir = state.static_dir.as_ref();
+    let config_path = locate_server_config(static_dir).await;
     let Some(config_path) = config_path else {
         return (
             StatusCode::NOT_FOUND,
@@ -171,6 +168,58 @@ async fn server_config_handler(State(state): State<AppState>) -> impl IntoRespon
         )
             .into_response(),
     }
+}
+
+async fn fastify_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let static_dir = state.static_dir.as_ref();
+    let config_path = locate_server_config(static_dir).await;
+    let Some(config_path) = config_path else {
+        return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+    };
+
+    let raw = match fs::read_to_string(&config_path).await {
+        Ok(raw) => raw,
+        Err(_) => {
+            return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+        }
+    };
+
+    let json_value: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => {
+            return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+        }
+    };
+
+    let host = json_value
+        .get("fastify")
+        .and_then(|v| v.get("host"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let port = json_value
+        .get("fastify")
+        .and_then(|v| v.get("port"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    if host.is_empty() || port == 0 {
+        return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+    }
+
+    let addr = format!("{}:{}", host, port);
+    let available = timeout(Duration::from_millis(300), TcpStream::connect(addr))
+        .await
+        .map(|res| res.is_ok())
+        .unwrap_or(false);
+
+    Json(json!({
+        "success": true,
+        "available": available,
+        "configured": true,
+        "host": host,
+        "port": port
+    }))
+        .into_response()
 }
 
 /// Debug log handler - receives logs from frontend to survive page reloads
@@ -1199,6 +1248,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
+        .route("/api/fastify-status", get(fastify_status_handler))
         .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
         .route(

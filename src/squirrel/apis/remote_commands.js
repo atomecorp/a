@@ -94,6 +94,91 @@ async function loadConfigOnce() {
     }
 }
 
+function resolveFastifyHttpBase() {
+    if (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string') {
+        const base = window.__SQUIRREL_FASTIFY_URL__.trim();
+        if (base) return base;
+    }
+
+    const wsUrl = CONFIG.WS_URL || '';
+    if (!wsUrl) return '';
+
+    return wsUrl
+        .replace(/^wss:/, 'https:')
+        .replace(/^ws:/, 'http:')
+        .replace(/\/ws\/api.*$/, '');
+}
+
+function shouldAttemptFastifyChecks() {
+    if (typeof window === 'undefined') return false;
+    const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (window.__SQUIRREL_DISABLE_FASTIFY__ === true) return false;
+    if (!isTauriRuntime) return true;
+    return !!resolveFastifyHttpBase();
+}
+
+async function checkFastifyViaTauri() {
+    if (typeof window === 'undefined') return null;
+    const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (!isTauriRuntime) return null;
+
+    const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3000;
+    const localBase = `http://127.0.0.1:${localPort}`;
+
+    try {
+        const res = await fetch(`${localBase}/api/fastify-status`, {
+            method: 'GET',
+            credentials: 'omit',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!res || !res.ok) return null;
+        const data = await res.json();
+        if (data && typeof data.available === 'boolean') {
+            return data.available;
+        }
+    } catch { }
+
+    return null;
+}
+
+async function isFastifyAvailable() {
+    if (!shouldAttemptFastifyChecks()) {
+        return false;
+    }
+
+    if (typeof window !== 'undefined' && typeof window._checkFastifyAvailable === 'function') {
+        const cachedState = window._checkFastifyAvailable();
+        if (cachedState === false || cachedState === true) {
+            return cachedState;
+        }
+    }
+
+    const tauriCheck = await checkFastifyViaTauri();
+    if (tauriCheck === true || tauriCheck === false) {
+        return tauriCheck;
+    }
+
+    const base = resolveFastifyHttpBase();
+    if (!base) return false;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    try {
+        await fetch(`${base}/api/auth/me`, {
+            method: 'GET',
+            signal: controller.signal,
+            credentials: 'omit',
+            headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeoutId);
+        return true;
+    } catch (_) {
+        clearTimeout(timeoutId);
+        return false;
+    }
+}
+
 /**
  * Debug log helper
  */
@@ -387,6 +472,12 @@ async function connect() {
 
     if (!CONFIG.WS_URL) {
         log('Cannot connect: missing WS_URL (server_config.json not available yet)');
+        return false;
+    }
+
+    const available = await isFastifyAvailable();
+    if (!available) {
+        log('Cannot connect: Fastify unavailable');
         return false;
     }
 

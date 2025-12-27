@@ -214,6 +214,11 @@ export async function resolvePendingOwners() {
     for (const row of pending) {
         try {
             const pendingId = JSON.parse(row.particle_value);
+            if (!pendingId || pendingId === 'anonymous') {
+                await query('run', 'DELETE FROM particles WHERE atome_id = ? AND particle_key = ?', [row.atome_id, row.particle_key]);
+                resolved++;
+                continue;
+            }
             const exists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [pendingId]);
 
             if (exists) {

@@ -119,6 +119,15 @@ async fn handle_register(
         Some(p) if p.len() >= 6 => p,
         _ => return error_response(request_id, "Password must be at least 6 characters"),
     };
+    let visibility = message
+        .get("visibility")
+        .and_then(|v| v.as_str())
+        .unwrap_or("public");
+    let visibility = if visibility == "private" {
+        "private".to_string()
+    } else {
+        "public".to_string()
+    };
 
     let db = match state.db.lock() {
         Ok(d) => d,
@@ -161,6 +170,7 @@ async fn handle_register(
                 ("username", &username),
                 ("phone", &phone),
                 ("password_hash", &password_hash),
+                ("visibility", &visibility),
             ];
 
             for (key, value) in particles {
@@ -211,6 +221,7 @@ async fn handle_register(
         ("username", &username),
         ("phone", &phone),
         ("password_hash", &password_hash),
+        ("visibility", &visibility),
     ];
 
     for (key, value) in particles {

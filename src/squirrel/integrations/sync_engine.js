@@ -76,54 +76,128 @@ export function getClientId() {
 // INTERNAL UTILITIES
 // =============================================================================
 
+const FASTIFY_AVAILABILITY_TTL = 10000;
+let fastifyAvailabilityCache = { value: null, lastCheck: 0 };
+
+function shouldAttemptFastifyChecks() {
+    if (typeof window === 'undefined') return false;
+    const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (!isTauriRuntime) return true;
+
+    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return true;
+
+    const base = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+        ? window.__SQUIRREL_FASTIFY_URL__.trim()
+        : '';
+    if (!base) return false;
+
+    try {
+        const parsed = new URL(base);
+        const host = parsed.hostname;
+        const port = parsed.port || '';
+        const isLocalHost = host === '127.0.0.1' || host === 'localhost';
+        const isDefaultPort = port === '' || port === '3001';
+        if (!isLocalHost || !isDefaultPort) return true;
+    } catch {
+        return false;
+    }
+
+    try {
+        const token = localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token');
+        if (token) return true;
+    } catch { }
+
+    try {
+        const pending = JSON.parse(localStorage.getItem('auth_pending_sync') || '[]');
+        if (Array.isArray(pending) && pending.length > 0) return true;
+    } catch { }
+
+    return false;
+}
+
+async function checkFastifyViaTauri() {
+    if (typeof window === 'undefined') return null;
+    const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (!isTauriRuntime) return null;
+
+    const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3000;
+    const localBase = `http://127.0.0.1:${localPort}`;
+
+    try {
+        const res = await fetch(`${localBase}/api/fastify-status`, {
+            method: 'GET',
+            credentials: 'omit',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!res || !res.ok) return null;
+        const data = await res.json();
+        if (data && typeof data.available === 'boolean') {
+            return data.available;
+        }
+    } catch { }
+    return null;
+}
+
 /**
  * Check if Fastify server is available
- * Uses WebSocket to avoid network errors in console
+ * Uses HTTP ping to avoid noisy WebSocket connection errors
  */
 async function checkFastifyAvailable() {
-    // First check if we already know Fastify is unavailable
-    if (typeof window._checkFastifyAvailable === 'function') {
-        const cachedState = window._checkFastifyAvailable();
-        if (cachedState === false) {
-            return false;
+    if (!shouldAttemptFastifyChecks()) {
+        fastifyAvailabilityCache = { value: false, lastCheck: Date.now() };
+        if (typeof window !== 'undefined') {
+            window._checkFastifyAvailable = () => false;
         }
-        if (cachedState === true) {
-            return true;
+        return false;
+    }
+    if (typeof window !== 'undefined' && typeof window._checkFastifyAvailable === 'function') {
+        const cachedState = window._checkFastifyAvailable();
+        if (cachedState === false || cachedState === true) {
+            return cachedState;
         }
     }
 
-    // Use WebSocket for silent check (no console errors)
-    return new Promise((resolve) => {
-        try {
-            const wsUrl = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ === 'string')
-                ? window.__SQUIRREL_FASTIFY_WS_SYNC_URL__
-                : '';
+    const now = Date.now();
+    if (fastifyAvailabilityCache.value !== null &&
+        (now - fastifyAvailabilityCache.lastCheck < FASTIFY_AVAILABILITY_TTL)) {
+        return fastifyAvailabilityCache.value;
+    }
 
-            if (!wsUrl) {
-                resolve(false);
-                return;
+    const tauriCheck = await checkFastifyViaTauri();
+    if (tauriCheck === true || tauriCheck === false) {
+        fastifyAvailabilityCache = { value: tauriCheck, lastCheck: now };
+    } else {
+        const base = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+            ? window.__SQUIRREL_FASTIFY_URL__.trim()
+            : '';
+
+        if (!base) {
+            fastifyAvailabilityCache = { value: false, lastCheck: now };
+        } else {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+            try {
+                await fetch(`${base}/api/auth/me`, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    credentials: 'omit',
+                    headers: { 'Accept': 'application/json' }
+                });
+                clearTimeout(timeoutId);
+                fastifyAvailabilityCache = { value: true, lastCheck: now };
+            } catch (_) {
+                clearTimeout(timeoutId);
+                fastifyAvailabilityCache = { value: false, lastCheck: now };
             }
-
-            const ws = new WebSocket(wsUrl);
-            const timeout = setTimeout(() => {
-                try { ws.close(); } catch (e) { }
-                resolve(false);
-            }, 2000);
-
-            ws.onopen = () => {
-                clearTimeout(timeout);
-                try { ws.close(); } catch (e) { }
-                resolve(true);
-            };
-
-            ws.onerror = () => {
-                clearTimeout(timeout);
-                resolve(false);
-            };
-        } catch (e) {
-            resolve(false);
         }
-    });
+    }
+
+    if (typeof window !== 'undefined') {
+        window._checkFastifyAvailable = () => fastifyAvailabilityCache.value;
+    }
+
+    return fastifyAvailabilityCache.value;
 }
 
 /**

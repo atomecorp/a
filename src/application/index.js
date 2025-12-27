@@ -85,6 +85,7 @@ import('./examples/AI.js');
 // - event categories with colors
 // - search functionality
 // - integration with other app features (e.g., tasks, notes)
+// - audio AI commands
 // import('./examples/audio_recorder.js');
 // import('./examples/video_recorder.js');
 // import('./examples/videotrain.js');
