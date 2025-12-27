@@ -425,6 +425,12 @@ async function loadProjectAtomes(projectId) {
 
   checkDebugPuts('🔍 Loading atomes for project: ' + projectId);
 
+  try {
+    if (typeof AdoleAPI !== 'undefined' && AdoleAPI.sync?.sync) {
+      await AdoleAPI.sync.sync();
+    }
+  } catch (_) { }
+
   // Fastify is the authoritative source for shared atomes.
   const result = await list_atomes({ projectId: projectId });
   const atomes = pickAuthoritativeAtomes(result);

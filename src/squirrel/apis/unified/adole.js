@@ -868,6 +868,18 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 if (result.token) setToken(tokenKey, result.token);
                 return result;
             },
+            async bootstrap(data) {
+                const result = await getWs().send({
+                    type: 'auth',
+                    action: 'bootstrap',
+                    username: data.username,
+                    phone: data.phone,
+                    password: data.password,
+                    visibility: data.visibility || 'public'
+                });
+                if (result.token) setToken(tokenKey, result.token);
+                return result;
+            },
             async login(data) {
                 const result = await getWs().send({
                     type: 'auth',

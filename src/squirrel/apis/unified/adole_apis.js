@@ -154,6 +154,9 @@ const PUBLIC_USER_DIRECTORY_CACHE_KEY = 'public_user_directory_cache_v1';
 const AUTH_PENDING_SYNC_KEY = 'auth_pending_sync';
 const PUBLIC_USER_DIRECTORY_LAST_SYNC_KEY = 'public_user_directory_last_sync_iso_v1';
 
+let _syncAtomesInProgress = false;
+let _lastSyncAtomesAttempt = 0;
+
 function is_tauri_runtime() {
     try {
         return typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -243,6 +246,43 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
     save_public_user_directory_cache(merged);
     set_public_user_directory_last_sync(nowIso);
     return { ok: true, added: fastifyUsers.length };
+}
+
+async function maybe_sync_atomes(reason = 'auto') {
+    if (_syncAtomesInProgress) return { skipped: true, reason: 'in_progress' };
+    if (!_currentUserId) return { skipped: true, reason: 'no_user' };
+
+    const now = Date.now();
+    if (_lastSyncAtomesAttempt && (now - _lastSyncAtomesAttempt < 5000)) {
+        return { skipped: true, reason: 'cooldown' };
+    }
+
+    let backends;
+    try {
+        backends = await checkBackends(true);
+    } catch {
+        return { skipped: true, reason: 'backend_check_failed' };
+    }
+
+    if (!backends.tauri || !backends.fastify) {
+        return { skipped: true, reason: 'backend_unavailable' };
+    }
+
+    const tauriToken = TauriAdapter.getToken?.();
+    const fastifyToken = FastifyAdapter.getToken?.();
+    if (!tauriToken || !fastifyToken) {
+        return { skipped: true, reason: 'missing_token' };
+    }
+
+    _syncAtomesInProgress = true;
+    _lastSyncAtomesAttempt = now;
+    try {
+        return await sync_atomes();
+    } catch (e) {
+        return { skipped: false, error: e.message, reason };
+    } finally {
+        _syncAtomesInProgress = false;
+    }
 }
 
 async function seed_public_user_directory_if_needed() {
@@ -1081,14 +1121,16 @@ async function log_user(phone, password, username, callback) {
         const canBootstrap = isTauriRuntime
             && results.fastify.success
             && !results.tauri.success
-            && (tauriLoginError.includes('user not found') || tauriLoginError.includes('no user') || tauriLoginError.includes('not found'));
+            && (tauriLoginError.includes('user not found') || tauriLoginError.includes('no user') || tauriLoginError.includes('not found') || tauriLoginError.includes('invalid credentials'))
+            && !tauriLoginError.includes('server unreachable');
 
         if (canBootstrap) {
             const fastifyUser = results.fastify.data?.user || {};
             const registerUsername = fastifyUser.username || username;
+            let bootstrapOk = false;
 
             try {
-                const reg = await TauriAdapter.auth.register({
+                const reg = await TauriAdapter.auth.bootstrap({
                     phone,
                     password,
                     username: registerUsername,
@@ -1097,20 +1139,25 @@ async function log_user(phone, password, username, callback) {
 
                 const regOk = reg && (reg.ok || reg.success);
                 const regErr = String(reg?.error || '').toLowerCase();
-                if (!regOk && regErr && !(regErr.includes('already') || regErr.includes('exists') || regErr.includes('registered'))) {
+                if (regOk) {
+                    results.tauri = { success: true, data: reg, error: null };
+                    bootstrapOk = true;
+                } else if (!regErr || !(regErr.includes('already') || regErr.includes('exists') || regErr.includes('registered'))) {
                     // Keep original tauri error; bootstrap failed.
                 }
             } catch (_) {
                 // Ignore bootstrap errors; we'll return original login results.
             }
 
-            try {
-                const tauriRetry = await TauriAdapter.auth.login({ phone, password });
-                if (tauriRetry && (tauriRetry.ok || tauriRetry.success)) {
-                    results.tauri = { success: true, data: tauriRetry, error: null };
+            if (!bootstrapOk) {
+                try {
+                    const tauriRetry = await TauriAdapter.auth.login({ phone, password });
+                    if (tauriRetry && (tauriRetry.ok || tauriRetry.success)) {
+                        results.tauri = { success: true, data: tauriRetry, error: null };
+                    }
+                } catch (_) {
+                    // Ignore
                 }
-            } catch (_) {
-                // Ignore
             }
         }
     } catch (_) {
@@ -1127,6 +1174,8 @@ async function log_user(phone, password, username, callback) {
         if (userId) {
             await set_current_user_state(userId, userName, userPhone, true);
         }
+
+        try { await maybe_sync_atomes('login'); } catch { }
     }
 
     // Call callback if provided
@@ -1395,6 +1444,7 @@ try {
         window.addEventListener('squirrel:server-available', async (event) => {
             if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
             try { await process_pending_registers(); } catch { }
+            try { await maybe_sync_atomes('fastify-available'); } catch { }
         });
 
         start_pending_register_monitor();
@@ -1482,21 +1532,36 @@ async function list_unsynced_atomes(callback) {
         error: null
     };
 
+    let ownerId = null;
+    try {
+        const currentUserResult = await current_user();
+        ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+    } catch {
+        ownerId = null;
+    }
+
     // Known atome types to query (server requires a type when no owner specified)
-    const atomeTypes = ['user', 'atome', 'shape', 'color', 'text', 'image', 'audio', 'video', 'code', 'data'];
+    const atomeTypes = ['user', 'tenant', 'project', 'machine', 'atome', 'shape', 'color', 'text', 'image', 'audio', 'video', 'code', 'data'];
+    const listLimit = 2000;
 
     let tauriAtomes = [];
     let fastifyAtomes = [];
 
     // Helper to fetch all atomes of all types from an adapter (including deleted for sync)
     // Uses ownerId: "*" to get ALL atomes, not just current user's
-    const fetchAllAtomes = async (adapter, name) => {
+    const fetchAllAtomes = async (adapter, name, owner) => {
         const allAtomes = [];
         for (const type of atomeTypes) {
             try {
                 // Include deleted atomes for sync comparison
-                // Use ownerId: "*" to get all atomes regardless of owner
-                const result = await adapter.atome.list({ type, includeDeleted: true, ownerId: '*' });
+                // Use ownerId: current user when available, otherwise fallback to "*"
+                const result = await adapter.atome.list({
+                    type,
+                    includeDeleted: true,
+                    ownerId: owner || '*',
+                    limit: listLimit,
+                    offset: 0
+                });
                 if (result.ok || result.success) {
                     const atomes = result.atomes || result.data || [];
                     allAtomes.push(...atomes);
@@ -1510,7 +1575,7 @@ async function list_unsynced_atomes(callback) {
 
     // Fetch all atomes from Tauri
     try {
-        tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri');
+        tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri', ownerId);
     } catch (e) {
         result.error = 'Tauri connection failed: ' + e.message;
         if (typeof callback === 'function') callback(result);
@@ -1519,7 +1584,7 @@ async function list_unsynced_atomes(callback) {
 
     // Fetch all atomes from Fastify
     try {
-        fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify');
+        fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify', ownerId);
     } catch (e) {
         // If Fastify is offline, all Tauri atomes are "unsynced"
         result.onlyOnTauri = tauriAtomes.filter(a => !a.deleted_at);
@@ -2059,6 +2124,10 @@ async function list_projects(callback) {
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
         return results;
+    }
+
+    if (is_tauri_runtime()) {
+        try { await maybe_sync_atomes('list_projects'); } catch { }
     }
 
     const listResult = await list_atomes({ type: 'project', ownerId: currentUserId });

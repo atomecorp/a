@@ -87,6 +87,7 @@ pub async fn handle_auth_message(
 
     match action {
         "register" => handle_register(message, state, request_id).await,
+        "bootstrap" => handle_bootstrap(message, state, request_id).await,
         "login" => handle_login(message, state, request_id).await,
         "me" => handle_me(message, state, request_id).await,
         "logout" => handle_logout(request_id),
@@ -99,6 +100,174 @@ pub async fn handle_auth_message(
 // =============================================================================
 // AUTH OPERATIONS
 // =============================================================================
+
+async fn handle_bootstrap(
+    message: serde_json::Value,
+    state: &LocalAuthState,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let username = message
+        .get("username")
+        .and_then(|v| v.as_str())
+        .map(|u| u.trim().to_string())
+        .filter(|u| u.len() >= 2)
+        .unwrap_or_else(|| "user".to_string());
+
+    let phone = match message.get("phone").and_then(|v| v.as_str()) {
+        Some(p) if p.trim().len() >= 6 => normalize_phone(p),
+        _ => return error_response(request_id, "Phone must be at least 6 characters"),
+    };
+
+    let password = match message.get("password").and_then(|v| v.as_str()) {
+        Some(p) if p.len() >= 6 => p,
+        _ => return error_response(request_id, "Password must be at least 6 characters"),
+    };
+
+    let visibility = message
+        .get("visibility")
+        .and_then(|v| v.as_str())
+        .unwrap_or("public");
+    let visibility = if visibility == "private" {
+        "private".to_string()
+    } else {
+        "public".to_string()
+    };
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let existing_user: Option<(String, Option<String>)> = db
+        .query_row(
+            "SELECT a.atome_id, a.deleted_at FROM particles p
+             JOIN atomes a ON p.atome_id = a.atome_id
+             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1",
+            rusqlite::params![format!("\"{}\"", phone)],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
+
+    let password_hash = match hash(password, DEFAULT_COST) {
+        Ok(h) => h,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let user_id = generate_user_id(&phone);
+    let now = Utc::now().to_rfc3339();
+
+    if let Some((existing_id, deleted_at)) = existing_user {
+        if deleted_at.is_some() {
+            if let Err(e) = db.execute(
+                "UPDATE atomes SET deleted_at = NULL, updated_at = ?1 WHERE atome_id = ?2",
+                rusqlite::params![&now, &existing_id],
+            ) {
+                return error_response(request_id, &e.to_string());
+            }
+        } else if let Err(e) = db.execute(
+            "UPDATE atomes SET updated_at = ?1 WHERE atome_id = ?2",
+            rusqlite::params![&now, &existing_id],
+        ) {
+            return error_response(request_id, &e.to_string());
+        }
+
+        let particles = [
+            ("username", &username),
+            ("phone", &phone),
+            ("password_hash", &password_hash),
+            ("visibility", &visibility),
+        ];
+
+        for (key, value) in particles {
+            let value_json = serde_json::to_string(value).unwrap_or_default();
+            let updated = db
+                .execute(
+                    "UPDATE particles SET particle_value = ?1, version = version + 1, updated_at = ?2
+                     WHERE atome_id = ?3 AND particle_key = ?4",
+                    rusqlite::params![&value_json, &now, &existing_id, key],
+                )
+                .unwrap_or(0);
+
+            if updated == 0 {
+                let _ = db.execute(
+                    "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
+                    rusqlite::params![&existing_id, key, &value_json, &now],
+                );
+            }
+        }
+
+        let created_at = db
+            .query_row(
+                "SELECT created_at FROM atomes WHERE atome_id = ?1",
+                rusqlite::params![&existing_id],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap_or_else(|_| now.clone());
+
+        let token = match generate_token(&state.jwt_secret, &existing_id, &username, &phone) {
+            Ok(t) => t,
+            Err(e) => return error_response(request_id, &e.to_string()),
+        };
+
+        return AuthResponse {
+            msg_type: "auth-response".into(),
+            request_id,
+            success: true,
+            error: None,
+            user: Some(UserInfo {
+                user_id: existing_id,
+                username,
+                phone,
+                created_at: Some(created_at),
+            }),
+            token: Some(token),
+        };
+    }
+
+    if let Err(e) = db.execute(
+        "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
+         VALUES (?1, 'user', ?1, ?1, ?2, ?2, NULL, 'tauri', 'pending')",
+        rusqlite::params![&user_id, &now],
+    ) {
+        return error_response(request_id, &e.to_string());
+    }
+
+    let particles = [
+        ("username", &username),
+        ("phone", &phone),
+        ("password_hash", &password_hash),
+        ("visibility", &visibility),
+    ];
+
+    for (key, value) in particles {
+        let value_json = serde_json::to_string(value).unwrap_or_default();
+        let _ = db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
+            rusqlite::params![&user_id, key, &value_json, &now],
+        );
+    }
+
+    let token = match generate_token(&state.jwt_secret, &user_id, &username, &phone) {
+        Ok(t) => t,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    AuthResponse {
+        msg_type: "auth-response".into(),
+        request_id,
+        success: true,
+        error: None,
+        user: Some(UserInfo {
+            user_id,
+            username,
+            phone,
+            created_at: Some(now),
+        }),
+        token: Some(token),
+    }
+}
 
 async fn handle_register(
     message: serde_json::Value,
