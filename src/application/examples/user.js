@@ -268,7 +268,7 @@ if (typeof window !== 'undefined') {
       const particleProjectId = particles.projectId || particles.project_id || null;
 
       if (String(parentId || '') !== String(projectId) &&
-          String(particleProjectId || '') !== String(projectId)) {
+        String(particleProjectId || '') !== String(projectId)) {
         return;
       }
 
@@ -1679,7 +1679,9 @@ $('input', {
     value: phone_pass
   },
   css: {
+
     margin: '10px',
+    marginLeft: '60px',
     padding: '8px',
     borderRadius: '4px',
     border: '1px solid #ccc',
@@ -2778,7 +2780,7 @@ $('div', {
     display: 'block',
     zIndex: '1',
     pointerEvents: 'auto',
-    maxWidth: '300px'
+    maxWidth: '400px'
   }
 });
 
