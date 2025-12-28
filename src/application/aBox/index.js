@@ -40,7 +40,8 @@ $('div', {
         zIndex: '9000',
         backgroundColor: '#111',
         color: '#fff',
-        margin: '10px',
+        marginLeft: '50px',
+        marginTop: '10px',
         padding: '10px',
         borderRadius: '6px',
         width: '260px',
@@ -80,13 +81,14 @@ $('div', {
         zIndex: '9000',
         backgroundColor: dropZoneDefaultBg,
         marginLeft: '0',
-        width: '120px',
-        height: '120px',
+        width: '90px',
+        height: '60px',
         padding: '10px',
         color: 'white',
         margin: '10px',
         display: 'inline-block'
-    }
+    },
+    text: 'Drop files here'
 });
 
 function setDropZoneColor(color) {

@@ -1681,7 +1681,7 @@ $('input', {
   css: {
 
     margin: '10px',
-    marginLeft: '60px',
+    marginTop: '100px',
     padding: '8px',
     borderRadius: '4px',
     border: '1px solid #ccc',
