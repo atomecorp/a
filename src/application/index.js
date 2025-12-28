@@ -62,8 +62,8 @@ import('./examples/user.js');
 // import('./aBox/index.js');
 // // import('./examples/messages.js');
 // // import('./examples/messages_ui.js');
-// // import('./examples/share.js');
-// // import('./examples/share_ui.js');
+import('./examples/share.js');
+import('./examples/share_ui.js');
 
 // // import('./examples/calendar.js');
 
@@ -72,7 +72,7 @@ import('./examples/user.js');
 // import('./examples/shellUI.js');
 // import('./examples/tools_code.js');
 
-import('./examples/AI.js');
+// import('./examples/AI.js');
 //todos :
 // test and check DB apis
 // - event drag and drop
