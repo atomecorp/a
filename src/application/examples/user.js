@@ -1705,102 +1705,6 @@ $('input', {
     width: '100px'
   }
 });
-$('span', {
-  id: 'clear_console',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: 'rgba(247, 0, 255, 1)',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'clear console',
-  onClick: () => {
-    puts('Clearing console...');
-    console.clear();
-  },
-});
-
-// Remote Commands Status Indicator
-$('span', {
-  id: 'remote_commands_status',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: 'rgba(200, 0, 0, 1)',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block',
-    cursor: 'pointer',
-    fontWeight: 'bold'
-  },
-  text: '📡 RC: OFF',
-  onClick: async () => {
-    if (RemoteCommands.isActive()) {
-      RemoteCommands.stop();
-      updateRemoteCommandsStatus(false);
-      puts('[RemoteCommands] Stopped');
-    } else {
-      // Get current user ID to pass to initRemoteCommands
-      const userResult = await current_user();
-      const userId = userResult.user?.user_id || userResult.user?.atome_id || userResult.user?.id;
-      await initRemoteCommands(userId);
-    }
-  },
-});
-
-// Send Test Command Button
-$('span', {
-  id: 'send_test_command',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: 'rgba(0, 150, 200, 1)',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block',
-    cursor: 'pointer'
-  },
-  text: '📤 Send Div',
-  onClick: async () => {
-    const targetInput = grab('remote_target_input');
-    const targetUserId = targetInput?.value?.trim();
-
-    if (!targetUserId) {
-      puts('[RemoteCommands] Enter a target user ID first');
-      return;
-    }
-
-    if (!RemoteCommands.isActive()) {
-      puts('[RemoteCommands] Not connected');
-      return;
-    }
-
-    puts(`[RemoteCommands] Sending create-element to ${targetUserId}...`);
-
-    const result = await RemoteCommands.sendCommand(targetUserId, 'create-element', {
-      tag: 'div',
-      css: {
-        width: '200px',
-        height: '200px',
-        backgroundColor: 'red',
-        top: '100px',
-        left: '100px',
-        borderRadius: '10px'
-      }
-    });
-
-    if (result.success) {
-      puts(`[RemoteCommands] Command sent! delivered=${result.delivered}`);
-    } else {
-      puts(`[RemoteCommands] Failed: ${result.error}`);
-    }
-  },
-});
 
 // Send Notification Button
 $('span', {
@@ -1864,35 +1768,6 @@ $('input', {
   }
 });
 
-// Copy Current User ID Button
-$('span', {
-  id: 'copy_user_id_btn',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: 'rgba(100, 100, 200, 1)',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block',
-    cursor: 'pointer'
-  },
-  text: '📋 Copy My ID',
-  onClick: async () => {
-    const myId = RemoteCommands.getCurrentUserId();
-    if (!myId) {
-      puts('[RemoteCommands] No user ID available');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(myId);
-      puts(`[RemoteCommands] Copied: ${myId}`);
-    } catch (e) {
-      puts(`[RemoteCommands] Copy failed: ${e.message}`);
-    }
-  },
-});
-
 $('span', {
   id: 'logged_user',
   parent: intuitionContainer,
@@ -1923,177 +1798,6 @@ $('span', {
 });
 
 $('br', { parent: intuitionContainer });
-
-$('span', {
-  id: 'current_user',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'get current user',
-  onClick: async () => {
-    const result = await current_user();
-    if (result.logged && result.user) {
-      const label = formatUserSummary(result.user);
-      puts('Logged user: ' + label);
-      grab('logged_user').textContent = label;
-      logUserDetails(result.user, 'current_user_click');
-    } else {
-      puts('no user logged');
-      grab('logged_user').textContent = 'no user logged';
-    }
-  },
-});
-
-
-
-
-$('span', {
-  id: 'user_list',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'Get user list',
-  onClick: async () => {
-    puts('Fetching user list...');
-    const result = await user_list();
-    console.log('[user_list] Result:', result);
-
-    // Display users from Tauri
-    if (result.tauri.users && result.tauri.users.length > 0) {
-      puts('[Tauri] Users:');
-      result.tauri.users.forEach(user => {
-        const name = user.username || user.data?.username || 'unknown';
-        const phone = user.phone || user.data?.phone || 'unknown';
-        puts('  - ' + name + ' (' + phone + ')');
-      });
-    } else {
-      puts('[Tauri] No users found');
-    }
-
-    // Display users from Fastify
-    if (result.fastify.users && result.fastify.users.length > 0) {
-      puts('[Fastify] Users:');
-      result.fastify.users.forEach(user => {
-        const name = user.username || user.data?.username || 'unknown';
-        const phone = user.phone || user.data?.phone || 'unknown';
-        puts('  - ' + name + ' (' + phone + ')');
-      });
-    } else {
-      puts('[Fastify] No users found');
-    }
-
-    // Display public directory cache (Fastify public users)
-    if (result.directory && result.directory.length > 0) {
-      puts('[Directory] Users:');
-      result.directory.forEach(user => {
-        const name = user.username || user.data?.username || 'unknown';
-        const phone = user.phone || user.data?.phone || 'unknown';
-        puts('  - ' + name + ' (' + phone + ')');
-      });
-    }
-  },
-});
-
-$('span', {
-  id: 'list_tables',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'List all tables',
-  onClick: async () => {
-    puts('Listing all tables...');
-    const result = await list_tables();
-
-    if (result.tauri.tables && result.tauri.tables.length > 0) {
-      puts('[Tauri] Tables: ' + result.tauri.tables.join(', '));
-    } else {
-      puts('[Tauri] No tables found or error: ' + (result.tauri.error || 'unknown'));
-    }
-
-    if (result.fastify.tables && result.fastify.tables.length > 0) {
-      puts('[Fastify] Tables: ' + result.fastify.tables.join(', '));
-    } else {
-      puts('[Fastify] No tables found or error: ' + (result.fastify.error || 'unknown'));
-    }
-  },
-});
-
-$('span', {
-  id: 'list_unsynced',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'list unsynced',
-  onClick: async () => {
-    const result = await list_unsynced_atomes();
-    // Create a concise summary including deletion states
-    const summary = {
-      onlyOnTauri: result.onlyOnTauri.length,
-      onlyOnFastify: result.onlyOnFastify.length,
-      modifiedOnTauri: result.modifiedOnTauri.length,
-      modifiedOnFastify: result.modifiedOnFastify.length,
-      deletedOnTauri: result.deletedOnTauri.length,
-      deletedOnFastify: result.deletedOnFastify.length,
-      conflicts: result.conflicts.length,
-      synced: result.synced.length,
-      error: result.error
-    };
-
-    // Check if there's anything to sync (including deletions)
-    const hasUnsyncedItems = summary.onlyOnTauri > 0 || summary.onlyOnFastify > 0 ||
-      summary.modifiedOnTauri > 0 || summary.modifiedOnFastify > 0 ||
-      summary.deletedOnTauri > 0 || summary.deletedOnFastify > 0 ||
-      summary.conflicts > 0;
-
-    if (hasUnsyncedItems) {
-      puts('Unsynced atomes: ' + JSON.stringify(summary));
-      // Show IDs of items needing sync
-      if (result.onlyOnTauri.length > 0) {
-        puts('  To push: ' + result.onlyOnTauri.map(a => a.atome_id).join(', '));
-      }
-      if (result.onlyOnFastify.length > 0) {
-        puts('  To pull: ' + result.onlyOnFastify.map(a => a.atome_id).join(', '));
-      }
-      if (result.deletedOnTauri.length > 0) {
-        puts('  Deleted on Tauri (propagate to Fastify): ' + result.deletedOnTauri.map(d => d.id).join(', '));
-      }
-      if (result.deletedOnFastify.length > 0) {
-        puts('  Deleted on Fastify (propagate to Tauri): ' + result.deletedOnFastify.map(d => d.id).join(', '));
-      }
-      if (result.conflicts.length > 0) {
-        puts('  Conflicts: ' + result.conflicts.map(c => c.id).join(', '));
-      }
-    } else {
-      puts('✅ All ' + summary.synced + ' atomes are synchronized');
-    }
-  },
-});
-
-
 $('br', { parent: intuitionContainer });
 
 
@@ -2273,25 +1977,6 @@ $('input', {
 });
 
 
-
-$('input', {
-  id: 'atome_type_input',
-  parent: intuitionContainer,
-  attrs: {
-    type: 'text',
-    placeholder: 'Atome Type',
-    value: atome_type
-  },
-  css: {
-    margin: '10px',
-    padding: '8px',
-    borderRadius: '4px',
-    border: '1px solid #ccc',
-    width: '100px'
-  }
-});
-
-
 $('input', {
   id: 'atome_color_input',
   parent: intuitionContainer,
@@ -2445,36 +2130,6 @@ $('span', {
     }
   },
 });
-
-$('span', {
-  id: 'list_projects',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'list projects',
-  onClick: async () => {
-    puts('Fetching projects...');
-    const result = await list_projects();
-    const projects = pickAuthoritativeProjects(result);
-    if (projects.length > 0) {
-      puts('Projects found: ' + projects.length);
-      projects.forEach(p => {
-        const name = p.name || p.data?.name || p.particles?.name || 'Unnamed';
-        const id = (p.atome_id || p.id).substring(0, 8);
-        puts('  - ' + name + ' (' + id + '...)');
-      });
-    } else {
-      puts('No projects found');
-    }
-  },
-});
-
 $('br', { parent: intuitionContainer });
 
 $('span', {
@@ -2494,7 +2149,8 @@ $('span', {
       puts('❌ No project loaded. Please load a project first.');
       return;
     }
-    const atomeType = grab('atome_type_input').value;
+    const atomeTypeInput = grab('atome_type_input');
+    const atomeType = atomeTypeInput ? atomeTypeInput.value : atome_type;
     const atomeColor = grab('atome_color_input').value;
     const initialLeft = '100px';
     const initialTop = '100px';
@@ -2662,38 +2318,6 @@ $('span', {
     await loadAtomeHistory(selectedAtomeId);
   },
 });
-
-$('span', {
-  id: 'list_atomes',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'list atomes',
-  onClick: async () => {
-    const atomeType = grab('atome_type_input').value;
-    puts('Fetching atomes of type: ' + atomeType);
-    const result = await list_atomes({ type: atomeType });
-    const atomes = pickAuthoritativeAtomes(result);
-    if (atomes.length > 0) {
-      puts('Atomes found: ' + atomes.length);
-      atomes.forEach(a => {
-        const type = a.atome_type || a.type || 'unknown';
-        const color = a.color || a.data?.color || a.particles?.color || '';
-        const id = (a.atome_id || a.id).substring(0, 8);
-        puts('  - ' + type + (color ? ' (' + color + ')' : '') + ' - ' + id + '...');
-      });
-    } else {
-      puts('No atomes found');
-    }
-  },
-});
-
 $('span', {
   id: 'list_project_atomes',
   parent: intuitionContainer,
@@ -2714,39 +2338,6 @@ $('span', {
 
     puts('🔍 Listing atomes for current project: ' + selectedProjectId);
     await loadProjectAtomes(selectedProjectId);
-  },
-});
-
-$('span', {
-  id: 'debug_positions',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: 'rgba(255, 20, 147, 1)',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'debug positions',
-  onClick: async () => {
-    if (!selectedProjectId) {
-      puts('❌ No project loaded. Please load a project first.');
-      return;
-    }
-
-    puts('🔍 DEBUG: Checking saved positions for project: ' + selectedProjectId);
-    const result = await list_atomes({ projectId: selectedProjectId });
-    const atomes = pickAuthoritativeAtomes(result);
-
-    atomes.forEach(atome => {
-      const atomeType = atome.atome_type || atome.type;
-      if (atomeType === 'project' || atomeType === 'user') return;
-
-      const atomeId = atome.atome_id || atome.id;
-      const particles = atome.particles || atome.data || {};
-      puts('🔍 Atome ' + atomeId.substring(0, 8) + ' particles: ' + JSON.stringify(particles));
-    });
   },
 });
 
@@ -3209,28 +2800,6 @@ $('br', { parent: intuitionContainer });
 
 $('br', { parent: intuitionContainer });
 
-$('span', {
-  id: 'sync_atomes',
-  parent: intuitionContainer,
-  css: {
-    backgroundColor: 'rgba(233, 146, 6, 1)',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'sync atomes',
-  onClick: async () => {
-    const result = await sync_atomes();
-    puts('sync atomes: ' + JSON.stringify(result));
-  },
-});
-
-
-
-
-
 // ============================================
 // SIMPLE PROJECT TEST
 // ============================================
@@ -3448,170 +3017,6 @@ async function logSelectedUserDbInfo(selection) {
 /**
  * Share with selected user using share_atome function
  */
-
-// Project selection state for sharing target project.
-// Must be defined at module scope because it is used by event handlers.
-let selectedProjectForSharing = null;
-
-
-function createProjectSquare(project, index) {
-  const name = project.name || project.data?.name || project.particles?.name || 'Unnamed';
-  const id = project.atome_id || project.id;
-  const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22'];
-  const color = colors[index % colors.length];
-
-  const square = $('div', {
-    id: 'project_square_' + index,
-    parent: grab('project_selector_container'),
-    css: {
-      width: '40px',
-      height: '40px',
-      backgroundColor: color,
-      margin: '5px',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      border: '2px solid transparent',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '10px',
-      color: 'white',
-      fontWeight: 'bold',
-      textAlign: 'center',
-      lineHeight: '1.2'
-    },
-    text: name.substring(0, 3).toUpperCase(),
-    title: name + ' (' + id.substring(0, 8) + '...)',
-    onClick: () => selectProject(project, square)
-  });
-
-  square.addEventListener('mouseenter', () => {
-    if (selectedProjectForSharing !== id) {
-      square.style.transform = 'scale(1.1)';
-      square.style.transition = 'transform 0.2s';
-    }
-  });
-
-  square.addEventListener('mouseleave', () => {
-    if (selectedProjectForSharing !== id) {
-      square.style.transform = 'scale(1)';
-    }
-  });
-
-  return square;
-}
-
-function selectProject(project, squareElement) {
-  const id = project.atome_id || project.id;
-  const name = project.name || project.data?.name || project.particles?.name || 'Unnamed';
-
-  // Remove previous selection
-  const container = grab('project_selector_container');
-  const squares = container.querySelectorAll('[id^="project_square_"]');
-  squares.forEach(square => {
-    square.style.border = '2px solid transparent';
-    square.style.transform = 'scale(1)';
-  });
-
-  // Mark new selection
-  selectedProjectForSharing = id;
-  squareElement.style.border = '2px solid yellow';
-  squareElement.style.transform = 'scale(1.2)';
-
-  puts('Selected project for sharing: ' + name);
-
-  // Save selection to localStorage
-  localStorage.setItem('selected_project_for_sharing', id);
-  localStorage.setItem('selected_project_name', name);
-}
-
-function loadProjectSelector() {
-  // Create or get container
-  let container = grab('project_selector_container');
-  if (!container) {
-    container = $('div', {
-      id: 'project_selector_container',
-      parent: document.body,
-      css: {
-        position: 'fixed',
-        bottom: '20px',
-        right: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        zIndex: '1000',
-        pointerEvents: 'auto'
-      }
-    });
-
-    // Add refresh button
-    $('div', {
-      id: 'refresh_projects_button',
-      parent: container,
-      css: {
-        width: '40px',
-        height: '20px',
-        backgroundColor: '#95a5a6',
-        margin: '5px',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '8px',
-        color: 'white',
-        fontWeight: 'bold'
-      },
-      text: 'REFRESH',
-      onClick: testListProjects
-    });
-  }
-
-  return container;
-}
-
-async function testListProjects() {
-  try {
-    const result = await list_projects();
-
-    const projects = pickAuthoritativeProjects(result);
-
-    puts('Found ' + projects.length + ' projects for selection');
-
-    // Load or create container
-    const container = loadProjectSelector();
-
-    // Clear existing project squares (keep refresh button)
-    const existingSquares = container.querySelectorAll('[id^="project_square_"]');
-    existingSquares.forEach(square => square.remove());
-
-    // Create squares for each project
-    projects.forEach((project, index) => {
-      createProjectSquare(project, index);
-    });
-
-    // Restore previous selection
-    const savedProjectId = localStorage.getItem('selected_project_for_sharing');
-    if (savedProjectId) {
-      const matchingProject = projects.find(p => (p.atome_id || p.id) === savedProjectId);
-      if (matchingProject) {
-        const squareIndex = projects.indexOf(matchingProject);
-        const square = grab('project_square_' + squareIndex);
-        if (square) {
-          selectProject(matchingProject, square);
-        }
-      }
-    }
-
-  } catch (error) {
-    console.error('[PROJECTS] Error:', error);
-  }
-}
-
-// Test projects after loading
-setTimeout(() => {
-  testListProjects();
-}, 2000);
 
 // ============================================================================
 // FASTIFY BROADCAST PROBE (debug)
