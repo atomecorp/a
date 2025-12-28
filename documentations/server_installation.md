@@ -98,6 +98,33 @@ Use `./run.sh` with service commands to manage it easily on any platform.
 | **Development** | `./run.sh --server` | HTTP | Local testing, debugging |
 | **Production** | `./run.sh --https` | HTTPS (via Nginx) | Production servers |
 
+---
+
+## 🧩 Fastify Server Overview (Runtime)
+
+The Fastify server runs from `server/server.js` and exposes REST + WebSocket endpoints.
+
+### Start Options (Advanced)
+
+```bash
+# Recommended (uses run.sh)
+./run.sh --server
+
+# Manual (runs Fastify directly)
+node server/server.js
+```
+
+### Key Endpoints
+
+Assuming `PORT=3001` (default):
+
+- `GET http://localhost:3001/health` - basic health + uptime
+- `GET http://localhost:3001/api/server-info` - version + server type
+- `ws://localhost:3001/ws/api` - authenticated WebSocket API
+- `ws://localhost:3001/ws/sync` - sync events WebSocket
+
+For detailed API and WebSocket usage examples, see `server/README.md`.
+
 ### Manual Service Management (Advanced)
 
 If you prefer using native system commands:
