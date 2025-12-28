@@ -531,7 +531,25 @@ async function startServer() {
         const raw = await fs.readFile(SERVER_CONFIG_FILE, 'utf8');
         reply.header('content-type', 'application/json; charset=utf-8');
         reply.header('cache-control', 'no-store');
-        return raw;
+        let config;
+        try {
+          config = JSON.parse(raw);
+        } catch (_) {
+          return raw;
+        }
+
+        const disableUiLogs =
+          process.env.SQUIRREL_DISABLE_UI_LOGS === '1'
+          || process.env.SQUIRREL_DISABLE_UI_LOGS === 'true';
+
+        if (disableUiLogs) {
+          config.logging = {
+            ...(config.logging || {}),
+            disableUiLogs: true
+          };
+        }
+
+        return JSON.stringify(config);
       } catch (error) {
         reply.code(404);
         return { success: false, error: 'server_config.json not found' };

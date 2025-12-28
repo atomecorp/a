@@ -13,6 +13,18 @@ function isTauriRuntime() {
   return typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__);
 }
 
+function isTruthyFlag(value) {
+  return value === true || value === '1' || value === 'true';
+}
+
+function isUiLoggingDisabled() {
+  if (typeof window === 'undefined') return false;
+  if (isTruthyFlag(window.__SQUIRREL_DISABLE_UI_LOGS__)) return true;
+  const config = window.__SQUIRREL_SERVER_CONFIG__;
+  if (config && config.logging && isTruthyFlag(config.logging.disableUiLogs)) return true;
+  return false;
+}
+
 function getTauriInvoke() {
   if (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function') {
     return window.__TAURI__.invoke.bind(window.__TAURI__);
@@ -23,13 +35,47 @@ function getTauriInvoke() {
   return null;
 }
 
+function isLocalHostname(hostname) {
+  return (
+    hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === ''
+    || hostname.startsWith('192.168.')
+    || hostname.startsWith('10.')
+  );
+}
+
+function normalizeBase(base) {
+  return typeof base === 'string' ? base.replace(/\/$/, '') : base;
+}
+
 function resolveFastifyBase() {
   if (typeof window === 'undefined') return FASTIFY_FALLBACK;
-  const configured = window.__SQUIRREL_FASTIFY_URL__;
-  if (typeof configured === 'string' && configured.trim()) {
-    return configured.replace(/\/$/, '');
+
+  const configured = normalizeBase(window.__SQUIRREL_FASTIFY_URL__);
+  if (configured) {
+    if (window.location && window.location.protocol === 'https:' && configured.startsWith('http://')) {
+      try {
+        const host = new URL(configured).hostname;
+        if (!isLocalHostname(host)) {
+          return configured.replace(/^http:/, 'https:');
+        }
+      } catch (_) {
+        // Ignore URL parsing errors; keep configured as-is.
+      }
+    }
+    return configured;
   }
-  return FASTIFY_FALLBACK;
+
+  const location = window.location;
+  if (!location) return FASTIFY_FALLBACK;
+
+  if (isLocalHostname(location.hostname)) {
+    return FASTIFY_FALLBACK;
+  }
+
+  const origin = normalizeBase(location.origin);
+  return origin && origin !== 'null' ? origin : FASTIFY_FALLBACK;
 }
 
 function getSessionId() {
@@ -95,6 +141,7 @@ async function sendToTauri(payload) {
 }
 
 async function emitLog(level, args) {
+  if (isUiLoggingDisabled()) return;
   const source = isTauriRuntime() ? 'tauri_webview' : 'browser';
   const message = formatArgs(args);
   const data = {

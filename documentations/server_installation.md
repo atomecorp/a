@@ -67,6 +67,9 @@ SQUIRREL_UPLOADS_DIR=/opt/a/uploads
 # Optional: For cloud deployment with Turso/libSQL
 # LIBSQL_URL=libsql://your-database.turso.io
 # LIBSQL_AUTH_TOKEN=your_auth_token
+
+# Optional: Disable browser UI log forwarding (production)
+# SQUIRREL_DISABLE_UI_LOGS=1
 ```
 
 * **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).
