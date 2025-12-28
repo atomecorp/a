@@ -58,7 +58,7 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
         id: 'ai-prompt-demo',
         css: {
             position: 'fixed',
-            top: '500px',
+            top: '555px',
             left: '16px',
             right: '16px',
             margin: '0',
