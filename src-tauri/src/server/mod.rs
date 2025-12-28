@@ -1,11 +1,13 @@
 use axum::{
+    body::Body,
     body::Bytes,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         DefaultBodyLimit, Path as AxumPath, State,
     },
-    http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
-    response::IntoResponse,
+    http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode},
+    middleware,
+    response::{IntoResponse, Response},
     routing::{get, get_service, post},
     Json, Router,
 };
@@ -17,10 +19,16 @@ use std::{
     io::{Cursor, Read},
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex, OnceLock},
 };
-use tokio::{fs, net::TcpStream, time::{timeout, Duration}};
+use tokio::{
+    fs,
+    net::TcpStream,
+    time::{timeout, Duration},
+};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
+use tracing::{error, info, warn};
+use uuid::Uuid;
 use zip::ZipArchive;
 
 // Local authentication module
@@ -33,12 +41,35 @@ struct AppState {
     uploads_dir: Arc<PathBuf>,
     static_dir: Arc<PathBuf>,
     version: Arc<String>,
+    started_at: Arc<std::time::Instant>,
     atome_state: Option<local_atome::LocalAtomeState>,
     auth_state: Option<local_auth::LocalAuthState>,
 }
 
 const SERVER_TYPE: &str = "Tauri frontend process";
 const MAX_UPLOAD_BYTES: usize = 1024 * 1024 * 1024; // 1 GiB
+
+#[derive(Clone)]
+struct RequestId(String);
+
+static RECENT_ERRORS: OnceLock<Mutex<Vec<serde_json::Value>>> = OnceLock::new();
+
+fn record_recent_error(entry: serde_json::Value) {
+    let store = RECENT_ERRORS.get_or_init(|| Mutex::new(Vec::new()));
+    let mut guard = store.lock().unwrap();
+    guard.push(entry);
+    let len = guard.len();
+    if len > 100 {
+        let drain_count = len - 100;
+        guard.drain(0..drain_count);
+    }
+}
+
+fn recent_errors_snapshot() -> Vec<serde_json::Value> {
+    let store = RECENT_ERRORS.get_or_init(|| Mutex::new(Vec::new()));
+    let guard = store.lock().unwrap();
+    guard.iter().cloned().collect()
+}
 
 fn sanitize_file_name(name: &str) -> String {
     if name.is_empty() {
@@ -56,6 +87,70 @@ fn sanitize_file_name(name: &str) -> String {
     } else {
         sanitized
     }
+}
+
+async fn log_request_middleware(mut req: Request<Body>, next: middleware::Next) -> Response {
+    let request_id = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    req.extensions_mut().insert(RequestId(request_id.clone()));
+
+    let method = req.method().to_string();
+    let uri = req.uri().to_string();
+    let start = std::time::Instant::now();
+
+    let mut response = next.run(req).await;
+    let status = response.status().as_u16();
+    let duration_ms = start.elapsed().as_millis() as u64;
+
+    if let Ok(header_value) = HeaderValue::from_str(&request_id) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("x-request-id"), header_value);
+    }
+
+    let log_payload = json!({
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "request_id": request_id,
+        "method": method,
+        "uri": uri,
+        "status_code": status,
+        "duration_ms": duration_ms
+    });
+
+    if status >= 500 {
+        record_recent_error(log_payload.clone());
+        error!(
+            source = "axum",
+            component = "http",
+            request_id = log_payload["request_id"].as_str().unwrap_or(""),
+            message = "request failed",
+            data = ?log_payload
+        );
+    } else if status >= 400 {
+        warn!(
+            source = "axum",
+            component = "http",
+            request_id = log_payload["request_id"].as_str().unwrap_or(""),
+            message = "request warning",
+            data = ?log_payload
+        );
+    } else {
+        info!(
+            source = "axum",
+            component = "http",
+            request_id = log_payload["request_id"].as_str().unwrap_or(""),
+            message = "request completed",
+            data = ?log_payload
+        );
+    }
+
+    response
 }
 
 fn load_version(static_dir: &Path) -> String {
@@ -122,6 +217,17 @@ async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse
     }))
 }
 
+async fn dev_state_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let uptime_sec = state.started_at.elapsed().as_secs_f64();
+    Json(json!({
+        "success": true,
+        "source": "axum",
+        "version": state.version.as_str(),
+        "uptime_sec": uptime_sec,
+        "recent_errors": recent_errors_snapshot(),
+    }))
+}
+
 async fn locate_server_config(static_dir: &Path) -> Option<PathBuf> {
     let mut dir = static_dir.to_path_buf();
     for _ in 0..12u8 {
@@ -174,20 +280,23 @@ async fn fastify_status_handler(State(state): State<AppState>) -> impl IntoRespo
     let static_dir = state.static_dir.as_ref();
     let config_path = locate_server_config(static_dir).await;
     let Some(config_path) = config_path else {
-        return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+        return Json(json!({ "success": true, "available": false, "configured": false }))
+            .into_response();
     };
 
     let raw = match fs::read_to_string(&config_path).await {
         Ok(raw) => raw,
         Err(_) => {
-            return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+            return Json(json!({ "success": true, "available": false, "configured": false }))
+                .into_response();
         }
     };
 
     let json_value: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(_) => {
-            return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+            return Json(json!({ "success": true, "available": false, "configured": false }))
+                .into_response();
         }
     };
 
@@ -203,7 +312,8 @@ async fn fastify_status_handler(State(state): State<AppState>) -> impl IntoRespo
         .unwrap_or(0);
 
     if host.is_empty() || port == 0 {
-        return Json(json!({ "success": true, "available": false, "configured": false })).into_response();
+        return Json(json!({ "success": true, "available": false, "configured": false }))
+            .into_response();
     }
 
     let addr = format!("{}:{}", host, port);
@@ -219,7 +329,7 @@ async fn fastify_status_handler(State(state): State<AppState>) -> impl IntoRespo
         "host": host,
         "port": port
     }))
-        .into_response()
+    .into_response()
 }
 
 /// Debug log handler - receives logs from frontend to survive page reloads
@@ -1215,6 +1325,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         uploads_dir: Arc::new(uploads_dir.clone()),
         static_dir: Arc::new(static_dir_abs),
         version: Arc::new(version.clone()),
+        started_at: Arc::new(std::time::Instant::now()),
         atome_state: Some(atome_state),
         auth_state: Some(auth_state),
     };
@@ -1248,6 +1359,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
+        .route("/dev/state", get(dev_state_handler))
         .route("/api/fastify-status", get(fastify_status_handler))
         .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
@@ -1268,6 +1380,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
+        .layer(middleware::from_fn(log_request_middleware))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));

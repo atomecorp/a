@@ -18,6 +18,8 @@ package-lock.json
 *.tmp
 *.bak
 *.old
+logs
+tests
 
 # Test files
 src/assets/uploads/

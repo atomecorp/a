@@ -39,6 +39,8 @@
 import './atome/atome.js';
 import './atome/mcp.js';
 import './ai/agent_gateway.js';
+import './dev/logging.js';
+import './dev/dev_console.js';
 
 // === STATIC ES6 IMPORTS ===
 import './apis/essentials.js';

@@ -379,6 +379,16 @@ const ShareAPI = {
                 shareResult,
                 error: ok ? null : (shareResult?.tauri?.error || shareResult?.fastify?.error || 'Share failed')
             });
+            if (!ok) {
+                console.warn('[ShareAPI] share_with failed', {
+                    phone,
+                    atomeIds,
+                    permissions,
+                    mode,
+                    shareType,
+                    shareResult
+                });
+            }
         }
 
         const ok = results.every(r => r.ok);
@@ -415,13 +425,21 @@ const ShareAPI = {
             });
             const ok = !!(res?.ok || res?.success);
             const imported = Array.isArray(res?.data?.copies) ? res.data.copies.length : 0;
+            let sharedProjectId = shareInfo.projectId || null;
+            if (ok && !sharedProjectId && Array.isArray(shareInfo.atomeIds) && shareInfo.atomeIds.length) {
+                try {
+                    sharedProjectId = await resolveSharedProjectId(shareInfo.atomeIds);
+                } catch (_) {
+                    sharedProjectId = null;
+                }
+            }
             if (ok && typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('adole-share-imported', {
                     detail: {
                         projectId: receiverProjectId || null,
                         requestAtomeId,
                         shareType: shareInfo.shareType || null,
-                        sharedProjectId: shareInfo.projectId || null,
+                        sharedProjectId,
                         atomeIds: shareInfo.atomeIds || []
                     }
                 }));
@@ -430,7 +448,7 @@ const ShareAPI = {
                 ok,
                 imported,
                 shareType: shareInfo.shareType || null,
-                sharedProjectId: shareInfo.projectId || null,
+                sharedProjectId,
                 data: res,
                 error: ok ? null : (res?.error || res?.message || 'Accept failed')
             };

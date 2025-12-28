@@ -5,7 +5,10 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { promises as fs, createReadStream, readFileSync, existsSync } from 'fs';
+import { promises as fs, createReadStream, readFileSync, existsSync, mkdirSync } from 'fs';
+import crypto from 'crypto';
+import pino from 'pino';
+import { coerceLogEnvelope, isValidLogEnvelope } from '../src/shared/logging.js';
 
 // Load environment variables from .env files
 const __filename_env = fileURLToPath(import.meta.url);
@@ -113,6 +116,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 const staticRoot = path.join(projectRoot, 'src');
 const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
+const LOG_DIR = path.join(projectRoot, 'logs');
+const FASTIFY_LOG_FILE = path.join(LOG_DIR, 'fastify.log');
+const BROWSER_LOG_FILE = path.join(LOG_DIR, 'browser.log');
+const SNAPSHOT_DIR = path.join(LOG_DIR, 'snapshots');
+const UI_TESTS_DIR = path.join(LOG_DIR, 'ui-tests');
+
+try {
+  mkdirSync(LOG_DIR, { recursive: true });
+  mkdirSync(SNAPSHOT_DIR, { recursive: true });
+  mkdirSync(UI_TESTS_DIR, { recursive: true });
+} catch (error) {
+  console.warn('WARN: Unable to prepare log directories:', error?.message || error);
+}
 const legacyUploadsDir = (() => {
   try {
     return resolveUploadsDir();
@@ -127,6 +143,32 @@ let SERVER_VERSION = 'unknown';
 const SERVER_TYPE = 'Fastify';
 const syncEventBus = getABoxEventBus();
 let fileSyncWatcherHandle = null;
+const recentErrors = [];
+const MAX_RECENT_ERRORS = 100;
+
+function recordRecentError(payload) {
+  if (!payload) return;
+  recentErrors.push(payload);
+  if (recentErrors.length > MAX_RECENT_ERRORS) {
+    recentErrors.splice(0, recentErrors.length - MAX_RECENT_ERRORS);
+  }
+}
+
+function logStructured(level, { source = 'fastify', component = 'server', request_id = null, session_id = null, message = '', data = null } = {}) {
+  const payload = {
+    source,
+    component,
+    request_id,
+    session_id,
+    data
+  };
+  if (typeof server?.log?.[level] === 'function') {
+    server.log[level](payload, message);
+  } else {
+    const fallback = { ...payload, level, timestamp: new Date().toISOString(), message };
+    process.stdout.write(`${JSON.stringify(fallback)}\n`);
+  }
+}
 
 async function loadServerVersion() {
   try {
@@ -385,16 +427,39 @@ if (process.env.USE_HTTPS === 'true') {
   }
 }
 
+const logLevel = process.env.LOG_LEVEL || 'info';
+const logStreams = pino.multistream([
+  { stream: process.stdout },
+  { stream: pino.destination({ dest: FASTIFY_LOG_FILE, sync: false }) }
+]);
+
+const logger = pino(
+  {
+    level: logLevel,
+    messageKey: 'message',
+    timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
+    formatters: {
+      level(label) {
+        return { level: label };
+      }
+    },
+    base: { source: 'fastify', component: 'http' }
+  },
+  logStreams
+);
+
 // Créer l'instance Fastify
 const server = fastify({
   https: httpsOptions,
   bodyLimit: 1024 * 1024 * 1024, // 1 GiB
-  logger: {
-    level: 'info',
-    transport: {
-      target: 'pino-pretty'
-    }
-  }
+  loggerInstance: logger,
+  disableRequestLogging: true,
+  genReqId: (req) => {
+    const headerId = req.headers['x-request-id'];
+    if (typeof headerId === 'string' && headerId.trim()) return headerId;
+    return crypto.randomUUID();
+  },
+  requestIdLogLabel: 'request_id'
 });
 
 const PORT = process.env.PORT || 3001;
@@ -409,6 +474,45 @@ async function startServer() {
       reply.code(statusCode);
       return payload;
     };
+
+    server.addHook('onRequest', async (request, reply) => {
+      request.request_id = request.id;
+      request._requestStartMs = Date.now();
+      reply.header('x-request-id', request.id);
+    });
+
+    server.addHook('onResponse', async (request, reply) => {
+      const durationMs = Date.now() - (request._requestStartMs || Date.now());
+      logStructured('info', {
+        component: 'http',
+        request_id: request.id,
+        message: `${request.method} ${request.url} ${reply.statusCode}`,
+        data: {
+          method: request.method,
+          url: request.url,
+          status_code: reply.statusCode,
+          duration_ms: durationMs
+        }
+      });
+    });
+
+    server.addHook('onError', async (request, reply, error) => {
+      const details = {
+        timestamp: new Date().toISOString(),
+        request_id: request?.id || null,
+        method: request?.method,
+        url: request?.url,
+        status_code: reply?.statusCode,
+        message: error?.message || String(error)
+      };
+      recordRecentError(details);
+      logStructured('error', {
+        component: 'http',
+        request_id: request?.id || null,
+        message: details.message,
+        data: details
+      });
+    });
 
     SERVER_VERSION = await loadServerVersion();
     console.log(`📦 Version applicative: ${SERVER_VERSION}`);
@@ -432,6 +536,61 @@ async function startServer() {
         reply.code(404);
         return { success: false, error: 'server_config.json not found' };
       }
+    });
+
+    server.get('/dev/state', async (request, reply) => {
+      return {
+        success: true,
+        source: 'fastify',
+        version: SERVER_VERSION,
+        uptime_sec: Number(process.uptime().toFixed(2)),
+        ws_api_connections: wsApiConnections.size,
+        ws_api_users: wsApiClientsByUserId.size,
+        recent_errors: recentErrors.slice(-20)
+      };
+    });
+
+    server.post('/dev/client-log', async (request, reply) => {
+      const payload = coerceLogEnvelope(request.body, {
+        source: 'browser',
+        component: 'ui'
+      });
+
+      if (!isValidLogEnvelope(payload)) {
+        return replyJson(reply, 400, { success: false, error: 'invalid log envelope' });
+      }
+
+      try {
+        await fs.appendFile(BROWSER_LOG_FILE, `${JSON.stringify(payload)}\n`);
+      } catch (error) {
+        const message = error?.message || String(error);
+        return replyJson(reply, 500, { success: false, error: message });
+      }
+
+      return { success: true };
+    });
+
+    server.post('/dev/snapshot', async (request, reply) => {
+      const now = new Date();
+      const payload = request.body && typeof request.body === 'object' ? request.body : {};
+      const fileSafe = now.toISOString().replace(/[:.]/g, '-');
+      const filePath = path.join(SNAPSHOT_DIR, `snapshot-${fileSafe}.json`);
+      const snapshot = {
+        timestamp: now.toISOString(),
+        source: 'fastify',
+        state: payload.state || null,
+        logs: Array.isArray(payload.logs) ? payload.logs.slice(-500) : [],
+        meta: payload.meta || null
+      };
+
+      try {
+        await fs.writeFile(filePath, JSON.stringify(snapshot, null, 2));
+      } catch (error) {
+        const message = error?.message || String(error);
+        return replyJson(reply, 500, { success: false, error: message });
+      }
+
+      return { success: true, path: filePath };
     });
 
     // Initialize user files tracking

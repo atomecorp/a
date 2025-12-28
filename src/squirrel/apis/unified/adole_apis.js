@@ -3423,6 +3423,13 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
         fastify: { success: false, data: null, error: null }
     };
 
+    const shareDebugContext = (extra = {}) => ({
+        targetPhone: phoneNumber || null,
+        atomeIds: Array.isArray(atomeIds) ? atomeIds : atomeIds ? [atomeIds] : [],
+        mode: sharingMode || 'real-time',
+        ...extra
+    });
+
     if (!phoneNumber) {
         const error = 'Phone number is required';
         results.fastify.error = error;
@@ -3474,9 +3481,22 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
     try {
         const authCheck = await ensure_fastify_ws_auth();
         if (!authCheck.ok) {
+            console.warn('[Share] Fastify auth failed', shareDebugContext({
+                error: authCheck.error || null,
+                targetUserId
+            }));
             results.fastify.error = authCheck.error;
             if (typeof callback === 'function') callback(results);
             return results;
+        }
+
+        try {
+            await maybe_sync_atomes('share');
+        } catch (e) {
+            console.warn('[Share] Pre-share sync failed', shareDebugContext({
+                error: e?.message || String(e),
+                targetUserId
+            }));
         }
 
         const payload = {
@@ -3491,6 +3511,13 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
 
         const fastifyResult = await FastifyAdapter.share.request(payload);
         const ok = !!(fastifyResult?.ok || fastifyResult?.success);
+        if (!ok) {
+            console.warn('[Share] Share request failed', shareDebugContext({
+                error: fastifyResult?.error || fastifyResult?.message || 'Share request failed',
+                targetUserId,
+                payload
+            }));
+        }
         results.fastify = {
             success: ok,
             data: fastifyResult,

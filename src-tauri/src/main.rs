@@ -3,6 +3,7 @@
     windows_subsystem = "windows"
 )]
 
+mod dev_logging;
 mod server;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,7 +31,10 @@ fn resolve_shared_uploads_dir(static_dir: &Path) -> PathBuf {
 }
 
 fn main() {
+    let _log_guard = dev_logging::init_tracing();
+
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![dev_logging::log_from_webview])
         .setup(|app| {
             let path_resolver = app.path();
             let static_dir: PathBuf = match path_resolver.resource_dir() {

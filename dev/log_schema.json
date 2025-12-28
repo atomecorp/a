@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Atome Unified Log Envelope",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "timestamp",
+    "level",
+    "source",
+    "component",
+    "message"
+  ],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "level": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"]
+    },
+    "source": {
+      "type": "string",
+      "enum": ["axum", "fastify", "tauri_webview", "browser", "daemon"]
+    },
+    "component": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": ["string", "null"]
+    },
+    "session_id": {
+      "type": ["string", "null"]
+    },
+    "message": {
+      "type": "string"
+    },
+    "data": {
+      "type": ["object", "array", "string", "number", "boolean", "null"]
+    }
+  }
+}
