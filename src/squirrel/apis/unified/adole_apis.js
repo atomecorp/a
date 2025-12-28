@@ -146,6 +146,13 @@ async function grant_share_permission(atomeId, principalId, sharePermissions, op
     };
 
     try {
+        const authCheck = await ensure_fastify_ws_auth();
+        if (!authCheck.ok) {
+            results.fastify.error = authCheck.error;
+            if (typeof callback === 'function') callback(results);
+            return results;
+        }
+
         const currentUserResult = await current_user();
         const sharerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
         if (!sharerId) {
@@ -336,6 +343,28 @@ async function ensure_fastify_token() {
     } catch { }
 
     return { ok: false, reason: cached ? 'login_failed' : 'no_cached_credentials' };
+}
+
+async function ensure_fastify_ws_auth() {
+    let token = FastifyAdapter.getToken?.();
+    if (!token && is_tauri_runtime()) {
+        try { await ensure_fastify_token(); } catch { }
+        token = FastifyAdapter.getToken?.();
+    }
+
+    if (!token) {
+        return { ok: false, error: 'Fastify auth required (login first)' };
+    }
+
+    try {
+        const res = await FastifyAdapter.auth.me();
+        if (res && (res.ok || res.success)) {
+            return { ok: true };
+        }
+        return { ok: false, error: res?.error || 'Fastify auth failed' };
+    } catch (e) {
+        return { ok: false, error: e.message || 'Fastify auth failed' };
+    }
 }
 
 function safe_parse_json(value) {
@@ -1286,7 +1315,7 @@ async function create_user(phone, password, username, options = {}, callback) {
         }
     }
     const loginSuccess = results?.login?.tauri?.success || results?.login?.fastify?.success;
-    if (!loginSuccess) {
+    if (!loginSuccess && is_tauri_runtime()) {
         const registeredUser = results.tauri?.data?.user || results.fastify?.data?.user || null;
         const registeredId = registeredUser?.user_id || registeredUser?.id || registeredUser?.atome_id || null;
         if (registeredId) {
@@ -1624,7 +1653,7 @@ async function current_user(callback) {
     }
 
     // No user logged in
-    if (_currentUserId) {
+    if (_currentUserId && is_tauri_runtime()) {
         result.logged = true;
         result.user = {
             user_id: _currentUserId,
@@ -2732,11 +2761,13 @@ async function list_projects(callback) {
         try { await maybe_sync_atomes('list_projects'); } catch { }
     }
 
-    const listResult = await list_atomes({ type: 'project', ownerId: currentUserId });
+    // Avoid ownerId filtering so shared projects (owned by others) appear.
+    const listResult = await list_atomes({ type: 'project', includeShared: true, skipOwner: true });
     results.tauri.projects = Array.isArray(listResult.tauri.atomes) ? listResult.tauri.atomes : [];
     results.fastify.projects = Array.isArray(listResult.fastify.atomes) ? listResult.fastify.atomes : [];
     results.tauri.error = listResult.tauri.error || null;
     results.fastify.error = listResult.fastify.error || null;
+    results.meta = listResult.meta || null;
 
     // If local deletions are pending, hide those projects from the Fastify list
     // so they don't "reappear" before the delete sync completes.
@@ -2961,16 +2992,19 @@ async function list_atomes(options = {}, callback) {
     const atomeType = options.type || null;
     const projectId = options.projectId || options.project_id || null;
     let ownerId = options.ownerId || null;
+    const includeShared = !!options.includeShared;
 
     const results = {
         tauri: { atomes: [], error: null },
-        fastify: { atomes: [], error: null }
+        fastify: { atomes: [], error: null },
+        meta: { preferFastify: includeShared }
     };
 
     // Default behavior: list current user's atomes.
     // Fastify WS list requires ownerId/userId or atomeType; otherwise it returns [].
     // Exception: when listing global users, do not force owner filtering.
-    if (!ownerId && atomeType !== 'user') {
+    const skipOwnerFilter = !!options.skipOwner;
+    if (!ownerId && atomeType !== 'user' && !skipOwnerFilter) {
         try {
             const currentUserResult = await current_user();
             const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
@@ -3011,6 +3045,7 @@ async function list_atomes(options = {}, callback) {
             try { await ensure_fastify_token(); } catch { }
         }
 
+        // Fastify WS list already includes shared atomes via permissions.
         let fastifyResult = await FastifyAdapter.atome.list(queryOptions);
         if (!(fastifyResult.ok || fastifyResult.success)) {
             const errMsg = String(fastifyResult.error || '').toLowerCase();
@@ -3021,11 +3056,23 @@ async function list_atomes(options = {}, callback) {
             }
         }
 
-        if (fastifyResult.ok || fastifyResult.success) {
+        if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
             const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
-            results.fastify.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-        } else {
-            results.fastify.error = fastifyResult.error;
+            let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+
+            if (projectId) {
+                const target = String(projectId);
+                normalized = normalized.filter((item) => {
+                    const parentId = item.parentId || item.parent_id || null;
+                    const particles = item.particles || item.data || {};
+                    const particleProjectId = particles.projectId || particles.project_id || null;
+                    return String(parentId || '') === target || String(particleProjectId || '') === target;
+                });
+            }
+
+            results.fastify.atomes = normalized;
+        } else if (!results.fastify.error) {
+            results.fastify.error = fastifyResult?.error || null;
         }
     } catch (e) {
         results.fastify.error = e.message;
@@ -3425,6 +3472,13 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
     }
 
     try {
+        const authCheck = await ensure_fastify_ws_auth();
+        if (!authCheck.ok) {
+            results.fastify.error = authCheck.error;
+            if (typeof callback === 'function') callback(results);
+            return results;
+        }
+
         const payload = {
             targetUserId: targetUserId || null,
             targetPhone: phoneNumber,
@@ -3453,7 +3507,12 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
 async function share_request(payload, callback) {
     let result = null;
     try {
-        result = await FastifyAdapter.share.request(payload || {});
+        const authCheck = await ensure_fastify_ws_auth();
+        if (!authCheck.ok) {
+            result = { ok: false, success: false, error: authCheck.error };
+        } else {
+            result = await FastifyAdapter.share.request(payload || {});
+        }
     } catch (e) {
         result = { ok: false, success: false, error: e.message };
     }
@@ -3464,7 +3523,12 @@ async function share_request(payload, callback) {
 async function share_respond(payload, callback) {
     let result = null;
     try {
-        result = await FastifyAdapter.share.respond(payload || {});
+        const authCheck = await ensure_fastify_ws_auth();
+        if (!authCheck.ok) {
+            result = { ok: false, success: false, error: authCheck.error };
+        } else {
+            result = await FastifyAdapter.share.respond(payload || {});
+        }
     } catch (e) {
         result = { ok: false, success: false, error: e.message };
     }
@@ -3475,7 +3539,12 @@ async function share_respond(payload, callback) {
 async function share_publish(payload, callback) {
     let result = null;
     try {
-        result = await FastifyAdapter.share.publish(payload || {});
+        const authCheck = await ensure_fastify_ws_auth();
+        if (!authCheck.ok) {
+            result = { ok: false, success: false, error: authCheck.error };
+        } else {
+            result = await FastifyAdapter.share.publish(payload || {});
+        }
     } catch (e) {
         result = { ok: false, success: false, error: e.message };
     }
@@ -3486,7 +3555,12 @@ async function share_publish(payload, callback) {
 async function share_policy(payload, callback) {
     let result = null;
     try {
-        result = await FastifyAdapter.share.policy(payload || {});
+        const authCheck = await ensure_fastify_ws_auth();
+        if (!authCheck.ok) {
+            result = { ok: false, success: false, error: authCheck.error };
+        } else {
+            result = await FastifyAdapter.share.policy(payload || {});
+        }
     } catch (e) {
         result = { ok: false, success: false, error: e.message };
     }

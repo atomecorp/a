@@ -73,6 +73,15 @@ function pickAuthoritativeList(result, key) {
     return fastifyItems.length ? fastifyItems : tauriItems;
 }
 
+function pickAuthoritativeAtome(result) {
+    const fastifyOk = result?.fastify && (result.fastify.success || result.fastify.ok) && !result.fastify.error;
+    const tauriOk = result?.tauri && (result.tauri.success || result.tauri.ok) && !result.tauri.error;
+
+    if (fastifyOk) return result.fastify.atome || result.fastify.data || null;
+    if (tauriOk) return result.tauri.atome || result.tauri.data || null;
+    return result?.fastify?.atome || result?.tauri?.atome || null;
+}
+
 async function getCurrentUser() {
     try {
         const result = await AdoleAPI.auth.current();
@@ -87,6 +96,22 @@ async function getCurrentUser() {
     return null;
 }
 
+function getCurrentProjectInfo() {
+    if (typeof window === 'undefined') return { id: null, name: null, backgroundColor: null };
+    if (window.__currentProject?.id) {
+        const name = window.__currentProject.name || window.__currentProject.projectName || window.__currentProject.label || null;
+        return {
+            id: window.__currentProject.id,
+            name,
+            backgroundColor: window.__currentProject.backgroundColor || null
+        };
+    }
+    if (typeof AdoleAPI !== 'undefined' && AdoleAPI.projects?.getCurrent) {
+        return AdoleAPI.projects.getCurrent();
+    }
+    return { id: null, name: null, backgroundColor: null };
+}
+
 function getCurrentProjectId() {
     if (typeof window === 'undefined') return null;
     if (window.__currentProject?.id) return window.__currentProject.id;
@@ -94,6 +119,45 @@ function getCurrentProjectId() {
         return AdoleAPI.projects.getCurrentId();
     }
     return null;
+}
+
+function normalizeAtomeIds(raw) {
+    if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+    if (raw) return [String(raw)];
+    return [];
+}
+
+async function resolveSharedProjectId(atomeIds) {
+    for (const atomeId of atomeIds) {
+        try {
+            const result = await AdoleAPI.atomes.get(atomeId);
+            const atome = pickAuthoritativeAtome(result);
+            const type = atome?.atome_type || atome?.type || null;
+            if (type === 'project') return String(atomeId);
+        } catch (_) { }
+    }
+    return null;
+}
+
+async function getShareRequestInfo(requestAtomeId) {
+    if (!requestAtomeId) return { shareType: null, atomeIds: [], projectId: null };
+    try {
+        const result = await AdoleAPI.atomes.get(requestAtomeId);
+        const atome = pickAuthoritativeAtome(result);
+        const particles = normalizeParticles(atome);
+        const shareType = particles.shareType
+            || particles.propertyOverrides?.__shareType
+            || particles.propertyOverrides?.shareType
+            || null;
+        const atomeIds = normalizeAtomeIds(particles.atomeIds || particles.atome_ids || particles.atomeId || particles.atome_id);
+        let projectId = particles.projectId || particles.project_id || null;
+        if (!projectId && atomeIds.length) {
+            projectId = await resolveSharedProjectId(atomeIds);
+        }
+        return { shareType, atomeIds, projectId };
+    } catch (_) {
+        return { shareType: null, atomeIds: [], projectId: null };
+    }
 }
 
 function registerRemoteHandlers() {
@@ -224,6 +288,12 @@ const ShareAPI = {
                 return { id: a.id, type: a.type, label, particles: a.particles };
             });
 
+            const projectInfo = getCurrentProjectInfo();
+            const projectLabel = projectInfo?.name || 'Current project';
+            if (!items.some(item => String(item.id) === String(projectId))) {
+                items.unshift({ id: projectId, type: 'project', label: projectLabel, particles: {} });
+            }
+
             return { ok: true, items, projectId };
         } catch (e) {
             return { ok: false, error: e.message, items: [] };
@@ -232,7 +302,7 @@ const ShareAPI = {
 
     async list_shares() {
         try {
-            const result = await AdoleAPI.atomes.list({ type: 'share_request' });
+            const result = await AdoleAPI.atomes.list({ type: 'share_request', skipOwner: true });
             const raw = pickAuthoritativeList(result, 'atomes');
             const items = raw.map((a) => {
                 const particles = normalizeParticles(a);
@@ -337,18 +407,33 @@ const ShareAPI = {
         try {
             if (!requestAtomeId) return { ok: false, error: 'Missing requestAtomeId' };
             const receiverProjectId = getCurrentProjectId();
+            const shareInfo = await getShareRequestInfo(requestAtomeId);
             const res = await AdoleAPI.sharing.respond({
                 requestAtomeId: requestAtomeId,
                 status: 'accepted',
                 receiverProjectId: receiverProjectId || null
             });
             const ok = !!(res?.ok || res?.success);
+            const imported = Array.isArray(res?.data?.copies) ? res.data.copies.length : 0;
             if (ok && typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('adole-share-imported', {
-                    detail: { projectId: receiverProjectId || null, requestAtomeId }
+                    detail: {
+                        projectId: receiverProjectId || null,
+                        requestAtomeId,
+                        shareType: shareInfo.shareType || null,
+                        sharedProjectId: shareInfo.projectId || null,
+                        atomeIds: shareInfo.atomeIds || []
+                    }
                 }));
             }
-            return { ok, data: res, error: ok ? null : (res?.error || res?.message || 'Accept failed') };
+            return {
+                ok,
+                imported,
+                shareType: shareInfo.shareType || null,
+                sharedProjectId: shareInfo.projectId || null,
+                data: res,
+                error: ok ? null : (res?.error || res?.message || 'Accept failed')
+            };
         } catch (e) {
             return { ok: false, error: e.message };
         }

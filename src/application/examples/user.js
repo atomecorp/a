@@ -222,7 +222,12 @@ let selectedVisualAtome = null;
 if (typeof window !== 'undefined') {
   window.addEventListener('adole-share-imported', async (e) => {
     try {
-      const projectId = e?.detail?.projectId || selectedProjectId;
+      const sharedProjectId = e?.detail?.sharedProjectId || null;
+      const shareType = e?.detail?.shareType || null;
+      const effectiveShareType = shareType || 'linked';
+      const projectId = (sharedProjectId && effectiveShareType === 'linked')
+        ? sharedProjectId
+        : (e?.detail?.projectId || selectedProjectId);
       if (!projectId) return;
 
       const shouldSwitchProject = !currentProjectDiv || String(projectId) !== String(selectedProjectId || '');
@@ -305,8 +310,18 @@ function pickAuthoritativeAtomes(result) {
   const fastifyOk = result?.fastify && !result.fastify.error;
   const tauriOk = result?.tauri && !result.tauri.error;
   const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+  const preferFastify = !!result?.meta?.preferFastify;
 
   if (isTauriRuntime) {
+    if (preferFastify) {
+      if (fastifyOk) {
+        return Array.isArray(result.fastify.atomes) ? result.fastify.atomes : [];
+      }
+      if (tauriOk) {
+        return Array.isArray(result.tauri.atomes) ? result.tauri.atomes : [];
+      }
+      return [];
+    }
     if (tauriOk) {
       return Array.isArray(result.tauri.atomes) ? result.tauri.atomes : [];
     }
@@ -329,8 +344,18 @@ function pickAuthoritativeProjects(result) {
   const fastifyOk = result?.fastify && !result.fastify.error;
   const tauriOk = result?.tauri && !result.tauri.error;
   const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+  const preferFastify = !!result?.meta?.preferFastify;
 
   if (isTauriRuntime) {
+    if (preferFastify) {
+      if (fastifyOk) {
+        return Array.isArray(result.fastify.projects) ? result.fastify.projects : [];
+      }
+      if (tauriOk) {
+        return Array.isArray(result.tauri.projects) ? result.tauri.projects : [];
+      }
+      return [];
+    }
     if (tauriOk) {
       return Array.isArray(result.tauri.projects) ? result.tauri.projects : [];
     }
@@ -454,7 +479,7 @@ async function loadProjectAtomes(projectId) {
   } catch (_) { }
 
   // Fastify is the authoritative source for shared atomes.
-  const result = await list_atomes({ projectId: projectId });
+  const result = await list_atomes({ projectId: projectId, includeShared: true });
   const atomes = pickAuthoritativeAtomes(result);
 
   checkDebugPuts('📊 Total atomes found: ' + atomes.length);
@@ -1077,7 +1102,7 @@ function stopDragAnimation() {
 
 /**
  * TEST ONLY - Open a project selector dialog - SECURE VERSION
- * Only shows projects owned by the current user
+ * Shows projects accessible to the current user (owned + shared)
  * @param {Function} callback - Callback with selected project { project_id, project_name }
  */
 async function open_project_selector(callback) {

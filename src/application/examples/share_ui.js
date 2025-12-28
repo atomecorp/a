@@ -127,6 +127,18 @@ function setStatus(message, type = 'info') {
     statusLineEl.style.color = type === 'error' ? '#ff7a7a' : type === 'success' ? '#7dff9b' : '#aaa';
 }
 
+function formatImportStatus(res) {
+    if (!res) return 'Share updated.';
+    const effectiveShareType = res.shareType || 'linked';
+    if (effectiveShareType === 'linked' && (!res.imported || res.imported === 0)) {
+        return res.sharedProjectId
+            ? 'Linked share active. Shared project added to your list.'
+            : 'Linked share active.';
+    }
+    const count = res.imported || 0;
+    return `Imported ${count} atome(s).`;
+}
+
 async function refreshAtomes() {
     if (refreshAtomesInFlight) return;
     refreshAtomesInFlight = true;
@@ -245,6 +257,7 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
     const label = (() => {
         const target = entry.targetPhone || 'unknown';
         const mode = entry.mode || 'unknown';
+        const shareType = entry.shareType || 'linked';
         const box = entry.box || 'box?';
         const statusLabel = entry.status || 'status?';
         const ids = Array.isArray(entry.atomeIds) ? entry.atomeIds : [];
@@ -256,7 +269,7 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
         if (entry.shareMeta?.condition) metaParts.push('condition:yes');
         const metaLabel = metaParts.length ? ` • ${metaParts.join(' • ')}` : '';
         const idsPart = idsLabel ? ` • ${idsLabel}` : '';
-        return `${box}:${statusLabel} • ${target} • ${mode} • ${count} atomes${idsPart} • ${ts}${metaLabel}`;
+        return `${box}:${statusLabel} • ${target} • ${mode} • ${shareType} • ${count} atomes${idsPart} • ${ts}${metaLabel}`;
     })();
 
     $('div', {
@@ -275,7 +288,7 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
                         if (!res?.ok) {
                             setStatus(res?.error || 'Accept failed.', 'error');
                         } else {
-                            setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
+                            setStatus(formatImportStatus(res), 'success');
                         }
                     } else {
                         const res = await ShareAPI.reject_request(entry.atomeId);
@@ -307,13 +320,13 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
             onAction: async () => {
                 const res = await ShareAPI.accept_request(entry.atomeId);
                 if (!res?.ok) setStatus(res?.error || 'Accept failed.', 'error');
-                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
+                else setStatus(formatImportStatus(res), 'success');
                 await refreshShared();
             },
             offAction: async () => {
                 const res = await ShareAPI.accept_request(entry.atomeId);
                 if (!res?.ok) setStatus(res?.error || 'Accept failed.', 'error');
-                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
+                else setStatus(formatImportStatus(res), 'success');
                 await refreshShared();
             }
         });
@@ -352,13 +365,13 @@ function renderSharedEntry(entry, parent, { kind, showAcceptReject = false, show
             onAction: async () => {
                 const res = await ShareAPI.accept_request(entry.atomeId);
                 if (!res?.ok) setStatus(res?.error || 'Import failed.', 'error');
-                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
+                else setStatus(formatImportStatus(res), 'success');
                 await refreshShared();
             },
             offAction: async () => {
                 const res = await ShareAPI.accept_request(entry.atomeId);
                 if (!res?.ok) setStatus(res?.error || 'Import failed.', 'error');
-                else setStatus(`Imported ${res.imported || 0} atome(s).`, 'success');
+                else setStatus(formatImportStatus(res), 'success');
                 await refreshShared();
             }
         });
