@@ -366,6 +366,7 @@ export async function getAtomesByOwner(ownerId, options = {}) {
  */
 export async function getAtomesAccessibleToUser(userId, options = {}) {
     const { type, parent, limit = 100, offset = 0 } = options;
+    const pendingOwner = JSON.stringify(userId);
 
     let sql = `
         SELECT DISTINCT a.*
@@ -376,10 +377,16 @@ export async function getAtomesAccessibleToUser(userId, options = {}) {
          AND p.can_read = 1
          AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))
         WHERE a.deleted_at IS NULL
-          AND (a.owner_id = ? OR p.permission_id IS NOT NULL)
+          AND (a.owner_id = ? OR p.permission_id IS NOT NULL
+               OR EXISTS (
+                   SELECT 1 FROM particles p2
+                   WHERE p2.atome_id = a.atome_id
+                     AND p2.particle_key = '_pending_owner_id'
+                     AND p2.particle_value = ?
+               ))
     `;
 
-    const params = [userId, userId];
+    const params = [userId, userId, pendingOwner];
 
     if (type) {
         sql += ' AND a.atome_type = ?';

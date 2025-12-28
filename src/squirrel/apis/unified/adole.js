@@ -942,12 +942,15 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     id: data.id,  // Allow specifying ID for sync operations
                     atomeId: data.id,  // Also send as atomeId for compatibility
                     atomeType: data.type || data.kind,
+                    atome_type: data.type || data.kind,
                     parentId: data.parentId || data.parent,
+                    parent_id: data.parentId || data.parent,
                     particles: data.particles || data
                 };
                 if (ownerId) {
                     payload.userId = ownerId;
                     payload.ownerId = ownerId;
+                    payload.owner_id = ownerId;
                 }
                 return getWs().send(payload);
             },
@@ -962,15 +965,23 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async list(params = {}) {
                 const token = getToken(tokenKey);
+                const ownerId = params.owner_id || params.ownerId;
+                const parentId = params.parentId || params.parent;
+                const atomeType = params.type || params.kind;
+                const includeDeleted = params.includeDeleted || false;
                 return getWs().send({
                     type: 'atome',
                     action: 'list',
                     token,
-                    atomeType: params.type || params.kind,
-                    parentId: params.parentId || params.parent,
-                    ownerId: params.owner_id || params.ownerId,
+                    atomeType,
+                    atome_type: atomeType,
+                    parentId,
+                    parent_id: parentId,
+                    ownerId,
+                    owner_id: ownerId,
                     since: params.since || params.updatedSince || params.updated_since || null,
-                    includeDeleted: params.includeDeleted || false,
+                    includeDeleted,
+                    include_deleted: includeDeleted,
                     limit: params.limit,
                     offset: params.offset || ((params.page || 0) * (params.limit || 50))
                 });
@@ -981,7 +992,8 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'soft-delete',
                     token,
-                    atomeId: id
+                    atomeId: id,
+                    atome_id: id
                 });
             },
             async alter(id, data) {
@@ -991,6 +1003,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     action: 'alter',
                     token,
                     atomeId: id,
+                    atome_id: id,
                     particles: data
                 });
             },
@@ -1001,6 +1014,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     action: 'update',
                     token,
                     atomeId: id,
+                    atome_id: id,
                     particles: data
                 });
             },

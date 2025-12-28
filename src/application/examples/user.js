@@ -304,6 +304,17 @@ function publishSelectedAtome(atomeId) {
 function pickAuthoritativeAtomes(result) {
   const fastifyOk = result?.fastify && !result.fastify.error;
   const tauriOk = result?.tauri && !result.tauri.error;
+  const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+
+  if (isTauriRuntime) {
+    if (tauriOk) {
+      return Array.isArray(result.tauri.atomes) ? result.tauri.atomes : [];
+    }
+    if (fastifyOk) {
+      return Array.isArray(result.fastify.atomes) ? result.fastify.atomes : [];
+    }
+    return [];
+  }
 
   if (fastifyOk) {
     return Array.isArray(result.fastify.atomes) ? result.fastify.atomes : [];
@@ -317,6 +328,17 @@ function pickAuthoritativeAtomes(result) {
 function pickAuthoritativeProjects(result) {
   const fastifyOk = result?.fastify && !result.fastify.error;
   const tauriOk = result?.tauri && !result.tauri.error;
+  const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+
+  if (isTauriRuntime) {
+    if (tauriOk) {
+      return Array.isArray(result.tauri.projects) ? result.tauri.projects : [];
+    }
+    if (fastifyOk) {
+      return Array.isArray(result.fastify.projects) ? result.fastify.projects : [];
+    }
+    return [];
+  }
 
   if (fastifyOk) {
     return Array.isArray(result.fastify.projects) ? result.fastify.projects : [];
@@ -1553,6 +1575,16 @@ function updateRemoteCommandsStatus(active) {
     // Start remote commands listener after login with actual user ID
     const userId = result.user.user_id || result.user.atome_id || result.user.id;
     await initRemoteCommands(userId);
+
+    const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (isTauriRuntime && AdoleAPI?.sync?.maybeSync) {
+      try {
+        const syncResult = await AdoleAPI.sync.maybeSync('refresh');
+        checkDebugPuts('sync atomes (refresh): ' + JSON.stringify(syncResult));
+      } catch (error) {
+        checkDebugPuts('sync atomes (refresh) failed: ' + (error?.message || String(error)));
+      }
+    }
   } else {
     puts('no user logged');
     grab('logged_user').textContent = 'no user logged';
@@ -1933,6 +1965,16 @@ $('span', {
       });
     } else {
       puts('[Fastify] No users found');
+    }
+
+    // Display public directory cache (Fastify public users)
+    if (result.directory && result.directory.length > 0) {
+      puts('[Directory] Users:');
+      result.directory.forEach(user => {
+        const name = user.username || user.data?.username || 'unknown';
+        const phone = user.phone || user.data?.phone || 'unknown';
+        puts('  - ' + name + ' (' + phone + ')');
+      });
     }
   },
 });

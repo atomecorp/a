@@ -417,13 +417,100 @@ async fn handle_create(
 
     // Insert or replace atome (upsert for sync operations)
     // Uses owner_id from message if provided, otherwise uses the logged-in user
-    if let Err(e) = db.execute(
+    let mut insert_owner_id: Option<String> = None;
+    let mut pending_owner_id: Option<String> = None;
+    let mut insert_parent_id: Option<String> = parent_id.map(String::from);
+    let mut pending_parent_id: Option<String> = None;
+
+    if !owner_id.is_empty() && owner_id != "anonymous" {
+        let owner_id_string = owner_id.to_string();
+        let owner_exists = db.query_row(
+            "SELECT 1 FROM atomes WHERE atome_id = ?1",
+            rusqlite::params![&owner_id_string],
+            |_| Ok(()),
+        ).is_ok();
+
+        if owner_id_string == atome_id || !owner_exists {
+            pending_owner_id = Some(owner_id_string);
+        } else {
+            insert_owner_id = Some(owner_id_string);
+        }
+    }
+
+    if let Some(parent) = parent_id {
+        let parent_string = parent.to_string();
+        let parent_exists = db.query_row(
+            "SELECT 1 FROM atomes WHERE atome_id = ?1",
+            rusqlite::params![&parent_string],
+            |_| Ok(()),
+        ).is_ok();
+
+        if parent_string == atome_id || !parent_exists {
+            pending_parent_id = Some(parent_string);
+            insert_parent_id = None;
+        }
+    }
+
+    let insert_owner_param = insert_owner_id.as_deref();
+    let insert_parent_param = insert_parent_id.as_deref();
+
+    let insert_result = db.execute(
         "INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
-         VALUES (?1, ?2, ?3, ?4, ?4, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?5), ?5, NULL, 'tauri', 'pending')",
-        rusqlite::params![&atome_id, atome_type, parent_id, owner_id, &now],
-    ) {
-        println!("[Create Debug] Insert error: {}", e);
-        return error_response(request_id, &e.to_string());
+         VALUES (?1, ?2, ?3, ?4, ?5, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?6), ?6, NULL, 'tauri', 'pending')",
+        rusqlite::params![&atome_id, atome_type, insert_parent_param, insert_owner_param, user_id, &now],
+    );
+
+    if let Err(e) = insert_result {
+        let err_msg = e.to_string();
+        if err_msg.contains("FOREIGN KEY constraint failed") {
+            if pending_owner_id.is_none() && !owner_id.is_empty() && owner_id != "anonymous" {
+                pending_owner_id = Some(owner_id.to_string());
+            }
+            if pending_parent_id.is_none() {
+                if let Some(parent) = parent_id {
+                    pending_parent_id = Some(parent.to_string());
+                }
+            }
+
+            let owner_id_null: Option<String> = None;
+            let parent_id_null: Option<String> = None;
+            if let Err(e2) = db.execute(
+                "INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
+                 VALUES (?1, ?2, ?3, ?4, ?5, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?6), ?6, NULL, 'tauri', 'pending')",
+                rusqlite::params![&atome_id, atome_type, parent_id_null, owner_id_null, user_id, &now],
+            ) {
+                println!("[Create Debug] Insert error: {}", e2);
+                return error_response(request_id, &e2.to_string());
+            }
+        } else {
+            println!("[Create Debug] Insert error: {}", e);
+            return error_response(request_id, &e.to_string());
+        }
+    }
+
+    if let Some(pending_owner) = pending_owner_id.as_ref() {
+        let pending_value = serde_json::to_string(pending_owner).unwrap_or_else(|_| format!("\"{}\"", pending_owner));
+        let _ = db.execute(
+            "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+             VALUES (?1, '_pending_owner_id', ?2, 'string', 1, ?3, ?3)",
+            rusqlite::params![&atome_id, pending_value, &now],
+        );
+    }
+
+    if let Some(pending_parent) = pending_parent_id.as_ref() {
+        let pending_value = serde_json::to_string(pending_parent).unwrap_or_else(|_| format!("\"{}\"", pending_parent));
+        let _ = db.execute(
+            "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+             VALUES (?1, '_pending_parent_id', ?2, 'string', 1, ?3, ?3)",
+            rusqlite::params![&atome_id, pending_value, &now],
+        );
+    }
+
+    // Try to resolve pending references now that we inserted the row.
+    if let Ok(resolved) = resolve_pending_references(&db) {
+        if resolved.resolved > 0 {
+            println!("[Create Debug] Resolved {} pending references", resolved.resolved);
+        }
     }
 
     // Insert or replace particles from data
@@ -581,10 +668,20 @@ async fn handle_list(
                   AND perm.principal_id = ?1
                   AND perm.can_read = 1
                   AND (perm.expires_at IS NULL OR perm.expires_at > datetime('now'))
-                 WHERE (a.owner_id = ?2 OR perm.permission_id IS NOT NULL)",
+                 WHERE (a.owner_id = ?2 OR perm.permission_id IS NOT NULL
+                   OR EXISTS (
+                     SELECT 1 FROM particles p2
+                     WHERE p2.atome_id = a.atome_id
+                       AND p2.particle_key = '_pending_owner_id'
+                       AND p2.particle_value = ?3
+                   ))",
             );
-            let mut params: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(owner.to_string()), Box::new(owner.to_string())];
+            let pending_owner = serde_json::to_string(owner).unwrap_or_else(|_| format!("\"{}\"", owner));
+            let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![
+                Box::new(owner.to_string()),
+                Box::new(owner.to_string()),
+                Box::new(pending_owner),
+            ];
             if let Some(t) = atome_type {
                 query.push_str(" AND a.atome_type = ?");
                 params.push(Box::new(t.to_string()));
@@ -1060,11 +1157,20 @@ fn load_atome_with_deleted(
         }
     }
 
+    let mut owner_id = row.3;
+    if owner_id.is_none() {
+        owner_id = get_pending_owner_id(db, &row.0);
+    }
+    let mut parent_id = row.2;
+    if parent_id.is_none() {
+        parent_id = get_pending_parent_id(db, &row.0);
+    }
+
     Ok(AtomeData {
         atome_id: row.0,
         atome_type: row.1,
-        parent_id: row.2,
-        owner_id: row.3,
+        parent_id,
+        owner_id,
         creator_id: row.4,
         data: serde_json::Value::Object(data_map),
         sync_status: row.5,
@@ -1260,14 +1366,120 @@ fn evaluate_condition_node(node: &serde_json::Value, context: &serde_json::Value
     true
 }
 
-fn get_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
-    db.query_row(
-        "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
+fn get_pending_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
+    let raw: Result<String, _> = db.query_row(
+        "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = '_pending_owner_id' LIMIT 1",
         rusqlite::params![atome_id],
-        |row| row.get::<_, Option<String>>(0),
-    )
-    .ok()
-    .flatten()
+        |row| row.get(0),
+    );
+
+    match raw {
+        Ok(value) => serde_json::from_str(&value).ok().or(Some(value)),
+        Err(_) => None,
+    }
+}
+
+fn get_pending_parent_id(db: &Connection, atome_id: &str) -> Option<String> {
+    let raw: Result<String, _> = db.query_row(
+        "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = '_pending_parent_id' LIMIT 1",
+        rusqlite::params![atome_id],
+        |row| row.get(0),
+    );
+
+    match raw {
+        Ok(value) => serde_json::from_str(&value).ok().or(Some(value)),
+        Err(_) => None,
+    }
+}
+
+struct PendingResolveSummary {
+    resolved: usize,
+    failed: usize,
+    total: usize,
+}
+
+fn resolve_pending_references(db: &Connection) -> Result<PendingResolveSummary, String> {
+    let now = Utc::now().to_rfc3339();
+    let mut resolved = 0usize;
+    let mut failed = 0usize;
+
+    let mut stmt = db
+        .prepare(
+            "SELECT atome_id, particle_key, particle_value
+             FROM particles
+             WHERE particle_key IN ('_pending_owner_id', '_pending_parent_id')",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)))
+        .map_err(|e| e.to_string())?;
+
+    let mut total = 0usize;
+    for row in rows.filter_map(|r| r.ok()) {
+        total += 1;
+        let (atome_id, particle_key, particle_value) = row;
+        let pending_id: Option<String> = serde_json::from_str(&particle_value).ok().or(Some(particle_value.clone()));
+
+        let pending_id = match pending_id {
+            Some(id) if !id.is_empty() && id != "anonymous" => id,
+            _ => {
+                let _ = db.execute(
+                    "DELETE FROM particles WHERE atome_id = ?1 AND particle_key = ?2",
+                    rusqlite::params![&atome_id, &particle_key],
+                );
+                resolved += 1;
+                continue;
+            }
+        };
+
+        let exists = db.query_row(
+            "SELECT 1 FROM atomes WHERE atome_id = ?1",
+            rusqlite::params![&pending_id],
+            |_| Ok(()),
+        ).is_ok();
+
+        if exists {
+            if particle_key == "_pending_owner_id" {
+                let _ = db.execute(
+                    "UPDATE atomes SET owner_id = ?1, updated_at = ?2, sync_status = 'pending' WHERE atome_id = ?3",
+                    rusqlite::params![&pending_id, &now, &atome_id],
+                );
+            } else if particle_key == "_pending_parent_id" {
+                let _ = db.execute(
+                    "UPDATE atomes SET parent_id = ?1, updated_at = ?2, sync_status = 'pending' WHERE atome_id = ?3",
+                    rusqlite::params![&pending_id, &now, &atome_id],
+                );
+            }
+
+            let _ = db.execute(
+                "DELETE FROM particles WHERE atome_id = ?1 AND particle_key = ?2",
+                rusqlite::params![&atome_id, &particle_key],
+            );
+            resolved += 1;
+        } else {
+            failed += 1;
+        }
+    }
+
+    Ok(PendingResolveSummary { resolved, failed, total })
+}
+
+fn get_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
+    let owner: Option<String> = db
+        .query_row(
+            "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
+            rusqlite::params![atome_id],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+
+    if owner.is_some() {
+        owner
+    } else {
+        get_pending_owner_id(db, atome_id)
+    }
 }
 
 fn upsert_permission(

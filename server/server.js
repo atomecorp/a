@@ -2169,6 +2169,7 @@ async function startServer() {
                 } else if (effectiveOwner && effectiveOwner !== 'anonymous') {
                   // List atomes accessible to this user (owned OR shared via permissions)
                   const dataSource = db.getDataSourceAdapter();
+                  const pendingOwner = JSON.stringify(effectiveOwner);
                   const rows = await dataSource.query(
                     `SELECT a.*, 
                             GROUP_CONCAT(p.particle_key || ':' || p.particle_value, '||') as particles_raw
@@ -2179,15 +2180,21 @@ async function startServer() {
                       AND perm.principal_id = ?
                       AND perm.can_read = 1
                       AND (perm.expires_at IS NULL OR perm.expires_at > datetime('now'))
-                     WHERE (a.owner_id = ? OR perm.permission_id IS NOT NULL)
+                     WHERE (a.owner_id = ? OR perm.permission_id IS NOT NULL
+                       OR EXISTS (
+                         SELECT 1 FROM particles p2
+                         WHERE p2.atome_id = a.atome_id
+                           AND p2.particle_key = '_pending_owner_id'
+                           AND p2.particle_value = ?
+                       ))
                        ${deletedClause}
                        ${effectiveType ? 'AND a.atome_type = ?' : ''}
                      GROUP BY a.atome_id
                      ORDER BY a.created_at DESC
                      LIMIT ? OFFSET ?`,
                     effectiveType
-                      ? [effectiveOwner, effectiveOwner, effectiveType, limit || 100, offset || 0]
-                      : [effectiveOwner, effectiveOwner, limit || 100, offset || 0]
+                      ? [effectiveOwner, effectiveOwner, pendingOwner, effectiveType, limit || 100, offset || 0]
+                      : [effectiveOwner, effectiveOwner, pendingOwner, limit || 100, offset || 0]
                   );
 
                   // Parse particles

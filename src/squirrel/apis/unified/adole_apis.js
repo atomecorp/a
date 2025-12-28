@@ -19,20 +19,64 @@ function normalizeAtomeRecord(raw) {
         ? raw.data
         : null;
 
+    const parsePendingId = (value) => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) return null;
+            try {
+                return JSON.parse(trimmed);
+            } catch {
+                return trimmed;
+            }
+        }
+        return value;
+    };
+
+    const pendingOwnerRaw =
+        raw._pending_owner_id ??
+        raw.pending_owner_id ??
+        raw.pendingOwnerId ??
+        particlesFromParticlesField?._pending_owner_id ??
+        particlesFromDataField?._pending_owner_id;
+    const pendingParentRaw =
+        raw._pending_parent_id ??
+        raw.pending_parent_id ??
+        raw.pendingParentId ??
+        particlesFromParticlesField?._pending_parent_id ??
+        particlesFromDataField?._pending_parent_id;
+
+    const pendingOwnerId = parsePendingId(pendingOwnerRaw);
+    const pendingParentId = parsePendingId(pendingParentRaw);
+
     const coreKeys = new Set([
-        'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
+        'atome_id', 'atome_type', 'atomeId', 'atomeType', 'parent_id', 'owner_id', 'creator_id',
         'created_at', 'updated_at', 'deleted_at',
+        'createdAt', 'updatedAt', 'deletedAt', 'lastSync', 'last_sync',
         // common aliases
         'id', 'type', 'kind', 'parent', 'parentId', 'owner', 'ownerId', 'userId',
         // response/meta
-        'data', 'particles', 'atomes', 'count'
+        'data', 'particles', 'atomes', 'count',
+        '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
     ]);
 
     // Fastify WS list flattens particles at top-level (e.g. atome.left/top/color).
     // Rehydrate them into `particles` so UI persistence works.
+    const stripPending = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj;
+        const copy = { ...obj };
+        delete copy._pending_owner_id;
+        delete copy._pending_parent_id;
+        delete copy.pending_owner_id;
+        delete copy.pending_parent_id;
+        delete copy.pendingOwnerId;
+        delete copy.pendingParentId;
+        return copy;
+    };
+
     const particles = particlesFromParticlesField
-        ? { ...particlesFromParticlesField }
-        : (particlesFromDataField ? { ...particlesFromDataField } : {});
+        ? stripPending(particlesFromParticlesField)
+        : (particlesFromDataField ? stripPending(particlesFromDataField) : {});
 
     // If both exist, merge them (prefer explicit `particles` over `data`).
     if (particlesFromParticlesField && raw.data && typeof raw.data === 'object') {
@@ -48,16 +92,39 @@ function normalizeAtomeRecord(raw) {
         particles[key] = val;
     }
 
+    const createdAt = raw.created_at ?? raw.createdAt;
+    const updatedAt = raw.updated_at ?? raw.updatedAt;
+    const deletedAt = raw.deleted_at ?? raw.deletedAt;
+    const lastSync = raw.last_sync ?? raw.lastSync;
+
+    const normalizeId = (value) => {
+        if (value === null || value === undefined) return null;
+        const str = String(value);
+        if (!str || str === 'anonymous') return null;
+        return str;
+    };
+
+    const atomeId = raw.atome_id || raw.atomeId || raw.id;
+    const atomeType = raw.atome_type || raw.atomeType || raw.type;
+    const resolvedOwnerId = normalizeId(raw.owner_id || raw.ownerId || raw.owner || raw.userId || pendingOwnerId);
+    const resolvedParentId = normalizeId(raw.parent_id || raw.parentId || raw.parent || pendingParentId);
+
     return {
         ...raw,
-        id: raw.id || raw.atome_id,
-        atome_id: raw.atome_id || raw.id,
-        type: raw.type || raw.atome_type,
-        atome_type: raw.atome_type || raw.type,
-        parentId: raw.parentId || raw.parent_id || raw.parent,
-        parent_id: raw.parent_id || raw.parentId || raw.parent,
-        ownerId: raw.ownerId || raw.owner_id || raw.owner || raw.userId,
-        owner_id: raw.owner_id || raw.ownerId || raw.owner || raw.userId,
+        id: raw.id || atomeId,
+        atome_id: atomeId,
+        type: atomeType,
+        atome_type: atomeType,
+        parentId: resolvedParentId,
+        parent_id: resolvedParentId,
+        ownerId: resolvedOwnerId,
+        owner_id: resolvedOwnerId,
+        pending_owner_id: pendingOwnerId || null,
+        pending_parent_id: pendingParentId || null,
+        created_at: createdAt,
+        updated_at: updatedAt,
+        deleted_at: deletedAt,
+        last_sync: lastSync,
         particles
     };
 }
@@ -153,9 +220,12 @@ let _currentMachinePlatform = null;
 const PUBLIC_USER_DIRECTORY_CACHE_KEY = 'public_user_directory_cache_v1';
 const AUTH_PENDING_SYNC_KEY = 'auth_pending_sync';
 const PUBLIC_USER_DIRECTORY_LAST_SYNC_KEY = 'public_user_directory_last_sync_iso_v1';
+const ATOME_PENDING_DELETE_KEY = 'atome_pending_delete_ops_v1';
+const FASTIFY_LOGIN_CACHE_KEY = 'fastify_login_cache_v1';
 
 let _syncAtomesInProgress = false;
 let _lastSyncAtomesAttempt = 0;
+let _lastFastifyAutoLoginAttempt = 0;
 
 function is_tauri_runtime() {
     try {
@@ -163,6 +233,109 @@ function is_tauri_runtime() {
     } catch {
         return false;
     }
+}
+
+function save_fastify_login_cache({ phone, password }) {
+    if (!is_tauri_runtime() || !phone || !password || typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(FASTIFY_LOGIN_CACHE_KEY, JSON.stringify({
+            phone: String(phone),
+            password: String(password),
+            savedAt: new Date().toISOString()
+        }));
+    } catch {
+        // Ignore
+    }
+}
+
+function load_fastify_login_cache() {
+    if (!is_tauri_runtime() || typeof localStorage === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(FASTIFY_LOGIN_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed?.phone || !parsed?.password) return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function clear_fastify_login_cache() {
+    if (!is_tauri_runtime() || typeof localStorage === 'undefined') return;
+    try {
+        localStorage.removeItem(FASTIFY_LOGIN_CACHE_KEY);
+    } catch {
+        // Ignore
+    }
+}
+
+async function ensure_fastify_token() {
+    if (!is_tauri_runtime()) return { ok: !!FastifyAdapter.getToken?.(), reason: 'not_tauri' };
+
+    const existing = FastifyAdapter.getToken?.();
+    if (existing) return { ok: true, reason: 'token_present' };
+
+    const now = Date.now();
+    if (_lastFastifyAutoLoginAttempt && (now - _lastFastifyAutoLoginAttempt < 15000)) {
+        return { ok: false, reason: 'cooldown' };
+    }
+
+    const cached = load_fastify_login_cache();
+
+    const attemptLogin = async (phone, password, reasonLabel) => {
+        if (!phone || !password) return { ok: false, reason: reasonLabel };
+        _lastFastifyAutoLoginAttempt = now;
+        try {
+            const res = await FastifyAdapter.auth.login({ phone, password });
+            if (res && (res.ok || res.success)) {
+                return { ok: true, reason: 'login_ok' };
+            }
+            return { ok: false, reason: res?.error || reasonLabel || 'login_failed', error: res?.error };
+        } catch (e) {
+            return { ok: false, reason: e.message || reasonLabel || 'login_failed', error: e.message };
+        }
+    };
+
+    if (cached?.phone && cached?.password) {
+        const result = await attemptLogin(cached.phone, cached.password, 'login_failed');
+        if (result.ok) return result;
+
+        const errMsg = String(result?.reason || '').toLowerCase();
+        const shouldRegister = errMsg.includes('user not found')
+            || errMsg.includes('no user')
+            || errMsg.includes('not found')
+            || errMsg.includes('invalid credentials');
+
+        if (shouldRegister) {
+            try {
+                const current = await current_user();
+                const registerUsername = current?.user?.username || cached.phone;
+                const reg = await FastifyAdapter.auth.register({
+                    phone: cached.phone,
+                    password: cached.password,
+                    username: registerUsername,
+                    visibility: 'public'
+                });
+                if (reg && (reg.ok || reg.success || is_already_exists_error(reg))) {
+                    const retry = await attemptLogin(cached.phone, cached.password, 'login_after_register_failed');
+                    if (retry.ok) return retry;
+                }
+            } catch { }
+        }
+    }
+
+    // Fallback: in this app the password is typically the phone number.
+    // This allows Tauri to re-auth Fastify after offline use without a manual login.
+    try {
+        const current = await current_user();
+        const phone = current?.user?.phone || null;
+        if (phone) {
+            return await attemptLogin(phone, phone, 'fallback_phone_password_failed');
+        }
+    } catch { }
+
+    return { ok: false, reason: cached ? 'login_failed' : 'no_cached_credentials' };
 }
 
 function safe_parse_json(value) {
@@ -223,17 +396,26 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
     const nowIso = new Date().toISOString();
 
     let fastifyUsers = [];
+    let listOk = false;
+    let listError = null;
     try {
         const res = await FastifyAdapter.atome.list({ type: 'user', limit, offset: 0, since: lastSync });
         if (res && (res.ok || res.success)) {
             fastifyUsers = res.atomes || res.data || [];
+            listOk = true;
+        } else {
+            listError = res?.error || 'list_failed';
         }
     } catch {
-        // Ignore
+        listError = 'list_failed';
+    }
+
+    if (!listOk) {
+        return { ok: false, error: listError || 'list_failed' };
     }
 
     if (fastifyUsers.length === 0) {
-        // Only advance the sync cursor if Fastify is actually reachable.
+        // Only advance the sync cursor if Fastify is actually reachable and list succeeded.
         try {
             const reachable = await FastifyAdapter.isAvailable();
             if (reachable) set_public_user_directory_last_sync(nowIso);
@@ -250,7 +432,15 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
 
 async function maybe_sync_atomes(reason = 'auto') {
     if (_syncAtomesInProgress) return { skipped: true, reason: 'in_progress' };
-    if (!_currentUserId) return { skipped: true, reason: 'no_user' };
+    if (!_currentUserId) {
+        try {
+            const currentResult = await current_user();
+            if (currentResult?.logged && currentResult.user) {
+                _currentUserId = currentResult.user.user_id || currentResult.user.atome_id || currentResult.user.id || null;
+            }
+        } catch { }
+        if (!_currentUserId) return { skipped: true, reason: 'no_user' };
+    }
 
     const now = Date.now();
     if (_lastSyncAtomesAttempt && (now - _lastSyncAtomesAttempt < 5000)) {
@@ -269,7 +459,11 @@ async function maybe_sync_atomes(reason = 'auto') {
     }
 
     const tauriToken = TauriAdapter.getToken?.();
-    const fastifyToken = FastifyAdapter.getToken?.();
+    let fastifyToken = FastifyAdapter.getToken?.();
+    if (!fastifyToken && backends.fastify) {
+        try { await ensure_fastify_token(); } catch { }
+        fastifyToken = FastifyAdapter.getToken?.();
+    }
     if (!tauriToken || !fastifyToken) {
         return { skipped: true, reason: 'missing_token' };
     }
@@ -277,6 +471,7 @@ async function maybe_sync_atomes(reason = 'auto') {
     _syncAtomesInProgress = true;
     _lastSyncAtomesAttempt = now;
     try {
+        await process_pending_deletes();
         return await sync_atomes();
     } catch (e) {
         return { skipped: false, error: e.message, reason };
@@ -415,6 +610,96 @@ function has_pending_registers() {
     }
 }
 
+function load_pending_deletes() {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+        const raw = localStorage.getItem(ATOME_PENDING_DELETE_KEY);
+        const queue = raw ? JSON.parse(raw) : [];
+        return Array.isArray(queue) ? queue : [];
+    } catch {
+        return [];
+    }
+}
+
+function save_pending_deletes(queue) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(ATOME_PENDING_DELETE_KEY, JSON.stringify(queue));
+    } catch {
+        // Ignore
+    }
+}
+
+function get_pending_delete_ids() {
+    const ids = new Set();
+    const queue = load_pending_deletes();
+    queue.forEach(item => {
+        if (item?.atomeId) ids.add(String(item.atomeId));
+    });
+    return ids;
+}
+
+function queue_pending_delete({ atomeId, ownerId, type }) {
+    if (!atomeId || typeof localStorage === 'undefined') return;
+    const queue = load_pending_deletes();
+    const entry = {
+        atomeId: String(atomeId),
+        ownerId: ownerId || null,
+        type: type || null,
+        queuedAt: new Date().toISOString()
+    };
+    const index = queue.findIndex(item => String(item?.atomeId) === String(atomeId));
+    if (index >= 0) {
+        queue[index] = { ...queue[index], ...entry };
+    } else {
+        queue.push(entry);
+    }
+    save_pending_deletes(queue);
+}
+
+function is_delete_already_applied(errorMessage) {
+    const msg = String(errorMessage || '').toLowerCase();
+    return msg.includes('not found') || msg.includes('deleted') || msg.includes('missing');
+}
+
+async function process_pending_deletes() {
+    const queue = load_pending_deletes();
+    if (!queue.length) return { processed: 0, remaining: 0 };
+
+    if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+        try { await ensure_fastify_token(); } catch { }
+    }
+    if (!FastifyAdapter.getToken?.()) {
+        return { processed: 0, remaining: queue.length, error: 'missing_token' };
+    }
+
+    const remaining = [];
+    let processed = 0;
+
+    for (const item of queue) {
+        const atomeId = item?.atomeId;
+        if (!atomeId) continue;
+
+        try {
+            const res = await FastifyAdapter.atome.softDelete(atomeId);
+            if (res?.ok || res?.success || is_delete_already_applied(res?.error)) {
+                processed += 1;
+                continue;
+            }
+        } catch (e) {
+            if (is_delete_already_applied(e?.message)) {
+                processed += 1;
+                continue;
+            }
+        }
+
+        remaining.push(item);
+    }
+
+    save_pending_deletes(remaining);
+    return { processed, remaining: remaining.length };
+}
+
 let pendingRegisterMonitorStarted = false;
 let pendingRegisterMonitorId = null;
 
@@ -424,11 +709,14 @@ function start_pending_register_monitor() {
 
     const pollInterval = Math.max(CONFIG.CHECK_INTERVAL || 30000, 15000);
     pendingRegisterMonitorId = setInterval(async () => {
-        if (!has_pending_registers()) return;
+        const hasRegisters = has_pending_registers();
+        const hasDeletes = load_pending_deletes().length > 0;
+        if (!hasRegisters && !hasDeletes) return;
         try {
             const { fastify } = await checkBackends(true);
             if (fastify) {
-                await process_pending_registers();
+                if (hasRegisters) await process_pending_registers();
+                if (hasDeletes) await process_pending_deletes();
             }
         } catch {
             // Ignore
@@ -997,6 +1285,21 @@ async function create_user(phone, password, username, options = {}, callback) {
             results.login = { error: e.message };
         }
     }
+    const loginSuccess = results?.login?.tauri?.success || results?.login?.fastify?.success;
+    if (!loginSuccess) {
+        const registeredUser = results.tauri?.data?.user || results.fastify?.data?.user || null;
+        const registeredId = registeredUser?.user_id || registeredUser?.id || registeredUser?.atome_id || null;
+        if (registeredId) {
+            try {
+                await set_current_user_state(
+                    registeredId,
+                    registeredUser?.username || username || null,
+                    registeredUser?.phone || phone || null,
+                    false
+                );
+            } catch { }
+        }
+    }
 
     // Call callback if provided
     if (typeof callback === 'function') {
@@ -1112,6 +1415,54 @@ async function log_user(phone, password, username, callback) {
         results.fastify = { success: false, data: null, error: e.message };
     }
 
+    // If running in Tauri and the account exists locally but not on Fastify yet,
+    // bootstrap the cloud account so sync can resume.
+    try {
+        const isTauriRuntime = is_tauri_runtime();
+        const fastifyLoginError = String(results.fastify?.error || '').toLowerCase();
+        const shouldBootstrapFastify = isTauriRuntime
+            && results.tauri.success
+            && !results.fastify.success
+            && (fastifyLoginError.includes('user not found')
+                || fastifyLoginError.includes('no user')
+                || fastifyLoginError.includes('not found')
+                || fastifyLoginError.includes('invalid credentials')
+                || fastifyLoginError.includes('server unreachable')
+                || fastifyLoginError.includes('failed to fetch'));
+
+        if (shouldBootstrapFastify) {
+            const tauriUser = results.tauri.data?.user || {};
+            const registerUsername = tauriUser.username || username || phone;
+            const shouldAttemptRegister = !!(phone && password && registerUsername);
+
+            if (shouldAttemptRegister) {
+                try {
+                    const reg = await FastifyAdapter.auth.register({
+                        phone,
+                        password,
+                        username: registerUsername,
+                        visibility: 'public'
+                    });
+
+                    if (reg && (reg.ok || reg.success || is_already_exists_error(reg))) {
+                        const retry = await FastifyAdapter.auth.login({ phone, password });
+                        if (retry && (retry.ok || retry.success)) {
+                            results.fastify = { success: true, data: retry, error: null };
+                        }
+                    }
+                } catch (_) {
+                    // Ignore; we'll fall back to pending register queue.
+                }
+            }
+
+            if (!results.fastify.success) {
+                queue_pending_register({ username: registerUsername, phone, password, createdOn: 'tauri' });
+            }
+        }
+    } catch (_) {
+        // Never fail login flow because of bootstrap attempt.
+    }
+
     // If running in Tauri and the account exists on Fastify but not yet locally,
     // bootstrap the local account on first login using the provided credentials.
     // This makes "created in browser/Fastify" accounts usable in Tauri without manual re-creation.
@@ -1166,6 +1517,8 @@ async function log_user(phone, password, username, callback) {
 
     // If login succeeded, update current user state and machine association
     if (results.tauri.success || results.fastify.success) {
+        save_fastify_login_cache({ phone, password });
+
         const userData = results.tauri.data?.user || results.fastify.data?.user || {};
         const userId = userData.user_id || userData.id || userData.userId;
         const userName = userData.username || username;
@@ -1197,6 +1550,21 @@ async function current_user(callback) {
         user: null,
         source: null
     };
+    const hydrateCurrentUserState = async (user) => {
+        if (!user || typeof user !== 'object') return;
+        const userId = user.user_id || user.atome_id || user.id || null;
+        if (!userId) return;
+        if (_currentUserId !== userId || !_currentUserName || !_currentUserPhone) {
+            try {
+                await set_current_user_state(
+                    userId,
+                    user.username || _currentUserName || null,
+                    user.phone || _currentUserPhone || null,
+                    false
+                );
+            } catch { }
+        }
+    };
 
     // Try Tauri first
     try {
@@ -1206,6 +1574,7 @@ async function current_user(callback) {
                 result.logged = true;
                 result.user = tauriResult.user;
                 result.source = 'tauri';
+                await hydrateCurrentUserState(tauriResult.user);
 
                 if (typeof callback === 'function') {
                     callback(result);
@@ -1231,6 +1600,7 @@ async function current_user(callback) {
                 result.logged = true;
                 result.user = fastifyResult.user;
                 result.source = 'fastify';
+                await hydrateCurrentUserState(fastifyResult.user);
 
                 if (typeof callback === 'function') {
                     callback(result);
@@ -1254,6 +1624,16 @@ async function current_user(callback) {
     }
 
     // No user logged in
+    if (_currentUserId) {
+        result.logged = true;
+        result.user = {
+            user_id: _currentUserId,
+            username: _currentUserName || null,
+            phone: _currentUserPhone || null
+        };
+        result.source = 'memory';
+    }
+
     if (typeof callback === 'function') {
         callback(result);
     }
@@ -1290,6 +1670,13 @@ async function unlog_user(callback = null) {
     } catch (e) {
         results.fastify = { success: false, data: null, error: e.message };
     }
+
+    clear_fastify_login_cache();
+    _currentUserId = null;
+    _currentUserName = null;
+    _currentUserPhone = null;
+    _currentProjectId = null;
+    _currentProjectName = null;
 
     // Execute callback if provided
     if (callback && typeof callback === 'function') {
@@ -1360,7 +1747,8 @@ async function delete_user(phone, password, username, callback) {
 async function user_list() {
     const results = {
         tauri: { users: [], error: null },
-        fastify: { users: [], error: null }
+        fastify: { users: [], error: null },
+        directory: []
     };
 
     // Scalable: refresh public directory cache using deltas first.
@@ -1398,17 +1786,13 @@ async function user_list() {
             save_public_user_directory_cache(merged);
         }
 
-        // If Tauri backend is unavailable (or empty) but we have cache, use it as a directory fallback.
-        // This is a visibility feature only; it does not create local accounts.
+        // Expose the public directory separately to keep account lists clean.
+        results.directory = merged;
         if (is_tauri_runtime()) {
             const cache = load_public_user_directory_cache();
-            if ((results.tauri.users.length === 0) && cache.length > 0) {
-                results.tauri.users = cache;
+            if (cache.length > 0) {
+                results.directory = merge_user_directories(cache, merged);
             }
-
-            // In Tauri, expose the merged directory through the Tauri slot so UI code that
-            // expects to read "Tauri users" also sees Fastify-created users.
-            results.tauri.users = merge_user_directories(results.tauri.users, results.fastify.users);
         }
     } catch {
         // Ignore
@@ -1444,7 +1828,26 @@ try {
         window.addEventListener('squirrel:server-available', async (event) => {
             if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
             try { await process_pending_registers(); } catch { }
+            try { await process_pending_deletes(); } catch { }
             try { await maybe_sync_atomes('fastify-available'); } catch { }
+        });
+
+        window.addEventListener('squirrel:atome-deleted', async (event) => {
+            if (!is_tauri_runtime()) return;
+            const detail = event?.detail || {};
+            const atomeId = detail.id || detail.atome_id || detail.atomeId;
+            if (!atomeId) return;
+
+            try {
+                const res = await TauriAdapter.atome.softDelete(atomeId);
+                if (!(res?.ok || res?.success || is_delete_already_applied(res?.error))) {
+                    console.warn('[AdoleAPI] Failed to apply remote delete locally:', res?.error || 'unknown');
+                }
+            } catch (e) {
+                if (!is_delete_already_applied(e?.message)) {
+                    console.warn('[AdoleAPI] Failed to apply remote delete locally:', e?.message || 'unknown');
+                }
+            }
         });
 
         start_pending_register_monitor();
@@ -1547,10 +1950,16 @@ async function list_unsynced_atomes(callback) {
     let tauriAtomes = [];
     let fastifyAtomes = [];
 
+    if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+        try { await ensure_fastify_token(); } catch { }
+    }
+
     // Helper to fetch all atomes of all types from an adapter (including deleted for sync)
     // Uses ownerId: "*" to get ALL atomes, not just current user's
     const fetchAllAtomes = async (adapter, name, owner) => {
         const allAtomes = [];
+        let successCount = 0;
+        let lastError = null;
         for (const type of atomeTypes) {
             try {
                 // Include deleted atomes for sync comparison
@@ -1563,19 +1972,71 @@ async function list_unsynced_atomes(callback) {
                     offset: 0
                 });
                 if (result.ok || result.success) {
+                    successCount += 1;
                     const atomes = result.atomes || result.data || [];
                     allAtomes.push(...atomes);
+                } else {
+                    lastError = result.error || lastError;
                 }
             } catch (e) {
                 // Ignore errors for individual types
+                lastError = e.message || lastError;
             }
         }
+        if (successCount === 0) {
+            throw new Error(lastError || `${name} list failed`);
+        }
         return allAtomes;
+    };
+
+    const normalizeRefId = (value) => {
+        if (value === null || value === undefined) return null;
+        const str = String(value);
+        if (!str || str === 'anonymous') return null;
+        return str;
+    };
+
+    const resolveOwnerForSync = (atome) => {
+        if (!atome || typeof atome !== 'object') return null;
+        return normalizeRefId(
+            atome.owner_id ||
+            atome.ownerId ||
+            atome.owner ||
+            atome.userId ||
+            atome.pending_owner_id ||
+            atome.pendingOwnerId
+        );
+    };
+
+    const resolveParentForSync = (atome) => {
+        if (!atome || typeof atome !== 'object') return null;
+        return normalizeRefId(
+            atome.parent_id ||
+            atome.parentId ||
+            atome.parent ||
+            atome.pending_parent_id ||
+            atome.pendingParentId
+        );
+    };
+
+    const filterOwnedAtomes = (atomes, owner) => {
+        if (!owner) return atomes;
+        return (Array.isArray(atomes) ? atomes : []).filter((atome) => {
+            const atomeId = atome?.atome_id || atome?.id;
+            const atomeType = atome?.atome_type || atome?.type;
+            if (atomeType === 'user') {
+                return normalizeRefId(atomeId) === owner;
+            }
+            const ownerId = resolveOwnerForSync(atome);
+            return ownerId === owner;
+        });
     };
 
     // Fetch all atomes from Tauri
     try {
         tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri', ownerId);
+        tauriAtomes = tauriAtomes.map(normalizeAtomeRecord);
+        tauriAtomes = filterOwnedAtomes(tauriAtomes, ownerId);
     } catch (e) {
         result.error = 'Tauri connection failed: ' + e.message;
         if (typeof callback === 'function') callback(result);
@@ -1585,6 +2046,8 @@ async function list_unsynced_atomes(callback) {
     // Fetch all atomes from Fastify
     try {
         fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify', ownerId);
+        fastifyAtomes = fastifyAtomes.map(normalizeAtomeRecord);
+        fastifyAtomes = filterOwnedAtomes(fastifyAtomes, ownerId);
     } catch (e) {
         // If Fastify is offline, all Tauri atomes are "unsynced"
         result.onlyOnTauri = tauriAtomes.filter(a => !a.deleted_at);
@@ -1623,9 +2086,12 @@ async function list_unsynced_atomes(callback) {
 
         // Otherwise, extract inline particles (all fields except metadata)
         const metadataFields = [
-            'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
+            'atome_id', 'atome_type', 'atomeId', 'atomeType',
+            'parent_id', 'parentId', 'owner_id', 'ownerId', 'creator_id', 'userId',
             'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
-            'created_source', 'id', 'type', 'data', 'particles'
+            'createdAt', 'updatedAt', 'deletedAt', 'lastSync',
+            'created_source', 'id', 'type', 'data', 'particles',
+            '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
         ];
 
         const inlineParticles = {};
@@ -1638,8 +2104,47 @@ async function list_unsynced_atomes(callback) {
     };
 
     // Helper function to compare atome content
+    const compareMetadata = (atome1, atome2) => {
+        const type1 = atome1.atome_type || atome1.atomeType || atome1.type || null;
+        const type2 = atome2.atome_type || atome2.atomeType || atome2.type || null;
+        const owner1 = resolveOwnerForSync(atome1);
+        const owner2 = resolveOwnerForSync(atome2);
+        const parent1 = resolveParentForSync(atome1);
+        const parent2 = resolveParentForSync(atome2);
+
+        const typeDiff = type1 && type2 && type1 !== type2;
+        const ownerDiff = owner1 !== owner2;
+        const parentDiff = parent1 !== parent2;
+
+        if (!typeDiff && !ownerDiff && !parentDiff) {
+            return 'equal';
+        }
+
+        if (!owner1 && owner2) return 'fastify_newer';
+        if (owner1 && !owner2) return 'tauri_newer';
+        if (!parent1 && parent2) return 'fastify_newer';
+        if (parent1 && !parent2) return 'tauri_newer';
+        if (type1 && !type2) return 'tauri_newer';
+        if (!type1 && type2) return 'fastify_newer';
+
+        const updated1 = atome1.updated_at || atome1.updatedAt;
+        const updated2 = atome2.updated_at || atome2.updatedAt;
+        if (updated1 && updated2) {
+            const date1 = new Date(updated1).getTime();
+            const date2 = new Date(updated2).getTime();
+            if (date1 > date2) return 'tauri_newer';
+            if (date2 > date1) return 'fastify_newer';
+        }
+
+        return 'conflict';
+    };
+
     const compareAtomes = (atome1, atome2) => {
-        // First, compare particles content (the actual data)
+        // Compare metadata first (owner/parent/type). If different, sync metadata.
+        const metadataComparison = compareMetadata(atome1, atome2);
+        if (metadataComparison !== 'equal') return metadataComparison;
+
+        // Then compare particles content (the actual data)
         const particles1 = extractParticlesForComparison(atome1);
         const particles2 = extractParticlesForComparison(atome2);
 
@@ -1689,8 +2194,8 @@ async function list_unsynced_atomes(callback) {
         const fastifyAtome = fastifyMap.get(id);
 
         // Check for soft deletes
-        const tauriDeleted = tauriAtome?.deleted_at != null;
-        const fastifyDeleted = fastifyAtome?.deleted_at != null;
+        const tauriDeleted = tauriAtome?.deleted_at != null || tauriAtome?.deletedAt != null;
+        const fastifyDeleted = fastifyAtome?.deleted_at != null || fastifyAtome?.deletedAt != null;
 
         if (tauriAtome && !fastifyAtome) {
             // Only on Tauri (local)
@@ -1763,10 +2268,21 @@ async function sync_atomes(callback) {
         pushed: { success: 0, failed: 0, errors: [] },
         pulled: { success: 0, failed: 0, errors: [] },
         updated: { success: 0, failed: 0, errors: [] },
+        deleted: {
+            onFastify: { success: 0, failed: 0, errors: [] },
+            onTauri: { success: 0, failed: 0, errors: [] }
+        },
         conflicts: { count: 0, items: [] },
         alreadySynced: 0,
         error: null
     };
+
+    if (!is_tauri_runtime()) {
+        result.skipped = true;
+        result.reason = 'not_tauri';
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
 
     // First, get the list of unsynced atomes
     let unsyncedResult;
@@ -1785,6 +2301,55 @@ async function sync_atomes(callback) {
 
     result.alreadySynced = unsyncedResult.synced.length;
 
+    let currentUserId = _currentUserId;
+    if (!currentUserId) {
+        try {
+            const currentResult = await current_user();
+            currentUserId = currentResult.user?.user_id || currentResult.user?.atome_id || currentResult.user?.id || null;
+        } catch { }
+    }
+
+    // 0. Propagate deletions before any create/update to prevent resurrecting records.
+    for (const item of unsyncedResult.deletedOnTauri || []) {
+        try {
+            const deleteResult = await FastifyAdapter.atome.softDelete(item.id);
+            if (deleteResult.ok || deleteResult.success || is_delete_already_applied(deleteResult.error)) {
+                result.deleted.onFastify.success++;
+            } else {
+                result.deleted.onFastify.failed++;
+                result.deleted.onFastify.errors.push({ id: item.id, error: deleteResult.error });
+                queue_pending_delete({ atomeId: item.id, ownerId: item.tauri?.owner_id, type: item.tauri?.atome_type || null });
+            }
+        } catch (e) {
+            if (is_delete_already_applied(e?.message)) {
+                result.deleted.onFastify.success++;
+            } else {
+                result.deleted.onFastify.failed++;
+                result.deleted.onFastify.errors.push({ id: item.id, error: e.message });
+                queue_pending_delete({ atomeId: item.id, ownerId: item.tauri?.owner_id, type: item.tauri?.atome_type || null });
+            }
+        }
+    }
+
+    for (const item of unsyncedResult.deletedOnFastify || []) {
+        try {
+            const deleteResult = await TauriAdapter.atome.softDelete(item.id);
+            if (deleteResult.ok || deleteResult.success || is_delete_already_applied(deleteResult.error)) {
+                result.deleted.onTauri.success++;
+            } else {
+                result.deleted.onTauri.failed++;
+                result.deleted.onTauri.errors.push({ id: item.id, error: deleteResult.error });
+            }
+        } catch (e) {
+            if (is_delete_already_applied(e?.message)) {
+                result.deleted.onTauri.success++;
+            } else {
+                result.deleted.onTauri.failed++;
+                result.deleted.onTauri.errors.push({ id: item.id, error: e.message });
+            }
+        }
+    }
+
     // Helper: extract particles from an atome object
     // - Prefers atome.data / atome.particles when present
     // - Falls back to inline fields (Fastify list returns particles inline)
@@ -1799,9 +2364,12 @@ async function sync_atomes(callback) {
         }
 
         const metadataFields = [
-            'atome_id', 'atome_type', 'parent_id', 'owner_id', 'creator_id',
+            'atome_id', 'atome_type', 'atomeId', 'atomeType',
+            'parent_id', 'parentId', 'owner_id', 'ownerId', 'creator_id', 'userId',
             'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
-            'created_source', 'id', 'type', 'data', 'particles'
+            'createdAt', 'updatedAt', 'deletedAt', 'lastSync',
+            'created_source', 'id', 'type', 'data', 'particles',
+            '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
         ];
 
         const inlineParticles = {};
@@ -1811,6 +2379,48 @@ async function sync_atomes(callback) {
             }
         }
         return inlineParticles;
+    };
+
+    const normalizeRefId = (value) => {
+        if (value === null || value === undefined) return null;
+        const str = String(value);
+        if (!str || str === 'anonymous') return null;
+        return str;
+    };
+
+    const resolveOwnerForSync = (atome) => normalizeRefId(
+        atome?.owner_id ||
+        atome?.ownerId ||
+        atome?.owner ||
+        atome?.userId ||
+        atome?.pending_owner_id ||
+        atome?.pendingOwnerId ||
+        null
+    );
+
+    const resolveParentForSync = (atome) => normalizeRefId(
+        atome?.parent_id ||
+        atome?.parentId ||
+        atome?.parent ||
+        atome?.pending_parent_id ||
+        atome?.pendingParentId ||
+        null
+    );
+
+    const buildUpsertPayload = (atome) => {
+        const id = atome?.atome_id || atome?.id;
+        const type = atome?.atome_type || atome?.type || atome?.atomeType || atome?.kind;
+        const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
+        const parentId = resolveParentForSync(atome);
+        const particles = extractParticles(atome);
+
+        return {
+            id,
+            type,
+            ownerId,
+            parentId,
+            particles
+        };
     };
 
     // Topological sort helper - orders atomes so parents/owners come before children
@@ -1875,14 +2485,8 @@ async function sync_atomes(callback) {
 
     for (const atome of sortedToPush) {
         try {
-            const particles = extractParticles(atome);
-            const createResult = await FastifyAdapter.atome.create({
-                id: atome.atome_id,
-                type: atome.atome_type,
-                ownerId: atome.owner_id,
-                parentId: atome.parent_id,
-                particles
-            });
+            const payload = buildUpsertPayload(atome);
+            const createResult = await FastifyAdapter.atome.create(payload);
 
             if (createResult.ok || createResult.success) {
                 result.pushed.success++;
@@ -1902,14 +2506,8 @@ async function sync_atomes(callback) {
 
     for (const atome of sortedToPull) {
         try {
-            const particles = extractParticles(atome);
-            const createResult = await TauriAdapter.atome.create({
-                id: atome.atome_id,
-                type: atome.atome_type,
-                ownerId: atome.owner_id,
-                parentId: atome.parent_id,
-                particles
-            });
+            const payload = buildUpsertPayload(atome);
+            const createResult = await TauriAdapter.atome.create(payload);
 
             if (createResult.ok || createResult.success) {
                 result.pulled.success++;
@@ -1923,17 +2521,11 @@ async function sync_atomes(callback) {
         }
     }
 
-    // 3. Update Fastify with newer Tauri modifications
+    // 3. Update Fastify with newer Tauri modifications (upsert to sync metadata too)
     for (const item of unsyncedResult.modifiedOnTauri) {
         try {
-            const particles = extractParticles(item.tauri);
-
-            if (!particles || Object.keys(particles).length === 0) {
-                result.updated.success++;
-                continue;
-            }
-
-            const updateResult = await FastifyAdapter.atome.update(item.id, particles);
+            const payload = buildUpsertPayload(item.tauri);
+            const updateResult = await FastifyAdapter.atome.create(payload);
 
             if (updateResult.ok || updateResult.success) {
                 result.updated.success++;
@@ -1947,17 +2539,11 @@ async function sync_atomes(callback) {
         }
     }
 
-    // 4. Update Tauri with newer Fastify modifications
+    // 4. Update Tauri with newer Fastify modifications (upsert to sync metadata too)
     for (const item of unsyncedResult.modifiedOnFastify) {
         try {
-            const particles = extractParticles(item.fastify);
-
-            if (!particles || Object.keys(particles).length === 0) {
-                result.updated.success++;
-                continue;
-            }
-
-            const updateResult = await TauriAdapter.atome.update(item.id, particles);
+            const payload = buildUpsertPayload(item.fastify);
+            const updateResult = await TauriAdapter.atome.create(payload);
 
             if (updateResult.ok || updateResult.success) {
                 result.updated.success++;
@@ -2090,7 +2676,19 @@ async function create_project(projectName, callback) {
             ? { ...projectData, id: tauriCreatedId, atome_id: tauriCreatedId }
             : projectData;
 
-        const fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+            try { await ensure_fastify_token(); } catch { }
+        }
+
+        let fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+        if (!(fastifyResult.ok || fastifyResult.success)) {
+            const errMsg = String(fastifyResult.error || '').toLowerCase();
+            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+            if (is_tauri_runtime() && authError) {
+                try { await ensure_fastify_token(); } catch { }
+                fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+            }
+        }
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
         } else {
@@ -2098,6 +2696,10 @@ async function create_project(projectName, callback) {
         }
     } catch (e) {
         results.fastify = { success: false, data: null, error: e.message };
+    }
+
+    if (is_tauri_runtime()) {
+        try { await maybe_sync_atomes('create_project'); } catch { }
     }
 
     if (typeof callback === 'function') callback(results);
@@ -2136,6 +2738,18 @@ async function list_projects(callback) {
     results.tauri.error = listResult.tauri.error || null;
     results.fastify.error = listResult.fastify.error || null;
 
+    // If local deletions are pending, hide those projects from the Fastify list
+    // so they don't "reappear" before the delete sync completes.
+    try {
+        const pendingDeletes = get_pending_delete_ids();
+        if (pendingDeletes.size > 0) {
+            results.fastify.projects = results.fastify.projects.filter(p => {
+                const id = p?.atome_id || p?.id;
+                return id ? !pendingDeletes.has(String(id)) : true;
+            });
+        }
+    } catch { }
+
     if (typeof callback === 'function') callback(results);
     return results;
 }
@@ -2160,6 +2774,12 @@ async function delete_project(projectId, callback) {
         return results;
     }
 
+    let ownerId = null;
+    try {
+        const currentUserResult = await current_user();
+        ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+    } catch { }
+
     // Soft delete on Tauri
     try {
         const tauriResult = await TauriAdapter.atome.softDelete(projectId);
@@ -2174,14 +2794,34 @@ async function delete_project(projectId, callback) {
 
     // Soft delete on Fastify
     try {
-        const fastifyResult = await FastifyAdapter.atome.softDelete(projectId);
+        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+            try { await ensure_fastify_token(); } catch { }
+        }
+
+        let fastifyResult = await FastifyAdapter.atome.softDelete(projectId);
+        if (!(fastifyResult.ok || fastifyResult.success)) {
+            const errMsg = String(fastifyResult.error || '').toLowerCase();
+            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+            if (is_tauri_runtime() && authError) {
+                try { await ensure_fastify_token(); } catch { }
+                fastifyResult = await FastifyAdapter.atome.softDelete(projectId);
+            }
+        }
+
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
         } else {
             results.fastify = { success: false, data: null, error: fastifyResult.error };
+            queue_pending_delete({ atomeId: projectId, ownerId, type: 'project' });
         }
     } catch (e) {
         results.fastify = { success: false, data: null, error: e.message };
+        queue_pending_delete({ atomeId: projectId, ownerId, type: 'project' });
+    }
+
+    if (is_tauri_runtime()) {
+        try { await process_pending_deletes(); } catch { }
+        try { await maybe_sync_atomes('delete_project'); } catch { }
     }
 
     if (typeof callback === 'function') callback(results);
@@ -2276,7 +2916,19 @@ async function create_atome(options, callback) {
             ? { ...atomeData, id: canonicalId, atome_id: canonicalId }
             : atomeData;
 
-        const fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+            try { await ensure_fastify_token(); } catch { }
+        }
+
+        let fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+        if (!(fastifyResult.ok || fastifyResult.success)) {
+            const errMsg = String(fastifyResult.error || '').toLowerCase();
+            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+            if (is_tauri_runtime() && authError) {
+                try { await ensure_fastify_token(); } catch { }
+                fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+            }
+        }
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
         } else {
@@ -2284,6 +2936,10 @@ async function create_atome(options, callback) {
         }
     } catch (e) {
         results.fastify = { success: false, data: null, error: e.message };
+    }
+
+    if (is_tauri_runtime()) {
+        try { await maybe_sync_atomes('create_atome'); } catch { }
     }
 
     if (typeof callback === 'function') callback(results);
@@ -2351,7 +3007,20 @@ async function list_atomes(options = {}, callback) {
 
     // Try Fastify
     try {
-        const fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+            try { await ensure_fastify_token(); } catch { }
+        }
+
+        let fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+        if (!(fastifyResult.ok || fastifyResult.success)) {
+            const errMsg = String(fastifyResult.error || '').toLowerCase();
+            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+            if (is_tauri_runtime() && authError) {
+                try { await ensure_fastify_token(); } catch { }
+                fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+            }
+        }
+
         if (fastifyResult.ok || fastifyResult.success) {
             const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
             results.fastify.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
@@ -2395,6 +3064,12 @@ async function delete_atome(atomeId, callback) {
         fastify: { success: false, data: null, error: null }
     };
 
+    let ownerId = null;
+    try {
+        const currentUserResult = await current_user();
+        ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+    } catch { }
+
     // Soft delete on Tauri
     try {
         const tauriResult = await TauriAdapter.atome.softDelete(atomeId);
@@ -2409,14 +3084,34 @@ async function delete_atome(atomeId, callback) {
 
     // Soft delete on Fastify
     try {
-        const fastifyResult = await FastifyAdapter.atome.softDelete(atomeId);
+        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+            try { await ensure_fastify_token(); } catch { }
+        }
+
+        let fastifyResult = await FastifyAdapter.atome.softDelete(atomeId);
+        if (!(fastifyResult.ok || fastifyResult.success)) {
+            const errMsg = String(fastifyResult.error || '').toLowerCase();
+            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+            if (is_tauri_runtime() && authError) {
+                try { await ensure_fastify_token(); } catch { }
+                fastifyResult = await FastifyAdapter.atome.softDelete(atomeId);
+            }
+        }
+
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
         } else {
             results.fastify = { success: false, data: null, error: fastifyResult.error };
+            queue_pending_delete({ atomeId, ownerId, type: null });
         }
     } catch (e) {
         results.fastify = { success: false, data: null, error: e.message };
+        queue_pending_delete({ atomeId, ownerId, type: null });
+    }
+
+    if (is_tauri_runtime()) {
+        try { await process_pending_deletes(); } catch { }
+        try { await maybe_sync_atomes('delete_atome'); } catch { }
     }
 
     if (typeof callback === 'function') callback(results);
@@ -2848,7 +3543,8 @@ export const AdoleAPI = {
     },
     sync: {
         sync: sync_atomes,
-        listUnsynced: list_unsynced_atomes
+        listUnsynced: list_unsynced_atomes,
+        maybeSync: maybe_sync_atomes
     },
     machine: {
         getCurrent: get_current_machine,
