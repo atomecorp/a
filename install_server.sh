@@ -33,6 +33,50 @@ log_ok() { echo -e "${GREEN}[SUCCESS] $1${NC}"; }
 log_warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
 log_error() { echo -e "${RED}[ERROR] $1${NC}"; }
 
+move_aside_untracked_file_if_needed() {
+    local rel_path="$1"
+    if [[ ! -f "$rel_path" ]]; then
+        return 0
+    fi
+
+    if [[ ! -d ".git" ]]; then
+        return 0
+    fi
+
+    # If the file is tracked, we never move it.
+    if git ls-files --error-unmatch "$rel_path" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # If it's untracked, it can block future pulls when the repo starts tracking it.
+    if git status --porcelain=v1 --untracked-files=all | grep -q "^?? ${rel_path}$"; then
+        local stamp
+        stamp="$(date -u +%Y%m%d_%H%M%SZ)"
+        local backup_name
+        backup_name="${rel_path}.untracked.${stamp}.bak"
+        mv "$rel_path" "$backup_name"
+        log_warn "Moved aside untracked ${rel_path} -> ${backup_name}"
+    fi
+}
+
+sync_repo_if_possible() {
+    # Installation should be reproducible. Syncing is safe in production because
+    # updates are expected to be applied via git.
+    if [[ ! -d ".git" ]]; then
+        return 0
+    fi
+
+    # Migration helper: older installs had package-lock.json ignored, which leaves
+    # an untracked lockfile on disk. When we start tracking it, git pull would fail.
+    move_aside_untracked_file_if_needed "package-lock.json"
+
+    if git remote get-url origin >/dev/null 2>&1; then
+        log_info "🔄 Syncing repository (fast-forward only)..."
+        git fetch origin >/dev/null 2>&1 || true
+        git pull --ff-only || true
+    fi
+}
+
 # --- OS Detection ----------------------------------------------------------
 OS_TYPE="unknown"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -131,6 +175,8 @@ if [ ! -d "$APP_DIR" ]; then
 fi
 
 cd "$APP_DIR"
+
+sync_repo_if_possible
 
 # --- 1. System Dependencies ------------------------------------------------
 
@@ -254,7 +300,23 @@ fi
 log_info "📦 Installing Project Dependencies..."
 
 # Reproducible install (never mutate package.json/package-lock.json on the server)
-npm ci --omit=dev --verbose
+if [[ ! -f "package-lock.json" ]]; then
+    log_error "Missing package-lock.json. Production installs require a committed lockfile to run npm ci reproducibly."
+    log_error "Fix: run 'npm install --package-lock-only' on your dev machine, commit package-lock.json, then re-run install." 
+    exit 1
+fi
+
+if [[ -d ".git" ]] && ! git ls-files --error-unmatch "package-lock.json" >/dev/null 2>&1; then
+    log_error "package-lock.json is present but not tracked by git. This breaks reproducible production installs."
+    log_error "Fix: ensure package-lock.json is not ignored, commit it, push, then re-run install." 
+    exit 1
+fi
+
+if ! npm ci --omit=dev --verbose; then
+    log_error "npm ci failed. This usually means package.json and package-lock.json are not in sync."
+    log_error "Fix: regenerate the lockfile on your dev machine (npm install --package-lock-only), commit it, push, then re-run install." 
+    exit 1
+fi
 
 # Create marker to skip reinstallation on run.sh
 touch node_modules/.install_complete

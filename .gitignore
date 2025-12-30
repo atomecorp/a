@@ -12,7 +12,6 @@ src/svelte/build/
 src-Auv3/build/
 
 # Development files
-package-lock.json
 **/.DS_Store
 .DS_Store
 *.tmp

@@ -82,6 +82,11 @@ SQUIRREL_UPLOADS_DIR=/opt/a/uploads
 
 > ⚠️ Important: On production servers, do not rely on untracked files inside `/opt/a` (like a manually created `.env`). They can be deleted by update operations. Use `/etc/squirrel/squirrel.env`.
 
+### Lockfile (Reproducible Installs)
+
+Production installs use `npm ci`, which requires a committed lockfile.
+Make sure `package-lock.json` is tracked in git and up to date with `package.json`.
+
 ---
 
 ## 🎮 Managing the Server

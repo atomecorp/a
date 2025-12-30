@@ -54,6 +54,34 @@ function nowStamp() {
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}_${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
 }
 
+function isTrackedByGit(relativePath) {
+    try {
+        execSync(`git ls-files --error-unmatch '${relativePath}'`, {
+            cwd: projectRoot,
+            stdio: 'ignore'
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function moveAsideUntrackedFilesThatBlockPull() {
+    // Migration helper: older installs used to have package-lock.json ignored.
+    // Once package-lock.json becomes tracked, an untracked local file with the same
+    // name will cause `git pull` to fail ("would be overwritten by merge").
+    const lockRel = 'package-lock.json';
+    const lockAbs = path.join(projectRoot, lockRel);
+    if (!fileExists(lockAbs)) return;
+
+    if (isTrackedByGit(lockRel)) return;
+
+    const backupName = `package-lock.json.untracked.${nowStamp()}.bak`;
+    const backupAbs = path.join(projectRoot, backupName);
+    fs.renameSync(lockAbs, backupAbs);
+    process.stdout.write(`Moved aside untracked ${lockRel} -> ${backupName}\n`);
+}
+
 function isRoot() {
     return typeof process.getuid === 'function' && process.getuid() === 0;
 }
@@ -171,6 +199,7 @@ function ensureNodeModules() {
 }
 
 function gitUpdate({ mode }) {
+    moveAsideUntrackedFilesThatBlockPull();
     run('git fetch origin');
 
     if (mode === 'reset') {
