@@ -65,6 +65,8 @@ pub fn init_tracing() -> Option<WorkerGuard> {
 #[tauri::command]
 pub fn log_from_webview(payload: WebviewLogPayload) {
     let level = payload.level.as_deref().unwrap_or("info");
+    let webview_source = payload.source.as_deref().unwrap_or("tauri_webview");
+    let webview_timestamp = payload.timestamp.as_deref().unwrap_or("");
     let component = payload.component.as_deref().unwrap_or("ui");
     let message = payload.message.as_deref().unwrap_or("");
     let request_id = payload.request_id.as_deref().unwrap_or("");
@@ -74,6 +76,8 @@ pub fn log_from_webview(payload: WebviewLogPayload) {
     match level {
         "debug" => debug!(
             source = "tauri_webview",
+            webview_source = webview_source,
+            webview_timestamp = webview_timestamp,
             component = component,
             request_id = request_id,
             session_id = session_id,
@@ -82,6 +86,8 @@ pub fn log_from_webview(payload: WebviewLogPayload) {
         ),
         "warn" => warn!(
             source = "tauri_webview",
+            webview_source = webview_source,
+            webview_timestamp = webview_timestamp,
             component = component,
             request_id = request_id,
             session_id = session_id,
@@ -90,6 +96,8 @@ pub fn log_from_webview(payload: WebviewLogPayload) {
         ),
         "error" => error!(
             source = "tauri_webview",
+            webview_source = webview_source,
+            webview_timestamp = webview_timestamp,
             component = component,
             request_id = request_id,
             session_id = session_id,
@@ -98,6 +106,8 @@ pub fn log_from_webview(payload: WebviewLogPayload) {
         ),
         _ => info!(
             source = "tauri_webview",
+            webview_source = webview_source,
+            webview_timestamp = webview_timestamp,
             component = component,
             request_id = request_id,
             session_id = session_id,

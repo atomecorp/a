@@ -507,9 +507,16 @@ async fn handle_create(
     }
 
     // Try to resolve pending references now that we inserted the row.
-    if let Ok(resolved) = resolve_pending_references(&db) {
-        if resolved.resolved > 0 {
-            println!("[Create Debug] Resolved {} pending references", resolved.resolved);
+    if let Ok(summary) = resolve_pending_references(&db) {
+        if summary.total > 0 {
+            if summary.failed > 0 {
+                println!(
+                    "[Create Debug] Pending references resolved: {} ok, {} failed ({} total)",
+                    summary.resolved, summary.failed, summary.total
+                );
+            } else if summary.resolved > 0 {
+                println!("[Create Debug] Resolved {} pending references", summary.resolved);
+            }
         }
     }
 

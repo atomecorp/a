@@ -49,9 +49,6 @@ struct AppState {
 const SERVER_TYPE: &str = "Tauri frontend process";
 const MAX_UPLOAD_BYTES: usize = 1024 * 1024 * 1024; // 1 GiB
 
-#[derive(Clone)]
-struct RequestId(String);
-
 static RECENT_ERRORS: OnceLock<Mutex<Vec<serde_json::Value>>> = OnceLock::new();
 
 fn record_recent_error(entry: serde_json::Value) {
@@ -89,7 +86,7 @@ fn sanitize_file_name(name: &str) -> String {
     }
 }
 
-async fn log_request_middleware(mut req: Request<Body>, next: middleware::Next) -> Response {
+async fn log_request_middleware(req: Request<Body>, next: middleware::Next) -> Response {
     let request_id = req
         .headers()
         .get("x-request-id")
@@ -97,8 +94,6 @@ async fn log_request_middleware(mut req: Request<Body>, next: middleware::Next) 
         .filter(|value| !value.trim().is_empty())
         .map(|value| value.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-    req.extensions_mut().insert(RequestId(request_id.clone()));
 
     let method = req.method().to_string();
     let uri = req.uri().to_string();
