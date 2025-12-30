@@ -466,14 +466,57 @@ const PORT = process.env.PORT || 3001;
 const DATABASE_ENABLED = DB_CONFIGURED;
 const DB_REQUIRED_MESSAGE = 'Database not configured. Set SQLITE_PATH or LIBSQL_URL/LIBSQL_AUTH_TOKEN.';
 
+function getServerFingerprint() {
+  return {
+    pid: process.pid,
+    node: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    cwd: process.cwd(),
+    argv: process.argv,
+    entry: fileURLToPath(import.meta.url),
+    projectRoot_env,
+    projectRoot,
+    staticRoot,
+    port: PORT,
+    env: {
+      NODE_ENV: process.env.NODE_ENV || null,
+      USE_HTTPS: process.env.USE_HTTPS || null,
+      HOST: process.env.HOST || null,
+      PORT: process.env.PORT || null
+    },
+    started_at: new Date().toISOString()
+  };
+}
+
 async function startServer() {
   try {
     console.log('🚀 Démarrage du serveur Fastify v5...');
+    console.log('🔎 Fastify fingerprint:', JSON.stringify(getServerFingerprint()));
 
     const replyJson = (reply, statusCode, payload) => {
       reply.code(statusCode);
       return payload;
     };
+
+    // Always-on diagnostic endpoint (useful in production to confirm which code is running)
+    server.get('/__whoami', async () => {
+      return {
+        success: true,
+        type: SERVER_TYPE,
+        appVersion: SERVER_VERSION,
+        fingerprint: getServerFingerprint()
+      };
+    });
+
+    server.get('/healthz', async () => {
+      return {
+        success: true,
+        type: SERVER_TYPE,
+        appVersion: SERVER_VERSION,
+        uptime_sec: Number(process.uptime().toFixed(2))
+      };
+    });
 
     server.addHook('onRequest', async (request, reply) => {
       request.request_id = request.id;
@@ -568,7 +611,7 @@ async function startServer() {
       };
     });
 
-    server.post('/dev/client-log', async (request, reply) => {
+    const clientLogHandler = async (request, reply) => {
       const payload = coerceLogEnvelope(request.body, {
         source: 'browser',
         component: 'ui'
@@ -586,7 +629,11 @@ async function startServer() {
       }
 
       return { success: true };
-    });
+    };
+
+    // Keep both endpoints for compatibility (older builds used /client-log).
+    server.post('/dev/client-log', clientLogHandler);
+    server.post('/client-log', clientLogHandler);
 
     server.post('/dev/snapshot', async (request, reply) => {
       const now = new Date();

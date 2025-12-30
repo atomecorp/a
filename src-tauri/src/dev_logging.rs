@@ -71,7 +71,10 @@ pub fn init_tracing() -> Option<WorkerGuard> {
     let file_logging_enabled = match std::fs::create_dir_all(&log_dir) {
         Ok(_) => true,
         Err(err) => {
-            eprintln!("WARN: Unable to create log directory {:?}: {}", log_dir, err);
+            eprintln!(
+                "WARN: Unable to create log directory {:?}: {}",
+                log_dir, err
+            );
             false
         }
     };
