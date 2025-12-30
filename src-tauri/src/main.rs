@@ -9,25 +9,37 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager; // pour get_webview_window
 
-fn resolve_shared_uploads_dir(static_dir: &Path) -> PathBuf {
-    let raw = std::env::var("SQUIRREL_UPLOADS_DIR")
-        .expect("SQUIRREL_UPLOADS_DIR must be set before launching Tauri");
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        panic!("SQUIRREL_UPLOADS_DIR is empty. Configure it via run.sh or export it before running Tauri.");
-    }
+fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> PathBuf {
+    match std::env::var("SQUIRREL_UPLOADS_DIR") {
+        Ok(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                eprintln!(
+                    "[tauri] SQUIRREL_UPLOADS_DIR is empty; using default uploads dir: {:?}",
+                    default_uploads_dir
+                );
+                return default_uploads_dir.to_path_buf();
+            }
 
-    let mut candidate = PathBuf::from(trimmed);
-    if !candidate.is_absolute() {
-        let project_root = static_dir
-            .parent()
-            .map(|p| p.to_path_buf())
-            .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_else(|| PathBuf::from("."));
-        candidate = project_root.join(candidate);
+            let mut candidate = PathBuf::from(trimmed);
+            if !candidate.is_absolute() {
+                let project_root = static_dir
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_else(|| PathBuf::from("."));
+                candidate = project_root.join(candidate);
+            }
+            candidate
+        }
+        Err(_) => {
+            eprintln!(
+                "[tauri] SQUIRREL_UPLOADS_DIR is not set; using default uploads dir: {:?}",
+                default_uploads_dir
+            );
+            default_uploads_dir.to_path_buf()
+        }
     }
-
-    candidate
 }
 
 fn main() {
@@ -76,7 +88,23 @@ fn main() {
 
             println!("📂 Static assets directory: {:?}", static_dir);
 
-            let uploads_dir = resolve_shared_uploads_dir(&static_dir);
+            let default_base = path_resolver
+                .download_dir()
+                .ok()
+                .or_else(|| path_resolver.app_data_dir().ok())
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            let default_uploads_dir = default_base.join("squirrel").join("Uploads");
+
+            let data_base = path_resolver
+                .app_data_dir()
+                .ok()
+                .or_else(|| path_resolver.download_dir().ok())
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            let data_dir = data_base.join("squirrel").join("Data");
+
+            let uploads_dir = resolve_shared_uploads_dir(&static_dir, &default_uploads_dir);
             if let Err(err) = fs::create_dir_all(&uploads_dir) {
                 panic!(
                     "Unable to prepare shared uploads directory {:?}: {}",
@@ -87,12 +115,13 @@ fn main() {
 
             let static_dir_for_server = static_dir.clone();
             let uploads_dir_for_server = uploads_dir.clone();
+            let data_dir_for_server = data_dir.clone();
 
             // Serveur Axum en arrière-plan
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(async {
-                    server::start_server(static_dir_for_server, uploads_dir_for_server).await;
+                    server::start_server(static_dir_for_server, uploads_dir_for_server, data_dir_for_server).await;
                 });
             });
 

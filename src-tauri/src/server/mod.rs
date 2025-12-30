@@ -1248,7 +1248,7 @@ async fn handle_ws_sync(mut socket: WebSocket) {
     println!("🔌 WebSocket sync connection closed");
 }
 
-pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
+pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
     let serve_dir_root = ServeDir::new(base_dir.clone()).append_index_html_on_directories(true);
@@ -1294,21 +1294,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
     println!("📂 Static dir (absolute): {:?}", static_dir_abs);
 
-    // Use a separate data directory for SQLite databases to avoid triggering Tauri hot-reload
-    // The data_dir should be outside the watched src/ folder
     let data_dir = {
-        // Try to use a 'data' folder at project root (outside src/)
-        let project_root = static_dir.parent().unwrap_or(&static_dir);
-        let data_path = project_root.join("data");
-
-        // Create the data directory if it doesn't exist
-        if let Err(e) = std::fs::create_dir_all(&data_path) {
-            eprintln!("⚠️ Could not create data directory {:?}: {}", data_path, e);
-            // Fallback to uploads parent if data dir creation fails
+        if let Err(e) = std::fs::create_dir_all(&data_dir) {
+            eprintln!("⚠️ Could not create data directory {:?}: {}", data_dir, e);
             uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf()
         } else {
-            println!("📂 Database directory (outside src/): {:?}", data_path);
-            data_path
+            println!("📂 Database directory: {:?}", data_dir);
+            data_dir
         }
     };
 
@@ -1383,6 +1375,30 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     println!("🔗 WebSocket API enabled: ws://localhost:3000/ws/api");
     println!("🔗 WebSocket Sync enabled: ws://localhost:3000/ws/sync");
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+            eprintln!(
+                "ERROR: Unable to bind Axum server on http://localhost:3000 ({}). Another instance may already be running.",
+                err
+            );
+            record_recent_error(json!({
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "source": "axum",
+                "component": "startup",
+                "error": format!("bind 127.0.0.1:3000 failed: {}", err),
+            }));
+            return;
+        }
+    };
+
+    if let Err(err) = axum::serve(listener, app).await {
+        eprintln!("ERROR: Axum server stopped unexpectedly: {}", err);
+        record_recent_error(json!({
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "source": "axum",
+            "component": "runtime",
+            "error": format!("serve failed: {}", err),
+        }));
+    }
 }

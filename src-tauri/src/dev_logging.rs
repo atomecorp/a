@@ -18,6 +18,13 @@ pub struct WebviewLogPayload {
 }
 
 fn resolve_log_dir() -> PathBuf {
+    if let Ok(raw) = std::env::var("SQUIRREL_LOG_DIR") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let direct = cwd.join("logs");
     if direct.exists() {
@@ -31,35 +38,73 @@ fn resolve_log_dir() -> PathBuf {
         }
     }
 
+    // Finder-launched macOS apps often start with cwd = "/".
+    // Never default to "/logs" because it is not writable.
+    if cwd.as_os_str() == "/" {
+        if let Ok(home) = std::env::var("HOME") {
+            let trimmed = home.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed)
+                    .join("Library")
+                    .join("Logs")
+                    .join("squirrel");
+            }
+        }
+    }
+
+    // Fallback when we are outside the repo and no logs dir exists yet.
+    if let Ok(home) = std::env::var("HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed)
+                .join("Library")
+                .join("Logs")
+                .join("squirrel");
+        }
+    }
+
     direct
 }
 
 pub fn init_tracing() -> Option<WorkerGuard> {
     let log_dir = resolve_log_dir();
-    if let Err(err) = std::fs::create_dir_all(&log_dir) {
-        eprintln!("WARN: Unable to create log directory {:?}: {}", log_dir, err);
-    }
-
-    let file_appender = tracing_appender::rolling::never(log_dir, "axum.log");
-    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+    let file_logging_enabled = match std::fs::create_dir_all(&log_dir) {
+        Ok(_) => true,
+        Err(err) => {
+            eprintln!("WARN: Unable to create log directory {:?}: {}", log_dir, err);
+            false
+        }
+    };
 
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let stdout_layer = tracing_subscriber::fmt::layer()
         .json()
         .with_target(false)
         .with_writer(std::io::stdout);
-    let file_layer = tracing_subscriber::fmt::layer()
-        .json()
-        .with_target(false)
-        .with_writer(file_writer);
+
+    if file_logging_enabled {
+        let file_appender = tracing_appender::rolling::never(log_dir, "axum.log");
+        let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+        let file_layer = tracing_subscriber::fmt::layer()
+            .json()
+            .with_target(false)
+            .with_writer(file_writer);
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stdout_layer)
+            .with(file_layer)
+            .init();
+
+        return Some(guard);
+    }
 
     tracing_subscriber::registry()
         .with(env_filter)
         .with(stdout_layer)
-        .with(file_layer)
         .init();
 
-    Some(guard)
+    None
 }
 
 #[tauri::command]

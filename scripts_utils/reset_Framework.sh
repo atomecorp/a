@@ -65,9 +65,9 @@ import json, pathlib
 path = pathlib.Path("${PROJECT_ROOT}/src-tauri/tauri.conf.json")
 try:
     data = json.loads(path.read_text())
-    print(data.get("identifier") or "com.squirrel.app")
+    print(data.get("identifier") or "com.squirrel.desktop")
 except Exception:
-    print("com.squirrel.app")
+    print("com.squirrel.desktop")
 PY
 )"
 
