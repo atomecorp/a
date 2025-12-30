@@ -87,7 +87,7 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             padding: '12px',
             border: '1px solid #2d2d2d',
             borderRadius: '8px',
-            backgroundColor: '#101010',
+            backgroundColor: '#433c3cff',
             color: '#e6e6e6',
             fontFamily: 'monospace',
             maxWidth: '555px',
