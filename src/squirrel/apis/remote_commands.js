@@ -77,11 +77,24 @@ async function loadConfigOnce() {
         }
 
         const config = await response.json();
-        const host = config?.fastify?.host || '127.0.0.1';
-        const port = config?.fastify?.port || localPort;
         const apiWsPath = config?.fastify?.apiWsPath || '/ws/api';
 
         const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+
+        // Browser deployments are typically served behind nginx, so Fastify must be
+        // reached via same-origin (no :3001). Using :3001 on an HTTPS page causes
+        // TLS handshake failures because Fastify speaks plain HTTP on 3001.
+        if (!isTauriRuntime) {
+            const host = window.location.host;
+            CONFIG.WS_URL = `${protocol}://${host}${apiWsPath}`;
+            configLoaded = true;
+            log('Loaded config (browser same-origin):', CONFIG.WS_URL);
+            return CONFIG.WS_URL;
+        }
+
+        // Tauri runtime: Fastify is local (http://127.0.0.1:3001 by default)
+        const host = config?.fastify?.host || '127.0.0.1';
+        const port = config?.fastify?.port || localPort;
         CONFIG.WS_URL = `${protocol}://${host}:${port}${apiWsPath}`;
         configLoaded = true;
 

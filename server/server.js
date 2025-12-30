@@ -463,6 +463,7 @@ const server = fastify({
 });
 
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
 const DATABASE_ENABLED = DB_CONFIGURED;
 const DB_REQUIRED_MESSAGE = 'Database not configured. Set SQLITE_PATH or LIBSQL_URL/LIBSQL_AUTH_TOKEN.';
 
@@ -2760,7 +2761,7 @@ async function startServer() {
 
     await server.listen({
       port: PORT,
-      host: '0.0.0.0'
+      host: HOST
     });
 
     console.log(`✅ Fastify server v${server.version} (app ${SERVER_VERSION}) started on http://localhost:${PORT}`);

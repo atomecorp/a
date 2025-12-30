@@ -65,6 +65,16 @@ function resolveProtocolBase() {
 }
 
 function buildFastifyHttpBase(config) {
+    // In browser mode (behind nginx), Fastify is reached via same-origin.
+    // Never force :3001 in production web deployments, otherwise HTTPS pages will
+    // attempt to talk TLS directly to the Fastify HTTP port and fail.
+    if (!isInTauriRuntime()) {
+        const origin = window.location?.origin;
+        if (typeof origin === 'string' && origin && origin !== 'null') {
+            return normalizeNoTrailingSlash(origin);
+        }
+    }
+
     const protocol = resolveProtocolBase();
     const host = resolveFastifyHostFromConfig(config);
     const port = resolveFastifyPortFromConfig(config);
