@@ -128,10 +128,10 @@ node server/server.js
 
 Assuming `PORT=3001` (default):
 
-- `GET http://localhost:3001/health` - basic health + uptime
-- `GET http://localhost:3001/api/server-info` - version + server type
-- `ws://localhost:3001/ws/api` - authenticated WebSocket API
-- `ws://localhost:3001/ws/sync` - sync events WebSocket
+* `GET http://localhost:3001/health` - basic health + uptime
+* `GET http://localhost:3001/api/server-info` - version + server type
+* `ws://localhost:3001/ws/api` - authenticated WebSocket API
+* `ws://localhost:3001/ws/sync` - sync events WebSocket
 
 For detailed API and WebSocket usage examples, see `server/README.md`.
 
