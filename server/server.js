@@ -2763,12 +2763,12 @@ async function startServer() {
       host: '0.0.0.0'
     });
 
-    console.log(`✅ Serveur Fastify v${server.version} (app ${SERVER_VERSION}) démarré sur http://localhost:${PORT}`);
-    console.log(`🔄 Sync WebSocket sur ws://localhost:${PORT}/ws/sync`);
-    console.log(`🌐 Frontend servi depuis: http://localhost:${PORT}/`);
+    console.log(`✅ Fastify server v${server.version} (app ${SERVER_VERSION}) started on http://localhost:${PORT}`);
+    console.log(`🔄 Sync WebSocket at ws://localhost:${PORT}/ws/sync`);
+    console.log(`🌐 Frontend served from: http://localhost:${PORT}/`);
 
   } catch (error) {
-    console.error('❌ Erreur démarrage serveur:', error);
+    console.error('❌ Error starting server:', error);
     process.exit(1);
   }
 }
@@ -2792,30 +2792,30 @@ async function stopFileWatcher() {
 // ===========================
 
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Arrêt du serveur...');
+  console.log('\n🛑 Server stopping...');
   try {
     await server.close();
     await stopFileWatcher();
-    console.log('✅ Serveur arrêté proprement');
+    console.log('✅ Server stopped cleanly');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Erreur lors de l\'arrêt:', error);
+    console.error('❌ Error during shutdown:', error);
     process.exit(1);
   }
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 Signal SIGTERM reçu, arrêt...');
+  console.log('\n🛑 Signal SIGTERM received, stopping...');
   try {
     await server.close();
     await stopFileWatcher();
-    console.log('✅ Serveur arrêté proprement');
+    console.log('✅ Server stopped cleanly');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Erreur lors de l\'arrêt:', error);
+    console.error('❌ Error during shutdown:', error);
     process.exit(1);
   }
 });
 
-// Démarrer le serveur
+// Start the server
 startServer();
