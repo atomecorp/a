@@ -53,8 +53,13 @@ sudo ./install_server.sh
 
 ## ⚙️ Configuration
 
-The configuration is stored in the `.env` file in the project root.
-The installer generates a default one for you.
+The canonical production configuration is stored outside the git checkout:
+
+* Linux: `/etc/squirrel/squirrel.env`
+* FreeBSD: `/usr/local/etc/squirrel/squirrel.env`
+
+The installer generates it for you (and may prompt for values on first install).
+For convenience, the installer also creates a symlink at `./.env` that points to this file.
 
 ```bash
 # .env example
@@ -74,6 +79,8 @@ SQUIRREL_UPLOADS_DIR=/opt/a/uploads
 
 * **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).
 * **PORT**: Internal port (default 3001).
+
+> ⚠️ Important: On production servers, do not rely on untracked files inside `/opt/a` (like a manually created `.env`). They can be deleted by update operations. Use `/etc/squirrel/squirrel.env`.
 
 ---
 
@@ -154,7 +161,22 @@ tail -f /var/log/messages  # Logs (or specific app log if configured)
 
 ## 🔄 Updating the Server
 
-To update the application code and dependencies:
+To update the application code and dependencies in a reproducible way (recommended):
+
+```bash
+cd /opt/a
+./run.sh update
+```
+
+This update command will:
+
+* Keep the server environment file outside the git checkout (so updates cannot wipe it)
+* Reinstall Node.js dependencies deterministically using the lockfile
+* Restart the system service and reload Nginx
+
+> ⚠️ Avoid running `git clean -fd` on production unless you also reinstall dependencies and restore your environment files.
+
+Legacy/manual update (still works if you know what you're doing):
 
 ```bash
 # 1. Pull latest changes

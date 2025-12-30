@@ -9,13 +9,17 @@
 set -euo pipefail
 
 # --- Configuration ---------------------------------------------------------
-DOMAIN="atome.one"
-WWW_DOMAIN="www.atome.one"
-APP_DIR="/opt/a"
-SERVICE_NAME="squirrel"
-NODE_PORT="3001"
+# You can override these via interactive prompts or environment variables.
+DOMAIN="${DOMAIN:-atome.one}"
+WWW_DOMAIN="${WWW_DOMAIN:-www.atome.one}"
+APP_DIR="${APP_DIR:-/opt/a}"
+SERVICE_NAME="${SERVICE_NAME:-squirrel}"
+NODE_PORT="${NODE_PORT:-3001}"
 USER="www-data" # Will be adjusted for FreeBSD
-UPLOADS_DIR="$APP_DIR/uploads"
+UPLOADS_DIR="${UPLOADS_DIR:-$APP_DIR/uploads}"
+ENV_DIR="${ENV_DIR:-/etc/squirrel}"
+ENV_FILE="${ENV_FILE:-$ENV_DIR/squirrel.env}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 
 # --- Colors ----------------------------------------------------------------
 GREEN='\033[0;32m'
@@ -41,12 +45,46 @@ elif [[ "$OSTYPE" == "freebsd"* ]]; then
     USER="www" # FreeBSD standard www user
     APP_DIR="/usr/local/a" # FreeBSD prefers /usr/local
     UPLOADS_DIR="$APP_DIR/uploads"
+    ENV_DIR="/usr/local/etc/squirrel"
+    ENV_FILE="$ENV_DIR/squirrel.env"
 else
     log_error "❌ Unsupported OS: $OSTYPE"
     exit 1
 fi
 
 log_info "🖥️  Detected OS: $OS_TYPE"
+
+# --- Interactive configuration (optional) ---------------------------------
+if [[ -t 0 ]]; then
+    log_info "🧩 Interactive configuration (press Enter to keep defaults)"
+
+    read -r -p "Domain [${DOMAIN}]: " input_domain
+    if [[ -n "${input_domain}" ]]; then DOMAIN="${input_domain}"; fi
+
+    read -r -p "WWW Domain [${WWW_DOMAIN}]: " input_www
+    if [[ -n "${input_www}" ]]; then WWW_DOMAIN="${input_www}"; fi
+
+    if [[ -z "${CERTBOT_EMAIL}" ]]; then
+        CERTBOT_EMAIL="admin@${DOMAIN}"
+    fi
+    read -r -p "Certbot email [${CERTBOT_EMAIL}]: " input_email
+    if [[ -n "${input_email}" ]]; then CERTBOT_EMAIL="${input_email}"; fi
+
+    read -r -p "Internal Node port [${NODE_PORT}]: " input_port
+    if [[ -n "${input_port}" ]]; then NODE_PORT="${input_port}"; fi
+
+    read -r -p "Uploads directory [${UPLOADS_DIR}]: " input_uploads
+    if [[ -n "${input_uploads}" ]]; then UPLOADS_DIR="${input_uploads}"; fi
+
+    read -r -p "Env directory [${ENV_DIR}]: " input_env_dir
+    if [[ -n "${input_env_dir}" ]]; then
+        ENV_DIR="${input_env_dir}"
+        ENV_FILE="$ENV_DIR/squirrel.env"
+    fi
+
+    read -r -p "Env file [${ENV_FILE}]: " input_env_file
+    if [[ -n "${input_env_file}" ]]; then ENV_FILE="${input_env_file}"; fi
+fi
 
 # --- Helper Functions ------------------------------------------------------
 
@@ -101,9 +139,12 @@ log_info "📦 Checking System Dependencies..."
 if [ "$OS_TYPE" == "linux" ]; then
     log_info "🔄 Updating apt repositories..."
     apt-get update
+    ensure_package "ca-certificates" "ca_root_nss"
     ensure_package "curl" "curl"
     ensure_package "git" "git"
     ensure_package "build-essential" "gmake" # gmake on FreeBSD
+    ensure_package "python3" "python3"
+    ensure_package "pkg-config" "pkgconf"
     ensure_package "qemu-system-x86" "qemu"
     ensure_package "qemu-utils" "qemu-utils" # Included in qemu on FreeBSD usually
 
@@ -162,20 +203,42 @@ if [ ! -d "$UPLOADS_DIR" ]; then
     mkdir -p "$UPLOADS_DIR"
 fi
 
-if [ ! -f .env ]; then
-    log_info "Creating .env from defaults..."
-    echo "# SQLite/libSQL Database Configuration" > .env
-    echo "SQLITE_PATH=$APP_DIR/data/adole.db" >> .env
-    echo "# For Turso cloud (optional):" >> .env
-    echo "# LIBSQL_URL=libsql://your-database.turso.io" >> .env
-    echo "# LIBSQL_AUTH_TOKEN=your-auth-token" >> .env
-    echo "" >> .env
-    echo "NODE_ENV=production" >> .env
-    echo "PORT=$NODE_PORT" >> .env
-    echo "SQUIRREL_UPLOADS_DIR=$UPLOADS_DIR" >> .env
-    echo "HOST=127.0.0.1" >> .env
-    chmod 600 .env
+mkdir -p "$ENV_DIR"
+chmod 755 "$ENV_DIR"
+
+if [ ! -f "$ENV_FILE" ]; then
+    log_info "Creating server env file at $ENV_FILE ..."
+        SQLITE_PATH_DEFAULT="$APP_DIR/database_storage/adole.db"
+        HOST_DEFAULT="127.0.0.1"
+
+        SQLITE_PATH_VALUE="$SQLITE_PATH_DEFAULT"
+        HOST_VALUE="$HOST_DEFAULT"
+
+        if [[ -t 0 ]]; then
+                read -r -p "SQLite path [${SQLITE_PATH_VALUE}]: " input_sqlite
+                if [[ -n "${input_sqlite}" ]]; then SQLITE_PATH_VALUE="${input_sqlite}"; fi
+                read -r -p "Bind host (should be 127.0.0.1) [${HOST_VALUE}]: " input_host
+                if [[ -n "${input_host}" ]]; then HOST_VALUE="${input_host}"; fi
+        fi
+
+    {
+            echo "# Squirrel/Atome production environment"
+            echo "# This file is intentionally stored outside the git checkout"
+            echo "# so updates cannot delete it."
+            echo ""
+      echo "NODE_ENV=production"
+            echo "HOST=$HOST_VALUE"
+      echo "PORT=$NODE_PORT"
+            echo "SQLITE_PATH=$SQLITE_PATH_VALUE"
+      echo "SQUIRREL_UPLOADS_DIR=$UPLOADS_DIR"
+      echo ""
+    } >"$ENV_FILE"
+    chmod 600 "$ENV_FILE"
 fi
+
+# Convenience: keep a local .env so tools that read it still work.
+# Never treat it as canonical (git clean can delete it).
+ln -sf "$ENV_FILE" "$APP_DIR/.env"
 
 # Create data directory for SQLite database
 DATA_DIR="$APP_DIR/data"
@@ -190,11 +253,8 @@ fi
 
 log_info "📦 Installing Project Dependencies..."
 
-# Install deps (production only, excludes devDependencies)
-npm install --omit=dev --verbose
-
-# Ensure critical production dependencies are installed
-npm install fastify chokidar pino-pretty better-sqlite3 @libsql/client --save
+# Reproducible install (never mutate package.json/package-lock.json on the server)
+npm ci --omit=dev --verbose
 
 # Create marker to skip reinstallation on run.sh
 touch node_modules/.install_complete
@@ -304,7 +364,7 @@ else
         log_warn "   Update DNS records, then run: sudo certbot --nginx -d $DOMAIN -d $WWW_DOMAIN"
     else
         # DNS looks correct, try certbot
-        if certbot --nginx -d "$DOMAIN" -d "$WWW_DOMAIN" --non-interactive --agree-tos --email "admin@$DOMAIN" --redirect 2>/dev/null; then
+        if certbot --nginx -d "$DOMAIN" -d "$WWW_DOMAIN" --non-interactive --agree-tos --email "${CERTBOT_EMAIL:-admin@$DOMAIN}" --redirect 2>/dev/null; then
             log_ok "✅ SSL certificate installed successfully!"
         else
             log_warn "⚠️  Certbot failed. You may need to run it manually:"
@@ -335,7 +395,7 @@ if [ "$OS_TYPE" == "linux" ]; then
     cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=Squirrel Node.js Server
-After=network.target postgresql.service
+After=network.target
 
 [Service]
 Type=simple
@@ -345,7 +405,7 @@ WorkingDirectory=$APP_DIR
 ExecStart=$NODE_EXEC $APP_DIR/server/server.js
 Restart=always
 RestartSec=5
-EnvironmentFile=$APP_DIR/.env
+EnvironmentFile=$ENV_FILE
 Environment=NODE_ENV=production
 StandardOutput=journal
 StandardError=journal

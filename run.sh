@@ -485,6 +485,22 @@ service_check() {
     echo ""
 }
 
+service_update() {
+    echo "🔄 Updating server code + dependencies (reproducible)"
+    local updater="$SCRIPTS_DIR/server_update.js"
+    if [[ ! -f "$updater" ]]; then
+        echo "❌ Missing updater script: $updater"
+        echo "   Pull the latest code and try again."
+        exit 1
+    fi
+
+    if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+        node "$updater"
+    else
+        sudo node "$updater"
+    fi
+}
+
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
 PROD_BUILD=false
@@ -546,6 +562,10 @@ while [[ $# -gt 0 ]]; do
             service_logs
             exit 0
             ;;
+        update)
+            service_update
+            exit 0
+            ;;
         check)
             service_check
             exit 0
@@ -570,6 +590,7 @@ while [[ $# -gt 0 ]]; do
             echo "  restart               Restart the production service"
             echo "  status                Show service status and recent logs"
             echo "  logs                  Follow service logs (Ctrl+C to exit)"
+            echo "  update                Update code + reinstall deps + restart"
             echo "  check                 Run system diagnostics (Nginx, SSL, ports)"
             echo ""
             echo "  -h, --help            Show this help message"
