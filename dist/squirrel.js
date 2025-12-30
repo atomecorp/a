@@ -25,12 +25,119 @@
     // Cache for recent results
     const domCache = new Map();
 
+    const looksLikeUuid = (val) => {
+      if (!val) return false;
+      const s = String(val);
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+    };
+
+    const resolveSelectableId = (thing, fallbackId = null) => {
+      try {
+        if (!thing) return null;
+        if (typeof thing === 'string') return thing;
+
+        // DOM element id conventions
+        const elId = thing.id ? String(thing.id) : '';
+        if (elId.startsWith('atome_')) return elId.slice('atome_'.length);
+        if (elId.startsWith('project_view_')) return elId.slice('project_view_'.length);
+        if (looksLikeUuid(elId)) return elId;
+
+        // Common object id fields
+        const candidate = thing.atome_id || thing.object_id || thing.id || null;
+        if (candidate && looksLikeUuid(candidate)) return String(candidate);
+      } catch (_) { }
+
+      if (fallbackId && looksLikeUuid(fallbackId)) return String(fallbackId);
+      return fallbackId ? String(fallbackId) : null;
+    };
+
+    const ensureSelectionApi = () => {
+      if (window.SelectionAPI) return window.SelectionAPI;
+
+      const _selected = new Set();
+      let _last = null;
+
+      const publish = () => {
+        try {
+          window.__selectedAtomeId = _last;
+          window.__selectedAtomeIds = Array.from(_selected);
+          window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: _last, selected: Array.from(_selected) } }));
+        } catch (_) { }
+      };
+
+      window.SelectionAPI = {
+        select(thingOrId, options = {}) {
+          const id = resolveSelectableId(thingOrId, options.fallbackId || null);
+          if (!id) return null;
+          const add = options.add === true;
+          const toggle = options.toggle === true;
+
+          if (!add && !toggle) {
+            _selected.clear();
+          }
+
+          if (toggle) {
+            if (_selected.has(id)) _selected.delete(id);
+            else _selected.add(id);
+          } else {
+            _selected.add(id);
+          }
+
+          _last = id;
+          publish();
+          return id;
+        },
+        clear() {
+          _selected.clear();
+          _last = null;
+          publish();
+          return true;
+        },
+        selected() {
+          return Array.from(_selected);
+        },
+        last() {
+          return _last;
+        },
+        isSelected(id) {
+          return _selected.has(String(id));
+        }
+      };
+
+      return window.SelectionAPI;
+    };
+
+    const enhanceSelectable = (obj, fallbackId = null) => {
+      if (!obj) return obj;
+      if (obj._enhancedSelection) return obj;
+      try {
+        Object.defineProperty(obj, '_enhancedSelection', { value: true, enumerable: false });
+
+        Object.defineProperty(obj, 'select', {
+          value: function (options = {}) {
+            const api = ensureSelectionApi();
+            return api.select(this, { ...options, fallbackId });
+          },
+          enumerable: false
+        });
+
+        Object.defineProperty(obj, 'selected', {
+          value: function () {
+            const api = ensureSelectionApi();
+            return api.selected();
+          },
+          enumerable: false
+        });
+      } catch (_) { }
+      return obj;
+    };
+
     return function (id) {
       if (!id) return null;
 
       // Check the registry first (fast path)
       const instance = _registry[id];
-      if (instance) return instance;
+      if (instance) return enhanceSelectable(instance, id);
 
       // Check the DOM cache
       if (domCache.has(id)) {
@@ -68,6 +175,8 @@
           };
         });
       }
+
+      enhanceSelectable(element, id);
 
       // Store in the cache for future calls
       domCache.set(id, element);

@@ -39,6 +39,7 @@
 import './atome/atome.js';
 import './atome/mcp.js';
 import './ai/agent_gateway.js';
+import './ai/default_tools.js';
 import './dev/logging.js';
 import './dev/dev_console.js';
 

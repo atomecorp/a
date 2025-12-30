@@ -37,15 +37,37 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
         }
     };
 
-    const SYSTEM_PROMPT = [
-        'Return JSON only.',
-        'Schema: {"actions":[{"tool_name":"ui.create_boxes","params":{"count":2}}, {"tool_name":"ui.select_all","params":{}}, {"tool_name":"ui.move_selection","params":{"dx":20,"dy":0}}]}',
+    const PREPROMPT_STORAGE_KEY = 'ai_example_preprompt_v1';
+    let userPrePrompt = (localStorage.getItem(PREPROMPT_STORAGE_KEY) || '').trim();
+
+    const BASE_SYSTEM_PROMPT = [
+        'Return JSON only (no extra text).',
+        'Output schema: {"reply":"<string>","actions":[{"tool_name":"<string>","params":{}}]}',
+        'If no tool action is required, return: {"actions":[]}',
+        'Only call tools when the user request requires UI changes.',
         'Available tools:',
-        '- ui.create_boxes(count:number)',
-        '- ui.select_all()',
-        '- ui.move_selection(dx:number, dy:number)',
-        'No extra text or markdown.'
+        '- (provided dynamically)',
+        'Do not include markdown or code fences.'
     ].join('\n');
+
+    const buildSystemPrompt = () => {
+        const extra = (userPrePrompt || '').trim();
+        const agentTools = (() => {
+            try {
+                if (!window.AtomeAI || typeof window.AtomeAI.listTools !== 'function') return [];
+                return window.AtomeAI.listTools();
+            } catch {
+                return [];
+            }
+        })();
+
+        const toolsBlock = agentTools.length
+            ? `\n\nTOOLS (JSON):\n${JSON.stringify(agentTools)}`
+            : '';
+
+        if (!extra) return `${BASE_SYSTEM_PROMPT}${toolsBlock}`;
+        return `${BASE_SYSTEM_PROMPT}${toolsBlock}\n\nAdditional instructions:\n${extra}`;
+    };
 
     const runtime = {
         items: new Map(),
@@ -68,20 +90,73 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             backgroundColor: '#101010',
             color: '#e6e6e6',
             fontFamily: 'monospace',
-            maxWidth: '680px',
+            maxWidth: '555px',
             zIndex: 10000001,
             pointerEvents: 'auto'
         }
     });
 
-    $('div', {
+    const makePanelDraggable = (panel, handle) => {
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        const onMove = (ev) => {
+            if (!dragging) return;
+            const x = ev.clientX - offsetX;
+            const y = ev.clientY - offsetY;
+            panel.style.left = `${x}px`;
+            panel.style.top = `${y}px`;
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+        };
+
+        const stop = () => {
+            if (!dragging) return;
+            dragging = false;
+            document.removeEventListener('pointermove', onMove, true);
+            document.removeEventListener('pointerup', stop, true);
+            document.removeEventListener('pointercancel', stop, true);
+            handle.releasePointerCapture?.(handle._dragPointerId);
+            handle._dragPointerId = null;
+        };
+
+        handle.addEventListener('pointerdown', (ev) => {
+            // Only primary button / finger
+            if (ev.button !== undefined && ev.button !== 0) return;
+
+            const rect = panel.getBoundingClientRect();
+            panel.style.width = `${rect.width}px`;
+            panel.style.right = 'auto';
+
+            dragging = true;
+            offsetX = ev.clientX - rect.left;
+            offsetY = ev.clientY - rect.top;
+
+            handle._dragPointerId = ev.pointerId;
+            handle.setPointerCapture?.(ev.pointerId);
+
+            document.addEventListener('pointermove', onMove, true);
+            document.addEventListener('pointerup', stop, true);
+            document.addEventListener('pointercancel', stop, true);
+            ev.preventDefault();
+            ev.stopPropagation();
+        }, { passive: false });
+    };
+
+    const dragHeader = $('div', {
         parent: wrapper,
         text: 'AI prompt input',
         css: {
             marginBottom: '8px',
-            fontSize: '14px'
+            fontSize: '14px',
+            cursor: 'move',
+            userSelect: 'none'
         }
     });
+
+    // Allow dragging the whole AI panel by its header
+    makePanelDraggable(wrapper, dragHeader);
 
     const settingsRow = $('div', {
         parent: wrapper,
@@ -210,6 +285,43 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             resize: 'vertical',
             marginBottom: '8px'
         }
+    });
+
+    const prePromptLabel = $('div', {
+        parent: wrapper,
+        text: 'Pre-prompt (optional, saved locally)'
+    });
+
+    prePromptLabel.style.fontSize = '12px';
+    prePromptLabel.style.color = '#9aa0a6';
+    prePromptLabel.style.marginBottom = '6px';
+
+    const prePromptInput = $('textarea', {
+        parent: wrapper,
+        text: userPrePrompt,
+        attrs: {
+            rows: 2,
+            placeholder: 'Extra recurring instructions appended to the system prompt...'
+        },
+        css: {
+            width: '100%',
+            padding: '8px',
+            borderRadius: '6px',
+            border: '1px solid #444',
+            backgroundColor: '#181818',
+            color: '#e6e6e6',
+            resize: 'vertical',
+            marginBottom: '10px'
+        }
+    });
+
+    let prePromptSaveTimer = null;
+    prePromptInput.addEventListener('input', () => {
+        userPrePrompt = (prePromptInput.value || '').trim();
+        if (prePromptSaveTimer) clearTimeout(prePromptSaveTimer);
+        prePromptSaveTimer = setTimeout(() => {
+            localStorage.setItem(PREPROMPT_STORAGE_KEY, userPrePrompt);
+        }, 250);
     });
 
     const buttonRow = $('div', {
@@ -616,11 +728,12 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
     };
 
     const requestOpenAIStyle = async ({ provider, model, prompt, apiKey, stream, onToken }) => {
+        const systemPrompt = buildSystemPrompt();
         const body = {
             model,
             temperature: 0.2,
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: systemPrompt },
                 { role: 'user', content: prompt }
             ],
             stream: Boolean(stream)
@@ -665,10 +778,11 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
     };
 
     const requestAnthropic = async ({ provider, model, prompt, apiKey, stream, onToken }) => {
+        const systemPrompt = buildSystemPrompt();
         const body = {
             model,
             max_tokens: 1024,
-            system: SYSTEM_PROMPT,
+            system: systemPrompt,
             messages: [{ role: 'user', content: prompt }],
             stream: Boolean(stream)
         };
@@ -715,13 +829,14 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
     };
 
     const requestGoogle = async ({ provider, model, prompt, apiKey, stream, onToken }) => {
+        const systemPrompt = buildSystemPrompt();
         const baseUrl = `${provider.endpoint}/${model}`;
         const action = stream ? 'streamGenerateContent' : 'generateContent';
         const url = `${baseUrl}:${action}?key=${encodeURIComponent(apiKey)}${stream ? '&alt=sse' : ''}`;
 
         const body = {
             systemInstruction: {
-                parts: [{ text: SYSTEM_PROMPT }]
+                parts: [{ text: systemPrompt }]
             },
             contents: [
                 { role: 'user', parts: [{ text: prompt }] }
@@ -800,15 +915,36 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
         const signals = { overall_confidence: 0.92 };
         let executed = 0;
 
+        const results = [];
+
         for (const action of actions) {
             if (!action?.tool_name) continue;
-            await window.AtomeAI.callTool({
+            const result = await window.AtomeAI.callTool({
                 tool_name: action.tool_name,
                 params: action.params || {},
                 actor,
                 signals
             });
+
+            results.push({ tool_name: action.tool_name, result });
+
+            if (result?.status === 'CONFIRMATION_REQUIRED') {
+                appendOutput(`\n[tool] confirmation required: ${action.tool_name} (proposal_id=${result.proposal_id || 'n/a'})\n`);
+                break;
+            }
+            if (result?.status === 'DENIED') {
+                appendOutput(`\n[tool] denied: ${action.tool_name}\n`);
+                break;
+            }
+            if (result?.status === 'ERROR') {
+                appendOutput(`\n[tool] error: ${action.tool_name} (${result.error || 'unknown'})\n`);
+                break;
+            }
             executed += 1;
+        }
+
+        if (results.length) {
+            appendOutput(`\n[tool] results: ${JSON.stringify(results, null, 2)}\n`);
         }
 
         return executed;
@@ -941,6 +1077,10 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             if (!parsed) {
                 updateStatus('Status: failed to parse JSON response');
                 return;
+            }
+
+            if (parsed.reply && typeof parsed.reply === 'string') {
+                appendOutput(`\n[reply] ${parsed.reply}\n`);
             }
 
             const actions = Array.isArray(parsed) ? parsed : parsed.actions;

@@ -506,6 +506,11 @@ while [[ $# -gt 0 ]]; do
             TAURI_ONLY=true
             shift
             ;;
+        --tauri-prod)
+            TAURI_ONLY=true
+            PROD_BUILD=true
+            shift
+            ;;
         --server)
             SERVER_ONLY=true
             shift
@@ -552,6 +557,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -f, --force-deps      Force update all dependencies before starting"
             echo "      --prod            Build a production Tauri bundle and exit"
             echo "      --tauri           Launch only Tauri (no local Fastify server)"
+            echo "      --tauri-prod      Build and launch the production Tauri app bundle"
             echo "      --server          Launch only Fastify server (HTTP, dev mode)"
             echo "      --fastify-url URL Configure remote Fastify server URL for Tauri"
             echo ""
@@ -576,6 +582,8 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 logs              # Prod: View live logs"
             echo "  $0 restart           # Prod: Restart after update"
             echo "  $0 --prod            # Build Tauri production bundle"
+            echo "  $0 --tauri --prod     # Build + launch Tauri production bundle"
+            echo "  $0 --tauri-prod       # Same as above"
             echo ""
             exit 0
             ;;
@@ -648,6 +656,46 @@ if [ "$TAURI_ONLY" = true ]; then
         chmod +x "$SCRIPTS_DIR/install_dependencies.sh"
         "$SCRIPTS_DIR/install_dependencies.sh" --non-interactive
         touch node_modules/.install_complete
+    fi
+
+    # Production mode for Tauri-only: build bundle then launch the generated .app
+    if [ "$PROD_BUILD" = true ]; then
+        echo "🏗️  Building production Tauri bundle..."
+        echo "🔍 Scanning Squirrel components..."
+        npm run scan:components
+        echo ""
+
+        echo "📦 Building frontend..."
+        npm run build
+        echo ""
+
+        echo "🛠️  Building Tauri (production)..."
+        TAURI_SKIP_BUNDLE_OPEN=1 npm run tauri build
+        echo ""
+
+        app_dir="$PROJECT_ROOT/src-tauri/target/release/bundle/macos"
+        if [ -d "$app_dir" ]; then
+            latest_app=$(ls -td "$app_dir"/*.app 2>/dev/null | head -n 1 || true)
+            if [ -n "${latest_app:-}" ] && [ -d "$latest_app" ]; then
+                echo "🚀 Launching app bundle: $latest_app"
+                open "$latest_app" || true
+            else
+                echo "WARN: No .app bundle found in $app_dir"
+            fi
+        else
+            echo "WARN: macOS bundle directory not found: $app_dir"
+        fi
+
+        dmg_dir="$PROJECT_ROOT/src-tauri/target/release/bundle/dmg"
+        if [ -d "$dmg_dir" ]; then
+            latest_dmg=$(ls -t "$dmg_dir"/*.dmg 2>/dev/null | head -n 1 || true)
+            if [ -n "${latest_dmg:-}" ] && [ -f "$latest_dmg" ]; then
+                echo "📦 DMG generated: $latest_dmg"
+            fi
+        fi
+
+        echo "✅ Production Tauri build complete"
+        exit 0
     fi
     
     echo "🖥️  Démarrage de Tauri (Axum sur port 3000)..."
