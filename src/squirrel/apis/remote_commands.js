@@ -179,6 +179,11 @@ async function isFastifyAvailable() {
     }
 }
 
+async function canStart() {
+    await loadConfigOnce();
+    return isFastifyAvailable();
+}
+
 /**
  * Debug log helper
  */
@@ -677,6 +682,7 @@ export const RemoteCommands = {
     setAllowedSenders,
 
     // Lifecycle
+    canStart,
     start,
     stop,
     isActive,

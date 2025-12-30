@@ -196,6 +196,10 @@ async function ensureRemoteCommandsReady(explicitUserId = null) {
     if (remoteStartInFlight) return false;
     remoteStartInFlight = true;
     try {
+        if (RemoteCommands?.canStart) {
+            const canStart = await RemoteCommands.canStart();
+            if (!canStart) return false;
+        }
         const userId = explicitUserId || (await getCurrentUser())?.id;
         if (!userId) return false;
         const started = await RemoteCommands.start(userId);

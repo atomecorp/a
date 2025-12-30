@@ -1571,6 +1571,13 @@ async function initRemoteCommands(userId) {
   BuiltinHandlers.registerAll();
 
   // Start listening for commands with the actual user ID
+  if (RemoteCommands?.canStart) {
+    const canStart = await RemoteCommands.canStart();
+    if (!canStart) {
+      updateRemoteCommandsStatus(false);
+      return;
+    }
+  }
   const started = await RemoteCommands.start(userId);
   if (started) {
     puts('[RemoteCommands] ✅ Listener active for user: ' + userId);

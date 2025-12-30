@@ -452,6 +452,10 @@ async function triggerAlarm(event, alarm, occurrenceStart) {
     if (alarm.targetUserId || alarm.targetPhone) {
         try {
             BuiltinHandlers.registerAll();
+            if (RemoteCommands?.canStart) {
+                const canStart = await RemoteCommands.canStart();
+                if (!canStart) return;
+            }
             await RemoteCommands.start();
             await RemoteCommands.sendCommand(
                 alarm.targetUserId || alarm.targetPhone,
