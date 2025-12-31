@@ -2304,24 +2304,22 @@ $('span', {
   },
 });
 
-// Tauri-only: server selector for sync + sharing (Fastify)
+// Tools: Debug Sync/Share (always) + Fastify target dropdown (Tauri-only)
+const __fastifyToolsWrapper = $('span', {
+  id: 'fastify_tools',
+  parent: intuitionContainer,
+  css: {
+    margin: '10px 10px 10px 0px',
+    display: 'inline-block',
+    verticalAlign: 'middle'
+  }
+});
+
 if (typeof window !== 'undefined' && __isTauriRuntime()) {
-  const wrapper = $('span', {
-    id: 'tauri_fastify_tools',
-    parent: intuitionContainer,
-    css: {
-      margin: '10px 10px 10px 0px',
-      display: 'inline-block',
-      verticalAlign: 'middle'
-    }
-  });
-
-
-
   const dd = (typeof window.dropDown === 'function') ? window.dropDown : null;
   if (dd) {
     const selector = dd({
-      parent: wrapper,
+      parent: __fastifyToolsWrapper,
       id: 'tauri_fastify_target_selector',
       options: [
         { label: 'Cloud (atome.one)', value: 'cloud' },
@@ -2380,41 +2378,74 @@ if (typeof window !== 'undefined' && __isTauriRuntime()) {
         if (selector?.setValue) selector.setValue(initialValue);
       }
     } catch (_) { }
-
-    // Debug button (Squirrel component)
-    Button({
-      onText: 'Debug Sync/Share',
-      offText: 'Debug Sync/Share',
-      onAction: __debugSyncShare,
-      offAction: __debugSyncShare,
-      parent: '#tauri_fastify_tools',
-      onStyle: { backgroundColor: '#00f', color: 'white' },
-      offStyle: { backgroundColor: '#00f', color: 'white' },
-      css: {
-        position: 'relative',
-        display: 'inline-block',
-        marginLeft: '10px',
-        marginTop: '0px',
-        marginBottom: '0px',
-        width: '170px',
-        height: '39px',
-        cursor: 'pointer',
-        pointerEvents: 'auto'
-      }
-    });
   } else {
     $('span', {
-      parent: wrapper,
+      parent: __fastifyToolsWrapper,
       text: 'dropdown unavailable',
       css: {
         display: 'inline-block',
         padding: '10px',
         color: 'white',
-        backgroundColor: '#00f'
+        backgroundColor: '#00f',
+        pointerEvents: 'auto'
       }
     });
   }
 }
+
+// Debug button is always available (Fastify web + Tauri)
+Button({
+  onText: 'Debug Sync/Share',
+  offText: 'Debug Sync/Share',
+  onAction: __debugSyncShare,
+  offAction: __debugSyncShare,
+  parent: '#fastify_tools',
+  onStyle: { backgroundColor: '#00f', color: 'white' },
+  offStyle: { backgroundColor: '#00f', color: 'white' },
+  css: {
+    position: 'relative',
+    display: 'inline-block',
+    marginLeft: '10px',
+    marginTop: '0px',
+    marginBottom: '0px',
+    width: '170px',
+    height: '39px',
+    cursor: 'pointer',
+    pointerEvents: 'auto'
+  }
+});
+
+// Extra always-visible debug button (top-right)
+// This avoids cases where the inline toolbar is present in DOM but not obvious on screen.
+const __debugSyncShareHolder = $('div', {
+  id: 'debug_sync_share_holder',
+  parent: document.body,
+  css: {
+    position: 'fixed',
+    top: '60px',
+    right: '10px',
+    zIndex: 50003,
+    pointerEvents: 'auto'
+  }
+});
+
+Button({
+  onText: 'Debug Sync/Share',
+  offText: 'Debug Sync/Share',
+  onAction: __debugSyncShare,
+  offAction: __debugSyncShare,
+  parent: '#debug_sync_share_holder',
+  onStyle: { backgroundColor: '#00f', color: 'white' },
+  offStyle: { backgroundColor: '#00f', color: 'white' },
+  css: {
+    position: 'relative',
+    display: 'inline-block',
+    width: '170px',
+    height: '36px',
+    cursor: 'pointer',
+    pointerEvents: 'auto'
+  }
+});
 
 $('br', { parent: intuitionContainer });
 const atome_type = 'shape';
@@ -3648,3 +3679,4 @@ async function startFastifyBroadcastProbe() {
     setTimeout(startFastifyBroadcastProbe, 2500);
   }
 })();
+
