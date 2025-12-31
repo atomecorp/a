@@ -1660,6 +1660,7 @@ function logUserDetails(user, context = 'current_user') {
 /// input box below
 
 // Initialize Remote Commands after user login
+let __remoteCommandsUserId = null;
 async function initRemoteCommands(userId) {
   // Register built-in handlers
   BuiltinHandlers.registerAll();
@@ -1674,12 +1675,260 @@ async function initRemoteCommands(userId) {
   }
   const started = await RemoteCommands.start(userId);
   if (started) {
+    __remoteCommandsUserId = userId;
     puts('[RemoteCommands] ✅ Listener active for user: ' + userId);
     updateRemoteCommandsStatus(true);
   } else {
     puts('[RemoteCommands] ❌ Failed to start');
     updateRemoteCommandsStatus(false);
   }
+}
+
+function __normalizeNoTrailingSlash(url) {
+  if (typeof url !== 'string') return '';
+  return url.trim().replace(/\/$/, '');
+}
+
+function __toWsBase(httpBase) {
+  return __normalizeNoTrailingSlash(httpBase)
+    .replace(/^https:/, 'wss:')
+    .replace(/^http:/, 'ws:');
+}
+
+function __applyFastifyTarget(httpBase) {
+  if (typeof window === 'undefined') return;
+  const base = __normalizeNoTrailingSlash(httpBase);
+  if (!base) return;
+
+  window.__SQUIRREL_TAURI_FASTIFY_URL__ = base;
+  window.__SQUIRREL_FASTIFY_URL__ = base;
+
+  const wsBase = __toWsBase(base);
+  window.__SQUIRREL_FASTIFY_WS_API_URL__ = `${wsBase}/ws/api`;
+  window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = `${wsBase}/ws/sync`;
+
+  try {
+    localStorage.setItem('squirrel_tauri_fastify_url_override', base);
+  } catch (_) { }
+}
+
+async function __restartSyncAndSharing() {
+  try {
+    if (window.Squirrel?.SyncEngine?.disconnect) {
+      window.Squirrel.SyncEngine.disconnect();
+    }
+  } catch (_) { }
+
+  try {
+    if (window.Squirrel?.SyncEngine?.retry) {
+      window.Squirrel.SyncEngine.retry();
+    }
+  } catch (_) { }
+
+  try {
+    if (typeof RemoteCommands?.stop === 'function') {
+      RemoteCommands.stop();
+    }
+  } catch (_) { }
+
+  try {
+    const uid = __remoteCommandsUserId || RemoteCommands?.getCurrentUserId?.();
+    if (uid && typeof RemoteCommands?.start === 'function') {
+      await RemoteCommands.start(uid);
+      updateRemoteCommandsStatus(true);
+    } else {
+      updateRemoteCommandsStatus(false);
+    }
+  } catch (_) {
+    updateRemoteCommandsStatus(false);
+  }
+}
+
+function __isTauriRuntime() {
+  return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+}
+
+function __currentFastifyTargetValue() {
+  const base = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string') ? window.__SQUIRREL_FASTIFY_URL__.trim() : '';
+  if (!base) return 'cloud';
+  if (base.includes('atome.one')) return 'cloud';
+  if (base.includes('127.0.0.1') || base.includes('localhost')) return 'local';
+  return 'cloud';
+}
+
+function __safeJsonParse(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== 'string') return raw;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try { return JSON.parse(trimmed); } catch (_) { return { __raw: raw }; }
+}
+
+function __decodeJwtPayload(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  const payload = parts[1];
+  try {
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+    const json = atob(b64 + pad);
+    return __safeJsonParse(json);
+  } catch (_) {
+    return null;
+  }
+}
+
+function __tokenDebug(name, token) {
+  const present = !!(token && token.length > 10);
+  const preview = present ? `${token.slice(0, 12)}...${token.slice(-8)}` : null;
+  const payload = present ? __decodeJwtPayload(token) : null;
+  return { name, present, length: token ? token.length : 0, preview, payload };
+}
+
+async function __fetchJsonWithTimeout(url, options = {}, timeoutMs = 1500) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    const text = await res.text().catch(() => '');
+    let json = null;
+    if (text) {
+      try { json = JSON.parse(text); } catch (_) { json = { __raw: text }; }
+    }
+    return { ok: res.ok, status: res.status, statusText: res.statusText, json };
+  } catch (e) {
+    return { ok: false, status: 0, statusText: e?.message || 'fetch_failed', json: null };
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function __debugSyncShare() {
+  const ts = new Date().toISOString();
+  console.groupCollapsed(`[Debug Sync/Share] ${ts}`);
+
+  const runtime = {
+    isTauri: __isTauriRuntime(),
+    hostname: window.location?.hostname || '',
+    origin: window.location?.origin || '',
+    localHttpPort: window.__ATOME_LOCAL_HTTP_PORT__ || null,
+    selectedFastify: __currentFastifyTargetValue()
+  };
+  console.log('Runtime:', runtime);
+
+  const fastify = {
+    tauriOverride: window.__SQUIRREL_TAURI_FASTIFY_URL__ || null,
+    httpBase: window.__SQUIRREL_FASTIFY_URL__ || null,
+    wsApi: window.__SQUIRREL_FASTIFY_WS_API_URL__ || null,
+    wsSync: window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ || null
+  };
+  console.log('Fastify endpoints:', fastify);
+
+  let localToken = null;
+  let cloudToken = null;
+  let legacyToken = null;
+  try {
+    localToken = localStorage.getItem('local_auth_token');
+    cloudToken = localStorage.getItem('cloud_auth_token');
+    legacyToken = localStorage.getItem('auth_token');
+  } catch (_) { }
+  console.log('Tokens:', {
+    local_auth_token: __tokenDebug('local_auth_token', localToken),
+    cloud_auth_token: __tokenDebug('cloud_auth_token', cloudToken),
+    auth_token: __tokenDebug('auth_token', legacyToken)
+  });
+
+  console.log('RemoteCommands:', {
+    active: (typeof RemoteCommands?.isActive === 'function') ? RemoteCommands.isActive() : null,
+    currentUserId: (typeof RemoteCommands?.getCurrentUserId === 'function') ? RemoteCommands.getCurrentUserId() : null,
+    rememberedUserId: __remoteCommandsUserId || null
+  });
+
+  console.log('SyncEngine:', (typeof window.Squirrel?.SyncEngine?.getState === 'function')
+    ? window.Squirrel.SyncEngine.getState()
+    : null);
+
+  // Current user
+  try {
+    const me = await current_user();
+    console.log('current_user():', me);
+  } catch (e) {
+    console.error('current_user() failed:', e?.message || e);
+  }
+
+  // Users list (tauri vs fastify)
+  try {
+    const users = await user_list();
+    console.log('auth.list() raw:', users);
+    const tauriUsers = users?.tauri?.data?.users || users?.tauri?.users || users?.tauri?.data || null;
+    const fastifyUsers = users?.fastify?.data?.users || users?.fastify?.users || users?.fastify?.data || null;
+    console.log('Users (tauri):', tauriUsers);
+    console.log('Users (fastify):', fastifyUsers);
+    console.log('Users counts:', {
+      tauri: Array.isArray(tauriUsers) ? tauriUsers.length : null,
+      fastify: Array.isArray(fastifyUsers) ? fastifyUsers.length : null
+    });
+  } catch (e) {
+    console.error('auth.list() failed:', e?.message || e);
+  }
+
+  // Unsynced atomes
+  try {
+    const pending = await list_unsynced_atomes();
+    console.log('sync.listUnsynced():', pending);
+  } catch (e) {
+    console.error('sync.listUnsynced() failed:', e?.message || e);
+  }
+
+  // Local queues / pending sync state
+  const keys = [
+    'auth_pending_sync',
+    'adole_sync_queue',
+    'atome_pending_ops',
+    'unified_atome_pending_ops',
+    'unified_atome_pending_ops',
+    'unified_atome_pending_ops'
+  ];
+  const uniqueKeys = Array.from(new Set(keys));
+  const storageDump = {};
+  uniqueKeys.forEach((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      const parsed = __safeJsonParse(raw);
+      const size = Array.isArray(parsed) ? parsed.length : (parsed && typeof parsed === 'object' ? Object.keys(parsed).length : (raw ? raw.length : 0));
+      storageDump[key] = { present: !!raw, size, preview: parsed };
+    } catch (e) {
+      storageDump[key] = { present: false, error: e?.message || String(e) };
+    }
+  });
+  console.log('LocalStorage queues:', storageDump);
+
+  // Quick auth probe against the currently-selected Fastify target
+  try {
+    const base = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string') ? window.__SQUIRREL_FASTIFY_URL__.trim() : '';
+    const tokenForMe = cloudToken || legacyToken || localToken || null;
+    if (!base) {
+      console.warn('Fastify base URL is empty; cannot probe /api/auth/me');
+    } else if (!tokenForMe) {
+      console.warn('No token available; cannot probe /api/auth/me');
+    } else {
+      const meProbe = await __fetchJsonWithTimeout(`${base}/api/auth/me`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${tokenForMe}`, 'Accept': 'application/json' },
+        credentials: 'omit'
+      }, 2000);
+      console.log(`Fastify /api/auth/me probe (${base}):`, meProbe);
+    }
+  } catch (e) {
+    console.error('Fastify /api/auth/me probe failed:', e?.message || e);
+  }
+
+  console.groupEnd();
+
+  try {
+    puts('[Debug] Sync/Share diagnostics printed to console.');
+  } catch (_) { }
 }
 
 function updateRemoteCommandsStatus(active) {
@@ -2054,6 +2303,118 @@ $('span', {
     }
   },
 });
+
+// Tauri-only: server selector for sync + sharing (Fastify)
+if (typeof window !== 'undefined' && __isTauriRuntime()) {
+  const wrapper = $('span', {
+    id: 'tauri_fastify_tools',
+    parent: intuitionContainer,
+    css: {
+      margin: '10px 10px 10px 0px',
+      display: 'inline-block',
+      verticalAlign: 'middle'
+    }
+  });
+
+
+
+  const dd = (typeof window.dropDown === 'function') ? window.dropDown : null;
+  if (dd) {
+    const selector = dd({
+      parent: wrapper,
+      id: 'tauri_fastify_target_selector',
+      options: [
+        { label: 'Cloud (atome.one)', value: 'cloud' },
+        { label: 'Local (127.0.0.1:3001)', value: 'local' }
+      ],
+      value: __currentFastifyTargetValue(),
+      openDirection: 'down',
+      css: {
+        display: 'inline-block',
+        width: '210px',
+        height: '39px',
+        lineHeight: '39px',
+        backgroundColor: '#00f',
+        color: 'white',
+        borderRadius: '0px',
+        margin: '0px',
+        padding: '0px'
+      },
+      listCss: {
+        width: '210px'
+      },
+      textCss: {
+        color: 'white'
+      },
+      onChange: async (value) => {
+        const selected = String(value || '');
+        if (selected === 'local') {
+          __applyFastifyTarget('http://127.0.0.1:3001');
+
+          // For local Fastify in Tauri dev, allow using local_auth_token as cloud_auth_token
+          // so SyncEngine (which reads cloud_auth_token) can authenticate.
+          try {
+            const cloud = localStorage.getItem('cloud_auth_token');
+            const local = localStorage.getItem('local_auth_token');
+            if ((!cloud || cloud.length < 10) && local && local.length > 10) {
+              localStorage.setItem('cloud_auth_token', local);
+            }
+          } catch (_) { }
+
+          puts('[Debug] Fastify target set to LOCAL (http://127.0.0.1:3001). Reconnecting sync + sharing...');
+        } else {
+          __applyFastifyTarget('https://atome.one');
+          puts('[Debug] Fastify target set to CLOUD (https://atome.one). Reconnecting sync + sharing...');
+          puts('[Debug] Note: cloud requires a valid cloud_auth_token (login to Fastify cloud).');
+        }
+
+        await __restartSyncAndSharing();
+      }
+    });
+
+    try {
+      const initial = localStorage.getItem('squirrel_tauri_fastify_url_override');
+      if (initial && typeof initial === 'string' && initial.trim()) {
+        __applyFastifyTarget(initial);
+        const initialValue = initial.includes('127.0.0.1') || initial.includes('localhost') ? 'local' : 'cloud';
+        if (selector?.setValue) selector.setValue(initialValue);
+      }
+    } catch (_) { }
+
+    // Debug button (Squirrel component)
+    Button({
+      onText: 'Debug Sync/Share',
+      offText: 'Debug Sync/Share',
+      onAction: __debugSyncShare,
+      offAction: __debugSyncShare,
+      parent: '#tauri_fastify_tools',
+      onStyle: { backgroundColor: '#00f', color: 'white' },
+      offStyle: { backgroundColor: '#00f', color: 'white' },
+      css: {
+        position: 'relative',
+        display: 'inline-block',
+        marginLeft: '10px',
+        marginTop: '0px',
+        marginBottom: '0px',
+        width: '170px',
+        height: '39px',
+        cursor: 'pointer',
+        pointerEvents: 'auto'
+      }
+    });
+  } else {
+    $('span', {
+      parent: wrapper,
+      text: 'dropdown unavailable',
+      css: {
+        display: 'inline-block',
+        padding: '10px',
+        color: 'white',
+        backgroundColor: '#00f'
+      }
+    });
+  }
+}
 
 $('br', { parent: intuitionContainer });
 const atome_type = 'shape';

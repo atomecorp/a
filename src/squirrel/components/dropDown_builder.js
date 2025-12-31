@@ -433,4 +433,9 @@ function dropDown(config) {
   return root;
 }
 
+// Expose globally at module load time (example scripts are not modules)
+if (typeof window !== 'undefined') {
+  window.dropDown = window.dropDown || dropDown;
+}
+
 export default dropDown;
