@@ -12,6 +12,25 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 
+# Guardrail: on production servers, running ./run.sh with no arguments starts dev mode
+# (foreground processes + dependency installs). This is almost always accidental and
+# will stop when the SSH terminal closes. Use service commands instead.
+if [[ $# -eq 0 ]]; then
+    if [[ -f "/etc/systemd/system/squirrel.service" ]] \
+        || [[ -f "/etc/squirrel/squirrel.env" ]] \
+        || [[ -f "/usr/local/etc/squirrel/squirrel.env" ]]; then
+        echo "ERROR: Detected a production server setup."
+        echo "       Do not run './run.sh' without arguments (dev mode)."
+        echo "       Use one of these instead:"
+        echo "         - ./run.sh --https"
+        echo "         - ./run.sh status"
+        echo "         - ./run.sh logs"
+        echo "         - ./run.sh update"
+        echo "       If you really want dev server mode, use: ./run.sh --server"
+        exit 1
+    fi
+fi
+
 # --- Editable defaults -------------------------------------------------------
 # Change DEFAULT_UPLOADS_PATH to point legacy uploads elsewhere (sync watcher).
 # Per-user uploads now live in each user's Downloads folder.
