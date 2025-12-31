@@ -67,9 +67,25 @@ export function getLocalServerUrl() {
 export function getCloudServerUrl() {
     if (typeof window !== 'undefined') {
         // Check for custom Fastify URL
+        const tauriProdOverride = (typeof window.__SQUIRREL_TAURI_FASTIFY_URL__ === 'string')
+            ? window.__SQUIRREL_TAURI_FASTIFY_URL__.trim()
+            : '';
+        if (tauriProdOverride) {
+            return tauriProdOverride.replace(/\/$/, '');
+        }
+
         const customUrl = window.__SQUIRREL_FASTIFY_URL__;
         if (customUrl && typeof customUrl === 'string') {
             return customUrl.trim().replace(/\/$/, '');
+        }
+
+        // Tauri production webview uses https://tauri.localhost for the UI origin.
+        // Cloud (Fastify) must be explicit and should never default to tauri.localhost.
+        if (isTauri()) {
+            const host = window.location?.hostname || '';
+            if (host === 'tauri.localhost') {
+                return 'https://atome.one';
+            }
         }
 
         // If server_config.json was loaded into a global, derive from it

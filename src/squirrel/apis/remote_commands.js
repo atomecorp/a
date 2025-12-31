@@ -64,6 +64,27 @@ async function loadConfigOnce() {
         }
     }
 
+    if (typeof window !== 'undefined') {
+        const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+        const host = window.location?.hostname || '';
+        if (isTauriRuntime && host === 'tauri.localhost') {
+            const base = (typeof window.__SQUIRREL_TAURI_FASTIFY_URL__ === 'string')
+                ? window.__SQUIRREL_TAURI_FASTIFY_URL__.trim()
+                : '';
+            if (base) {
+                const wsBase = base
+                    .replace(/^https:/, 'wss:')
+                    .replace(/^http:/, 'ws:')
+                    .replace(/\/$/, '');
+                CONFIG.WS_URL = `${wsBase}/ws/api`;
+            } else {
+                CONFIG.WS_URL = 'wss://atome.one/ws/api';
+            }
+            configLoaded = true;
+            return CONFIG.WS_URL;
+        }
+    }
+
     try {
         const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
         const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3001;

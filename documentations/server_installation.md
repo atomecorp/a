@@ -117,6 +117,41 @@ Use `./run.sh` with service commands to manage it easily on any platform.
 
 ---
 
+## 🖥️ Tauri Clients: Fastify Endpoint (Sync + Share)
+
+In the **Tauri desktop app**, the UI origin is typically `https://tauri.localhost`.
+This origin is **not** the cloud Fastify server.
+
+To ensure that **sync** (`/ws/sync`) and **sharing / direct-messages** (`/ws/api`) use the **cloud Fastify** (e.g. `https://atome.one`) in **Tauri production**, the client supports an explicit override.
+
+### Recommended (Tauri production)
+
+Set this global **before the Squirrel bundle is loaded**:
+
+```js
+window.__SQUIRREL_TAURI_FASTIFY_URL__ = 'https://atome.one';
+```
+
+This will drive:
+
+* `window.__SQUIRREL_FASTIFY_URL__` (HTTP base)
+* `window.__SQUIRREL_FASTIFY_WS_API_URL__` (WS API base, e.g. `wss://atome.one/ws/api`)
+* `window.__SQUIRREL_FASTIFY_WS_SYNC_URL__` (WS sync base, e.g. `wss://atome.one/ws/sync`)
+
+### Dev behavior (unchanged)
+
+In development, you can keep using local config (for example, via `server_config.json`) and you usually **do not** need to set `__SQUIRREL_TAURI_FASTIFY_URL__`.
+
+If you want to point your dev Tauri client at a staging Fastify, set:
+
+```js
+window.__SQUIRREL_TAURI_FASTIFY_URL__ = 'https://your-staging-domain.example';
+```
+
+> Important: this is a **client-side** setting (Tauri/webview), not a server setting. It must be executed early (before importing/loading the Squirrel bundle).
+
+---
+
 ## 🧩 Fastify Server Overview (Runtime)
 
 The Fastify server runs from `server/server.js` and exposes REST + WebSocket endpoints.

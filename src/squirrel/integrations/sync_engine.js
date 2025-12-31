@@ -220,6 +220,11 @@ async function getLocalVersion() {
  * Resolve WebSocket URL
  */
 function resolveWsUrl() {
+    const explicitSync = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ === 'string')
+        ? window.__SQUIRREL_FASTIFY_WS_SYNC_URL__.trim()
+        : '';
+    if (explicitSync) return explicitSync;
+
     const customEndpoint = typeof window[CONFIG.CUSTOM_VAR] === 'string'
         ? window[CONFIG.CUSTOM_VAR].trim()
         : '';

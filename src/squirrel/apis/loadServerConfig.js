@@ -18,6 +18,28 @@ function isInTauriRuntime() {
     return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 }
 
+function isTauriProdWebview() {
+    if (!isInTauriRuntime()) return false;
+    const host = window.location?.hostname || '';
+    return host === 'tauri.localhost';
+}
+
+function resolveTauriProdFastifyHttpBase() {
+    if (typeof window === 'undefined') return 'https://atome.one';
+
+    const explicit = (typeof window.__SQUIRREL_TAURI_FASTIFY_URL__ === 'string')
+        ? window.__SQUIRREL_TAURI_FASTIFY_URL__.trim()
+        : '';
+    if (explicit) return explicit;
+
+    const already = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+        ? window.__SQUIRREL_FASTIFY_URL__.trim()
+        : '';
+    if (already) return already;
+
+    return 'https://atome.one';
+}
+
 function normalizeNoTrailingSlash(url) {
     if (typeof url !== 'string') return '';
     return url.trim().replace(/\/$/, '');
@@ -27,6 +49,19 @@ function toWsBase(httpBase) {
     return normalizeNoTrailingSlash(httpBase)
         .replace(/^https:/, 'wss:')
         .replace(/^http:/, 'ws:');
+}
+
+function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
+    const base = normalizeNoTrailingSlash(httpBase);
+    if (!base) return;
+
+    window.__SQUIRREL_FASTIFY_URL__ = base;
+
+    const apiWsPath = config?.fastify?.apiWsPath || '/ws/api';
+    const syncWsPath = config?.fastify?.syncWsPath || '/ws/sync';
+
+    window.__SQUIRREL_FASTIFY_WS_API_URL__ = buildFastifyWsUrl(base, apiWsPath);
+    window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = buildFastifyWsUrl(base, syncWsPath);
 }
 
 function resolveConfigUrl() {
@@ -103,6 +138,10 @@ export async function loadServerConfigOnce() {
     if (_loadPromise) return _loadPromise;
 
     _loadPromise = (async () => {
+        if (isTauriProdWebview()) {
+            applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), window.__SQUIRREL_SERVER_CONFIG__ || null);
+        }
+
         const configUrl = resolveConfigUrl();
 
         try {
@@ -114,15 +153,14 @@ export async function loadServerConfigOnce() {
             const config = await res.json();
             window.__SQUIRREL_SERVER_CONFIG__ = config;
 
+            if (isTauriProdWebview()) {
+                applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), config);
+                return config;
+            }
+
             const httpBase = buildFastifyHttpBase(config);
             if (httpBase) {
-                window.__SQUIRREL_FASTIFY_URL__ = normalizeNoTrailingSlash(httpBase);
-
-                const apiWsPath = config?.fastify?.apiWsPath || '/ws/api';
-                const syncWsPath = config?.fastify?.syncWsPath || '/ws/sync';
-
-                window.__SQUIRREL_FASTIFY_WS_API_URL__ = buildFastifyWsUrl(httpBase, apiWsPath);
-                window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = buildFastifyWsUrl(httpBase, syncWsPath);
+                applyFastifyGlobalsFromHttpBase(httpBase, config);
             }
 
             return config;
