@@ -809,6 +809,10 @@ function updateHistorySlider() {
 function makeAtomeDraggable(atomeEl, atomeId) {
   let isDragging = false;
   let startX, startY, initialLeft, initialTop;
+  let activePointerId = null;
+
+  // Mobile/touch: prevent scroll/gesture interference during drag.
+  try { atomeEl.style.touchAction = 'none'; } catch (_) { }
 
   const dragRealtime = (() => {
     let rafId = null;
@@ -854,49 +858,10 @@ function makeAtomeDraggable(atomeEl, atomeId) {
     };
   })();
 
-  atomeEl.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return; // Left click only
-    isDragging = true;
-
-    startX = e.clientX;
-    startY = e.clientY;
-    initialLeft = parseInt(atomeEl.style.left) || 0;
-    initialTop = parseInt(atomeEl.style.top) || 0;
-    atomeEl.style.zIndex = '100';
-
-    // Start continuous recording for drag
-    startContinuousRecording(atomeId, 'drag movement');
-    recordContinuousState(atomeId, {
-      left: initialLeft + 'px',
-      top: initialTop + 'px'
-    });
-
-    e.preventDefault();
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    const newLeft = (initialLeft + dx) + 'px';
-    const newTop = (initialTop + dy) + 'px';
-
-    atomeEl.style.left = newLeft;
-    atomeEl.style.top = newTop;
-
-    // Record continuous position changes
-    recordContinuousState(atomeId, {
-      left: newLeft,
-      top: newTop
-    });
-
-    // Realtime: push position during drag (no DB write) so receivers see continuous movement.
-    dragRealtime.push({ left: newLeft, top: newTop });
-  });
-
-  document.addEventListener('mouseup', (e) => {
+  const finishDrag = () => {
     if (!isDragging) return;
     isDragging = false;
+    activePointerId = null;
     atomeEl.style.zIndex = '';
 
     // Cancel any pending realtime frame
@@ -935,6 +900,107 @@ function makeAtomeDraggable(atomeEl, atomeId) {
       puts('⚠️ Database save error, but position tracked in history: ' + error);
       console.error('[Position Save] Error:', error);
     });
+  };
+
+  const supportsPointer = (typeof window !== 'undefined') && ('PointerEvent' in window);
+  if (supportsPointer) {
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      if (activePointerId != null && e.pointerId !== activePointerId) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const newLeft = (initialLeft + dx) + 'px';
+      const newTop = (initialTop + dy) + 'px';
+
+      atomeEl.style.left = newLeft;
+      atomeEl.style.top = newTop;
+
+      recordContinuousState(atomeId, { left: newLeft, top: newTop });
+      dragRealtime.push({ left: newLeft, top: newTop });
+
+      try { e.preventDefault(); } catch (_) { }
+    };
+
+    const onPointerUp = (e) => {
+      if (activePointerId != null && e.pointerId !== activePointerId) return;
+      try { atomeEl.releasePointerCapture(e.pointerId); } catch (_) { }
+      atomeEl.removeEventListener('pointermove', onPointerMove);
+      atomeEl.removeEventListener('pointerup', onPointerUp);
+      atomeEl.removeEventListener('pointercancel', onPointerUp);
+      finishDrag();
+    };
+
+    atomeEl.addEventListener('pointerdown', (e) => {
+      // Mouse: left button only. Touch/pen: accept primary pointer.
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.isPrimary === false) return;
+
+      isDragging = true;
+      activePointerId = e.pointerId;
+
+      startX = e.clientX;
+      startY = e.clientY;
+      initialLeft = parseInt(atomeEl.style.left) || 0;
+      initialTop = parseInt(atomeEl.style.top) || 0;
+      atomeEl.style.zIndex = '100';
+
+      // Start continuous recording for drag
+      startContinuousRecording(atomeId, 'drag movement');
+      recordContinuousState(atomeId, {
+        left: initialLeft + 'px',
+        top: initialTop + 'px'
+      });
+
+      try { atomeEl.setPointerCapture(e.pointerId); } catch (_) { }
+
+      atomeEl.addEventListener('pointermove', onPointerMove);
+      atomeEl.addEventListener('pointerup', onPointerUp);
+      atomeEl.addEventListener('pointercancel', onPointerUp);
+
+      try { e.preventDefault(); } catch (_) { }
+    });
+
+    return;
+  }
+
+  // Fallback (older browsers): mouse-only drag
+  atomeEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // Left click only
+    isDragging = true;
+
+    startX = e.clientX;
+    startY = e.clientY;
+    initialLeft = parseInt(atomeEl.style.left) || 0;
+    initialTop = parseInt(atomeEl.style.top) || 0;
+    atomeEl.style.zIndex = '100';
+
+    // Start continuous recording for drag
+    startContinuousRecording(atomeId, 'drag movement');
+    recordContinuousState(atomeId, {
+      left: initialLeft + 'px',
+      top: initialTop + 'px'
+    });
+
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const newLeft = (initialLeft + dx) + 'px';
+    const newTop = (initialTop + dy) + 'px';
+
+    atomeEl.style.left = newLeft;
+    atomeEl.style.top = newTop;
+
+    recordContinuousState(atomeId, { left: newLeft, top: newTop });
+    dragRealtime.push({ left: newLeft, top: newTop });
+  });
+
+  document.addEventListener('mouseup', () => {
+    finishDrag();
   });
 }
 
