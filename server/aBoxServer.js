@@ -13,12 +13,17 @@ const pendingMirrorGuards = {
     monitored: new Map()
 };
 
+const warnedMissingEnvVars = new Set();
+
 function resolveDirectoryFromEnv(envVarName) {
     const rawValue = typeof process.env[envVarName] === 'string'
         ? process.env[envVarName].trim()
         : '';
     if (!rawValue) {
-        console.warn(`⚠️  ${envVarName} is not defined. aBox sync will stay disabled.`);
+        if (!warnedMissingEnvVars.has(envVarName)) {
+            warnedMissingEnvVars.add(envVarName);
+            console.warn(`⚠️  ${envVarName} is not defined. aBox sync will stay disabled.`);
+        }
         return null;
     }
     return path.resolve(rawValue);

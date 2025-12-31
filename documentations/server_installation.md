@@ -68,6 +68,7 @@ PORT=3001
 HOST=127.0.0.1
 SQLITE_PATH=/opt/a/database_storage/adole.db
 SQUIRREL_UPLOADS_DIR=/opt/a/uploads
+SQUIRREL_MONITORED_DIR=/opt/a/monitored
 
 # Optional: For cloud deployment with Turso/libSQL
 # LIBSQL_URL=libsql://your-database.turso.io
@@ -79,6 +80,7 @@ SQUIRREL_UPLOADS_DIR=/opt/a/uploads
 
 * **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).
 * **PORT**: Internal port (default 3001).
+* **SQUIRREL_MONITORED_DIR**: Folder watched for aBox sync. If missing, aBox sync is disabled and the server will log a warning.
 
 > ⚠️ Important: On production servers, do not rely on untracked files inside `/opt/a` (like a manually created `.env`). They can be deleted by update operations. Use `/etc/squirrel/squirrel.env`.
 

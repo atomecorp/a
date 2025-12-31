@@ -17,6 +17,7 @@ SERVICE_NAME="${SERVICE_NAME:-squirrel}"
 NODE_PORT="${NODE_PORT:-3001}"
 USER="www-data" # Will be adjusted for FreeBSD
 UPLOADS_DIR="${UPLOADS_DIR:-$APP_DIR/uploads}"
+MONITORED_DIR="${MONITORED_DIR:-$APP_DIR/monitored}"
 ENV_DIR="${ENV_DIR:-/etc/squirrel}"
 ENV_FILE="${ENV_FILE:-$ENV_DIR/squirrel.env}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
@@ -119,6 +120,9 @@ if [[ -t 0 ]]; then
 
     read -r -p "Uploads directory [${UPLOADS_DIR}]: " input_uploads
     if [[ -n "${input_uploads}" ]]; then UPLOADS_DIR="${input_uploads}"; fi
+
+    read -r -p "Monitored directory (aBox sync) [${MONITORED_DIR}]: " input_monitored
+    if [[ -n "${input_monitored}" ]]; then MONITORED_DIR="${input_monitored}"; fi
 
     read -r -p "Env directory [${ENV_DIR}]: " input_env_dir
     if [[ -n "${input_env_dir}" ]]; then
@@ -249,6 +253,10 @@ if [ ! -d "$UPLOADS_DIR" ]; then
     mkdir -p "$UPLOADS_DIR"
 fi
 
+if [ ! -d "$MONITORED_DIR" ]; then
+    mkdir -p "$MONITORED_DIR"
+fi
+
 mkdir -p "$ENV_DIR"
 chmod 755 "$ENV_DIR"
 
@@ -277,6 +285,7 @@ if [ ! -f "$ENV_FILE" ]; then
       echo "PORT=$NODE_PORT"
             echo "SQLITE_PATH=$SQLITE_PATH_VALUE"
       echo "SQUIRREL_UPLOADS_DIR=$UPLOADS_DIR"
+            echo "SQUIRREL_MONITORED_DIR=$MONITORED_DIR"
       echo ""
     } >"$ENV_FILE"
     chmod 600 "$ENV_FILE"
