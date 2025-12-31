@@ -9,3 +9,5 @@
 <https://github.com/NativeScript/NativeScript>
 
 <https://www.elementary.audio/docs>
+
+<https://github.com/ruby/ruby.wasm>

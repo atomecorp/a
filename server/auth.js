@@ -837,8 +837,21 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             const decoded = server.jwt.verify(token);
 
+            // Support both HTTP-issued tokens ({ id }) and ws/api-issued tokens ({ userId }).
+            // Also accept common JWT conventions like { sub }.
+            const resolvedUserId = decoded?.id || decoded?.userId || decoded?.user_id || decoded?.sub || null;
+            if (!resolvedUserId) {
+                reply.clearCookie('access_token', {
+                    path: '/',
+                    httpOnly: true,
+                    secure: isProduction,
+                    sameSite: 'strict'
+                });
+                return { success: false, authenticated: false };
+            }
+
             // ADOLE v3.0: Fetch user data from atomes+particles
-            const user = await findUserById(dataSource, decoded.id);
+            const user = await findUserById(dataSource, String(resolvedUserId));
 
             if (!user) {
                 reply.clearCookie('access_token', {
@@ -884,10 +897,14 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const decoded = server.jwt.verify(token);
+            const resolvedUserId = decoded?.id || decoded?.userId || decoded?.user_id || decoded?.sub || null;
+            if (!resolvedUserId) {
+                return reply.code(401).send({ success: false, error: 'Not authenticated' });
+            }
             const { username } = request.body || {};
 
             // ADOLE v3.0: Get current user from atomes+particles
-            const current = await findUserById(dataSource, decoded.id);
+            const current = await findUserById(dataSource, String(resolvedUserId));
 
             if (!current) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
@@ -896,14 +913,14 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             const newUsername = username || current.username;
 
             // Update username particle
-            await updateUserParticle(dataSource, decoded.id, 'username', newUsername);
+            await updateUserParticle(dataSource, String(resolvedUserId), 'username', newUsername);
 
             console.log(`✅ User profile updated (ADOLE): ${newUsername}`);
 
             return {
                 success: true,
                 user: {
-                    id: decoded.id,
+                    id: String(resolvedUserId),
                     username: newUsername,
                     phone: current.phone,
                     optional: {}
@@ -1027,6 +1044,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const decoded = server.jwt.verify(token);
+            const resolvedUserId = decoded?.id || decoded?.userId || decoded?.user_id || decoded?.sub || null;
+            if (!resolvedUserId) {
+                return reply.code(401).send({ success: false, error: 'Not authenticated' });
+            }
             const { currentPassword, newPassword } = request.body || {};
 
             if (!currentPassword || !newPassword) {
@@ -1038,7 +1059,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             // ADOLE v3.0: Get current user from atomes+particles
-            const current = await findUserById(dataSource, decoded.id);
+            const current = await findUserById(dataSource, String(resolvedUserId));
 
             if (!current) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
@@ -1052,9 +1073,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             // Hash new password and update particle
             const newHash = await hashPassword(newPassword);
-            await updateUserParticle(dataSource, decoded.id, 'password_hash', newHash);
+            await updateUserParticle(dataSource, String(resolvedUserId), 'password_hash', newHash);
 
-            console.log(`✅ Password changed for user ${decoded.id}`);
+            console.log(`✅ Password changed for user ${String(resolvedUserId)}`);
 
             return { success: true, message: 'Password changed successfully' };
 
@@ -1122,6 +1143,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const decoded = server.jwt.verify(token);
+            const resolvedUserId = decoded?.id || decoded?.userId || decoded?.user_id || decoded?.sub || null;
+            if (!resolvedUserId) {
+                return reply.code(401).send({ success: false, error: 'Not authenticated' });
+            }
             const { newPhone, code } = request.body || {};
 
             if (!newPhone || !code) {
@@ -1137,17 +1162,17 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             // ADOLE v3.0: Update phone in particles
-            const current = await findUserById(dataSource, decoded.id);
+            const current = await findUserById(dataSource, String(resolvedUserId));
 
             if (!current) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            await updateUserParticle(dataSource, decoded.id, 'phone', cleanPhone);
+            await updateUserParticle(dataSource, String(resolvedUserId), 'phone', cleanPhone);
 
             // Generate new JWT with updated phone
             const newToken = server.jwt.sign({
-                id: decoded.id,
+                id: String(resolvedUserId),
                 tenantId: decoded.tenantId,
                 phone: cleanPhone,
                 username: current.username
@@ -1162,7 +1187,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 maxAge: COOKIE_MAX_AGE
             });
 
-            console.log(`✅ Phone changed for user ${decoded.id}: ${cleanPhone}`);
+            console.log(`✅ Phone changed for user ${String(resolvedUserId)}: ${cleanPhone}`);
 
             // Parse optional if it's a string
             let optional = current.optional;
@@ -1174,7 +1199,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 success: true,
                 message: 'Phone number updated successfully',
                 user: {
-                    id: decoded.id,
+                    id: String(resolvedUserId),
                     username: current.username,
                     phone: cleanPhone,
                     optional: optional || {}
@@ -1219,6 +1244,17 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(401).send({ success: false, error: 'Invalid session' });
             }
 
+            const resolvedUserId = decoded?.id || decoded?.userId || decoded?.user_id || decoded?.sub || null;
+            if (!resolvedUserId) {
+                reply.clearCookie('access_token', {
+                    path: '/',
+                    httpOnly: true,
+                    secure: isProduction,
+                    sameSite: 'strict'
+                });
+                return reply.code(401).send({ success: false, error: 'Invalid session' });
+            }
+
             const { password } = request.body || {};
 
             if (!password) {
@@ -1226,7 +1262,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             // ADOLE v3.0: Get current user from atomes+particles
-            const user = await findUserById(dataSource, decoded.id);
+            const user = await findUserById(dataSource, String(resolvedUserId));
 
             if (!user) {
                 reply.clearCookie('access_token', {
@@ -1245,12 +1281,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             // ADOLE v3.0: Delete user atome and all its particles
-            await dataSource.query(`DELETE FROM particles WHERE atome_id = ?`, [decoded.id]);
-            await dataSource.query(`DELETE FROM particles_versions WHERE atome_id = ?`, [decoded.id]);
-            await dataSource.query(`DELETE FROM permissions WHERE atome_id = ?`, [decoded.id]);
-            await dataSource.query(`DELETE FROM atomes WHERE atome_id = ?`, [decoded.id]);
+            await dataSource.query(`DELETE FROM particles WHERE atome_id = ?`, [String(resolvedUserId)]);
+            await dataSource.query(`DELETE FROM particles_versions WHERE atome_id = ?`, [String(resolvedUserId)]);
+            await dataSource.query(`DELETE FROM permissions WHERE atome_id = ?`, [String(resolvedUserId)]);
+            await dataSource.query(`DELETE FROM atomes WHERE atome_id = ?`, [String(resolvedUserId)]);
 
-            console.log(`[delete] User atome ${decoded.id} and particles deleted`);
+            console.log(`[delete] User atome ${String(resolvedUserId)} and particles deleted`);
 
             // Clear the authentication cookie
             reply.clearCookie('access_token', {
@@ -1260,7 +1296,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 sameSite: 'strict'
             });
 
-            console.log(`🗑️ Account deleted: user ${decoded.id}`);
+            console.log(`🗑️ Account deleted: user ${String(resolvedUserId)}`);
 
             // === SYNC: Delete account via WebSocket (not POST) ===
             try {
@@ -1271,7 +1307,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                         timestamp: new Date().toISOString(),
                         runtime: 'Fastify',
                         payload: {
-                            userId: decoded.id,
+                            userId: String(resolvedUserId),
                             phone: user.phone,
                             username: user.username
                         }
