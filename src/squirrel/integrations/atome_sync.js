@@ -37,6 +37,12 @@ function isTauriEnvironment() {
     return detectRuntime() === 'tauri';
 }
 
+function isTauriProdWebview() {
+    if (!isTauriEnvironment()) return false;
+    const host = window.location?.hostname || '';
+    return host === 'tauri.localhost';
+}
+
 function resolveAtomeConfig() {
     // Check for custom API base
     if (typeof window !== 'undefined' && window.SQUIRREL_API_BASE) {
@@ -62,8 +68,9 @@ function resolveAtomeConfig() {
     if (isTauri) {
         return {
             base: cloudBase || '',
-            isLocal: true,  // But we still use local_auth_token
-            isTauri: true
+            isLocal: true,
+            isTauri: true,
+            preferCloudToken: isTauriProdWebview()
         };
     }
 
@@ -90,12 +97,15 @@ const ATOME_API_BASE = atomeConfig.base + '/api/atome';
 // Token storage:
 // - Tauri runtime uses local auth (local_auth_token)
 // - Browser runtime uses Fastify auth (cloud_auth_token)
-const TOKEN_KEY = atomeConfig.isTauri ? 'local_auth_token' : 'cloud_auth_token';
+const TOKEN_KEY = atomeConfig.preferCloudToken
+    ? 'cloud_auth_token'
+    : (atomeConfig.isTauri ? 'local_auth_token' : 'cloud_auth_token');
 
 console.log('[Atome] Config:', {
     base: atomeConfig.base,
     isLocal: atomeConfig.isLocal,
     isTauri: atomeConfig.isTauri,
+    preferCloudToken: !!atomeConfig.preferCloudToken,
     TOKEN_KEY,
     ATOME_API_BASE
 });
@@ -121,13 +131,33 @@ window.addEventListener('offline', () => {
  * Get authentication token from current session
  */
 function getAuthToken() {
-    // Try the environment-specific token key first
-    const token = localStorage.getItem(TOKEN_KEY)
-        || localStorage.getItem('local_auth_token')  // Fallback for Tauri
-        || localStorage.getItem('cloud_auth_token')  // Fallback for cloud
-        || localStorage.getItem('auth_token')        // Legacy fallback
+    const preferCloud = !!atomeConfig.preferCloudToken;
+    const orderedKeys = preferCloud
+        ? ['cloud_auth_token', 'auth_token', 'local_auth_token']
+        : [TOKEN_KEY, 'local_auth_token', 'cloud_auth_token', 'auth_token'];
+
+    let token = null;
+    for (const key of orderedKeys) {
+        try {
+            const value = localStorage.getItem(key);
+            if (value) {
+                token = value;
+                break;
+            }
+        } catch { }
+    }
+
+    token = token
         || sessionStorage.getItem('auth_token')
         || window.__SQUIRREL_AUTH_TOKEN__;
+
+    if (preferCloud) {
+        const cloud = localStorage.getItem('cloud_auth_token');
+        const local = localStorage.getItem('local_auth_token');
+        if (!cloud && local) {
+            console.warn('[Atome] Tauri production is configured for Fastify cloud, but cloud_auth_token is missing. Please login to Fastify (cloud) to enable Atome sync/sharing.');
+        }
+    }
 
     if (!token) {
         console.warn('[Atome] No auth token found. User must be logged in.');
