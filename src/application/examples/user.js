@@ -2841,6 +2841,13 @@ $('br', { parent: intuitionContainer });
 
 async function loadFastifyWsApiUrl() {
   try {
+    // Prefer Squirrel-injected WS URL in production.
+    // server_config.json is primarily meant for local/Tauri and may contain loopback values.
+    const injectedWsUrl = (typeof window !== 'undefined') ? window.__SQUIRREL_FASTIFY_WS_API_URL__ : null;
+    if (typeof injectedWsUrl === 'string' && injectedWsUrl.startsWith('ws')) {
+      return injectedWsUrl;
+    }
+
     const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
     const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3000;
     const localBase = isTauriRuntime ? `http://127.0.0.1:${localPort}` : '';
@@ -2862,7 +2869,19 @@ async function loadFastifyWsApiUrl() {
       return null;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const isLoopbackHost = host === '127.0.0.1' || host === 'localhost';
+
+    // If config points to loopback but we are running in a remote browser context (prod),
+    // use the current origin instead of trying to connect to the user's own machine.
+    const runtimeHostname = window.location?.hostname || '';
+    const runtimeIsLocal = runtimeHostname === 'localhost' || runtimeHostname === '127.0.0.1' || runtimeHostname === '';
+    if (!isTauriRuntime && isLoopbackHost && !runtimeIsLocal) {
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      return `${protocol}://${window.location.host}${apiWsPath}`;
+    }
+
+    // Never use TLS WebSocket for loopback unless you explicitly serve TLS locally.
+    const protocol = isLoopbackHost ? 'ws' : (window.location.protocol === 'https:' ? 'wss' : 'ws');
     return `${protocol}://${host}:${port}${apiWsPath}`;
   } catch (error) {
     console.warn('[check.js] Failed to read server_config.json', error);

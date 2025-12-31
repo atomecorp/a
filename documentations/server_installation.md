@@ -166,11 +166,23 @@ tail -f /var/log/messages  # Logs (or specific app log if configured)
 
 ## 🔄 Updating the Server
 
+`install_server.sh` is meant for **initial provisioning** (system packages, Nginx, SSL, service creation).
+For day-to-day production updates, use the `run.sh` **service commands**.
+
 To update the application code and dependencies in a reproducible way (recommended):
 
 ```bash
 cd /opt/a
 ./run.sh update
+```
+
+If you are not logged in as `root`, use `sudo`:
+
+```bash
+cd /opt/a
+sudo ./run.sh update
+sudo ./run.sh status
+sudo ./run.sh logs
 ```
 
 This update command will:
