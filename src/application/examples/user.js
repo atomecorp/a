@@ -646,7 +646,25 @@ async function loadAtomeHistory(atomeId) {
     const listResult = await list_atomes({ projectId: selectedProjectId });
     const atomes = pickAuthoritativeAtomes(listResult);
 
-    let currentAtome = atomes.find(a => (a.atome_id || a.id) === atomeId);
+    const tauriAtomes = Array.isArray(listResult?.tauri?.atomes) ? listResult.tauri.atomes : [];
+    const fastifyAtomes = Array.isArray(listResult?.fastify?.atomes) ? listResult.fastify.atomes : [];
+
+    const findById = (items) => {
+      if (!Array.isArray(items)) return null;
+      return items.find(a => (a?.atome_id || a?.id) === atomeId) || null;
+    };
+
+    let currentAtome = findById(atomes);
+    if (!currentAtome) {
+      // In Tauri, the preferred backend may be local (SQLite) while the selected atome
+      // actually exists only on Fastify (shared/remote). Always try the other backend.
+      const preferredWasTauri = atomes === tauriAtomes;
+      const fallbackList = preferredWasTauri ? fastifyAtomes : tauriAtomes;
+      currentAtome = findById(fallbackList);
+      if (currentAtome) {
+        puts('ℹ️ History: atome found on fallback backend');
+      }
+    }
 
     if (currentAtome) {
       puts('✅ Found current atome state');
@@ -654,7 +672,13 @@ async function loadAtomeHistory(atomeId) {
 
       // Check if manual history exists in localStorage
       const historyKey = 'atome_history_' + atomeId;
-      const storedHistory = localStorage.getItem(historyKey);
+      let storedHistory = null;
+      try {
+        storedHistory = localStorage.getItem(historyKey);
+      } catch (e) {
+        console.warn('[History] localStorage.getItem failed:', e);
+        storedHistory = null;
+      }
 
       if (storedHistory) {
         try {
@@ -686,7 +710,11 @@ async function loadAtomeHistory(atomeId) {
         currentAtomeHistory.push(currentState);
 
         // Save updated history to localStorage
-        localStorage.setItem(historyKey, JSON.stringify(currentAtomeHistory));
+        try {
+          localStorage.setItem(historyKey, JSON.stringify(currentAtomeHistory));
+        } catch (e) {
+          console.warn('[History] localStorage.setItem failed:', e);
+        }
       }
 
       // Set to most recent entry

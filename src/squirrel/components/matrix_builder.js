@@ -33,6 +33,9 @@ class Matrix {
     this.cellElements = new Map();       // Éléments DOM par cellule
     this.selectedCells = new Set();      // Cellules sélectionnées
 
+    // Index pour accès rapide par ID de cellule
+    this.cellIdToKey = new Map();        // cellId -> "x,y"
+
     // Callbacks
     this.callbacks = {
       onCellClick: options.onCellClick || null,
@@ -89,6 +92,7 @@ class Matrix {
 
     // Création du container principal
     this.container = document.createElement('div');
+    this.container.__refObj = this;
     this.container.id = this.config.id;
     this.container.className = 'matrix-container';
 
@@ -271,6 +275,9 @@ class Matrix {
       element: cellElement,
       config: cellConfig
     });
+
+    // Index id -> key
+    this.cellIdToKey.set(cellId, cellKey);
 
     // Stockage de l'élément DOM
     this.cellElements.set(cellKey, cellElement);
@@ -1146,6 +1153,14 @@ class Matrix {
     }
   }
 
+  setCellContentById(cellId, content) {
+    const cellKey = this.getCellKeyById(cellId);
+    if (!cellKey) return false;
+    const [x, y] = cellKey.split(',').map(Number);
+    this.setCellContent(x, y, content);
+    return true;
+  }
+
   getCellStyle(x, y) {
     const cellKey = `${x},${y}`;
     const cell = this.cellsMap.get(cellKey);
@@ -1263,6 +1278,52 @@ class Matrix {
   }
 
   // ========================================
+  // 🆔 API PAR ID
+  // ========================================
+
+  getCellKeyById(cellId) {
+    return this.cellIdToKey.get(cellId) || null;
+  }
+
+  getCellById(cellId) {
+    const cellKey = this.getCellKeyById(cellId);
+    if (!cellKey) return null;
+    const cell = this.cellsMap.get(cellKey);
+    return cell ? cell.element : null;
+  }
+
+  getCellDataById(cellId) {
+    const cellKey = this.getCellKeyById(cellId);
+    if (!cellKey) return null;
+    return this.cellsMap.get(cellKey) || null;
+  }
+
+  appendCellContentById(cellId, text, { separator = '' } = {}) {
+    const cellKey = this.getCellKeyById(cellId);
+    if (!cellKey) return false;
+    const cell = this.cellsMap.get(cellKey);
+    if (!cell) return false;
+
+    const next = `${cell.content || ''}${separator}${text}`;
+    const [x, y] = cellKey.split(',').map(Number);
+    this.setCellContent(x, y, next);
+    return true;
+  }
+
+  setCellStateById(cellId, stateName, active = true) {
+    const cellKey = this.getCellKeyById(cellId);
+    if (!cellKey) return false;
+    const [x, y] = cellKey.split(',').map(Number);
+    this.setCellState(x, y, stateName, active);
+    return true;
+  }
+
+  selectCellById(cellId, { clearFirst = false } = {}) {
+    if (clearFirst) this.clearSelection();
+    return this.setCellStateById(cellId, 'selected', true);
+  }
+
+  // ========================================
   // 🧹 NETTOYAGE
   // ========================================
 
@@ -1298,6 +1359,7 @@ class Matrix {
       this.cellStates.clear();
       this.cellElements.clear();
       this.selectedCells.clear();
+      this.cellIdToKey.clear();
 
       // Reset des callbacks
       this.callbacks = {};
