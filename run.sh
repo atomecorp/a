@@ -18,7 +18,11 @@ SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 DEFAULT_UPLOADS_PATH="data/users/anonymous/Downloads"
 # Change DEFAULT_MONITORED_PATH to pick the folder watched by chokidar.
 # Absolute paths are supported; relative values are resolved from the project root.
-DEFAULT_MONITORED_PATH="/Users/Shared/monitored"
+if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
+    DEFAULT_MONITORED_PATH="/Users/Shared/monitored"
+else
+    DEFAULT_MONITORED_PATH="$PROJECT_ROOT/monitored"
+fi
 
 # --- Database defaults (SQLite/libSQL) ---------------------------------------
 DEFAULT_SQLITE_PATH="database_storage/adole.db"

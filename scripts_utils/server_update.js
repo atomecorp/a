@@ -82,6 +82,28 @@ function moveAsideUntrackedFilesThatBlockPull() {
     process.stdout.write(`Moved aside untracked ${lockRel} -> ${backupName}\n`);
 }
 
+function stashIfDirty() {
+    // Production servers should stay on a clean git checkout.
+    // If the working tree is dirty (manual edits, generated files, etc.), a fast-forward pull will fail.
+    // We auto-stash to keep updates non-blocking while preserving the local changes for inspection.
+    try {
+        const status = execSync('git status --porcelain=v1', { cwd: projectRoot, encoding: 'utf8' });
+        const trimmed = String(status || '').trim();
+        if (!trimmed) {
+            return;
+        }
+
+        const stamp = nowStamp();
+        const message = `server_update auto-stash ${stamp}`;
+        process.stdout.write(`\n⚠️  Git working tree is dirty. Creating stash: "${message}"\n`);
+        run(`git stash push -u -m "${message}"`, { cwd: projectRoot, allowFailure: false });
+        process.stdout.write('✅ Stashed local changes. Continuing with update.\n');
+    } catch (error) {
+        // If git is not available or status fails, let the normal flow handle it.
+        process.stdout.write(`\n⚠️  Unable to check/stash dirty git state: ${error?.message || error}\n`);
+    }
+}
+
 function isRoot() {
     return typeof process.getuid === 'function' && process.getuid() === 0;
 }
@@ -201,6 +223,10 @@ function ensureNodeModules() {
 function gitUpdate({ mode }) {
     moveAsideUntrackedFilesThatBlockPull();
     run('git fetch origin');
+
+    if (mode !== 'reset') {
+        stashIfDirty();
+    }
 
     if (mode === 'reset') {
         run('git reset --hard origin/main');
