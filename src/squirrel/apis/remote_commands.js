@@ -156,6 +156,19 @@ async function checkFastifyViaTauri() {
     const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
     if (!isTauriRuntime) return null;
 
+    // Only relevant for LOCAL Fastify (the Tauri local server knows whether it spawned
+    // the local Fastify process). For cloud Fastify targets, this check must be skipped
+    // or it will incorrectly report "offline".
+    try {
+        const base = resolveFastifyHttpBase();
+        if (base) {
+            const parsed = new URL(base);
+            const host = parsed.hostname;
+            const isLocalHost = host === '127.0.0.1' || host === 'localhost';
+            if (!isLocalHost) return null;
+        }
+    } catch { }
+
     const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3000;
     const localBase = `http://127.0.0.1:${localPort}`;
 

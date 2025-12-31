@@ -141,8 +141,20 @@ function shouldAttemptFastify() {
     return !!getFastifyHttpBaseUrl();
 }
 
-async function checkFastifyViaTauri() {
+async function checkFastifyViaTauri(fastifyBaseUrl) {
     if (!isInTauri()) return null;
+
+    // This check only reports whether the LOCAL Fastify process (spawned by the Tauri local server)
+    // is available. If the selected Fastify target is cloud, this must be skipped.
+    try {
+        if (fastifyBaseUrl) {
+            const parsed = new URL(fastifyBaseUrl);
+            const host = parsed.hostname;
+            const isLocalHost = host === '127.0.0.1' || host === 'localhost';
+            if (!isLocalHost) return null;
+        }
+    } catch { }
+
     const localBase = getTauriHttpBaseUrl();
     if (!localBase) return null;
     try {
@@ -215,7 +227,7 @@ export async function checkConnection(backend) {
         return false;
     }
     let isOnline = false;
-    const tauriFastify = await checkFastifyViaTauri();
+    const tauriFastify = await checkFastifyViaTauri(baseUrl);
     if (tauriFastify === true || tauriFastify === false) {
         isOnline = tauriFastify;
     } else {
