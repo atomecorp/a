@@ -3084,11 +3084,18 @@ async function startFastifyBroadcastProbe() {
     return;
   }
 
-  const wsUrl = await loadFastifyWsApiUrl();
+  const explicitWsUrl = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_WS_API_URL__ === 'string')
+    ? window.__SQUIRREL_FASTIFY_WS_API_URL__.trim()
+    : '';
+  const wsUrl = (explicitWsUrl && explicitWsUrl.startsWith('ws'))
+    ? explicitWsUrl
+    : await loadFastifyWsApiUrl();
   if (!wsUrl) {
     puts('[probe] Fastify ws/api URL unavailable; cannot start direct-message probe');
     return;
   }
+
+  puts('[probe] ws/api url: ' + wsUrl);
 
   const initialToken = getFastifyToken();
   if (!initialToken) {
