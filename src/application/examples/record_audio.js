@@ -269,13 +269,23 @@
             id: atomeId,
             type: 'audio_recording',
             ownerId,
-            parentId: ownerId,
             particles
         });
-        const ok = !!(res && (res.success || res.ok));
+
+        const ok = !!(
+            res?.tauri?.success || res?.fastify?.success ||
+            res?.tauri?.ok || res?.fastify?.ok
+        );
+
         if (!ok) {
-            throw new Error(res && (res.error || res.message) ? (res.error || res.message) : 'Atome create failed');
+            const tauriError = res?.tauri?.error;
+            const fastifyError = res?.fastify?.error;
+            const details = (tauriError || fastifyError)
+                ? `Tauri: ${tauriError || 'n/a'} | Fastify: ${fastifyError || 'n/a'}`
+                : (res ? JSON.stringify(res) : 'no response');
+            throw new Error(`Atome create failed (${details})`);
         }
+
         return { atomeId, result: res };
     }
 

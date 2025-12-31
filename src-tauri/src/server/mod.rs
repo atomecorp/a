@@ -462,7 +462,10 @@ async fn user_recordings_upload_handler(
         .join("recordings");
 
     if let Err(err) = fs::create_dir_all(&recordings_dir).await {
-        eprintln!("Erreur création dossier recordings {:?}: {}", recordings_dir, err);
+        eprintln!(
+            "Erreur création dossier recordings {:?}: {}",
+            recordings_dir, err
+        );
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "success": false, "error": err.to_string() })),
