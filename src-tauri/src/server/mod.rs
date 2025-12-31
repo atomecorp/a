@@ -40,6 +40,7 @@ pub mod local_atome;
 struct AppState {
     uploads_dir: Arc<PathBuf>,
     static_dir: Arc<PathBuf>,
+    project_root: Arc<PathBuf>,
     version: Arc<String>,
     started_at: Arc<std::time::Instant>,
     atome_state: Option<local_atome::LocalAtomeState>,
@@ -391,6 +392,96 @@ async fn upload_handler(
     (
         StatusCode::OK,
         Json(json!({ "success": true, "file": file_name })),
+    )
+}
+
+async fn user_recordings_upload_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl IntoResponse {
+    if body.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Empty upload body" })),
+        );
+    }
+
+    let Some(file_name_header) = headers.get("x-filename") else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Missing X-Filename header" })),
+        );
+    };
+
+    let file_name_raw = match file_name_header.to_str() {
+        Ok(v) if !v.is_empty() => v,
+        _ => "upload.bin",
+    };
+
+    let decoded: Cow<'_, str> =
+        urlencoding::decode(file_name_raw).unwrap_or_else(|_| Cow::from(file_name_raw));
+    let safe_name = sanitize_file_name(decoded.as_ref());
+
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            );
+        }
+    };
+
+    let token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim())
+        .and_then(|v| {
+            if v.to_lowercase().starts_with("bearer ") {
+                Some(v[7..].trim())
+            } else {
+                Some(v)
+            }
+        })
+        .filter(|v| !v.is_empty());
+
+    let user_id = local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token);
+    if user_id == "anonymous" {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": "Unauthorized" })),
+        );
+    }
+
+    let recordings_dir = state
+        .project_root
+        .join("data")
+        .join("users")
+        .join(&user_id)
+        .join("recordings");
+
+    if let Err(err) = fs::create_dir_all(&recordings_dir).await {
+        eprintln!("Erreur création dossier recordings {:?}: {}", recordings_dir, err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "error": err.to_string() })),
+        );
+    }
+
+    let file_path = recordings_dir.join(&safe_name);
+    if let Err(err) = fs::write(&file_path, &body).await {
+        eprintln!("Erreur écriture recording {:?}: {}", file_path, err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "error": err.to_string() })),
+        );
+    }
+
+    let rel_path = format!("data/users/{}/recordings/{}", user_id, safe_name);
+    (
+        StatusCode::OK,
+        Json(json!({ "success": true, "file": safe_name, "path": rel_path, "owner": user_id })),
     )
 }
 
@@ -1308,9 +1399,15 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     let atome_state = local_atome::create_state(data_dir.clone());
     let auth_state = local_auth::create_state(&atome_state, &data_dir);
 
+    let project_root = static_dir_abs
+        .parent()
+        .unwrap_or(&static_dir_abs)
+        .to_path_buf();
+
     let state = AppState {
         uploads_dir: Arc::new(uploads_dir.clone()),
         static_dir: Arc::new(static_dir_abs),
+        project_root: Arc::new(project_root),
         version: Arc::new(version.clone()),
         started_at: Arc::new(std::time::Instant::now()),
         atome_state: Some(atome_state),
@@ -1341,6 +1438,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             header::AUTHORIZATION,
             header::ACCEPT,
             HeaderName::from_static("x-client-id"),
+            HeaderName::from_static("x-filename"),
         ])
         .allow_credentials(true);
 
@@ -1355,6 +1453,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             get(list_uploads_handler).post(upload_handler),
         )
         .route("/api/uploads/:file", get(download_upload_handler))
+        .route("/api/user-recordings", post(user_recordings_upload_handler))
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))
         .route("/api/admin/sync-from-zip", post(sync_from_zip_handler))

@@ -64,6 +64,8 @@ import('./examples/messages.js');
 import('./examples/messages_ui.js');
 import('./examples/share.js');
 import('./examples/share_ui.js');
+import('./examples/record_audio.js');
+import('./examples/record_audio_UI.js');
 
 // // import('./examples/calendar.js');
 
