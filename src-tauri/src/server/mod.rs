@@ -696,11 +696,11 @@ async fn download_recording_handler(
             }
         };
 
-        let owner_id: Option<String> = match db.query_row(
-            "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND atome_type = 'audio_recording' AND deleted_at IS NULL",
-            params![safe_id],
-            |row| row.get(0),
-        ) {
+    let owner_id: Option<String> = match db.query_row(
+        "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND atome_type IN ('audio_recording', 'video_recording') AND deleted_at IS NULL",
+        params![safe_id],
+        |row| row.get(0),
+    ) {
             Ok(val) => val,
             Err(_) => {
                 return (

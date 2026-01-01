@@ -18,7 +18,7 @@
     const IDB_STORE = 'files';
     const SYNC_INTERVAL_MS = 15_000;
     const MEDIA_EXTS = {
-        audio: new Set(['wav', 'mp3', 'm4a', 'aac', 'ogg', 'flac', 'opus', 'aif', 'aiff']),
+        audio: new Set(['wav', 'mp3', 'm4a', 'aac', 'ogg', 'flac', 'opus', 'aif', 'aiff', 'weba']),
         video: new Set(['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi']),
         image: new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tif', 'tiff'])
     };
@@ -453,6 +453,7 @@
             ogg: 'audio/ogg',
             flac: 'audio/flac',
             opus: 'audio/opus',
+            weba: 'audio/webm',
             aif: 'audio/aiff',
             aiff: 'audio/aiff'
         };
@@ -481,41 +482,49 @@
         return '';
     }
 
-    async function listAudioRecordingAtomes() {
+    async function listRecordingAtomes(types = ['audio_recording']) {
         const api = getAdoleAPI();
         if (!api?.atomes || typeof api.atomes.list !== 'function') {
             return { ok: false, files: [] };
         }
-        try {
-            const res = await api.atomes.list({ type: 'audio_recording' });
-            const raw = pickAuthoritativeList(res, 'atomes');
-            const files = [];
-            raw.forEach((item) => {
-                const particles = normalizeParticles(item);
-                const fileName = particles.file_name || particles.fileName || particles.name || '';
-                const filePath = particles.file_path || particles.filePath || '';
-                const displayName = fileName || filePath || 'recording';
-                const mimeType = particles.mime_type || particles.mimeType || '';
-                const kind = detectMediaKind({ name: displayName, mime: mimeType });
-                files.push({
-                    id: normalizeAtomeId(item),
-                    name: displayName,
-                    file_name: fileName || displayName,
-                    file_path: filePath || null,
-                    owner_id: item?.owner_id || item?.ownerId || particles.owner_id || particles.ownerId || null,
-                    shared: false,
-                    kind,
-                    size: particles.size_bytes || particles.size || null,
-                    modified: item?.updated_at || particles.updated_at || particles.created_iso || null,
-                    created_at: item?.created_at || particles.created_iso || null,
-                    mime_type: mimeType,
-                    source: 'recording'
+        const typeList = (Array.isArray(types) && types.length) ? types : ['audio_recording'];
+        const files = [];
+        for (const type of typeList) {
+            try {
+                const res = await api.atomes.list({ type });
+                const raw = pickAuthoritativeList(res, 'atomes');
+                raw.forEach((item) => {
+                    const particles = normalizeParticles(item);
+                    const fileName = particles.file_name || particles.fileName || particles.name || '';
+                    const filePath = particles.file_path || particles.filePath || '';
+                    const displayName = fileName || filePath || 'recording';
+                    const mimeType = particles.mime_type || particles.mimeType || '';
+                    const kind = detectMediaKind({ name: displayName, mime: mimeType });
+                    files.push({
+                        id: normalizeAtomeId(item),
+                        name: displayName,
+                        file_name: fileName || displayName,
+                        file_path: filePath || null,
+                        owner_id: item?.owner_id || item?.ownerId || particles.owner_id || particles.ownerId || null,
+                        shared: false,
+                        kind,
+                        size: particles.size_bytes || particles.size || null,
+                        modified: item?.updated_at || particles.updated_at || particles.created_iso || null,
+                        created_at: item?.created_at || particles.created_iso || null,
+                        mime_type: mimeType,
+                        source: 'recording',
+                        atome_type: item?.atome_type || item?.type || type
+                    });
                 });
-            });
-            return { ok: true, files };
-        } catch (e) {
-            return { ok: false, error: e?.message || String(e), files: [] };
+            } catch (e) {
+                return { ok: false, error: e?.message || String(e), files: [] };
+            }
         }
+        return { ok: true, files };
+    }
+
+    async function listAudioRecordingAtomes() {
+        return listRecordingAtomes(['audio_recording']);
     }
 
     async function listFileAtomes() {
@@ -583,7 +592,7 @@
             }
         }
 
-        const recordings = await listAudioRecordingAtomes();
+        const recordings = await listRecordingAtomes(['audio_recording', 'video_recording']);
         if (recordings?.files?.length) {
             recordings.files.forEach((entry) => {
                 const kind = entry.kind || detectMediaKind({ name: entry.file_name || entry.name, mime: entry.mime_type });
@@ -603,8 +612,8 @@
                 console.log('Uploads files:', combined.filter(f => f.source === 'uploads').length);
                 console.log('Recordings files:', combined.filter(f => f.source === 'recording').length);
                 console.log('Combined:', combined);
-                const recordingsRaw = await listAudioRecordingAtomes();
-                console.log('audio_recording atomes:', recordingsRaw);
+                const recordingsRaw = await listRecordingAtomes(['audio_recording', 'video_recording']);
+                console.log('recording atomes:', recordingsRaw);
                 const fileAtomes = await listFileAtomes();
                 console.log('file atomes:', fileAtomes);
             } catch (e) {
@@ -625,16 +634,53 @@
         }
 
         if (entry.source === 'recording') {
-            if (!isTauriRuntime()) {
-                return { ok: false, error: 'Recordings are only available in Tauri runtime' };
+            if (isTauriRuntime()) {
+                const tauriBase = getTauriHttpBaseUrl();
+                if (!tauriBase) return { ok: false, error: 'Tauri base URL is not configured' };
+                let res;
+                try {
+                    res = await fetch(`${tauriBase}/api/recordings/${encodeURIComponent(identifier)}`, {
+                        method: 'GET',
+                        headers: buildLocalAuthHeaders(),
+                        credentials: 'omit'
+                    });
+                } catch (e) {
+                    return { ok: false, error: e && e.message ? e.message : String(e) };
+                }
+
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => null);
+                    const msg = payload && payload.error ? payload.error : `Download failed (${res.status})`;
+                    return { ok: false, error: msg };
+                }
+
+                const blob = await res.blob();
+                const name = entry.name || entry.file_name || identifier;
+                const mime = blob.type || entry.mime_type || guessMimeFromExt(name) || '';
+                const kind = detectMediaKind({ name, mime });
+                const url = URL.createObjectURL(blob);
+                return {
+                    ok: true,
+                    url,
+                    name,
+                    mime,
+                    kind,
+                    revoke: () => {
+                        try { URL.revokeObjectURL(url); } catch (_) { }
+                    }
+                };
             }
-            const tauriBase = getTauriHttpBaseUrl();
-            if (!tauriBase) return { ok: false, error: 'Tauri base URL is not configured' };
+
+            const fileName = entry.file_name || entry.name || '';
+            const base = getFastifyBaseUrl();
+            if (!base || !fileName) {
+                return { ok: false, error: 'Recording playback requires a server endpoint' };
+            }
             let res;
             try {
-                res = await fetch(`${tauriBase}/api/recordings/${encodeURIComponent(identifier)}`, {
+                res = await fetch(`${base}/api/uploads/${encodeURIComponent(fileName)}`, {
                     method: 'GET',
-                    headers: buildLocalAuthHeaders(),
+                    headers: buildAuthHeaders(),
                     credentials: 'omit'
                 });
             } catch (e) {
