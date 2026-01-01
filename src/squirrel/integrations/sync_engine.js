@@ -79,6 +79,21 @@ export function getClientId() {
 const FASTIFY_AVAILABILITY_TTL = 10000;
 let fastifyAvailabilityCache = { value: null, lastCheck: 0 };
 
+function isLocalHostname(hostname) {
+    return hostname === '127.0.0.1' || hostname === 'localhost';
+}
+
+export function clearFastifyAvailabilityCache() {
+    fastifyAvailabilityCache = { value: null, lastCheck: 0 };
+    if (typeof window !== 'undefined' && typeof window._checkFastifyAvailable !== 'undefined') {
+        try {
+            delete window._checkFastifyAvailable;
+        } catch (_) {
+            window._checkFastifyAvailable = null;
+        }
+    }
+}
+
 function shouldAttemptFastifyChecks() {
     if (typeof window === 'undefined') return false;
     const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -237,7 +252,26 @@ function resolveWsUrl() {
     const explicitSync = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ === 'string')
         ? window.__SQUIRREL_FASTIFY_WS_SYNC_URL__.trim()
         : '';
-    if (explicitSync) return explicitSync;
+    if (explicitSync) {
+        const base = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+            ? window.__SQUIRREL_FASTIFY_URL__.trim()
+            : '';
+        if (base) {
+            try {
+                const explicitHost = new URL(explicitSync).hostname;
+                const baseHost = new URL(base).hostname;
+                if (isLocalHostname(explicitHost) && !isLocalHostname(baseHost)) {
+                    // Ignore stale local ws url when Fastify base is cloud.
+                } else {
+                    return explicitSync;
+                }
+            } catch (_) {
+                return explicitSync;
+            }
+        } else {
+            return explicitSync;
+        }
+    }
 
     const customEndpoint = typeof window[CONFIG.CUSTOM_VAR] === 'string'
         ? window[CONFIG.CUSTOM_VAR].trim()
@@ -839,6 +873,7 @@ export default function initSyncEngine() {
         isServerAvailable: () => syncClient.isServerAvailable(),
         retry: () => syncClient.retry(),
         disconnect: () => syncClient.disconnect(),
+        clearFastifyAvailabilityCache: () => clearFastifyAvailabilityCache(),
 
         // Version sync methods (merged in)
         requestSync: () => syncClient.requestSync(),

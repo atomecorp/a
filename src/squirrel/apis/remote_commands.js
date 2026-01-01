@@ -53,8 +53,6 @@ let configLoaded = false;
  * Single source of truth for server configuration
  */
 async function loadConfigOnce() {
-    if (configLoaded && CONFIG.WS_URL) return CONFIG.WS_URL;
-
     if (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_WS_API_URL__ === 'string') {
         const wsUrl = window.__SQUIRREL_FASTIFY_WS_API_URL__.trim();
         if (wsUrl) {
@@ -63,6 +61,8 @@ async function loadConfigOnce() {
             return CONFIG.WS_URL;
         }
     }
+
+    if (configLoaded && CONFIG.WS_URL) return CONFIG.WS_URL;
 
     if (typeof window !== 'undefined') {
         const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -716,6 +716,11 @@ async function sendCommand(target, commandName, params = {}) {
     });
 }
 
+function resetConfig() {
+    configLoaded = false;
+    CONFIG.WS_URL = null;
+}
+
 // Export the module
 export const RemoteCommands = {
     // Configuration
@@ -734,6 +739,7 @@ export const RemoteCommands = {
     stop,
     isActive,
     getCurrentUserId,
+    resetConfig,
 
     // Sending
     sendCommand

@@ -32,6 +32,9 @@ function resolveTauriProdFastifyHttpBase() {
         : '';
     if (explicit) return explicit;
 
+    const override = readTauriFastifyOverride();
+    if (override) return override;
+
     const already = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
         ? window.__SQUIRREL_FASTIFY_URL__.trim()
         : '';
@@ -43,6 +46,16 @@ function resolveTauriProdFastifyHttpBase() {
 function normalizeNoTrailingSlash(url) {
     if (typeof url !== 'string') return '';
     return url.trim().replace(/\/$/, '');
+}
+
+function readTauriFastifyOverride() {
+    if (typeof window === 'undefined') return '';
+    try {
+        const stored = localStorage.getItem('squirrel_tauri_fastify_url_override');
+        return normalizeNoTrailingSlash(stored);
+    } catch (_) {
+        return '';
+    }
 }
 
 function toWsBase(httpBase) {
@@ -138,6 +151,14 @@ export async function loadServerConfigOnce() {
     if (_loadPromise) return _loadPromise;
 
     _loadPromise = (async () => {
+        const isTauriRuntime = isInTauriRuntime();
+        const tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';
+
+        if (tauriOverride) {
+            window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;
+            applyFastifyGlobalsFromHttpBase(tauriOverride, window.__SQUIRREL_SERVER_CONFIG__ || null);
+        }
+
         if (isTauriProdWebview()) {
             applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), window.__SQUIRREL_SERVER_CONFIG__ || null);
         }
@@ -155,6 +176,11 @@ export async function loadServerConfigOnce() {
 
             if (isTauriProdWebview()) {
                 applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), config);
+                return config;
+            }
+
+            if (tauriOverride) {
+                applyFastifyGlobalsFromHttpBase(tauriOverride, config);
                 return config;
             }
 
