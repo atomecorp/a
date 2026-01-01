@@ -283,7 +283,10 @@
         if (!base) throw new Error('Fastify base URL is not configured');
         const res = await fetch(`${base}/api/uploads`, {
             method: 'POST',
-            headers: buildAuthHeaders({ 'X-Filename': encodeURIComponent(fileName) }),
+            headers: buildAuthHeaders({
+                'X-Filename': encodeURIComponent(fileName),
+                'Content-Type': 'application/octet-stream'
+            }),
             body: bytes
         });
         const json = await res.json().catch(() => null);
