@@ -14,8 +14,12 @@
     const BASE_LEFT = 900;
     const CAMERA_TOGGLE_LEFT = BASE_LEFT + 34;
     const MODE_LEFT = CAMERA_TOGGLE_LEFT + 74;
+    const PREVIEW_STORAGE_KEY = 'record_video_camera_preview_rect';
     const PREVIEW_TOP = 32;
     const PREVIEW_HEIGHT = 140;
+    const PREVIEW_WIDTH = 260;
+    const PREVIEW_MIN_WIDTH = 160;
+    const PREVIEW_MIN_HEIGHT = 90;
     const MEDIA_TOP = PREVIEW_TOP + PREVIEW_HEIGHT + 12;
     const PLAYER_TOP = MEDIA_TOP + 30;
 
@@ -84,6 +88,33 @@
             return null;
         }
         return (typeof window.camera === 'function') ? window.camera : null;
+    }
+
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    function loadPreviewRect() {
+        try {
+            const raw = localStorage.getItem(PREVIEW_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed) return null;
+            return {
+                left: Number(parsed.left),
+                top: Number(parsed.top),
+                width: Number(parsed.width),
+                height: Number(parsed.height)
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function savePreviewRect(rect) {
+        try {
+            localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(rect));
+        } catch (_) { }
     }
 
     onReady(() => {
@@ -270,6 +301,114 @@
             if (!cameraState.ctrl) {
                 await startCameraPreview();
             }
+        }
+
+        function getPreviewRect(panel, hostEl) {
+            const panelRect = panel.getBoundingClientRect();
+            const hostRect = hostEl.getBoundingClientRect();
+            const left = panelRect.left - hostRect.left;
+            const top = panelRect.top - hostRect.top;
+            return {
+                left: Math.max(0, Math.round(left)),
+                top: Math.max(0, Math.round(top)),
+                width: Math.round(panelRect.width),
+                height: Math.round(panelRect.height)
+            };
+        }
+
+        function makePanelDraggable(panel, handle, hostEl) {
+            let dragging = false;
+            let startX = 0;
+            let startY = 0;
+            let startLeft = 0;
+            let startTop = 0;
+
+            const onMove = (ev) => {
+                if (!dragging) return;
+                const hostRect = hostEl.getBoundingClientRect();
+                const maxLeft = Math.max(0, hostRect.width - panel.offsetWidth);
+                const maxTop = Math.max(0, hostRect.height - panel.offsetHeight);
+                const nextLeft = clamp(startLeft + (ev.clientX - startX), 0, maxLeft);
+                const nextTop = clamp(startTop + (ev.clientY - startY), 0, maxTop);
+                panel.style.left = `${nextLeft}px`;
+                panel.style.top = `${nextTop}px`;
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            };
+
+            const stop = () => {
+                if (!dragging) return;
+                dragging = false;
+                document.removeEventListener('pointermove', onMove, true);
+                document.removeEventListener('pointerup', stop, true);
+                document.removeEventListener('pointercancel', stop, true);
+                handle.releasePointerCapture?.(handle._dragPointerId);
+                savePreviewRect(getPreviewRect(panel, hostEl));
+            };
+
+            handle.addEventListener('pointerdown', (ev) => {
+                if (ev.button !== undefined && ev.button !== 0) return;
+                const hostRect = hostEl.getBoundingClientRect();
+                const panelRect = panel.getBoundingClientRect();
+                dragging = true;
+                startX = ev.clientX;
+                startY = ev.clientY;
+                startLeft = panelRect.left - hostRect.left;
+                startTop = panelRect.top - hostRect.top;
+                handle._dragPointerId = ev.pointerId;
+                handle.setPointerCapture?.(ev.pointerId);
+                document.addEventListener('pointermove', onMove, true);
+                document.addEventListener('pointerup', stop, true);
+                document.addEventListener('pointercancel', stop, true);
+                ev.preventDefault();
+                ev.stopPropagation();
+            }, { passive: false });
+        }
+
+        function makePanelResizable(panel, handle, hostEl) {
+            let resizing = false;
+            let startX = 0;
+            let startY = 0;
+            let startWidth = 0;
+            let startHeight = 0;
+
+            const onMove = (ev) => {
+                if (!resizing) return;
+                const hostRect = hostEl.getBoundingClientRect();
+                const panelRect = panel.getBoundingClientRect();
+                const maxWidth = Math.max(PREVIEW_MIN_WIDTH, hostRect.width - (panelRect.left - hostRect.left));
+                const maxHeight = Math.max(PREVIEW_MIN_HEIGHT, hostRect.height - (panelRect.top - hostRect.top));
+                const nextWidth = clamp(startWidth + (ev.clientX - startX), PREVIEW_MIN_WIDTH, maxWidth);
+                const nextHeight = clamp(startHeight + (ev.clientY - startY), PREVIEW_MIN_HEIGHT, maxHeight);
+                panel.style.width = `${nextWidth}px`;
+                panel.style.height = `${nextHeight}px`;
+            };
+
+            const stop = () => {
+                if (!resizing) return;
+                resizing = false;
+                document.removeEventListener('pointermove', onMove, true);
+                document.removeEventListener('pointerup', stop, true);
+                document.removeEventListener('pointercancel', stop, true);
+                handle.releasePointerCapture?.(handle._resizePointerId);
+                savePreviewRect(getPreviewRect(panel, hostEl));
+            };
+
+            handle.addEventListener('pointerdown', (ev) => {
+                if (ev.button !== undefined && ev.button !== 0) return;
+                resizing = true;
+                startX = ev.clientX;
+                startY = ev.clientY;
+                startWidth = panel.offsetWidth;
+                startHeight = panel.offsetHeight;
+                handle._resizePointerId = ev.pointerId;
+                handle.setPointerCapture?.(ev.pointerId);
+                document.addEventListener('pointermove', onMove, true);
+                document.addEventListener('pointerup', stop, true);
+                document.addEventListener('pointercancel', stop, true);
+                ev.preventDefault();
+                ev.stopPropagation();
+            }, { passive: false });
         }
 
         function mountMediaSelector(options) {
@@ -513,15 +652,20 @@
 
         // Camera preview
         try {
+            const storedRect = loadPreviewRect();
+            const initialLeft = Number.isFinite(storedRect?.left) ? storedRect.left : BASE_LEFT;
+            const initialTop = Number.isFinite(storedRect?.top) ? storedRect.top : PREVIEW_TOP;
+            const initialWidth = Number.isFinite(storedRect?.width) ? storedRect.width : PREVIEW_WIDTH;
+            const initialHeight = Number.isFinite(storedRect?.height) ? storedRect.height : PREVIEW_HEIGHT;
             cameraState.holder = $('div', {
                 id: 'record-video-camera-holder',
                 parent: host,
                 css: {
                     position: 'absolute',
-                    top: `${PREVIEW_TOP}px`,
-                    left: `${BASE_LEFT}px`,
-                    width: '260px',
-                    height: `${PREVIEW_HEIGHT}px`,
+                    top: `${initialTop}px`,
+                    left: `${initialLeft}px`,
+                    width: `${Math.max(PREVIEW_MIN_WIDTH, initialWidth)}px`,
+                    height: `${Math.max(PREVIEW_MIN_HEIGHT, initialHeight)}px`,
                     backgroundColor: '#000',
                     border: '1px solid rgba(255,255,255,0.15)',
                     borderRadius: '4px',
@@ -530,6 +674,43 @@
                     pointerEvents: 'auto'
                 }
             });
+            const dragHandle = $('div', {
+                parent: cameraState.holder,
+                text: 'Preview',
+                css: {
+                    position: 'absolute',
+                    top: '0px',
+                    left: '0px',
+                    right: '0px',
+                    height: '18px',
+                    lineHeight: '18px',
+                    backgroundColor: 'rgba(20, 20, 20, 0.6)',
+                    color: '#dcdcdc',
+                    fontSize: '10px',
+                    fontFamily: 'Roboto, sans-serif',
+                    textAlign: 'center',
+                    cursor: 'move',
+                    userSelect: 'none',
+                    zIndex: 2
+                }
+            });
+            const resizeHandle = $('div', {
+                parent: cameraState.holder,
+                css: {
+                    position: 'absolute',
+                    right: '2px',
+                    bottom: '2px',
+                    width: '12px',
+                    height: '12px',
+                    borderRight: '2px solid rgba(255,255,255,0.7)',
+                    borderBottom: '2px solid rgba(255,255,255,0.7)',
+                    cursor: 'nwse-resize',
+                    zIndex: 2
+                }
+            });
+
+            makePanelDraggable(cameraState.holder, dragHandle, host);
+            makePanelResizable(cameraState.holder, resizeHandle, host);
             renderCameraStatus('Camera preview');
             updateCameraPreview().catch(() => null);
         } catch (e) {

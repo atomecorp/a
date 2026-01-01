@@ -66,8 +66,8 @@ import('./examples/share.js');
 import('./examples/share_ui.js');
 import('./iplug/tauri_iplug_bridge.js');
 import('./apis/record_audio_api.js');
-// import('./examples/record_audio.js');
-// import('./examples/record_audio_UI.js');
+import('./examples/record_audio.js');
+import('./examples/record_audio_UI.js');
 
 import('./examples/record_video.js');
 import('./examples/record_video_UI.js');

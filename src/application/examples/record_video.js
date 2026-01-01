@@ -90,6 +90,44 @@
         return v === 'audio' ? 'audio' : 'video';
     }
 
+    function resolveVideoConstraints(opts) {
+        const widthVal = Number(opts.width);
+        const heightVal = Number(opts.height);
+        const frameRateVal = Number(opts.frameRate);
+        const width = Number.isFinite(widthVal) ? widthVal : null;
+        const height = Number.isFinite(heightVal) ? heightVal : null;
+        const frameRate = Number.isFinite(frameRateVal) ? frameRateVal : null;
+        const facingMode = (typeof opts.facingMode === 'string' && opts.facingMode.trim())
+            ? opts.facingMode.trim()
+            : 'user';
+
+        const video = (opts.videoConstraints && typeof opts.videoConstraints === 'object')
+            ? { ...opts.videoConstraints }
+            : {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode
+            };
+
+        if (!video.facingMode && facingMode) video.facingMode = facingMode;
+        if (width) video.width = { ideal: width };
+        if (height) video.height = { ideal: height };
+        if (frameRate && !video.frameRate) video.frameRate = { ideal: frameRate };
+
+        return video;
+    }
+
+    function buildConstraints(options, mode) {
+        const opts = options || {};
+        if (opts.constraints) return opts.constraints;
+        if (mode === 'audio') {
+            return { audio: true, video: false };
+        }
+        const audio = (typeof opts.audio === 'boolean') ? opts.audio : true;
+        const video = resolveVideoConstraints(opts);
+        return { audio, video };
+    }
+
     function pickSupportedMime(candidates) {
         if (!Array.isArray(candidates) || !candidates.length) return '';
         if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
@@ -124,11 +162,7 @@
         const wantsAudio = opts.audio === true;
         const constraints = opts.constraints || {
             audio: wantsAudio,
-            video: wantsVideo ? {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: 'user'
-            } : false
+            video: wantsVideo ? resolveVideoConstraints(opts) : false
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -351,16 +385,7 @@
         const externalStream = options.stream || null;
         const keepStream = options.keepStream === true;
         const stopExternalStream = options.stopExternalStream === true;
-        const constraints = mode === 'audio'
-            ? { audio: true, video: false }
-            : {
-                audio: true,
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: 'user'
-                }
-            };
+        const constraints = buildConstraints(options, mode);
 
         const audioCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
         const videoCandidates = [
@@ -389,7 +414,21 @@
         const mimeType = pickSupportedMime(candidates);
         const ext = extForMime(mimeType, mode);
         const safeFileName = sanitizeFileName(filename || '', ext);
-        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        const recorderOptions = {};
+        if (mimeType) recorderOptions.mimeType = mimeType;
+        if (Number.isFinite(options.bitsPerSecond)) {
+            recorderOptions.bitsPerSecond = Number(options.bitsPerSecond);
+        }
+        if (Number.isFinite(options.videoBitsPerSecond)) {
+            recorderOptions.videoBitsPerSecond = Number(options.videoBitsPerSecond);
+        }
+        if (Number.isFinite(options.audioBitsPerSecond)) {
+            recorderOptions.audioBitsPerSecond = Number(options.audioBitsPerSecond);
+        }
+        const recorder = new MediaRecorder(
+            stream,
+            Object.keys(recorderOptions).length ? recorderOptions : undefined
+        );
         if (mode === 'video' && recorder.mimeType && !recorder.mimeType.startsWith('video/')) {
             if (!externalStream || stopExternalStream) {
                 stream.getTracks().forEach((track) => track.stop());
