@@ -13,8 +13,6 @@ import AudioToolbox
 public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     static let shared = WebViewManager()
     private let log = Logger(subsystem: "atome", category: "WebViewManager")
-    // Share the WebContent process across WKWebViews to avoid relaunch cost
-    static let sharedProcessPool = WKWebViewFactory.sharedProcessPool
     static var webView: WKWebView?
     static weak var audioController: AudioControllerProtocol?
     static var fileSystemBridge: FileSystemBridge?
@@ -99,15 +97,14 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         }()
     WebViewManager.runningInExtension = isExtension
     let execMode = isExtension ? "AUv3" : "APP"
-    let poolPtr = Unmanaged.passUnretained(WKWebViewFactory.sharedProcessPool).toOpaque()
-    print("[Startup] exec mode: \(execMode); shared WKProcessPool=\(poolPtr)")
+    print("[Startup] exec mode: \(execMode)")
     if isExtension {
         markPageLoading()
         FileSyncCoordinator.shared.setWebViewReady(false)
     } else {
         pageReady = true
     }
-    WebViewManager.shared.log.info("Setup webview; mode=\(execMode, privacy: .public) pool=\(String(describing: poolPtr), privacy: .public)")
+    WebViewManager.shared.log.info("Setup webview; mode=\(execMode, privacy: .public)")
 
         // Start lightweight embedded HTTP server (once) to serve audio via standard stack
         if FeatureFlags.startLocalHTTPServer {
@@ -412,6 +409,27 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 }
                 // Vérifier si c'est un message de système de fichiers
                 if let action = body["action"] as? String {
+                    if action == "record_start" || action == "record_stop" {
+                        let sessionId = (body["sessionId"] as? String)
+                            ?? (body["session_id"] as? String)
+                            ?? ""
+                        if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                            if action == "record_start" {
+                                let fileName = (body["fileName"] as? String) ?? "mic.wav"
+                                let source = (body["source"] as? String) ?? "mic"
+                                let sampleRate = (body["sampleRate"] as? NSNumber)?.doubleValue
+                                let channels = (body["channels"] as? NSNumber)?.uint32Value
+                                au.recordStart(sessionId: sessionId,
+                                               fileName: fileName,
+                                               source: source,
+                                               sampleRate: sampleRate,
+                                               channels: channels)
+                            } else {
+                                au.recordStop(sessionId: sessionId)
+                            }
+                        }
+                        return
+                    }
                     if action == "loadLocalPath" || (body["type"] as? String) == "iplug" {
                         // Accept either { action:'loadLocalPath', relativePath } or { type:'iplug', action:'loadLocalPath', relativePath }
                         if let rel = body["relativePath"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {

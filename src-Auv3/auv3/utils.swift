@@ -13,6 +13,30 @@ import Accelerate
 import os.lock
 import WebKit
 
+@_silgen_name("squirrel_recorder_core_start")
+private func squirrel_recorder_core_start(_ path: UnsafePointer<CChar>,
+                                          _ sampleRate: UInt32,
+                                          _ channels: UInt16,
+                                          _ source: UnsafePointer<CChar>,
+                                          _ errOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Bool
+
+@_silgen_name("squirrel_recorder_core_stop")
+private func squirrel_recorder_core_stop(_ errOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+                                         _ outDurationSec: UnsafeMutablePointer<Double>) -> Bool
+
+@_silgen_name("squirrel_recorder_core_push")
+private func squirrel_recorder_core_push(_ data: UnsafePointer<UnsafePointer<Float>?>,
+                                         _ channels: UInt16,
+                                         _ frames: UInt32)
+
+@_silgen_name("squirrel_recorder_core_push_interleaved")
+private func squirrel_recorder_core_push_interleaved(_ data: UnsafePointer<Float>,
+                                                     _ channels: UInt16,
+                                                     _ frames: UInt32)
+
+@_silgen_name("squirrel_string_free")
+private func squirrel_string_free(_ s: UnsafeMutablePointer<CChar>?)
+
 
 // File d'attente circulaire pour messages JS (évite blocage thread principal)
 
@@ -64,6 +88,20 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var dbgCaptureEnabled: Bool = false
     private var dbgBuffer: [Float] = [Float](repeating: 0, count: 48000) // ~1s stereo mixed
     private var dbgIndex: Int = 0
+
+    private enum RecordingState {
+        case idle
+        case recording
+    }
+    private var recordingState: RecordingState = .idle
+    private var recordingSessionId: String = ""
+    private var recordingSource: String = "mic"
+    private var recordingFileName: String = ""
+    private var recordingSampleRate: Double = 0
+    private var recordingChannels: UInt32 = 0
+    private var recordingPath: String = ""
+    private var recordingInputBuffer: AVAudioPCMBuffer?
+    private var recordingChannelPointers: [UnsafePointer<Float>?] = Array(repeating: nil, count: 8)
     
     // NOUVEAU: JavaScript Audio Injection
     private var jsAudioBuffer: [Float] = []
@@ -445,6 +483,20 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
             }
 
+            if strongSelf.recordingState == .recording {
+                if strongSelf.recordingSource == "plugin" {
+                    strongSelf.captureRecordingOutput(bufferList: bufferList,
+                                                      channels: outChannels,
+                                                      frames: frameCount,
+                                                      interleaved: outInterleaved,
+                                                      isFloat32: outIsFloat32)
+                } else if strongSelf.recordingSource == "mic" {
+                    strongSelf.captureRecordingInput(pullInputBlock: pullInputBlock,
+                                                     timestamp: timestamp,
+                                                     frameCount: frameCount)
+                }
+            }
+
             // Handle muting (lightweight operation)
             if strongSelf.isMuted {
                 for i in 0..<bufferList.numberOfBuffers {
@@ -522,6 +574,287 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     let sr = Int(getSampleRate() ?? 44100.0)
     fadeInTotal = max(128, min(sr / 100, 1024))
     fadeInSamplesRemaining = fadeInTotal
+    }
+
+    public func recordStart(sessionId: String, fileName: String, source: String, sampleRate: Double?, channels: UInt32?) {
+        if recordingState != .idle {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "Recording already in progress"
+            ])
+            return
+        }
+
+        let normalizedSource = normalizeRecordingSource(source)
+        let safeName = sanitizeRecordingFileName(fileName)
+        guard let url = resolveRecordingURL(fileName: safeName) else {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "App Group container unavailable",
+                "file_name": safeName
+            ])
+            return
+        }
+
+#if os(iOS)
+        if normalizedSource == "mic" {
+            let permission = AVAudioSession.sharedInstance().recordPermission
+            if permission == .denied {
+                emitRecordingEvent(type: "record_error", payload: [
+                    "session_id": sessionId,
+                    "error": "Microphone permission denied",
+                    "file_name": safeName
+                ])
+                return
+            }
+        }
+#endif
+
+        let outputFormat = _outputBusArray?.first?.format
+        let inputFormat = _inputBusArray?.first?.format
+        if normalizedSource == "mic" && inputFormat == nil {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "Input bus not available",
+                "file_name": safeName
+            ])
+            return
+        }
+        if normalizedSource == "plugin" && outputFormat == nil {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "Output bus not available",
+                "file_name": safeName
+            ])
+            return
+        }
+        let srDefault = (normalizedSource == "mic" ? inputFormat?.sampleRate : outputFormat?.sampleRate) ?? 44100.0
+        let chDefault = (normalizedSource == "mic" ? inputFormat?.channelCount : outputFormat?.channelCount) ?? 1
+
+        if let requestedSr = sampleRate, abs(requestedSr - srDefault) > 0.5 {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "Requested sample rate not supported in AUv3",
+                "file_name": safeName
+            ])
+            return
+        }
+        if let requestedCh = channels, Int(requestedCh) != Int(chDefault) {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "Requested channel count not supported in AUv3",
+                "file_name": safeName
+            ])
+            return
+        }
+
+        let sr = srDefault
+        let ch = max(1, min(2, Int(chDefault)))
+
+        var errPtr: UnsafeMutablePointer<CChar>? = nil
+        let ok = url.path.withCString { pathPtr in
+            normalizedSource.withCString { srcPtr in
+                squirrel_recorder_core_start(pathPtr, UInt32(sr), UInt16(ch), srcPtr, &errPtr)
+            }
+        }
+
+        if !ok {
+            var message = "Recorder start failed"
+            if let errPtr {
+                message = String(cString: errPtr)
+                squirrel_string_free(errPtr)
+            }
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": message,
+                "file_name": safeName
+            ])
+            return
+        }
+
+        recordingSessionId = sessionId
+        recordingSource = normalizedSource
+        recordingFileName = safeName
+        recordingSampleRate = sr
+        recordingChannels = UInt32(ch)
+        recordingPath = url.path
+
+        if normalizedSource == "mic" {
+            if let format = inputFormat {
+                let capacity = max(maximumFramesToRender, 1024)
+                recordingInputBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity)
+            }
+        } else {
+            recordingInputBuffer = nil
+        }
+
+        recordingState = .recording
+
+        emitRecordingEvent(type: "record_started", payload: [
+            "session_id": sessionId,
+            "file_name": safeName,
+            "path": url.path,
+            "source": normalizedSource,
+            "sample_rate": sr,
+            "channels": ch
+        ])
+    }
+
+    public func recordStop(sessionId: String) {
+        if recordingState != .recording {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "No active recording"
+            ])
+            return
+        }
+        if !sessionId.isEmpty && sessionId != recordingSessionId {
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": sessionId,
+                "error": "Session id mismatch"
+            ])
+            return
+        }
+
+        let activeSessionId = recordingSessionId
+        let activeFileName = recordingFileName
+        let activePath = recordingPath
+        let activeSource = recordingSource
+        let activeSampleRate = recordingSampleRate
+        let activeChannels = recordingChannels
+        recordingState = .idle
+
+        var errPtr: UnsafeMutablePointer<CChar>? = nil
+        var duration: Double = 0
+        let ok = squirrel_recorder_core_stop(&errPtr, &duration)
+        if !ok {
+            var message = "Recorder stop failed"
+            if let errPtr {
+                message = String(cString: errPtr)
+                squirrel_string_free(errPtr)
+            }
+            emitRecordingEvent(type: "record_error", payload: [
+                "session_id": activeSessionId,
+                "error": message,
+                "file_name": activeFileName
+            ])
+        } else {
+            emitRecordingEvent(type: "record_done", payload: [
+                "session_id": activeSessionId,
+                "file_name": activeFileName,
+                "path": activePath,
+                "source": activeSource,
+                "sample_rate": activeSampleRate,
+                "channels": activeChannels,
+                "duration_sec": duration
+            ])
+        }
+
+        recordingSessionId = ""
+        recordingSource = "mic"
+        recordingFileName = ""
+        recordingSampleRate = 0
+        recordingChannels = 0
+        recordingPath = ""
+        recordingInputBuffer = nil
+    }
+
+    private func normalizeRecordingSource(_ source: String) -> String {
+        let raw = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if raw == "plugin" || raw == "plugin_output" { return "plugin" }
+        return "mic"
+    }
+
+    private func sanitizeRecordingFileName(_ input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "mic.wav" }
+        let allowed = trimmed.map { ch -> Character in
+            if ch.isLetter || ch.isNumber { return ch }
+            if ch == "_" || ch == "-" || ch == "." { return ch }
+            return "_"
+        }
+        let name = String(allowed)
+        if name.isEmpty { return "mic.wav" }
+        if name.lowercased().hasSuffix(".wav") { return name }
+        return name + ".wav"
+    }
+
+    private func resolveRecordingURL(fileName: String) -> URL? {
+        guard let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedBus.appGroupSuite) else {
+            return nil
+        }
+        let recordingsDir = base.appendingPathComponent("Documents").appendingPathComponent("recordings")
+        do {
+            try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        return recordingsDir.appendingPathComponent(fileName)
+    }
+
+    private func emitRecordingEvent(type: String, payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let js = """
+        try{
+          const payload = \(json);
+          if(typeof window.__fromDSP==='function'){ window.__fromDSP({ type:'\(type)', payload }); }
+          window.dispatchEvent(new CustomEvent('iplug_recording', { detail: Object.assign({ type:'\(type)' }, payload) }));
+        }catch(e){}
+        """
+        DispatchQueue.main.async {
+            WebViewManager.evaluateJS(js, label: "auv3.recording", priority: .high)
+        }
+    }
+
+    private func captureRecordingInput(pullInputBlock: AURenderPullInputBlock?, timestamp: UnsafePointer<AudioTimeStamp>, frameCount: AUAudioFrameCount) {
+        guard let pullInputBlock, let inputBuffer = recordingInputBuffer else { return }
+        inputBuffer.frameLength = frameCount
+        var flags = AudioUnitRenderActionFlags()
+        let status = pullInputBlock(&flags, timestamp, frameCount, 0, inputBuffer.mutableAudioBufferList)
+        if status != noErr { return }
+
+        let format = inputBuffer.format
+        let channels = Int(format.channelCount)
+        let interleaved = format.isInterleaved
+        let isFloat32 = (format.commonFormat == .pcmFormatFloat32)
+        let list = AudioBufferListWrapper(ptr: inputBuffer.mutableAudioBufferList)
+        pushRecordingBufferList(bufferList: list,
+                                channels: channels,
+                                frames: frameCount,
+                                interleaved: interleaved,
+                                isFloat32: isFloat32)
+    }
+
+    private func captureRecordingOutput(bufferList: AudioBufferListWrapper, channels: Int, frames: AUAudioFrameCount, interleaved: Bool, isFloat32: Bool) {
+        pushRecordingBufferList(bufferList: bufferList,
+                                channels: channels,
+                                frames: frames,
+                                interleaved: interleaved,
+                                isFloat32: isFloat32)
+    }
+
+    private func pushRecordingBufferList(bufferList: AudioBufferListWrapper, channels: Int, frames: AUAudioFrameCount, interleaved: Bool, isFloat32: Bool) {
+        if !isFloat32 { return }
+        let ch = max(1, min(channels, recordingChannelPointers.count))
+        if interleaved || bufferList.numberOfBuffers == 1 {
+            let buf = bufferList.buffer(at: 0)
+            guard let mData = buf.mData else { return }
+            let ptr = mData.assumingMemoryBound(to: Float.self)
+            squirrel_recorder_core_push_interleaved(ptr, UInt16(ch), UInt32(frames))
+            return
+        }
+        if bufferList.numberOfBuffers < ch { return }
+        for c in 0..<ch {
+            let buf = bufferList.buffer(at: c)
+            guard let mData = buf.mData else { return }
+            recordingChannelPointers[c] = mData.assumingMemoryBound(to: Float.self)
+        }
+        recordingChannelPointers.withUnsafeBufferPointer { ptr in
+            if let base = ptr.baseAddress {
+                squirrel_recorder_core_push(base, UInt16(ch), UInt32(frames))
+            }
+        }
     }
     
     private func checkHostTransport() {

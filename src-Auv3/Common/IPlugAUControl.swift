@@ -10,4 +10,6 @@ public protocol IPlugAUControl: AnyObject {
     func dumpDebugCapture()
     /// 0..1 normalized seek within currently loaded file (ignored if no file)
     func setPlaybackPositionNormalized(_ pos: Float)
+    func recordStart(sessionId: String, fileName: String, source: String, sampleRate: Double?, channels: UInt32?)
+    func recordStop(sessionId: String)
 }

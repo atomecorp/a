@@ -8,6 +8,11 @@
     const TARGET_SR = 16000; // Speech-recognition friendly
     const CHUNK_SEC = 0.12;
 
+    const RECORD_BACKENDS = {
+        WEBAUDIO: 'webaudio',
+        IPLUG2: 'iplug2'
+    };
+
     const QUEUE_KEY = '__SQUIRREL_AUDIO_UPLOAD_QUEUE__';
     const IDB_NAME = 'squirrel_audio_recorder';
     const IDB_STORE = 'files';
@@ -549,12 +554,288 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
 
     let __recording = null;
 
+    function normalizeBackend(input) {
+        const v = (typeof input === 'string' ? input : '').trim().toLowerCase();
+        if (v === RECORD_BACKENDS.IPLUG2 || v === 'iplug') return RECORD_BACKENDS.IPLUG2;
+        return RECORD_BACKENDS.WEBAUDIO;
+    }
+
+    function hasIPlugBridge() {
+        if (!isBrowser()) return false;
+        // IMPORTANT: do NOT treat generic postMessage as an iPlug2 bridge.
+        // In Tauri (and most browsers), postMessage exists but nobody consumes our protocol,
+        // which causes the iplug2 path to time out waiting for record_done.
+        return !!(
+            typeof window.__toDSP === 'function' ||
+            (window.webkit && window.webkit.messageHandlers && (
+                window.webkit.messageHandlers.swiftBridge ||
+                window.webkit.messageHandlers.squirrel ||
+                window.webkit.messageHandlers.callback
+            ))
+        );
+    }
+
+    function sendToIPlug(msg) {
+        if (!isBrowser()) return false;
+        try {
+            if (typeof window.__toDSP === 'function') {
+                window.__toDSP(msg);
+                return true;
+            }
+        } catch (_) { }
+
+        try {
+            if (window.webkit && window.webkit.messageHandlers) {
+                if (window.webkit.messageHandlers.swiftBridge) {
+                    window.webkit.messageHandlers.swiftBridge.postMessage(msg);
+                    return true;
+                }
+                if (window.webkit.messageHandlers.squirrel) {
+                    window.webkit.messageHandlers.squirrel.postMessage(msg);
+                    return true;
+                }
+                // iPlug2 default WebView handler name (see third_party/iPlug2 WebView glue)
+                if (window.webkit.messageHandlers.callback) {
+                    window.webkit.messageHandlers.callback.postMessage(msg);
+                    return true;
+                }
+            }
+        } catch (_) { }
+
+        // Last-resort transport used by existing iPlug web integration.
+        try {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(msg, '*');
+                return true;
+            }
+        } catch (_) { }
+
+        try {
+            window.postMessage(msg, '*');
+            return true;
+        } catch (_) { }
+
+        return false;
+    }
+
+    function waitForIPlugRecordResult({ timeoutMs = 3_000 } = {}) {
+        return new Promise((resolve, reject) => {
+            let done = false;
+            const timeoutId = setTimeout(() => {
+                if (done) return;
+                done = true;
+                cleanup();
+                reject(new Error(
+                    'iPlug2 recording timed out (no record_done message received). ' +
+                    'This typically means the native iPlug2 host does not implement the record_start/record_stop protocol ' +
+                    'or does not emit record_done/record_error back to the WebView. ' +
+                    'Use backend "webaudio" for now, or implement native record handling.'
+                ));
+            }, timeoutMs);
+
+            const onCustomEvent = (ev) => {
+                if (done) return;
+                const detail = ev && ev.detail ? ev.detail : null;
+                if (!detail || (detail.type !== 'record_done' && detail.type !== 'record_error')) return;
+                done = true;
+                cleanup();
+                if (detail.type === 'record_error') {
+                    reject(new Error(detail.error || 'iPlug2 record error'));
+                    return;
+                }
+                resolve(detail);
+            };
+
+            const prevFromDSP = (typeof window.__fromDSP === 'function') ? window.__fromDSP : null;
+            const wrappedFromDSP = (msg) => {
+                try {
+                    const type = msg && msg.type ? msg.type : null;
+                    if (type === 'record_done' || type === 'record_error') {
+                        const payload = msg && msg.payload ? msg.payload : {};
+                        onCustomEvent({ detail: { type, ...payload } });
+                    }
+                } catch (_) { }
+                if (typeof prevFromDSP === 'function') {
+                    try { prevFromDSP(msg); } catch (_) { }
+                }
+            };
+
+            const onWindowMessage = (ev) => {
+                if (done) return;
+                const data = ev && ev.data ? ev.data : null;
+                if (!data || typeof data !== 'object') return;
+                const type = data.type || null;
+                if (type !== 'record_done' && type !== 'record_error') return;
+                const payload = data.payload && typeof data.payload === 'object' ? data.payload : data;
+                onCustomEvent({ detail: { type, ...payload } });
+            };
+
+            function cleanup() {
+                try { clearTimeout(timeoutId); } catch (_) { }
+                try { window.removeEventListener('iplug_recording', onCustomEvent); } catch (_) { }
+                try { window.removeEventListener('message', onWindowMessage); } catch (_) { }
+                try {
+                    if (window.__fromDSP === wrappedFromDSP) {
+                        window.__fromDSP = prevFromDSP || undefined;
+                    }
+                } catch (_) { }
+            }
+
+            try { window.addEventListener('iplug_recording', onCustomEvent); } catch (_) { }
+            try { window.addEventListener('message', onWindowMessage); } catch (_) { }
+            try { window.__fromDSP = wrappedFromDSP; } catch (_) { }
+        });
+    }
+
+    async function record_audio_iplug2(filename, path, opts) {
+        if (!hasIPlugBridge()) {
+            throw new Error(
+                'iPlug2 recording bridge is not available in this runtime. ' +
+                'Expected window.__toDSP or window.webkit.messageHandlers.(swiftBridge|squirrel|callback).'
+            );
+        }
+        if (__recording && __recording.state === 'recording') {
+            throw new Error('A recording is already in progress');
+        }
+
+        const fileName = sanitizeFileName(filename);
+        const startIso = nowIso();
+        const sourceRaw = opts && typeof opts.source === 'string' ? opts.source : 'mic';
+        const source = (String(sourceRaw).toLowerCase() === 'plugin' || String(sourceRaw).toLowerCase() === 'plugin_output')
+            ? 'plugin'
+            : 'mic';
+
+        // Tauri native recording writes directly into data/users/<userId>/recordings.
+        // Provide userId up-front so native can resolve the destination.
+        let userId = null;
+        if (isTauriRuntime()) {
+            const userInfo = await getCurrentUserInfo();
+            if (!userInfo.ok) throw new Error(userInfo.error || 'Unable to resolve current user');
+            userId = userInfo.user.user_id;
+        }
+
+        const ok = sendToIPlug({
+            type: 'iplug',
+            action: 'record_start',
+            fileName,
+            userId: userId || undefined,
+            source,
+            sampleRate: TARGET_SR,
+            channels: 1
+        });
+        if (!ok) {
+            throw new Error('Failed to send iPlug2 record_start message');
+        }
+
+        __recording = {
+            state: 'recording',
+            fileName,
+            path: path || null,
+            backend: RECORD_BACKENDS.IPLUG2,
+            started_iso: startIso,
+            getStats: () => ({ backend: 'iplug2', fileName, started_iso: startIso })
+        };
+
+        const stop = async () => {
+            if (!__recording || __recording.state !== 'recording') {
+                return { success: false, error: 'No active recording' };
+            }
+            __recording.state = 'stopping';
+
+            const sent = sendToIPlug({
+                type: 'iplug',
+                action: 'record_stop',
+                fileName
+            });
+            if (!sent) {
+                __recording = null;
+                throw new Error('Failed to send iPlug2 record_stop message');
+            }
+
+            const detail = await waitForIPlugRecordResult({ timeoutMs: Number(opts && opts.timeoutMs) || 3_000 });
+
+            // NOTE: If this keeps timing out, it means the native iPlug2 side does not implement
+            // the record_start/record_stop protocol nor emit record_done/record_error back to JS.
+            // The current repo has a stub at src/native/iplug/bridge/WebBridge.cpp and AUv3 hosts
+            // WKScriptMessageHandler channels in src-Auv3/iplug/AUViewController.swift.
+
+            // Supported payload shapes:
+            // - { path: 'data/users/.../recordings/foo.wav' } (native wrote the file)
+            // - { wav_base64: '...' } (native returned WAV bytes)
+            let relPath = null;
+            let wavArrayBuffer = null;
+            if (detail && typeof detail.path === 'string' && detail.path) {
+                relPath = detail.path;
+            } else if (detail && typeof detail.wav_base64 === 'string' && detail.wav_base64) {
+                const bin = atob(detail.wav_base64);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                wavArrayBuffer = bytes.buffer;
+            } else {
+                __recording = null;
+                throw new Error('iPlug2 recording returned no path or WAV bytes');
+            }
+
+            // If we received bytes, persist through the existing offline-first pipeline.
+            let localInfo = null;
+            if (wavArrayBuffer) {
+                localInfo = await persistRecordingLocally({
+                    fileName,
+                    wavArrayBuffer,
+                    durationSec: 0,
+                    sampleRate: TARGET_SR,
+                    channels: 1
+                });
+                relPath = localInfo.tauriPath || null;
+            }
+
+            // If we only received a path, register atome here.
+            if (relPath && !localInfo && isTauriRuntime()) {
+                const userInfo = await getCurrentUserInfo();
+                if (!userInfo.ok) throw new Error(userInfo.error || 'Unable to resolve current user');
+                const userId = userInfo.user.user_id;
+                const atome = await createAudioRecordingAtome({
+                    ownerId: userId,
+                    fileName,
+                    relPath,
+                    durationSec: 0,
+                    sampleRate: TARGET_SR,
+                    channels: 1,
+                    sizeBytes: 0
+                });
+                localInfo = { id: atome.atomeId, createdAt: nowIso(), backend: 'iplug2', tauriPath: relPath, atomeId: atome.atomeId };
+            }
+
+            __recording = null;
+            return {
+                success: true,
+                uploaded: false,
+                file: null,
+                owner: null,
+                local: { id: localInfo ? localInfo.id : null, backend: localInfo ? localInfo.backend : 'iplug2', tauriPath: relPath, atomeId: localInfo ? localInfo.atomeId : null },
+                duration_sec: 0,
+                sample_rate: TARGET_SR,
+                channels: 1
+            };
+        };
+
+        return { fileName, stop, getStats: __recording.getStats };
+    }
+
     /**
      * record_audio(filename, path?)
      * - filename: file name to store (server-side will sanitize)
      * - path: reserved for future (native backends). Not used by the Fastify upload endpoint.
      */
     async function record_audio(filename, path) {
+        const opts = arguments.length >= 3 ? arguments[2] : null;
+        const backend = (opts && Object.prototype.hasOwnProperty.call(opts, 'backend'))
+            ? normalizeBackend(opts.backend)
+            : (hasIPlugBridge() ? RECORD_BACKENDS.IPLUG2 : RECORD_BACKENDS.WEBAUDIO);
+        if (backend === RECORD_BACKENDS.IPLUG2) {
+            return await record_audio_iplug2(filename, path, opts);
+        }
+
         if (__recording && __recording.state === 'recording') {
             throw new Error('A recording is already in progress');
         }
@@ -734,46 +1015,4 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
         try { syncQueuedUploads().catch(() => null); } catch (_) { }
     }
 
-    // UI: single toggle button
-    if (isBrowser()) {
-        const root = $('div', {
-            id: 'record-audio-example',
-            parent: '#view',
-            css: { position: 'relative', padding: '14px' }
-        });
-
-        const state = { ctrl: null };
-
-        const recBtn = Button({
-            template: 'flat_modern',
-            onText: 'Stop recording',
-            offText: 'Record audio',
-            parent: root,
-            css: { position: 'relative' },
-            onAction: async () => {
-                try {
-                    const name = `mic_${Date.now()}.wav`;
-                    state.ctrl = await record_audio(name);
-                    console.log('Recording started:', state.ctrl.fileName);
-                } catch (e) {
-                    console.warn('Failed to start recording:', e && e.message ? e.message : e);
-                    try { recBtn.setState(false); } catch (_) { }
-                }
-            },
-            offAction: async () => {
-                try {
-                    if (!state.ctrl) return;
-                    const res = await state.ctrl.stop();
-                    console.log('Recording saved:', res);
-                    state.ctrl = null;
-                } catch (e) {
-                    console.warn('Failed to stop/upload recording:', e && e.message ? e.message : e);
-                    state.ctrl = null;
-                }
-            }
-        });
-
-        // Default state: not recording
-        try { recBtn.setState(false); } catch (_) { }
-    }
 })();

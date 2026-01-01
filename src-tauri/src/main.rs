@@ -4,10 +4,17 @@
 )]
 
 mod dev_logging;
+mod iplug_bridge;
+mod native_recorder;
 mod server;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager; // pour get_webview_window
+
+#[derive(Clone)]
+pub struct ProjectPaths {
+    pub project_root: PathBuf,
+}
 
 fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> PathBuf {
     match std::env::var("SQUIRREL_UPLOADS_DIR") {
@@ -46,7 +53,11 @@ fn main() {
     let _log_guard = dev_logging::init_tracing();
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![dev_logging::log_from_webview])
+        .invoke_handler(tauri::generate_handler![
+            dev_logging::log_from_webview,
+            iplug_bridge::iplug_send,
+            iplug_bridge::iplug_poll_events
+        ])
         .setup(|app| {
             let path_resolver = app.path();
             let static_dir: PathBuf = match path_resolver.resource_dir() {
@@ -87,6 +98,18 @@ fn main() {
             }
 
             println!("📂 Static assets directory: {:?}", static_dir);
+
+            // Compute project root used by Axum local server and recording storage.
+            let static_dir_abs = static_dir
+                .canonicalize()
+                .unwrap_or_else(|_| static_dir.clone());
+            let project_root = static_dir_abs
+                .parent()
+                .unwrap_or(&static_dir_abs)
+                .to_path_buf();
+            app.manage(ProjectPaths {
+                project_root: project_root.clone(),
+            });
 
             let default_base = path_resolver
                 .download_dir()

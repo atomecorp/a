@@ -548,7 +548,8 @@ async function loadProjectAtomes(projectId) {
       savedBorderRadius, savedOpacity, borderRadius, opacity
     });
 
-    createVisualAtome(atomeId, atomeType, color, left, top, borderRadius, opacity);
+    const visualType = particles.visualType || particles.visual_type || atomeType;
+    createVisualAtome(atomeId, visualType, color, left, top, borderRadius, opacity, particles);
   }
 }
 
@@ -561,45 +562,242 @@ async function loadProjectAtomes(projectId) {
  * @param {string} top - CSS top position
  * @param {string} borderRadius - CSS border radius (optional)
  * @param {number} opacity - CSS opacity (optional)
+ * @param {Object} particles - Atome particles (optional)
  * @returns {HTMLElement} The created element
  */
-function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px', opacity = 1.0) {
+function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px', opacity = 1.0, particles = {}) {
   if (!currentProjectDiv) {
     puts('No project loaded. Please load a project first.');
     return null;
   }
 
-  const atomeEl = $('div', {
+  const visualType = String(type || 'shape').toLowerCase();
+  const textContent = particles.content || particles.label || particles.text || particles.value || '';
+  const placeholder = particles.placeholder || 'Type...';
+  const supportsInlineEdit = visualType === 'text' || visualType === 'span' || visualType === 'button';
+  const isTextInput = visualType === 'input' || visualType === 'textarea';
+  const canInlineEdit = supportsInlineEdit && particles.editable !== false && particles.contenteditable !== false;
+  const canTextInputEdit = isTextInput && particles.editable !== false;
+  let isEditing = particles.isEditing === true && (canInlineEdit || canTextInputEdit);
+  const tagName = (() => {
+    switch (visualType) {
+      case 'text':
+      case 'shape':
+        return 'div';
+      case 'span':
+        return 'span';
+      case 'button':
+        return 'button';
+      case 'input':
+        return 'input';
+      case 'textarea':
+        return 'textarea';
+      default:
+        return 'div';
+    }
+  })();
+
+  const baseCss = {
+    position: 'absolute',
+    left: left,
+    top: top,
+    opacity: opacity,
+    cursor: (isTextInput || isEditing) ? 'text' : 'move',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    userSelect: (isTextInput || isEditing) ? 'text' : 'none',
+    border: '2px solid transparent',
+    outline: 'none',
+    zIndex: '50',
+    pointerEvents: 'auto'
+  };
+
+  const typeCss = (() => {
+    switch (visualType) {
+      case 'shape':
+        return {
+          width: '80px',
+          height: '80px',
+          backgroundColor: color,
+          borderRadius: borderRadius,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          color: 'white',
+          fontSize: '12px',
+          textAlign: 'center'
+        };
+      case 'text':
+      case 'span':
+        return {
+          minWidth: '80px',
+          minHeight: '30px',
+          padding: '6px 8px',
+          backgroundColor: color,
+          borderRadius: borderRadius,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontSize: '12px',
+          textAlign: 'center'
+        };
+      case 'button':
+        return {
+          padding: '6px 10px',
+          backgroundColor: color,
+          borderRadius: borderRadius,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontSize: '12px',
+          textAlign: 'center',
+          border: '1px solid rgba(0,0,0,0.2)'
+        };
+      case 'input':
+        return {
+          width: '160px',
+          height: '30px',
+          padding: '6px',
+          backgroundColor: '#fff',
+          color: '#111',
+          borderRadius: borderRadius,
+          border: '2px solid ' + color,
+          display: 'block'
+        };
+      case 'textarea':
+        return {
+          width: '160px',
+          height: '80px',
+          padding: '6px',
+          backgroundColor: '#fff',
+          color: '#111',
+          borderRadius: borderRadius,
+          border: '2px solid ' + color,
+          display: 'block',
+          resize: 'none'
+        };
+      default:
+        return {
+          width: '80px',
+          height: '80px',
+          backgroundColor: color,
+          borderRadius: borderRadius,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          color: 'white',
+          fontSize: '12px',
+          textAlign: 'center'
+        };
+    }
+  })();
+
+  const elementText = textContent || (visualType + ' ' + atomeId.substring(0, 6));
+  const attrs = {
+    'data-atome-type': visualType,
+    'data-editing': 'false'
+  };
+  if (isEditing) attrs.contenteditable = true;
+  if (visualType === 'input') attrs.type = 'text';
+  if (isTextInput) attrs.readonly = true;
+
+  const atomeEl = $(tagName, {
     id: 'atome_' + atomeId,
     parent: currentProjectDiv,
-    css: {
-      position: 'absolute',
-      left: left,
-      top: top,
-      width: '80px',
-      height: '80px',
-      backgroundColor: color,
-      borderRadius: borderRadius,
-      opacity: opacity,
-      cursor: 'move',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      color: 'white',
-      fontSize: '12px',
-      textAlign: 'center',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-      userSelect: 'none',
-      border: '2px solid transparent',
-      zIndex: '50',
-      pointerEvents: 'auto'
-    },
-    text: type + '\n' + atomeId.substring(0, 6),
+    css: { ...baseCss, ...typeCss },
+    attrs,
+    text: (visualType === 'input' || visualType === 'textarea') ? '' : elementText,
     onClick: (e) => {
       e.stopPropagation();
       selectVisualAtome(atomeEl, atomeId);
     }
   });
+
+  if (visualType === 'input' || visualType === 'textarea') {
+    if (textContent) atomeEl.value = textContent;
+    if (placeholder) atomeEl.placeholder = placeholder;
+  }
+
+  const setInlineEditState = (enabled) => {
+    if (!canInlineEdit) return;
+    isEditing = !!enabled;
+    if (isEditing) {
+      atomeEl.setAttribute('contenteditable', 'true');
+      atomeEl.style.userSelect = 'text';
+      atomeEl.style.cursor = 'text';
+      atomeEl.style.outline = '2px dashed rgba(255,255,255,0.7)';
+      atomeEl.setAttribute('data-editing', 'true');
+      try { atomeEl.focus({ preventScroll: true }); } catch (_) { }
+    } else {
+      atomeEl.removeAttribute('contenteditable');
+      atomeEl.style.userSelect = 'none';
+      atomeEl.style.cursor = 'move';
+      atomeEl.style.outline = 'none';
+      atomeEl.setAttribute('data-editing', 'false');
+      try { atomeEl.blur(); } catch (_) { }
+    }
+  };
+
+  if (supportsInlineEdit) {
+    atomeEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      setInlineEditState(!isEditing);
+    });
+    atomeEl.addEventListener('keydown', (e) => {
+      if (!isEditing) return;
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        setInlineEditState(false);
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setInlineEditState(false);
+      }
+    });
+    atomeEl.addEventListener('focusout', () => {
+      if (isEditing) setInlineEditState(false);
+    });
+    setInlineEditState(isEditing);
+  }
+
+  const setTextInputEditState = (enabled) => {
+    if (!canTextInputEdit) return;
+    isEditing = !!enabled;
+    atomeEl.readOnly = !isEditing;
+    atomeEl.style.userSelect = isEditing ? 'text' : 'none';
+    atomeEl.style.cursor = isEditing ? 'text' : 'move';
+    atomeEl.style.outline = isEditing ? '2px dashed rgba(255,255,255,0.7)' : 'none';
+    atomeEl.setAttribute('data-editing', isEditing ? 'true' : 'false');
+    if (isEditing) {
+      try { atomeEl.focus({ preventScroll: true }); } catch (_) { }
+    } else {
+      try { atomeEl.blur(); } catch (_) { }
+    }
+  };
+
+  if (isTextInput) {
+    atomeEl.addEventListener('dblclick', (e) => {
+      if (!canTextInputEdit) return;
+      e.stopPropagation();
+      setTextInputEditState(!isEditing);
+    });
+    atomeEl.addEventListener('keydown', (e) => {
+      if (!isEditing) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setTextInputEditState(false);
+      }
+      if (visualType === 'input' && e.key === 'Enter') {
+        e.preventDefault();
+        setTextInputEditState(false);
+      }
+    });
+    atomeEl.addEventListener('focusout', () => {
+      if (isEditing) setTextInputEditState(false);
+    });
+    setTextInputEditState(isEditing);
+  }
 
   // Make draggable
   makeAtomeDraggable(atomeEl, atomeId);
@@ -801,6 +999,15 @@ function updateHistorySlider() {
   }
 }
 
+function shouldSkipDragStart(event) {
+  if (event && event.shiftKey) return false;
+  const current = event?.currentTarget || event?.target;
+  if (!current) return false;
+  if (current.getAttribute && current.getAttribute('data-editing') === 'true') return true;
+  if (current.isContentEditable) return true;
+  return false;
+}
+
 /**
  * TEST ONLY - Make an atome element draggable and save position
  * @param {HTMLElement} atomeEl - The atome element
@@ -935,6 +1142,7 @@ function makeAtomeDraggable(atomeEl, atomeId) {
       // Mouse: left button only. Touch/pen: accept primary pointer.
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.isPrimary === false) return;
+      if (shouldSkipDragStart(e)) return;
 
       isDragging = true;
       activePointerId = e.pointerId;
@@ -967,6 +1175,7 @@ function makeAtomeDraggable(atomeEl, atomeId) {
   // Fallback (older browsers): mouse-only drag
   atomeEl.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Left click only
+    if (shouldSkipDragStart(e)) return;
     isDragging = true;
 
     startX = e.clientX;
@@ -2451,6 +2660,30 @@ $('br', { parent: intuitionContainer });
 const atome_type = 'shape';
 const atome_color = 'orange';
 const atome_project_name = 'my project';
+const random_atome_texts = [
+  'Editable text',
+  'Span text',
+  'Click me',
+  'Edit me',
+  'Hello'
+];
+const random_atome_templates = [
+  { type: 'shape' },
+  { type: 'text', buildParticles: (text) => ({ content: text, editable: true }) },
+  { type: 'span', buildParticles: (text) => ({ content: text, editable: true }) },
+  { type: 'button', buildParticles: (text) => ({ content: text, label: text }) },
+  { type: 'input', buildParticles: (text) => ({ value: text, placeholder: 'Type...' }) },
+  { type: 'textarea', buildParticles: (text) => ({ value: text, placeholder: 'Type...' }) }
+];
+
+function pickRandomAtomeSpec() {
+  const template = random_atome_templates[Math.floor(Math.random() * random_atome_templates.length)];
+  const text = random_atome_texts[Math.floor(Math.random() * random_atome_texts.length)];
+  return {
+    type: template.type,
+    particles: template.buildParticles ? template.buildParticles(text) : {}
+  };
+}
 
 $('input', {
   id: 'atome_project_name_input',
@@ -2643,18 +2876,24 @@ $('span', {
       return;
     }
     const atomeTypeInput = grab('atome_type_input');
-    const atomeType = atomeTypeInput ? atomeTypeInput.value : atome_type;
+    const manualType = atomeTypeInput?.value?.trim();
+    const randomSpec = pickRandomAtomeSpec();
+    const atomeType = manualType || randomSpec.type || atome_type;
     const atomeColor = grab('atome_color_input').value;
     const initialLeft = '100px';
     const initialTop = '100px';
+    const extraParticles = manualType
+      ? { visualType: atomeType }
+      : { visualType: atomeType, ...(randomSpec.particles || {}) };
+    const typeLabel = manualType ? atomeType : atomeType + ' (random)';
 
-    puts('🔄 Creating atome: ' + atomeType + ' (' + atomeColor + ') at position: ' + initialLeft + ', ' + initialTop);
+    puts('🔄 Creating atome: ' + typeLabel + ' (' + atomeColor + ') at position: ' + initialLeft + ', ' + initialTop);
 
     const result = await create_atome({
       type: atomeType,
       color: atomeColor,
       projectId: selectedProjectId,
-      particles: { left: initialLeft, top: initialTop }
+      particles: { left: initialLeft, top: initialTop, ...extraParticles }
     });
 
     console.log('[create_atome button] Full result:', result);
@@ -3679,4 +3918,3 @@ async function startFastifyBroadcastProbe() {
     setTimeout(startFastifyBroadcastProbe, 2500);
   }
 })();
-

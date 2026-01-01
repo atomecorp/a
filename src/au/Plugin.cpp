@@ -1,6 +1,7 @@
 #include "Plugin.h"
 #include <IPlug_include_in_plug_src.h>
 #include <IPlugConstants.h>
+#include "../native/iplug/recorder/RecorderCore.h"
 
 enum EParams {
   kParamGain = 0,
@@ -37,6 +38,11 @@ void Plugin::OnParamChange(int paramIdx) {
 void Plugin::ProcessBlock(sample** inputs, sample** outputs, int nFrames) {
   const int chans = NOutChansConnected();
   mCore.process((const float* const*) inputs, (float* const*) outputs, chans, nFrames);
+  if (squirrel_recorder_core_source_is("plugin")) {
+    squirrel_recorder_core_push((const float* const*) outputs,
+                                static_cast<uint16_t>(chans),
+                                static_cast<uint32_t>(nFrames));
+  }
 }
 
 void Plugin::LoadFile(const char* path) {

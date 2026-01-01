@@ -16,6 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+cc = "1"
 
 [dependencies]
 axum = { version = "0.7.9", features = ["ws"] }
@@ -30,6 +31,9 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 urlencoding = "2"
 futures-util = "0.3"
+base64 = "0.22"
+cpal = "0.15"
+hound = "3"
 
 # Local authentication dependencies
 rusqlite = { version = "0.31", features = ["bundled"] }
