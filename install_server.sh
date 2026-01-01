@@ -363,6 +363,16 @@ if [ "$OS_TYPE" == "linux" ]; then
     CONF_PATH="$SITES_AVAIL/$DOMAIN"
     if ! grep -q "include /etc/nginx/conf.d/*.conf;" /etc/nginx/nginx.conf; then
         sed -i "s|http {|http {\n    include /etc/nginx/conf.d/*.conf;|" /etc/nginx/nginx.conf
+    else
+        include_count=$(grep -c "include /etc/nginx/conf.d/*.conf;" /etc/nginx/nginx.conf || true)
+        if [ "${include_count:-0}" -gt 1 ]; then
+            awk '
+                $0 ~ /include \/etc\/nginx\/conf\.d\/\*\.conf;/ {
+                    if (seen++) next
+                }
+                { print }
+            ' /etc/nginx/nginx.conf > /etc/nginx/nginx.conf.tmp && mv /etc/nginx/nginx.conf.tmp /etc/nginx/nginx.conf
+        fi
     fi
 elif [ "$OS_TYPE" == "freebsd" ]; then
     SITES_AVAIL="/usr/local/etc/nginx/conf.d"
@@ -371,6 +381,16 @@ elif [ "$OS_TYPE" == "freebsd" ]; then
     # Ensure nginx.conf includes conf.d
     if ! grep -q "include $SITES_AVAIL/*.conf;" /usr/local/etc/nginx/nginx.conf; then
         sed -i '' "s|http {|http {\n    include $SITES_AVAIL/*.conf;|" /usr/local/etc/nginx/nginx.conf
+    else
+        include_count=$(grep -c "include $SITES_AVAIL/*.conf;" /usr/local/etc/nginx/nginx.conf || true)
+        if [ "${include_count:-0}" -gt 1 ]; then
+            awk '
+                $0 ~ /include \/usr\/local\/etc\/nginx\/conf\.d\/\*\.conf;/ {
+                    if (seen++) next
+                }
+                { print }
+            ' /usr/local/etc/nginx/nginx.conf > /usr/local/etc/nginx/nginx.conf.tmp && mv /usr/local/etc/nginx/nginx.conf.tmp /usr/local/etc/nginx/nginx.conf
+        fi
     fi
 fi
 
