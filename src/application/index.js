@@ -72,8 +72,8 @@ import('./examples/record_audio_UI.js');
 import('./examples/record_video.js');
 import('./examples/record_video_UI.js');
 
-// // import('./examples/calendar.js');
-
+// import('./examples/calendar.js');
+// import('./examples/calendar_UI.js');
 // import('./examples/shell.js');
 
 // import('./examples/shellUI.js');
