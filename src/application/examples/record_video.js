@@ -6,6 +6,8 @@
     if (typeof window === 'undefined') return;
 
     const DEFAULT_SLICE_MS = 200;
+    const UPLOAD_CHUNK_SIZE = 5 * 1024 * 1024;
+    const CHUNKED_UPLOAD_THRESHOLD = 8 * 1024 * 1024;
 
     function isBrowser() {
         return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -278,9 +280,62 @@
         return json;
     }
 
-    async function uploadToFastify({ fileName, bytes }) {
+    async function uploadToFastifyChunked({ fileName, bytes, mimeType, chunkSize }) {
         const base = getFastifyBaseUrl();
         if (!base) throw new Error('Fastify base URL is not configured');
+        const size = Number.isFinite(chunkSize) ? chunkSize : UPLOAD_CHUNK_SIZE;
+        const totalSize = bytes.length;
+        const totalChunks = Math.max(1, Math.ceil(totalSize / size));
+        const uploadId = `upload_${randomId()}`;
+
+        for (let idx = 0; idx < totalChunks; idx++) {
+            const start = idx * size;
+            const end = Math.min(totalSize, start + size);
+            const chunk = bytes.slice(start, end);
+            const res = await fetch(`${base}/api/uploads/chunk`, {
+                method: 'POST',
+                headers: buildAuthHeaders({
+                    'X-Filename': encodeURIComponent(fileName),
+                    'X-Upload-Id': uploadId,
+                    'X-Chunk-Index': String(idx),
+                    'X-Chunk-Count': String(totalChunks),
+                    'X-Chunk-Size': String(chunk.length),
+                    'X-Mime-Type': mimeType || '',
+                    'Content-Type': 'application/octet-stream'
+                }),
+                body: chunk
+            });
+            if (!res.ok) {
+                const payload = await res.json().catch(() => null);
+                const msg = payload && payload.error ? payload.error : `Chunk upload failed (${res.status})`;
+                throw new Error(msg);
+            }
+        }
+
+        const completeRes = await fetch(`${base}/api/uploads/complete`, {
+            method: 'POST',
+            headers: buildAuthHeaders({
+                'X-Filename': encodeURIComponent(fileName),
+                'X-Upload-Id': uploadId,
+                'X-Chunk-Count': String(totalChunks),
+                'X-Total-Size': String(totalSize),
+                'X-Mime-Type': mimeType || ''
+            })
+        });
+        const completeJson = await completeRes.json().catch(() => null);
+        if (!completeRes.ok || !completeJson || completeJson.success !== true) {
+            const msg = completeJson && completeJson.error ? completeJson.error : `Upload failed (${completeRes.status})`;
+            throw new Error(msg);
+        }
+        return completeJson;
+    }
+
+    async function uploadToFastify({ fileName, bytes, mimeType, chunkSize, forceChunked = false }) {
+        const base = getFastifyBaseUrl();
+        if (!base) throw new Error('Fastify base URL is not configured');
+        if (forceChunked || bytes.length >= CHUNKED_UPLOAD_THRESHOLD) {
+            return await uploadToFastifyChunked({ fileName, bytes, mimeType, chunkSize });
+        }
         const res = await fetch(`${base}/api/uploads`, {
             method: 'POST',
             headers: buildAuthHeaders({
@@ -289,9 +344,17 @@
             }),
             body: bytes
         });
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json || json.success !== true) {
+        if (!res.ok) {
+            if (res.status === 413) {
+                return await uploadToFastifyChunked({ fileName, bytes, mimeType, chunkSize });
+            }
+            const json = await res.json().catch(() => null);
             const msg = json && json.error ? json.error : `Upload failed (${res.status})`;
+            throw new Error(msg);
+        }
+        const json = await res.json().catch(() => null);
+        if (!json || json.success !== true) {
+            const msg = json && json.error ? json.error : 'Upload failed';
             throw new Error(msg);
         }
         return json;
@@ -349,7 +412,7 @@
             const saved = await saveToTauriRecordings({ fileName, bytes });
             relPath = saved && typeof saved.path === 'string' ? saved.path : null;
         } else {
-            const uploaded = await uploadToFastify({ fileName, bytes });
+            const uploaded = await uploadToFastify({ fileName, bytes, mimeType });
             relPath = uploaded && typeof uploaded.path === 'string' ? uploaded.path : null;
         }
 

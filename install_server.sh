@@ -21,6 +21,7 @@ MONITORED_DIR="${MONITORED_DIR:-$APP_DIR/monitored}"
 ENV_DIR="${ENV_DIR:-/etc/squirrel}"
 ENV_FILE="${ENV_FILE:-$ENV_DIR/squirrel.env}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+NGINX_CLIENT_MAX_BODY_SIZE="${NGINX_CLIENT_MAX_BODY_SIZE:-1024m}"
 
 # --- Colors ----------------------------------------------------------------
 GREEN='\033[0;32m'
@@ -360,6 +361,9 @@ if [ "$OS_TYPE" == "linux" ]; then
     SITES_ENABLED="/etc/nginx/sites-enabled"
     mkdir -p "$SITES_AVAIL" "$SITES_ENABLED"
     CONF_PATH="$SITES_AVAIL/$DOMAIN"
+    if ! grep -q "include /etc/nginx/conf.d/*.conf;" /etc/nginx/nginx.conf; then
+        sed -i "s|http {|http {\n    include /etc/nginx/conf.d/*.conf;|" /etc/nginx/nginx.conf
+    fi
 elif [ "$OS_TYPE" == "freebsd" ]; then
     SITES_AVAIL="/usr/local/etc/nginx/conf.d"
     mkdir -p "$SITES_AVAIL"
@@ -369,6 +373,15 @@ elif [ "$OS_TYPE" == "freebsd" ]; then
         sed -i '' "s|http {|http {\n    include $SITES_AVAIL/*.conf;|" /usr/local/etc/nginx/nginx.conf
     fi
 fi
+
+# Global upload size limit (applies inside http{} context via conf.d include)
+NGINX_CONF_D="$NGINX_CONF_DIR/conf.d"
+mkdir -p "$NGINX_CONF_D"
+UPLOAD_CONF="$NGINX_CONF_D/squirrel_uploads.conf"
+cat > "$UPLOAD_CONF" <<EOF
+# Allow large uploads for media capture.
+client_max_body_size $NGINX_CLIENT_MAX_BODY_SIZE;
+EOF
 
 # Check if SSL is already configured (don't overwrite certbot's config)
 if [ -f "$CONF_PATH" ] && grep -q "ssl_certificate" "$CONF_PATH"; then

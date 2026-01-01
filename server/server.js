@@ -5,7 +5,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { promises as fs, createReadStream, readFileSync, existsSync, mkdirSync } from 'fs';
+import { promises as fs, createReadStream, createWriteStream, readFileSync, existsSync, mkdirSync } from 'fs';
 import crypto from 'crypto';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../src/shared/logging.js';
@@ -118,6 +118,7 @@ const staticRoot = path.join(projectRoot, 'src');
 const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
 const LOG_DIR = path.join(projectRoot, 'logs');
 const FASTIFY_LOG_FILE = path.join(LOG_DIR, 'fastify.log');
+const UPLOADS_TMP_DIR = path.join(projectRoot, 'data', 'uploads_tmp');
 const BROWSER_LOG_FILE = path.join(LOG_DIR, 'browser.log');
 const SNAPSHOT_DIR = path.join(LOG_DIR, 'snapshots');
 const UI_TESTS_DIR = path.join(LOG_DIR, 'ui-tests');
@@ -152,6 +153,13 @@ function recordRecentError(payload) {
   if (recentErrors.length > MAX_RECENT_ERRORS) {
     recentErrors.splice(0, recentErrors.length - MAX_RECENT_ERRORS);
   }
+}
+
+function sanitizeUploadId(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  if (!/^[a-zA-Z0-9_-]+$/.test(value)) return null;
+  return value;
 }
 
 function logStructured(level, { source = 'fastify', component = 'server', request_id = null, session_id = null, message = '', data = null } = {}) {
@@ -855,6 +863,161 @@ async function startServer() {
         return { success: true, file: fileName, owner: userId };
       } catch (error) {
         request.log.error({ err: error }, 'File upload failed');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.post('/api/uploads/chunk', async (request, reply) => {
+      try {
+        // Get user info if authenticated (optional for uploads)
+        const user = await validateToken(request);
+        const userId = resolveUserId(user);
+
+        const headerValue = Array.isArray(request.headers['x-filename'])
+          ? request.headers['x-filename'][0]
+          : request.headers['x-filename'];
+        if (!headerValue) {
+          reply.code(400);
+          return { success: false, error: 'Missing X-Filename header' };
+        }
+
+        const uploadIdHeader = Array.isArray(request.headers['x-upload-id'])
+          ? request.headers['x-upload-id'][0]
+          : request.headers['x-upload-id'];
+        const safeUploadId = sanitizeUploadId(uploadIdHeader);
+        if (!safeUploadId) {
+          reply.code(400);
+          return { success: false, error: 'Missing or invalid X-Upload-Id header' };
+        }
+
+        const chunkIndexRaw = Array.isArray(request.headers['x-chunk-index'])
+          ? request.headers['x-chunk-index'][0]
+          : request.headers['x-chunk-index'];
+        const chunkCountRaw = Array.isArray(request.headers['x-chunk-count'])
+          ? request.headers['x-chunk-count'][0]
+          : request.headers['x-chunk-count'];
+        const chunkIndex = Number.parseInt(chunkIndexRaw, 10);
+        const chunkCount = Number.parseInt(chunkCountRaw, 10);
+        if (!Number.isFinite(chunkIndex) || chunkIndex < 0 || !Number.isFinite(chunkCount) || chunkCount < 1) {
+          reply.code(400);
+          return { success: false, error: 'Invalid chunk index/count' };
+        }
+
+        let decodedName = String(headerValue);
+        try {
+          decodedName = decodeURIComponent(decodedName);
+        } catch {
+          // Keep original value if decoding fails
+        }
+
+        const bodyBuffer = request.body;
+        if (!bodyBuffer || !(bodyBuffer instanceof Buffer) || !bodyBuffer.length) {
+          reply.code(400);
+          return { success: false, error: 'Empty upload body' };
+        }
+
+        await fs.mkdir(UPLOADS_TMP_DIR, { recursive: true, mode: 0o700 });
+        const uploadDir = path.join(UPLOADS_TMP_DIR, safeUploadId);
+        await fs.mkdir(uploadDir, { recursive: true, mode: 0o700 });
+
+        const chunkPath = path.join(uploadDir, `${chunkIndex}.part`);
+        await fs.writeFile(chunkPath, bodyBuffer);
+
+        return {
+          success: true,
+          uploadId: safeUploadId,
+          chunkIndex,
+          chunkCount,
+          owner: userId,
+          file: sanitizeFileName(decodedName)
+        };
+      } catch (error) {
+        request.log.error({ err: error }, 'Chunk upload failed');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.post('/api/uploads/complete', async (request, reply) => {
+      try {
+        // Get user info if authenticated (optional for uploads)
+        const user = await validateToken(request);
+        const userId = resolveUserId(user);
+
+        const headerValue = Array.isArray(request.headers['x-filename'])
+          ? request.headers['x-filename'][0]
+          : request.headers['x-filename'];
+        if (!headerValue) {
+          reply.code(400);
+          return { success: false, error: 'Missing X-Filename header' };
+        }
+
+        const uploadIdHeader = Array.isArray(request.headers['x-upload-id'])
+          ? request.headers['x-upload-id'][0]
+          : request.headers['x-upload-id'];
+        const safeUploadId = sanitizeUploadId(uploadIdHeader);
+        if (!safeUploadId) {
+          reply.code(400);
+          return { success: false, error: 'Missing or invalid X-Upload-Id header' };
+        }
+
+        const chunkCountRaw = Array.isArray(request.headers['x-chunk-count'])
+          ? request.headers['x-chunk-count'][0]
+          : request.headers['x-chunk-count'];
+        const chunkCount = Number.parseInt(chunkCountRaw, 10);
+        if (!Number.isFinite(chunkCount) || chunkCount < 1) {
+          reply.code(400);
+          return { success: false, error: 'Invalid chunk count' };
+        }
+
+        let decodedName = String(headerValue);
+        try {
+          decodedName = decodeURIComponent(decodedName);
+        } catch {
+          // Keep original value if decoding fails
+        }
+
+        const uploadDir = path.join(UPLOADS_TMP_DIR, safeUploadId);
+        const { fileName, filePath } = await resolveUserUploadPath(
+          projectRoot,
+          { id: userId, username: user?.username },
+          decodedName
+        );
+
+        const output = createWriteStream(filePath, { flags: 'w' });
+        for (let idx = 0; idx < chunkCount; idx += 1) {
+          const chunkPath = path.join(uploadDir, `${idx}.part`);
+          await new Promise((resolve, reject) => {
+            const input = createReadStream(chunkPath);
+            input.on('error', reject);
+            input.on('end', resolve);
+            input.pipe(output, { end: false });
+          });
+        }
+
+        await new Promise((resolve, reject) => {
+          output.on('error', reject);
+          output.end(resolve);
+        });
+
+        try {
+          await fs.rm(uploadDir, { recursive: true, force: true });
+        } catch (_) { }
+
+        if (DATABASE_ENABLED) {
+          const mimeType = request.headers['x-mime-type'] || null;
+          const stats = await fs.stat(filePath).catch(() => null);
+          await registerFileUpload(fileName, userId, {
+            originalName: decodedName,
+            mimeType: mimeType || null,
+            size: stats ? stats.size : null
+          });
+        }
+
+        return { success: true, file: fileName, owner: userId };
+      } catch (error) {
+        request.log.error({ err: error }, 'Chunked upload finalize failed');
         reply.code(500);
         return { success: false, error: error.message };
       }
