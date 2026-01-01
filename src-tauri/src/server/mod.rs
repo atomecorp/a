@@ -12,6 +12,7 @@ use axum::{
     Json, Router,
 };
 use futures_util::StreamExt;
+use rusqlite::params;
 use serde_json::json;
 use std::{
     borrow::Cow,
@@ -84,6 +85,51 @@ fn sanitize_file_name(name: &str) -> String {
         "upload.bin".to_string()
     } else {
         sanitized
+    }
+}
+
+fn sanitize_recording_id(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return None;
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+    {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn guess_mime_from_ext(name: &str) -> &'static str {
+    let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
+    match ext.as_str() {
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
+        "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "ogg" => "audio/ogg",
+        "flac" => "audio/flac",
+        "opus" => "audio/opus",
+        "aif" | "aiff" => "audio/aiff",
+        "mp4" => "video/mp4",
+        "mov" => "video/quicktime",
+        "m4v" => "video/x-m4v",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "tif" | "tiff" => "image/tiff",
+        _ => "application/octet-stream",
     }
 }
 
@@ -579,6 +625,177 @@ async fn download_upload_handler(
         )
             .into_response(),
     }
+}
+
+async fn download_recording_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    AxumPath(recording_id): AxumPath<String>,
+) -> impl IntoResponse {
+    let Some(safe_id) = sanitize_recording_id(&recording_id) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Invalid recording id" })),
+        )
+            .into_response();
+    };
+
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            )
+                .into_response();
+        }
+    };
+
+    let token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim())
+        .and_then(|v| {
+            if v.to_lowercase().starts_with("bearer ") {
+                Some(v[7..].trim())
+            } else {
+                Some(v)
+            }
+        })
+        .filter(|v| !v.is_empty());
+
+    let user_id = local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token);
+    if user_id == "anonymous" {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": "Unauthorized" })),
+        )
+            .into_response();
+    }
+
+    let rel = {
+        let atome_state = match &state.atome_state {
+            Some(s) => s,
+            None => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "success": false, "error": "Atome state not initialized" })),
+                )
+                    .into_response();
+            }
+        };
+
+        let db = match atome_state.db.lock() {
+            Ok(lock) => lock,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "success": false, "error": "Database lock failed" })),
+                )
+                    .into_response();
+            }
+        };
+
+        let owner_id: Option<String> = match db.query_row(
+            "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND atome_type = 'audio_recording' AND deleted_at IS NULL",
+            params![safe_id],
+            |row| row.get(0),
+        ) {
+            Ok(val) => val,
+            Err(_) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({ "success": false, "error": "Recording not found" })),
+                )
+                    .into_response();
+            }
+        };
+
+        let owner = match owner_id {
+            Some(id) if id == user_id => id,
+            _ => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "success": false, "error": "Access denied" })),
+                )
+                    .into_response();
+            }
+        };
+
+        let mut file_path: Option<String> = None;
+        let mut file_name: Option<String> = None;
+
+        if let Ok(mut stmt) =
+            db.prepare("SELECT particle_key, particle_value FROM particles WHERE atome_id = ?1")
+        {
+            if let Ok(rows) = stmt.query_map(params![safe_id], |row| {
+                let key: String = row.get(0)?;
+                let value: String = row.get(1)?;
+                Ok((key, value))
+            }) {
+                for row in rows.flatten() {
+                    let (key, raw) = row;
+                    let parsed = serde_json::from_str::<serde_json::Value>(&raw).ok();
+                    let as_str = parsed
+                        .as_ref()
+                        .and_then(|v| v.as_str().map(|s| s.to_string()))
+                        .unwrap_or(raw.clone());
+                    if key == "file_path" {
+                        file_path = Some(as_str);
+                    } else if key == "file_name" {
+                        file_name = Some(as_str);
+                    }
+                }
+            }
+        }
+
+        let prefix = format!("data/users/{}/recordings/", owner);
+        if let Some(path) = file_path {
+            let trimmed = path.trim().trim_start_matches('/');
+            if !trimmed.starts_with(&prefix) || trimmed.contains("..") {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "success": false, "error": "Access denied" })),
+                )
+                    .into_response();
+            }
+            trimmed.to_string()
+        } else if let Some(name) = file_name {
+            let safe_name = sanitize_file_name(&name);
+            format!("{}{}", prefix, safe_name)
+        } else {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "success": false, "error": "Recording path missing" })),
+            )
+                .into_response();
+        }
+    };
+
+    let target_path = state.project_root.join(&rel);
+    let bytes = match fs::read(&target_path).await {
+        Ok(b) => b,
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "success": false, "error": "File not found" })),
+            )
+                .into_response();
+        }
+    };
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(guess_mime_from_ext(&rel)),
+    );
+    if let Ok(header_value) =
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", sanitize_file_name(&rel)))
+    {
+        headers.insert(header::CONTENT_DISPOSITION, header_value);
+    }
+
+    (StatusCode::OK, headers, bytes).into_response()
 }
 
 /// Request for writing update files
@@ -1456,6 +1673,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             get(list_uploads_handler).post(upload_handler),
         )
         .route("/api/uploads/:file", get(download_upload_handler))
+        .route("/api/recordings/:id", get(download_recording_handler))
         .route("/api/user-recordings", post(user_recordings_upload_handler))
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))

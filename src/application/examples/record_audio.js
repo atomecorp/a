@@ -17,6 +17,11 @@
     const IDB_NAME = 'squirrel_audio_recorder';
     const IDB_STORE = 'files';
     const SYNC_INTERVAL_MS = 15_000;
+    const MEDIA_EXTS = {
+        audio: new Set(['wav', 'mp3', 'm4a', 'aac', 'ogg', 'flac', 'opus', 'aif', 'aiff']),
+        video: new Set(['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi']),
+        image: new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tif', 'tiff'])
+    };
 
     function isBrowser() {
         return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -360,6 +365,340 @@
         } catch (_) {
             return '';
         }
+    }
+
+    function getFileExtension(name) {
+        if (typeof name !== 'string') return '';
+        const base = name.split('/').pop().split('\\').pop();
+        const parts = base.split('.');
+        if (parts.length < 2) return '';
+        return parts[parts.length - 1].toLowerCase();
+    }
+
+    function detectMediaKind({ name, mime }) {
+        const mimeType = (typeof mime === 'string' && mime.trim()) ? mime.trim().toLowerCase() : '';
+        if (mimeType.startsWith('audio/')) return 'audio';
+        if (mimeType.startsWith('video/')) return 'video';
+        if (mimeType.startsWith('image/')) return 'image';
+        const ext = getFileExtension(name);
+        if (MEDIA_EXTS.audio.has(ext)) return 'audio';
+        if (MEDIA_EXTS.video.has(ext)) return 'video';
+        if (MEDIA_EXTS.image.has(ext)) return 'image';
+        return 'other';
+    }
+
+    function isAllowedMediaKind(kind, allowed) {
+        if (!allowed || !allowed.size) return true;
+        return allowed.has(kind);
+    }
+
+    function isSafeFileIdentifier(raw) {
+        if (typeof raw !== 'string') return false;
+        const trimmed = raw.trim();
+        if (!trimmed) return false;
+        if (trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('..')) return false;
+        return /^[a-zA-Z0-9._-]+$/.test(trimmed);
+    }
+
+    function buildAuthHeaders(extra = {}) {
+        const token = getAuthToken();
+        const headers = { ...extra };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        return headers;
+    }
+
+    function buildLocalAuthHeaders(extra = {}) {
+        const token = getLocalAuthToken();
+        const headers = { ...extra };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        return headers;
+    }
+
+    function extractList(result, key) {
+        const direct = result?.[key];
+        if (Array.isArray(direct)) return direct;
+        const data = result?.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.[key])) return data[key];
+        return [];
+    }
+
+    function pickAuthoritativeList(result, key) {
+        const fastifyError = result?.fastify?.error || null;
+        const tauriError = result?.tauri?.error || null;
+        const fastifyItems = extractList(result?.fastify, key);
+        const tauriItems = extractList(result?.tauri, key);
+
+        if (!fastifyError) return fastifyItems;
+        if (!tauriError) return tauriItems;
+        return fastifyItems.length ? fastifyItems : tauriItems;
+    }
+
+    function normalizeParticles(raw) {
+        return raw?.particles || raw?.data || {};
+    }
+
+    function normalizeAtomeId(raw) {
+        return raw?.atome_id || raw?.id || null;
+    }
+
+    function guessMimeFromExt(name) {
+        const ext = getFileExtension(name);
+        if (!ext) return '';
+        const audio = {
+            wav: 'audio/wav',
+            mp3: 'audio/mpeg',
+            m4a: 'audio/mp4',
+            aac: 'audio/aac',
+            ogg: 'audio/ogg',
+            flac: 'audio/flac',
+            opus: 'audio/opus',
+            aif: 'audio/aiff',
+            aiff: 'audio/aiff'
+        };
+        const video = {
+            mp4: 'video/mp4',
+            mov: 'video/quicktime',
+            m4v: 'video/x-m4v',
+            webm: 'video/webm',
+            mkv: 'video/x-matroska',
+            avi: 'video/x-msvideo'
+        };
+        const image = {
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            gif: 'image/gif',
+            webp: 'image/webp',
+            svg: 'image/svg+xml',
+            bmp: 'image/bmp',
+            tif: 'image/tiff',
+            tiff: 'image/tiff'
+        };
+        if (audio[ext]) return audio[ext];
+        if (video[ext]) return video[ext];
+        if (image[ext]) return image[ext];
+        return '';
+    }
+
+    async function listAudioRecordingAtomes() {
+        const api = getAdoleAPI();
+        if (!api?.atomes || typeof api.atomes.list !== 'function') {
+            return { ok: false, files: [] };
+        }
+        try {
+            const res = await api.atomes.list({ type: 'audio_recording' });
+            const raw = pickAuthoritativeList(res, 'atomes');
+            const files = [];
+            raw.forEach((item) => {
+                const particles = normalizeParticles(item);
+                const fileName = particles.file_name || particles.fileName || particles.name || '';
+                const filePath = particles.file_path || particles.filePath || '';
+                const displayName = fileName || filePath || 'recording';
+                const mimeType = particles.mime_type || particles.mimeType || '';
+                const kind = detectMediaKind({ name: displayName, mime: mimeType });
+                files.push({
+                    id: normalizeAtomeId(item),
+                    name: displayName,
+                    file_name: fileName || displayName,
+                    file_path: filePath || null,
+                    owner_id: item?.owner_id || item?.ownerId || particles.owner_id || particles.ownerId || null,
+                    shared: false,
+                    kind,
+                    size: particles.size_bytes || particles.size || null,
+                    modified: item?.updated_at || particles.updated_at || particles.created_iso || null,
+                    created_at: item?.created_at || particles.created_iso || null,
+                    mime_type: mimeType,
+                    source: 'recording'
+                });
+            });
+            return { ok: true, files };
+        } catch (e) {
+            return { ok: false, error: e?.message || String(e), files: [] };
+        }
+    }
+
+    async function listFileAtomes() {
+        const api = getAdoleAPI();
+        if (!api?.atomes || typeof api.atomes.list !== 'function') {
+            return { ok: false, files: [] };
+        }
+        try {
+            const res = await api.atomes.list({ type: 'file' });
+            const raw = pickAuthoritativeList(res, 'atomes');
+            return { ok: true, files: raw };
+        } catch (e) {
+            return { ok: false, error: e?.message || String(e), files: [] };
+        }
+    }
+
+    async function list_user_media_files(options = {}) {
+        const base = getFastifyBaseUrl();
+        const types = Array.isArray(options.types) ? new Set(options.types) : null;
+        const combined = [];
+        const seen = new Set();
+        const noteSeen = (key) => {
+            if (!key) return false;
+            if (seen.has(key)) return true;
+            seen.add(key);
+            return false;
+        };
+
+        if (base) {
+            try {
+                const res = await fetch(`${base}/api/uploads`, {
+                    method: 'GET',
+                    headers: buildAuthHeaders({ 'Accept': 'application/json' }),
+                    credentials: 'omit'
+                });
+
+                const json = await res.json().catch(() => null);
+                if (res.ok && json && json.success === true) {
+                    const rawFiles = Array.isArray(json.files) ? json.files : (Array.isArray(json.data) ? json.data : []);
+                    for (const entry of rawFiles) {
+                        if (!entry) continue;
+                        const name = entry.name || entry.file_name || entry.original_name || '';
+                        const fileName = entry.file_name || entry.name || entry.original_name || '';
+                        const kind = detectMediaKind({ name: fileName, mime: entry.mime_type || entry.mime });
+                        if (!isAllowedMediaKind(kind, types)) continue;
+                        const id = entry.id || entry.atome_id || null;
+                        const key = id || fileName;
+                        if (noteSeen(key)) continue;
+                        combined.push({
+                            id,
+                            name,
+                            file_name: fileName,
+                            owner_id: entry.owner_id || null,
+                            shared: !!entry.shared,
+                            kind,
+                            size: entry.size || null,
+                            modified: entry.modified || entry.updated_at || entry.created_at || null,
+                            mime_type: entry.mime_type || entry.mime || null,
+                            source: 'uploads'
+                        });
+                    }
+                }
+            } catch (_) {
+                // Ignore Fastify list errors; recordings list may still be available.
+            }
+        }
+
+        const recordings = await listAudioRecordingAtomes();
+        if (recordings?.files?.length) {
+            recordings.files.forEach((entry) => {
+                const kind = entry.kind || detectMediaKind({ name: entry.file_name || entry.name, mime: entry.mime_type });
+                if (!isAllowedMediaKind(kind, types)) return;
+                const key = entry.id || entry.file_path || entry.file_name;
+                if (noteSeen(key)) return;
+                combined.push({ ...entry, kind });
+            });
+        }
+
+        if (options.debug) {
+            console.groupCollapsed('[record_audio] list_user_media_files debug');
+            try {
+                console.log('Fastify base:', base || '(none)');
+                console.log('Tauri runtime:', isTauriRuntime());
+                console.log('Types filter:', types ? Array.from(types) : 'all');
+                console.log('Uploads files:', combined.filter(f => f.source === 'uploads').length);
+                console.log('Recordings files:', combined.filter(f => f.source === 'recording').length);
+                console.log('Combined:', combined);
+                const recordingsRaw = await listAudioRecordingAtomes();
+                console.log('audio_recording atomes:', recordingsRaw);
+                const fileAtomes = await listFileAtomes();
+                console.log('file atomes:', fileAtomes);
+            } catch (e) {
+                console.warn('[record_audio] debug listing failed:', e?.message || e);
+            } finally {
+                console.groupEnd();
+            }
+        }
+
+        return { ok: true, files: combined };
+    }
+
+    async function play(fileInput, options = {}) {
+        const entry = (fileInput && typeof fileInput === 'object') ? fileInput : { id: fileInput };
+        const identifier = String(entry.id || entry.atome_id || entry.file_name || entry.name || '').trim();
+        if (!isSafeFileIdentifier(identifier)) {
+            return { ok: false, error: 'Invalid file identifier' };
+        }
+
+        if (entry.source === 'recording') {
+            if (!isTauriRuntime()) {
+                return { ok: false, error: 'Recordings are only available in Tauri runtime' };
+            }
+            const tauriBase = getTauriHttpBaseUrl();
+            if (!tauriBase) return { ok: false, error: 'Tauri base URL is not configured' };
+            let res;
+            try {
+                res = await fetch(`${tauriBase}/api/recordings/${encodeURIComponent(identifier)}`, {
+                    method: 'GET',
+                    headers: buildLocalAuthHeaders(),
+                    credentials: 'omit'
+                });
+            } catch (e) {
+                return { ok: false, error: e && e.message ? e.message : String(e) };
+            }
+
+            if (!res.ok) {
+                const payload = await res.json().catch(() => null);
+                const msg = payload && payload.error ? payload.error : `Download failed (${res.status})`;
+                return { ok: false, error: msg };
+            }
+
+            const blob = await res.blob();
+            const name = entry.name || entry.file_name || identifier;
+            const mime = blob.type || entry.mime_type || guessMimeFromExt(name) || '';
+            const kind = detectMediaKind({ name, mime });
+            const url = URL.createObjectURL(blob);
+            return {
+                ok: true,
+                url,
+                name,
+                mime,
+                kind,
+                revoke: () => {
+                    try { URL.revokeObjectURL(url); } catch (_) { }
+                }
+            };
+        }
+
+        const base = getFastifyBaseUrl();
+        if (!base) return { ok: false, error: 'Fastify base URL is not configured' };
+        let res;
+        try {
+            res = await fetch(`${base}/api/uploads/${encodeURIComponent(identifier)}`, {
+                method: 'GET',
+                headers: buildAuthHeaders(),
+                credentials: 'omit'
+            });
+        } catch (e) {
+            return { ok: false, error: e && e.message ? e.message : String(e) };
+        }
+
+        if (!res.ok) {
+            const payload = await res.json().catch(() => null);
+            const msg = payload && payload.error ? payload.error : `Download failed (${res.status})`;
+            return { ok: false, error: msg };
+        }
+
+        const blob = await res.blob();
+        const name = entry.name || entry.file_name || identifier;
+        const mime = blob.type || entry.mime_type || guessMimeFromExt(name) || '';
+        const kind = detectMediaKind({ name, mime });
+        const url = URL.createObjectURL(blob);
+
+        return {
+            ok: true,
+            url,
+            name,
+            mime,
+            kind,
+            revoke: () => {
+                try { URL.revokeObjectURL(url); } catch (_) { }
+            }
+        };
     }
 
     function sanitizeFileName(name) {
@@ -1001,6 +1340,14 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
     // Expose globally (used by future voice recognition pipeline)
     if (isBrowser()) {
         window.record_audio = record_audio;
+        window.record_audio_list_media = list_user_media_files;
+        window.record_audio_play = play;
+        window.record_audio_debug_list = async (opts = {}) => {
+            return await list_user_media_files({ ...opts, debug: true });
+        };
+        if (typeof window.play !== 'function') {
+            window.play = play;
+        }
     }
 
     // Background sync: retry on connectivity changes + small timer.

@@ -248,10 +248,10 @@ const imageElement1 = $('img', {
     console.log('Image 1 clicked');
     output.$({ text: '🌍 Image cliquée : Planète verte!' });
   },
-  onmouseover: function() {
+  onmouseover: function () {
     this.style.transform = 'scale(1.1)';
   },
-  onmouseout: function() {
+  onmouseout: function () {
     this.style.transform = 'scale(1)';
   }
 });
@@ -278,10 +278,10 @@ const imageElement2 = $('img', {
     console.log('Image 2 clicked');
     output.$({ text: '🏔️ Image cliquée : Puy de Sancy!' });
   },
-  onmouseover: function() {
+  onmouseover: function () {
     this.style.transform = 'scale(1.1) rotate(5deg)';
   },
-  onmouseout: function() {
+  onmouseout: function () {
     this.style.transform = 'scale(1) rotate(0deg)';
   }
 });
@@ -291,7 +291,7 @@ const videoElement = $('video', {
   parent: '#view',
   id: 'demo-video',
   attrs: {
-    src: './assets/videos/avengers.mp4',
+    src: './assets/videos/superman.mp4',
     controls: true,
     width: 400,
     height: 225
@@ -487,10 +487,10 @@ $('div', {
 async function performSearch(query) {
   console.log('🔍 Recherche Google simulée - Debug info:');
   console.log('- Query:', query);
-  
+
   // Vider les résultats
   resultsContainer.innerHTML = '';
-  
+
   // Afficher le chargement
   const loadingDiv = $('div', {
     parent: resultsContainer,
@@ -502,23 +502,23 @@ async function performSearch(query) {
     },
     text: '🔄 Recherche en cours...'
   });
-  
+
   output.$({ text: `🔍 Recherche: "${query}"` });
-  
+
   try {
     // Simulation d'API de recherche avec délai
     setTimeout(() => {
       // Supprimer le loading
       loadingDiv.remove();
-      
+
       // Créer des résultats simulés
       createSearchResults(query);
-      
+
       console.log('✅ Résultats de recherche générés');
       output.$({ text: `✅ Résultats trouvés pour: "${query}"` });
     }, 1000);
-    
-  } catch(e) {
+
+  } catch (e) {
     console.log('❌ Erreur de recherche:', e);
     loadingDiv.$({ text: '❌ Erreur lors de la recherche' });
     output.$({ text: '❌ Erreur de recherche: ' + e.message });
@@ -539,10 +539,10 @@ function createSearchResults(query) {
     },
     text: `Environ 1,250,000 résultats pour "${query}"`
   });
-  
+
   // Génération de résultats factices basés sur la requête
   const results = generateMockResults(query);
-  
+
   results.forEach((result, index) => {
     // Container du résultat
     const resultDiv = $('div', {
@@ -554,10 +554,10 @@ function createSearchResults(query) {
         cursor: 'pointer',
         transition: 'background-color 0.2s'
       },
-      onmouseover: function() {
+      onmouseover: function () {
         this.style.backgroundColor = '#f8f9fa';
       },
-      onmouseout: function() {
+      onmouseout: function () {
         this.style.backgroundColor = 'transparent';
       },
       onclick: () => {
@@ -565,7 +565,7 @@ function createSearchResults(query) {
         console.log('📄 Zone de résultat cliquée:', result.title);
       }
     });
-    
+
     // URL cliquable
     $('div', {
       parent: resultDiv,
@@ -585,7 +585,7 @@ function createSearchResults(query) {
         output.$({ text: `🔗 Chargement: ${result.url}` });
       }
     });
-    
+
     // Titre cliquable
     $('div', {
       parent: resultDiv,
@@ -606,7 +606,7 @@ function createSearchResults(query) {
         output.$({ text: `🔗 Chargement: ${result.title}` });
       }
     });
-    
+
     // Description
     $('div', {
       parent: resultDiv,
@@ -649,36 +649,36 @@ function generateMockResults(query) {
       description: `Articles académiques et recherches scientifiques sur ${query}. Publications peer-reviewed et citations.`
     }
   ];
-  
+
   return baseResults;
 }
 
 // Fonction pour charger une page dans l'iframe
 function loadInWebView(url, title) {
   console.log('🌐 Chargement dans iframe:', url);
-  
+
   try {
     // Ajouter le protocole si manquant
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = 'https://' + url;
     }
-    
+
     // Masquer les résultats de recherche
     resultsContainer.style.display = 'none';
-    
+
     // Afficher et redimensionner l'iframe
     webViewFrame.style.display = 'block';
     webViewFrame.style.height = 'calc(100% - 60px)';
     webViewFrame.src = url;
-    
+
     // Afficher le bouton de fermeture
     closeWebViewButton.style.display = 'block';
-    
+
     // Feedback avec l'URL courante
     console.log('✅ Page chargée dans iframe');
     output.$({ text: `🌐 Page chargée: ${title} | URL: ${url}` });
-    
-  } catch(e) {
+
+  } catch (e) {
     console.log('❌ Erreur lors du chargement:', e);
     output.$({ text: `❌ Erreur: ${e.message}` });
   }
