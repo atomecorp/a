@@ -11,6 +11,7 @@ Note: Some code references (for example in `src/application/index.js`) mention `
 It provides:
 
 - A form to create/update/delete events
+- (Future) Todos can be represented as events with `kind: 'todo'` and will appear in the same month/day views.
 - A “stored events” list with selection
 - A month grid powered by the `eventCalendar(...)` library
 - A day timeline view with click/drag selection
@@ -85,6 +86,7 @@ When the user clicks “Create event” / “Update event”, the UI builds a pa
 - `description` (string)
 - `allDay` (boolean)
 - `calendarId` (string) – always `calendar_default` in the demo
+- (Future) `kind` / `status` – to support todos stored as events (Phase 1)
 - `recurrence` (object|null)
   - `freq`: `daily|weekly|monthly|yearly`
   - `interval`: number

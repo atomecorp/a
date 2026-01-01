@@ -34,6 +34,10 @@ When `src/application/examples/calendar.js` runs in a browser/webview environmen
 - `color` (string|null)
 - `alarms` (array)
 - `recurrence` (object|null)
+- `kind` (string) – optional; recommended values: `event` (default), `todo`
+- `status` (string) – optional; recommended values: `open` (default), `done`
+- `dueAt` (Date|null) – optional; for todos, the due date/time
+- `completedAt` (Date|null) – optional; for done todos
 - `createdAt` (string|null) – ISO date string when present
 - `updatedAt` (string|null) – ISO date string when present
 
@@ -46,7 +50,38 @@ Internally, persistence uses an “atome particles” payload with keys like:
 - `timezone` (string)
 - `alarms` (JSON string|null)
 - `recurrence` (JSON string|null)
+- `kind` (string) – optional
+- `status` (string) – optional
+- `due_at` (ISO string|null) – optional
+- `completed_at` (ISO string|null) – optional
 - `created_at` (ISO string), `updated_at` (ISO string)
+
+## Todos (Phase 1) using the calendar backend
+
+The current codebase does not ship a dedicated `TaskAPI` yet, but the calendar storage model can support simple todos ("due date + reminder") by storing them as `calendar_event` atomes with extra particles.
+
+### Recommended particles for todos
+
+- `kind: 'todo'`
+- `status: 'open' | 'done'`
+- `due_at: <ISO string>`
+- `completed_at: <ISO string|null>`
+
+### Recommended mapping rules
+
+- For a todo, treat `start` as the due date/time. Persist `due_at` equal to `start`.
+- When marking a todo done, set `status = 'done'` and set `completed_at`.
+- When reopening, set `status = 'open'` and clear `completed_at`.
+
+### How to use with existing API
+
+You can implement todos today by calling existing CRUD methods:
+
+- Create: `CalendarAPI.createEvent({ title, start: dueDate, kind: 'todo', status: 'open', alarms: [...] })`
+- Complete: `CalendarAPI.updateEvent(id, { status: 'done', completedAt: new Date() })`
+- Reopen: `CalendarAPI.updateEvent(id, { status: 'open', completedAt: null })`
+
+Note: The current implementation of `src/application/examples/calendar.js` does not yet normalize/persist these fields automatically; the section above defines the intended contract to implement.
 
 ### Alarm object
 
