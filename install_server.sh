@@ -35,6 +35,19 @@ log_ok() { echo -e "${GREEN}[SUCCESS] $1${NC}"; }
 log_warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
 log_error() { echo -e "${RED}[ERROR] $1${NC}"; }
 
+dedupe_nginx_include_line() {
+    local target_file="$1"
+    local include_line="$2"
+    if [[ -f "$target_file" ]] && grep -F -q "$include_line" "$target_file"; then
+        awk -v line="$include_line" '
+            index($0, line) {
+                if (seen++) next
+            }
+            { print }
+        ' "$target_file" > "${target_file}.tmp" && mv "${target_file}.tmp" "$target_file"
+    fi
+}
+
 move_aside_untracked_file_if_needed() {
     local rel_path="$1"
     if [[ ! -f "$rel_path" ]]; then
@@ -340,13 +353,10 @@ log_info "🗄️  Initializing SQLite Database..."
 # Initialize the database by running migrations
 cd "$APP_DIR"
 node -e "
-import { connect } from './database/driver.js';
-import { runMigrations } from './database/migrate.js';
-
-const db = await connect();
-await runMigrations(db);
+import { initDatabase, closeDatabase } from './database/adole.js';
+await initDatabase();
 console.log('Database initialized successfully');
-db.close();
+await closeDatabase();
 " 2>&1 || log_warn "Database initialization will be done on first run"
 
 log_ok "✅ Database ready."
@@ -361,37 +371,19 @@ if [ "$OS_TYPE" == "linux" ]; then
     SITES_ENABLED="/etc/nginx/sites-enabled"
     mkdir -p "$SITES_AVAIL" "$SITES_ENABLED"
     CONF_PATH="$SITES_AVAIL/$DOMAIN"
-    if ! grep -q "include /etc/nginx/conf.d/*.conf;" /etc/nginx/nginx.conf; then
+    if ! grep -F -q "include /etc/nginx/conf.d/*.conf;" /etc/nginx/nginx.conf; then
         sed -i "s|http {|http {\n    include /etc/nginx/conf.d/*.conf;|" /etc/nginx/nginx.conf
-    else
-        include_count=$(grep -c "include /etc/nginx/conf.d/*.conf;" /etc/nginx/nginx.conf || true)
-        if [ "${include_count:-0}" -gt 1 ]; then
-            awk '
-                $0 ~ /include \/etc\/nginx\/conf\.d\/\*\.conf;/ {
-                    if (seen++) next
-                }
-                { print }
-            ' /etc/nginx/nginx.conf > /etc/nginx/nginx.conf.tmp && mv /etc/nginx/nginx.conf.tmp /etc/nginx/nginx.conf
-        fi
     fi
+    dedupe_nginx_include_line /etc/nginx/nginx.conf "include /etc/nginx/conf.d/*.conf;"
 elif [ "$OS_TYPE" == "freebsd" ]; then
     SITES_AVAIL="/usr/local/etc/nginx/conf.d"
     mkdir -p "$SITES_AVAIL"
     CONF_PATH="$SITES_AVAIL/$DOMAIN.conf"
     # Ensure nginx.conf includes conf.d
-    if ! grep -q "include $SITES_AVAIL/*.conf;" /usr/local/etc/nginx/nginx.conf; then
+    if ! grep -F -q "include $SITES_AVAIL/*.conf;" /usr/local/etc/nginx/nginx.conf; then
         sed -i '' "s|http {|http {\n    include $SITES_AVAIL/*.conf;|" /usr/local/etc/nginx/nginx.conf
-    else
-        include_count=$(grep -c "include $SITES_AVAIL/*.conf;" /usr/local/etc/nginx/nginx.conf || true)
-        if [ "${include_count:-0}" -gt 1 ]; then
-            awk '
-                $0 ~ /include \/usr\/local\/etc\/nginx\/conf\.d\/\*\.conf;/ {
-                    if (seen++) next
-                }
-                { print }
-            ' /usr/local/etc/nginx/nginx.conf > /usr/local/etc/nginx/nginx.conf.tmp && mv /usr/local/etc/nginx/nginx.conf.tmp /usr/local/etc/nginx/nginx.conf
-        fi
     fi
+    dedupe_nginx_include_line /usr/local/etc/nginx/nginx.conf "include $SITES_AVAIL/*.conf;"
 fi
 
 # Global upload size limit (applies inside http{} context via conf.d include)
