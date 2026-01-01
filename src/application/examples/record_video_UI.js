@@ -7,9 +7,17 @@
     const ICON_ID = 'record-video-icon';
     const ICON_SRC = 'assets/images/icons/record.svg';
     const MODE_SELECTOR_ID = 'record-video-mode-selector';
+    const CAMERA_TOGGLE_ID = 'record-video-camera-toggle';
+    const CAMERA_PREVIEW_ID = 'record-video-camera-preview';
     const MEDIA_SELECTOR_ID = 'record-video-media-selector';
     const MEDIA_PLAYER_ID = 'record-video-media-player';
     const BASE_LEFT = 900;
+    const CAMERA_TOGGLE_LEFT = BASE_LEFT + 34;
+    const MODE_LEFT = CAMERA_TOGGLE_LEFT + 74;
+    const PREVIEW_TOP = 32;
+    const PREVIEW_HEIGHT = 140;
+    const MEDIA_TOP = PREVIEW_TOP + PREVIEW_HEIGHT + 12;
+    const PLAYER_TOP = MEDIA_TOP + 30;
 
     function onReady(cb) {
         const run = () => {
@@ -68,6 +76,16 @@
         return { listMediaFiles, play };
     }
 
+    async function ensureCameraApi() {
+        if (typeof window.camera === 'function') return window.camera;
+        try {
+            await import('./record_video.js');
+        } catch (_) {
+            return null;
+        }
+        return (typeof window.camera === 'function') ? window.camera : null;
+    }
+
     onReady(() => {
         if (typeof document === 'undefined') return;
         const $ = window.Squirrel.$ || window.$;
@@ -83,7 +101,8 @@
         const state = {
             mode: 'video',
             isRecording: false,
-            ctrl: null
+            ctrl: null,
+            cameraEnabled: true
         };
 
         const mediaState = {
@@ -94,6 +113,11 @@
             entries: [],
             revoke: null,
             debugLogged: false
+        };
+        const cameraState = {
+            holder: null,
+            ctrl: null,
+            stream: null
         };
 
         function updateTitle(icon) {
@@ -171,6 +195,81 @@
             }
 
             mediaState.revoke = playback.revoke || null;
+        }
+
+        function clearCameraHolder() {
+            if (!cameraState.holder) return;
+            while (cameraState.holder.firstChild) {
+                cameraState.holder.removeChild(cameraState.holder.firstChild);
+            }
+        }
+
+        function renderCameraStatus(message, tone) {
+            if (!cameraState.holder) return;
+            clearCameraHolder();
+            $('div', {
+                parent: cameraState.holder,
+                text: message || '',
+                css: {
+                    color: tone || '#cfcfcf',
+                    fontSize: '11px',
+                    padding: '6px',
+                    textAlign: 'center'
+                }
+            });
+        }
+
+        async function startCameraPreview() {
+            if (!cameraState.holder || cameraState.ctrl) return;
+            const cameraApi = await ensureCameraApi();
+            if (!cameraApi) {
+                renderCameraStatus('camera() unavailable', '#ffb0b0');
+                return;
+            }
+            clearCameraHolder();
+            try {
+                const ctrl = await cameraApi({
+                    parent: cameraState.holder,
+                    id: CAMERA_PREVIEW_ID,
+                    video: true,
+                    audio: false,
+                    muted: true,
+                    css: { width: '100%', height: '100%', objectFit: 'cover' }
+                });
+                cameraState.ctrl = ctrl;
+                cameraState.stream = ctrl && ctrl.stream ? ctrl.stream : null;
+            } catch (e) {
+                const msg = e && e.message ? e.message : String(e);
+                renderCameraStatus(`Camera error: ${msg}`, '#ffb0b0');
+            }
+        }
+
+        function stopCameraPreview() {
+            if (cameraState.ctrl && typeof cameraState.ctrl.stop === 'function') {
+                try { cameraState.ctrl.stop(); } catch (_) { }
+            }
+            cameraState.ctrl = null;
+            cameraState.stream = null;
+            renderCameraStatus('Camera stopped');
+        }
+
+        async function updateCameraPreview() {
+            if (!cameraState.holder) return;
+            cameraState.holder.style.display = state.cameraEnabled ? 'block' : 'none';
+            if (!state.cameraEnabled) {
+                if (!state.isRecording) {
+                    stopCameraPreview();
+                }
+                return;
+            }
+            if (state.mode !== 'video') {
+                if (cameraState.ctrl) stopCameraPreview();
+                renderCameraStatus('Audio mode (no camera)');
+                return;
+            }
+            if (!cameraState.ctrl) {
+                await startCameraPreview();
+            }
         }
 
         function mountMediaSelector(options) {
@@ -303,7 +402,13 @@
                     }
                     if (!state.isRecording) {
                         const fileName = `${state.mode}_${Date.now()}`;
-                        state.ctrl = await recordVideo(fileName, null, { mode: state.mode });
+                        await updateCameraPreview();
+                        const stream = (state.mode === 'video' && cameraState.stream) ? cameraState.stream : null;
+                        state.ctrl = await recordVideo(fileName, null, {
+                            mode: state.mode,
+                            stream,
+                            keepStream: true
+                        });
                         state.isRecording = true;
                         icon.style.opacity = '0.6';
                         return;
@@ -328,6 +433,45 @@
 
         updateTitle(icon);
 
+        // Camera toggle button (to the right of record icon)
+        try {
+            const toggle = $('div', {
+                id: CAMERA_TOGGLE_ID,
+                parent: host,
+                text: 'Cam On',
+                css: {
+                    position: 'absolute',
+                    top: '3px',
+                    left: `${CAMERA_TOGGLE_LEFT}px`,
+                    width: '70px',
+                    height: '26px',
+                    lineHeight: '26px',
+                    textAlign: 'center',
+                    backgroundColor: '#1e7d3b',
+                    color: 'white',
+                    fontSize: '11px',
+                    fontFamily: 'Roboto, sans-serif',
+                    borderRadius: '0px',
+                    cursor: 'pointer',
+                    zIndex: 9999,
+                    userSelect: 'none',
+                    pointerEvents: 'auto'
+                },
+                onclick: () => {
+                    state.cameraEnabled = !state.cameraEnabled;
+                    toggle.textContent = state.cameraEnabled ? 'Cam On' : 'Cam Off';
+                    toggle.style.backgroundColor = state.cameraEnabled ? '#1e7d3b' : '#7a2d2d';
+                    updateCameraPreview().catch(() => null);
+                }
+            });
+            if (!state.cameraEnabled) {
+                toggle.textContent = 'Cam Off';
+                toggle.style.backgroundColor = '#7a2d2d';
+            }
+        } catch (e) {
+            console.warn('[record_video_UI] Failed to mount camera toggle:', e && e.message ? e.message : e);
+        }
+
         // Mode selector (audio/video)
         try {
             const modeHolder = $('div', {
@@ -336,7 +480,7 @@
                 css: {
                     position: 'absolute',
                     top: '3px',
-                    left: `${BASE_LEFT + 34}px`,
+                    left: `${MODE_LEFT}px`,
                     width: '120px',
                     height: '26px',
                     zIndex: 9999,
@@ -357,6 +501,7 @@
                     onChange: (val) => {
                         state.mode = (String(val).toLowerCase() === 'audio') ? 'audio' : 'video';
                         updateTitle(icon);
+                        updateCameraPreview().catch(() => null);
                     }
                 });
             } else {
@@ -366,14 +511,39 @@
             console.warn('[record_video_UI] Failed to mount mode selector:', e && e.message ? e.message : e);
         }
 
-        // Media selector + player (under the record button)
+        // Camera preview
+        try {
+            cameraState.holder = $('div', {
+                id: 'record-video-camera-holder',
+                parent: host,
+                css: {
+                    position: 'absolute',
+                    top: `${PREVIEW_TOP}px`,
+                    left: `${BASE_LEFT}px`,
+                    width: '260px',
+                    height: `${PREVIEW_HEIGHT}px`,
+                    backgroundColor: '#000',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    zIndex: 9999,
+                    pointerEvents: 'auto'
+                }
+            });
+            renderCameraStatus('Camera preview');
+            updateCameraPreview().catch(() => null);
+        } catch (e) {
+            console.warn('[record_video_UI] Failed to mount camera preview:', e && e.message ? e.message : e);
+        }
+
+        // Media selector + player (under the preview)
         try {
             mediaState.holder = $('div', {
                 id: 'record-video-media-selector-holder',
                 parent: host,
                 css: {
                     position: 'absolute',
-                    top: '32px',
+                    top: `${MEDIA_TOP}px`,
                     left: `${BASE_LEFT}px`,
                     width: '260px',
                     height: '26px',
@@ -387,7 +557,7 @@
                 parent: host,
                 css: {
                     position: 'absolute',
-                    top: '62px',
+                    top: `${PLAYER_TOP}px`,
                     left: `${BASE_LEFT}px`,
                     width: '260px',
                     minHeight: '60px',

@@ -114,6 +114,95 @@
         return mode === 'audio' ? 'weba' : 'webm';
     }
 
+    async function camera(options = {}) {
+        if (!isBrowser()) throw new Error('camera() is only available in the browser');
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+            throw new Error('getUserMedia() is not available');
+        }
+        const opts = options || {};
+        const wantsVideo = opts.video !== false;
+        const wantsAudio = opts.audio === true;
+        const constraints = opts.constraints || {
+            audio: wantsAudio,
+            video: wantsVideo ? {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'user'
+            } : false
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (wantsVideo && stream.getVideoTracks().length === 0) {
+            stream.getTracks().forEach((track) => track.stop());
+            throw new Error('No camera video track available');
+        }
+
+        const element = opts.element || (() => {
+            if (typeof window.$ === 'function' || (window.Squirrel && window.Squirrel.$)) {
+                const $ = window.Squirrel.$ || window.$;
+                return $('video', {
+                    parent: opts.parent,
+                    id: opts.id,
+                    attrs: { muted: true, playsinline: true },
+                    css: Object.assign({
+                        width: '100%',
+                        height: '100%',
+                        backgroundColor: '#000',
+                        display: 'block',
+                        objectFit: 'cover'
+                    }, opts.css || {})
+                });
+            }
+            if (!isBrowser()) return null;
+            const el = document.createElement('video');
+            if (opts.id) el.id = opts.id;
+            if (opts.css && el.style) {
+                Object.assign(el.style, opts.css);
+            } else {
+                el.style.width = '100%';
+                el.style.height = '100%';
+                el.style.backgroundColor = '#000';
+                el.style.display = 'block';
+                el.style.objectFit = 'cover';
+            }
+            if (opts.parent && opts.parent.appendChild) {
+                opts.parent.appendChild(el);
+            }
+            return el;
+        })();
+
+        if (!element) {
+            stream.getTracks().forEach((track) => track.stop());
+            throw new Error('Unable to create camera preview element');
+        }
+
+        try {
+            element.autoplay = opts.autoplay !== false;
+            element.muted = opts.muted !== false;
+            element.playsInline = opts.playsInline !== false;
+        } catch (_) { }
+
+        try {
+            element.srcObject = stream;
+        } catch (_) {
+            try { element.src = URL.createObjectURL(stream); } catch (_) { }
+        }
+
+        try {
+            const playPromise = element.play && element.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => null);
+            }
+        } catch (_) { }
+
+        const stop = () => {
+            try { stream.getTracks().forEach((track) => track.stop()); } catch (_) { }
+            try { element.srcObject = null; } catch (_) { }
+        };
+
+        return { element, stream, stop };
+    }
+
     function getAdoleAPI() {
         return window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null);
     }
@@ -259,6 +348,9 @@
         }
 
         const mode = normalizeMode(options.mode || options.kind);
+        const externalStream = options.stream || null;
+        const keepStream = options.keepStream === true;
+        const stopExternalStream = options.stopExternalStream === true;
         const constraints = mode === 'audio'
             ? { audio: true, video: false }
             : {
@@ -286,9 +378,11 @@
             }
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const stream = externalStream || await navigator.mediaDevices.getUserMedia(constraints);
         if (mode === 'video' && stream.getVideoTracks().length === 0) {
-            stream.getTracks().forEach((track) => track.stop());
+            if (!externalStream) {
+                stream.getTracks().forEach((track) => track.stop());
+            }
             throw new Error('No camera video track available');
         }
 
@@ -297,7 +391,9 @@
         const safeFileName = sanitizeFileName(filename || '', ext);
         const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
         if (mode === 'video' && recorder.mimeType && !recorder.mimeType.startsWith('video/')) {
-            stream.getTracks().forEach((track) => track.stop());
+            if (!externalStream || stopExternalStream) {
+                stream.getTracks().forEach((track) => track.stop());
+            }
             throw new Error(`Video recording not supported (got ${recorder.mimeType})`);
         }
         const chunks = [];
@@ -316,9 +412,11 @@
                     reject(ev && ev.error ? ev.error : new Error('Recording failed'));
                 };
                 recorder.onstop = async () => {
-                    try {
-                        stream.getTracks().forEach((track) => track.stop());
-                    } catch (_) { }
+                    if (!keepStream && (!externalStream || stopExternalStream)) {
+                        try {
+                            stream.getTracks().forEach((track) => track.stop());
+                        } catch (_) { }
+                    }
                     try {
                         const blob = new Blob(chunks, { type: mimeType || '' });
                         if (mode === 'video' && blob.type && blob.type.startsWith('audio/')) {
@@ -359,7 +457,9 @@
         try {
             recorder.start(DEFAULT_SLICE_MS);
         } catch (e) {
-            stream.getTracks().forEach((track) => track.stop());
+            if (!externalStream || stopExternalStream) {
+                stream.getTracks().forEach((track) => track.stop());
+            }
             throw e;
         }
 
@@ -397,6 +497,9 @@
 
     if (typeof window.record_video !== 'function') {
         window.record_video = record_video;
+    }
+    if (typeof window.camera !== 'function') {
+        window.camera = camera;
     }
     window.record_video_list_media = list_user_media_files;
     window.record_video_play = play;
