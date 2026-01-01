@@ -147,6 +147,7 @@
         };
         const cameraState = {
             holder: null,
+            videoSlot: null,
             ctrl: null,
             stream: null
         };
@@ -229,9 +230,9 @@
         }
 
         function clearCameraHolder() {
-            if (!cameraState.holder) return;
-            while (cameraState.holder.firstChild) {
-                cameraState.holder.removeChild(cameraState.holder.firstChild);
+            if (!cameraState.videoSlot) return;
+            while (cameraState.videoSlot.firstChild) {
+                cameraState.videoSlot.removeChild(cameraState.videoSlot.firstChild);
             }
         }
 
@@ -239,7 +240,7 @@
             if (!cameraState.holder) return;
             clearCameraHolder();
             $('div', {
-                parent: cameraState.holder,
+                parent: cameraState.videoSlot || cameraState.holder,
                 text: message || '',
                 css: {
                     color: tone || '#cfcfcf',
@@ -260,12 +261,20 @@
             clearCameraHolder();
             try {
                 const ctrl = await cameraApi({
-                    parent: cameraState.holder,
+                    parent: cameraState.videoSlot || cameraState.holder,
                     id: CAMERA_PREVIEW_ID,
                     video: true,
                     audio: false,
                     muted: true,
-                    css: { width: '100%', height: '100%', objectFit: 'cover' }
+                    css: {
+                        position: 'absolute',
+                        inset: '0px',
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        zIndex: 1,
+                        pointerEvents: 'none'
+                    }
                 });
                 cameraState.ctrl = ctrl;
                 cameraState.stream = ctrl && ctrl.stream ? ctrl.stream : null;
@@ -346,7 +355,7 @@
                 savePreviewRect(getPreviewRect(panel, hostEl));
             };
 
-            handle.addEventListener('pointerdown', (ev) => {
+            const startDrag = (ev) => {
                 if (ev.button !== undefined && ev.button !== 0) return;
                 const hostRect = hostEl.getBoundingClientRect();
                 const panelRect = panel.getBoundingClientRect();
@@ -362,7 +371,23 @@
                 document.addEventListener('pointercancel', stop, true);
                 ev.preventDefault();
                 ev.stopPropagation();
-            }, { passive: false });
+            };
+
+            if (window.PointerEvent) {
+                handle.addEventListener('pointerdown', startDrag, { passive: false });
+            } else {
+                handle.addEventListener('mousedown', (ev) => {
+                    startDrag(ev);
+                    const move = (e) => onMove(e);
+                    const up = () => {
+                        stop();
+                        document.removeEventListener('mousemove', move, true);
+                        document.removeEventListener('mouseup', up, true);
+                    };
+                    document.addEventListener('mousemove', move, true);
+                    document.addEventListener('mouseup', up, true);
+                }, { passive: false });
+            }
         }
 
         function makePanelResizable(panel, handle, hostEl) {
@@ -671,7 +696,16 @@
                     borderRadius: '4px',
                     overflow: 'hidden',
                     zIndex: 9999,
-                    pointerEvents: 'auto'
+                    pointerEvents: 'auto',
+                    touchAction: 'none'
+                }
+            });
+            cameraState.videoSlot = $('div', {
+                parent: cameraState.holder,
+                css: {
+                    position: 'absolute',
+                    inset: '0px',
+                    zIndex: 1
                 }
             });
             const dragHandle = $('div', {
@@ -691,7 +725,7 @@
                     textAlign: 'center',
                     cursor: 'move',
                     userSelect: 'none',
-                    zIndex: 2
+                    zIndex: 3
                 }
             });
             const resizeHandle = $('div', {
@@ -705,7 +739,7 @@
                     borderRight: '2px solid rgba(255,255,255,0.7)',
                     borderBottom: '2px solid rgba(255,255,255,0.7)',
                     cursor: 'nwse-resize',
-                    zIndex: 2
+                    zIndex: 3
                 }
             });
 
