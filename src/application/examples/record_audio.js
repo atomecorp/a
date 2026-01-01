@@ -597,7 +597,9 @@
             recordings.files.forEach((entry) => {
                 const kind = entry.kind || detectMediaKind({ name: entry.file_name || entry.name, mime: entry.mime_type });
                 if (!isAllowedMediaKind(kind, types)) return;
-                const key = entry.id || entry.file_path || entry.file_name;
+                const key = (!isTauriRuntime() && entry.file_name)
+                    ? entry.file_name
+                    : (entry.id || entry.file_path || entry.file_name);
                 if (noteSeen(key)) return;
                 combined.push({ ...entry, kind });
             });

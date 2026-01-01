@@ -254,20 +254,52 @@
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
             throw new Error('getUserMedia() is not available');
         }
+        if (typeof MediaRecorder === 'undefined') {
+            throw new Error('MediaRecorder is not available');
+        }
 
         const mode = normalizeMode(options.mode || options.kind);
         const constraints = mode === 'audio'
             ? { audio: true, video: false }
-            : { audio: true, video: true };
+            : {
+                audio: true,
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: 'user'
+                }
+            };
+
+        const audioCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+        const videoCandidates = [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm',
+            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+            'video/mp4'
+        ];
+        const candidates = mode === 'audio' ? audioCandidates : videoCandidates;
+        if (mode === 'video' && typeof MediaRecorder.isTypeSupported === 'function') {
+            const supportsVideo = videoCandidates.some((candidate) => MediaRecorder.isTypeSupported(candidate));
+            if (!supportsVideo) {
+                throw new Error('Video recording is not supported in this environment');
+            }
+        }
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        const candidates = mode === 'audio'
-            ? ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
-            : ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'];
+        if (mode === 'video' && stream.getVideoTracks().length === 0) {
+            stream.getTracks().forEach((track) => track.stop());
+            throw new Error('No camera video track available');
+        }
+
         const mimeType = pickSupportedMime(candidates);
         const ext = extForMime(mimeType, mode);
         const safeFileName = sanitizeFileName(filename || '', ext);
         const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        if (mode === 'video' && recorder.mimeType && !recorder.mimeType.startsWith('video/')) {
+            stream.getTracks().forEach((track) => track.stop());
+            throw new Error(`Video recording not supported (got ${recorder.mimeType})`);
+        }
         const chunks = [];
         const startedAt = Date.now();
         let stopped = false;
@@ -289,6 +321,9 @@
                     } catch (_) { }
                     try {
                         const blob = new Blob(chunks, { type: mimeType || '' });
+                        if (mode === 'video' && blob.type && blob.type.startsWith('audio/')) {
+                            throw new Error(`Video recording failed (audio output: ${blob.type})`);
+                        }
                         const buffer = await blob.arrayBuffer();
                         const bytes = new Uint8Array(buffer);
                         const durationSec = Math.max(0, (Date.now() - startedAt) / 1000);

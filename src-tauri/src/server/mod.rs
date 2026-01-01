@@ -115,6 +115,7 @@ fn guess_mime_from_ext(name: &str) -> &'static str {
         "ogg" => "audio/ogg",
         "flac" => "audio/flac",
         "opus" => "audio/opus",
+        "weba" => "audio/webm",
         "aif" | "aiff" => "audio/aiff",
         "mp4" => "video/mp4",
         "mov" => "video/quicktime",
