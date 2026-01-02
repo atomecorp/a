@@ -48,6 +48,18 @@ if [[ "$no_git" == false ]]; then
 	git -C "$project_root" submodule update --init --recursive
 fi
 
+eve_dir="$project_root/src/application/eVe"
+eve_branch="${EVE_BRANCH:-main}"
+if [[ -d "$eve_dir/.git" ]]; then
+	git -C "$eve_dir" fetch origin
+	if git -C "$eve_dir" show-ref --verify --quiet "refs/heads/$eve_branch"; then
+		git -C "$eve_dir" checkout "$eve_branch"
+	else
+		git -C "$eve_dir" checkout -B "$eve_branch" "origin/$eve_branch"
+	fi
+	git -C "$eve_dir" reset --hard "origin/$eve_branch"
+fi
+
 if [[ "$restart_after" == true ]]; then
 	"$project_root/run.sh" restart
 fi
