@@ -2,28 +2,77 @@
  * User Files Management - ADOLE v3.0
  * 
  * Tracks file ownership using the ADOLE atomes table.
- * Files are stored as atomes with atome_type = 'file'.
+ * Files are stored as atomes with atome_type matching their format (image, sound, text, etc.).
  * Sharing uses the permissions table.
  * All operations via WebSocket.
  */
 
+import path from 'path';
 import db from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { checkPermission, PERMISSION } from './sharing.js';
 
-/**
- * Register a file upload as an atome
- */
+const FILE_ATOME_TYPES = Object.freeze(['file', 'image', 'video', 'sound', 'text', 'shape', 'raw']);
+const FILE_ATOME_TYPES_SQL = FILE_ATOME_TYPES.map(() => '?').join(', ');
+const FILE_ATOME_TYPES_SET = new Set(FILE_ATOME_TYPES);
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.ico']);
+const SHAPE_EXTENSIONS = new Set(['.svg']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi', '.mpeg', '.mpg', '.m4v']);
+const SOUND_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.aiff', '.aif', '.opus']);
+const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.csv', '.tsv', '.log']);
+const TEXT_MIME_TYPES = new Set(['text/plain', 'text/markdown', 'text/csv', 'text/tab-separated-values']);
+
+function normalizeMimeType(mimeType) {
+    return typeof mimeType === 'string' ? mimeType.trim().toLowerCase() : '';
+}
+
+function normalizeExtension(fileName) {
+    return typeof fileName === 'string' ? path.extname(fileName).toLowerCase() : '';
+}
+
+function normalizeFileAtomeType(value) {
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    return FILE_ATOME_TYPES_SET.has(normalized) ? normalized : null;
+}
+
+function inferFileAtomeType(fileName, mimeType) {
+    const ext = normalizeExtension(fileName);
+    const mime = normalizeMimeType(mimeType);
+
+    if (SHAPE_EXTENSIONS.has(ext) || mime === 'image/svg+xml') return 'shape';
+    if (IMAGE_EXTENSIONS.has(ext) || (mime.startsWith('image/') && mime !== 'image/svg+xml')) return 'image';
+    if (VIDEO_EXTENSIONS.has(ext) || mime.startsWith('video/')) return 'video';
+    if (SOUND_EXTENSIONS.has(ext) || mime.startsWith('audio/')) return 'sound';
+    if (TEXT_EXTENSIONS.has(ext) || TEXT_MIME_TYPES.has(mime)) return 'text';
+    return 'raw';
+}
+
+function resolveFileAtomeType(fileName, options = {}) {
+    const explicit = normalizeFileAtomeType(options.atomeType || options.atome_type);
+    if (explicit) return explicit;
+    const sourceName = typeof options.originalName === 'string' && options.originalName.trim()
+        ? options.originalName
+        : fileName;
+    const inferred = inferFileAtomeType(sourceName, options.mimeType || options.mime_type || options.mime);
+    return normalizeFileAtomeType(inferred) || 'raw';
+}
+
+function fileTypeWhere(alias = 'a') {
+    return `${alias}.atome_type IN (${FILE_ATOME_TYPES_SQL})`;
+}
+
 export async function registerFileUpload(fileName, userId, options = {}) {
     const now = new Date().toISOString();
     const atomeId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const atomeType = resolveFileAtomeType(fileName, options);
 
     try {
         // Create atome for the file
         await db.query('run', `
             INSERT INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at)
-            VALUES (?, 'file', ?, ?, ?)
-        `, [atomeId, userId, now, now]);
+            VALUES (?, ?, ?, ?, ?)
+        `, [atomeId, atomeType, userId, now, now]);
 
         // Store file metadata as particles
         const particles = {
@@ -46,11 +95,12 @@ export async function registerFileUpload(fileName, userId, options = {}) {
         console.log(`File registered: ${fileName} -> user ${userId}`);
 
         // Emit via WebSocket
-        emitFileEvent('upload', { atome_id: atomeId, file_name: fileName, owner_id: userId });
+        emitFileEvent('upload', { atome_id: atomeId, atome_type: atomeType, file_name: fileName, owner_id: userId });
 
         return {
             success: true,
             atome_id: atomeId,
+            atome_type: atomeType,
             file_name: fileName,
             owner_id: userId,
             ...particles
@@ -70,32 +120,32 @@ export async function getFileMetadata(identifier, options = {}) {
         const { ownerId = null, userId = null } = options;
         // Try by atome_id first
         let atome = await db.query('get', `
-            SELECT a.atome_id, a.owner_id, a.created_at
+            SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at
             FROM atomes a
-            WHERE a.atome_id = ? AND a.atome_type = 'file' AND a.deleted_at IS NULL
-        `, [identifier]);
+            WHERE a.atome_id = ? AND ${fileTypeWhere('a')} AND a.deleted_at IS NULL
+        `, [identifier, ...FILE_ATOME_TYPES]);
 
         // If not found, try by file_name particle
         if (!atome) {
             if (ownerId) {
                 atome = await db.query('get', `
-                    SELECT a.atome_id, a.owner_id, a.created_at
+                    SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at
                     FROM atomes a
                     JOIN particles p ON a.atome_id = p.atome_id
                     WHERE p.particle_key = 'file_name' AND p.particle_value = ?
                     AND a.owner_id = ?
-                    AND a.atome_type = 'file' AND a.deleted_at IS NULL
-                `, [JSON.stringify(identifier), ownerId]);
+                    AND ${fileTypeWhere('a')} AND a.deleted_at IS NULL
+                `, [JSON.stringify(identifier), ownerId, ...FILE_ATOME_TYPES]);
 
                 if (!atome) {
                     atome = await db.query('get', `
-                        SELECT a.atome_id, a.owner_id, a.created_at
+                        SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at
                         FROM atomes a
                         JOIN particles p ON a.atome_id = p.atome_id
                         WHERE p.particle_key = 'original_name' AND p.particle_value = ?
                         AND a.owner_id = ?
-                        AND a.atome_type = 'file' AND a.deleted_at IS NULL
-                    `, [JSON.stringify(identifier), ownerId]);
+                        AND ${fileTypeWhere('a')} AND a.deleted_at IS NULL
+                    `, [JSON.stringify(identifier), ownerId, ...FILE_ATOME_TYPES]);
                 }
             } else if (userId) {
                 const accessible = await getAccessibleFiles(userId);
@@ -107,12 +157,12 @@ export async function getFileMetadata(identifier, options = {}) {
                 }
             } else {
                 atome = await db.query('get', `
-                    SELECT a.atome_id, a.owner_id, a.created_at
+                    SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at
                     FROM atomes a
                     JOIN particles p ON a.atome_id = p.atome_id
                     WHERE p.particle_key = 'file_name' AND p.particle_value = ?
-                    AND a.atome_type = 'file' AND a.deleted_at IS NULL
-                `, [JSON.stringify(identifier)]);
+                    AND ${fileTypeWhere('a')} AND a.deleted_at IS NULL
+                `, [JSON.stringify(identifier), ...FILE_ATOME_TYPES]);
             }
         }
 
@@ -125,6 +175,7 @@ export async function getFileMetadata(identifier, options = {}) {
 
         const meta = {
             atome_id: atome.atome_id,
+            atome_type: atome.atome_type,
             owner_id: atome.owner_id,
             created_at: atome.created_at
         };
@@ -150,11 +201,11 @@ export async function getFileMetadata(identifier, options = {}) {
  */
 export async function getUserFiles(userId) {
     const files = await db.query('all', `
-        SELECT a.atome_id, a.owner_id, a.created_at, a.updated_at
+        SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at, a.updated_at
         FROM atomes a
-        WHERE a.owner_id = ? AND a.atome_type = 'file' AND a.deleted_at IS NULL
+        WHERE a.owner_id = ? AND ${fileTypeWhere('a')} AND a.deleted_at IS NULL
         ORDER BY a.created_at DESC
-    `, [userId]);
+    `, [userId, ...FILE_ATOME_TYPES]);
 
     const result = [];
     for (const file of (files || [])) {
@@ -181,16 +232,16 @@ export async function getUserFiles(userId) {
  */
 export async function getAccessibleFiles(userId) {
     const files = await db.query('all', `
-        SELECT DISTINCT a.atome_id, a.owner_id, a.created_at, a.updated_at,
+        SELECT DISTINCT a.atome_id, a.atome_type, a.owner_id, a.created_at, a.updated_at,
             CASE WHEN a.owner_id = ? THEN 'owner' 
                  WHEN p.can_write = 1 THEN 'write'
                  ELSE 'read' END as access
         FROM atomes a
         LEFT JOIN permissions p ON a.atome_id = p.atome_id AND p.principal_id = ?
-        WHERE a.atome_type = 'file' AND a.deleted_at IS NULL
+        WHERE ${fileTypeWhere('a')} AND a.deleted_at IS NULL
         AND (a.owner_id = ? OR (p.can_read = 1 AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))))
         ORDER BY a.created_at DESC
-    `, [userId, userId, userId]);
+    `, [userId, userId, ...FILE_ATOME_TYPES, userId]);
 
     const result = [];
     for (const file of (files || [])) {
@@ -341,24 +392,24 @@ export async function getFileStats() {
         SELECT 
             COUNT(*) as total_files,
             COUNT(DISTINCT owner_id) as unique_owners
-        FROM atomes 
-        WHERE atome_type = 'file' AND deleted_at IS NULL
-    `);
+        FROM atomes a
+        WHERE ${fileTypeWhere('a')} AND a.deleted_at IS NULL
+    `, [...FILE_ATOME_TYPES]);
 
     const publicCount = await db.query('get', `
         SELECT COUNT(*) as count
         FROM particles p
         JOIN atomes a ON p.atome_id = a.atome_id
         WHERE p.particle_key = 'is_public' AND p.particle_value = 'true'
-        AND a.atome_type = 'file' AND a.deleted_at IS NULL
-    `);
+        AND ${fileTypeWhere('a')} AND a.deleted_at IS NULL
+    `, [...FILE_ATOME_TYPES]);
 
     const sharedCount = await db.query('get', `
         SELECT COUNT(DISTINCT atome_id) as count
         FROM permissions p
         JOIN atomes a ON p.atome_id = a.atome_id
-        WHERE a.atome_type = 'file' AND a.deleted_at IS NULL
-    `);
+        WHERE ${fileTypeWhere('a')} AND a.deleted_at IS NULL
+    `, [...FILE_ATOME_TYPES]);
 
     return {
         totalFiles: stats?.total_files || 0,

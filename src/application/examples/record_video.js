@@ -28,12 +28,51 @@
         const globalBase = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
             ? window.__SQUIRREL_FASTIFY_URL__.trim()
             : '';
-        if (globalBase) return globalBase.replace(/\/$/, '');
+        const preferred = globalBase ? globalBase.replace(/\/$/, '') : '';
+        if (preferred && !shouldUseFastifyBase(preferred)) return '';
+        if (preferred) return preferred;
         try {
-            return String(location.origin || '').replace(/\/$/, '');
+            const fallback = String(location.origin || '').replace(/\/$/, '');
+            return shouldUseFastifyBase(fallback) ? fallback : '';
         } catch (_) {
             return '';
         }
+    }
+
+    function shouldUseFastifyBase(base) {
+        if (!isTauriRuntime()) return true;
+        if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return true;
+        const candidate = (typeof base === 'string') ? base.trim() : '';
+        if (!candidate) return false;
+
+        if (typeof window._checkFastifyAvailable === 'function') {
+            const available = window._checkFastifyAvailable();
+            if (available === false) return false;
+            if (available === true) return true;
+        }
+
+        try {
+            const parsed = new URL(candidate);
+            const host = parsed.hostname;
+            const port = parsed.port || '';
+            const isLocalHost = host === '127.0.0.1' || host === 'localhost';
+            const isDefaultPort = port === '' || port === '3001';
+            if (!isLocalHost || !isDefaultPort) return true;
+        } catch {
+            return false;
+        }
+
+        try {
+            const token = localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token');
+            if (token) return true;
+        } catch { }
+
+        try {
+            const pending = JSON.parse(localStorage.getItem('auth_pending_sync') || '[]');
+            if (Array.isArray(pending) && pending.length > 0) return true;
+        } catch { }
+
+        return false;
     }
 
     function getAuthToken() {

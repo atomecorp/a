@@ -88,6 +88,24 @@ fn sanitize_file_name(name: &str) -> String {
     }
 }
 
+fn sanitize_user_segment(value: &str) -> String {
+    if value.is_empty() {
+        return "anonymous".to_string();
+    }
+    let sanitized: String = value
+        .chars()
+        .map(|c| match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-' => c,
+            _ => '_',
+        })
+        .collect();
+    if sanitized.trim().is_empty() {
+        "anonymous".to_string()
+    } else {
+        sanitized
+    }
+}
+
 fn sanitize_recording_id(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -103,6 +121,47 @@ fn sanitize_recording_id(raw: &str) -> Option<String> {
         return None;
     }
     Some(trimmed.to_string())
+}
+
+fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim())
+        .and_then(|v| {
+            if v.to_lowercase().starts_with("bearer ") {
+                Some(v[7..].trim())
+            } else {
+                Some(v)
+            }
+        })
+        .filter(|v| !v.is_empty())
+        .map(|v| v.to_string())
+}
+
+fn extract_user_id_from_headers(headers: &HeaderMap) -> Option<String> {
+    const CANDIDATES: [&str; 6] = [
+        "x-user-id",
+        "x-userid",
+        "x-username",
+        "x-user-name",
+        "x-phone",
+        "x-user-phone",
+    ];
+
+    for key in CANDIDATES.iter() {
+        if let Some(value) = headers.get(*key).and_then(|v| v.to_str().ok()) {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let sanitized = sanitize_user_segment(trimmed);
+            if sanitized != "anonymous" {
+                return Some(sanitized);
+            }
+        }
+    }
+    None
 }
 
 fn guess_mime_from_ext(name: &str) -> &'static str {
@@ -131,6 +190,54 @@ fn guess_mime_from_ext(name: &str) -> &'static str {
         "bmp" => "image/bmp",
         "tif" | "tiff" => "image/tiff",
         _ => "application/octet-stream",
+    }
+}
+
+async fn resolve_user_downloads_dir(
+    state: &AppState,
+    user_id: &str,
+) -> Result<PathBuf, std::io::Error> {
+    let safe_user = sanitize_user_segment(user_id);
+    let downloads_dir = state
+        .project_root
+        .join("data")
+        .join("users")
+        .join(safe_user)
+        .join("Downloads");
+    fs::create_dir_all(&downloads_dir).await?;
+    Ok(downloads_dir)
+}
+
+async fn resolve_user_upload_path(
+    state: &AppState,
+    user_id: &str,
+    raw_name: &str,
+) -> Result<(String, PathBuf), std::io::Error> {
+    let sanitized = sanitize_file_name(raw_name);
+    let downloads_dir = resolve_user_downloads_dir(state, user_id).await?;
+    let mut candidate = sanitized.clone();
+    let mut counter = 1u32;
+
+    loop {
+        let target = downloads_dir.join(&candidate);
+        if fs::metadata(&target).await.is_err() {
+            return Ok((candidate, target));
+        }
+
+        let path = Path::new(&sanitized);
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("upload");
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+        if ext.is_empty() {
+            candidate = format!("{}_{}", stem, counter);
+        } else {
+            candidate = format!("{}_{}.{}", stem, counter, ext);
+        }
+        counter += 1;
     }
 }
 
@@ -424,9 +531,41 @@ async fn upload_handler(
         _ => "upload.bin",
     };
 
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            );
+        }
+    };
+
+    let token = extract_bearer_token(&headers);
+    let token_user_id =
+        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+    let user_id = if token_user_id != "anonymous" {
+        token_user_id
+    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
+        header_user_id
+    } else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": "Unauthorized" })),
+        );
+    };
+
     let decoded: Cow<'_, str> =
         urlencoding::decode(file_name_raw).unwrap_or_else(|_| Cow::from(file_name_raw));
-    let (file_name, file_path) = resolve_upload_path(&state, decoded.as_ref()).await;
+    let (file_name, file_path) = match resolve_user_upload_path(&state, &user_id, decoded.as_ref()).await {
+        Ok(path) => path,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    };
 
     if let Err(err) = fs::write(&file_path, &body).await {
         eprintln!("Erreur écriture upload {:?}: {}", file_path, err);
@@ -438,7 +577,7 @@ async fn upload_handler(
 
     (
         StatusCode::OK,
-        Json(json!({ "success": true, "file": file_name })),
+        Json(json!({ "success": true, "file": file_name, "owner": user_id })),
     )
 }
 
@@ -535,9 +674,43 @@ async fn user_recordings_upload_handler(
     )
 }
 
-async fn list_uploads_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn list_uploads_handler(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            );
+        }
+    };
+
+    let token = extract_bearer_token(&headers);
+    let token_user_id =
+        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+    let user_id = if token_user_id != "anonymous" {
+        token_user_id
+    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
+        header_user_id
+    } else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": "Unauthorized" })),
+        );
+    };
+
+    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    };
+
     let mut files: Vec<(String, u64, u64)> = Vec::new();
-    match fs::read_dir(&*state.uploads_dir).await {
+    match fs::read_dir(&downloads_dir).await {
         Ok(mut dir) => {
             while let Ok(Some(entry)) = dir.next_entry().await {
                 if !entry
@@ -550,7 +723,7 @@ async fn list_uploads_handler(State(state): State<AppState>) -> impl IntoRespons
                 }
                 let file_name = entry.file_name().to_string_lossy().to_string();
                 let safe_name = sanitize_file_name(&file_name);
-                let path = state.uploads_dir.join(&safe_name);
+                let path = downloads_dir.join(&safe_name);
                 match fs::metadata(&path).await {
                     Ok(meta) => {
                         let modified = meta
@@ -570,7 +743,7 @@ async fn list_uploads_handler(State(state): State<AppState>) -> impl IntoRespons
         Err(err) => {
             eprintln!(
                 "Erreur lecture dossier uploads {:?}: {}",
-                state.uploads_dir, err
+                downloads_dir, err
             );
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -600,10 +773,48 @@ async fn list_uploads_handler(State(state): State<AppState>) -> impl IntoRespons
 
 async fn download_upload_handler(
     State(state): State<AppState>,
+    headers: HeaderMap,
     AxumPath(file): AxumPath<String>,
 ) -> impl IntoResponse {
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            )
+                .into_response();
+        }
+    };
+
+    let token = extract_bearer_token(&headers);
+    let token_user_id =
+        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+    let user_id = if token_user_id != "anonymous" {
+        token_user_id
+    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
+        header_user_id
+    } else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": "Unauthorized" })),
+        )
+            .into_response();
+    };
+
+    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
     let safe_name = sanitize_file_name(&file);
-    let file_path = state.uploads_dir.join(&safe_name);
+    let file_path = downloads_dir.join(&safe_name);
 
     match fs::read(&file_path).await {
         Ok(bytes) => {
@@ -1660,6 +1871,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             header::ACCEPT,
             HeaderName::from_static("x-client-id"),
             HeaderName::from_static("x-filename"),
+            HeaderName::from_static("x-mime-type"),
+            HeaderName::from_static("x-user-id"),
+            HeaderName::from_static("x-userid"),
+            HeaderName::from_static("x-username"),
+            HeaderName::from_static("x-user-name"),
+            HeaderName::from_static("x-phone"),
+            HeaderName::from_static("x-user-phone"),
         ])
         .allow_credentials(true);
 

@@ -234,7 +234,25 @@ async function listLegacyUploads() {
 }
 
 function resolveUserId(user) {
-  return user?.id || user?.userId || user?.user_id || 'anonymous';
+  const direct = user?.id || user?.userId || user?.user_id;
+  if (direct !== undefined && direct !== null) {
+    const text = String(direct).trim();
+    if (text) return text;
+  }
+
+  const phone = user?.phone || user?.user_phone || user?.userPhone;
+  if (phone !== undefined && phone !== null) {
+    const text = String(phone).trim();
+    if (text) return generateDeterministicUserId(text);
+  }
+
+  const fallback = user?.username || user?.name;
+  if (fallback !== undefined && fallback !== null) {
+    const text = String(fallback).trim();
+    if (text) return text;
+  }
+
+  return 'anonymous';
 }
 
 function pickDisplayName(file, fallbackName) {
@@ -712,7 +730,20 @@ async function startServer() {
       origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Client-Id', 'X-Filename']
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Accept',
+        'X-Client-Id',
+        'X-Filename',
+        'X-Mime-Type',
+        'X-User-Id',
+        'X-UserId',
+        'X-Username',
+        'X-User-Name',
+        'X-Phone',
+        'X-User-Phone'
+      ]
     });
 
     // Servir les fichiers statiques depuis staticRoot (../src en dev)
@@ -769,6 +800,39 @@ async function startServer() {
       }
 
       return null;
+    };
+
+    const getHeaderValue = (request, headerName) => {
+      const raw = request.headers?.[headerName];
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      if (value === undefined || value === null) return null;
+      const text = String(value).trim();
+      return text || null;
+    };
+
+    const resolveUserFromHeaders = (request) => {
+      const userId = getHeaderValue(request, 'x-user-id') || getHeaderValue(request, 'x-userid');
+      const username = getHeaderValue(request, 'x-username') || getHeaderValue(request, 'x-user-name');
+      const phone = getHeaderValue(request, 'x-phone') || getHeaderValue(request, 'x-user-phone');
+      if (!userId && !username && !phone) return null;
+      return {
+        id: userId || null,
+        user_id: userId || null,
+        username: username || null,
+        phone: phone || null
+      };
+    };
+
+    const resolveUploadIdentity = async (request) => {
+      const tokenUser = await validateToken(request);
+      if (tokenUser) {
+        return { user: tokenUser, userId: resolveUserId(tokenUser), source: 'token' };
+      }
+      const headerUser = resolveUserFromHeaders(request);
+      if (headerUser) {
+        return { user: headerUser, userId: resolveUserId(headerUser), source: 'headers' };
+      }
+      return { user: null, userId: 'anonymous', source: 'anonymous' };
     };
 
     // Register authentication routes (login, register, logout, OTP, etc.)
@@ -1200,8 +1264,7 @@ async function startServer() {
 
     server.get('/api/uploads', async (request, reply) => {
       try {
-        const user = await validateToken(request);
-        const userId = resolveUserId(user);
+        const { userId } = await resolveUploadIdentity(request);
         const files = await listUploadsForUser(userId);
         return { success: true, files };
       } catch (error) {
@@ -1213,8 +1276,7 @@ async function startServer() {
 
     server.get('/api/uploads/:file', async (request, reply) => {
       try {
-        const user = await validateToken(request);
-        const userId = resolveUserId(user);
+        const { userId } = await resolveUploadIdentity(request);
         const fileParam = request.params.file || '';
         const target = await resolveDownloadTarget(fileParam, userId);
 

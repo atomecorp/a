@@ -32,6 +32,53 @@ function getAuthToken() {
     return '';
 }
 
+async function resolveCurrentUserInfo() {
+    const info = { id: null, username: null, phone: null };
+
+    try {
+        if (window.AdoleAPI?.auth?.getCurrentInfo) {
+            const current = window.AdoleAPI.auth.getCurrentInfo();
+            if (current) {
+                info.id = current.user_id || current.atome_id || current.id || info.id;
+                info.username = current.username || current.name || info.username;
+                info.phone = current.phone || info.phone;
+            }
+        }
+    } catch (_) { }
+
+    if ((!info.id || !info.username || !info.phone) && typeof window.AdoleAPI?.auth?.current === 'function') {
+        try {
+            const res = await window.AdoleAPI.auth.current();
+            const user = res?.user || res;
+            if (user) {
+                info.id = info.id || user.user_id || user.atome_id || user.id || null;
+                info.username = info.username || user.username || user.name || null;
+                info.phone = info.phone || user.phone || null;
+            }
+        } catch (_) { }
+    }
+
+    if ((!info.id || !info.username || !info.phone) && window.__currentUser) {
+        try {
+            const user = window.__currentUser;
+            info.id = info.id || user.user_id || user.atome_id || user.id || null;
+            info.username = info.username || user.username || user.name || null;
+            info.phone = info.phone || user.phone || null;
+        } catch (_) { }
+    }
+
+    return info;
+}
+
+async function buildUserHeaders(extra = {}) {
+    const headers = { ...extra };
+    const info = await resolveCurrentUserInfo();
+    if (info.id) headers['X-User-Id'] = info.id;
+    if (info.username) headers['X-Username'] = info.username;
+    if (info.phone) headers['X-Phone'] = info.phone;
+    return headers;
+}
+
 $('div', {
     id: uploadsListId,
     parent: '#view',
@@ -133,15 +180,43 @@ function attachDropZoneHighlight() {
 
 attachDropZoneHighlight();
 
+function normalizeApiBase(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    return trimmed ? trimmed.replace(/\/$/, '') : '';
+}
+
+function isTauriRuntime() {
+    if (typeof window === 'undefined') return false;
+    return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+}
+
+function isLocalBase(base) {
+    if (isTauriRuntime()) return true;
+    const normalized = normalizeApiBase(base).toLowerCase();
+    if (!normalized) return true;
+    return normalized.includes('127.0.0.1') || normalized.includes('localhost');
+}
+
+function shouldSendUserHeaders(base) {
+    return isLocalBase(base);
+}
+
 function resolveApiBases() {
     try {
-        const platform = typeof current_platform === 'function' ? current_platform() : '';
-        if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
-            const fastifyBase = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
-                ? window.__SQUIRREL_FASTIFY_URL__.trim().replace(/\/$/, '')
-                : '';
-            return ['http://127.0.0.1:3000', fastifyBase, ''].filter(v => v !== null && v !== undefined);
+        if (isTauriRuntime()) {
+            const port = (typeof window !== 'undefined')
+                ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || 3000)
+                : 3000;
+            return [`http://127.0.0.1:${port}`];
         }
+
+        const configured = normalizeApiBase(
+            (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+                ? window.__SQUIRREL_FASTIFY_URL__
+                : (typeof window !== 'undefined' ? window.__SQUIRREL_TAURI_FASTIFY_URL__ : '')
+        );
+        if (configured) return [configured];
     } catch (_) { }
     return [''];
 }
@@ -152,9 +227,13 @@ let lastSuccessfulApiBase = null;
 function uniqueBaseCandidates() {
     const seen = new Set();
     const ordered = [];
+    const allowEmptyBase = apiBases.some((base) => !base);
 
     const pushBase = (base) => {
         const value = base || '';
+        if (isTauriRuntime() && !isLocalBase(value)) {
+            return;
+        }
         if (!seen.has(value)) {
             seen.add(value);
             ordered.push(value);
@@ -166,7 +245,9 @@ function uniqueBaseCandidates() {
     }
 
     apiBases.forEach(pushBase);
-    pushBase('');
+    if (allowEmptyBase) {
+        pushBase('');
+    }
 
     return ordered;
 }
@@ -182,12 +263,14 @@ function formatBytes(bytes) {
 async function fetchUploadsMetadata() {
     const bases = uniqueBaseCandidates();
     let lastError = null;
+    const token = getAuthToken();
+    const userHeaders = await buildUserHeaders();
 
     for (const base of bases) {
         const endpoint = base ? `${base}/api/uploads` : '/api/uploads';
         try {
-            const token = getAuthToken();
-            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            const headers = shouldSendUserHeaders(base) ? { ...userHeaders } : {};
+            if (token) headers.Authorization = `Bearer ${token}`;
             const response = await fetch(endpoint, {
                 method: 'GET',
                 headers,
@@ -283,11 +366,15 @@ async function downloadUpload(fileId, fileName) {
     const url = base ? `${base}/api/uploads/${encoded}` : `/api/uploads/${encoded}`;
 
     const token = getAuthToken();
-    if (token) {
+    const userHeaders = await buildUserHeaders();
+    const headers = shouldSendUserHeaders(base) ? { ...userHeaders } : {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const hasUserHints = Boolean(headers['X-User-Id'] || headers['X-Username'] || headers['X-Phone']);
+    if (token || hasUserHints) {
         try {
             const response = await fetch(url, {
                 method: 'GET',
-                headers: { Authorization: `Bearer ${token}` },
+                headers,
                 credentials: 'include'
             });
             if (!response.ok) {
@@ -332,19 +419,27 @@ async function sendFileToServer(entry) {
     }
 
     const fileName = entry && entry.name ? entry.name : (blob.name || `upload_${Date.now()}`);
-    const headers = {
-        'Content-Type': 'application/octet-stream',
-        'X-Filename': encodeURIComponent(fileName)
-    };
+    const detectedMime = (typeof entry?.type === 'string' && entry.type.trim())
+        ? entry.type.trim()
+        : (typeof blob.type === 'string' && blob.type.trim() ? blob.type.trim() : '');
     const token = getAuthToken();
-    if (token) {
-        headers.Authorization = `Bearer ${token}`;
-    }
+    const userHeaders = await buildUserHeaders();
 
     let lastError = null;
     for (const base of uniqueBaseCandidates()) {
         const endpoint = base ? `${base}/api/uploads` : '/api/uploads';
         try {
+            const headers = {
+                'Content-Type': 'application/octet-stream',
+                'X-Filename': encodeURIComponent(fileName)
+            };
+            if (shouldSendUserHeaders(base)) {
+                Object.assign(headers, userHeaders);
+                if (detectedMime) headers['X-Mime-Type'] = detectedMime;
+            }
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers,
