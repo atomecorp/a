@@ -81,17 +81,21 @@ $('div', {
     id: uploadsListId,
     parent: '#view',
     css: {
-        position: 'relative',
+        position: 'fixed',
         zIndex: '9000',
         backgroundColor: '#111',
         color: '#fff',
-        marginLeft: '50px',
-        marginTop: '10px',
+        left: '50px',
+        top: '10px',
         padding: '10px',
         borderRadius: '6px',
         width: '260px',
         display: 'inline-block',
-        verticalAlign: 'top'
+        verticalAlign: 'top',
+        cursor: 'move',
+        userSelect: 'none',
+        pointerEvents: 'auto',
+        touchAction: 'none'
     }
 });
 
@@ -101,8 +105,12 @@ $('div', {
     css: {
         zIndex: '9000',
         fontWeight: 'bold',
-        marginBottom: '8px'
-    }
+        marginBottom: '8px',
+        cursor: 'move',
+        userSelect: 'none',
+        pointerEvents: 'auto'
+    },
+    'data-role': 'aBox-drag-handle'
 });
 
 $('div', {
@@ -135,6 +143,93 @@ $('div', {
     },
     text: 'Drop files here'
 });
+
+function attachUploadsListDrag() {
+    const panel = document.getElementById(uploadsListId);
+    if (!panel) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+
+    const onPointerMove = (event) => {
+        if (!isDragging) return;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        const nextLeft = Math.max(0, startLeft + dx);
+        const nextTop = Math.max(0, startTop + dy);
+        panel.style.left = `${nextLeft}px`;
+        panel.style.top = `${nextTop}px`;
+    };
+
+    const stopDrag = (event) => {
+        if (!isDragging) return;
+        isDragging = false;
+        try {
+            panel.releasePointerCapture?.(event.pointerId);
+        } catch (_) { }
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', stopDrag);
+        document.removeEventListener('mousemove', onPointerMove);
+        document.removeEventListener('mouseup', stopDrag);
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', stopDrag);
+    };
+
+    const startDrag = (clientX, clientY) => {
+        const rect = panel.getBoundingClientRect();
+        startX = clientX;
+        startY = clientY;
+        startLeft = rect.left;
+        startTop = rect.top;
+        isDragging = true;
+    };
+
+    const onTouchMove = (event) => {
+        if (!isDragging || !event.touches || !event.touches[0]) return;
+        const touch = event.touches[0];
+        onPointerMove({ clientX: touch.clientX, clientY: touch.clientY });
+    };
+
+    const shouldIgnoreDrag = (target) => {
+        if (!target) return false;
+        const tag = String(target.tagName || '').toLowerCase();
+        return tag === 'input' || tag === 'textarea' || tag === 'button' || tag === 'select';
+    };
+
+    panel.addEventListener('pointerdown', (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        if (shouldIgnoreDrag(event.target)) return;
+        startDrag(event.clientX, event.clientY);
+        try {
+            panel.setPointerCapture?.(event.pointerId);
+        } catch (_) { }
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', stopDrag);
+        event.preventDefault();
+    });
+
+    panel.addEventListener('mousedown', (event) => {
+        if (event.button !== 0) return;
+        if (shouldIgnoreDrag(event.target)) return;
+        startDrag(event.clientX, event.clientY);
+        document.addEventListener('mousemove', onPointerMove);
+        document.addEventListener('mouseup', stopDrag);
+        event.preventDefault();
+    });
+
+    panel.addEventListener('touchstart', (event) => {
+        if (!event.touches || !event.touches[0]) return;
+        if (shouldIgnoreDrag(event.target)) return;
+        const touch = event.touches[0];
+        startDrag(touch.clientX, touch.clientY);
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', stopDrag);
+        event.preventDefault();
+    }, { passive: false });
+}
 
 function setDropZoneColor(color) {
     const zone = document.getElementById(dropZoneId);
@@ -177,6 +272,7 @@ function attachDropZoneHighlight() {
 }
 
 attachDropZoneHighlight();
+attachUploadsListDrag();
 
 function normalizeApiBase(value) {
     if (typeof value !== 'string') return '';

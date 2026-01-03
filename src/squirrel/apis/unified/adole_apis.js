@@ -2715,7 +2715,17 @@ async function sync_atomes(callback) {
             }
         }
 
-        const identifier = encodeURIComponent(String(atomeId || safeFileName));
+        console.log('[sync_atomes] asset pull attempt', {
+            atomeId,
+            ownerId,
+            fileName: safeFileName,
+            filePath,
+            localPath,
+            sizeBytes,
+            base
+        });
+
+        const identifier = encodeURIComponent(String(atomeId));
         try {
             const response = await fetch(`${base}/api/uploads/${identifier}`, {
                 method: 'GET',
@@ -2724,7 +2734,14 @@ async function sync_atomes(callback) {
             });
             if (!response.ok) {
                 const text = await response.text().catch(() => '');
-                return { ok: false, error: text || `download_failed_${response.status}` };
+                const error = text || `download_failed_${response.status}`;
+                console.log('[sync_atomes] asset pull failed', {
+                    atomeId,
+                    fileName: safeFileName,
+                    status: response.status,
+                    error
+                });
+                return { ok: false, error };
             }
             const buffer = await response.arrayBuffer();
             const bytes = new Uint8Array(buffer);
@@ -2734,7 +2751,13 @@ async function sync_atomes(callback) {
             }
             return { ok: true, path: localPath, size: bytes.length };
         } catch (e) {
-            return { ok: false, error: e?.message || 'download_failed' };
+            const error = e?.message || 'download_failed';
+            console.log('[sync_atomes] asset pull failed', {
+                atomeId,
+                fileName: safeFileName,
+                error
+            });
+            return { ok: false, error };
         }
     };
 
