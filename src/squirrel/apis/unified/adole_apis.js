@@ -2550,6 +2550,66 @@ async function sync_atomes(callback) {
         }
     };
 
+    const tryTauriCreateDir = async (dirPath) => {
+        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
+        const fs = tauri && tauri.fs ? tauri.fs : null;
+        if (!fs || typeof fs.createDir !== 'function') return { ok: false, error: 'tauri_fs_create_dir_unavailable' };
+        try {
+            await fs.createDir(dirPath, { recursive: true });
+            return { ok: true };
+        } catch (e) {
+            try {
+                await fs.createDir({ dir: dirPath, recursive: true });
+                return { ok: true };
+            } catch (e2) {
+                return { ok: false, error: e2?.message || e?.message || 'tauri_create_dir_failed' };
+            }
+        }
+    };
+
+    const tryTauriWriteBinaryFile = async (path, bytes) => {
+        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
+        const fs = tauri && tauri.fs ? tauri.fs : null;
+        if (!fs || typeof fs.writeBinaryFile !== 'function') {
+            return { ok: false, error: 'tauri_fs_write_unavailable' };
+        }
+        try {
+            const parent = String(path).replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+            if (parent) {
+                const mk = await tryTauriCreateDir(parent);
+                if (!mk.ok) return { ok: false, error: mk.error || 'tauri_create_dir_failed' };
+            }
+        } catch (_) { }
+        try {
+            const contents = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes);
+            try {
+                await fs.writeBinaryFile({ path, contents });
+            } catch (_) {
+                await fs.writeBinaryFile(path, contents);
+            }
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: e?.message || 'tauri_write_failed' };
+        }
+    };
+
+    const tryTauriStat = async (path) => {
+        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
+        const fs = tauri && tauri.fs ? tauri.fs : null;
+        if (!fs) return null;
+        try {
+            if (typeof fs.metadata === 'function') {
+                return await fs.metadata(path);
+            }
+            if (typeof fs.stat === 'function') {
+                return await fs.stat(path);
+            }
+        } catch {
+            return null;
+        }
+        return null;
+    };
+
     const isFileAssetAtome = (atome) => {
         return is_file_asset_type(atome?.atome_type || atome?.type);
     };
@@ -2562,6 +2622,56 @@ async function sync_atomes(callback) {
         const mimeType = particles.mime_type || particles.mimeType || '';
         const sizeBytes = particles.size_bytes || particles.sizeBytes || particles.size || null;
         return { particles, fileName, originalName, filePath, mimeType, sizeBytes };
+    };
+
+    const downloadFileAssetFromFastify = async (atome) => {
+        if (!is_tauri_runtime()) return { ok: false, error: 'not_tauri' };
+        const atomeId = atome?.atome_id || atome?.id;
+        if (!atomeId) return { ok: false, error: 'missing_atome_id' };
+
+        const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
+        const { fileName, originalName, filePath, sizeBytes } = extractFileMeta(atome);
+        const safeFileName = fileName || originalName || atomeId;
+        const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
+        if (!localPath) return { ok: false, error: 'local_path_missing' };
+
+        const base = resolveFastifyUploadBase();
+        if (!base) return { ok: false, error: 'fastify_base_missing' };
+
+        const token = FastifyAdapter?.getToken ? FastifyAdapter.getToken() : null;
+        if (!token) return { ok: false, error: 'fastify_token_missing' };
+
+        if (sizeBytes != null) {
+            const meta = await tryTauriStat(localPath);
+            const localSize = typeof meta?.size === 'number'
+                ? meta.size
+                : (typeof meta?.len === 'number' ? meta.len : null);
+            if (localSize != null && Number(localSize) === Number(sizeBytes)) {
+                return { ok: true, skipped: true, reason: 'size_match' };
+            }
+        }
+
+        const identifier = encodeURIComponent(String(atomeId || safeFileName));
+        try {
+            const response = await fetch(`${base}/api/uploads/${identifier}`, {
+                method: 'GET',
+                headers: { Authorization: `Bearer ${token}` },
+                credentials: 'omit'
+            });
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                return { ok: false, error: text || `download_failed_${response.status}` };
+            }
+            const buffer = await response.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+            const writeResult = await tryTauriWriteBinaryFile(localPath, bytes);
+            if (!writeResult.ok) {
+                return { ok: false, error: writeResult.error || 'write_failed' };
+            }
+            return { ok: true, path: localPath, size: bytes.length };
+        } catch (e) {
+            return { ok: false, error: e?.message || 'download_failed' };
+        }
     };
 
     const uploadFileAssetToFastify = async (atome) => {
@@ -2717,6 +2827,16 @@ async function sync_atomes(callback) {
 
             if (createResult.ok || createResult.success) {
                 result.pulled.success++;
+                if (isFileAssetAtome(atome)) {
+                    const downloadResult = await downloadFileAssetFromFastify(atome);
+                    if (!downloadResult.ok) {
+                        result.pulled.errors.push({
+                            id: atome.atome_id || atome.id,
+                            error: downloadResult.error || 'asset_download_failed',
+                            asset: true
+                        });
+                    }
+                }
             } else {
                 result.pulled.failed++;
                 result.pulled.errors.push({ id: atome.atome_id, error: createResult.error });
@@ -2765,6 +2885,16 @@ async function sync_atomes(callback) {
 
             if (updateResult.ok || updateResult.success) {
                 result.updated.success++;
+                if (isFileAssetAtome(item.fastify)) {
+                    const downloadResult = await downloadFileAssetFromFastify(item.fastify);
+                    if (!downloadResult.ok) {
+                        result.updated.errors.push({
+                            id: item.id,
+                            error: downloadResult.error || 'asset_download_failed',
+                            asset: true
+                        });
+                    }
+                }
             } else {
                 result.updated.failed++;
                 result.updated.errors.push({ id: item.id, error: updateResult.error });
