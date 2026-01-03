@@ -428,6 +428,13 @@ async function refreshUploadsList() {
         const files = await fetchUploadsMetadata();
         renderUploadsList(files);
     } catch (error) {
+        const message = String(error?.message || '');
+        const unauthorized = message.includes('Unauthorized') || message.includes('401');
+        if (unauthorized) {
+            uploadsAuthMissing = true;
+            renderUploadsList([]);
+            return;
+        }
         console.error('Unable to refresh uploads list:', error);
         const container = document.getElementById(uploadsListBodyId);
         if (container) {

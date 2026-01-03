@@ -1001,10 +1001,10 @@ async function openDialog() {
 function createShareButton() {
     const root = getIntuitionHost();
     if (!root) {
-        if (!shareButtonWarned) {
+        if (!shareButtonWarned && typeof window !== 'undefined' && window.__SQUIRREL_DEBUG_SHARE_UI__ === true) {
             console.warn('[ShareUI] #intuition host not ready; Share button not created yet');
-            shareButtonWarned = true;
         }
+        shareButtonWarned = true;
         scheduleShareButtonRetry();
         return;
     }
