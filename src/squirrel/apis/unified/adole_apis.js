@@ -2740,11 +2740,13 @@ async function sync_atomes(callback) {
     const syncFastifyFileAssetsToTauri = async () => {
         if (!is_tauri_runtime()) return { ok: false, reason: 'not_tauri' };
         if (window?.__SQUIRREL_DISABLE_FILE_ASSET_SYNC__ === true) {
+            console.log('[sync_atomes] asset pull skipped: disabled');
             return { ok: false, reason: 'disabled' };
         }
 
         const now = Date.now();
         if (now - _lastFastifyAssetSync < 30_000) {
+            console.log('[sync_atomes] asset pull skipped: throttled');
             return { ok: true, skipped: true, reason: 'throttled' };
         }
         _lastFastifyAssetSync = now;
@@ -2753,7 +2755,10 @@ async function sync_atomes(callback) {
             try { await ensure_fastify_token(); } catch { }
         }
         const token = FastifyAdapter?.getToken?.();
-        if (!token) return { ok: false, reason: 'fastify_token_missing' };
+        if (!token) {
+            console.log('[sync_atomes] asset pull blocked: fastify_token_missing');
+            return { ok: false, reason: 'fastify_token_missing' };
+        }
 
         let ownerId = currentUserId;
         if (!ownerId) {
@@ -2762,7 +2767,13 @@ async function sync_atomes(callback) {
                 ownerId = current?.user?.user_id || current?.user?.atome_id || current?.user?.id || null;
             } catch { }
         }
-        if (!ownerId) return { ok: false, reason: 'owner_missing' };
+        if (!ownerId) {
+            console.log('[sync_atomes] asset pull blocked: owner_missing');
+            return { ok: false, reason: 'owner_missing' };
+        }
+
+        const fastifyBase = resolveFastifyUploadBase();
+        console.log('[sync_atomes] asset pull start', { ownerId, fastifyBase });
 
         const summary = { ok: true, attempted: 0, downloaded: 0, skipped: 0, failed: 0 };
         for (const type of FILE_ASSET_TYPES) {
@@ -2784,6 +2795,7 @@ async function sync_atomes(callback) {
             }
         }
 
+        console.log('[sync_atomes] asset pull summary', summary);
         return summary;
     };
 

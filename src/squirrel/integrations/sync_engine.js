@@ -402,10 +402,28 @@ class UnifiedSyncClient {
 
         this.setupNetworkListeners();
 
+        try {
+            const base = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+                ? window.__SQUIRREL_FASTIFY_URL__.trim()
+                : '';
+            const wsUrl = resolveWsUrl();
+            let hasCloudToken = false;
+            try {
+                hasCloudToken = !!(localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token'));
+            } catch (_) { }
+            console.log('[sync_engine] debug: start', { base, wsUrl, hasCloudToken, runtime: this.runtime });
+        } catch (_) { }
+
         if (!this.state.fastifyChecked) {
             this.state.fastifyChecked = true;
             const available = await checkFastifyAvailable();
             if (!available) {
+                try {
+                    const base = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+                        ? window.__SQUIRREL_FASTIFY_URL__.trim()
+                        : '';
+                    console.log('[sync_engine] debug: fastify unavailable', { base });
+                } catch (_) { }
                 this.state.silentMode = true;
                 this.state.serverAvailable = false;
                 this.scheduleBackgroundRetry();
@@ -422,6 +440,7 @@ class UnifiedSyncClient {
         this.state.endpoint = url;
 
         if (!url) {
+            console.log('[sync_engine] debug: missing ws url');
             this.handleConnectionError();
             return;
         }
@@ -501,6 +520,9 @@ class UnifiedSyncClient {
         this.state.totalFailures++;
         this.state.connected = false;
         this.state.serverAvailable = false;
+        if (this.state.totalFailures === 1) {
+            console.log('[sync_engine] debug: connection error', { endpoint: this.state.endpoint });
+        }
 
         if (this.state.totalFailures >= CONFIG.SILENT_MODE_AFTER_FAILURES && !this.state.silentMode) {
             this.state.silentMode = true;
