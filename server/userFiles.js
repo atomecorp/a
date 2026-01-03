@@ -64,21 +64,26 @@ function fileTypeWhere(alias = 'a') {
 
 export async function registerFileUpload(fileName, userId, options = {}) {
     const now = new Date().toISOString();
-    const atomeId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const atomeId = options.atomeId || options.atome_id || `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const atomeType = resolveFileAtomeType(fileName, options);
 
     try {
         // Create atome for the file
         await db.query('run', `
-            INSERT INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        `, [atomeId, atomeType, userId, now, now]);
+            INSERT OR REPLACE INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at)
+            VALUES (
+                ?, ?, ?, 
+                COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?),
+                ?
+            )
+        `, [atomeId, atomeType, userId, atomeId, now, now]);
 
         // Store file metadata as particles
         const particles = {
             file_name: fileName,
             original_name: options.originalName || fileName,
             mime_type: options.mimeType || null,
+            file_path: options.filePath || null,
             size: options.size || 0,
             is_public: false
         };
@@ -86,7 +91,7 @@ export async function registerFileUpload(fileName, userId, options = {}) {
         for (const [key, value] of Object.entries(particles)) {
             if (value !== null) {
                 await db.query('run', `
-                    INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+                    INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, updated_at)
                     VALUES (?, ?, ?, ?)
                 `, [atomeId, key, JSON.stringify(value), now]);
             }

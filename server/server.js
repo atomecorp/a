@@ -99,6 +99,8 @@ import { ensureUserHome } from './userHome.js';
 import {
   ensureUserDownloadsDir,
   resolveUserUploadPath,
+  resolveUserAssetPath,
+  normalizeUserRelativePath,
   resolveUserFilePath,
   sanitizeFileName,
   ensureSharedFileLink,
@@ -736,6 +738,10 @@ async function startServer() {
         'Accept',
         'X-Client-Id',
         'X-Filename',
+        'X-Original-Name',
+        'X-File-Path',
+        'X-Atome-Id',
+        'X-Atome-Type',
         'X-Mime-Type',
         'X-User-Id',
         'X-UserId',
@@ -890,14 +896,18 @@ async function startServer() {
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
           : request.headers['x-filename'];
-        if (!headerValue) {
+        const pathHeader = Array.isArray(request.headers['x-file-path'])
+          ? request.headers['x-file-path'][0]
+          : request.headers['x-file-path'];
+
+        if (!headerValue && !pathHeader) {
           reply.code(400);
           return { success: false, error: 'Missing X-Filename header' };
         }
 
-        let decodedName = String(headerValue);
+        let decodedName = headerValue ? String(headerValue) : '';
         try {
-          decodedName = decodeURIComponent(decodedName);
+          decodedName = decodedName ? decodeURIComponent(decodedName) : decodedName;
         } catch {
           // Keep original value if decoding fails
         }
@@ -908,23 +918,60 @@ async function startServer() {
           return { success: false, error: 'Empty upload body' };
         }
 
-        const { fileName, filePath } = await resolveUserUploadPath(
-          projectRoot,
-          { id: userId, username: user?.username },
-          decodedName
-        );
+        let fileName = decodedName;
+        let filePath = null;
+        let relativePath = null;
+
+        if (pathHeader) {
+          const rawPath = Array.isArray(pathHeader) ? pathHeader[0] : pathHeader;
+          const normalizedRelative = normalizeUserRelativePath(rawPath, userId);
+          const resolved = await resolveUserAssetPath(
+            projectRoot,
+            { id: userId, username: user?.username },
+            normalizedRelative
+          );
+          fileName = fileName || resolved.fileName;
+          filePath = resolved.filePath;
+          relativePath = resolved.relativePath;
+        } else {
+          const resolved = await resolveUserUploadPath(
+            projectRoot,
+            { id: userId, username: user?.username },
+            decodedName || 'upload.bin'
+          );
+          fileName = resolved.fileName;
+          filePath = resolved.filePath;
+          relativePath = path.join('Downloads', resolved.fileName);
+        }
+
         await fs.writeFile(filePath, bodyBuffer);
 
         if (DATABASE_ENABLED) {
           // Register file ownership
+          const atomeIdHeader = Array.isArray(request.headers['x-atome-id'])
+            ? request.headers['x-atome-id'][0]
+            : request.headers['x-atome-id'];
+          const atomeTypeHeader = Array.isArray(request.headers['x-atome-type'])
+            ? request.headers['x-atome-type'][0]
+            : request.headers['x-atome-type'];
+          const originalNameHeader = Array.isArray(request.headers['x-original-name'])
+            ? request.headers['x-original-name'][0]
+            : request.headers['x-original-name'];
+          const mimeHeader = Array.isArray(request.headers['x-mime-type'])
+            ? request.headers['x-mime-type'][0]
+            : request.headers['x-mime-type'];
+
           await registerFileUpload(fileName, userId, {
-            originalName: decodedName,
-            mimeType: request.headers['content-type'] || null,
-            size: bodyBuffer.length
+            atomeId: atomeIdHeader || null,
+            atomeType: atomeTypeHeader || null,
+            originalName: originalNameHeader || decodedName || fileName,
+            mimeType: mimeHeader || request.headers['content-type'] || null,
+            size: bodyBuffer.length,
+            filePath: relativePath || null
           });
         }
 
-        return { success: true, file: fileName, owner: userId };
+        return { success: true, file: fileName, owner: userId, path: relativePath || null };
       } catch (error) {
         request.log.error({ err: error }, 'File upload failed');
         reply.code(500);

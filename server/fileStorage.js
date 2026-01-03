@@ -9,6 +9,33 @@ function sanitizeSegment(value) {
   return String(value || '').trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
 }
 
+function normalizeRelativePath(rawPath) {
+  if (!rawPath) return '';
+  const cleaned = String(rawPath).trim().replace(/\\/g, '/').replace(/^file:\/\//i, '');
+  const parts = cleaned.split('/').filter((part) => part && part !== '.' && part !== '..');
+  if (!parts.length) return '';
+  const safeParts = parts.map((part, idx) => (
+    idx === parts.length - 1 ? sanitizeFileName(part) : sanitizeSegment(part)
+  ));
+  return safeParts.join('/');
+}
+
+export function normalizeUserRelativePath(rawPath, userId) {
+  if (!rawPath) return '';
+  const safeUser = sanitizeSegment(userId || 'user');
+  let cleaned = String(rawPath).trim().replace(/\\/g, '/').replace(/^file:\/\//i, '');
+  const anchor = `/data/users/${safeUser}/`;
+  const altAnchor = `data/users/${safeUser}/`;
+  if (cleaned.includes(anchor)) {
+    cleaned = cleaned.slice(cleaned.indexOf(anchor) + anchor.length);
+  } else if (cleaned.startsWith(altAnchor)) {
+    cleaned = cleaned.slice(altAnchor.length);
+  } else if (cleaned.startsWith(`${safeUser}/`)) {
+    cleaned = cleaned.slice(`${safeUser}/`.length);
+  }
+  return normalizeRelativePath(cleaned);
+}
+
 export function sanitizeFileName(name) {
   const base = typeof name === 'string' ? name : 'upload.bin';
   const cleaned = path.basename(base).replace(/[^a-z0-9._-]/gi, '_');
@@ -48,6 +75,29 @@ export async function resolveUserUploadPath(projectRoot, user, rawName, options 
   }
 
   return { fileName: candidate, filePath: targetPath, downloadsDir };
+}
+
+export async function resolveUserAssetPath(projectRoot, user, rawPath, options = {}) {
+  const homeInfo = await ensureUserHome(projectRoot, user, options.userRoot);
+  const relativePath = normalizeUserRelativePath(rawPath, user?.id || user?.user_id);
+  if (!relativePath) {
+    throw new Error('Invalid asset path');
+  }
+
+  const targetPath = path.join(homeInfo.home, relativePath);
+  const relative = path.relative(homeInfo.home, targetPath);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Invalid asset path');
+  }
+
+  await fs.mkdir(path.dirname(targetPath), { recursive: true, mode: 0o700 });
+
+  return {
+    fileName: path.basename(targetPath),
+    filePath: targetPath,
+    relativePath,
+    homeDir: homeInfo.home
+  };
 }
 
 export async function resolveUserFilePath(projectRoot, userId, fileName, options = {}) {

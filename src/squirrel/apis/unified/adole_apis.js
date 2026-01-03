@@ -6,6 +6,16 @@
 
 import { TauriAdapter, FastifyAdapter, CONFIG, generateUUID, checkBackends } from './adole.js';
 
+const FILE_ASSET_TYPES = new Set([
+    'file', 'image', 'video', 'sound', 'text', 'shape', 'raw',
+    'audio_recording', 'video_recording'
+]);
+
+function is_file_asset_type(value) {
+    const type = String(value || '').trim().toLowerCase();
+    return FILE_ASSET_TYPES.has(type);
+}
+
 function normalizeAtomeRecord(raw) {
     if (!raw || typeof raw !== 'object') return raw;
 
@@ -1973,7 +1983,11 @@ async function list_unsynced_atomes(callback) {
     }
 
     // Known atome types to query (server requires a type when no owner specified)
-    const atomeTypes = ['user', 'tenant', 'project', 'machine', 'atome', 'shape', 'color', 'text', 'image', 'audio', 'video', 'code', 'data'];
+    const atomeTypes = [
+        'user', 'tenant', 'project', 'machine', 'atome', 'shape', 'color', 'text',
+        'image', 'audio', 'video', 'code', 'data',
+        'file', 'sound', 'raw', 'audio_recording', 'video_recording'
+    ];
     const listLimit = 2000;
 
     let tauriAtomes = [];
@@ -2452,6 +2466,157 @@ async function sync_atomes(callback) {
         };
     };
 
+    const normalizePath = (value) => {
+        if (!value) return '';
+        return String(value).trim().replace(/\\/g, '/').replace(/^file:\/\//i, '');
+    };
+
+    const isAbsolutePath = (value) => {
+        if (!value) return false;
+        const str = String(value);
+        return str.startsWith('/') || /^[A-Za-z]:[\\/]/.test(str);
+    };
+
+    const normalizeUserRelativePath = (value, userId) => {
+        if (!value) return '';
+        const safeUser = String(userId || '').trim();
+        let cleaned = normalizePath(value);
+        if (!cleaned) return '';
+        const anchor = `/data/users/${safeUser}/`;
+        const altAnchor = `data/users/${safeUser}/`;
+        if (safeUser && cleaned.includes(anchor)) {
+            cleaned = cleaned.slice(cleaned.indexOf(anchor) + anchor.length);
+        } else if (safeUser && cleaned.startsWith(altAnchor)) {
+            cleaned = cleaned.slice(altAnchor.length);
+        } else if (safeUser && cleaned.startsWith(`${safeUser}/`)) {
+            cleaned = cleaned.slice(`${safeUser}/`.length);
+        }
+        cleaned = cleaned.replace(/^\/+/, '');
+        return cleaned;
+    };
+
+    const resolveLocalAssetPath = (value, userId, fallbackName) => {
+        if (value) {
+            const normalized = normalizePath(value);
+            if (normalized) {
+                if (isAbsolutePath(normalized)) return normalized;
+                if (normalized.startsWith('data/users/')) return normalized;
+                if (userId) return `data/users/${userId}/${normalized}`;
+                return normalized;
+            }
+        }
+        if (userId && fallbackName) {
+            return `data/users/${userId}/Downloads/${fallbackName}`;
+        }
+        return fallbackName || '';
+    };
+
+    const resolveFastifyUploadBase = () => {
+        const adapterBase = (FastifyAdapter && typeof FastifyAdapter.baseUrl === 'string')
+            ? FastifyAdapter.baseUrl.trim()
+            : '';
+        if (adapterBase) return adapterBase.replace(/\/$/, '');
+        const explicit = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+            ? window.__SQUIRREL_FASTIFY_URL__.trim()
+            : '';
+        if (explicit) return explicit.replace(/\/$/, '');
+        try {
+            return String(location.origin || '').replace(/\/$/, '');
+        } catch {
+            return '';
+        }
+    };
+
+    const isLocalFastifyBase = (base) => {
+        if (!base) return false;
+        try {
+            const parsed = new URL(base);
+            return parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost';
+        } catch {
+            return false;
+        }
+    };
+
+    const readTauriBinaryFile = async (path) => {
+        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
+        const fs = tauri && tauri.fs ? tauri.fs : null;
+        if (!fs || typeof fs.readBinaryFile !== 'function') return null;
+        try {
+            const out = await fs.readBinaryFile(path);
+            if (!out) return null;
+            return (out instanceof Uint8Array) ? out : new Uint8Array(out);
+        } catch {
+            return null;
+        }
+    };
+
+    const isFileAssetAtome = (atome) => {
+        return is_file_asset_type(atome?.atome_type || atome?.type);
+    };
+
+    const extractFileMeta = (atome) => {
+        const particles = extractParticles(atome);
+        const fileName = particles.file_name || particles.fileName || particles.name || atome?.file_name || '';
+        const originalName = particles.original_name || particles.originalName || fileName;
+        const filePath = particles.file_path || particles.filePath || particles.path || particles.rel_path || '';
+        const mimeType = particles.mime_type || particles.mimeType || '';
+        const sizeBytes = particles.size_bytes || particles.sizeBytes || particles.size || null;
+        return { particles, fileName, originalName, filePath, mimeType, sizeBytes };
+    };
+
+    const uploadFileAssetToFastify = async (atome) => {
+        const atomeId = atome?.atome_id || atome?.id;
+        if (!atomeId) return { ok: false, error: 'missing_atome_id' };
+
+        const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
+        const type = String(atome?.atome_type || atome?.type || '').trim().toLowerCase();
+        const { fileName, originalName, filePath, mimeType, sizeBytes } = extractFileMeta(atome);
+        const safeFileName = fileName || originalName || atomeId;
+        const relativePath = normalizeUserRelativePath(filePath || safeFileName, ownerId)
+            || (safeFileName ? `Downloads/${safeFileName}` : '');
+
+        const base = resolveFastifyUploadBase();
+        if (!base) return { ok: false, error: 'fastify_base_missing' };
+
+        const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
+        const bytes = await readTauriBinaryFile(localPath);
+        if (!bytes || !bytes.length) {
+            return { ok: false, error: 'local_asset_missing' };
+        }
+
+        const token = FastifyAdapter?.getToken ? FastifyAdapter.getToken() : null;
+        if (!token) {
+            return { ok: false, error: 'fastify_token_missing' };
+        }
+
+        const headers = {
+            'Content-Type': 'application/octet-stream',
+            'X-Filename': encodeURIComponent(safeFileName),
+            'X-Original-Name': String(originalName || safeFileName || ''),
+            'X-Atome-Id': String(atomeId),
+            'X-Atome-Type': String(type || ''),
+            'X-Mime-Type': String(mimeType || '')
+        };
+        if (relativePath) headers['X-File-Path'] = String(relativePath);
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        try {
+            const res = await fetch(`${base}/api/uploads`, {
+                method: 'POST',
+                headers,
+                body: bytes
+            });
+            const json = await res.json().catch(() => null);
+            if (!res.ok || !json || json.success !== true) {
+                const msg = json?.error || `upload_failed_${res.status}`;
+                return { ok: false, error: msg };
+            }
+            return { ok: true, createdAtome: true, sizeBytes, path: relativePath };
+        } catch (e) {
+            return { ok: false, error: e?.message || 'upload_failed' };
+        }
+    };
+
     // Topological sort helper - orders atomes so parents/owners come before children
     const topologicalSort = (atomes) => {
         // Build lookup map
@@ -2514,6 +2679,18 @@ async function sync_atomes(callback) {
 
     for (const atome of sortedToPush) {
         try {
+            if (isFileAssetAtome(atome)) {
+                const uploadResult = await uploadFileAssetToFastify(atome);
+                if (!uploadResult.ok) {
+                    result.pushed.failed++;
+                    result.pushed.errors.push({ id: atome.atome_id, error: uploadResult.error });
+                    continue;
+                }
+                if (uploadResult.createdAtome) {
+                    result.pushed.success++;
+                    continue;
+                }
+            }
             const payload = buildUpsertPayload(atome);
             const createResult = await FastifyAdapter.atome.create(payload);
 
@@ -2553,6 +2730,18 @@ async function sync_atomes(callback) {
     // 3. Update Fastify with newer Tauri modifications (upsert to sync metadata too)
     for (const item of unsyncedResult.modifiedOnTauri) {
         try {
+            if (isFileAssetAtome(item.tauri)) {
+                const uploadResult = await uploadFileAssetToFastify(item.tauri);
+                if (!uploadResult.ok) {
+                    result.updated.failed++;
+                    result.updated.errors.push({ id: item.id, error: uploadResult.error });
+                    continue;
+                }
+                if (uploadResult.createdAtome) {
+                    result.updated.success++;
+                    continue;
+                }
+            }
             const payload = buildUpsertPayload(item.tauri);
             const updateResult = await FastifyAdapter.atome.create(payload);
 
@@ -2910,6 +3099,10 @@ async function create_atome(options, callback) {
         }
     };
 
+    const deferFastify = !!(options.deferFastify || options.defer_fastify);
+    const shouldDeferFastify = deferFastify
+        || (is_tauri_runtime() && is_file_asset_type(atomeType) && (options.particles?.file_path || options.particles?.filePath));
+
     const extractCreatedAtomeId = (res) => {
         try {
             return (
@@ -2941,32 +3134,36 @@ async function create_atome(options, callback) {
     }
 
     // Create on Fastify (reuse the Tauri-generated ID when available to avoid duplicates)
-    try {
-        const canonicalId = desiredId || tauriCreatedId || null;
-        const fastifyPayload = canonicalId
-            ? { ...atomeData, id: canonicalId, atome_id: canonicalId }
-            : atomeData;
+    if (shouldDeferFastify) {
+        results.fastify = { success: false, data: null, error: 'deferred' };
+    } else {
+        try {
+            const canonicalId = desiredId || tauriCreatedId || null;
+            const fastifyPayload = canonicalId
+                ? { ...atomeData, id: canonicalId, atome_id: canonicalId }
+                : atomeData;
 
-        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-            try { await ensure_fastify_token(); } catch { }
-        }
-
-        let fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
-        if (!(fastifyResult.ok || fastifyResult.success)) {
-            const errMsg = String(fastifyResult.error || '').toLowerCase();
-            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-            if (is_tauri_runtime() && authError) {
+            if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
                 try { await ensure_fastify_token(); } catch { }
-                fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
             }
+
+            let fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+            if (!(fastifyResult.ok || fastifyResult.success)) {
+                const errMsg = String(fastifyResult.error || '').toLowerCase();
+                const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+                if (is_tauri_runtime() && authError) {
+                    try { await ensure_fastify_token(); } catch { }
+                    fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
+                }
+            }
+            if (fastifyResult.ok || fastifyResult.success) {
+                results.fastify = { success: true, data: fastifyResult, error: null };
+            } else {
+                results.fastify = { success: false, data: null, error: fastifyResult.error };
+            }
+        } catch (e) {
+            results.fastify = { success: false, data: null, error: e.message };
         }
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
     }
 
     if (is_tauri_runtime()) {

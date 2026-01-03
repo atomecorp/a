@@ -260,6 +260,90 @@ function formatBytes(bytes) {
     return `${value.toFixed(exponent === 0 ? 0 : 1)} ${units[exponent]}`;
 }
 
+const FILE_TYPE_MAP = {
+    image: new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.ico']),
+    shape: new Set(['.svg']),
+    video: new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi', '.mpeg', '.mpg', '.m4v']),
+    sound: new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.aiff', '.aif', '.opus']),
+    text: new Set(['.txt', '.md', '.markdown', '.csv', '.tsv', '.log'])
+};
+
+const TEXT_MIME_TYPES = new Set(['text/plain', 'text/markdown', 'text/csv', 'text/tab-separated-values']);
+
+function getFileExtension(name) {
+    if (typeof name !== 'string') return '';
+    const base = name.split('/').pop().split('\\').pop();
+    const parts = base.split('.');
+    if (parts.length < 2) return '';
+    return `.${parts[parts.length - 1].toLowerCase()}`;
+}
+
+function inferUploadAtomeType(name, mimeType) {
+    const mime = (typeof mimeType === 'string' && mimeType.trim()) ? mimeType.trim().toLowerCase() : '';
+    const ext = getFileExtension(name);
+    if (FILE_TYPE_MAP.shape.has(ext) || mime === 'image/svg+xml') return 'shape';
+    if (FILE_TYPE_MAP.image.has(ext) || (mime.startsWith('image/') && mime !== 'image/svg+xml')) return 'image';
+    if (FILE_TYPE_MAP.video.has(ext) || mime.startsWith('video/')) return 'video';
+    if (FILE_TYPE_MAP.sound.has(ext) || mime.startsWith('audio/')) return 'sound';
+    if (FILE_TYPE_MAP.text.has(ext) || TEXT_MIME_TYPES.has(mime)) return 'text';
+    return 'raw';
+}
+
+function normalizeUserRelativePath(value, userId) {
+    if (!value) return '';
+    const safeUser = String(userId || '').trim();
+    let cleaned = String(value).trim().replace(/\\/g, '/');
+    if (!cleaned) return '';
+    const anchor = `/data/users/${safeUser}/`;
+    const altAnchor = `data/users/${safeUser}/`;
+    if (safeUser && cleaned.includes(anchor)) {
+        cleaned = cleaned.slice(cleaned.indexOf(anchor) + anchor.length);
+    } else if (safeUser && cleaned.startsWith(altAnchor)) {
+        cleaned = cleaned.slice(altAnchor.length);
+    } else if (safeUser && cleaned.startsWith(`${safeUser}/`)) {
+        cleaned = cleaned.slice(`${safeUser}/`.length);
+    }
+    return cleaned.replace(/^\/+/, '');
+}
+
+async function createUploadAtome({ fileName, originalName, relPath, mimeType, sizeBytes, atomeId }) {
+    const api = window.AdoleAPI;
+    if (!api || !api.atomes || typeof api.atomes.create !== 'function') return;
+
+    const userInfo = await resolveCurrentUserInfo();
+    const ownerId = userInfo.id;
+    if (!ownerId) return;
+
+    const atomeType = inferUploadAtomeType(originalName || fileName, mimeType);
+    const resolvedId = atomeId || `file_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const relativePath = normalizeUserRelativePath(relPath, ownerId) || relPath || null;
+    const particles = {
+        kind: atomeType,
+        file_name: fileName,
+        original_name: originalName || fileName,
+        file_path: relativePath,
+        mime_type: mimeType || null,
+        size_bytes: Number.isFinite(sizeBytes) ? sizeBytes : 0,
+        created_iso: new Date().toISOString()
+    };
+
+    try {
+        const res = await api.atomes.create({
+            id: resolvedId,
+            type: atomeType,
+            ownerId,
+            particles,
+            deferFastify: isTauriRuntime()
+        });
+        const ok = !!(res?.tauri?.success || res?.fastify?.success || res?.tauri?.ok || res?.fastify?.ok);
+        if (!ok) {
+            console.warn('[aBox] Atome create failed:', res?.tauri?.error || res?.fastify?.error || res);
+        }
+    } catch (error) {
+        console.warn('[aBox] Atome create failed:', error?.message || error);
+    }
+}
+
 async function fetchUploadsMetadata() {
     const bases = uniqueBaseCandidates();
     let lastError = null;
@@ -422,6 +506,8 @@ async function sendFileToServer(entry) {
     const detectedMime = (typeof entry?.type === 'string' && entry.type.trim())
         ? entry.type.trim()
         : (typeof blob.type === 'string' && blob.type.trim() ? blob.type.trim() : '');
+    const atomeId = `file_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const atomeType = inferUploadAtomeType(fileName, detectedMime);
     const token = getAuthToken();
     const userHeaders = await buildUserHeaders();
 
@@ -433,9 +519,12 @@ async function sendFileToServer(entry) {
                 'Content-Type': 'application/octet-stream',
                 'X-Filename': encodeURIComponent(fileName)
             };
+            if (atomeId) headers['X-Atome-Id'] = atomeId;
+            if (atomeType) headers['X-Atome-Type'] = atomeType;
+            if (detectedMime) headers['X-Mime-Type'] = detectedMime;
+            headers['X-Original-Name'] = fileName;
             if (shouldSendUserHeaders(base)) {
                 Object.assign(headers, userHeaders);
-                if (detectedMime) headers['X-Mime-Type'] = detectedMime;
             }
             if (token) {
                 headers.Authorization = `Bearer ${token}`;
@@ -459,6 +548,14 @@ async function sendFileToServer(entry) {
 
             puts(`[upload] ${payload.file} envoyé au serveur`);
             lastSuccessfulApiBase = base;
+            await createUploadAtome({
+                fileName: payload.file || fileName,
+                originalName: fileName,
+                relPath: payload.path || null,
+                mimeType: detectedMime || blob.type || null,
+                sizeBytes: blob.size || 0,
+                atomeId
+            });
             return;
         } catch (error) {
             lastError = error;

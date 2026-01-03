@@ -39,7 +39,6 @@ pub mod local_atome;
 
 #[derive(Clone)]
 struct AppState {
-    uploads_dir: Arc<PathBuf>,
     static_dir: Arc<PathBuf>,
     project_root: Arc<PathBuf>,
     version: Arc<String>,
@@ -330,35 +329,6 @@ fn load_version(static_dir: &Path) -> String {
     "unknown".to_string()
 }
 
-async fn resolve_upload_path(state: &AppState, raw_name: &str) -> (String, PathBuf) {
-    let sanitized = sanitize_file_name(raw_name);
-    let uploads_dir = &state.uploads_dir;
-    let mut candidate = sanitized.clone();
-    let mut counter = 1u32;
-
-    loop {
-        let target = uploads_dir.join(&candidate);
-        if fs::metadata(&target).await.is_err() {
-            return (candidate, target);
-        }
-
-        let path = Path::new(&sanitized);
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or("upload");
-        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-
-        if ext.is_empty() {
-            candidate = format!("{}_{}", stem, counter);
-        } else {
-            candidate = format!("{}_{}.{}", stem, counter, ext);
-        }
-        counter += 1;
-    }
-}
-
 async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse {
     Json(json!({
         "success": true,
@@ -575,9 +545,15 @@ async fn upload_handler(
         );
     }
 
+    let rel_path = file_path
+        .strip_prefix(&*state.project_root)
+        .ok()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|| file_path.to_string_lossy().replace('\\', "/"));
+
     (
         StatusCode::OK,
-        Json(json!({ "success": true, "file": file_name, "owner": user_id })),
+        Json(json!({ "success": true, "file": file_name, "owner": user_id, "path": rel_path })),
     )
 }
 
@@ -1837,7 +1813,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .to_path_buf();
 
     let state = AppState {
-        uploads_dir: Arc::new(uploads_dir.clone()),
         static_dir: Arc::new(static_dir_abs),
         project_root: Arc::new(project_root),
         version: Arc::new(version.clone()),
