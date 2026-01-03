@@ -80,6 +80,10 @@ async function buildUserHeaders(extra = {}) {
     return headers;
 }
 
+function hasUserHints(headers) {
+    return Boolean(headers['X-User-Id'] || headers['X-Username'] || headers['X-Phone']);
+}
+
 $('div', {
     id: uploadsListId,
     parent: '#view',
@@ -192,6 +196,20 @@ function isTauriRuntime() {
     return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 }
 
+function isAxumBrowserServer() {
+    if (isTauriRuntime()) return false;
+    if (typeof window === 'undefined') return false;
+    const type = String(window.__SQUIRREL_SERVER_TYPE__ || '').toLowerCase();
+    if (type) return type.includes('tauri');
+
+    const cfgPort = window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port;
+    const pagePort = window.location?.port;
+    if (cfgPort && pagePort && String(cfgPort) !== String(pagePort)) {
+        return true;
+    }
+    return false;
+}
+
 function isLocalBase(base) {
     if (isTauriRuntime()) return true;
     const normalized = normalizeApiBase(base).toLowerCase();
@@ -224,6 +242,7 @@ function resolveApiBases() {
 
 const apiBases = resolveApiBases();
 let lastSuccessfulApiBase = null;
+let uploadsAuthMissing = false;
 
 function uniqueBaseCandidates() {
     const seen = new Set();
@@ -350,17 +369,35 @@ async function fetchUploadsMetadata() {
     let lastError = null;
     const token = getAuthToken();
     const userHeaders = await buildUserHeaders();
+    const hasHints = hasUserHints(userHeaders);
+    const requiresHints = isAxumBrowserServer() || isTauriRuntime();
+    const tokenUsable = Boolean(token) && (!requiresHints || hasHints);
+    const canUseUserHints = hasHints && bases.some((base) => shouldSendUserHeaders(base));
+    const hasAuth = tokenUsable || canUseUserHints;
+
+    uploadsAuthMissing = !hasAuth;
+    if (!hasAuth) {
+        return [];
+    }
 
     for (const base of bases) {
         const endpoint = base ? `${base}/api/uploads` : '/api/uploads';
         try {
             const headers = shouldSendUserHeaders(base) ? { ...userHeaders } : {};
-            if (token) headers.Authorization = `Bearer ${token}`;
+            const hasHintsForBase = hasUserHints(headers);
+            if (tokenUsable) headers.Authorization = `Bearer ${token}`;
+            if (!tokenUsable && !hasHintsForBase) {
+                continue;
+            }
             const response = await fetch(endpoint, {
                 method: 'GET',
                 headers,
                 credentials: 'include'
             });
+            if (response.status === 401) {
+                uploadsAuthMissing = true;
+                return [];
+            }
             if (!response.ok) {
                 const text = await response.text().catch(() => '');
                 throw new Error(text || `HTTP ${response.status}`);
@@ -386,6 +423,19 @@ function renderUploadsList(files) {
     if (!container) return;
 
     container.innerHTML = '';
+
+    if (uploadsAuthMissing) {
+        $('div', {
+            parent: `#${uploadsListBodyId}`,
+            text: 'Connectez-vous pour voir les uploads',
+            css: {
+                color: '#bbb',
+                fontStyle: 'italic',
+                padding: '4px 2px'
+            }
+        });
+        return;
+    }
 
     if (!Array.isArray(files) || files.length === 0) {
         $('div', {
@@ -518,6 +568,17 @@ async function sendFileToServer(entry) {
     const atomeType = inferUploadAtomeType(fileName, detectedMime);
     const token = getAuthToken();
     const userHeaders = await buildUserHeaders();
+    const hasHints = hasUserHints(userHeaders);
+    const requiresHints = isAxumBrowserServer() || isTauriRuntime();
+    const tokenUsable = Boolean(token) && (!requiresHints || hasHints);
+    const canUseUserHints = hasHints && uniqueBaseCandidates().some((base) => shouldSendUserHeaders(base));
+
+    if (!tokenUsable && !canUseUserHints) {
+        uploadsAuthMissing = true;
+        renderUploadsList([]);
+        puts('[upload] Connectez-vous pour envoyer des fichiers');
+        return;
+    }
 
     let lastError = null;
     for (const base of uniqueBaseCandidates()) {
@@ -534,8 +595,11 @@ async function sendFileToServer(entry) {
             if (shouldSendUserHeaders(base)) {
                 Object.assign(headers, userHeaders);
             }
-            if (token) {
+            if (tokenUsable) {
                 headers.Authorization = `Bearer ${token}`;
+            }
+            if (!tokenUsable && !hasUserHints(headers)) {
+                continue;
             }
             const response = await fetch(endpoint, {
                 method: 'POST',
