@@ -2614,6 +2614,46 @@ async function sync_atomes(callback) {
         }
     };
 
+    const WS_FILE_CHUNK_SIZE = 256 * 1024;
+
+    const bytesToBase64 = (bytes) => {
+        if (!bytes || !bytes.length) return '';
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(bytes).toString('base64');
+        }
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const slice = bytes.subarray(i, i + chunkSize);
+            binary += String.fromCharCode.apply(null, slice);
+        }
+        return btoa(binary);
+    };
+
+    const base64ToBytes = (base64) => {
+        if (!base64) return new Uint8Array(0);
+        if (typeof Buffer !== 'undefined') {
+            return new Uint8Array(Buffer.from(base64, 'base64'));
+        }
+        const binary = atob(base64);
+        const out = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+            out[i] = binary.charCodeAt(i);
+        }
+        return out;
+    };
+
+    const concatChunks = (chunks, total) => {
+        if (!chunks || !chunks.length) return new Uint8Array(0);
+        const out = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+            out.set(chunk, offset);
+            offset += chunk.length;
+        }
+        return out;
+    };
+
     const tryTauriCreateDir = async (dirPath) => {
         const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
         const fs = tauri && tauri.fs ? tauri.fs : null;
@@ -2713,12 +2753,6 @@ async function sync_atomes(callback) {
             return { ok: false, error: 'local_path_missing' };
         }
 
-        const base = resolveFastifyUploadBase();
-        if (!base) {
-            console.log('[sync_atomes] asset pull blocked: fastify_base_missing', { atomeId, ownerId });
-            return { ok: false, error: 'fastify_base_missing' };
-        }
-
         const token = FastifyAdapter?.getToken ? FastifyAdapter.getToken() : null;
         if (!token) {
             console.log('[sync_atomes] asset pull blocked: fastify_token_missing', { atomeId, ownerId });
@@ -2747,51 +2781,88 @@ async function sync_atomes(callback) {
             fileName: safeFileName,
             filePath,
             localPath,
-            sizeBytes,
-            base
+            sizeBytes
         });
 
-        const identifier = encodeURIComponent(String(atomeId));
         try {
-            const url = `${base}/api/uploads/${identifier}`;
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: { Authorization: `Bearer ${token}` },
-                credentials: 'omit'
+            const infoResult = await FastifyAdapter.file.downloadInfo({
+                atomeId,
+                chunkSize: WS_FILE_CHUNK_SIZE
             });
-            if (!response.ok) {
-                const text = await response.text().catch(() => '');
-                const error = text || `download_failed_${response.status}`;
+
+            if (!(infoResult?.ok || infoResult?.success)) {
+                const error = infoResult?.error || 'download_info_failed';
                 console.log('[sync_atomes] asset pull failed', {
                     atomeId,
                     fileName: safeFileName,
-                    status: response.status,
-                    error,
-                    url
+                    error
                 });
                 return { ok: false, error };
             }
-            const buffer = await response.arrayBuffer();
-            const bytes = new Uint8Array(buffer);
-            const writeResult = await tryTauriWriteBinaryFile(localPath, bytes);
+
+            const info = infoResult?.data || {};
+            const totalSize = Number(info.sizeBytes ?? info.size ?? sizeBytes ?? 0);
+            const chunkSize = Number(info.chunkSize) || WS_FILE_CHUNK_SIZE;
+            let chunkCount = Number(info.chunkCount);
+            if (!Number.isFinite(chunkCount) || chunkCount < 0) {
+                chunkCount = totalSize ? Math.ceil(totalSize / chunkSize) : 0;
+            } else if (chunkCount === 0 && totalSize) {
+                chunkCount = Math.ceil(totalSize / chunkSize);
+            }
+            const useFixedSize = totalSize > 0;
+            const fixedBuffer = useFixedSize ? new Uint8Array(totalSize) : null;
+            const chunks = useFixedSize ? null : [];
+            let collectedSize = 0;
+
+            for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+                const chunkResult = await FastifyAdapter.file.downloadChunk({
+                    atomeId,
+                    chunkIndex,
+                    chunkSize
+                });
+
+                if (!(chunkResult?.ok || chunkResult?.success)) {
+                    const error = chunkResult?.error || 'download_chunk_failed';
+                    console.log('[sync_atomes] asset pull failed', {
+                        atomeId,
+                        fileName: safeFileName,
+                        error,
+                        chunkIndex
+                    });
+                    return { ok: false, error };
+                }
+
+                const chunkPayload = chunkResult?.data || {};
+                const chunkBase64 = chunkPayload.chunkBase64 || chunkPayload.chunk_base64 || '';
+                const chunkBytes = base64ToBytes(chunkBase64);
+
+                if (useFixedSize) {
+                    fixedBuffer.set(chunkBytes, chunkIndex * chunkSize);
+                } else {
+                    chunks.push(chunkBytes);
+                    collectedSize += chunkBytes.length;
+                }
+            }
+
+            const finalBytes = useFixedSize ? fixedBuffer : concatChunks(chunks, collectedSize);
+            const writeResult = await tryTauriWriteBinaryFile(localPath, finalBytes);
             if (!writeResult.ok) {
                 console.log('[sync_atomes] asset pull failed', {
                     atomeId,
                     fileName: safeFileName,
                     error: writeResult.error || 'write_failed',
-                    url,
                     localPath
                 });
                 return { ok: false, error: writeResult.error || 'write_failed' };
             }
-            return { ok: true, path: localPath, size: bytes.length };
+
+            return { ok: true, path: localPath, size: finalBytes.length };
         } catch (e) {
             const error = e?.message || 'download_failed';
             console.log('[sync_atomes] asset pull failed', {
                 atomeId,
                 fileName: safeFileName,
-                error,
-                url: `${base}/api/uploads/${identifier}`
+                error
             });
             return { ok: false, error };
         }
@@ -2932,9 +3003,6 @@ async function sync_atomes(callback) {
         const relativePath = normalizeUserRelativePath(filePath || safeFileName, ownerId)
             || (safeFileName ? `Downloads/${safeFileName}` : '');
 
-        const base = resolveFastifyUploadBase();
-        if (!base) return { ok: false, error: 'fastify_base_missing' };
-
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
         const bytes = await readTauriBinaryFile(localPath);
         if (!bytes || !bytes.length) {
@@ -2946,30 +3014,62 @@ async function sync_atomes(callback) {
             return { ok: false, error: 'fastify_token_missing' };
         }
 
-        const headers = {
-            'Content-Type': 'application/octet-stream',
-            'X-Filename': encodeURIComponent(safeFileName),
-            'X-Original-Name': String(originalName || safeFileName || ''),
-            'X-Atome-Id': String(atomeId),
-            'X-Atome-Type': String(type || ''),
-            'X-Mime-Type': String(mimeType || '')
-        };
-        if (relativePath) headers['X-File-Path'] = String(relativePath);
-        if (token) headers.Authorization = `Bearer ${token}`;
-
         try {
-            const res = await fetch(`${base}/api/uploads`, {
-                method: 'POST',
-                headers,
-                body: bytes
+            const uploadId = generateUUID ? generateUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const totalSize = bytes.length;
+            const chunkCount = totalSize ? Math.ceil(totalSize / WS_FILE_CHUNK_SIZE) : 0;
+
+            for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+                const start = chunkIndex * WS_FILE_CHUNK_SIZE;
+                const end = Math.min(totalSize, start + WS_FILE_CHUNK_SIZE);
+                const chunkBytes = bytes.subarray(start, end);
+                const chunkBase64 = bytesToBase64(chunkBytes);
+                const chunkResult = await FastifyAdapter.file.uploadChunk({
+                    uploadId,
+                    chunkIndex,
+                    chunkCount,
+                    chunkBase64
+                });
+                if (!(chunkResult?.ok || chunkResult?.success)) {
+                    const msg = chunkResult?.error || 'upload_chunk_failed';
+                    console.log('[sync_atomes] asset push failed', {
+                        atomeId,
+                        fileName: safeFileName,
+                        chunkIndex,
+                        error: msg
+                    });
+                    return { ok: false, error: msg };
+                }
+            }
+
+            const completeResult = await FastifyAdapter.file.uploadComplete({
+                uploadId,
+                chunkCount,
+                fileName: safeFileName,
+                filePath: relativePath,
+                atomeId,
+                atomeType: type || '',
+                originalName: originalName || safeFileName,
+                mimeType: mimeType || ''
             });
-            const json = await res.json().catch(() => null);
-            if (!res.ok || !json || json.success !== true) {
-                const msg = json?.error || `upload_failed_${res.status}`;
+
+            if (!(completeResult?.ok || completeResult?.success)) {
+                const msg = completeResult?.error || 'upload_complete_failed';
+                console.log('[sync_atomes] asset push failed', {
+                    atomeId,
+                    fileName: safeFileName,
+                    error: msg
+                });
                 return { ok: false, error: msg };
             }
-            return { ok: true, createdAtome: true, sizeBytes, path: relativePath };
+
+            return { ok: true, createdAtome: true, sizeBytes: totalSize, path: relativePath };
         } catch (e) {
+            console.log('[sync_atomes] asset push failed', {
+                atomeId,
+                fileName: safeFileName,
+                error: e?.message || 'upload_failed'
+            });
             return { ok: false, error: e?.message || 'upload_failed' };
         }
     };

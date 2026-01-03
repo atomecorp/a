@@ -640,6 +640,23 @@ class TauriWebSocket {
                 return;
             }
 
+            // Handle file-response
+            if (message.type === 'file-response' && (message.request_id || message.requestId)) {
+                const pending = this.pendingRequests.get(message.request_id || message.requestId);
+                if (pending) {
+                    this.pendingRequests.delete(message.request_id || message.requestId);
+                    clearTimeout(pending.timeout);
+                    pending.resolve({
+                        ok: message.success,
+                        success: message.success,
+                        status: message.success ? 200 : 400,
+                        error: message.error,
+                        data: message.data ?? message
+                    });
+                }
+                return;
+            }
+
             // Handle debug-response
             if (message.type === 'debug-response' && (message.request_id || message.requestId)) {
                 const pending = this.pendingRequests.get(message.request_id || message.requestId);
@@ -1152,6 +1169,60 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     userId: data.userId || data.user_id,
                     atome_id: data.atomeId || data.atome_id,
                     permission: data.permission || 'read'
+                });
+            }
+        },
+
+        file: {
+            async downloadInfo(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'file',
+                    action: 'download-info',
+                    token,
+                    atomeId: data.atomeId || data.atome_id || data.id || null,
+                    identifier: data.identifier || data.fileId || null,
+                    chunkSize: data.chunkSize || data.chunk_size || null
+                });
+            },
+            async downloadChunk(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'file',
+                    action: 'download-chunk',
+                    token,
+                    atomeId: data.atomeId || data.atome_id || data.id || null,
+                    identifier: data.identifier || data.fileId || null,
+                    chunkIndex: data.chunkIndex ?? data.chunk_index ?? null,
+                    chunkSize: data.chunkSize || data.chunk_size || null
+                });
+            },
+            async uploadChunk(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'file',
+                    action: 'upload-chunk',
+                    token,
+                    uploadId: data.uploadId || data.upload_id || null,
+                    chunkIndex: data.chunkIndex ?? data.chunk_index ?? null,
+                    chunkCount: data.chunkCount ?? data.chunk_count ?? null,
+                    chunkBase64: data.chunkBase64 || data.chunk_base64 || null
+                });
+            },
+            async uploadComplete(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'file',
+                    action: 'upload-complete',
+                    token,
+                    uploadId: data.uploadId || data.upload_id || null,
+                    chunkCount: data.chunkCount ?? data.chunk_count ?? null,
+                    fileName: data.fileName || data.file_name || null,
+                    filePath: data.filePath || data.file_path || null,
+                    atomeId: data.atomeId || data.atome_id || null,
+                    atomeType: data.atomeType || data.atome_type || null,
+                    originalName: data.originalName || data.original_name || null,
+                    mimeType: data.mimeType || data.mime_type || null
                 });
             }
         },
