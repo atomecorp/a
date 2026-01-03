@@ -10,6 +10,14 @@ import crypto from 'crypto';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../src/shared/logging.js';
 
+const SERVER_LOG_LEVEL = (process.env.SQUIRREL_LOG_LEVEL || 'warn').toLowerCase();
+const SERVER_INFO_ENABLED = SERVER_LOG_LEVEL === 'info' || SERVER_LOG_LEVEL === 'debug';
+if (!SERVER_INFO_ENABLED) {
+  console.log = () => {};
+  console.info = () => {};
+  console.debug = () => {};
+}
+
 // Load environment variables from .env files
 const __filename_env = fileURLToPath(import.meta.url);
 const __dirname_env = path.dirname(__filename_env);

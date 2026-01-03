@@ -8,6 +8,20 @@ const LOG_ENDPOINT = '/dev/client-log';
 const FASTIFY_FALLBACK = 'http://127.0.0.1:3001';
 const SESSION_KEY = 'atome_session_id';
 const MAX_ARG_STRING = 2000;
+const DEFAULT_LOG_ALLOWLIST = [
+  /Tone\.js v\d+/,
+  '[Atome] Config:',
+  '[Squirrel] Error handlers installed',
+  '[Squirrel] AdoleAPI v3.0 loaded globally',
+  'Current platform:',
+  /^Squirrel\s+\d+/,
+  /^Server\s+\d+/,
+  '[Squirrel] server_config.json loaded',
+  '[Squirrel] __SQUIRREL_FASTIFY_URL__:',
+  '[Squirrel] __SQUIRREL_FASTIFY_WS_API_URL__:',
+  '[Squirrel] __SQUIRREL_FASTIFY_WS_SYNC_URL__:',
+  /\[sync_engine\].*Initialized/
+];
 
 function isTauriRuntime() {
   return typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -119,6 +133,37 @@ function formatArgs(args) {
     .join(' ');
 }
 
+function getLogAllowlist() {
+  if (typeof window === 'undefined') return DEFAULT_LOG_ALLOWLIST;
+  const custom = window.__SQUIRREL_LOG_ALLOWLIST__;
+  if (Array.isArray(custom) && custom.length) {
+    return custom.filter((entry) => {
+      if (entry instanceof RegExp) return true;
+      return typeof entry === 'string' && entry.trim();
+    });
+  }
+  return DEFAULT_LOG_ALLOWLIST;
+}
+
+function isStrictLogFilter() {
+  if (typeof window === 'undefined') return true;
+  if (window.__SQUIRREL_LOG_FILTER_STRICT__ === false) return false;
+  return true;
+}
+
+function shouldAllowConsoleLog(level, args) {
+  if (!isStrictLogFilter() && (level === 'error' || level === 'warn')) {
+    return true;
+  }
+  const allowlist = getLogAllowlist();
+  if (!allowlist.length) return true;
+  const message = formatArgs(args);
+  return allowlist.some((token) => {
+    if (token instanceof RegExp) return token.test(message);
+    return message.includes(token);
+  });
+}
+
 async function sendToFastify(payload) {
   const base = resolveFastifyBase();
   const url = `${base}${LOG_ENDPOINT}`;
@@ -191,11 +236,15 @@ function installConsoleWrapper() {
   methods.forEach((method) => {
     original[method] = console[method];
     console[method] = (...args) => {
+      const level = method === 'log' ? 'info' : method;
+      if (!shouldAllowConsoleLog(level, args)) {
+        return;
+      }
       original[method](...args);
       if (inSend) return;
       inSend = true;
       Promise.resolve()
-        .then(() => emitLog(method === 'log' ? 'info' : method, args))
+        .then(() => emitLog(level, args))
         .finally(() => {
           inSend = false;
         });
@@ -203,6 +252,7 @@ function installConsoleWrapper() {
   });
 
   window.atomeLog = (level, message, data = null) => {
+    if (!shouldAllowConsoleLog(level, [message, data])) return;
     emitLog(level, [message, data]);
   };
 }

@@ -79,7 +79,7 @@ pub fn init_tracing() -> Option<WorkerGuard> {
         }
     };
 
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
     let stdout_layer = tracing_subscriber::fmt::layer()
         .json()
         .with_target(false)

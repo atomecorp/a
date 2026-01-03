@@ -33,6 +33,26 @@ function getAuthToken() {
     return '';
 }
 
+function getLocalToken() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            return localStorage.getItem('local_auth_token') || '';
+        }
+    } catch (_) { }
+    return '';
+}
+
+function getCloudToken() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            return localStorage.getItem('cloud_auth_token')
+                || localStorage.getItem('auth_token')
+                || '';
+        }
+    } catch (_) { }
+    return '';
+}
+
 async function resolveCurrentUserInfo() {
     const info = { id: null, username: null, phone: null };
 
@@ -196,6 +216,48 @@ function isTauriRuntime() {
     return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 }
 
+function resolveLocalApiBase() {
+    if (!isTauriRuntime()) return '';
+    const port = (typeof window !== 'undefined')
+        ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || 3000)
+        : 3000;
+    return `http://127.0.0.1:${port}`;
+}
+
+function resolveFastifyApiBase() {
+    try {
+        return normalizeApiBase(
+            (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+                ? window.__SQUIRREL_FASTIFY_URL__
+                : (typeof window !== 'undefined' ? window.__SQUIRREL_TAURI_FASTIFY_URL__ : '')
+        );
+    } catch (_) {
+        return '';
+    }
+}
+
+function resolveFastifyApiBases() {
+    const bases = [];
+    const configured = resolveFastifyApiBase();
+    if (configured) bases.push(configured);
+
+    if (isTauriRuntime()) {
+        const cloudToken = getCloudToken();
+        const cloudBase = 'https://atome.one';
+        if (cloudToken && !bases.some((base) => base.includes('atome.one'))) {
+            bases.push(cloudBase);
+        }
+    }
+
+    return bases;
+}
+
+function isLocalAxumBase(base) {
+    if (!isTauriRuntime()) return false;
+    const localBase = normalizeApiBase(resolveLocalApiBase());
+    return localBase && normalizeApiBase(base) === localBase;
+}
+
 function isAxumBrowserServer() {
     if (isTauriRuntime()) return false;
     if (typeof window === 'undefined') return false;
@@ -211,9 +273,11 @@ function isAxumBrowserServer() {
 }
 
 function isLocalBase(base) {
-    if (isTauriRuntime()) return true;
     const normalized = normalizeApiBase(base).toLowerCase();
-    if (!normalized) return true;
+    if (!normalized) {
+        const host = typeof window !== 'undefined' ? (window.location?.hostname || '') : '';
+        return host === '' || host === 'localhost' || host === '127.0.0.1';
+    }
     return normalized.includes('127.0.0.1') || normalized.includes('localhost');
 }
 
@@ -221,21 +285,36 @@ function shouldSendUserHeaders(base) {
     return isLocalBase(base);
 }
 
+function describeUploadOrigin(base) {
+    const normalized = normalizeApiBase(base);
+    if (!normalized) return '';
+    if (isLocalAxumBase(normalized)) return 'local';
+    if (normalized.includes('atome.one')) return 'cloud';
+    if (normalized.includes('127.0.0.1') || normalized.includes('localhost')) return 'fastify';
+    try {
+        return new URL(normalized).hostname || 'remote';
+    } catch (_) {
+        return 'remote';
+    }
+}
+
 function resolveApiBases() {
     try {
         if (isTauriRuntime()) {
-            const port = (typeof window !== 'undefined')
-                ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || 3000)
-                : 3000;
-            return [`http://127.0.0.1:${port}`];
+            const localBase = resolveLocalApiBase();
+            const fastifyBases = resolveFastifyApiBases();
+            const bases = [];
+            if (localBase) bases.push(localBase);
+            fastifyBases.forEach((base) => {
+                if (base && normalizeApiBase(base) !== normalizeApiBase(localBase)) {
+                    bases.push(base);
+                }
+            });
+            return bases.length ? bases : [''];
         }
 
-        const configured = normalizeApiBase(
-            (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
-                ? window.__SQUIRREL_FASTIFY_URL__
-                : (typeof window !== 'undefined' ? window.__SQUIRREL_TAURI_FASTIFY_URL__ : '')
-        );
-        if (configured) return [configured];
+        const configured = resolveFastifyApiBases();
+        if (configured.length) return configured;
     } catch (_) { }
     return [''];
 }
@@ -252,7 +331,11 @@ function uniqueBaseCandidates() {
     const pushBase = (base) => {
         const value = base || '';
         if (isTauriRuntime() && !isLocalBase(value)) {
-            return;
+            const fastifyBases = resolveFastifyApiBases();
+            const matched = fastifyBases.some((base) => normalizeApiBase(value) === normalizeApiBase(base));
+            if (!matched) {
+                return;
+            }
         }
         if (!seen.has(value)) {
             seen.add(value);
@@ -367,37 +450,46 @@ async function createUploadAtome({ fileName, originalName, relPath, mimeType, si
 async function fetchUploadsMetadata() {
     const bases = uniqueBaseCandidates();
     let lastError = null;
-    const token = getAuthToken();
     const userHeaders = await buildUserHeaders();
     const hasHints = hasUserHints(userHeaders);
-    const requiresHints = isAxumBrowserServer() || isTauriRuntime();
-    const tokenUsable = Boolean(token) && (!requiresHints || hasHints);
-    const canUseUserHints = hasHints && bases.some((base) => shouldSendUserHeaders(base));
-    const hasAuth = tokenUsable || canUseUserHints;
-
-    uploadsAuthMissing = !hasAuth;
-    if (!hasAuth) {
-        return [];
-    }
+    let sawAuth = false;
+    let sawUnauthorized = false;
+    let sawSuccess = false;
+    const collected = [];
+    const seen = new Set();
 
     for (const base of bases) {
         const endpoint = base ? `${base}/api/uploads` : '/api/uploads';
+        const isLocalAxum = isLocalAxumBase(base);
+        const token = isLocalAxum ? getLocalToken() : getCloudToken();
+        const needsHints = isLocalAxum || isAxumBrowserServer();
+        const canUseHints = hasHints && shouldSendUserHeaders(base);
+        const canAuth = (token && (!needsHints || hasHints)) || canUseHints;
+
+        if (!canAuth) {
+            continue;
+        }
+
+        sawAuth = true;
+
         try {
             const headers = shouldSendUserHeaders(base) ? { ...userHeaders } : {};
-            const hasHintsForBase = hasUserHints(headers);
-            if (tokenUsable) headers.Authorization = `Bearer ${token}`;
-            if (!tokenUsable && !hasHintsForBase) {
+            if (token) headers.Authorization = `Bearer ${token}`;
+            if (needsHints && !token && !hasUserHints(headers)) {
                 continue;
             }
+
             const response = await fetch(endpoint, {
                 method: 'GET',
                 headers,
                 credentials: 'include'
             });
+
             if (response.status === 401) {
-                uploadsAuthMissing = true;
-                return [];
+                sawUnauthorized = true;
+                continue;
             }
+
             if (!response.ok) {
                 const text = await response.text().catch(() => '');
                 throw new Error(text || `HTTP ${response.status}`);
@@ -408,14 +500,35 @@ async function fetchUploadsMetadata() {
                 throw new Error('Unexpected payload structure');
             }
 
+            sawSuccess = true;
             lastSuccessfulApiBase = base;
-            return payload.files;
+            const origin = describeUploadOrigin(base);
+            payload.files.forEach((file) => {
+                if (!file) return;
+                const id = file.id || file.atome_id || file.file_id || file.name || file.file_name || file.original_name || '';
+                const key = `${origin}:${id}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                file.__base = base;
+                if (origin) file.origin = origin;
+                collected.push(file);
+            });
         } catch (error) {
             lastError = error;
         }
     }
 
-    throw lastError || new Error('No upload endpoint available');
+    if (!sawAuth || (!sawSuccess && sawUnauthorized)) {
+        uploadsAuthMissing = true;
+        return [];
+    }
+
+    uploadsAuthMissing = false;
+    if (!sawSuccess && lastError) {
+        throw lastError;
+    }
+
+    return collected;
 }
 
 function renderUploadsList(files) {
@@ -458,9 +571,10 @@ function renderUploadsList(files) {
         const size = typeof file?.size === 'number' ? file.size : 0;
         const access = typeof file?.access === 'string' && file.access !== 'owner' ? ` [${file.access}]` : '';
         const legacy = file?.legacy ? ' [legacy]' : '';
+        const origin = typeof file?.origin === 'string' && file.origin ? ` [${file.origin}]` : '';
         $('div', {
             parent: `#${uploadsListBodyId}`,
-            text: `${displayName}${access}${legacy} (${formatBytes(size)})`,
+            text: `${displayName}${access}${legacy}${origin} (${formatBytes(size)})`,
             css: {
                 padding: '6px',
                 marginBottom: '4px',
@@ -468,7 +582,7 @@ function renderUploadsList(files) {
                 borderRadius: '4px',
                 cursor: 'pointer'
             },
-            onClick: () => downloadUpload(fileId || displayName, displayName)
+            onClick: () => downloadUpload(fileId || displayName, displayName, file.__base)
         });
     });
 }
@@ -501,18 +615,18 @@ async function refreshUploadsList() {
     }
 }
 
-async function downloadUpload(fileId, fileName) {
+async function downloadUpload(fileId, fileName, baseOverride = '') {
     const bases = uniqueBaseCandidates();
     const encoded = encodeURIComponent(fileId || fileName);
-    const base = bases.length ? bases[0] : '';
+    const base = baseOverride ? normalizeApiBase(baseOverride) : (bases.length ? bases[0] : '');
     const url = base ? `${base}/api/uploads/${encoded}` : `/api/uploads/${encoded}`;
 
-    const token = getAuthToken();
+    const token = isLocalAxumBase(base) ? getLocalToken() : getCloudToken();
     const userHeaders = await buildUserHeaders();
     const headers = shouldSendUserHeaders(base) ? { ...userHeaders } : {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    const hasUserHints = Boolean(headers['X-User-Id'] || headers['X-Username'] || headers['X-Phone']);
-    if (token || hasUserHints) {
+    const hasHints = hasUserHints(headers);
+    if (token || hasHints) {
         try {
             const response = await fetch(url, {
                 method: 'GET',
@@ -566,13 +680,113 @@ async function sendFileToServer(entry) {
         : (typeof blob.type === 'string' && blob.type.trim() ? blob.type.trim() : '');
     const atomeId = `file_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const atomeType = inferUploadAtomeType(fileName, detectedMime);
-    const token = getAuthToken();
     const userHeaders = await buildUserHeaders();
     const hasHints = hasUserHints(userHeaders);
-    const requiresHints = isAxumBrowserServer() || isTauriRuntime();
-    const tokenUsable = Boolean(token) && (!requiresHints || hasHints);
-    const canUseUserHints = hasHints && uniqueBaseCandidates().some((base) => shouldSendUserHeaders(base));
+    const localBase = resolveLocalApiBase();
+    const fastifyBases = resolveFastifyApiBases();
+    const localToken = getLocalToken();
+    const cloudToken = getCloudToken();
+    const needsHints = isTauriRuntime() || isAxumBrowserServer();
 
+    const buildUploadHeaders = (base, token) => {
+        const headers = {
+            'Content-Type': 'application/octet-stream',
+            'X-Filename': encodeURIComponent(fileName)
+        };
+        if (atomeId) headers['X-Atome-Id'] = atomeId;
+        if (atomeType) headers['X-Atome-Type'] = atomeType;
+        if (detectedMime) headers['X-Mime-Type'] = detectedMime;
+        headers['X-Original-Name'] = fileName;
+        if (shouldSendUserHeaders(base)) {
+            Object.assign(headers, userHeaders);
+        }
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+        return headers;
+    };
+
+    const uploadToBase = async (base, token, requireHints) => {
+        if (!base) return null;
+        const headers = buildUploadHeaders(base, token);
+        if (requireHints && !token && !hasUserHints(headers)) {
+            return null;
+        }
+        const endpoint = `${base}/api/uploads`;
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: blob,
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            throw new Error(text || `statut HTTP ${response.status}`);
+        }
+        const payload = await response.json().catch(() => ({ success: true, file: fileName }));
+        if (!payload || payload.success !== true) {
+            throw new Error(payload && payload.error ? payload.error : 'réponse serveur invalide');
+        }
+        return payload;
+    };
+
+    if (isTauriRuntime()) {
+        const localNeedsHints = needsHints && isLocalAxumBase(localBase);
+        const canLocalAuth = (localToken && (!localNeedsHints || hasHints))
+            || (hasHints && shouldSendUserHeaders(localBase));
+        const canFastifyAuth = Boolean(cloudToken);
+
+        if (!canLocalAuth && !canFastifyAuth) {
+            uploadsAuthMissing = true;
+            renderUploadsList([]);
+            puts('[upload] Connectez-vous pour envoyer des fichiers');
+            return;
+        }
+
+        let localPayload = null;
+        let lastError = null;
+
+        if (localBase && canLocalAuth) {
+            try {
+                localPayload = await uploadToBase(localBase, localToken, localNeedsHints);
+                if (localPayload) {
+                    puts(`[upload] ${localPayload.file} envoyé au serveur`);
+                    lastSuccessfulApiBase = localBase;
+                }
+            } catch (error) {
+                lastError = error;
+            }
+        }
+
+        if (localPayload) {
+            await createUploadAtome({
+                fileName: localPayload.file || fileName,
+                originalName: fileName,
+                relPath: localPayload.path || null,
+                mimeType: detectedMime || blob.type || null,
+                sizeBytes: blob.size || 0,
+                atomeId
+            });
+        } else if (lastError) {
+            throw lastError;
+        }
+
+        const mirrorBase = fastifyBases.find((base) => normalizeApiBase(base) !== normalizeApiBase(localBase));
+        if (mirrorBase && cloudToken) {
+            try {
+                await uploadToBase(mirrorBase, cloudToken, false);
+            } catch (error) {
+                console.warn('[upload] Fastify mirror failed:', error?.message || error);
+            }
+        }
+
+        return;
+    }
+
+    let lastError = null;
+    const token = getCloudToken();
+    const tokenUsable = Boolean(token);
+    const canUseUserHints = hasHints && uniqueBaseCandidates().some((base) => shouldSendUserHeaders(base));
     if (!tokenUsable && !canUseUserHints) {
         uploadsAuthMissing = true;
         renderUploadsList([]);
@@ -580,44 +794,10 @@ async function sendFileToServer(entry) {
         return;
     }
 
-    let lastError = null;
     for (const base of uniqueBaseCandidates()) {
-        const endpoint = base ? `${base}/api/uploads` : '/api/uploads';
         try {
-            const headers = {
-                'Content-Type': 'application/octet-stream',
-                'X-Filename': encodeURIComponent(fileName)
-            };
-            if (atomeId) headers['X-Atome-Id'] = atomeId;
-            if (atomeType) headers['X-Atome-Type'] = atomeType;
-            if (detectedMime) headers['X-Mime-Type'] = detectedMime;
-            headers['X-Original-Name'] = fileName;
-            if (shouldSendUserHeaders(base)) {
-                Object.assign(headers, userHeaders);
-            }
-            if (tokenUsable) {
-                headers.Authorization = `Bearer ${token}`;
-            }
-            if (!tokenUsable && !hasUserHints(headers)) {
-                continue;
-            }
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers,
-                body: blob,
-                credentials: 'include'
-            });
-
-            if (!response.ok) {
-                const text = await response.text().catch(() => '');
-                throw new Error(text || `statut HTTP ${response.status}`);
-            }
-
-            const payload = await response.json().catch(() => ({ success: true, file: fileName }));
-            if (!payload || payload.success !== true) {
-                throw new Error(payload && payload.error ? payload.error : 'réponse serveur invalide');
-            }
-
+            const payload = await uploadToBase(base, token, needsHints);
+            if (!payload) continue;
             puts(`[upload] ${payload.file} envoyé au serveur`);
             lastSuccessfulApiBase = base;
             await createUploadAtome({
@@ -631,7 +811,6 @@ async function sendFileToServer(entry) {
             return;
         } catch (error) {
             lastError = error;
-            continue;
         }
     }
 
