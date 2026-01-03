@@ -2561,7 +2561,12 @@ async function sync_atomes(callback) {
         const adapterBase = (FastifyAdapter && typeof FastifyAdapter.baseUrl === 'string')
             ? FastifyAdapter.baseUrl.trim()
             : '';
-        if (adapterBase) return adapterBase.replace(/\/$/, '');
+        if (adapterBase) {
+            return adapterBase
+                .replace(/^wss:/, 'https:')
+                .replace(/^ws:/, 'http:')
+                .replace(/\/$/, '');
+        }
         const explicit = (typeof window !== 'undefined' && typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
             ? window.__SQUIRREL_FASTIFY_URL__.trim()
             : '';
