@@ -2689,21 +2689,41 @@ async function sync_atomes(callback) {
     };
 
     const downloadFileAssetFromFastify = async (atome) => {
-        if (!is_tauri_runtime()) return { ok: false, error: 'not_tauri' };
+        if (!is_tauri_runtime()) {
+            console.log('[sync_atomes] asset pull blocked: not_tauri');
+            return { ok: false, error: 'not_tauri' };
+        }
         const atomeId = atome?.atome_id || atome?.id;
-        if (!atomeId) return { ok: false, error: 'missing_atome_id' };
+        if (!atomeId) {
+            console.log('[sync_atomes] asset pull blocked: missing_atome_id');
+            return { ok: false, error: 'missing_atome_id' };
+        }
 
         const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
         const { fileName, originalName, filePath, sizeBytes } = extractFileMeta(atome);
         const safeFileName = fileName || originalName || atomeId;
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
-        if (!localPath) return { ok: false, error: 'local_path_missing' };
+        if (!localPath) {
+            console.log('[sync_atomes] asset pull blocked: local_path_missing', {
+                atomeId,
+                ownerId,
+                fileName: safeFileName,
+                filePath
+            });
+            return { ok: false, error: 'local_path_missing' };
+        }
 
         const base = resolveFastifyUploadBase();
-        if (!base) return { ok: false, error: 'fastify_base_missing' };
+        if (!base) {
+            console.log('[sync_atomes] asset pull blocked: fastify_base_missing', { atomeId, ownerId });
+            return { ok: false, error: 'fastify_base_missing' };
+        }
 
         const token = FastifyAdapter?.getToken ? FastifyAdapter.getToken() : null;
-        if (!token) return { ok: false, error: 'fastify_token_missing' };
+        if (!token) {
+            console.log('[sync_atomes] asset pull blocked: fastify_token_missing', { atomeId, ownerId });
+            return { ok: false, error: 'fastify_token_missing' };
+        }
 
         if (sizeBytes != null) {
             const meta = await tryTauriStat(localPath);
@@ -2711,6 +2731,12 @@ async function sync_atomes(callback) {
                 ? meta.size
                 : (typeof meta?.len === 'number' ? meta.len : null);
             if (localSize != null && Number(localSize) === Number(sizeBytes)) {
+                console.log('[sync_atomes] asset pull skipped: size_match', {
+                    atomeId,
+                    ownerId,
+                    sizeBytes,
+                    localPath
+                });
                 return { ok: true, skipped: true, reason: 'size_match' };
             }
         }
@@ -2727,7 +2753,8 @@ async function sync_atomes(callback) {
 
         const identifier = encodeURIComponent(String(atomeId));
         try {
-            const response = await fetch(`${base}/api/uploads/${identifier}`, {
+            const url = `${base}/api/uploads/${identifier}`;
+            const response = await fetch(url, {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${token}` },
                 credentials: 'omit'
@@ -2739,7 +2766,8 @@ async function sync_atomes(callback) {
                     atomeId,
                     fileName: safeFileName,
                     status: response.status,
-                    error
+                    error,
+                    url
                 });
                 return { ok: false, error };
             }
@@ -2747,6 +2775,13 @@ async function sync_atomes(callback) {
             const bytes = new Uint8Array(buffer);
             const writeResult = await tryTauriWriteBinaryFile(localPath, bytes);
             if (!writeResult.ok) {
+                console.log('[sync_atomes] asset pull failed', {
+                    atomeId,
+                    fileName: safeFileName,
+                    error: writeResult.error || 'write_failed',
+                    url,
+                    localPath
+                });
                 return { ok: false, error: writeResult.error || 'write_failed' };
             }
             return { ok: true, path: localPath, size: bytes.length };
@@ -2755,7 +2790,8 @@ async function sync_atomes(callback) {
             console.log('[sync_atomes] asset pull failed', {
                 atomeId,
                 fileName: safeFileName,
-                error
+                error,
+                url: `${base}/api/uploads/${identifier}`
             });
             return { ok: false, error };
         }
@@ -2858,7 +2894,13 @@ async function sync_atomes(callback) {
         const summary = { ok: true, attempted: 0, downloaded: 0, skipped: 0, failed: 0 };
         for (const type of FILE_ASSET_TYPES) {
             const listResult = await listFastifyAtomesByType(type, ownerId);
-            if (!listResult.ok) continue;
+            if (!listResult.ok) {
+                console.log('[sync_atomes] asset pull list failed', {
+                    type,
+                    error: listResult.error
+                });
+                continue;
+            }
 
             for (const atome of listResult.items) {
                 const result = await downloadFileAssetFromFastify(atome);
