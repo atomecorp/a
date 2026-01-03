@@ -1616,6 +1616,12 @@ async function current_user(callback) {
                 result.source = 'tauri';
                 await hydrateCurrentUserState(tauriResult.user);
 
+                if (is_tauri_runtime()) {
+                    try {
+                        await syncFastifyFileAssetsToTauri();
+                    } catch (_) { }
+                }
+
                 if (typeof callback === 'function') {
                     callback(result);
                 }
@@ -1641,6 +1647,12 @@ async function current_user(callback) {
                 result.user = fastifyResult.user;
                 result.source = 'fastify';
                 await hydrateCurrentUserState(fastifyResult.user);
+
+                if (is_tauri_runtime()) {
+                    try {
+                        await syncFastifyFileAssetsToTauri();
+                    } catch (_) { }
+                }
 
                 if (typeof callback === 'function') {
                     callback(result);
@@ -2357,8 +2369,9 @@ async function sync_atomes(callback) {
         const fastifyBase = (FastifyAdapter && typeof FastifyAdapter.baseUrl === 'string')
             ? FastifyAdapter.baseUrl.trim()
             : '';
+        const uploadBase = resolveFastifyUploadBase();
         const tokenPresent = !!FastifyAdapter.getToken?.();
-        console.log('[sync_atomes] sync start', { fastifyBase, tokenPresent });
+        console.log('[sync_atomes] sync start', { fastifyBase, uploadBase, tokenPresent });
     } catch (_) { }
 
     // First, get the list of unsynced atomes
@@ -3114,6 +3127,12 @@ async function sync_atomes(callback) {
 
     if (typeof callback === 'function') {
         callback(result);
+    }
+
+    if (is_tauri_runtime()) {
+        try {
+            await syncFastifyFileAssetsToTauri();
+        } catch (_) { }
     }
 
     return result;
