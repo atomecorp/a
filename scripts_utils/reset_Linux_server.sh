@@ -2,7 +2,7 @@
 
 ============================================
 
-Reset Framework Script (POSIX portable)
+Reset Linux Server Script (POSIX portable)
 
 Works on Linux (sh/dash/bash) and macOS
 
@@ -40,7 +40,7 @@ else
 echo “   ⏭️  database_storage/ does not exist, skipping”
 fi
 
-Remove Tauri local data directory (includes local ADOLE DB + user data)
+Remove Tauri local data directory
 
 DATA_DIR=”$PROJECT_ROOT/data”
 if [ -d “$DATA_DIR” ]; then
@@ -51,7 +51,7 @@ else
 echo “   ⏭️  data/ does not exist, skipping”
 fi
 
-Remove uploads directory (optional, used for shared assets)
+Remove uploads directory
 
 UPLOADS_DIR=”$PROJECT_ROOT/uploads”
 if [ -d “$UPLOADS_DIR” ]; then
