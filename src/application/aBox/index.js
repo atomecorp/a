@@ -16,9 +16,10 @@ function getAuthToken() {
 
     try {
         if (typeof localStorage !== 'undefined') {
+            const isTauri = isTauriRuntime();
             return localStorage.getItem('cloud_auth_token')
                 || localStorage.getItem('auth_token')
-                || localStorage.getItem('local_auth_token')
+                || (isTauri ? localStorage.getItem('local_auth_token') : '')
                 || '';
         }
     } catch (_) { }

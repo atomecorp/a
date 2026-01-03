@@ -3774,18 +3774,11 @@ function getFastifyToken() {
   try {
     const hostname = window.location?.hostname || '';
     const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-    const isLocalDev = isTauriRuntime
-      || hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === ''
-      || hostname.startsWith('192.168.')
-      || hostname.startsWith('10.');
-
     // For Fastify ws/api calls we must prefer the Fastify-issued JWT.
     // local_auth_token may come from Tauri and can be signed with a different secret.
-    const token = isLocalDev
+    const token = isTauriRuntime
       ? (localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('local_auth_token'))
-      : (localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('local_auth_token'));
+      : (localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token'));
 
     return token && token.length > 10 ? token : null;
   } catch (_) {

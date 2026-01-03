@@ -118,6 +118,22 @@ function buildFastifyHttpBase(config) {
     // attempt to talk TLS directly to the Fastify HTTP port and fail.
     if (!isInTauriRuntime()) {
         const origin = window.location?.origin;
+        const host = window.location?.hostname || '';
+        const isLocalHost = host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0' || host === '';
+
+        if (!isLocalHost) {
+            if (typeof origin === 'string' && origin && origin !== 'null') {
+                return normalizeNoTrailingSlash(origin);
+            }
+        }
+
+        const protocol = resolveProtocolBase();
+        const cfgHost = resolveFastifyHostFromConfig(config);
+        const cfgPort = resolveFastifyPortFromConfig(config);
+        if (cfgHost && cfgPort) {
+            return `${protocol}//${cfgHost}:${cfgPort}`;
+        }
+
         if (typeof origin === 'string' && origin && origin !== 'null') {
             return normalizeNoTrailingSlash(origin);
         }
