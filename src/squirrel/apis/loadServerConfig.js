@@ -168,7 +168,7 @@ export async function loadServerConfigOnce() {
 
     _loadPromise = (async () => {
         const isTauriRuntime = isInTauriRuntime();
-        const tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';
+        let tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';
 
         if (tauriOverride) {
             window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;
@@ -195,6 +195,9 @@ export async function loadServerConfigOnce() {
                 return config;
             }
 
+            if (isTauriRuntime) {
+                tauriOverride = readTauriFastifyOverride() || tauriOverride;
+            }
             if (tauriOverride) {
                 applyFastifyGlobalsFromHttpBase(tauriOverride, config);
                 return config;
