@@ -1988,6 +1988,7 @@ async function list_unsynced_atomes(callback) {
     } catch {
         ownerId = null;
     }
+    console.log('[sync_atomes] list_unsynced start', { ownerId });
 
     // Known atome types to query (server requires a type when no owner specified)
     const atomeTypes = [
@@ -2003,6 +2004,7 @@ async function list_unsynced_atomes(callback) {
     if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
         try { await ensure_fastify_token(); } catch { }
     }
+    console.log('[sync_atomes] fastify token', { present: !!FastifyAdapter.getToken?.() });
 
     // Helper to fetch all atomes of all types from an adapter (including deleted for sync)
     // Uses ownerId: "*" to get ALL atomes, not just current user's
@@ -2087,8 +2089,10 @@ async function list_unsynced_atomes(callback) {
         tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri', ownerId);
         tauriAtomes = tauriAtomes.map(normalizeAtomeRecord);
         tauriAtomes = filterOwnedAtomes(tauriAtomes, ownerId);
+        console.log('[sync_atomes] list_unsynced tauri count', { count: tauriAtomes.length });
     } catch (e) {
         result.error = 'Tauri connection failed: ' + e.message;
+        console.log('[sync_atomes] list_unsynced tauri error', { error: result.error });
         if (typeof callback === 'function') callback(result);
         return result;
     }
@@ -2098,10 +2102,12 @@ async function list_unsynced_atomes(callback) {
         fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify', ownerId);
         fastifyAtomes = fastifyAtomes.map(normalizeAtomeRecord);
         fastifyAtomes = filterOwnedAtomes(fastifyAtomes, ownerId);
+        console.log('[sync_atomes] list_unsynced fastify count', { count: fastifyAtomes.length });
     } catch (e) {
         // If Fastify is offline, all Tauri atomes are "unsynced"
         result.onlyOnTauri = tauriAtomes.filter(a => !a.deleted_at);
         result.error = 'Fastify connection failed - all local atomes considered unsynced';
+        console.log('[sync_atomes] list_unsynced fastify error', { error: result.error });
         if (typeof callback === 'function') callback(result);
         return result;
     }
@@ -2302,6 +2308,18 @@ async function list_unsynced_atomes(callback) {
         callback(result);
     }
 
+    console.log('[sync_atomes] list_unsynced summary', {
+        onlyOnTauri: result.onlyOnTauri.length,
+        onlyOnFastify: result.onlyOnFastify.length,
+        modifiedOnTauri: result.modifiedOnTauri.length,
+        modifiedOnFastify: result.modifiedOnFastify.length,
+        deletedOnTauri: result.deletedOnTauri.length,
+        deletedOnFastify: result.deletedOnFastify.length,
+        conflicts: result.conflicts.length,
+        synced: result.synced.length,
+        error: result.error
+    });
+
     return result;
 }
 
@@ -2330,9 +2348,18 @@ async function sync_atomes(callback) {
     if (!is_tauri_runtime()) {
         result.skipped = true;
         result.reason = 'not_tauri';
+        console.log('[sync_atomes] sync skipped (not tauri)');
         if (typeof callback === 'function') callback(result);
         return result;
     }
+
+    try {
+        const fastifyBase = (FastifyAdapter && typeof FastifyAdapter.baseUrl === 'string')
+            ? FastifyAdapter.baseUrl.trim()
+            : '';
+        const tokenPresent = !!FastifyAdapter.getToken?.();
+        console.log('[sync_atomes] sync start', { fastifyBase, tokenPresent });
+    } catch (_) { }
 
     // First, get the list of unsynced atomes
     let unsyncedResult;
@@ -2340,16 +2367,28 @@ async function sync_atomes(callback) {
         unsyncedResult = await list_unsynced_atomes();
         if (unsyncedResult.error) {
             result.error = unsyncedResult.error;
+            console.log('[sync_atomes] sync aborted', { error: result.error });
             if (typeof callback === 'function') callback(result);
             return result;
         }
     } catch (e) {
         result.error = 'Failed to list unsynced atomes: ' + e.message;
+        console.log('[sync_atomes] sync failed', { error: result.error });
         if (typeof callback === 'function') callback(result);
         return result;
     }
 
     result.alreadySynced = unsyncedResult.synced.length;
+    console.log('[sync_atomes] unsynced counts', {
+        onlyOnTauri: unsyncedResult.onlyOnTauri.length,
+        onlyOnFastify: unsyncedResult.onlyOnFastify.length,
+        modifiedOnTauri: unsyncedResult.modifiedOnTauri.length,
+        modifiedOnFastify: unsyncedResult.modifiedOnFastify.length,
+        deletedOnTauri: unsyncedResult.deletedOnTauri.length,
+        deletedOnFastify: unsyncedResult.deletedOnFastify.length,
+        conflicts: unsyncedResult.conflicts.length,
+        synced: unsyncedResult.synced.length
+    });
 
     let currentUserId = _currentUserId;
     if (!currentUserId) {
