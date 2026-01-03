@@ -243,6 +243,7 @@ const FASTIFY_LOGIN_CACHE_KEY = 'fastify_login_cache_v1';
 let _syncAtomesInProgress = false;
 let _lastSyncAtomesAttempt = 0;
 let _lastFastifyAutoLoginAttempt = 0;
+let _lastFastifyAssetSync = 0;
 
 function is_tauri_runtime() {
     try {
@@ -1677,6 +1678,12 @@ async function current_user(callback) {
         callback(result);
     }
 
+    if (is_tauri_runtime()) {
+        try {
+            await syncFastifyFileAssetsToTauri();
+        } catch (_) { }
+    }
+
     return result;
 }
 
@@ -2672,6 +2679,112 @@ async function sync_atomes(callback) {
         } catch (e) {
             return { ok: false, error: e?.message || 'download_failed' };
         }
+    };
+
+    const listFastifyAtomesByType = async (type, ownerId) => {
+        const items = [];
+        const seen = new Set();
+        const limit = 500;
+        let offset = 0;
+        let page = 0;
+
+        while (page < 20) {
+            const query = { type, owner_id: ownerId, limit, offset };
+            let response;
+            try {
+                response = await FastifyAdapter.atome.list(query);
+            } catch (e) {
+                return { ok: false, error: e?.message || 'fastify_list_failed', items };
+            }
+
+            if (!(response?.ok || response?.success)) {
+                const errMsg = String(response?.error || '').toLowerCase();
+                const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+                if (is_tauri_runtime() && authError) {
+                    try { await ensure_fastify_token(); } catch { }
+                    try {
+                        response = await FastifyAdapter.atome.list(query);
+                    } catch (e) {
+                        return { ok: false, error: e?.message || 'fastify_list_failed', items };
+                    }
+                }
+            }
+
+            if (!(response?.ok || response?.success)) {
+                return { ok: false, error: response?.error || 'fastify_list_failed', items };
+            }
+
+            const raw = response.atomes || response.data || [];
+            const normalized = Array.isArray(raw) ? raw.map(normalizeAtomeRecord) : [];
+
+            let added = 0;
+            normalized.forEach((item) => {
+                const id = item?.atome_id || item?.id;
+                if (!id || seen.has(id)) return;
+                seen.add(id);
+                items.push(item);
+                added += 1;
+            });
+
+            if (!normalized.length || normalized.length < limit || added === 0) {
+                break;
+            }
+
+            offset += limit;
+            page += 1;
+        }
+
+        return { ok: true, items };
+    };
+
+    const syncFastifyFileAssetsToTauri = async () => {
+        if (!is_tauri_runtime()) return { ok: false, reason: 'not_tauri' };
+        if (window?.__SQUIRREL_DISABLE_FILE_ASSET_SYNC__ === true) {
+            return { ok: false, reason: 'disabled' };
+        }
+
+        const now = Date.now();
+        if (now - _lastFastifyAssetSync < 30_000) {
+            return { ok: true, skipped: true, reason: 'throttled' };
+        }
+        _lastFastifyAssetSync = now;
+
+        if (!FastifyAdapter?.getToken?.()) {
+            try { await ensure_fastify_token(); } catch { }
+        }
+        const token = FastifyAdapter?.getToken?.();
+        if (!token) return { ok: false, reason: 'fastify_token_missing' };
+
+        let ownerId = currentUserId;
+        if (!ownerId) {
+            try {
+                const current = await current_user();
+                ownerId = current?.user?.user_id || current?.user?.atome_id || current?.user?.id || null;
+            } catch { }
+        }
+        if (!ownerId) return { ok: false, reason: 'owner_missing' };
+
+        const summary = { ok: true, attempted: 0, downloaded: 0, skipped: 0, failed: 0 };
+        for (const type of FILE_ASSET_TYPES) {
+            const listResult = await listFastifyAtomesByType(type, ownerId);
+            if (!listResult.ok) continue;
+
+            for (const atome of listResult.items) {
+                const result = await downloadFileAssetFromFastify(atome);
+                if (result.ok && result.skipped) {
+                    summary.skipped += 1;
+                    continue;
+                }
+                if (result.ok) {
+                    summary.downloaded += 1;
+                } else {
+                    summary.failed += 1;
+                }
+                summary.attempted += 1;
+            }
+        }
+
+        return summary;
     };
 
     const uploadFileAssetToFastify = async (atome) => {
