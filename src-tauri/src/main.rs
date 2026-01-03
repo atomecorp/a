@@ -53,12 +53,14 @@ fn main() {
     let _log_guard = dev_logging::init_tracing();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
             iplug_bridge::iplug_send,
             iplug_bridge::iplug_poll_events
         ])
         .setup(|app| {
+            println!("[tauri] fs plugin enabled");
             let path_resolver = app.path();
             let static_dir: PathBuf = match path_resolver.resource_dir() {
                 Ok(dir) => {
