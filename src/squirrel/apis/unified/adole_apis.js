@@ -742,6 +742,8 @@ async function process_pending_deletes() {
 
 let pendingRegisterMonitorStarted = false;
 let pendingRegisterMonitorId = null;
+let periodicSyncStarted = false;
+let periodicSyncId = null;
 
 function start_pending_register_monitor() {
     if (pendingRegisterMonitorStarted || typeof window === 'undefined') return;
@@ -758,6 +760,21 @@ function start_pending_register_monitor() {
                 if (hasRegisters) await process_pending_registers();
                 if (hasDeletes) await process_pending_deletes();
             }
+        } catch {
+            // Ignore
+        }
+    }, pollInterval);
+}
+
+function start_periodic_sync_monitor() {
+    if (periodicSyncStarted || typeof window === 'undefined') return;
+    periodicSyncStarted = true;
+
+    const pollInterval = Math.max(CONFIG.CHECK_INTERVAL || 30000, 15000);
+    periodicSyncId = setInterval(async () => {
+        if (!is_tauri_runtime()) return;
+        try {
+            await maybe_sync_atomes('periodic');
         } catch {
             // Ignore
         }
@@ -1915,6 +1932,7 @@ try {
         });
 
         start_pending_register_monitor();
+        start_periodic_sync_monitor();
     }
 } catch {
     // Ignore
@@ -2873,6 +2891,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
         const url = `${base}/api/local-files/meta?path=${encodeURIComponent(relativePath)}`;
         const result = await fetchLocalJson(url, { method: 'GET', headers });
         if (!result.ok) return null;
+        if (result.data?.exists === false || result.data?.success === false) return null;
         return result.data;
     };
 

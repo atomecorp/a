@@ -872,8 +872,12 @@ async fn local_file_meta_handler(
             })),
         ),
         Err(err) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "success": false, "exists": false, "error": err.to_string() })),
+            StatusCode::OK,
+            Json(json!({
+                "success": false,
+                "exists": false,
+                "error": err.to_string()
+            })),
         ),
     }
 }
