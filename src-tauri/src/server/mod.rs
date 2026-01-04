@@ -182,7 +182,16 @@ fn resolve_authenticated_user(
     extract_user_id_from_headers(headers)
 }
 
-fn normalize_downloads_relative_path(raw_path: &str, user_id: &str) -> Option<String> {
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum LocalStorageRoot {
+    Downloads,
+    Recordings,
+}
+
+fn normalize_local_relative_path(
+    raw_path: &str,
+    user_id: &str,
+) -> Option<(LocalStorageRoot, String)> {
     let safe_user = sanitize_user_segment(user_id);
     let mut cleaned = raw_path.trim().replace('\\', "/");
     if cleaned.to_lowercase().starts_with("file://") {
@@ -200,9 +209,6 @@ fn normalize_downloads_relative_path(raw_path: &str, user_id: &str) -> Option<St
     }
 
     cleaned = cleaned.trim_start_matches('/').to_string();
-    if cleaned.starts_with("Downloads/") {
-        cleaned = cleaned["Downloads/".len()..].to_string();
-    }
 
     let raw_parts: Vec<&str> = cleaned
         .split('/')
@@ -212,9 +218,16 @@ fn normalize_downloads_relative_path(raw_path: &str, user_id: &str) -> Option<St
         return None;
     }
 
-    let last_idx = raw_parts.len().saturating_sub(1);
+    let first = raw_parts[0].to_lowercase();
+    let (root, parts) = match first.as_str() {
+        "downloads" => (LocalStorageRoot::Downloads, &raw_parts[1..]),
+        "recordings" => (LocalStorageRoot::Recordings, &raw_parts[1..]),
+        _ => (LocalStorageRoot::Downloads, raw_parts.as_slice()),
+    };
+
+    let last_idx = parts.len().saturating_sub(1);
     let mut safe_parts = Vec::with_capacity(raw_parts.len());
-    for (idx, part) in raw_parts.iter().enumerate() {
+    for (idx, part) in parts.iter().enumerate() {
         if idx == last_idx {
             safe_parts.push(sanitize_file_name(part));
         } else {
@@ -222,7 +235,7 @@ fn normalize_downloads_relative_path(raw_path: &str, user_id: &str) -> Option<St
         }
     }
 
-    Some(safe_parts.join("/"))
+    Some((root, safe_parts.join("/")))
 }
 
 fn guess_mime_from_ext(name: &str) -> &'static str {
@@ -254,19 +267,30 @@ fn guess_mime_from_ext(name: &str) -> &'static str {
     }
 }
 
+async fn resolve_user_storage_dir(
+    state: &AppState,
+    user_id: &str,
+    root: LocalStorageRoot,
+) -> Result<PathBuf, std::io::Error> {
+    let safe_user = sanitize_user_segment(user_id);
+    let base_dir = state
+        .project_root
+        .join("data")
+        .join("users")
+        .join(safe_user);
+    let dir = match root {
+        LocalStorageRoot::Downloads => base_dir.join("Downloads"),
+        LocalStorageRoot::Recordings => base_dir.join("recordings"),
+    };
+    fs::create_dir_all(&dir).await?;
+    Ok(dir)
+}
+
 async fn resolve_user_downloads_dir(
     state: &AppState,
     user_id: &str,
 ) -> Result<PathBuf, std::io::Error> {
-    let safe_user = sanitize_user_segment(user_id);
-    let downloads_dir = state
-        .project_root
-        .join("data")
-        .join("users")
-        .join(safe_user)
-        .join("Downloads");
-    fs::create_dir_all(&downloads_dir).await?;
-    Ok(downloads_dir)
+    resolve_user_storage_dir(state, user_id, LocalStorageRoot::Downloads).await
 }
 
 async fn resolve_user_upload_path(
@@ -663,7 +687,7 @@ async fn local_file_read_handler(
             .into_response();
     }
 
-    let relative = match normalize_downloads_relative_path(&raw_path, &user_id) {
+    let (root, relative) = match normalize_local_relative_path(&raw_path, &user_id) {
         Some(path) => path,
         None => {
             return (
@@ -673,8 +697,15 @@ async fn local_file_read_handler(
                 .into_response();
         }
     };
+    if relative.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Missing file path" })),
+        )
+            .into_response();
+    }
 
-    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+    let base_dir = match resolve_user_storage_dir(&state, &user_id, root).await {
         Ok(dir) => dir,
         Err(err) => {
             return (
@@ -685,7 +716,7 @@ async fn local_file_read_handler(
         }
     };
 
-    let file_path = downloads_dir.join(&relative);
+    let file_path = base_dir.join(&relative);
     let data = match fs::read(&file_path).await {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -758,7 +789,7 @@ async fn local_file_write_handler(
         );
     }
 
-    let relative = match normalize_downloads_relative_path(&raw_path, &user_id) {
+    let (root, relative) = match normalize_local_relative_path(&raw_path, &user_id) {
         Some(path) => path,
         None => {
             return (
@@ -767,8 +798,14 @@ async fn local_file_write_handler(
             );
         }
     };
+    if relative.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Missing file path" })),
+        );
+    }
 
-    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+    let base_dir = match resolve_user_storage_dir(&state, &user_id, root).await {
         Ok(dir) => dir,
         Err(err) => {
             return (
@@ -778,7 +815,7 @@ async fn local_file_write_handler(
         }
     };
 
-    let file_path = downloads_dir.join(&relative);
+    let file_path = base_dir.join(&relative);
     if let Some(parent) = file_path.parent() {
         if let Err(err) = fs::create_dir_all(parent).await {
             return (
@@ -795,7 +832,10 @@ async fn local_file_write_handler(
         );
     }
 
-    let relative_path = format!("Downloads/{}", relative);
+    let relative_path = match root {
+        LocalStorageRoot::Downloads => format!("Downloads/{}", relative),
+        LocalStorageRoot::Recordings => format!("recordings/{}", relative),
+    };
     (
         StatusCode::OK,
         Json(json!({
@@ -840,7 +880,7 @@ async fn local_file_meta_handler(
         );
     }
 
-    let relative = match normalize_downloads_relative_path(&raw_path, &user_id) {
+    let (root, relative) = match normalize_local_relative_path(&raw_path, &user_id) {
         Some(path) => path,
         None => {
             return (
@@ -849,8 +889,14 @@ async fn local_file_meta_handler(
             );
         }
     };
+    if relative.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Missing file path" })),
+        );
+    }
 
-    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+    let base_dir = match resolve_user_storage_dir(&state, &user_id, root).await {
         Ok(dir) => dir,
         Err(err) => {
             return (
@@ -860,7 +906,7 @@ async fn local_file_meta_handler(
         }
     };
 
-    let file_path = downloads_dir.join(&relative);
+    let file_path = base_dir.join(&relative);
     match fs::metadata(&file_path).await {
         Ok(meta) => (
             StatusCode::OK,
@@ -868,7 +914,10 @@ async fn local_file_meta_handler(
                 "success": true,
                 "exists": true,
                 "size": meta.len(),
-                "path": format!("Downloads/{}", relative)
+                "path": match root {
+                    LocalStorageRoot::Downloads => format!("Downloads/{}", relative),
+                    LocalStorageRoot::Recordings => format!("recordings/{}", relative)
+                }
             })),
         ),
         Err(err) => (
@@ -907,7 +956,14 @@ async fn local_file_list_handler(
         }
     };
 
-    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+    let (root, relative) = if let Some(raw_path) = query.path {
+        normalize_local_relative_path(&raw_path, &user_id)
+            .unwrap_or((LocalStorageRoot::Downloads, String::new()))
+    } else {
+        (LocalStorageRoot::Downloads, String::new())
+    };
+
+    let base_dir = match resolve_user_storage_dir(&state, &user_id, root).await {
         Ok(dir) => dir,
         Err(err) => {
             return (
@@ -917,18 +973,14 @@ async fn local_file_list_handler(
         }
     };
 
-    let target_dir = if let Some(raw_path) = query.path {
-        if let Some(relative) = normalize_downloads_relative_path(&raw_path, &user_id) {
-            let candidate = downloads_dir.join(&relative);
-            match fs::metadata(&candidate).await {
-                Ok(meta) if meta.is_dir() => candidate,
-                _ => candidate.parent().unwrap_or(&downloads_dir).to_path_buf(),
-            }
-        } else {
-            downloads_dir.clone()
-        }
+    let target_dir = if relative.trim().is_empty() {
+        base_dir.clone()
     } else {
-        downloads_dir.clone()
+        let candidate = base_dir.join(&relative);
+        match fs::metadata(&candidate).await {
+            Ok(meta) if meta.is_dir() => candidate,
+            _ => candidate.parent().unwrap_or(&base_dir).to_path_buf(),
+        }
     };
 
     let mut entries = Vec::new();

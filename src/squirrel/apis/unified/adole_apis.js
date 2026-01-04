@@ -2688,10 +2688,13 @@ async function sync_atomes(callback) {
         if (!relative && fallbackName) {
             relative = `Downloads/${fallbackName}`;
         }
-        if (relative && !relative.startsWith('Downloads/')) {
-            relative = `Downloads/${relative}`;
-        }
-        return relative;
+        if (!relative) return '';
+        const normalized = normalizePath(relative) || relative;
+        const lower = normalized.toLowerCase();
+        if (lower.startsWith('downloads/')) return `Downloads/${normalized.slice('downloads/'.length)}`;
+        if (lower.startsWith('recordings/')) return `recordings/${normalized.slice('recordings/'.length)}`;
+        if (lower === 'downloads' || lower === 'recordings') return lower;
+        return `Downloads/${normalized.replace(/^\/+/, '')}`;
     };
 
     const fetchLocalJson = async (url, options = {}) => {
