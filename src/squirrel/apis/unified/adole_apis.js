@@ -2626,14 +2626,22 @@ async function sync_atomes(callback) {
     const readTauriBinaryFile = async (path) => {
         const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
         const fs = tauri && tauri.fs ? tauri.fs : null;
-        if (!fs || typeof fs.readBinaryFile !== 'function') return null;
+        if (!fs) return null;
         try {
-            const out = await fs.readBinaryFile(path);
-            if (!out) return null;
-            return (out instanceof Uint8Array) ? out : new Uint8Array(out);
+            if (typeof fs.readFile === 'function') {
+                const out = await fs.readFile(path);
+                if (!out) return null;
+                return (out instanceof Uint8Array) ? out : new Uint8Array(out);
+            }
+            if (typeof fs.readBinaryFile === 'function') {
+                const out = await fs.readBinaryFile(path);
+                if (!out) return null;
+                return (out instanceof Uint8Array) ? out : new Uint8Array(out);
+            }
         } catch {
             return null;
         }
+        return null;
     };
 
     const WS_FILE_CHUNK_SIZE = 256 * 1024;
@@ -2679,24 +2687,34 @@ async function sync_atomes(callback) {
     const tryTauriCreateDir = async (dirPath) => {
         const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
         const fs = tauri && tauri.fs ? tauri.fs : null;
-        if (!fs || typeof fs.createDir !== 'function') return { ok: false, error: 'tauri_fs_create_dir_unavailable' };
+        if (!fs) return { ok: false, error: 'tauri_fs_create_dir_unavailable' };
         try {
-            await fs.createDir(dirPath, { recursive: true });
-            return { ok: true };
+            if (typeof fs.mkdir === 'function') {
+                await fs.mkdir(dirPath, { recursive: true });
+                return { ok: true };
+            }
+            if (typeof fs.createDir === 'function') {
+                await fs.createDir(dirPath, { recursive: true });
+                return { ok: true };
+            }
         } catch (e) {
             try {
-                await fs.createDir({ dir: dirPath, recursive: true });
-                return { ok: true };
+                if (typeof fs.createDir === 'function') {
+                    await fs.createDir({ dir: dirPath, recursive: true });
+                    return { ok: true };
+                }
             } catch (e2) {
                 return { ok: false, error: e2?.message || e?.message || 'tauri_create_dir_failed' };
             }
+            return { ok: false, error: e?.message || 'tauri_create_dir_failed' };
         }
+        return { ok: false, error: 'tauri_fs_create_dir_unavailable' };
     };
 
     const tryTauriWriteBinaryFile = async (path, bytes) => {
         const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
         const fs = tauri && tauri.fs ? tauri.fs : null;
-        if (!fs || typeof fs.writeBinaryFile !== 'function') {
+        if (!fs) {
             return { ok: false, error: 'tauri_fs_write_unavailable' };
         }
         try {
@@ -2708,12 +2726,19 @@ async function sync_atomes(callback) {
         } catch (_) { }
         try {
             const contents = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes);
-            try {
-                await fs.writeBinaryFile({ path, contents });
-            } catch (_) {
-                await fs.writeBinaryFile(path, contents);
+            if (typeof fs.writeFile === 'function') {
+                await fs.writeFile(path, contents);
+                return { ok: true };
             }
-            return { ok: true };
+            if (typeof fs.writeBinaryFile === 'function') {
+                try {
+                    await fs.writeBinaryFile({ path, contents });
+                } catch (_) {
+                    await fs.writeBinaryFile(path, contents);
+                }
+                return { ok: true };
+            }
+            return { ok: false, error: 'tauri_fs_write_unavailable' };
         } catch (e) {
             return { ok: false, error: e?.message || 'tauri_write_failed' };
         }
@@ -2724,11 +2749,11 @@ async function sync_atomes(callback) {
         const fs = tauri && tauri.fs ? tauri.fs : null;
         if (!fs) return null;
         try {
-            if (typeof fs.metadata === 'function') {
-                return await fs.metadata(path);
-            }
             if (typeof fs.stat === 'function') {
                 return await fs.stat(path);
+            }
+            if (typeof fs.metadata === 'function') {
+                return await fs.metadata(path);
             }
         } catch {
             return null;
@@ -2737,7 +2762,9 @@ async function sync_atomes(callback) {
     };
 
     const isFileAssetAtome = (atome) => {
-        return is_file_asset_type(atome?.atome_type || atome?.type);
+        if (!is_file_asset_type(atome?.atome_type || atome?.type)) return false;
+        const { fileName, originalName, filePath } = extractFileMeta(atome);
+        return Boolean(filePath || fileName || originalName);
     };
 
     const extractFileMeta = (atome) => {
