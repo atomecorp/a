@@ -1524,6 +1524,118 @@ async function open_project_selector(callback) {
   });
 }
 
+function getPasswordInputValue() {
+  return grab('password_input')?.value?.trim() || '';
+}
+
+async function promptUserPassword(username, prefill = '') {
+  return new Promise((resolve) => {
+    const existingPrompt = grab('password_prompt_overlay');
+    if (existingPrompt) existingPrompt.remove();
+
+    const overlay = $('div', {
+      id: 'password_prompt_overlay',
+      parent: intuitionContainer,
+      css: {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: '1100',
+        pointerEvents: 'auto'
+      }
+    });
+
+    const modal = $('div', {
+      parent: overlay,
+      css: {
+        backgroundColor: '#fff',
+        padding: '20px',
+        borderRadius: '8px',
+        minWidth: '260px',
+        pointerEvents: 'auto'
+      }
+    });
+
+    $('div', {
+      parent: modal,
+      css: { fontSize: '16px', fontWeight: 'bold', marginBottom: '12px', color: '#333' },
+      text: `Enter password${username ? ` for ${username}` : ''}`
+    });
+
+    const input = $('input', {
+      parent: modal,
+      attrs: {
+        type: 'password',
+        placeholder: 'Password',
+        value: prefill
+      },
+      css: {
+        padding: '8px',
+        borderRadius: '4px',
+        border: '1px solid #ccc',
+        width: '220px'
+      }
+    });
+
+    const actions = $('div', {
+      parent: modal,
+      css: {
+        display: 'flex',
+        gap: '8px',
+        justifyContent: 'flex-end',
+        marginTop: '12px'
+      }
+    });
+
+    const finish = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+
+    $('span', {
+      parent: actions,
+      css: {
+        padding: '6px 10px',
+        backgroundColor: '#ccc',
+        borderRadius: '4px',
+        cursor: 'pointer'
+      },
+      text: 'Cancel',
+      onClick: () => finish('')
+    });
+
+    $('span', {
+      parent: actions,
+      css: {
+        padding: '6px 10px',
+        backgroundColor: '#00f',
+        color: 'white',
+        borderRadius: '4px',
+        cursor: 'pointer'
+      },
+      text: 'OK',
+      onClick: () => finish(input?.value?.trim() || '')
+    });
+
+    if (input?.focus) input.focus();
+    if (input?.addEventListener) {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          finish(input?.value?.trim() || '');
+        } else if (event.key === 'Escape') {
+          finish('');
+        }
+      });
+    }
+  });
+}
+
 /**
  * TEST ONLY - Open a user selector dialog
  * @param {Function} callback - Callback with selected user { user_id, username, phone }
@@ -1537,11 +1649,13 @@ async function open_user_selector(callback) {
   if (users.length === 0) {
     const phoneInput = grab('phone_pass_input');
     const usernameInput = grab('username_input');
+    const passwordInput = grab('password_input');
     const phone = phoneInput?.value?.trim() || '';
     const username = usernameInput?.value?.trim() || '';
+    const password = passwordInput?.value?.trim() || '';
 
     if (phone) {
-      const loginResult = await log_user(phone, phone, username || '');
+      const loginResult = await log_user(phone, password || phone, username || '');
       if (loginResult.tauri.success || loginResult.fastify.success) {
         const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
         const userObj = userData?.user || userData || { username, phone };
@@ -1629,7 +1743,20 @@ async function open_user_selector(callback) {
       onClick: async () => {
         overlay.remove();
         if (phone && phone !== 'No phone') {
-          const loginResult = await log_user(phone, phone, '');
+          const prefillPassword = getPasswordInputValue();
+          const password = await promptUserPassword(username, prefillPassword);
+          if (!password) {
+            puts('❌ Password required to log in');
+            if (typeof callback === 'function') {
+              callback({ user_id: null, username: null, phone: null, cancelled: true, error: 'Password required' });
+            }
+            return;
+          }
+
+          const passwordInput = grab('password_input');
+          if (passwordInput) passwordInput.value = password;
+
+          const loginResult = await log_user(phone, password, '');
           if (loginResult.tauri.success || loginResult.fastify.success) {
             const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
             const userObj = userData?.user || userData || { username, phone };
@@ -2372,13 +2499,14 @@ function updateRemoteCommandsStatus(active) {
 
 const phone_pass = '11111111';
 const username = 'jeezs';
+const default_password = phone_pass;
 
 $('input', {
   id: 'phone_pass_input',
   parent: intuitionContainer,
   attrs: {
     type: 'text',
-    placeholder: 'Phone / Password',
+    placeholder: 'Phone',
     value: phone_pass
   },
   css: {
@@ -2399,6 +2527,23 @@ $('input', {
     type: 'text',
     placeholder: 'Username',
     value: username
+  },
+  css: {
+    margin: '10px',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    width: '100px'
+  }
+});
+
+$('input', {
+  id: 'password_input',
+  parent: intuitionContainer,
+  attrs: {
+    type: 'password',
+    placeholder: 'Password',
+    value: default_password
   },
   css: {
     margin: '10px',
@@ -2519,8 +2664,14 @@ $('span', {
   onClick: async () => {
     const user_phone = grab('phone_pass_input').value;
     const user_name = grab('username_input').value;
+    const user_password = getPasswordInputValue();
 
-    const results = await create_user(user_phone, user_phone, user_name, (result) => {
+    if (!user_password) {
+      puts('❌ Please enter a password first');
+      return;
+    }
+
+    const results = await create_user(user_phone, user_password, user_name, (result) => {
       if (result?.tauri?.success || result?.fastify?.success) {
         console.log('user: ' + user_name + ' created');
       }
@@ -2575,9 +2726,10 @@ $('span', {
   onClick: async () => {
     const phone = grab('phone_pass_input')?.value?.trim() || '';
     const username = grab('username_input')?.value?.trim() || '';
+    const password = getPasswordInputValue();
 
-    if (phone) {
-      const loginResult = await log_user(phone, phone, username || '');
+    if (phone && password) {
+      const loginResult = await log_user(phone, password, username || '');
       if (loginResult.tauri.success || loginResult.fastify.success) {
         const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
         const userObj = userData?.user || userData || { username, phone };
@@ -2591,6 +2743,8 @@ $('span', {
         return;
       }
       puts('❌ Login failed; opening user selector');
+    } else if (phone && !password) {
+      puts('Please enter a password or choose a user');
     }
 
     open_user_selector((result) => {
@@ -2647,8 +2801,9 @@ $('span', {
     puts('Deleting user...');
     const phone = grab('phone_pass_input').value;
     const user_name = grab('username_input').value;
+    const user_password = getPasswordInputValue() || phone;
 
-    const results = await delete_user(phone, phone, user_name);
+    const results = await delete_user(phone, user_password, user_name);
     if (results.tauri.success || results.fastify.success) {
       puts('User deleted, logging out...');
       await unlog_user();
@@ -3906,7 +4061,8 @@ async function logSelectedUserDbInfo(selection) {
   puts('🔐 Switching session to selected user to count atomes');
 
   try {
-    const loginResult = await log_user(phone, phone, '');
+    const loginPassword = getPasswordInputValue() || phone;
+    const loginResult = await log_user(phone, loginPassword, '');
     if (!(loginResult.tauri.success || loginResult.fastify.success)) {
       puts('❌ Login failed for selected user');
       console.log('[User DB Info] Login failed:', loginResult);
