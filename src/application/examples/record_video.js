@@ -88,6 +88,18 @@
         }
     }
 
+    function getCloudAuthToken() {
+        try {
+            return (
+                localStorage.getItem('cloud_auth_token') ||
+                localStorage.getItem('auth_token') ||
+                ''
+            );
+        } catch (_) {
+            return '';
+        }
+    }
+
     function getLocalAuthToken() {
         try {
             return localStorage.getItem('local_auth_token') || '';
@@ -450,6 +462,14 @@
         if (isTauriRuntime()) {
             const saved = await saveToTauriRecordings({ fileName, bytes });
             relPath = saved && typeof saved.path === 'string' ? saved.path : null;
+            const cloudToken = getCloudAuthToken();
+            if (cloudToken && getFastifyBaseUrl()) {
+                try {
+                    await uploadToFastify({ fileName, bytes, mimeType });
+                } catch (_) {
+                    // Keep local save even if cloud upload fails.
+                }
+            }
         } else {
             const uploaded = await uploadToFastify({ fileName, bytes, mimeType });
             relPath = uploaded && typeof uploaded.path === 'string' ? uploaded.path : null;
@@ -516,6 +536,22 @@
             throw new Error('No camera video track available');
         }
 
+        let recordStream = stream;
+        let extraAudioStream = null;
+        const wantsAudio = mode === 'audio'
+            || (mode === 'video' && (typeof options.audio === 'boolean' ? options.audio : true));
+        if (mode === 'video' && wantsAudio && stream.getAudioTracks().length === 0) {
+            try {
+                extraAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                recordStream = new MediaStream([
+                    ...stream.getVideoTracks(),
+                    ...extraAudioStream.getAudioTracks()
+                ]);
+            } catch (_) {
+                // If audio capture fails, keep recording video-only.
+            }
+        }
+
         const mimeType = pickSupportedMime(candidates);
         const ext = extForMime(mimeType, mode);
         const safeFileName = sanitizeFileName(filename || '', ext);
@@ -531,7 +567,7 @@
             recorderOptions.audioBitsPerSecond = Number(options.audioBitsPerSecond);
         }
         const recorder = new MediaRecorder(
-            stream,
+            recordStream,
             Object.keys(recorderOptions).length ? recorderOptions : undefined
         );
         if (mode === 'video' && recorder.mimeType && !recorder.mimeType.startsWith('video/')) {
@@ -561,6 +597,11 @@
                             stream.getTracks().forEach((track) => track.stop());
                         } catch (_) { }
                     }
+                    if (extraAudioStream) {
+                        try {
+                            extraAudioStream.getTracks().forEach((track) => track.stop());
+                        } catch (_) { }
+                    }
                     try {
                         const blob = new Blob(chunks, { type: mimeType || '' });
                         if (mode === 'video' && blob.type && blob.type.startsWith('audio/')) {
@@ -569,7 +610,7 @@
                         const buffer = await blob.arrayBuffer();
                         const bytes = new Uint8Array(buffer);
                         const durationSec = Math.max(0, (Date.now() - startedAt) / 1000);
-                        const videoTrack = stream.getVideoTracks()[0];
+                        const videoTrack = recordStream.getVideoTracks()[0];
                         const settings = videoTrack && typeof videoTrack.getSettings === 'function'
                             ? videoTrack.getSettings()
                             : null;
@@ -603,6 +644,11 @@
         } catch (e) {
             if (!externalStream || stopExternalStream) {
                 stream.getTracks().forEach((track) => track.stop());
+            }
+            if (extraAudioStream) {
+                try {
+                    extraAudioStream.getTracks().forEach((track) => track.stop());
+                } catch (_) { }
             }
             throw e;
         }
