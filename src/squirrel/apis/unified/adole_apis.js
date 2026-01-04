@@ -3004,8 +3004,22 @@ async function sync_atomes(callback) {
             || (safeFileName ? `Downloads/${safeFileName}` : '');
 
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
+        console.log('[sync_atomes] asset push start', {
+            atomeId,
+            ownerId,
+            fileName: safeFileName,
+            filePath,
+            localPath,
+            sizeBytes
+        });
         const bytes = await readTauriBinaryFile(localPath);
         if (!bytes || !bytes.length) {
+            console.log('[sync_atomes] asset push blocked: local_asset_missing', {
+                atomeId,
+                ownerId,
+                fileName: safeFileName,
+                localPath
+            });
             return { ok: false, error: 'local_asset_missing' };
         }
 
@@ -3063,6 +3077,12 @@ async function sync_atomes(callback) {
                 return { ok: false, error: msg };
             }
 
+            console.log('[sync_atomes] asset push ok', {
+                atomeId,
+                fileName: safeFileName,
+                sizeBytes: totalSize,
+                path: relativePath
+            });
             return { ok: true, createdAtome: true, sizeBytes: totalSize, path: relativePath };
         } catch (e) {
             console.log('[sync_atomes] asset push failed', {
