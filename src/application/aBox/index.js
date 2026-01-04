@@ -5,6 +5,11 @@ const dropZoneDefaultBg = '#00f';
 const dropZoneHoverBg = '#ff8800';
 const uploadsListId = 'aBox_uploads_list';
 const uploadsListBodyId = `${uploadsListId}_body`;
+const uploadsListHeaderId = `${uploadsListId}_header`;
+const uploadsListToggleId = `${uploadsListId}_toggle`;
+const uploadsListToggleLabelId = `${uploadsListId}_toggle_label`;
+
+let showAtomesList = false;
 
 function getLocalToken() {
     try {
@@ -100,17 +105,60 @@ $('div', {
 });
 
 $('div', {
+    id: uploadsListHeaderId,
     parent: `#${uploadsListId}`,
-    text: 'Uploaded files',
     css: {
         zIndex: '9000',
         fontWeight: 'bold',
         marginBottom: '8px',
         cursor: 'move',
         userSelect: 'none',
-        pointerEvents: 'auto'
+        pointerEvents: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '8px'
     },
     'data-role': 'aBox-drag-handle'
+});
+
+$('div', {
+    parent: `#${uploadsListHeaderId}`,
+    text: 'Uploaded files',
+    css: {
+        fontWeight: 'bold'
+    }
+});
+
+const uploadsToggleWrap = $('label', {
+    id: uploadsListToggleLabelId,
+    parent: `#${uploadsListHeaderId}`,
+    css: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        fontSize: '11px',
+        fontWeight: 'normal',
+        color: '#bbb',
+        cursor: 'pointer',
+        userSelect: 'none'
+    }
+});
+
+const uploadsToggle = $('input', {
+    parent: uploadsToggleWrap,
+    attrs: { type: 'checkbox' },
+    css: {
+        width: '14px',
+        height: '14px',
+        cursor: 'pointer',
+        pointerEvents: 'auto'
+    }
+});
+
+$('span', {
+    parent: uploadsToggleWrap,
+    text: 'Atomes'
 });
 
 $('div', {
@@ -348,6 +396,7 @@ function resolveApiBases() {
 const apiBases = resolveApiBases();
 let lastSuccessfulApiBase = null;
 let uploadsAuthMissing = false;
+let atomesListError = null;
 
 function uniqueBaseCandidates() {
     const seen = new Set();
@@ -570,6 +619,99 @@ function renderUploadsList(files) {
     });
 }
 
+function normalizeAtomeEntry(atome) {
+    if (!atome || typeof atome !== 'object') return null;
+    const id = atome.atome_id || atome.id || null;
+    const type = atome.atome_type || atome.type || atome.kind || 'unknown';
+    const particles = atome.particles || atome.data || {};
+    const filePath = particles.file_path || particles.filePath || particles.path || particles.rel_path || '';
+    return { id, type, filePath };
+}
+
+function renderAtomesList(items) {
+    const container = document.getElementById(uploadsListBodyId);
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (atomesListError) {
+        $('div', {
+            parent: `#${uploadsListBodyId}`,
+            text: `Unable to load atomes (${atomesListError})`,
+            css: {
+                color: '#f66',
+                padding: '4px 2px'
+            }
+        });
+        return;
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+        $('div', {
+            parent: `#${uploadsListBodyId}`,
+            text: 'No atomes yet',
+            css: {
+                color: '#bbb',
+                fontStyle: 'italic',
+                padding: '4px 2px'
+            }
+        });
+        return;
+    }
+
+    items.forEach((entry) => {
+        if (!entry) return;
+        const label = entry.filePath
+            ? `${entry.type} - ${entry.filePath}`
+            : `${entry.type} - (no path)`;
+        $('div', {
+            parent: `#${uploadsListBodyId}`,
+            text: label,
+            css: {
+                padding: '6px',
+                marginBottom: '4px',
+                backgroundColor: '#252525',
+                borderRadius: '4px'
+            }
+        });
+    });
+}
+
+async function fetchUserAtomesList() {
+    const api = window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null);
+    if (!api?.atomes?.list) {
+        atomesListError = 'AdoleAPI.atomes.list unavailable';
+        return [];
+    }
+
+    atomesListError = null;
+    const result = await api.atomes.list();
+    const tauriAtomes = Array.isArray(result?.tauri?.atomes) ? result.tauri.atomes : [];
+    const fastifyAtomes = Array.isArray(result?.fastify?.atomes) ? result.fastify.atomes : [];
+    const merged = [];
+    const seen = new Set();
+
+    const add = (items) => {
+        items.forEach((item) => {
+            const id = item?.atome_id || item?.id || null;
+            if (id && seen.has(id)) return;
+            if (id) seen.add(id);
+            const normalized = normalizeAtomeEntry(item);
+            if (normalized) merged.push(normalized);
+        });
+    };
+
+    add(fastifyAtomes);
+    add(tauriAtomes);
+
+    merged.sort((a, b) => {
+        if (a.type !== b.type) return String(a.type).localeCompare(String(b.type));
+        return String(a.filePath || '').localeCompare(String(b.filePath || ''));
+    });
+
+    return merged;
+}
+
 async function refreshUploadsList() {
     try {
         const files = await fetchUploadsMetadata();
@@ -598,6 +740,31 @@ async function refreshUploadsList() {
     }
 }
 
+async function refreshAtomesList() {
+    try {
+        const atomes = await fetchUserAtomesList();
+        renderAtomesList(atomes);
+    } catch (error) {
+        atomesListError = error?.message || String(error);
+        renderAtomesList([]);
+    }
+}
+
+async function refreshUploadsPanel() {
+    if (showAtomesList) {
+        await refreshAtomesList();
+        return;
+    }
+    await refreshUploadsList();
+}
+
+if (uploadsToggle?.element || uploadsToggle) {
+    const toggleEl = uploadsToggle?.element || uploadsToggle;
+    toggleEl.onchange = async () => {
+        showAtomesList = !!toggleEl.checked;
+        await refreshUploadsPanel();
+    };
+}
 async function downloadUpload(fileId, fileName) {
     const bases = uniqueBaseCandidates();
     const encoded = encodeURIComponent(fileId || fileName);
@@ -740,7 +907,7 @@ async function uploadDroppedFiles(fileList) {
             puts(`[upload] échec pour ${entry && entry.name ? entry.name : 'inconnu'} : ${error.message}`);
         }
     }
-    await refreshUploadsList();
+    await refreshUploadsPanel();
 }
 
 DragDrop.createDropZone(`#${dropZoneId}`, {
@@ -756,4 +923,4 @@ DragDrop.createDropZone(`#${dropZoneId}`, {
     }
 });
 
-refreshUploadsList();
+refreshUploadsPanel();

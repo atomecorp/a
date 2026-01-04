@@ -2644,7 +2644,25 @@ async function sync_atomes(callback) {
         return null;
     };
 
-    const WS_FILE_CHUNK_SIZE = 256 * 1024;
+const WS_FILE_CHUNK_SIZE = 256 * 1024;
+const _tauriFsLogState = { pull: false, push: false };
+
+const logTauriFsStatusOnce = (mode, localPath) => {
+    if (!is_tauri_runtime()) return;
+    if (_tauriFsLogState[mode]) return;
+    const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
+    const fs = tauri && tauri.fs ? tauri.fs : null;
+    console.log('[sync_atomes] tauri_fs', {
+        mode,
+        available: !!fs,
+        hasRead: !!fs?.readFile || !!fs?.readBinaryFile,
+        hasWrite: !!fs?.writeFile || !!fs?.writeBinaryFile,
+        hasMkdir: !!fs?.mkdir || !!fs?.createDir,
+        hasStat: !!fs?.stat || !!fs?.metadata,
+        localPath
+    });
+    _tauriFsLogState[mode] = true;
+};
 
     const bytesToBase64 = (bytes) => {
         if (!bytes || !bytes.length) return '';
@@ -2792,6 +2810,7 @@ async function sync_atomes(callback) {
         const { fileName, originalName, filePath, sizeBytes } = extractFileMeta(atome);
         const safeFileName = fileName || originalName || atomeId;
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
+        logTauriFsStatusOnce('pull', localPath);
         if (!localPath) {
             console.log('[sync_atomes] asset pull blocked: local_path_missing', {
                 atomeId,
@@ -3053,6 +3072,7 @@ async function sync_atomes(callback) {
             || (safeFileName ? `Downloads/${safeFileName}` : '');
 
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
+        logTauriFsStatusOnce('push', localPath);
         console.log('[sync_atomes] asset push start', {
             atomeId,
             ownerId,
