@@ -45,6 +45,10 @@ remove_dir() {
     if [ -d "$target" ]; then
         echo "$label: $target"
         rm -rf "$target" || true
+        if [ -d "$target" ] && have_sudo; then
+            echo "   ⚠️  Retrying removal with sudo: $target"
+            sudo rm -rf "$target" || true
+        fi
         if [ -d "$target" ]; then
             echo "   ⚠️  Failed to fully remove: $target"
             return 1
