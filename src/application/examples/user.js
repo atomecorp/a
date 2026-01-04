@@ -149,7 +149,7 @@ const intuitionContainer = grab('intuition')
 intuitionContainer.style.width = '100%';
 intuitionContainer.style.position = 'relative';
 intuitionContainer.style.zIndex = '10';
-intuitionContainer.style.pointerEvents = 'auto'; // Allow UI controls to receive clicks
+intuitionContainer.style.pointerEvents = 'none'; // Let background events pass through the layer
 // Allow pointer events only on child elements
 intuitionContainer.style.background = 'transparent';
 

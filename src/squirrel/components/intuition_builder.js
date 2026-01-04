@@ -4765,7 +4765,10 @@ const intuitionAddOn = {
 function ensureIntuitionLayerRoot() {
     if (typeof document === 'undefined') return null;
     let root = document.getElementById('intuition');
-    if (root) return root;
+    if (root) {
+        root.style.pointerEvents = 'none';
+        return root;
+    }
     const parent = document.body || document.documentElement;
     if (!parent) return null;
     root = $('div', {
@@ -4781,7 +4784,8 @@ function ensureIntuitionLayerRoot() {
             position: 'absolute',
             width: '0px',
             height: '0px',
-            overflow: 'visible'
+            overflow: 'visible',
+            pointerEvents: 'none'
         }
     });
     return root;
@@ -7177,5 +7181,4 @@ Intuition.setContent = function setContentBridge(content) {
 };
 
 export default Intuition;
-
 
