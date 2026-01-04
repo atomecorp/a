@@ -1890,6 +1890,12 @@ try {
             try { await maybe_sync_atomes('fastify-available'); } catch { }
         });
 
+        window.addEventListener('squirrel:sync-connected', async (event) => {
+            if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
+            if (!is_tauri_runtime()) return;
+            try { await maybe_sync_atomes('sync-connected'); } catch { }
+        });
+
         window.addEventListener('squirrel:atome-deleted', async (event) => {
             if (!is_tauri_runtime()) return;
             const detail = event?.detail || {};
@@ -2536,6 +2542,22 @@ async function sync_atomes(callback) {
         return str.startsWith('/') || /^[A-Za-z]:[\\/]/.test(str);
     };
 
+    const resolveProjectRoot = () => {
+        if (typeof window === 'undefined') return '';
+        const root = window.__ATOME_PROJECT_ROOT__;
+        if (typeof root !== 'string') return '';
+        const cleaned = root.trim().replace(/\\/g, '/').replace(/\/$/, '');
+        return cleaned;
+    };
+
+    const qualifyProjectPath = (value) => {
+        if (!value) return value;
+        if (isAbsolutePath(value)) return value;
+        const root = resolveProjectRoot();
+        if (!root) return value;
+        return `${root}/${String(value).replace(/^\/+/, '')}`;
+    };
+
     const normalizeUserRelativePath = (value, userId) => {
         if (!value) return '';
         const safeUser = String(userId || '').trim();
@@ -2559,15 +2581,15 @@ async function sync_atomes(callback) {
             const normalized = normalizePath(value);
             if (normalized) {
                 if (isAbsolutePath(normalized)) return normalized;
-                if (normalized.startsWith('data/users/')) return normalized;
-                if (userId) return `data/users/${userId}/${normalized}`;
-                return normalized;
+                if (normalized.startsWith('data/users/')) return qualifyProjectPath(normalized);
+                if (userId) return qualifyProjectPath(`data/users/${userId}/${normalized}`);
+                return qualifyProjectPath(normalized);
             }
         }
         if (userId && fallbackName) {
-            return `data/users/${userId}/Downloads/${fallbackName}`;
+            return qualifyProjectPath(`data/users/${userId}/Downloads/${fallbackName}`);
         }
-        return fallbackName || '';
+        return fallbackName ? qualifyProjectPath(fallbackName) : '';
     };
 
     const resolveFastifyUploadBase = () => {

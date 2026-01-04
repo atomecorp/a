@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "fs:default",
+    "fs:read-all",
+    "fs:write-all",
     "opener:default"
   ]
 }

@@ -506,6 +506,16 @@ class UnifiedSyncClient {
 
         this.startHeartbeat();
         this.broadcast({ type: 'connected', endpoint: this.state.endpoint });
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('squirrel:sync-connected', {
+                detail: {
+                    backend: 'fastify',
+                    endpoint: this.state.endpoint,
+                    runtime: this.runtime
+                }
+            }));
+        }
     }
 
     onClose(event) {
