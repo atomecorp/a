@@ -9,11 +9,16 @@ mod native_recorder;
 mod server;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::Manager; // pour get_webview_window
+use tauri::{Manager, State}; // pour get_webview_window
 
 #[derive(Clone)]
 pub struct ProjectPaths {
     pub project_root: PathBuf,
+}
+
+#[tauri::command]
+fn project_root(state: State<ProjectPaths>) -> String {
+    state.project_root.to_string_lossy().to_string()
 }
 
 fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> PathBuf {
@@ -57,7 +62,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
             iplug_bridge::iplug_send,
-            iplug_bridge::iplug_poll_events
+            iplug_bridge::iplug_poll_events,
+            project_root
         ])
         .setup(|app| {
             println!("[tauri] fs plugin enabled");

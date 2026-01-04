@@ -2550,6 +2550,32 @@ async function sync_atomes(callback) {
         return cleaned;
     };
 
+    const ensureProjectRoot = async () => {
+        if (!is_tauri_runtime()) return resolveProjectRoot();
+        const current = resolveProjectRoot();
+        if (current) return current;
+        if (ensureProjectRoot.pending) return ensureProjectRoot.pending;
+
+        const invoke = (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function')
+            ? window.__TAURI__.invoke.bind(window.__TAURI__)
+            : (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function')
+                ? window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__)
+                : null;
+
+        ensureProjectRoot.pending = (async () => {
+            if (!invoke) return '';
+            try {
+                const result = await invoke('project_root');
+                if (typeof result === 'string' && result.trim()) {
+                    window.__ATOME_PROJECT_ROOT__ = result;
+                }
+            } catch (_) { }
+            return resolveProjectRoot();
+        })();
+
+        return ensureProjectRoot.pending;
+    };
+
     const qualifyProjectPath = (value) => {
         if (!value) return value;
         if (isAbsolutePath(value)) return value;
@@ -2647,22 +2673,23 @@ async function sync_atomes(callback) {
 const WS_FILE_CHUNK_SIZE = 256 * 1024;
 const _tauriFsLogState = { pull: false, push: false };
 
-const logTauriFsStatusOnce = (mode, localPath) => {
-    if (!is_tauri_runtime()) return;
-    if (_tauriFsLogState[mode]) return;
-    const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
-    const fs = tauri && tauri.fs ? tauri.fs : null;
-    console.log('[sync_atomes] tauri_fs', {
-        mode,
-        available: !!fs,
-        hasRead: !!fs?.readFile || !!fs?.readBinaryFile,
-        hasWrite: !!fs?.writeFile || !!fs?.writeBinaryFile,
-        hasMkdir: !!fs?.mkdir || !!fs?.createDir,
-        hasStat: !!fs?.stat || !!fs?.metadata,
-        localPath
-    });
-    _tauriFsLogState[mode] = true;
-};
+    const logTauriFsStatusOnce = (mode, localPath) => {
+        if (!is_tauri_runtime()) return;
+        if (_tauriFsLogState[mode]) return;
+        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
+        const fs = tauri && tauri.fs ? tauri.fs : null;
+        console.log('[sync_atomes] tauri_fs', {
+            mode,
+            available: !!fs,
+            hasRead: !!fs?.readFile || !!fs?.readBinaryFile,
+            hasWrite: !!fs?.writeFile || !!fs?.writeBinaryFile,
+            hasMkdir: !!fs?.mkdir || !!fs?.createDir,
+            hasStat: !!fs?.stat || !!fs?.metadata,
+            projectRoot: resolveProjectRoot(),
+            localPath
+        });
+        _tauriFsLogState[mode] = true;
+    };
 
     const bytesToBase64 = (bytes) => {
         if (!bytes || !bytes.length) return '';
@@ -2787,7 +2814,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
 
     const extractFileMeta = (atome) => {
         const particles = extractParticles(atome);
-        const fileName = particles.file_name || particles.fileName || particles.name || atome?.file_name || '';
+        const fileName = particles.file_name || particles.fileName || atome?.file_name || '';
         const originalName = particles.original_name || particles.originalName || fileName;
         const filePath = particles.file_path || particles.filePath || particles.path || particles.rel_path || '';
         const mimeType = particles.mime_type || particles.mimeType || '';
@@ -2800,6 +2827,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
             console.log('[sync_atomes] asset pull blocked: not_tauri');
             return { ok: false, error: 'not_tauri' };
         }
+        await ensureProjectRoot();
         const atomeId = atome?.atome_id || atome?.id;
         if (!atomeId) {
             console.log('[sync_atomes] asset pull blocked: missing_atome_id');
@@ -3064,6 +3092,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
         const atomeId = atome?.atome_id || atome?.id;
         if (!atomeId) return { ok: false, error: 'missing_atome_id' };
 
+        await ensureProjectRoot();
         const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
         const type = String(atome?.atome_type || atome?.type || '').trim().toLowerCase();
         const { fileName, originalName, filePath, mimeType, sizeBytes } = extractFileMeta(atome);
@@ -3152,7 +3181,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
                 sizeBytes: totalSize,
                 path: relativePath
             });
-            return { ok: true, createdAtome: true, sizeBytes: totalSize, path: relativePath };
+            return { ok: true, createdAtome: false, sizeBytes: totalSize, path: relativePath };
         } catch (e) {
             console.log('[sync_atomes] asset push failed', {
                 atomeId,
