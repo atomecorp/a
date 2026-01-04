@@ -432,10 +432,26 @@ async function resolveDownloadTarget(fileParam, userId) {
       const safeName = typeof meta.file_name === 'string' && meta.file_name.trim()
         ? meta.file_name
         : sanitizeFileName(meta.original_name || safeParam);
-      const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
       const downloadName = typeof meta.original_name === 'string' && meta.original_name.trim()
         ? meta.original_name
         : safeName;
+      const rawPath = meta.file_path || meta.filePath || null;
+      if (rawPath) {
+        try {
+          const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
+          if (normalizedRelative) {
+            const resolved = await resolveUserAssetPath(
+              projectRoot,
+              { id: meta.owner_id || userId },
+              normalizedRelative
+            );
+            return { filePath: resolved.filePath, downloadName, meta };
+          }
+        } catch (_) {
+          // Fallback to Downloads resolution below.
+        }
+      }
+      const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
       return { filePath, downloadName, meta };
     }
   }
@@ -1040,6 +1056,9 @@ async function startServer() {
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
           : request.headers['x-filename'];
+        const pathHeader = Array.isArray(request.headers['x-file-path'])
+          ? request.headers['x-file-path'][0]
+          : request.headers['x-file-path'];
         if (!headerValue) {
           reply.code(400);
           return { success: false, error: 'Missing X-Filename header' };
@@ -1142,11 +1161,31 @@ async function startServer() {
         }
 
         const uploadDir = path.join(UPLOADS_TMP_DIR, safeUploadId);
-        const { fileName, filePath } = await resolveUserUploadPath(
-          projectRoot,
-          { id: userId, username: user?.username },
-          decodedName
-        );
+        let fileName = decodedName;
+        let filePath = null;
+        let relativePath = null;
+
+        if (pathHeader) {
+          const rawPath = Array.isArray(pathHeader) ? pathHeader[0] : pathHeader;
+          const normalizedRelative = normalizeUserRelativePath(rawPath, userId);
+          const resolved = await resolveUserAssetPath(
+            projectRoot,
+            { id: userId, username: user?.username },
+            normalizedRelative
+          );
+          fileName = fileName || resolved.fileName;
+          filePath = resolved.filePath;
+          relativePath = resolved.relativePath;
+        } else {
+          const resolved = await resolveUserUploadPath(
+            projectRoot,
+            { id: userId, username: user?.username },
+            decodedName
+          );
+          fileName = resolved.fileName;
+          filePath = resolved.filePath;
+          relativePath = path.join('Downloads', resolved.fileName);
+        }
 
         const output = createWriteStream(filePath, { flags: 'w' });
         for (let idx = 0; idx < chunkCount; idx += 1) {
@@ -1174,11 +1213,12 @@ async function startServer() {
           await registerFileUpload(fileName, userId, {
             originalName: decodedName,
             mimeType: mimeType || null,
-            size: stats ? stats.size : null
+            size: stats ? stats.size : null,
+            filePath: relativePath || null
           });
         }
 
-        return { success: true, file: fileName, owner: userId };
+        return { success: true, file: fileName, owner: userId, path: relativePath || null };
       } catch (error) {
         request.log.error({ err: error }, 'Chunked upload finalize failed');
         reply.code(500);

@@ -879,11 +879,19 @@
         if (!base) throw new Error('Fastify base URL is not configured');
 
         const token = getAuthToken();
+        let filePath = `recordings/${fileName}`;
+        try {
+            const userInfo = await getCurrentUserInfo();
+            if (userInfo.ok && userInfo.user && userInfo.user.user_id) {
+                filePath = `data/users/${userInfo.user.user_id}/recordings/${fileName}`;
+            }
+        } catch (_) { }
         // IMPORTANT: Fastify server registers a Buffer parser only for
         // `application/octet-stream` (otherwise it returns 415).
         const headers = {
             'Content-Type': 'application/octet-stream',
-            'X-Filename': encodeURIComponent(fileName)
+            'X-Filename': encodeURIComponent(fileName),
+            'X-File-Path': filePath
         };
         if (token) headers.Authorization = `Bearer ${token}`;
 

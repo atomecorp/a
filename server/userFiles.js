@@ -12,7 +12,11 @@ import db from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { checkPermission, PERMISSION } from './sharing.js';
 
-const FILE_ATOME_TYPES = Object.freeze(['file', 'image', 'video', 'sound', 'text', 'shape', 'raw']);
+const FILE_ATOME_TYPES = Object.freeze([
+    'file', 'image', 'video', 'sound',
+    'audio_recording', 'video_recording',
+    'text', 'shape', 'raw'
+]);
 const FILE_ATOME_TYPES_SQL = FILE_ATOME_TYPES.map(() => '?').join(', ');
 const FILE_ATOME_TYPES_SET = new Set(FILE_ATOME_TYPES);
 
