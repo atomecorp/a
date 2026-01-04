@@ -2664,7 +2664,11 @@ async function sync_atomes(callback) {
                 if (!out) return null;
                 return (out instanceof Uint8Array) ? out : new Uint8Array(out);
             }
-        } catch {
+        } catch (e) {
+            console.log('[sync_atomes] tauri_fs read_failed', {
+                path,
+                error: e?.message || 'tauri_read_failed'
+            });
             return null;
         }
         return null;
@@ -2673,9 +2677,58 @@ async function sync_atomes(callback) {
 const WS_FILE_CHUNK_SIZE = 256 * 1024;
 const _tauriFsLogState = { pull: false, push: false };
 
-    const logTauriFsStatusOnce = (mode, localPath) => {
-        if (!is_tauri_runtime()) return;
-        if (_tauriFsLogState[mode]) return;
+const listTauriDirEntries = async (dirPath) => {
+    const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
+    const fs = tauri && tauri.fs ? tauri.fs : null;
+    if (!fs || typeof fs.readDir !== 'function') {
+        return { ok: false, error: 'tauri_fs_readdir_unavailable', entries: [] };
+    }
+    try {
+        const entries = await fs.readDir(dirPath);
+        const list = (Array.isArray(entries) ? entries : []).map((entry) => {
+            const name = entry?.name
+                || (typeof entry?.path === 'string' ? entry.path.split('/').pop() : '');
+            return {
+                name: name || '',
+                path: typeof entry?.path === 'string' ? entry.path : '',
+                isFile: !!entry?.isFile,
+                isDir: !!entry?.isDirectory
+            };
+        });
+        return { ok: true, entries: list };
+    } catch (e) {
+        return { ok: false, error: e?.message || 'tauri_readdir_failed', entries: [] };
+    }
+};
+
+const resolveLocalDownloadsDir = (ownerId) => {
+    if (!ownerId) return '';
+    return qualifyProjectPath(`data/users/${ownerId}/Downloads`);
+};
+
+const logLocalDownloadsSnapshot = async (ownerId, localPath, reason) => {
+    if (!is_tauri_runtime()) return;
+    await ensureProjectRoot();
+    const downloadsDir = resolveLocalDownloadsDir(ownerId);
+    const targetDir = localPath
+        ? String(localPath).replace(/\\/g, '/').split('/').slice(0, -1).join('/')
+        : downloadsDir;
+    const dirToRead = targetDir || downloadsDir;
+    const result = await listTauriDirEntries(dirToRead);
+    const entries = result.entries.slice(0, 50).map((entry) => entry.name || entry.path || '');
+    console.log('[sync_atomes] local_dir_snapshot', {
+        reason,
+        ownerId,
+        dir: dirToRead,
+        ok: result.ok,
+        error: result.error,
+        entries
+    });
+};
+
+const logTauriFsStatusOnce = (mode, localPath) => {
+    if (!is_tauri_runtime()) return;
+    if (_tauriFsLogState[mode]) return;
         const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
         const fs = tauri && tauri.fs ? tauri.fs : null;
         console.log('[sync_atomes] tauri_fs', {
@@ -2749,8 +2802,16 @@ const _tauriFsLogState = { pull: false, push: false };
                     return { ok: true };
                 }
             } catch (e2) {
+                console.log('[sync_atomes] tauri_fs create_dir_failed', {
+                    dirPath,
+                    error: e2?.message || e?.message || 'tauri_create_dir_failed'
+                });
                 return { ok: false, error: e2?.message || e?.message || 'tauri_create_dir_failed' };
             }
+            console.log('[sync_atomes] tauri_fs create_dir_failed', {
+                dirPath,
+                error: e?.message || 'tauri_create_dir_failed'
+            });
             return { ok: false, error: e?.message || 'tauri_create_dir_failed' };
         }
         return { ok: false, error: 'tauri_fs_create_dir_unavailable' };
@@ -2785,6 +2846,10 @@ const _tauriFsLogState = { pull: false, push: false };
             }
             return { ok: false, error: 'tauri_fs_write_unavailable' };
         } catch (e) {
+            console.log('[sync_atomes] tauri_fs write_failed', {
+                path,
+                error: e?.message || 'tauri_write_failed'
+            });
             return { ok: false, error: e?.message || 'tauri_write_failed' };
         }
     };
@@ -2883,7 +2948,8 @@ const _tauriFsLogState = { pull: false, push: false };
         try {
             const infoResult = await FastifyAdapter.file.downloadInfo({
                 atomeId,
-                chunkSize: WS_FILE_CHUNK_SIZE
+                chunkSize: WS_FILE_CHUNK_SIZE,
+                debug: true
             });
 
             if (!(infoResult?.ok || infoResult?.success)) {
@@ -2897,6 +2963,9 @@ const _tauriFsLogState = { pull: false, push: false };
             }
 
             const info = infoResult?.data || {};
+            if (info?.downloadsSnapshot) {
+                console.log('[sync_atomes] server_dir_snapshot', info.downloadsSnapshot);
+            }
             const totalSize = Number(info.sizeBytes ?? info.size ?? sizeBytes ?? 0);
             const chunkSize = Number(info.chunkSize) || WS_FILE_CHUNK_SIZE;
             let chunkCount = Number(info.chunkCount);
@@ -2949,6 +3018,7 @@ const _tauriFsLogState = { pull: false, push: false };
                     error: writeResult.error || 'write_failed',
                     localPath
                 });
+                await logLocalDownloadsSnapshot(ownerId, localPath, 'pull_write_failed');
                 return { ok: false, error: writeResult.error || 'write_failed' };
             }
 
@@ -3118,6 +3188,7 @@ const _tauriFsLogState = { pull: false, push: false };
                 fileName: safeFileName,
                 localPath
             });
+            await logLocalDownloadsSnapshot(ownerId, localPath, 'push_missing');
             return { ok: false, error: 'local_asset_missing' };
         }
 
@@ -3162,7 +3233,8 @@ const _tauriFsLogState = { pull: false, push: false };
                 atomeId,
                 atomeType: type || '',
                 originalName: originalName || safeFileName,
-                mimeType: mimeType || ''
+                mimeType: mimeType || '',
+                debug: true
             });
 
             if (!(completeResult?.ok || completeResult?.success)) {
@@ -3175,6 +3247,9 @@ const _tauriFsLogState = { pull: false, push: false };
                 return { ok: false, error: msg };
             }
 
+            if (completeResult?.data?.downloadsSnapshot) {
+                console.log('[sync_atomes] server_dir_snapshot', completeResult.data.downloadsSnapshot);
+            }
             console.log('[sync_atomes] asset push ok', {
                 atomeId,
                 fileName: safeFileName,

@@ -140,6 +140,40 @@ try {
 } catch (error) {
   console.warn('WARN: Unable to prepare log directories:', error?.message || error);
 }
+
+async function listUserDownloadsSnapshot(userId) {
+  if (!userId) {
+    return { ok: false, error: 'Missing userId', downloadsDir: null, files: [] };
+  }
+
+  try {
+    const { downloadsDir } = await ensureUserDownloadsDir(projectRoot, { id: userId });
+    const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+    const files = [];
+    for (const entry of entries.slice(0, 50)) {
+      const name = entry.name;
+      if (!name) continue;
+      if (entry.isFile()) {
+        let size = null;
+        try {
+          const stats = await fs.stat(path.join(downloadsDir, name));
+          size = stats?.size ?? null;
+        } catch (_) { }
+        files.push({ name, size });
+      } else if (entry.isDirectory()) {
+        files.push({ name: `${name}/`, size: null });
+      }
+    }
+    return { ok: true, downloadsDir, files };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || String(error),
+      downloadsDir: null,
+      files: []
+    };
+  }
+}
 const legacyUploadsDir = (() => {
   try {
     return resolveUploadsDir();
@@ -1829,9 +1863,19 @@ async function startServer() {
               }
 
               try {
+                let downloadsSnapshot = null;
+                if (data.debug) {
+                  downloadsSnapshot = await listUserDownloadsSnapshot(userId);
+                  console.log('[file-sync] server downloads snapshot (download-info)', downloadsSnapshot);
+                }
                 const target = await resolveDownloadTarget(identifier, userId);
                 if (!target?.filePath) {
-                  sendFileResponse({ success: false, error: 'File not found', status: 404 });
+                  sendFileResponse({
+                    success: false,
+                    error: 'File not found',
+                    status: 404,
+                    downloadsSnapshot
+                  });
                   return;
                 }
                 const stats = await fs.stat(target.filePath);
@@ -1850,7 +1894,8 @@ async function startServer() {
                   mimeType: meta?.mime_type || null,
                   sizeBytes,
                   chunkSize,
-                  chunkCount
+                  chunkCount,
+                  downloadsSnapshot
                 });
               } catch (error) {
                 sendFileResponse({ success: false, error: error.message || 'download_info_failed' });
@@ -2043,12 +2088,18 @@ async function startServer() {
                   });
                 }
 
+                let downloadsSnapshot = null;
+                if (data.debug) {
+                  downloadsSnapshot = await listUserDownloadsSnapshot(userId);
+                  console.log('[file-sync] server downloads snapshot (upload-complete)', downloadsSnapshot);
+                }
                 sendFileResponse({
                   success: true,
                   action,
                   file: fileName,
                   owner: userId,
-                  path: relativePath || null
+                  path: relativePath || null,
+                  downloadsSnapshot
                 });
               } catch (error) {
                 sendFileResponse({ success: false, error: error.message || 'upload_complete_failed' });

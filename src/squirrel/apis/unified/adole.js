@@ -1180,6 +1180,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'file',
                     action: 'download-info',
                     token,
+                    debug: data.debug === true,
                     atomeId: data.atomeId || data.atome_id || data.id || null,
                     identifier: data.identifier || data.fileId || null,
                     chunkSize: data.chunkSize || data.chunk_size || null
@@ -1215,6 +1216,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'file',
                     action: 'upload-complete',
                     token,
+                    debug: data.debug === true,
                     uploadId: data.uploadId || data.upload_id || null,
                     chunkCount: data.chunkCount ?? data.chunk_count ?? null,
                     fileName: data.fileName || data.file_name || null,
