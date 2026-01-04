@@ -3,7 +3,7 @@ use axum::{
     body::Bytes,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        DefaultBodyLimit, Path as AxumPath, State,
+        DefaultBodyLimit, Path as AxumPath, Query, State,
     },
     http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode},
     middleware,
@@ -13,6 +13,7 @@ use axum::{
 };
 use futures_util::StreamExt;
 use rusqlite::params;
+use serde::Deserialize;
 use serde_json::json;
 use std::{
     borrow::Cow,
@@ -45,6 +46,11 @@ struct AppState {
     started_at: Arc<std::time::Instant>,
     atome_state: Option<local_atome::LocalAtomeState>,
     auth_state: Option<local_auth::LocalAuthState>,
+}
+
+#[derive(Deserialize)]
+struct LocalFileQuery {
+    path: Option<String>,
 }
 
 const SERVER_TYPE: &str = "Tauri frontend process";
@@ -161,6 +167,62 @@ fn extract_user_id_from_headers(headers: &HeaderMap) -> Option<String> {
         }
     }
     None
+}
+
+fn resolve_authenticated_user(
+    headers: &HeaderMap,
+    auth_state: &local_auth::LocalAuthState,
+) -> Option<String> {
+    let token = extract_bearer_token(headers);
+    let token_user_id =
+        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+    if token_user_id != "anonymous" {
+        return Some(token_user_id);
+    }
+    extract_user_id_from_headers(headers)
+}
+
+fn normalize_downloads_relative_path(raw_path: &str, user_id: &str) -> Option<String> {
+    let safe_user = sanitize_user_segment(user_id);
+    let mut cleaned = raw_path.trim().replace('\\', "/");
+    if cleaned.to_lowercase().starts_with("file://") {
+        cleaned = cleaned.trim_start_matches("file://").to_string();
+    }
+
+    let anchor = format!("/data/users/{}/", safe_user);
+    let alt_anchor = format!("data/users/{}/", safe_user);
+    if let Some(idx) = cleaned.find(&anchor) {
+        cleaned = cleaned[(idx + anchor.len())..].to_string();
+    } else if cleaned.starts_with(&alt_anchor) {
+        cleaned = cleaned[alt_anchor.len()..].to_string();
+    } else if cleaned.starts_with(&format!("{}/", safe_user)) {
+        cleaned = cleaned[(safe_user.len() + 1)..].to_string();
+    }
+
+    cleaned = cleaned.trim_start_matches('/').to_string();
+    if cleaned.starts_with("Downloads/") {
+        cleaned = cleaned["Downloads/".len()..].to_string();
+    }
+
+    let raw_parts: Vec<&str> = cleaned
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != "." && *part != "..")
+        .collect();
+    if raw_parts.is_empty() {
+        return None;
+    }
+
+    let last_idx = raw_parts.len().saturating_sub(1);
+    let mut safe_parts = Vec::with_capacity(raw_parts.len());
+    for (idx, part) in raw_parts.iter().enumerate() {
+        if idx == last_idx {
+            safe_parts.push(sanitize_file_name(part));
+        } else {
+            safe_parts.push(sanitize_user_segment(part));
+        }
+    }
+
+    Some(safe_parts.join("/"))
 }
 
 fn guess_mime_from_ext(name: &str) -> &'static str {
@@ -554,6 +616,358 @@ async fn upload_handler(
     (
         StatusCode::OK,
         Json(json!({ "success": true, "file": file_name, "owner": user_id, "path": rel_path })),
+    )
+}
+
+async fn local_file_read_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LocalFileQuery>,
+) -> impl IntoResponse {
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            )
+                .into_response();
+        }
+    };
+
+    let user_id = match resolve_authenticated_user(&headers, auth_state) {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "success": false, "error": "Unauthorized" })),
+            )
+                .into_response();
+        }
+    };
+
+    let raw_path = query
+        .path
+        .or_else(|| {
+            headers
+                .get("x-file-path")
+                .and_then(|v| v.to_str().ok())
+                .map(|v| v.to_string())
+        })
+        .unwrap_or_default();
+    if raw_path.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Missing file path" })),
+        )
+            .into_response();
+    }
+
+    let relative = match normalize_downloads_relative_path(&raw_path, &user_id) {
+        Some(path) => path,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "success": false, "error": "Invalid file path" })),
+            )
+                .into_response();
+        }
+    };
+
+    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let file_path = downloads_dir.join(&relative);
+    let data = match fs::read(&file_path).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let file_name = Path::new(&relative)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("file");
+    let mime = guess_mime_from_ext(file_name);
+
+    let mut response = Response::new(Body::from(data));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(mime),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("inline; filename=\"{}\"", file_name))
+            .unwrap_or_else(|_| HeaderValue::from_static("inline")),
+    );
+    response
+}
+
+async fn local_file_write_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LocalFileQuery>,
+    body: Bytes,
+) -> impl IntoResponse {
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            );
+        }
+    };
+
+    let user_id = match resolve_authenticated_user(&headers, auth_state) {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "success": false, "error": "Unauthorized" })),
+            );
+        }
+    };
+
+    let raw_path = query
+        .path
+        .or_else(|| {
+            headers
+                .get("x-file-path")
+                .and_then(|v| v.to_str().ok())
+                .map(|v| v.to_string())
+        })
+        .unwrap_or_default();
+    if raw_path.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Missing file path" })),
+        );
+    }
+
+    let relative = match normalize_downloads_relative_path(&raw_path, &user_id) {
+        Some(path) => path,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "success": false, "error": "Invalid file path" })),
+            );
+        }
+    };
+
+    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    };
+
+    let file_path = downloads_dir.join(&relative);
+    if let Some(parent) = file_path.parent() {
+        if let Err(err) = fs::create_dir_all(parent).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    }
+
+    if let Err(err) = fs::write(&file_path, &body).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "error": err.to_string() })),
+        );
+    }
+
+    let relative_path = format!("Downloads/{}", relative);
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "file": file_path.file_name().and_then(|s| s.to_str()).unwrap_or("file"),
+            "path": relative_path,
+            "owner": user_id
+        })),
+    )
+}
+
+async fn local_file_meta_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LocalFileQuery>,
+) -> impl IntoResponse {
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            );
+        }
+    };
+
+    let user_id = match resolve_authenticated_user(&headers, auth_state) {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "success": false, "error": "Unauthorized" })),
+            );
+        }
+    };
+
+    let raw_path = query.path.unwrap_or_default();
+    if raw_path.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Missing file path" })),
+        );
+    }
+
+    let relative = match normalize_downloads_relative_path(&raw_path, &user_id) {
+        Some(path) => path,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "success": false, "error": "Invalid file path" })),
+            );
+        }
+    };
+
+    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    };
+
+    let file_path = downloads_dir.join(&relative);
+    match fs::metadata(&file_path).await {
+        Ok(meta) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "exists": true,
+                "size": meta.len(),
+                "path": format!("Downloads/{}", relative)
+            })),
+        ),
+        Err(err) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "success": false, "exists": false, "error": err.to_string() })),
+        ),
+    }
+}
+
+async fn local_file_list_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LocalFileQuery>,
+) -> impl IntoResponse {
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            );
+        }
+    };
+
+    let user_id = match resolve_authenticated_user(&headers, auth_state) {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "success": false, "error": "Unauthorized" })),
+            );
+        }
+    };
+
+    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    };
+
+    let target_dir = if let Some(raw_path) = query.path {
+        if let Some(relative) = normalize_downloads_relative_path(&raw_path, &user_id) {
+            let candidate = downloads_dir.join(&relative);
+            match fs::metadata(&candidate).await {
+                Ok(meta) if meta.is_dir() => candidate,
+                _ => candidate.parent().unwrap_or(&downloads_dir).to_path_buf(),
+            }
+        } else {
+            downloads_dir.clone()
+        }
+    } else {
+        downloads_dir.clone()
+    };
+
+    let mut entries = Vec::new();
+    match fs::read_dir(&target_dir).await {
+        Ok(mut dir) => {
+            while let Ok(Some(entry)) = dir.next_entry().await {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                let file_type = entry.file_type().await.ok();
+                let is_file = file_type.as_ref().map(|ft| ft.is_file()).unwrap_or(false);
+                let is_dir = file_type.as_ref().map(|ft| ft.is_dir()).unwrap_or(false);
+                let size = if is_file {
+                    entry
+                        .metadata()
+                        .await
+                        .ok()
+                        .map(|meta| meta.len())
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+                entries.push(json!({
+                    "name": file_name,
+                    "isFile": is_file,
+                    "isDir": is_dir,
+                    "size": size
+                }));
+            }
+        }
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "dir": target_dir.to_string_lossy().to_string(),
+            "entries": entries
+        })),
     )
 }
 
@@ -1866,6 +2280,12 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/fastify-status", get(fastify_status_handler))
         .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
+        .route(
+            "/api/local-files",
+            get(local_file_read_handler).post(local_file_write_handler),
+        )
+        .route("/api/local-files/meta", get(local_file_meta_handler))
+        .route("/api/local-files/list", get(local_file_list_handler))
         .route(
             "/api/uploads",
             get(list_uploads_handler).post(upload_handler),

@@ -2649,77 +2649,138 @@ async function sync_atomes(callback) {
         }
     };
 
-    const readTauriBinaryFile = async (path) => {
-        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
-        const fs = tauri && tauri.fs ? tauri.fs : null;
-        if (!fs) return null;
+    const resolveLocalAxumBase = () => {
+        if (typeof window !== 'undefined' && window.__ATOME_LOCAL_HTTP_PORT__) {
+            return `http://127.0.0.1:${window.__ATOME_LOCAL_HTTP_PORT__}`;
+        }
+        const base = CONFIG?.TAURI_BASE_URL || 'http://127.0.0.1:3000';
+        return base.replace(/\/$/, '');
+    };
+
+    const buildLocalAuthHeaders = (ownerId) => {
+        const headers = {};
+        const token = TauriAdapter?.getToken?.();
+        if (token) headers.Authorization = `Bearer ${token}`;
+        if (ownerId) headers['X-User-Id'] = ownerId;
+        return headers;
+    };
+
+    const resolveLocalRelativePath = (value, ownerId, fallbackName) => {
+        let relative = normalizeUserRelativePath(value || '', ownerId);
+        if (!relative && fallbackName) {
+            relative = `Downloads/${fallbackName}`;
+        }
+        if (relative && !relative.startsWith('Downloads/')) {
+            relative = `Downloads/${relative}`;
+        }
+        return relative;
+    };
+
+    const fetchLocalJson = async (url, options = {}) => {
         try {
-            if (typeof fs.readFile === 'function') {
-                const out = await fs.readFile(path);
-                if (!out) return null;
-                return (out instanceof Uint8Array) ? out : new Uint8Array(out);
+            const response = await fetch(url, {
+                credentials: 'include',
+                ...options
+            });
+            const text = await response.text().catch(() => '');
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch {
+                data = text;
             }
-            if (typeof fs.readBinaryFile === 'function') {
-                const out = await fs.readBinaryFile(path);
-                if (!out) return null;
-                return (out instanceof Uint8Array) ? out : new Uint8Array(out);
-            }
+            return {
+                ok: response.ok,
+                status: response.status,
+                data
+            };
         } catch (e) {
-            console.log('[sync_atomes] tauri_fs read_failed', {
-                path,
-                error: e?.message || 'tauri_read_failed'
+            return {
+                ok: false,
+                status: 0,
+                data: e?.message || 'local_fetch_failed'
+            };
+        }
+    };
+
+    const fetchLocalBinary = async (url, options = {}) => {
+        try {
+            const response = await fetch(url, {
+                credentials: 'include',
+                ...options
+            });
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                return {
+                    ok: false,
+                    status: response.status,
+                    error: text || `HTTP ${response.status}`
+                };
+            }
+            const buffer = await response.arrayBuffer();
+            return {
+                ok: true,
+                status: response.status,
+                bytes: new Uint8Array(buffer)
+            };
+        } catch (e) {
+            return {
+                ok: false,
+                status: 0,
+                error: e?.message || 'local_fetch_failed'
+            };
+        }
+    };
+
+    const readTauriBinaryFile = async (localPath, ownerId, filePath, fallbackName) => {
+        if (!is_tauri_runtime()) return null;
+        const relativePath = resolveLocalRelativePath(filePath || localPath, ownerId, fallbackName);
+        if (!relativePath) return null;
+        const base = resolveLocalAxumBase();
+        const headers = buildLocalAuthHeaders(ownerId);
+        const url = `${base}/api/local-files?path=${encodeURIComponent(relativePath)}`;
+        const result = await fetchLocalBinary(url, { method: 'GET', headers });
+        if (!result.ok) {
+            console.log('[sync_atomes] local_axum read_failed', {
+                path: relativePath,
+                error: result.error || result.data || 'local_read_failed'
             });
             return null;
         }
-        return null;
+        return result.bytes || null;
     };
 
 const WS_FILE_CHUNK_SIZE = 256 * 1024;
-const _tauriFsLogState = { pull: false, push: false };
+const _localFsLogState = { pull: false, push: false };
 
-const listTauriDirEntries = async (dirPath) => {
-    const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
-    const fs = tauri && tauri.fs ? tauri.fs : null;
-    if (!fs || typeof fs.readDir !== 'function') {
-        return { ok: false, error: 'tauri_fs_readdir_unavailable', entries: [] };
+const listTauriDirEntries = async (ownerId, relativePath) => {
+    if (!is_tauri_runtime()) {
+        return { ok: false, error: 'not_tauri', entries: [] };
     }
-    try {
-        const entries = await fs.readDir(dirPath);
-        const list = (Array.isArray(entries) ? entries : []).map((entry) => {
-            const name = entry?.name
-                || (typeof entry?.path === 'string' ? entry.path.split('/').pop() : '');
-            return {
-                name: name || '',
-                path: typeof entry?.path === 'string' ? entry.path : '',
-                isFile: !!entry?.isFile,
-                isDir: !!entry?.isDirectory
-            };
-        });
-        return { ok: true, entries: list };
-    } catch (e) {
-        return { ok: false, error: e?.message || 'tauri_readdir_failed', entries: [] };
+    const base = resolveLocalAxumBase();
+    const headers = buildLocalAuthHeaders(ownerId);
+    const url = `${base}/api/local-files/list?path=${encodeURIComponent(relativePath || '')}`;
+    const result = await fetchLocalJson(url, { method: 'GET', headers });
+    if (!result.ok) {
+        return {
+            ok: false,
+            error: result.data?.error || result.data || 'local_list_failed',
+            entries: []
+        };
     }
+    const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
+    return { ok: true, entries };
 };
 
-const resolveLocalDownloadsDir = (ownerId) => {
-    if (!ownerId) return '';
-    return qualifyProjectPath(`data/users/${ownerId}/Downloads`);
-};
-
-const logLocalDownloadsSnapshot = async (ownerId, localPath, reason) => {
+const logLocalDownloadsSnapshot = async (ownerId, filePath, reason) => {
     if (!is_tauri_runtime()) return;
-    await ensureProjectRoot();
-    const downloadsDir = resolveLocalDownloadsDir(ownerId);
-    const targetDir = localPath
-        ? String(localPath).replace(/\\/g, '/').split('/').slice(0, -1).join('/')
-        : downloadsDir;
-    const dirToRead = targetDir || downloadsDir;
-    const result = await listTauriDirEntries(dirToRead);
+    const relativePath = resolveLocalRelativePath(filePath || '', ownerId, null);
+    const result = await listTauriDirEntries(ownerId, relativePath);
     const entries = result.entries.slice(0, 50).map((entry) => entry.name || entry.path || '');
     console.log('[sync_atomes] local_dir_snapshot', {
         reason,
         ownerId,
-        dir: dirToRead,
+        dir: relativePath || 'Downloads',
         ok: result.ok,
         error: result.error,
         entries
@@ -2728,21 +2789,16 @@ const logLocalDownloadsSnapshot = async (ownerId, localPath, reason) => {
 
 const logTauriFsStatusOnce = (mode, localPath) => {
     if (!is_tauri_runtime()) return;
-    if (_tauriFsLogState[mode]) return;
-        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
-        const fs = tauri && tauri.fs ? tauri.fs : null;
-        console.log('[sync_atomes] tauri_fs', {
-            mode,
-            available: !!fs,
-            hasRead: !!fs?.readFile || !!fs?.readBinaryFile,
-            hasWrite: !!fs?.writeFile || !!fs?.writeBinaryFile,
-            hasMkdir: !!fs?.mkdir || !!fs?.createDir,
-            hasStat: !!fs?.stat || !!fs?.metadata,
-            projectRoot: resolveProjectRoot(),
-            localPath
-        });
-        _tauriFsLogState[mode] = true;
-    };
+    if (_localFsLogState[mode]) return;
+    console.log('[sync_atomes] local_fs', {
+        mode,
+        base: resolveLocalAxumBase(),
+        hasToken: !!TauriAdapter?.getToken?.(),
+        projectRoot: resolveProjectRoot(),
+        localPath
+    });
+    _localFsLogState[mode] = true;
+};
 
     const bytesToBase64 = (bytes) => {
         if (!bytes || !bytes.length) return '';
@@ -2782,93 +2838,42 @@ const logTauriFsStatusOnce = (mode, localPath) => {
         return out;
     };
 
-    const tryTauriCreateDir = async (dirPath) => {
-        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
-        const fs = tauri && tauri.fs ? tauri.fs : null;
-        if (!fs) return { ok: false, error: 'tauri_fs_create_dir_unavailable' };
-        try {
-            if (typeof fs.mkdir === 'function') {
-                await fs.mkdir(dirPath, { recursive: true });
-                return { ok: true };
-            }
-            if (typeof fs.createDir === 'function') {
-                await fs.createDir(dirPath, { recursive: true });
-                return { ok: true };
-            }
-        } catch (e) {
-            try {
-                if (typeof fs.createDir === 'function') {
-                    await fs.createDir({ dir: dirPath, recursive: true });
-                    return { ok: true };
-                }
-            } catch (e2) {
-                console.log('[sync_atomes] tauri_fs create_dir_failed', {
-                    dirPath,
-                    error: e2?.message || e?.message || 'tauri_create_dir_failed'
-                });
-                return { ok: false, error: e2?.message || e?.message || 'tauri_create_dir_failed' };
-            }
-            console.log('[sync_atomes] tauri_fs create_dir_failed', {
-                dirPath,
-                error: e?.message || 'tauri_create_dir_failed'
-            });
-            return { ok: false, error: e?.message || 'tauri_create_dir_failed' };
+    const tryTauriWriteBinaryFile = async (localPath, bytes, ownerId, filePath, fallbackName) => {
+        if (!is_tauri_runtime()) {
+            return { ok: false, error: 'not_tauri' };
         }
-        return { ok: false, error: 'tauri_fs_create_dir_unavailable' };
+        const relativePath = resolveLocalRelativePath(filePath || localPath, ownerId, fallbackName);
+        if (!relativePath) {
+            return { ok: false, error: 'local_path_missing' };
+        }
+        const base = resolveLocalAxumBase();
+        const headers = {
+            'Content-Type': 'application/octet-stream',
+            ...buildLocalAuthHeaders(ownerId)
+        };
+        const url = `${base}/api/local-files?path=${encodeURIComponent(relativePath)}`;
+        const payload = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes);
+        const result = await fetchLocalJson(url, { method: 'POST', headers, body: payload });
+        if (!result.ok) {
+            console.log('[sync_atomes] local_axum write_failed', {
+                path: relativePath,
+                error: result.data?.error || result.data || 'local_write_failed'
+            });
+            return { ok: false, error: result.data?.error || result.data || 'local_write_failed' };
+        }
+        return { ok: true, data: result.data };
     };
 
-    const tryTauriWriteBinaryFile = async (path, bytes) => {
-        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
-        const fs = tauri && tauri.fs ? tauri.fs : null;
-        if (!fs) {
-            return { ok: false, error: 'tauri_fs_write_unavailable' };
-        }
-        try {
-            const parent = String(path).replace(/\\/g, '/').split('/').slice(0, -1).join('/');
-            if (parent) {
-                const mk = await tryTauriCreateDir(parent);
-                if (!mk.ok) return { ok: false, error: mk.error || 'tauri_create_dir_failed' };
-            }
-        } catch (_) { }
-        try {
-            const contents = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes);
-            if (typeof fs.writeFile === 'function') {
-                await fs.writeFile(path, contents);
-                return { ok: true };
-            }
-            if (typeof fs.writeBinaryFile === 'function') {
-                try {
-                    await fs.writeBinaryFile({ path, contents });
-                } catch (_) {
-                    await fs.writeBinaryFile(path, contents);
-                }
-                return { ok: true };
-            }
-            return { ok: false, error: 'tauri_fs_write_unavailable' };
-        } catch (e) {
-            console.log('[sync_atomes] tauri_fs write_failed', {
-                path,
-                error: e?.message || 'tauri_write_failed'
-            });
-            return { ok: false, error: e?.message || 'tauri_write_failed' };
-        }
-    };
-
-    const tryTauriStat = async (path) => {
-        const tauri = (typeof window !== 'undefined' && window.__TAURI__) ? window.__TAURI__ : null;
-        const fs = tauri && tauri.fs ? tauri.fs : null;
-        if (!fs) return null;
-        try {
-            if (typeof fs.stat === 'function') {
-                return await fs.stat(path);
-            }
-            if (typeof fs.metadata === 'function') {
-                return await fs.metadata(path);
-            }
-        } catch {
-            return null;
-        }
-        return null;
+    const tryTauriStat = async (localPath, ownerId, filePath, fallbackName) => {
+        if (!is_tauri_runtime()) return null;
+        const relativePath = resolveLocalRelativePath(filePath || localPath, ownerId, fallbackName);
+        if (!relativePath) return null;
+        const base = resolveLocalAxumBase();
+        const headers = buildLocalAuthHeaders(ownerId);
+        const url = `${base}/api/local-files/meta?path=${encodeURIComponent(relativePath)}`;
+        const result = await fetchLocalJson(url, { method: 'GET', headers });
+        if (!result.ok) return null;
+        return result.data;
     };
 
     const isFileAssetAtome = (atome) => {
@@ -2921,7 +2926,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
         }
 
         if (sizeBytes != null) {
-            const meta = await tryTauriStat(localPath);
+            const meta = await tryTauriStat(localPath, ownerId, filePath, safeFileName);
             const localSize = typeof meta?.size === 'number'
                 ? meta.size
                 : (typeof meta?.len === 'number' ? meta.len : null);
@@ -3010,7 +3015,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
             }
 
             const finalBytes = useFixedSize ? fixedBuffer : concatChunks(chunks, collectedSize);
-            const writeResult = await tryTauriWriteBinaryFile(localPath, finalBytes);
+            const writeResult = await tryTauriWriteBinaryFile(localPath, finalBytes, ownerId, filePath, safeFileName);
             if (!writeResult.ok) {
                 console.log('[sync_atomes] asset pull failed', {
                     atomeId,
@@ -3018,7 +3023,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
                     error: writeResult.error || 'write_failed',
                     localPath
                 });
-                await logLocalDownloadsSnapshot(ownerId, localPath, 'pull_write_failed');
+                await logLocalDownloadsSnapshot(ownerId, filePath, 'pull_write_failed');
                 return { ok: false, error: writeResult.error || 'write_failed' };
             }
 
@@ -3180,7 +3185,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
             localPath,
             sizeBytes
         });
-        const bytes = await readTauriBinaryFile(localPath);
+        const bytes = await readTauriBinaryFile(localPath, ownerId, filePath, safeFileName);
         if (!bytes || !bytes.length) {
             console.log('[sync_atomes] asset push blocked: local_asset_missing', {
                 atomeId,
@@ -3188,7 +3193,7 @@ const logTauriFsStatusOnce = (mode, localPath) => {
                 fileName: safeFileName,
                 localPath
             });
-            await logLocalDownloadsSnapshot(ownerId, localPath, 'push_missing');
+            await logLocalDownloadsSnapshot(ownerId, filePath, 'push_missing');
             return { ok: false, error: 'local_asset_missing' };
         }
 
