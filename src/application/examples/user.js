@@ -149,7 +149,7 @@ const intuitionContainer = grab('intuition')
 intuitionContainer.style.width = '100%';
 intuitionContainer.style.position = 'relative';
 intuitionContainer.style.zIndex = '10';
-intuitionContainer.style.pointerEvents = 'none'; // Don't block interactions
+intuitionContainer.style.pointerEvents = 'auto'; // Allow UI controls to receive clicks
 // Allow pointer events only on child elements
 intuitionContainer.style.background = 'transparent';
 
@@ -2711,7 +2711,56 @@ $('span', {
   },
 });
 
-$('span', {
+const handleLogUserClick = async () => {
+  console.log('log user clicked');
+  puts('log user clicked');
+
+  const phone = grab('phone_pass_input')?.value?.trim() || '';
+  const username = grab('username_input')?.value?.trim() || '';
+  const password = getPasswordInputValue();
+
+  console.log('[log_user click] inputs:', { phone, username, hasPassword: !!password });
+  puts(`🔐 log_user click: phone=${phone || '∅'} username=${username || '∅'} password=${password ? '✓' : '∅'}`);
+
+  if (phone && password) {
+    const loginResult = await log_user(phone, password, username || '');
+    console.log('[log_user click] result:', loginResult);
+    const tauriOk = !!loginResult?.tauri?.success;
+    const fastifyOk = !!loginResult?.fastify?.success;
+    const tauriErr = loginResult?.tauri?.error || null;
+    const fastifyErr = loginResult?.fastify?.error || null;
+    puts(`log_user result: Tauri=${tauriOk ? 'OK' : 'FAIL'}${tauriErr ? ` (${tauriErr})` : ''} | Fastify=${fastifyOk ? 'OK' : 'FAIL'}${fastifyErr ? ` (${fastifyErr})` : ''}`);
+    if (loginResult.tauri.success || loginResult.fastify.success) {
+      const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
+      const userObj = userData?.user || userData || { username, phone };
+      const label = formatUserSummary(userObj);
+      puts('✅ Logged user: ' + label);
+      grab('logged_user').textContent = label;
+      logUserDetails(userObj, 'manual_login');
+
+      const userId = userObj.user_id || userObj.atome_id || userObj.id;
+      if (userId) await initRemoteCommands(userId);
+      return;
+    }
+    puts('❌ Login failed; opening user selector');
+  } else if (phone && !password) {
+    puts('Please enter a password or choose a user');
+  }
+
+  console.log('[log_user click] opening user selector');
+  open_user_selector((result) => {
+    console.log('[log_user click] user selector result:', result);
+    if (!result.cancelled && !result.error) {
+      puts('User selection successful');
+    } else if (result.error) {
+      puts('User switch error: ' + result.error);
+    } else {
+      puts('User selection cancelled');
+    }
+  });
+};
+
+const logUserButton = $('span', {
   id: 'log_user',
   parent: intuitionContainer,
   css: {
@@ -2720,44 +2769,19 @@ $('span', {
     padding: '10px',
     color: 'white',
     margin: '10px',
-    display: 'inline-block'
+    display: 'inline-block',
+    cursor: 'pointer',
+    pointerEvents: 'auto'
   },
-  text: 'log user',
-  onClick: async () => {
-    const phone = grab('phone_pass_input')?.value?.trim() || '';
-    const username = grab('username_input')?.value?.trim() || '';
-    const password = getPasswordInputValue();
-
-    if (phone && password) {
-      const loginResult = await log_user(phone, password, username || '');
-      if (loginResult.tauri.success || loginResult.fastify.success) {
-        const userData = loginResult.tauri.success ? loginResult.tauri.data : loginResult.fastify.data;
-        const userObj = userData?.user || userData || { username, phone };
-        const label = formatUserSummary(userObj);
-        puts('✅ Logged user: ' + label);
-        grab('logged_user').textContent = label;
-        logUserDetails(userObj, 'manual_login');
-
-        const userId = userObj.user_id || userObj.atome_id || userObj.id;
-        if (userId) await initRemoteCommands(userId);
-        return;
-      }
-      puts('❌ Login failed; opening user selector');
-    } else if (phone && !password) {
-      puts('Please enter a password or choose a user');
-    }
-
-    open_user_selector((result) => {
-      if (!result.cancelled && !result.error) {
-        puts('User selection successful');
-      } else if (result.error) {
-        puts('User switch error: ' + result.error);
-      } else {
-        puts('User selection cancelled');
-      }
-    });
-  },
+  text: 'log user'
 });
+
+if (logUserButton?.addEventListener) {
+  logUserButton.addEventListener('click', (event) => {
+    console.log('[log_user native click] target:', event?.target || null);
+    handleLogUserClick();
+  });
+}
 
 $('span', {
   id: 'unlog_user',
