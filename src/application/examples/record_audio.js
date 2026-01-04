@@ -797,6 +797,67 @@
         return cleaned.toLowerCase().endsWith('.wav') ? cleaned : `${cleaned}.wav`;
     }
 
+    function pickSupportedMime(candidates) {
+        if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+            return '';
+        }
+        for (const candidate of candidates) {
+            if (MediaRecorder.isTypeSupported(candidate)) return candidate;
+        }
+        return '';
+    }
+
+    function computePeak(samples) {
+        if (!samples || !samples.length) return 0;
+        let peak = 0;
+        for (let i = 0; i < samples.length; i++) {
+            const v = Math.abs(samples[i]);
+            if (v > peak) peak = v;
+        }
+        return peak;
+    }
+
+    async function decodeAudioBlobToMono(blob) {
+        if (!blob) return null;
+        if (!isBrowser()) return null;
+        const buffer = await blob.arrayBuffer();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return null;
+        const ctx = new AudioCtx();
+        try {
+            const audioBuffer = await ctx.decodeAudioData(buffer);
+            const channels = Math.max(1, audioBuffer.numberOfChannels || 1);
+            if (channels === 1) {
+                return {
+                    samples: audioBuffer.getChannelData(0),
+                    sampleRate: audioBuffer.sampleRate,
+                    duration: audioBuffer.duration
+                };
+            }
+            const length = audioBuffer.length;
+            const mixed = new Float32Array(length);
+            for (let ch = 0; ch < channels; ch++) {
+                const data = audioBuffer.getChannelData(ch);
+                for (let i = 0; i < length; i++) {
+                    mixed[i] += data[i];
+                }
+            }
+            const inv = 1 / channels;
+            for (let i = 0; i < length; i++) {
+                mixed[i] *= inv;
+            }
+            return {
+                samples: mixed,
+                sampleRate: audioBuffer.sampleRate,
+                duration: audioBuffer.duration
+            };
+        } catch (_) {
+            return null;
+        } finally {
+            try { await ctx.close(); } catch (_) { }
+        }
+    }
+
     function downsampleFloat32ToInt16Mono(inputFloat32, inputSampleRate, targetSampleRate) {
         if (!inputFloat32 || inputFloat32.length === 0) return new Int16Array(0);
 
@@ -1292,6 +1353,28 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
         }
 
         const src = ctx.createMediaStreamSource(stream);
+        const mediaFallback = (() => {
+            if (typeof MediaRecorder === 'undefined') return null;
+            const candidates = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+                'audio/ogg',
+                'audio/mp4'
+            ];
+            const mimeType = pickSupportedMime(candidates);
+            try {
+                const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+                const chunks = [];
+                recorder.ondataavailable = (ev) => {
+                    if (ev.data && ev.data.size) chunks.push(ev.data);
+                };
+                recorder.start();
+                return { recorder, chunks, mimeType };
+            } catch (_) {
+                return null;
+            }
+        })();
 
         const blob = new Blob([REC_WORKLET_SOURCE], { type: 'application/javascript' });
         const workletUrl = URL.createObjectURL(blob);
@@ -1339,6 +1422,7 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
             src,
             silent,
             chunks,
+            mediaFallback,
             getStats: () => ({ inputSampleRate, totalFrames, fileName })
         };
 
@@ -1347,6 +1431,36 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
                 return { success: false, error: 'No active recording' };
             }
             __recording.state = 'stopping';
+
+            let fallbackBlob = null;
+            let fallbackMime = '';
+            if (__recording.mediaFallback && __recording.mediaFallback.recorder) {
+                const { recorder, chunks: mediaChunks, mimeType } = __recording.mediaFallback;
+                fallbackMime = mimeType || recorder.mimeType || '';
+                fallbackBlob = await new Promise((resolve) => {
+                    let done = false;
+                    const finalize = () => {
+                        if (done) return;
+                        done = true;
+                        if (mediaChunks && mediaChunks.length) {
+                            resolve(new Blob(mediaChunks, { type: fallbackMime || '' }));
+                        } else {
+                            resolve(null);
+                        }
+                    };
+                    recorder.onstop = finalize;
+                    recorder.onerror = finalize;
+                    try {
+                        if (recorder.state !== 'inactive') {
+                            recorder.stop();
+                        } else {
+                            finalize();
+                        }
+                    } catch (_) {
+                        finalize();
+                    }
+                });
+            }
 
             try { __recording.src.disconnect(); } catch (_) { }
             try { __recording.node.disconnect(); } catch (_) { }
@@ -1373,10 +1487,26 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
                 }
             }
 
-            const pcm16 = downsampleFloat32ToInt16Mono(merged, inputSampleRate, TARGET_SR);
-            const wav = encodeWav16Mono(pcm16, TARGET_SR);
+            let pcm16 = null;
+            let wav = null;
+            let durationSec = 0;
+            const peak = computePeak(merged);
+            const shouldFallback = !merged.length || !Number.isFinite(peak) || peak < 1e-4;
 
-            const durationSec = pcm16.length / TARGET_SR;
+            if (shouldFallback && fallbackBlob) {
+                const decoded = await decodeAudioBlobToMono(fallbackBlob);
+                if (decoded && decoded.samples && decoded.samples.length) {
+                    pcm16 = downsampleFloat32ToInt16Mono(decoded.samples, decoded.sampleRate, TARGET_SR);
+                    wav = encodeWav16Mono(pcm16, TARGET_SR);
+                    durationSec = decoded.duration || (pcm16.length / TARGET_SR);
+                }
+            }
+
+            if (!wav || !pcm16) {
+                pcm16 = downsampleFloat32ToInt16Mono(merged, inputSampleRate, TARGET_SR);
+                wav = encodeWav16Mono(pcm16, TARGET_SR);
+                durationSec = pcm16.length / TARGET_SR;
+            }
 
             // Offline-first:
             // 1) Persist locally immediately.
