@@ -288,7 +288,7 @@ async function listLegacyUploads() {
 }
 
 function resolveUserId(user) {
-  const direct = user?.id || user?.userId || user?.user_id;
+  const direct = user?.id || user?.userId || user?.user_id || user?.sub;
   if (direct !== undefined && direct !== null) {
     const text = String(direct).trim();
     if (text) return text;
