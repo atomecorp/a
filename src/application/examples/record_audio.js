@@ -715,12 +715,13 @@
 
             const fileName = entry.file_name || entry.name || '';
             const base = getFastifyBaseUrl();
-            if (!base || !fileName) {
+            const downloadId = identifier || fileName;
+            if (!base || !downloadId) {
                 return { ok: false, error: 'Recording playback requires a server endpoint' };
             }
             let res;
             try {
-                res = await fetch(`${base}/api/uploads/${encodeURIComponent(fileName)}`, {
+                res = await fetch(`${base}/api/uploads/${encodeURIComponent(downloadId)}`, {
                     method: 'GET',
                     headers: buildAuthHeaders(),
                     credentials: 'omit'
