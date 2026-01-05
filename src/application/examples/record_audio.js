@@ -1412,16 +1412,77 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
             }
         })();
 
-        const blob = new Blob([REC_WORKLET_SOURCE], { type: 'application/javascript' });
-        const workletUrl = URL.createObjectURL(blob);
-        await ctx.audioWorklet.addModule(workletUrl);
+        const chunks = [];
+        let inputSampleRate = ctx.sampleRate;
+        let totalFrames = 0;
+        let node = null;
+        let processorKind = 'worklet';
+        let workletUrl = null;
 
-        const node = new AudioWorkletNode(ctx, 'squirrel-mic-recorder', {
-            numberOfInputs: 1,
-            numberOfOutputs: 1,
-            outputChannelCount: [1],
-            processorOptions: { chunkSec: CHUNK_SEC }
-        });
+        if (ctx.audioWorklet && typeof window.AudioWorkletNode === 'function') {
+            try {
+                const blob = new Blob([REC_WORKLET_SOURCE], { type: 'application/javascript' });
+                workletUrl = URL.createObjectURL(blob);
+                await ctx.audioWorklet.addModule(workletUrl);
+                node = new AudioWorkletNode(ctx, 'squirrel-mic-recorder', {
+                    numberOfInputs: 1,
+                    numberOfOutputs: 1,
+                    outputChannelCount: [1],
+                    processorOptions: { chunkSec: CHUNK_SEC }
+                });
+                node.port.onmessage = (ev) => {
+                    const msg = ev && ev.data ? ev.data : null;
+                    if (!msg || msg.type !== 'chunk' || !msg.pcm) return;
+                    inputSampleRate = msg.sr || inputSampleRate;
+                    const f32 = msg.pcm;
+                    try {
+                        totalFrames += f32.length;
+                        chunks.push(f32);
+                    } catch (e) {
+                        console.warn('Recorder chunk handling failed:', e);
+                    }
+                };
+            } catch (e) {
+                processorKind = 'scriptprocessor';
+                node = null;
+                if (workletUrl) {
+                    try { URL.revokeObjectURL(workletUrl); } catch (_) { }
+                    workletUrl = null;
+                }
+                console.warn('[record_audio] AudioWorklet failed, falling back to ScriptProcessor:', e && e.message ? e.message : e);
+            }
+        } else {
+            processorKind = 'scriptprocessor';
+        }
+
+        if (!node) {
+            const proc = ctx.createScriptProcessor ? ctx.createScriptProcessor(2048, 2, 1) : null;
+            if (!proc) {
+                throw new Error('AudioWorklet unavailable and ScriptProcessor not supported');
+            }
+            proc.onaudioprocess = (ev) => {
+                const ib = ev && ev.inputBuffer ? ev.inputBuffer : null;
+                if (!ib) return;
+                inputSampleRate = ib.sampleRate || inputSampleRate;
+                const ch0 = ib.getChannelData(0);
+                const ch1 = ib.numberOfChannels > 1 ? ib.getChannelData(1) : null;
+                const n = ch0.length;
+                if (!n) return;
+                const mono = new Float32Array(n);
+                if (ch1) {
+                    for (let i = 0; i < n; i++) mono[i] = (ch0[i] + ch1[i]) * 0.5;
+                } else {
+                    mono.set(ch0);
+                }
+                try {
+                    totalFrames += mono.length;
+                    chunks.push(mono);
+                } catch (e) {
+                    console.warn('Recorder chunk handling failed:', e);
+                }
+            };
+            node = proc;
+        }
 
         // Keep graph alive in some WebViews by connecting to a silent sink
         const silent = ctx.createGain();
@@ -1431,23 +1492,6 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
         node.connect(silent);
         silent.connect(ctx.destination);
 
-        const chunks = [];
-        let inputSampleRate = ctx.sampleRate;
-        let totalFrames = 0;
-
-        node.port.onmessage = (ev) => {
-            const msg = ev && ev.data ? ev.data : null;
-            if (!msg || msg.type !== 'chunk' || !msg.pcm) return;
-            inputSampleRate = msg.sr || inputSampleRate;
-            const f32 = msg.pcm;
-            try {
-                totalFrames += f32.length;
-                chunks.push(f32);
-            } catch (e) {
-                console.warn('Recorder chunk handling failed:', e);
-            }
-        };
-
         __recording = {
             state: 'recording',
             fileName,
@@ -1455,6 +1499,7 @@ registerProcessor('squirrel-mic-recorder', SquirrelMicRecorder);
             stream,
             ctx,
             node,
+            processorKind,
             src,
             silent,
             chunks,
