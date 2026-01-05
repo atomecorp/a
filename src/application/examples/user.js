@@ -2513,7 +2513,8 @@ $('input', {
   css: {
 
     margin: '10px',
-    marginTop: '100px',
+
+    marginTop: '360px',
     padding: '8px',
     borderRadius: '4px',
     border: '1px solid #ccc',
@@ -2608,7 +2609,7 @@ $('input', {
     margin: '10px',
     border: '1px solid #666',
     borderRadius: '4px',
-    width: '200px',
+    width: '100px',
     fontSize: '12px'
   },
   attr: {

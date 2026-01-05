@@ -296,6 +296,7 @@ $('div', {
         zIndex: '9000',
         backgroundColor: dropZoneDefaultBg,
         marginLeft: '0',
+        top: '90px',
         width: '90px',
         height: '60px',
         padding: '10px',
