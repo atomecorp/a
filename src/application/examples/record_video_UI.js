@@ -511,6 +511,12 @@
             }
             const result = await api.listMediaFiles({ types: ['audio', 'video'] });
             if (!result || !result.ok) {
+                if (result && result.error === 'auth_required') {
+                    const msg = 'Connectez-vous pour voir les medias';
+                    mountMediaSelector([{ label: msg, value: '' }]);
+                    renderMediaStatus(msg, '#ffb0b0');
+                    return;
+                }
                 mountMediaSelector([{ label: 'No media available', value: '' }]);
                 if (!mediaState.debugLogged && typeof window.record_audio_debug_list === 'function') {
                     mediaState.debugLogged = true;

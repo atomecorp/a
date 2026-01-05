@@ -356,6 +356,18 @@
         }
     }
 
+    function getCloudAuthToken() {
+        try {
+            return (
+                localStorage.getItem('cloud_auth_token') ||
+                localStorage.getItem('auth_token') ||
+                ''
+            );
+        } catch (_) {
+            return '';
+        }
+    }
+
     function getFastifyBaseUrl() {
         const globalBase = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
             ? window.__SQUIRREL_FASTIFY_URL__.trim()
@@ -474,6 +486,26 @@
         return fastifyItems.length ? fastifyItems : tauriItems;
     }
 
+    function mergeAtomeLists(result, key) {
+        const fastifyItems = extractList(result?.fastify, key);
+        const tauriItems = extractList(result?.tauri, key);
+        if (!isTauriRuntime()) return pickAuthoritativeList(result, key);
+        const merged = [];
+        const seen = new Set();
+        const addItem = (item) => {
+            if (!item) return;
+            const id = normalizeAtomeId(item) || item.file_name || item.fileName || item.name || null;
+            const keyVal = id || JSON.stringify(item);
+            if (!keyVal || seen.has(keyVal)) return;
+            seen.add(keyVal);
+            merged.push(item);
+        };
+        tauriItems.forEach(addItem);
+        fastifyItems.forEach(addItem);
+        if (merged.length) return merged;
+        return fastifyItems.length ? fastifyItems : tauriItems;
+    }
+
     function normalizeParticles(raw) {
         return raw?.particles || raw?.data || {};
     }
@@ -532,7 +564,7 @@
         for (const type of typeList) {
             try {
                 const res = await api.atomes.list({ type });
-                const raw = pickAuthoritativeList(res, 'atomes');
+                const raw = mergeAtomeLists(res, 'atomes');
                 raw.forEach((item) => {
                     const particles = normalizeParticles(item);
                     const fileName = particles.file_name || particles.fileName || particles.name || '';
@@ -584,6 +616,10 @@
     async function list_user_media_files(options = {}) {
         const base = getFastifyBaseUrl();
         const types = Array.isArray(options.types) ? new Set(options.types) : null;
+        const requireAuth = options.requireAuth !== false;
+        if (requireAuth && !getCloudAuthToken()) {
+            return { ok: false, error: 'auth_required', files: [] };
+        }
         const combined = [];
         const seen = new Set();
         const noteSeen = (key) => {

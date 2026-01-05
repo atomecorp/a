@@ -2612,6 +2612,7 @@ async function startServer() {
             // - Enforce expiry
             // - If missing (or expired), verify JWT from the message and attach the connection
             let requesterId = connection?._wsApiUserId || null;
+            let hasAuthIdentity = !!requesterId;
 
             try {
               const authExpMs = connection && typeof connection._wsApiAuthExpMs === 'number' ? connection._wsApiAuthExpMs : null;
@@ -2631,6 +2632,7 @@ async function startServer() {
                 if (decodedUserId) {
                   requesterId = String(decodedUserId);
                   attachWsApiClientToUser(connection, requesterId);
+                  hasAuthIdentity = true;
                   if (decoded && typeof decoded.exp === 'number') {
                     connection._wsApiAuthExpMs = decoded.exp * 1000;
                   }
@@ -3004,6 +3006,17 @@ async function startServer() {
                 // This is critical for sharing workflows (recipient discovery) and must work
                 // even when authenticated.
                 const isUserDirectoryRequest = effectiveType === 'user' && !requestedOwner;
+                const isAuthenticated = hasAuthIdentity && requesterId && requesterId !== 'anonymous';
+
+                if (!isAuthenticated && !isUserDirectoryRequest) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Unauthorized'
+                  });
+                  return;
+                }
 
                 if (process.env.ATOME_LIST_DEBUG === '1') {
                   console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}, includeDeleted=${includeDeleted}`);
