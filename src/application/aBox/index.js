@@ -10,6 +10,120 @@ const uploadsListToggleId = `${uploadsListId}_toggle`;
 const uploadsListToggleLabelId = `${uploadsListId}_toggle_label`;
 
 let showAtomesList = false;
+const shareSelectionByKey = new Map();
+const shareAtomeCounts = new Map();
+const shareAtomeMeta = new Map();
+let cachedAtomes = null;
+let cachedAtomesAt = 0;
+const ATOME_CACHE_TTL_MS = 5000;
+
+function normalizePathValue(value) {
+    if (!value) return '';
+    return String(value).trim().replace(/\\/g, '/');
+}
+
+function normalizeComparablePath(value) {
+    const cleaned = normalizePathValue(value).replace(/^\/+/, '');
+    if (!cleaned) return '';
+    const match = cleaned.match(/^data\/users\/[^/]+\//);
+    return match ? cleaned.slice(match[0].length) : cleaned;
+}
+
+function getPathDirectory(pathValue) {
+    const normalized = normalizePathValue(pathValue).replace(/\/+$/, '');
+    if (!normalized) return '';
+    const idx = normalized.lastIndexOf('/');
+    if (idx <= 0) return '';
+    return normalized.slice(0, idx);
+}
+
+function updateShareSelectionState() {
+    if (typeof window === 'undefined') return;
+    const atomeIds = Array.from(shareAtomeCounts.keys());
+    const items = atomeIds.map((id) => {
+        const meta = shareAtomeMeta.get(id) || {};
+        return {
+            id,
+            label: meta.label || meta.filePath || meta.fileName || null,
+            filePath: meta.filePath || null,
+            fileName: meta.fileName || null,
+            type: meta.type || null,
+            source: meta.source || null
+        };
+    });
+    window.__aBoxShareSelection = {
+        atomeIds,
+        items,
+        sources: Array.from(shareSelectionByKey.keys()),
+        updatedAt: Date.now()
+    };
+    window.dispatchEvent(new CustomEvent('abox-share-selection', {
+        detail: { atomeIds, items }
+    }));
+}
+
+function applyShareButtonState(buttonEl, isSelected) {
+    if (!buttonEl) return;
+    buttonEl.textContent = isSelected ? 'Selected' : 'Select';
+    buttonEl.style.backgroundColor = isSelected ? '#2f5eff' : '#333';
+    buttonEl.style.borderColor = isSelected ? '#2f5eff' : '#444';
+    buttonEl.style.color = isSelected ? '#fff' : '#ddd';
+}
+
+function applyShareRowState(rowEl, isSelected) {
+    if (!rowEl) return;
+    rowEl.style.backgroundColor = isSelected ? '#2c2f36' : '#252525';
+    rowEl.style.boxShadow = isSelected ? '0 0 0 1px #2f5eff inset' : 'none';
+}
+
+function addShareSelection(key, atomeIds, metaById = null) {
+    const uniqueIds = Array.from(new Set((atomeIds || []).map(String).filter(Boolean)));
+    if (!uniqueIds.length) return false;
+    shareSelectionByKey.set(key, uniqueIds);
+    uniqueIds.forEach((id) => {
+        const count = shareAtomeCounts.get(id) || 0;
+        shareAtomeCounts.set(id, count + 1);
+        const meta = metaById?.[id];
+        if (meta && !shareAtomeMeta.has(id)) {
+            shareAtomeMeta.set(id, meta);
+        }
+    });
+    updateShareSelectionState();
+    return true;
+}
+
+function removeShareSelection(key) {
+    const ids = shareSelectionByKey.get(key);
+    if (!ids) return;
+    shareSelectionByKey.delete(key);
+    ids.forEach((id) => {
+        const count = shareAtomeCounts.get(id) || 0;
+        if (count <= 1) {
+            shareAtomeCounts.delete(id);
+            shareAtomeMeta.delete(id);
+        } else {
+            shareAtomeCounts.set(id, count - 1);
+        }
+    });
+    updateShareSelectionState();
+}
+
+function isShareSelectionActive(key) {
+    return shareSelectionByKey.has(key);
+}
+
+function appendCachedAtomeEntry(entry) {
+    if (!entry?.id) return;
+    const normalized = {
+        id: String(entry.id),
+        type: entry.type || 'raw',
+        filePath: entry.filePath || ''
+    };
+    if (!cachedAtomes) cachedAtomes = [];
+    if (cachedAtomes.some((item) => String(item.id) === normalized.id)) return;
+    cachedAtomes.push(normalized);
+    cachedAtomesAt = Date.now();
+}
 
 function getLocalToken() {
     try {
@@ -477,13 +591,13 @@ function normalizeUserRelativePath(value, userId) {
     return cleaned.replace(/^\/+/, '');
 }
 
-async function createUploadAtome({ fileName, originalName, relPath, mimeType, sizeBytes, atomeId }) {
+async function createUploadAtome({ fileName, originalName, relPath, mimeType, sizeBytes, atomeId, requireFastify = false }) {
     const api = window.AdoleAPI;
-    if (!api || !api.atomes || typeof api.atomes.create !== 'function') return;
+    if (!api || !api.atomes || typeof api.atomes.create !== 'function') return { ok: false };
 
     const userInfo = await resolveCurrentUserInfo();
     const ownerId = userInfo.id;
-    if (!ownerId) return;
+    if (!ownerId) return { ok: false };
 
     const atomeType = inferUploadAtomeType(originalName || fileName, mimeType);
     const resolvedId = atomeId || `file_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -504,14 +618,27 @@ async function createUploadAtome({ fileName, originalName, relPath, mimeType, si
             type: atomeType,
             ownerId,
             particles,
-            deferFastify: isTauriRuntime()
+            deferFastify: isTauriRuntime() && !requireFastify
         });
-        const ok = !!(res?.tauri?.success || res?.fastify?.success || res?.tauri?.ok || res?.fastify?.ok);
+        const okTauri = !!(res?.tauri?.success || res?.tauri?.ok);
+        const okFastify = !!(res?.fastify?.success || res?.fastify?.ok);
+        const ok = okTauri || okFastify;
+        const fastifyError = res?.fastify?.error || null;
         if (!ok) {
             console.warn('[aBox] Atome create failed:', res?.tauri?.error || res?.fastify?.error || res);
         }
+        return {
+            ok,
+            id: resolvedId,
+            type: atomeType,
+            filePath: relativePath,
+            fastifyOk: okFastify,
+            fastifyDeferred: fastifyError === 'deferred',
+            res
+        };
     } catch (error) {
         console.warn('[aBox] Atome create failed:', error?.message || error);
+        return { ok: false, id: resolvedId, type: atomeType, filePath: relativePath, fastifyOk: false, fastifyDeferred: false };
     }
 }
 
@@ -564,6 +691,94 @@ async function fetchUploadsMetadata() {
     return payload.files;
 }
 
+async function getCachedAtomesList() {
+    const now = Date.now();
+    if (cachedAtomes && (now - cachedAtomesAt) < ATOME_CACHE_TTL_MS) {
+        return cachedAtomes;
+    }
+    const items = await fetchUserAtomesList();
+    cachedAtomes = items;
+    cachedAtomesAt = now;
+    return items;
+}
+
+function findAtomeByFileName(items, fileName) {
+    if (!fileName) return null;
+    const normalizedName = normalizePathValue(fileName).split('/').pop().toLowerCase();
+    if (!normalizedName) return null;
+    return items.find((item) => {
+        const filePath = normalizeComparablePath(item?.filePath).toLowerCase();
+        return filePath === normalizedName || filePath.endsWith(`/${normalizedName}`);
+    }) || null;
+}
+
+function collectRelatedAtomeIdsByPath(items, filePath, fallbackId = null) {
+    const ids = new Set();
+    if (fallbackId) ids.add(String(fallbackId));
+    const dir = getPathDirectory(normalizeComparablePath(filePath));
+    if (!dir) {
+        return Array.from(ids).filter(Boolean);
+    }
+    const dirNormalized = normalizePathValue(dir).toLowerCase();
+    items.forEach((item) => {
+        if (!item?.id || !item?.filePath) return;
+        const candidate = normalizeComparablePath(item.filePath).toLowerCase();
+        if (candidate === dirNormalized || candidate.startsWith(`${dirNormalized}/`)) {
+            ids.add(String(item.id));
+        }
+    });
+    return Array.from(ids).filter(Boolean);
+}
+
+async function ensureUploadAtomeFromEntry(file) {
+    const fileName = file?.file_name || file?.name || file?.original_name || '';
+    if (!fileName) return null;
+    const relativePath = file?.file_path || file?.filePath || `Downloads/${fileName}`;
+    const createResult = await createUploadAtome({
+        fileName,
+        originalName: file?.original_name || fileName,
+        relPath: relativePath,
+        mimeType: file?.mime_type || null,
+        sizeBytes: typeof file?.size === 'number' ? file.size : 0,
+        atomeId: `file_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        requireFastify: true
+    });
+    if (!createResult?.ok || !createResult?.id) return null;
+    if (createResult.fastifyDeferred || !createResult.fastifyOk) {
+        try {
+            await window.AdoleAPI?.sync?.maybeSync?.('abox_share');
+        } catch (_) { }
+    }
+    appendCachedAtomeEntry({
+        id: createResult.id,
+        type: createResult.type || inferUploadAtomeType(fileName, file?.mime_type || ''),
+        filePath: createResult.filePath || relativePath
+    });
+    return createResult;
+}
+
+async function collectRelatedAtomeIdsForUpload(file) {
+    const items = await getCachedAtomesList();
+    const fileId = file && (file.id || file.atome_id || file.file_id) ? String(file.id || file.atome_id || file.file_id) : null;
+    const name = file?.file_name || file?.name || file?.original_name || '';
+    const match = fileId ? (items.find((item) => String(item?.id || '') === fileId) || null) : null;
+    const fallbackMatch = match || findAtomeByFileName(items, name);
+    if (fallbackMatch?.id) {
+        return collectRelatedAtomeIdsByPath(items, fallbackMatch.filePath, fallbackMatch.id);
+    }
+    if (fileId) return [fileId];
+    if (!items.length) {
+        const created = await ensureUploadAtomeFromEntry(file);
+        return created?.id ? [String(created.id)] : [];
+    }
+    const created = await ensureUploadAtomeFromEntry(file);
+    if (created?.id) {
+        const list = cachedAtomes || items;
+        return collectRelatedAtomeIdsByPath(list, created.filePath, created.id);
+    }
+    return [];
+}
+
 function renderUploadsList(files) {
     const container = document.getElementById(uploadsListBodyId);
     if (!container) return;
@@ -604,10 +819,15 @@ function renderUploadsList(files) {
         const size = typeof file?.size === 'number' ? file.size : 0;
         const access = typeof file?.access === 'string' && file.access !== 'owner' ? ` [${file.access}]` : '';
         const legacy = file?.legacy ? ' [legacy]' : '';
-        $('div', {
+        const keyToken = fileId || file?.file_name || displayName || '';
+        const itemKey = `upload:${String(keyToken).trim()}`;
+        const row = $('div', {
             parent: `#${uploadsListBodyId}`,
-            text: `${displayName}${access}${legacy} (${formatBytes(size)})`,
             css: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                justifyContent: 'space-between',
                 padding: '6px',
                 marginBottom: '4px',
                 backgroundColor: '#252525',
@@ -616,6 +836,75 @@ function renderUploadsList(files) {
             },
             onClick: () => downloadUpload(fileId || displayName, displayName)
         });
+        const rowEl = row?.element || row;
+
+        $('div', {
+            parent: row,
+            text: `${displayName}${access}${legacy} (${formatBytes(size)})`,
+            css: {
+                flex: '1',
+                minWidth: '0',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+            }
+        });
+
+        const selectButton = $('button', {
+            parent: row,
+            text: 'Select',
+            attrs: { type: 'button' },
+            css: {
+                padding: '4px 6px',
+                fontSize: '10px',
+                borderRadius: '4px',
+                border: '1px solid #444',
+                backgroundColor: '#333',
+                color: '#ddd',
+                cursor: 'pointer',
+                flex: '0 0 auto'
+            },
+            onClick: async (event) => {
+                event.stopPropagation();
+                const buttonEl = selectButton?.element || selectButton;
+                if (isShareSelectionActive(itemKey)) {
+                    removeShareSelection(itemKey);
+                    applyShareButtonState(buttonEl, false);
+                    applyShareRowState(rowEl, false);
+                    return;
+                }
+                buttonEl.disabled = true;
+                buttonEl.textContent = '...';
+                try {
+                    const relatedIds = await collectRelatedAtomeIdsForUpload(file);
+                    const atomes = await getCachedAtomesList();
+                    const atomeById = new Map(atomes.map(item => [String(item.id), item]));
+                    const metaById = {};
+                    relatedIds.forEach((id) => {
+                        const info = atomeById.get(String(id));
+                        metaById[id] = {
+                            label: info?.filePath || displayName,
+                            filePath: info?.filePath || null,
+                            fileName: displayName,
+                            type: info?.type || null,
+                            source: 'upload'
+                        };
+                    });
+                    const added = addShareSelection(itemKey, relatedIds, metaById);
+                    if (!added) puts('[aBox] Aucun atome associe pour ce fichier.');
+                } catch (error) {
+                    console.warn('[aBox] Selection failed:', error);
+                } finally {
+                    buttonEl.disabled = false;
+                    applyShareButtonState(buttonEl, isShareSelectionActive(itemKey));
+                    applyShareRowState(rowEl, isShareSelectionActive(itemKey));
+                }
+            }
+        });
+
+        const selectButtonEl = selectButton?.element || selectButton;
+        applyShareButtonState(selectButtonEl, isShareSelectionActive(itemKey));
+        applyShareRowState(rowEl, isShareSelectionActive(itemKey));
     });
 }
 
@@ -664,16 +953,79 @@ function renderAtomesList(items) {
         const label = entry.filePath
             ? `${entry.type} - ${entry.filePath}`
             : `${entry.type} - (no path)`;
-        $('div', {
+        const itemKey = `atome:${String(entry.id || label || '').trim()}`;
+        const row = $('div', {
             parent: `#${uploadsListBodyId}`,
-            text: label,
             css: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                justifyContent: 'space-between',
                 padding: '6px',
                 marginBottom: '4px',
                 backgroundColor: '#252525',
                 borderRadius: '4px'
             }
         });
+        const rowEl = row?.element || row;
+
+        $('div', {
+            parent: row,
+            text: label,
+            css: {
+                flex: '1',
+                minWidth: '0',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+            }
+        });
+
+        const selectButton = $('button', {
+            parent: row,
+            text: 'Select',
+            attrs: { type: 'button' },
+            css: {
+                padding: '4px 6px',
+                fontSize: '10px',
+                borderRadius: '4px',
+                border: '1px solid #444',
+                backgroundColor: '#333',
+                color: '#ddd',
+                cursor: 'pointer',
+                flex: '0 0 auto'
+            },
+            onClick: (event) => {
+                event.stopPropagation();
+                const buttonEl = selectButton?.element || selectButton;
+                if (isShareSelectionActive(itemKey)) {
+                    removeShareSelection(itemKey);
+                    applyShareButtonState(buttonEl, false);
+                    applyShareRowState(rowEl, false);
+                    return;
+                }
+                const relatedIds = collectRelatedAtomeIdsByPath(items, entry.filePath, entry.id);
+                const metaById = {};
+                relatedIds.forEach((id) => {
+                    const info = items.find(item => String(item.id) === String(id));
+                    metaById[id] = {
+                        label: info?.filePath || info?.type || 'atome',
+                        filePath: info?.filePath || null,
+                        fileName: info?.filePath ? info.filePath.split('/').pop() : null,
+                        type: info?.type || null,
+                        source: 'atome'
+                    };
+                });
+                const added = addShareSelection(itemKey, relatedIds, metaById);
+                if (!added) puts('[aBox] Aucun atome associe pour ce chemin.');
+                applyShareButtonState(buttonEl, isShareSelectionActive(itemKey));
+                applyShareRowState(rowEl, isShareSelectionActive(itemKey));
+            }
+        });
+
+        const selectButtonEl = selectButton?.element || selectButton;
+        applyShareButtonState(selectButtonEl, isShareSelectionActive(itemKey));
+        applyShareRowState(rowEl, isShareSelectionActive(itemKey));
     });
 }
 
@@ -708,6 +1060,9 @@ async function fetchUserAtomesList() {
         if (a.type !== b.type) return String(a.type).localeCompare(String(b.type));
         return String(a.filePath || '').localeCompare(String(b.filePath || ''));
     });
+
+    cachedAtomes = merged;
+    cachedAtomesAt = Date.now();
 
     return merged;
 }

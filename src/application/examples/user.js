@@ -2049,6 +2049,7 @@ function __ensureFastifyStatusEl(parent) {
       height: '39px',
       lineHeight: '39px',
       marginLeft: '10px',
+      marginTop: '300px',
       padding: '0 10px',
       color: 'white',
       backgroundColor: '#00f',
@@ -2893,7 +2894,7 @@ if (typeof window !== 'undefined' && __isTauriRuntime()) {
         parent: document.body,
         css: {
           position: 'fixed',
-          top: '10px',
+          top: '200px',
           right: '10px',
           zIndex: 50004,
           pointerEvents: 'auto'

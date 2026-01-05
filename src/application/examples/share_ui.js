@@ -42,6 +42,12 @@ function registerShareUiEventHandlers() {
             await refreshAtomes();
         } catch (_) { }
     });
+
+    window.addEventListener('abox-share-selection', async () => {
+        try {
+            await refreshAtomes();
+        } catch (_) { }
+    });
 }
 
 function uniqueUiId(prefix) {
@@ -75,6 +81,7 @@ let shareButtonRetryTimer = null;
 let shareButtonRetryCount = 0;
 const SHARE_BUTTON_MAX_RETRIES = 600; // ~5 minutes at 500ms
 let shareButtonWarned = false;
+let shareButtonObserver = null;
 
 function scheduleShareButtonRetry() {
     if (shareButtonRetryTimer) return;
@@ -84,6 +91,21 @@ function scheduleShareButtonRetry() {
         shareButtonRetryCount += 1;
         createShareButton();
     }, 500);
+}
+
+function ensureShareButton() {
+    const root = getIntuitionHost();
+    if (!root) return;
+    if (document.getElementById('share_button_holder')) return;
+    createShareButton();
+}
+
+function watchShareButton() {
+    if (shareButtonObserver || typeof MutationObserver === 'undefined') return;
+    shareButtonObserver = new MutationObserver(() => {
+        ensureShareButton();
+    });
+    shareButtonObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 function destroyDialog() {
@@ -127,6 +149,26 @@ function setStatus(message, type = 'info') {
     statusLineEl.style.color = type === 'error' ? '#ff7a7a' : type === 'success' ? '#7dff9b' : '#aaa';
 }
 
+function getABoxSelectedAtomeIds() {
+    if (typeof window === 'undefined') return [];
+    const ids = window.__aBoxShareSelection?.atomeIds;
+    if (!Array.isArray(ids)) return [];
+    return ids.map(String).filter(Boolean);
+}
+
+function getABoxSelectedItems() {
+    if (typeof window === 'undefined') return [];
+    const items = window.__aBoxShareSelection?.items;
+    if (!Array.isArray(items)) return [];
+    return items.filter(item => item && item.id).map(item => ({
+        id: String(item.id),
+        label: item.label || item.filePath || item.fileName || String(item.id),
+        filePath: item.filePath || null,
+        fileName: item.fileName || null,
+        type: item.type || 'abox'
+    }));
+}
+
 function formatImportStatus(res) {
     if (!res) return 'Share updated.';
     const effectiveShareType = res.shareType || 'linked';
@@ -147,6 +189,7 @@ async function refreshAtomes() {
     try {
         if (!atomesHolderEl) return;
 
+        try { atomesList?.destroy?.(); } catch (_) { }
         try { holderEl.innerHTML = ''; } catch (_) { }
         try {
             const attachEl = document.querySelector('#share_atomes_list');
@@ -155,14 +198,33 @@ async function refreshAtomes() {
         atomesList = null;
 
         const res = await ShareAPI.list_current_project_atomes_normalized();
-        if (!res.ok) {
-            $('div', { parent: holderEl, css: { color: '#ff7a7a', fontSize: '12px' }, text: res.error || 'Failed to load atomes' });
-            return;
-        }
+        const items = res.ok ? (res.items || []) : [];
+        const aBoxItems = getABoxSelectedItems();
+        const uniqueABoxItems = [];
+        const seenABox = new Set();
+        aBoxItems.forEach((item) => {
+            if (seenABox.has(item.id)) return;
+            seenABox.add(item.id);
+            uniqueABoxItems.push(item);
+        });
+        const existingIds = new Set(items.map(item => String(item.id)));
+        const aBoxExtras = uniqueABoxItems
+            .filter(item => !existingIds.has(String(item.id)))
+            .map((item) => ({
+                id: String(item.id),
+                type: item.type || 'abox',
+                label: item.label || `aBox • ${String(item.id).slice(0, 8)}`,
+                particles: {}
+            }));
+        const listItems = [...aBoxExtras, ...items];
 
-        const items = res.items || [];
-        if (!items.length) {
-            $('div', { parent: holderEl, css: { color: '#888', fontSize: '12px' }, text: 'No atomes in current project.' });
+        if (!listItems.length) {
+            if (!res.ok) {
+                const msg = res.error || 'Failed to load atomes';
+                $('div', { parent: holderEl, css: { color: '#ff7a7a', fontSize: '12px' }, text: msg });
+            } else {
+                $('div', { parent: holderEl, css: { color: '#888', fontSize: '12px' }, text: 'No atomes in current project.' });
+            }
             return;
         }
 
@@ -189,10 +251,10 @@ async function refreshAtomes() {
                 hover: { backgroundColor: '#2a2a2a' },
                 selected: { backgroundColor: '#2f5eff', color: 'white' }
             },
-            items: items.map(a => ({ content: `${a.type} • ${a.label} • ${String(a.id).slice(0, 8)}` })),
+            items: listItems.map(a => ({ content: `${a.type} • ${a.label} • ${String(a.id).slice(0, 8)}` })),
             onItemClick: (item) => {
-                const idx = items.findIndex(a => `${a.type} • ${a.label} • ${String(a.id).slice(0, 8)}` === item.content);
-                const a = items[idx];
+                const idx = listItems.findIndex(a => `${a.type} • ${a.label} • ${String(a.id).slice(0, 8)}` === item.content);
+                const a = listItems[idx];
                 if (!a) return;
                 if (atomeIdInput) atomeIdInput.value = String(a.id);
             }
@@ -812,6 +874,9 @@ async function openDialog() {
                 const atomeId = atomeIdInput?.value ? String(atomeIdInput.value).trim() : '';
                 const duration = durationInput?.value || null;
                 const condition = conditionInput?.value || null;
+                const aBoxIds = getABoxSelectedAtomeIds();
+                const atomeIds = aBoxIds.length ? aBoxIds : (atomeId ? [atomeId] : []);
+                const usingABox = aBoxIds.length > 0;
 
                 if (!selectedTarget?.phone) {
                     setStatus('Select a user first.', 'error');
@@ -819,7 +884,7 @@ async function openDialog() {
                     return;
                 }
 
-                if (!atomeId) {
+                if (!atomeIds.length) {
                     setStatus('Select an atome first (or use the list).', 'error');
                     await refreshShared();
                     return;
@@ -830,7 +895,7 @@ async function openDialog() {
                 ], {
                     mode,
                     shareType,
-                    atomeIds: [atomeId],
+                    atomeIds,
                     duration,
                     condition
                 });
@@ -838,8 +903,10 @@ async function openDialog() {
                 if (!result.ok) {
                     const firstErr = (result.results || []).find(r => !r.ok)?.error;
                     setStatus(firstErr || 'Share failed.', 'error');
+                    console.warn('[ShareUI] Share failed', { result, atomeIds, target: selectedTarget });
                 } else {
-                    setStatus('Share request created.', 'success');
+                    const label = usingABox ? `Share request created (${atomeIds.length} aBox items).` : 'Share request created.';
+                    setStatus(label, 'success');
                 }
 
                 await refreshShared();
@@ -851,6 +918,9 @@ async function openDialog() {
                 const atomeId = atomeIdInput?.value ? String(atomeIdInput.value).trim() : '';
                 const duration = durationInput?.value || null;
                 const condition = conditionInput?.value || null;
+                const aBoxIds = getABoxSelectedAtomeIds();
+                const atomeIds = aBoxIds.length ? aBoxIds : (atomeId ? [atomeId] : []);
+                const usingABox = aBoxIds.length > 0;
 
                 if (!selectedTarget?.phone) {
                     setStatus('Select a user first.', 'error');
@@ -858,7 +928,7 @@ async function openDialog() {
                     return;
                 }
 
-                if (!atomeId) {
+                if (!atomeIds.length) {
                     setStatus('Select an atome first (or use the list).', 'error');
                     await refreshShared();
                     return;
@@ -869,7 +939,7 @@ async function openDialog() {
                 ], {
                     mode,
                     shareType,
-                    atomeIds: [atomeId],
+                    atomeIds,
                     duration,
                     condition
                 });
@@ -877,8 +947,10 @@ async function openDialog() {
                 if (!result.ok) {
                     const firstErr = (result.results || []).find(r => !r.ok)?.error;
                     setStatus(firstErr || 'Share failed.', 'error');
+                    console.warn('[ShareUI] Share failed', { result, atomeIds, target: selectedTarget });
                 } else {
-                    setStatus('Share request created.', 'success');
+                    const label = usingABox ? `Share request created (${atomeIds.length} aBox items).` : 'Share request created.';
+                    setStatus(label, 'success');
                 }
 
                 await refreshShared();
@@ -943,11 +1015,13 @@ async function openDialog() {
 
         // Load users
         const usersHolderEl = usersHolder.element || usersHolder;
+        try { usersList?.destroy?.(); } catch (_) { }
         try { usersHolderEl.innerHTML = ''; } catch (_) { }
         try {
             const attachEl = document.querySelector('#share_users_list');
             if (attachEl && attachEl !== usersHolderEl) attachEl.innerHTML = '';
         } catch (_) { }
+        usersList = null;
 
         const usersResult = await ShareAPI.list_users_normalized();
         if (!usersResult.ok) {
@@ -1016,14 +1090,15 @@ function createShareButton() {
         id: 'share_button_holder',
         css: {
             position: 'fixed',
-            top: '10px',
-            right: '10px',
+            right: '12px',
+            bottom: '12px',
             zIndex: String(BASE_Z_INDEX + 2),
             pointerEvents: 'auto'
         }
     });
 
     Button({
+        id: 'share_button',
         template: 'material_design_blue',
         onText: 'Share',
         offText: 'Share',
@@ -1036,5 +1111,6 @@ function createShareButton() {
 }
 
 createShareButton();
+watchShareButton();
 
 export { createShareButton, openDialog };
