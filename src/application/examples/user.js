@@ -217,6 +217,12 @@ let selectedAtomeId = null;
 let currentProjectName = null;
 let currentProjectDiv = null;
 let selectedVisualAtome = null;
+let currentProjectAtomes = [];
+let atomeMetaById = new Map();
+let isProjectHistoryMode = false;
+let currentProjectHistory = [];
+let currentProjectHistoryIndex = 0;
+let projectHistoryByAtome = new Map();
 
 // When Share imports/assigns atomes to the current project, refresh the project view.
 if (typeof window !== 'undefined') {
@@ -440,6 +446,7 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
       }
       selectedVisualAtome = null;
       publishSelectedAtome(projectId);
+      loadProjectHistory(projectId);
       puts('Selected bureau (project): ' + String(projectId).substring(0, 8) + '...');
     }
   });
@@ -517,6 +524,36 @@ async function loadProjectAtomes(projectId) {
   });
 
   checkDebugPuts('✅ Project atomes found: ' + projectAtomes.length);
+
+  currentProjectAtomes = projectAtomes;
+  atomeMetaById = new Map();
+  projectAtomes.forEach(atome => {
+    const atomeId = atome.atome_id || atome.id || null;
+    if (!atomeId) return;
+    const particles = atome.particles || atome.data || {};
+    const atomeType = atome.atome_type || atome.type || 'unknown';
+    const projectId = atome.project_id || atome.projectId || atome.parent_id || atome.parentId
+      || particles.projectId || particles.project_id || selectedProjectId || null;
+    const visualType = particles.visualType || particles.visual_type || atomeType;
+    const color = particles.color || atome.color || 'blue';
+    const left = particles.left || '50px';
+    const top = particles.top || '50px';
+    const borderRadius = particles.borderRadius || '8px';
+    const opacity = particles.opacity !== undefined ? particles.opacity : 1.0;
+
+    atomeMetaById.set(String(atomeId), {
+      id: String(atomeId),
+      type: atomeType,
+      projectId,
+      visualType,
+      color,
+      left,
+      top,
+      borderRadius,
+      opacity,
+      particles: { ...particles }
+    });
+  });
 
   // Create visual elements for project atomes
   for (const atome of projectAtomes) {
@@ -721,6 +758,7 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
 
   const setInlineEditState = (enabled) => {
     if (!canInlineEdit) return;
+    const wasEditing = isEditing;
     isEditing = !!enabled;
     if (isEditing) {
       atomeEl.setAttribute('contenteditable', 'true');
@@ -736,6 +774,9 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
       atomeEl.style.outline = 'none';
       atomeEl.setAttribute('data-editing', 'false');
       try { atomeEl.blur(); } catch (_) { }
+    }
+    if (wasEditing && !isEditing) {
+      recordTextChangeIfNeeded(atomeEl, atomeId);
     }
   };
 
@@ -763,6 +804,7 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
 
   const setTextInputEditState = (enabled) => {
     if (!canTextInputEdit) return;
+    const wasEditing = isEditing;
     isEditing = !!enabled;
     atomeEl.readOnly = !isEditing;
     atomeEl.style.userSelect = isEditing ? 'text' : 'none';
@@ -773,6 +815,9 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
       try { atomeEl.focus({ preventScroll: true }); } catch (_) { }
     } else {
       try { atomeEl.blur(); } catch (_) { }
+    }
+    if (wasEditing && !isEditing) {
+      recordTextChangeIfNeeded(atomeEl, atomeId);
     }
   };
 
@@ -798,6 +843,8 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
     });
     setTextInputEditState(isEditing);
   }
+
+  cacheAtomeTextValue(atomeEl);
 
   // Make draggable
   makeAtomeDraggable(atomeEl, atomeId);
@@ -831,6 +878,7 @@ async function selectVisualAtome(atomeEl, atomeId) {
  * @param {string} atomeId - The atome ID
  */
 async function loadAtomeHistory(atomeId) {
+  isProjectHistoryMode = false;
   if (!atomeId) {
     currentAtomeHistory = [];
     updateHistorySlider();
@@ -942,6 +990,10 @@ async function loadAtomeHistory(atomeId) {
 function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
   if (!atomeId || atomeId.startsWith('temp_')) return;
 
+  const safeParticles = { ...particles };
+  const projectId = safeParticles.projectId || resolveProjectIdForAtome(atomeId);
+  if (projectId) safeParticles.projectId = projectId;
+
   const historyKey = 'atome_history_' + atomeId;
   const storedHistory = localStorage.getItem(historyKey);
   let history = [];
@@ -955,9 +1007,12 @@ function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
   }
 
   const newEntry = {
-    particles: { ...particles },
+    particles: { ...safeParticles },
     timestamp: new Date().toISOString(),
     id: atomeId,
+    atomeId: atomeId,
+    projectId: projectId || null,
+    changeType: safeParticles.changeType || null,
     note: note
   };
 
@@ -970,6 +1025,230 @@ function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
 
   localStorage.setItem(historyKey, JSON.stringify(history));
   puts('📝 Saved history entry: ' + note);
+
+  if (projectId) {
+    recordProjectHistoryEntry(projectId, newEntry);
+  }
+}
+
+function getProjectHistoryKey(projectId) {
+  if (!projectId) return null;
+  return 'project_history_' + projectId;
+}
+
+function resolveProjectIdForAtome(atomeId, fallbackProjectId = null) {
+  const meta = atomeMetaById.get(String(atomeId));
+  return meta?.projectId || fallbackProjectId || selectedProjectId || null;
+}
+
+function recordProjectHistoryEntry(projectId, entry) {
+  const key = getProjectHistoryKey(projectId);
+  if (!key || typeof localStorage === 'undefined') return;
+  let history = [];
+  try {
+    history = JSON.parse(localStorage.getItem(key)) || [];
+  } catch (_) {
+    history = [];
+  }
+  history.push(entry);
+  if (history.length > 200) {
+    history = history.slice(-200);
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(history));
+  } catch (_) { }
+}
+
+function normalizeHistoryEntry(entry, atomeIdFallback = null, projectIdFallback = null) {
+  if (!entry || typeof entry !== 'object') return null;
+  const timestamp = entry.timestamp || entry.time || entry.date || Date.now();
+  const timestampMs = typeof timestamp === 'number' ? timestamp : Date.parse(timestamp);
+  const changeType = entry.changeType || entry.particles?.changeType || entry.data?.changeType || null;
+  const normalized = {
+    ...entry,
+    atomeId: entry.atomeId || entry.id || atomeIdFallback || null,
+    projectId: entry.projectId || projectIdFallback || null,
+    particles: entry.particles || entry.data || {},
+    timestampMs: Number.isFinite(timestampMs) ? timestampMs : Date.now(),
+    changeType: changeType
+  };
+  return normalized;
+}
+
+function readAtomeTextValue(atomeEl) {
+  if (!atomeEl) return '';
+  const tag = String(atomeEl.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return atomeEl.value || '';
+  return atomeEl.textContent || '';
+}
+
+function cacheAtomeTextValue(atomeEl) {
+  if (!atomeEl || !atomeEl.dataset) return;
+  atomeEl.dataset.lastContent = readAtomeTextValue(atomeEl);
+}
+
+function recordTextChangeIfNeeded(atomeEl, atomeId) {
+  if (!atomeEl || !atomeEl.dataset) return;
+  const nextValue = readAtomeTextValue(atomeEl);
+  const lastValue = atomeEl.dataset.lastContent || '';
+  if (nextValue === lastValue) return;
+  atomeEl.dataset.lastContent = nextValue;
+  saveHistoryEntry(atomeId, { content: nextValue, changeType: 'text' }, 'Text changed');
+}
+
+function getVisualAtomeElement(atomeId) {
+  if (!atomeId) return null;
+  return grab('atome_' + atomeId) || document.getElementById(String(atomeId));
+}
+
+function applyParticlesToVisual(atomeEl, particles) {
+  if (!atomeEl || !particles) return;
+  if (particles.left) atomeEl.style.left = particles.left;
+  if (particles.top) atomeEl.style.top = particles.top;
+  if (particles.color) atomeEl.style.backgroundColor = particles.color;
+  if (particles.borderRadius) atomeEl.style.borderRadius = particles.borderRadius;
+  if (particles.opacity !== undefined) atomeEl.style.opacity = particles.opacity;
+  if (particles.width) atomeEl.style.width = particles.width;
+  if (particles.height) atomeEl.style.height = particles.height;
+  if (particles.transform) atomeEl.style.transform = particles.transform;
+  const textValue = particles.content || particles.text || particles.value;
+  if (textValue !== undefined) {
+    const tag = String(atomeEl.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') {
+      atomeEl.value = textValue;
+    } else {
+      atomeEl.textContent = textValue;
+    }
+    cacheAtomeTextValue(atomeEl);
+  }
+}
+
+function ensureVisualAtome(atomeId, particles) {
+  const meta = atomeMetaById.get(String(atomeId)) || {};
+  const visualType = particles?.visualType || particles?.visual_type || meta.visualType || meta.type || 'shape';
+  const color = particles?.color || meta.color || 'blue';
+  const left = particles?.left || meta.left || '50px';
+  const top = particles?.top || meta.top || '50px';
+  const borderRadius = particles?.borderRadius || meta.borderRadius || '8px';
+  const opacity = particles?.opacity !== undefined ? particles.opacity : (meta.opacity !== undefined ? meta.opacity : 1.0);
+  const mergedParticles = { ...(meta.particles || {}), ...(particles || {}) };
+
+  const atomeEl = createVisualAtome(atomeId, visualType, color, left, top, borderRadius, opacity, mergedParticles);
+  if (atomeEl) {
+    atomeMetaById.set(String(atomeId), {
+      ...meta,
+      id: String(atomeId),
+      visualType,
+      color,
+      left,
+      top,
+      borderRadius,
+      opacity,
+      particles: mergedParticles
+    });
+  }
+  return atomeEl;
+}
+
+function findLatestEntryForTime(entries, targetTimeMs) {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    if (entries[i].timestampMs <= targetTimeMs) return entries[i];
+  }
+  return null;
+}
+
+function loadProjectHistory(projectId) {
+  isProjectHistoryMode = true;
+  currentProjectHistory = [];
+  currentProjectHistoryIndex = 0;
+  projectHistoryByAtome = new Map();
+  currentProportionalPositions = [];
+
+  const key = getProjectHistoryKey(projectId);
+  const normalized = [];
+  const seen = new Set();
+
+  const addEntry = (entry, atomeIdFallback = null) => {
+    const normalizedEntry = normalizeHistoryEntry(entry, atomeIdFallback, projectId);
+    if (!normalizedEntry || !normalizedEntry.atomeId) return;
+    const signature = `${normalizedEntry.atomeId}|${normalizedEntry.timestampMs}|${normalizedEntry.note || ''}|${normalizedEntry.changeType || ''}`;
+    if (seen.has(signature)) return;
+    seen.add(signature);
+    normalized.push(normalizedEntry);
+  };
+
+  if (key && typeof localStorage !== 'undefined') {
+    try {
+      const stored = JSON.parse(localStorage.getItem(key)) || [];
+      stored.forEach(entry => addEntry(entry, null));
+    } catch (_) { }
+  }
+
+  currentProjectAtomes.forEach(atome => {
+    const atomeId = atome?.atome_id || atome?.id;
+    if (!atomeId) return;
+    const atomeKey = 'atome_history_' + atomeId;
+    try {
+      const stored = JSON.parse(localStorage.getItem(atomeKey)) || [];
+      stored.forEach(entry => addEntry(entry, String(atomeId)));
+    } catch (_) { }
+  });
+
+  normalized.sort((a, b) => a.timestampMs - b.timestampMs);
+  currentProjectHistory = normalized;
+  currentProjectHistoryIndex = Math.max(0, normalized.length - 1);
+  currentProportionalPositions = calculateProportionalPositions(currentProjectHistory);
+
+  normalized.forEach(entry => {
+    if (!entry.atomeId) return;
+    const list = projectHistoryByAtome.get(entry.atomeId) || [];
+    list.push(entry);
+    projectHistoryByAtome.set(entry.atomeId, list);
+  });
+
+  isInScrubMode = false;
+  const scrubBtn = grab('scrub_sequence_button');
+  if (scrubBtn) scrubBtn.style.display = 'none';
+  const playBtn = grab('play_animation_button');
+  if (playBtn) playBtn.style.display = 'none';
+  const exitBtn = grab('exit_scrub_button');
+  if (exitBtn) exitBtn.style.display = 'none';
+
+  updateHistorySlider();
+
+  if (currentProjectHistory.length > 0) {
+    applyProjectHistoryAtIndex(currentProjectHistoryIndex);
+  }
+}
+
+function applyProjectHistoryAtIndex(historyIndex) {
+  const entry = currentProjectHistory[historyIndex];
+  if (!entry) return;
+  const targetTimeMs = entry.timestampMs;
+
+  projectHistoryByAtome.forEach((entries, atomeId) => {
+    const latestEntry = findLatestEntryForTime(entries, targetTimeMs);
+    const atomeEl = getVisualAtomeElement(atomeId);
+
+    if (!latestEntry) {
+      if (atomeEl) atomeEl.style.display = 'none';
+      return;
+    }
+
+    const particles = latestEntry.particles || latestEntry.data || {};
+    const changeType = latestEntry.changeType || particles.changeType || '';
+    const isDeleted = changeType === 'delete' || particles.deleted === true;
+    if (isDeleted) {
+      if (atomeEl) atomeEl.style.display = 'none';
+      return;
+    }
+
+    const targetEl = atomeEl || ensureVisualAtome(atomeId, particles);
+    if (!targetEl) return;
+    targetEl.style.display = '';
+    applyParticlesToVisual(targetEl, particles);
+  });
 }
 
 /**
@@ -978,23 +1257,32 @@ function saveHistoryEntry(atomeId, particles, note = 'Manual modification') {
 function updateHistorySlider() {
   const slider = grab('history_slider');
   const info = grab('history_info');
+  const title = grab('history_title');
+  const history = isProjectHistoryMode ? currentProjectHistory : currentAtomeHistory;
+  const historyIndex = isProjectHistoryMode ? currentProjectHistoryIndex : currentHistoryIndex;
 
-  if (currentAtomeHistory.length === 0) {
+  if (title) {
+    title.textContent = isProjectHistoryMode
+      ? 'Project History Navigation (select the bureau)'
+      : 'Atome History Navigation (select an atome first)';
+  }
+
+  if (history.length === 0) {
     slider.disabled = true;
     slider.max = '0';
     slider.value = '0';
-    info.textContent = 'No history available';
+    info.textContent = isProjectHistoryMode ? 'No project history available' : 'No history available';
   } else {
     slider.disabled = false;
     slider.max = '1000'; // Use high resolution for smooth scrubbing
     slider.value = '1000'; // Start at the end (most recent)
 
     // Calculate proportional positions for better scrubbing
-    currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
+    currentProportionalPositions = calculateProportionalPositions(history);
 
-    const currentEntry = currentAtomeHistory[currentHistoryIndex];
-    info.textContent = 'Loaded ' + currentAtomeHistory.length + ' entries with enhanced spacing - Entry ' + currentHistoryIndex + '/' + (currentAtomeHistory.length - 1);
-    puts('✅ Loaded manual history: ' + currentAtomeHistory.length + ' entries with proportional spacing');
+    const currentEntry = history[historyIndex];
+    info.textContent = 'Loaded ' + history.length + ' entries with enhanced spacing - Entry ' + historyIndex + '/' + (history.length - 1);
+    puts('✅ Loaded manual history: ' + history.length + ' entries with proportional spacing');
     console.log('[History] Proportional positions:', currentProportionalPositions);
   }
 }
@@ -3303,6 +3591,16 @@ $('span', {
       console.log('[create_atome button] Final ID:', newId);
       puts('✅ Atome created: ' + newId.substring(0, 8) + '...');
 
+      saveHistoryEntry(newId, {
+        left: initialLeft,
+        top: initialTop,
+        color: atomeColor,
+        visualType: extraParticles.visualType || atomeType,
+        projectId: selectedProjectId,
+        changeType: 'create',
+        ...extraParticles
+      }, 'Atome created');
+
       // Reload project to display the new atome
       puts('🔄 Reloading project atomes...');
       await loadProjectAtomes(selectedProjectId);
@@ -3331,6 +3629,18 @@ $('span', {
       puts('❌ No atome selected. Click on an atome to select it first.');
       return;
     }
+    saveHistoryEntry(selectedAtomeId, {
+      left: selectedVisualAtome.style.left,
+      top: selectedVisualAtome.style.top,
+      color: selectedVisualAtome.style.backgroundColor,
+      borderRadius: selectedVisualAtome.style.borderRadius,
+      opacity: selectedVisualAtome.style.opacity,
+      content: readAtomeTextValue(selectedVisualAtome),
+      visualType: selectedVisualAtome.getAttribute('data-atome-type') || null,
+      projectId: selectedProjectId,
+      changeType: 'delete',
+      deleted: true
+    }, 'Atome deleted');
     puts('Deleting selected atome: ' + selectedAtomeId.substring(0, 8) + '...');
     const result = await delete_atome(selectedAtomeId);
 
@@ -3387,7 +3697,8 @@ $('span', {
     saveHistoryEntry(selectedAtomeId, {
       color: newColor,
       borderRadius: newBorderRadius,
-      opacity: newOpacity
+      opacity: newOpacity,
+      changeType: 'style'
     }, 'Style changed');
 
     // Save to database using alter_atome
@@ -3473,6 +3784,7 @@ $('div', {
 });
 
 $('div', {
+  id: 'history_title',
   parent: grab('history_slider_container'),
   css: { color: 'white', fontSize: '12px', marginBottom: '5px' },
   text: 'Atome History Navigation (select an atome first)'
@@ -3503,6 +3815,26 @@ $('input', {
     margin: '5px 0'
   },
   onInput: (e) => {
+    if (isProjectHistoryMode) {
+      if (currentProjectHistory.length === 0) return;
+      stopDragAnimation();
+
+      const sliderValue = parseInt(e.target.value);
+      const sliderPosition = sliderValue / 1000; // Convert to 0-1 range
+      const historyIndex = findHistoryIndexFromPosition(sliderPosition, currentProportionalPositions);
+      currentProjectHistoryIndex = historyIndex;
+      applyProjectHistoryAtIndex(historyIndex);
+
+      const entry = currentProjectHistory[historyIndex];
+      if (entry) {
+        const label = entry.note || entry.changeType || 'change';
+        const atomeLabel = entry.atomeId ? String(entry.atomeId).substring(0, 8) : 'unknown';
+        grab('history_info').textContent = 'Project entry ' + historyIndex + '/' + (currentProjectHistory.length - 1) +
+          ' - ' + label + ' (atome ' + atomeLabel + '...)';
+      }
+      return;
+    }
+
     if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
 
     // Stop any playing animation first
@@ -3617,6 +3949,15 @@ $('input', {
     }
   },
   onChange: async (e) => {
+    if (isProjectHistoryMode) {
+      if (currentProjectHistory.length === 0) return;
+      const sliderValue = parseInt(e.target.value);
+      const sliderPosition = sliderValue / 1000;
+      const historyIndex = findHistoryIndexFromPosition(sliderPosition, currentProportionalPositions);
+      currentProjectHistoryIndex = historyIndex;
+      return;
+    }
+
     if (!selectedAtomeId || currentAtomeHistory.length === 0) return;
 
     // Stop any playing animation first
@@ -3797,6 +4138,10 @@ $('span', {
   },
   text: 'Apply to Atome',
   onClick: async () => {
+    if (isProjectHistoryMode) {
+      puts('❌ Project history cannot be applied to a single atome');
+      return;
+    }
     if (!selectedAtomeId || currentAtomeHistory.length === 0) {
       puts('❌ No atome selected or no history available');
       return;
@@ -3846,45 +4191,13 @@ $('span', {
       puts('✅ History entry applied permanently');
       console.log('[History Apply] Success result:', result);
 
-      // Add the new applied state to history
-      const newHistoryEntry = {
-        timestamp: Date.now(),
-        type: 'applied_state',
-        particles: { ...updates },
-        data: { ...updates }
-      };
+      saveHistoryEntry(selectedAtomeId, { ...updates, changeType: 'apply' }, 'History applied');
 
-      // Add to history
-      currentAtomeHistory.push(newHistoryEntry);
-
-      // Update localStorage
-      const storageKey = 'atome_history_' + selectedAtomeId;
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(currentAtomeHistory));
-      } catch (e) {
-        console.warn('[History] Failed to save to localStorage:', e);
+      if (selectedVisualAtome) {
+        applyParticlesToVisual(selectedVisualAtome, updates);
       }
 
-      // Recalculate proportional positions
-      currentProportionalPositions = calculateProportionalPositions(currentAtomeHistory);
-
-      // Update slider to point to the new latest state
-      const slider = grab('history_slider');
-      if (slider) {
-        slider.value = 1000; // Move to end (latest state)
-      }
-
-      // Update current atome with the new state visually
-      const atome = grab(selectedAtomeId);
-      if (atome) {
-        if (updates.left !== undefined) atome.left = updates.left;
-        if (updates.top !== undefined) atome.top = updates.top;
-        if (updates.color !== undefined) atome.color = updates.color;
-        if (updates.borderRadius !== undefined) atome.borderRadius = updates.borderRadius;
-        if (updates.opacity !== undefined) atome.opacity = updates.opacity;
-      }
-
-      puts('🔄 History updated with new applied state (' + currentAtomeHistory.length + ' total entries)');
+      await loadAtomeHistory(selectedAtomeId);
 
     } else {
       puts('❌ Failed to apply history entry');
