@@ -104,6 +104,7 @@ import {
 } from './atomeRealtime.js';
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
+import { createVisioService } from './visio.js';
 import {
   ensureUserDownloadsDir,
   resolveUserUploadPath,
@@ -935,6 +936,14 @@ async function startServer() {
       server.post('/api/auth/request-otp', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
       server.post('/api/auth/reset-password', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
     }
+
+    const visioService = createVisioService({
+      databaseEnabled: DATABASE_ENABLED,
+      jwtSecret: process.env.JWT_SECRET,
+      logger: server.log
+    });
+    visioService.registerRoutes(server);
+    visioService.registerWebsocket(server, { path: '/ws/visio' });
 
     server.get('/api/server-info', async () => {
       return {

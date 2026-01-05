@@ -13,6 +13,11 @@ MODE="stable"          # stable | latest
 SKIP_TAURI=false
 SKIP_FASTIFY=false
 SKIP_IPLUG=false
+SKIP_SYSTEM=false
+SKIP_INSTALL_SERVER=false
+
+TARGET_OS="${TARGET_OS:-auto}" # auto | debian | freebsd | macos
+NODE_VERSION="${NODE_VERSION:-20.19.5}"
 
 # SQLite database path (no longer using PostgreSQL)
 DEFAULT_SQLITE_PATH="database_storage/adole.db"
@@ -88,6 +93,12 @@ Options:
   --skip-tauri             Skip updating @tauri-apps/cli
   --skip-fastify           Skip updating Fastify and related plugins
   --skip-iplug             Skip refreshing iPlug2 (tools/update_iplug2.sh)
+  --skip-system            Skip OS/system dependency installation
+  --skip-install-server    Skip calling install_server.sh (Debian/FreeBSD)
+  --os <auto|debian|freebsd|macos>
+                             Override OS detection (default: auto)
+  --node-version <v20.19.5>
+                             Force Node.js version (default: 20.19.5)
   -h, --help                   Show this help message
 
 Examples:
@@ -124,6 +135,22 @@ while [[ $# -gt 0 ]]; do
       SKIP_IPLUG=true
       shift
       ;;
+    --skip-system)
+      SKIP_SYSTEM=true
+      shift
+      ;;
+    --skip-install-server)
+      SKIP_INSTALL_SERVER=true
+      shift
+      ;;
+    --os)
+      TARGET_OS="${2:-}"
+      shift 2
+      ;;
+    --node-version)
+      NODE_VERSION="${2:-}"
+      shift 2
+      ;;
     --help|-h)
       show_help
       exit 0
@@ -139,6 +166,11 @@ done
 MODE="$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]')"
 if [[ "$MODE" != "stable" && "$MODE" != "latest" ]]; then
   echo "❌ Unsupported mode: $MODE (use 'stable' or 'latest')" >&2
+  exit 1
+fi
+NODE_VERSION="${NODE_VERSION#v}"
+if [[ -z "$NODE_VERSION" ]]; then
+  echo "❌ NODE_VERSION cannot be empty" >&2
   exit 1
 fi
 
@@ -171,6 +203,177 @@ log_warn()  { printf "${YELLOW}%s${NC}\n" "$1"; }
 log_error() { printf "${RED}%s${NC}\n" "$1"; }
 
 ensure_env_configured
+
+# --- OS helpers ------------------------------------------------------------
+OS_TYPE="unknown"
+
+run_with_sudo() {
+  if [ "$EUID" -ne 0 ]; then
+    sudo "$@"
+  else
+    "$@"
+  fi
+}
+
+detect_os() {
+  local target
+  target="$(printf '%s' "$TARGET_OS" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$target" != "auto" ]]; then
+    OS_TYPE="$target"
+    return
+  fi
+
+  local uname_out
+  uname_out="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$uname_out" in
+    darwin)
+      OS_TYPE="macos"
+      ;;
+    freebsd)
+      OS_TYPE="freebsd"
+      ;;
+    linux)
+      if [[ -f /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        if [[ "${ID:-}" == "debian" || "${ID:-}" == "ubuntu" || "${ID_LIKE:-}" == *debian* ]]; then
+          OS_TYPE="debian"
+        else
+          OS_TYPE="linux"
+        fi
+      else
+        OS_TYPE="linux"
+      fi
+      ;;
+    *)
+      OS_TYPE="unknown"
+      ;;
+  esac
+}
+
+install_system_dependencies() {
+  if [[ "$SKIP_SYSTEM" == "true" ]]; then
+    log_info "⏭️  Skipping system dependency install (--skip-system)"
+    return
+  fi
+
+  log_info "🧩 Installing system dependencies for $OS_TYPE"
+  case "$OS_TYPE" in
+    debian)
+      run_with_sudo apt-get update
+      run_with_sudo apt-get install -y \
+        ca-certificates \
+        curl \
+        git \
+        build-essential \
+        python3 \
+        pkg-config
+      ;;
+    freebsd)
+      run_with_sudo pkg update
+      run_with_sudo pkg install -y \
+        curl \
+        git \
+        gmake \
+        python3 \
+        pkgconf \
+        bash
+      ;;
+    macos)
+      if ! xcode-select -p >/dev/null 2>&1; then
+        log_warn "⚠️  Xcode Command Line Tools not detected. Installing..."
+        xcode-select --install || true
+      fi
+      if command -v brew >/dev/null 2>&1; then
+        brew install python@3 pkg-config || true
+      else
+        log_warn "⚠️  Homebrew not found; install it to auto-install system deps."
+      fi
+      ;;
+    linux)
+      log_warn "⚠️  Linux distro not detected as Debian/Ubuntu; skipping system deps."
+      ;;
+    *)
+      log_warn "⚠️  Unknown OS '$OS_TYPE'; skipping system deps."
+      ;;
+  esac
+}
+
+install_node_base() {
+  case "$OS_TYPE" in
+    debian)
+      if ! command -v node >/dev/null 2>&1; then
+        log_info "🧰 Installing Node.js 20.x (base) via NodeSource"
+        run_with_sudo bash -c "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
+        run_with_sudo apt-get install -y nodejs
+      fi
+      ;;
+    freebsd)
+      if ! command -v node >/dev/null 2>&1; then
+        log_info "🧰 Installing Node.js 20 (base) via pkg"
+        run_with_sudo pkg install -y node20 npm-node20
+      fi
+      ;;
+    macos)
+      if ! command -v node >/dev/null 2>&1; then
+        if command -v brew >/dev/null 2>&1; then
+          log_info "🧰 Installing Node.js 20 via Homebrew"
+          brew install node@20
+          brew link --overwrite --force node@20 || true
+        else
+          log_warn "⚠️  Homebrew not found; Node.js install skipped."
+        fi
+      fi
+      ;;
+  esac
+}
+
+install_node_with_n() {
+  if ! command -v npm >/dev/null 2>&1; then
+    log_warn "⚠️  npm not found; cannot install Node.js with n"
+    return 1
+  fi
+  if ! command -v n >/dev/null 2>&1; then
+    log_info "📦 Installing n (Node version manager)"
+    run_with_sudo npm install -g n
+  fi
+
+  log_info "🧰 Installing Node.js v${NODE_VERSION} via n"
+  run_with_sudo n "$NODE_VERSION"
+}
+
+ensure_node_version() {
+  local required="v${NODE_VERSION}"
+  local current=""
+  if command -v node >/dev/null 2>&1; then
+    current="$(node -v || true)"
+  fi
+
+  if [[ "$current" == "$required" ]]; then
+    log_ok "✅ Node.js ${current} already installed"
+    return
+  fi
+
+  install_node_base
+
+  if command -v node >/dev/null 2>&1; then
+    current="$(node -v || true)"
+  fi
+  if [[ "$current" == "$required" ]]; then
+    log_ok "✅ Node.js ${current} ready"
+    return
+  fi
+
+  if install_node_with_n; then
+    current="$(node -v || true)"
+  fi
+
+  if [[ "$current" == "$required" ]]; then
+    log_ok "✅ Node.js ${current} ready"
+  else
+    log_warn "⚠️  Node.js version is ${current:-unknown} (expected ${required})"
+  fi
+}
 
 # --- Utility helpers -------------------------------------------------------
 get_file_size_human() {
@@ -680,24 +883,34 @@ main() {
   log_info "🚀 Starting Atome Full Installation/Update..."
   log_info "ℹ️  Mode: $MODE"
 
-  # 1. Call install_server.sh to handle system dependencies and server setup (Linux only)
-  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  detect_os
+  log_info "🖥️  Detected OS: $OS_TYPE (target: $TARGET_OS)"
+
+  local install_server_used="false"
+  if [[ "$SKIP_INSTALL_SERVER" == "false" && ( "$OS_TYPE" == "debian" || "$OS_TYPE" == "freebsd" ) ]]; then
     if [[ -f "$PROJECT_ROOT/install_server.sh" ]]; then
-        log_info "🔗 Calling install_server.sh..."
-        # We might need sudo for install_server.sh if it installs system packages
-        if [ "$EUID" -ne 0 ]; then
-            log_warn "⚠️  install_server.sh usually requires root. You might be prompted for password."
-            sudo "$PROJECT_ROOT/install_server.sh"
-        else
-            "$PROJECT_ROOT/install_server.sh"
-        fi
+      log_info "🔗 Calling install_server.sh..."
+      if [ "$EUID" -ne 0 ]; then
+        log_warn "⚠️  install_server.sh usually requires root. You might be prompted for password."
+        sudo "$PROJECT_ROOT/install_server.sh"
+      else
+        "$PROJECT_ROOT/install_server.sh"
+      fi
+      install_server_used="true"
     else
-        log_error "❌ install_server.sh not found in $PROJECT_ROOT"
-        # We don't exit here because we might want to continue with other updates
+      log_error "❌ install_server.sh not found in $PROJECT_ROOT"
     fi
   else
-    log_info "ℹ️  Skipping install_server.sh (not on Linux)"
+    log_info "ℹ️  Skipping install_server.sh (not Debian/FreeBSD or skipped)"
   fi
+
+  if [[ "$OS_TYPE" == "macos" || "$SKIP_INSTALL_SERVER" == "true" || "$install_server_used" == "false" ]]; then
+    install_system_dependencies
+  else
+    log_info "ℹ️  System dependencies handled by install_server.sh"
+  fi
+
+  ensure_node_version
 
   ensure_env_configured
 
