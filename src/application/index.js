@@ -57,37 +57,37 @@
 // import('./examples/ide_code_editor.js');
 // import('./examples/apis.js');
 
-//////////////////////////////
-//  ==> create user - messge them ans share 
-import('./examples/user.js');
-import('./aBox/index.js');
-import('./examples/messages.js');
-import('./examples/messages_ui.js');
-import('./examples/share.js');
-import('./examples/share_ui.js');
-import('./iplug/tauri_iplug_bridge.js');
-import('./apis/record_audio_api.js');
-import('./examples/record_audio.js');
-import('./examples/record_audio_UI.js');
+// //////////////////////////////
+// //  ==> create user - messge them ans share 
+// import('./examples/user.js');
+// import('./aBox/index.js');
+// import('./examples/messages.js');
+// import('./examples/messages_ui.js');
+// import('./examples/share.js');
+// import('./examples/share_ui.js');
+// import('./iplug/tauri_iplug_bridge.js');
+// import('./apis/record_audio_api.js');
+// import('./examples/record_audio.js');
+// import('./examples/record_audio_UI.js');
 
-import('./examples/record_video.js');
-import('./examples/record_video_UI.js');
+// import('./examples/record_video.js');
+// import('./examples/record_video_UI.js');
 
 
-import('./examples/visio.js');
-import('./examples/visio_UI.js');
-// import('./examples/calendar.js');
-// import('./examples/calendar_UI.js');
-// import('./examples/shell.js');
+// import('./examples/visio.js');
+// import('./examples/visio_UI.js');
+// // import('./examples/calendar.js');
+// // import('./examples/calendar_UI.js');
+// // import('./examples/shell.js');
 
-// import('./examples/shellUI.js');
-// import('./examples/tools_code.js');
+// // import('./examples/shellUI.js');
+// // import('./examples/tools_code.js');
 
-import('./examples/AI.js');
-//////////////////////////////
+// import('./examples/AI.js');
+// //////////////////////////////
 
 // //eVe below:
-// import('./eVe/index.js');
+import('./eVe/index.js');
 
 
 //todos :
