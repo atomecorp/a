@@ -28,9 +28,9 @@
 
 
 
-// import('./examples/svg.js');
+
 // import('./examples/platform.js');
-// import('./examples/anim_svg.js');
+
 
 // import('./examples/shortcut.js');
 
@@ -87,10 +87,7 @@
 // //////////////////////////////
 
 // //eVe below:
-setTimeout(() => console.log('############> eVe tools home loaded (delayed)'), 2000);
-
-// import('./eVe/index.js');
-setTimeout(() => console.log('++++++++++> eVe tools home loaded (delayed)'), 2000);
+import('./eVe/index.js');
 
 
 //todos :
@@ -127,7 +124,7 @@ setTimeout(() => console.log('++++++++++> eVe tools home loaded (delayed)'), 200
 // import('./examples/iplug_sampler.js');
 
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)
-// import('./examples/a_svg.js');
+
 
 // import('./examples/basic.js');
 // import('./examples/tools.js'); //intuition menu
@@ -141,8 +138,10 @@ setTimeout(() => console.log('++++++++++> eVe tools home loaded (delayed)'), 200
 // 
 
 // import('./examples/drag_drop_files.js');
+// import('./examples/a_svg.js');
+// import('./examples/svg.js');
+// import('./examples/anim_svg.js');
 // import('./examples/svg_fetch_usage.js');
-// import('./examples/svg_animate.js');
 // import('./examples/testSVGSize.js');
 // import('./examples/iOSFetch.js');
 

@@ -17,14 +17,14 @@ class UnitManager {
     this.nextUnitId = 1;
     this.nextConnectorId = 1;
     this.nextConnectionId = 1;
-    
+
     // État pour le drag de connecteurs
     this.connectorDragState = {
       isDragging: false,
       sourceConnector: null,
       dragLine: null
     };
-    
+
     this.setupGlobalListeners();
   }
 
@@ -103,7 +103,7 @@ class UnitManager {
       toUnit: toUnitId,
       toConnector: toConnectorId
     };
-    
+
     this.connections.set(connectionId, connection);
     this.renderConnection(connection);
     return connectionId;
@@ -123,20 +123,20 @@ class UnitManager {
   renderConnection(connection) {
     const fromUnit = this.units.get(connection.fromUnit);
     const toUnit = this.units.get(connection.toUnit);
-    
+
     if (!fromUnit || !toUnit) return;
 
     const fromConnector = fromUnit.element.querySelector(`[data-connector-id="${connection.fromConnector}"]`);
     const toConnector = toUnit.element.querySelector(`[data-connector-id="${connection.toConnector}"]`);
-    
+
     if (!fromConnector || !toConnector) return;
 
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('data-connection-id', connection.id);
     line.classList.add('unit-connection-line');
-    
+
     this.updateConnectionPosition(line, fromConnector, toConnector);
-    
+
     // Ajouter la ligne au SVG container (créé s'il n'existe pas)
     let svg = document.querySelector('.unit-connections-svg');
     if (!svg) {
@@ -153,19 +153,19 @@ class UnitManager {
       `;
       document.body.appendChild(svg);
     }
-    
+
     svg.appendChild(line);
   }
 
   updateConnectionPosition(line, fromConnector, toConnector) {
     const fromRect = fromConnector.getBoundingClientRect();
     const toRect = toConnector.getBoundingClientRect();
-    
+
     const fromX = fromRect.left + fromRect.width / 2;
     const fromY = fromRect.top + fromRect.height / 2;
     const toX = toRect.left + toRect.width / 2;
     const toY = toRect.top + toRect.height / 2;
-    
+
     line.setAttribute('x1', fromX);
     line.setAttribute('y1', fromY);
     line.setAttribute('x2', toX);
@@ -180,11 +180,11 @@ class UnitManager {
       if (line) {
         const fromUnit = this.units.get(connection.fromUnit);
         const toUnit = this.units.get(connection.toUnit);
-        
+
         if (fromUnit && toUnit) {
           const fromConnector = fromUnit.element.querySelector(`[data-connector-id="${connection.fromConnector}"]`);
           const toConnector = toUnit.element.querySelector(`[data-connector-id="${connection.toConnector}"]`);
-          
+
           if (fromConnector && toConnector) {
             this.updateConnectionPosition(line, fromConnector, toConnector);
           }
@@ -205,13 +205,13 @@ class UnitManager {
     } else {
       // Deuxième connecteur sélectionné
       const { unitId: firstUnitId, connectorId: firstConnectorId, connectorType: firstType } = this.firstConnector;
-      
+
       // Vérifier que ce ne sont pas les mêmes connecteurs
       if (firstUnitId !== unitId || firstConnectorId !== connectorId) {
         // Vérifier qu'un est input et l'autre output
-        if ((firstType === 'input' && connectorType === 'output') || 
-            (firstType === 'output' && connectorType === 'input')) {
-          
+        if ((firstType === 'input' && connectorType === 'output') ||
+          (firstType === 'output' && connectorType === 'input')) {
+
           // Déterminer fromUnit/fromConnector et toUnit/toConnector
           let fromUnitId, fromConnectorId, toUnitId, toConnectorId;
           if (firstType === 'output') {
@@ -225,15 +225,15 @@ class UnitManager {
             toUnitId = firstUnitId;
             toConnectorId = firstConnectorId;
           }
-          
+
           // Vérifier s'il existe déjà une connexion entre ces connecteurs
           const existingConnection = Array.from(this.connections.values()).find(conn =>
-            conn.fromUnit === fromUnitId && 
+            conn.fromUnit === fromUnitId &&
             conn.fromConnector === fromConnectorId &&
-            conn.toUnit === toUnitId && 
+            conn.toUnit === toUnitId &&
             conn.toConnector === toConnectorId
           );
-          
+
           if (existingConnection) {
             // Déconnecter
             this.removeConnection(existingConnection.id);
@@ -243,7 +243,7 @@ class UnitManager {
           }
         }
       }
-      
+
       // Reset de la sélection
       this.highlightConnector(firstUnitId, firstConnectorId, false);
       this.firstConnector = null;
@@ -269,13 +269,13 @@ class UnitManager {
   startConnectorDrag(unitId, connectorId, connectorType, event) {
     event.preventDefault();
     event.stopPropagation();
-    
+
     this.connectorDragState.isDragging = true;
     this.connectorDragState.sourceConnector = { unitId, connectorId, connectorType };
-    
+
     // Créer une ligne temporaire pour visualiser la connexion
     this.createDragLine(event);
-    
+
     // Ajouter les listeners globaux
     document.addEventListener('mousemove', this.handleConnectorDragMove.bind(this));
     document.addEventListener('mouseup', this.handleConnectorDragEnd.bind(this));
@@ -298,7 +298,7 @@ class UnitManager {
       `;
       document.body.appendChild(svg);
     }
-    
+
     // Créer la ligne temporaire
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.classList.add('unit-drag-line');
@@ -306,49 +306,49 @@ class UnitManager {
     line.setAttribute('stroke-width', '2');
     line.setAttribute('stroke-dasharray', '5,5');
     line.setAttribute('opacity', '0.8');
-    
+
     const sourceConnector = this.getConnectorElement(
-      this.connectorDragState.sourceConnector.unitId, 
+      this.connectorDragState.sourceConnector.unitId,
       this.connectorDragState.sourceConnector.connectorId
     );
-    
+
     if (sourceConnector) {
       const rect = sourceConnector.getBoundingClientRect();
       const startX = rect.left + rect.width / 2;
       const startY = rect.top + rect.height / 2;
-      
+
       line.setAttribute('x1', startX);
       line.setAttribute('y1', startY);
       line.setAttribute('x2', event.clientX);
       line.setAttribute('y2', event.clientY);
     }
-    
+
     svg.appendChild(line);
     this.connectorDragState.dragLine = line;
   }
 
   handleConnectorDragMove(event) {
     if (!this.connectorDragState.isDragging || !this.connectorDragState.dragLine) return;
-    
+
     // Mettre à jour la position de fin de la ligne
     this.connectorDragState.dragLine.setAttribute('x2', event.clientX);
     this.connectorDragState.dragLine.setAttribute('y2', event.clientY);
-    
+
     // Highlight du connecteur cible potentiel
     const targetElement = document.elementFromPoint(event.clientX, event.clientY);
     if (targetElement && targetElement.classList.contains('unit-connector')) {
       const targetConnectorId = targetElement.getAttribute('data-connector-id');
       const targetConnectorType = targetElement.getAttribute('data-connector-type');
       const targetUnitId = targetElement.closest('.unit-container').getAttribute('data-unit-id');
-      
+
       // Vérifier si c'est un connecteur valide pour la connexion
       const sourceType = this.connectorDragState.sourceConnector.connectorType;
       if ((sourceType === 'output' && targetConnectorType === 'input') ||
-          (sourceType === 'input' && targetConnectorType === 'output')) {
+        (sourceType === 'input' && targetConnectorType === 'output')) {
         targetElement.classList.add('connector-drag-hover');
       }
     }
-    
+
     // Supprimer les anciens highlights
     document.querySelectorAll('.connector-drag-hover').forEach(el => {
       if (!el.contains(targetElement)) {
@@ -359,25 +359,25 @@ class UnitManager {
 
   handleConnectorDragEnd(event) {
     if (!this.connectorDragState.isDragging) return;
-    
+
     // Supprimer la ligne temporaire
     if (this.connectorDragState.dragLine) {
       this.connectorDragState.dragLine.remove();
     }
-    
+
     // Trouver le connecteur cible
     const targetElement = document.elementFromPoint(event.clientX, event.clientY);
     if (targetElement && targetElement.classList.contains('unit-connector')) {
       const targetConnectorId = targetElement.getAttribute('data-connector-id');
       const targetConnectorType = targetElement.getAttribute('data-connector-type');
       const targetUnitId = targetElement.closest('.unit-container').getAttribute('data-unit-id');
-      
+
       const source = this.connectorDragState.sourceConnector;
-      
+
       // Vérifier si c'est une connexion valide
       if ((source.connectorType === 'output' && targetConnectorType === 'input') ||
-          (source.connectorType === 'input' && targetConnectorType === 'output')) {
-        
+        (source.connectorType === 'input' && targetConnectorType === 'output')) {
+
         // Déterminer fromUnit/fromConnector et toUnit/toConnector
         let fromUnitId, fromConnectorId, toUnitId, toConnectorId;
         if (source.connectorType === 'output') {
@@ -391,15 +391,15 @@ class UnitManager {
           toUnitId = source.unitId;
           toConnectorId = source.connectorId;
         }
-        
+
         // Vérifier s'il existe déjà une connexion
         const existingConnection = Array.from(this.connections.values()).find(conn =>
-          conn.fromUnit === fromUnitId && 
+          conn.fromUnit === fromUnitId &&
           conn.fromConnector === fromConnectorId &&
-          conn.toUnit === toUnitId && 
+          conn.toUnit === toUnitId &&
           conn.toConnector === toConnectorId
         );
-        
+
         if (existingConnection) {
           // Déconnecter
           this.removeConnection(existingConnection.id);
@@ -409,15 +409,15 @@ class UnitManager {
         }
       }
     }
-    
+
     // Nettoyer
     document.querySelectorAll('.connector-drag-hover').forEach(el => {
       el.classList.remove('connector-drag-hover');
     });
-    
+
     document.removeEventListener('mousemove', this.handleConnectorDragMove.bind(this));
     document.removeEventListener('mouseup', this.handleConnectorDragEnd.bind(this));
-    
+
     this.connectorDragState.isDragging = false;
     this.connectorDragState.sourceConnector = null;
     this.connectorDragState.dragLine = null;
@@ -641,26 +641,26 @@ class Unit {
     this.setupSelection();
     this.setupNameEditing();
     this.setPosition(position.x, position.y);
-    
+
     // Appliquer la couleur de fond si fournie
     if (backgroundColor) {
       this.setBackgroundColor(backgroundColor);
     }
-    
+
     // Ajouter au DOM d'abord
     unitManager.registerUnit(this);
-    
+
     // Utiliser le parent spécifié ou document.body par défaut
     const parentElement = this.getParentElement();
     parentElement.appendChild(this.element);
-    
+
     // Puis ajouter les connecteurs
     inputs.forEach(input => this.addInput(input));
     outputs.forEach(output => this.addOutput(output));
-    
+
     // Ajuster la hauteur initiale du module
     this.adjustModuleHeight();
-    
+
     // Ajouter l'icône si fournie
     if (icon || iconSrc) {
       this.setIcon(icon || iconSrc);
@@ -685,7 +685,7 @@ class Unit {
     if (!this.parent) {
       return document.body;
     }
-    
+
     // Si parent est une string, traiter comme ID ou sélecteur
     if (typeof this.parent === 'string') {
       if (this.parent.startsWith('#')) {
@@ -694,12 +694,12 @@ class Unit {
         return document.getElementById(this.parent) || document.body;
       }
     }
-    
+
     // Si parent est un élément DOM
     if (this.parent && this.parent.nodeType === Node.ELEMENT_NODE) {
       return this.parent;
     }
-    
+
     // Fallback
     return document.body;
   }
@@ -709,13 +709,13 @@ class Unit {
 
     const handleMouseDown = (e) => {
       if (this.isEditingName) return;
-      
+
       this.isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
       startPosX = this.position.x;
       startPosY = this.position.y;
-      
+
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       e.preventDefault();
@@ -723,10 +723,10 @@ class Unit {
 
     const handleMouseMove = (e) => {
       if (!this.isDragging) return;
-      
+
       const deltaX = e.clientX - startX;
       const deltaY = e.clientY - startY;
-      
+
       this.setPosition(startPosX + deltaX, startPosY + deltaY);
       unitManager.updateAllConnections();
     };
@@ -743,7 +743,7 @@ class Unit {
   setupSelection() {
     this.element.addEventListener('click', (e) => {
       e.stopPropagation();
-      
+
       if (e.ctrlKey || e.metaKey) {
         // Multi-sélection
         if (unitManager.selectedUnits.has(this.id)) {
@@ -770,7 +770,7 @@ class Unit {
     this.isEditingName = true;
     this.nameElement.contentEditable = true;
     this.nameElement.focus();
-    
+
     // Sélectionner tout le texte
     const range = document.createRange();
     range.selectNodeContents(this.nameElement);
@@ -818,17 +818,10 @@ class Unit {
     if (!iconData) return;
 
     const icon = $('unit-icon');
-    
+
     // Désactiver le drag par défaut sur l'image
     icon.draggable = false;
-    
-    if (iconData.startsWith('data:')) {
-      // Base64
-      icon.src = iconData;
-    } else {
-      // URL/Path
-      icon.src = iconData;
-    }
+
 
     this.body.appendChild(icon);
     this.iconElement = icon;
@@ -851,7 +844,7 @@ class Unit {
     } = options;
 
     const connector = $('unit-connector-input', {
-      attrs: { 
+      attrs: {
         'data-connector-id': id,
         'data-connector-type': 'input',
         'title': name
@@ -885,10 +878,10 @@ class Unit {
 
     this.element.appendChild(connector);
     this.inputs.push({ id, name, color, element: connector });
-    
+
     // Ajuster la hauteur du module après ajout
     this.adjustModuleHeight();
-    
+
     return id;
   }
 
@@ -900,7 +893,7 @@ class Unit {
     } = options;
 
     const connector = $('unit-connector-output', {
-      attrs: { 
+      attrs: {
         'data-connector-id': id,
         'data-connector-type': 'output',
         'title': name
@@ -934,10 +927,10 @@ class Unit {
 
     this.element.appendChild(connector);
     this.outputs.push({ id, name, color, element: connector });
-    
+
     // Ajuster la hauteur du module après ajout
     this.adjustModuleHeight();
-    
+
     return id;
   }
 
@@ -947,7 +940,7 @@ class Unit {
       const input = this.inputs[inputIndex];
       input.element.remove();
       this.inputs.splice(inputIndex, 1);
-      
+
       // Repositionner les connecteurs restants
       this.repositionInputs();
     }
@@ -959,7 +952,7 @@ class Unit {
       const output = this.outputs[outputIndex];
       output.element.remove();
       this.outputs.splice(outputIndex, 1);
-      
+
       // Repositionner les connecteurs restants
       this.repositionOutputs();
     }
@@ -974,7 +967,7 @@ class Unit {
     this.inputs.forEach((input, index) => {
       input.element.style.top = `${startY + index * spacing}px`;
     });
-    
+
     // Ajuster la hauteur du module après repositionnement
     this.adjustModuleHeight();
   }
@@ -988,7 +981,7 @@ class Unit {
     this.outputs.forEach((output, index) => {
       output.element.style.top = `${startY + index * spacing}px`;
     });
-    
+
     // Ajuster la hauteur du module après repositionnement
     this.adjustModuleHeight();
   }
@@ -1000,26 +993,26 @@ class Unit {
     const bodyPadding = 16; // Padding réduit top + bottom du body
     const minBodyHeight = 32; // Hauteur minimale réduite du body
     const extraMargin = 8; // Marge réduite pour l'esthétique
-    
+
     // Calculer le nombre maximum de connecteurs sur un côté
     const maxConnectors = Math.max(this.inputs.length, this.outputs.length);
-    
+
     if (maxConnectors === 0) {
       // Pas de connecteurs, utiliser une hauteur minimale réduite
       this.element.style.height = 'auto';
       this.element.style.minHeight = '60px';
       return;
     }
-    
+
     // Calculer la hauteur nécessaire pour tous les connecteurs
     const connectorsHeight = Math.max(1, maxConnectors) * connectorSpacing; // Supprimer le +10 pour startY
     const requiredBodyHeight = Math.max(minBodyHeight, connectorsHeight);
     const totalHeight = headerHeight + requiredBodyHeight + bodyPadding + extraMargin;
-    
+
     // Appliquer la nouvelle hauteur
     this.element.style.height = `${totalHeight}px`;
     this.element.style.minHeight = `${totalHeight}px`;
-    
+
     // Optionnel: Log pour debug
     console.log(`📏 Unit ${this.name}: ${maxConnectors} connecteurs max → hauteur ${totalHeight}px`);
   }
@@ -1110,12 +1103,12 @@ function connectUnits(fromUnitId, fromConnectorId, toUnitId, toConnectorId) {
 
 function disconnectUnits(fromUnitId, fromConnectorId, toUnitId, toConnectorId) {
   const connectionToRemove = Array.from(unitManager.connections.values()).find(conn =>
-    conn.fromUnit === fromUnitId && 
+    conn.fromUnit === fromUnitId &&
     conn.fromConnector === fromConnectorId &&
-    conn.toUnit === toUnitId && 
+    conn.toUnit === toUnitId &&
     conn.toConnector === toConnectorId
   );
-  
+
   if (connectionToRemove) {
     unitManager.removeConnection(connectionToRemove.id);
   }
@@ -1145,13 +1138,13 @@ export { UnitComponent as Unit };
 export default createUnit;
 
 // Export des utilitaires supplémentaires
-export { 
-  deleteUnit, 
+export {
+  deleteUnit,
   deleteUnits,
-  selectUnit, 
-  selectUnits, 
-  deselectUnit, 
-  deselectUnits, 
+  selectUnit,
+  selectUnits,
+  deselectUnit,
+  deselectUnits,
   deselectAllUnits,
   getSelectedUnits,
   renameUnit,

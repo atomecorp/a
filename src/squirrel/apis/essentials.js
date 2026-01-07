@@ -2,6 +2,94 @@
  * 🌐 APIS - EXTENSIONS FOR JAVASCRIPT
  * Adding Ruby-like functionalities to JavaScript + MINIMAL REQUIRE SYSTEM FOR SQUIRREL
  */
+const shadowLeft = 0,
+  shadowTop = 0,
+  shadowBlur = 12;
+const items_spacing = 3;
+const item_border_radius = 6;
+const item_size = 54;
+
+window.currentTheme = {
+  basic: {
+    button_color: 'rgba(204, 35, 35, 0.85)',
+    button_active_color: "rgba(72,71,71,0.15) 100%)",
+    palette_bg: 'rgba(72,71,71,0)',
+    tool_bg: 'rgba(72,71,71,0)',
+    particle_bg: 'rgba(72,71,71)',
+    option_bg: 'rgba(72,71,71,0)',
+    zonespecial_bg: 'rgba(72,71,71,0)',
+    slider_length: '70%',
+    slider_zoom_length: '100%',
+    slider_length_vertical: '30%',
+    slider_zoom_length_vertical: '69%',
+    slider_track_color: 'rgba(241, 139, 49, 1)',
+    slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
+    handle_color: 'rgba(248, 184, 128, 1)',
+    slider_handle_size: '16%', // relative handle size (%, px, or ratio)
+    slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
+    item_zoom: '330%',            // width target when pressing a slider item
+    item_zoom_transition: '220ms',// animation duration
+    drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
+    drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
+    button_size: '33%',
+    satellite_offset: '0px',
+    satellite_bg: 'rgba(72,71,71,0)',
+    items_spacing: items_spacing + 'px',
+    item_size: item_size + 'px',
+    support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
+    // Translucent gradient for a glassy look
+    tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
+    tool_bg_active: "#7a7c73ff",
+    tool_backDrop_effect: '0px',
+    tool_text: "#cacacaff",
+    tool_font: "0.9vw",
+    tool_font_px: 10,
+    text_char_max: 9,
+    tool_active_bg: "#a06e0aff",
+    tool_lock_bg: '#9f1f1fff', // couleur lock
+
+    tool_lock_pulse_duration: '1400ms', // durée animation clignotement doux
+    tool_lock_toggle_mode: 'long', // 'long' (par défaut) ou 'click' pour permettre le clic simple de sortir
+
+    toolbox_icon: 'data:image/svg+xml;base64,' + "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4iICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPjxzdmcgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiAgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgaWQ9Im1lbnVDYW52YXMiPgk8ZyBpZD0ibWVudUNhbnZhcy1ncm91cCI+CQk8ZyBpZD0ibWVudUNhbnZhcy1ncm91cDIiPgkJCTxnIGlkPSJtZW51Q2FudmFzLWdyb3VwMyI+CQkJPHBhdGggaWQ9Im1lbnVDYW52YXMtYmV6aWVyMyIgc3Ryb2tlPSJyZ2IoMjM4LCAyMzgsIDIzOCkiIHN0cm9rZS13aWR0aD0iMzMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZmlsbD0ibm9uZSIgZD0iTSAxNy42NywxMTAuNjcgTCAxMTEuMzMsMTEwLjY3IiAvPgkJCQk8cGF0aCBpZD0ibWVudUNhbnZhcy1iZXppZXIxIiBzdHJva2U9InJnYigyMzgsIDIzOCwgMjM4KSIgc3Ryb2tlLXdpZHRoPSIzMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIiBkPSJNIDE3LjY3LDE4LjMzIEwgMTExLjMzLDE4LjMzIiAvPgkJCQk8cGF0aCBpZD0ibWVudUNhbnZhcy1iZXppZXIyIiBzdHJva2U9InJnYigyMzgsIDIzOCwgMjM4KSIgc3Ryb2tlLXdpZHRoPSIzMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIiBkPSJNIDE3LjY3LDY0LjUgTCAxMTEuMzMsNjQuNSIgLz4JCQk8L2c+CQk8L2c+CTwvZz48L3N2Zz4=",
+    toolbox_icon_color: '#cacacaff',
+    toolbox_icon_size: '39%',      // px, %, ou ratio (0..1)
+    toolbox_icon_top: '50%',       // position verticale
+    toolbox_icon_left: '50%',
+    toolboxOffsetMain: "7px",
+    toolboxOffsetEdge: "7px",
+    items_offset_main: item_border_radius + items_spacing + 'px',
+    icon_color: "#cacacaff",
+    icon_size: "39%",
+    icon_top: '63%',       // position verticale
+    icon_left: '50%',
+    // Toggle label/icon visibility when a palette is popped out
+    palette_icon: false,
+    palette_label: true,
+    dropdown_text_color: '#ffff00',
+    dropdown_background_color: 'yellow',
+    floating_host_bg: 'transparent',
+    floating_host_shadow: 'none',
+    // Particle value/unit display (theme-driven)
+    particle_value_unit: '%',
+    particle_value_value: 30,
+    particle_value_decimals: 0,
+    particle_value_font_px: 11,
+    particle_value_bottom: '6%',
+    particle_value_color: '#cacacaff',
+    particle_unit_color: '#9e9e9eff',
+    item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
+    item_border_radius: item_border_radius + 'px',
+    // Animation settings for menu open
+    anim_duration_ms: 333,
+    anim_stagger_ms: 33,
+    anim_bounce_overshoot: 0.09,
+    // Elasticity controls extra rebounds (0 = back easing, 1 = strong elastic)
+    anim_elasticity: 6,
+    direction: "top_left_horizontal",
+    edit_mode_color: '#ff6f61'
+  }
+};
 
 // Add the puts method to display in the console
 window.puts = function puts(val) {
@@ -296,3 +384,7 @@ function cleanupGlobalVariables() {
 
 // Export for ES6 modules
 export { wait };
+
+
+
+

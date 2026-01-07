@@ -1,13 +1,110 @@
-import { $ } from '../squirrel.js';
-import dropDown from './dropDown_builder.js';
+
+
+/// svg utils
+
+
+function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) {
+    requestAnimationFrame(() => {
+        const svgEl = document.getElementById(svgId);
+        const parentEl = document.getElementById(parentId);
+
+
+        if (!svgEl || !parentEl) return;
+        // Responsif via CSS (pas d'attributs width/height)
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        svgEl.style.position = 'absolute';
+        svgEl.style.left = icon_Left;
+        svgEl.style.top = icon_Top;
+        svgEl.style.transform = 'translate(-50%, -50%)';
+        svgEl.style.display = 'block';
+        svgEl.style.pointerEvents = 'none';
+        const baseSize = Math.max(1,
+            Math.min(parentEl.clientWidth || 0, parentEl.clientHeight || 0) ||
+            (parseFloat(currentTheme.item_size) || 54)
+        );
+
+        const cs = window.getComputedStyle(parentEl);
+        if (!cs.position || cs.position === 'static') {
+            parentEl.style.position = 'relative';
+        }
+
+        // const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
+        const szDefRaw = (cfg.icon_size || currentTheme.icon_size || '16%').trim();
+
+        let iconSize = NaN;
+        if (szDefRaw.endsWith('%')) {
+            const pct = parseFloat(szDefRaw);
+            if (!isNaN(pct)) iconSize = Math.round((pct / 100) * baseSize);
+        } else if (szDefRaw.endsWith('px')) {
+            const px = parseFloat(szDefRaw);
+            if (!isNaN(px)) iconSize = Math.round(px);
+        } else {
+            const num = parseFloat(szDefRaw);
+            if (!isNaN(num)) {
+                // num < 1 => ratio, sinon px
+                iconSize = num <= 1 ? Math.round(num * baseSize) : Math.round(num);
+            }
+        }
+        if (!isFinite(iconSize) || isNaN(iconSize)) {
+            iconSize = Math.round(0.16 * baseSize); // fallback 16%
+        }
+        iconSize = Math.max(8, iconSize);
+        svgEl.style.width = iconSize + 'px';
+        svgEl.style.height = iconSize + 'px';
+
+        if (!svgEl.getAttribute('viewBox')) {
+            svgEl.setAttribute('viewBox', `0 0 ${iconSize} ${iconSize}`);
+        }
+        if (!svgEl.getAttribute('preserveAspectRatio')) {
+            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        }
+    });
+}
+
+
+function create_svg(cfg) {
+    const parentId = cfg.id;
+    const svgId = `${parentId}__icon`;
+    const prev = document.getElementById(svgId);
+    if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
+    const icon = cfg.icon;
+    if (icon === null || icon === false || (typeof icon === 'string' && icon.trim() === '')) {
+        return;
+    }
+    let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
+    let icon_Left = (cfg.icon_left || currentTheme.icon_left || '10%').trim();
+    let icon_Top = (cfg.icon_top || currentTheme.icon_top || '50%').trim();
+    // check if icon is base64 encoded svg
+    if (typeof icon === 'string' && icon.startsWith('data:image/svg+xml;base64,')) {
+
+        const base64Data = icon.replace('data:image/svg+xml;base64,', '');
+        const svgData = atob(base64Data);
+
+        render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
+        apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
+    }
+    else {
+        dataFetcher(`assets/images/icons/${icon}.svg`)
+            .then(svgData => {
+                // Injecte le SVG dans le parent
+                render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
+                // Normalisation et centrage + taille basée sur currentTheme.icon_size
+                apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
+            })
+            .catch(err => { console.error(`Erreur (create_svg):${icon}, ${err}`); });
+    }
+
+}
+window.create_svg = create_svg;
 
 let calculatedCSS = {};
-const shadowLeft = 0,
-    shadowTop = 0,
-    shadowBlur = 12;
-const items_spacing = 3;
-const item_border_radius = 6;
-const item_size = 54;
+// const shadowLeft = 0,
+//     shadowTop = 0,
+//     shadowBlur = 12;
+// const items_spacing = 3;
+// const item_border_radius = 6;
+// const item_size = 54;
 const DIRECTIONS = [
     "top_left_horizontal",
     "top_right_horizontal",
@@ -729,7 +826,7 @@ function renderFloatingGripBadge(grip, opts = {}) {
     const fallbackSize = (themeRef && themeRef.icon_size) || (currentTheme && currentTheme.icon_size);
     const iconName = iconInfo.icon;
     if (iconName !== undefined && iconName !== null && iconName !== false && String(iconName).trim() !== '') {
-        createIcon({
+        create_svg({
             id: grip.id,
             icon: iconName,
             icon_color: iconInfo.iconColor || fallbackColor,
@@ -2415,95 +2512,10 @@ const particle = createParticle;
 const option = createOption;
 const zonespecial = createZonespecial;
 
-const Intuition_theme = {
-    basic: {
-        button_color: 'rgba(204, 35, 35, 0.85)',
-        button_active_color: "rgba(72,71,71,0.15) 100%)",
-        palette_bg: 'rgba(72,71,71,0)',
-        tool_bg: 'rgba(72,71,71,0)',
-        particle_bg: 'rgba(72,71,71)',
-        option_bg: 'rgba(72,71,71,0)',
-        zonespecial_bg: 'rgba(72,71,71,0)',
-        slider_length: '70%',
-        slider_zoom_length: '100%',
-        slider_length_vertical: '30%',
-        slider_zoom_length_vertical: '69%',
-        slider_track_color: 'rgba(241, 139, 49, 1)',
-        slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
-        handle_color: 'rgba(248, 184, 128, 1)',
-        slider_handle_size: '16%', // relative handle size (%, px, or ratio)
-        slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
-        item_zoom: '330%',            // width target when pressing a slider item
-        item_zoom_transition: '220ms',// animation duration
-        drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
-        drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
-        button_size: '33%',
-        satellite_offset: '0px',
-        satellite_bg: 'rgba(72,71,71,0)',
-        items_spacing: items_spacing + 'px',
-        item_size: item_size + 'px',
-        support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
-        // Translucent gradient for a glassy look
-        tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
-        tool_bg_active: "#7a7c73ff",
-        tool_backDrop_effect: '0px',
-        tool_text: "#cacacaff",
-        tool_font: "0.9vw",
-        tool_font_px: 10,
-        text_char_max: 9,
-        tool_active_bg: "#a06e0aff",
-        tool_lock_bg: '#9f1f1fff', // couleur lock
-
-        tool_lock_pulse_duration: '1400ms', // durée animation clignotement doux
-        tool_lock_toggle_mode: 'long', // 'long' (par défaut) ou 'click' pour permettre le clic simple de sortir
-
-        toolbox_icon: 'data:image/svg+xml;base64,' + "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4iICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPjxzdmcgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiAgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgaWQ9Im1lbnVDYW52YXMiPgk8ZyBpZD0ibWVudUNhbnZhcy1ncm91cCI+CQk8ZyBpZD0ibWVudUNhbnZhcy1ncm91cDIiPgkJCTxnIGlkPSJtZW51Q2FudmFzLWdyb3VwMyI+CQkJPHBhdGggaWQ9Im1lbnVDYW52YXMtYmV6aWVyMyIgc3Ryb2tlPSJyZ2IoMjM4LCAyMzgsIDIzOCkiIHN0cm9rZS13aWR0aD0iMzMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZmlsbD0ibm9uZSIgZD0iTSAxNy42NywxMTAuNjcgTCAxMTEuMzMsMTEwLjY3IiAvPgkJCQk8cGF0aCBpZD0ibWVudUNhbnZhcy1iZXppZXIxIiBzdHJva2U9InJnYigyMzgsIDIzOCwgMjM4KSIgc3Ryb2tlLXdpZHRoPSIzMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIiBkPSJNIDE3LjY3LDE4LjMzIEwgMTExLjMzLDE4LjMzIiAvPgkJCQk8cGF0aCBpZD0ibWVudUNhbnZhcy1iZXppZXIyIiBzdHJva2U9InJnYigyMzgsIDIzOCwgMjM4KSIgc3Ryb2tlLXdpZHRoPSIzMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIiBkPSJNIDE3LjY3LDY0LjUgTCAxMTEuMzMsNjQuNSIgLz4JCQk8L2c+CQk8L2c+CTwvZz48L3N2Zz4=",
-        toolbox_icon_color: '#cacacaff',
-        toolbox_icon_size: '39%',      // px, %, ou ratio (0..1)
-        toolbox_icon_top: '50%',       // position verticale
-        toolbox_icon_left: '50%',
-        toolboxOffsetMain: "7px",
-        toolboxOffsetEdge: "7px",
-        items_offset_main: item_border_radius + items_spacing + 'px',
-        icon_color: "#cacacaff",
-        icon_size: "39%",
-        icon_top: '63%',       // position verticale
-        icon_left: '50%',
-        // Toggle label/icon visibility when a palette is popped out
-        palette_icon: false,
-        palette_label: true,
-        dropdown_text_color: '#ffff00',
-        dropdown_background_color: 'yellow',
-        floating_host_bg: 'transparent',
-        floating_host_shadow: 'none',
-        // Particle value/unit display (theme-driven)
-        particle_value_unit: '%',
-        particle_value_value: 30,
-        particle_value_decimals: 0,
-        particle_value_font_px: 11,
-        particle_value_bottom: '6%',
-        particle_value_color: '#cacacaff',
-        particle_unit_color: '#9e9e9eff',
-        item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
-        item_border_radius: item_border_radius + 'px',
-        // Animation settings for menu open
-        anim_duration_ms: 333,
-        anim_stagger_ms: 33,
-        anim_bounce_overshoot: 0.09,
-        // Elasticity controls extra rebounds (0 = back easing, 1 = strong elastic)
-        anim_elasticity: 6,
-        direction: "top_left_horizontal",
-        edit_mode_color: '#ff6f61'
-    }
-};
-
-
-
 
 
 const intuition_content = {};
 
-const currentTheme = Intuition_theme.basic;
 orientationSelectionMap.set('toolbox', (currentTheme && currentTheme.direction)
     ? String(currentTheme.direction).toLowerCase()
     : 'top_left_horizontal');
@@ -2777,101 +2789,6 @@ function intuitionCommon(cfg) {
 
     return el;
 }
-
-function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) {
-    requestAnimationFrame(() => {
-        const svgEl = document.getElementById(svgId);
-        const parentEl = document.getElementById(parentId);
-
-
-        if (!svgEl || !parentEl) return;
-        // Responsif via CSS (pas d'attributs width/height)
-        svgEl.removeAttribute('width');
-        svgEl.removeAttribute('height');
-        svgEl.style.position = 'absolute';
-        svgEl.style.left = icon_Left;
-        svgEl.style.top = icon_Top;
-        svgEl.style.transform = 'translate(-50%, -50%)';
-        svgEl.style.display = 'block';
-        svgEl.style.pointerEvents = 'none';
-        const baseSize = Math.max(1,
-            Math.min(parentEl.clientWidth || 0, parentEl.clientHeight || 0) ||
-            (parseFloat(currentTheme.item_size) || 54)
-        );
-
-        const cs = window.getComputedStyle(parentEl);
-        if (!cs.position || cs.position === 'static') {
-            parentEl.style.position = 'relative';
-        }
-
-        // const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
-        const szDefRaw = (cfg.icon_size || currentTheme.icon_size || '16%').trim();
-
-        let iconSize = NaN;
-        if (szDefRaw.endsWith('%')) {
-            const pct = parseFloat(szDefRaw);
-            if (!isNaN(pct)) iconSize = Math.round((pct / 100) * baseSize);
-        } else if (szDefRaw.endsWith('px')) {
-            const px = parseFloat(szDefRaw);
-            if (!isNaN(px)) iconSize = Math.round(px);
-        } else {
-            const num = parseFloat(szDefRaw);
-            if (!isNaN(num)) {
-                // num < 1 => ratio, sinon px
-                iconSize = num <= 1 ? Math.round(num * baseSize) : Math.round(num);
-            }
-        }
-        if (!isFinite(iconSize) || isNaN(iconSize)) {
-            iconSize = Math.round(0.16 * baseSize); // fallback 16%
-        }
-        iconSize = Math.max(8, iconSize);
-        svgEl.style.width = iconSize + 'px';
-        svgEl.style.height = iconSize + 'px';
-
-        if (!svgEl.getAttribute('viewBox')) {
-            svgEl.setAttribute('viewBox', `0 0 ${iconSize} ${iconSize}`);
-        }
-        if (!svgEl.getAttribute('preserveAspectRatio')) {
-            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        }
-    });
-}
-
-
-function createIcon(cfg) {
-    const parentId = cfg.id;
-    const svgId = `${parentId}__icon`;
-    const prev = document.getElementById(svgId);
-    if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
-    const icon = cfg.icon;
-    if (icon === null || icon === false || (typeof icon === 'string' && icon.trim() === '')) {
-        return;
-    }
-    let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
-    let icon_Left = (cfg.icon_left || currentTheme.icon_left || '10%').trim();
-    let icon_Top = (cfg.icon_top || currentTheme.icon_top || '50%').trim();
-    // check if icon is base64 encoded svg
-    if (typeof icon === 'string' && icon.startsWith('data:image/svg+xml;base64,')) {
-
-        const base64Data = icon.replace('data:image/svg+xml;base64,', '');
-        const svgData = atob(base64Data);
-
-        render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
-        apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
-    }
-    else {
-        dataFetcher(`assets/images/icons/${icon}.svg`)
-            .then(svgData => {
-                // Injecte le SVG dans le parent
-                render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
-                // Normalisation et centrage + taille basée sur currentTheme.icon_size
-                apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
-            })
-            .catch(err => { console.error(`Erreur (createIcon):${icon}, ${err}`); });
-    }
-
-}
-window.createIcon = createIcon;
 function createLabel(cfg) {
     if (cfg.label) {
         const rawText = String(cfg.label);
@@ -2902,7 +2819,7 @@ function createLabel(cfg) {
                 userSelect: 'none'
             }
         });
-        // Taille fixée via Intuition_theme.tool_font_px
+        // Taille fixée via currentTheme.tool_font_px
     }
 }
 
@@ -2924,7 +2841,7 @@ function createPalette(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     var el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    createIcon(finalCfg);
+    create_svg(finalCfg);
     el.addEventListener('click', (e) => {
         if (suppressInteractionDuringEdit(e)) return;
         // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
@@ -2942,7 +2859,7 @@ function createTool(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     const el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    createIcon(finalCfg);
+    create_svg(finalCfg);
     const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
 
@@ -2976,7 +2893,7 @@ function createParticle(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    // createIcon(finalCfg)
+    // create_svg(finalCfg)
     renderParticleValueFromTheme(finalCfg);
     // Render helper component (slider/button) if defined for this particle
     renderHelperForItem(finalCfg);
@@ -2989,7 +2906,7 @@ function createOption(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     const el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    createIcon(finalCfg);
+    create_svg(finalCfg);
     const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
     // Click behaves like semantic 'touch'
@@ -3021,7 +2938,7 @@ function createZonespecial(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     const el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    createIcon(finalCfg);
+    create_svg(finalCfg);
     const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
     el.addEventListener('click', (e) => {
@@ -4815,7 +4732,7 @@ function createToolbox() {
             const iconSize = currentTheme.toolbox_icon_size || '30%';
             const iconTop = currentTheme.toolbox_icon_top || '50%';
             const iconLeft = currentTheme.toolbox_icon_left || '50%';
-            createIcon({
+            create_svg({
                 id: 'toolbox',
                 icon: iconName,
                 icon_color: currentTheme.toolbox_icon_color || currentTheme.icon_color,
@@ -6624,8 +6541,8 @@ function normalizeContentEntry(entry) {
 }
 
 const REGISTERED_THEMES = new Map();
-Object.keys(Intuition_theme).forEach((name) => {
-    REGISTERED_THEMES.set(name.toLowerCase(), clonePlainIntuitionValue(Intuition_theme[name]));
+Object.keys(currentTheme).forEach((name) => {
+    REGISTERED_THEMES.set(name.toLowerCase(), clonePlainIntuitionValue(currentTheme[name]));
 });
 
 function applyThemeOption(themeOption) {
@@ -7139,7 +7056,7 @@ Intuition.addTheme = function addTheme(theme) {
     if (!name) return null;
     const base = REGISTERED_THEMES.get('light') || clonePlainIntuitionValue(currentTheme);
     const merged = { ...clonePlainIntuitionValue(base), ...clonePlainIntuitionValue(theme), themeName: name };
-    Intuition_theme[name] = merged;
+    currentTheme[name] = merged;
     REGISTERED_THEMES.set(name, clonePlainIntuitionValue(merged));
     return merged;
 };
