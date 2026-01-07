@@ -2782,6 +2782,8 @@ function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) 
     requestAnimationFrame(() => {
         const svgEl = document.getElementById(svgId);
         const parentEl = document.getElementById(parentId);
+
+
         if (!svgEl || !parentEl) return;
         // Responsif via CSS (pas d'attributs width/height)
         svgEl.removeAttribute('width');
@@ -2792,12 +2794,15 @@ function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) 
         svgEl.style.transform = 'translate(-50%, -50%)';
         svgEl.style.display = 'block';
         svgEl.style.pointerEvents = 'none';
-
-        // Taille: basée sur currentTheme.icon_size
         const baseSize = Math.max(1,
             Math.min(parentEl.clientWidth || 0, parentEl.clientHeight || 0) ||
             (parseFloat(currentTheme.item_size) || 54)
         );
+
+        const cs = window.getComputedStyle(parentEl);
+        if (!cs.position || cs.position === 'static') {
+            parentEl.style.position = 'relative';
+        }
 
         // const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
         const szDefRaw = (cfg.icon_size || currentTheme.icon_size || '16%').trim();
@@ -2852,7 +2857,7 @@ function createIcon(cfg) {
         const svgData = atob(base64Data);
 
         render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
-        apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId,);
+        apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
     }
     else {
         dataFetcher(`assets/images/icons/${icon}.svg`)
@@ -2866,6 +2871,7 @@ function createIcon(cfg) {
     }
 
 }
+window.createIcon = createIcon;
 function createLabel(cfg) {
     if (cfg.label) {
         const rawText = String(cfg.label);
@@ -3177,7 +3183,8 @@ function runContentHandler(def, handlerName, payload = {}) {
             fn(el, event, kind, nameKey, window.updateParticleValue, currentTheme, payload.value);
         }
     } catch (err) {
-        console.error('Intuition content handler error', err);
+        console.error(`Error in content handler '${handlerName}' code '${code}':`, err);
+
     } finally {
         activeContentHandlerContext = prevHandlerContext;
     }
@@ -4765,10 +4772,7 @@ const intuitionAddOn = {
 function ensureIntuitionLayerRoot() {
     if (typeof document === 'undefined') return null;
     let root = document.getElementById('intuition');
-    if (root) {
-        root.style.pointerEvents = 'none';
-        return root;
-    }
+    if (root) return root;
     const parent = document.body || document.documentElement;
     if (!parent) return null;
     root = $('div', {
@@ -4784,8 +4788,7 @@ function ensureIntuitionLayerRoot() {
             position: 'absolute',
             width: '0px',
             height: '0px',
-            overflow: 'visible',
-            pointerEvents: 'none'
+            overflow: 'visible'
         }
     });
     return root;
@@ -7181,4 +7184,5 @@ Intuition.setContent = function setContentBridge(content) {
 };
 
 export default Intuition;
+
 

@@ -87,7 +87,10 @@
 // //////////////////////////////
 
 // //eVe below:
-import('./eVe/index.js');
+setTimeout(() => console.log('############> eVe tools home loaded (delayed)'), 2000);
+
+// import('./eVe/index.js');
+setTimeout(() => console.log('++++++++++> eVe tools home loaded (delayed)'), 2000);
 
 
 //todos :

@@ -238,10 +238,10 @@ function installConsoleWrapper() {
     original[method] = console[method];
     console[method] = (...args) => {
       const level = method === 'log' ? 'info' : method;
+      original[method](...args);
       if (!shouldAllowConsoleLog(level, args)) {
         return;
       }
-      original[method](...args);
       if (inSend) return;
       inSend = true;
       Promise.resolve()
