@@ -90,6 +90,8 @@
 import('./eVe/eVe.js');
 
 
+// import('./examples/AI.js');
+
 //todos :
 // test and check DB apis
 // - event drag and drop
