@@ -39,36 +39,8 @@ function initKickstart() {
     parent: document.body,
 
   });
-  // 1. Basic template for the intuition layer
-  // window.define('intuition', {
-  //   tag: 'div',
-  //   class: 'atome',
-  //   id: 'intuition',
-  //   css: {
-  //     zIndex: 9999999,
-  //     background: 'transparent',
-  //     color: 'lightgray',
-  //     left: '0px',
-  //     top: '0px',
-  //     position: 'absolute',
-  //     width: '0px',
-  //     height: '0px',
-  //     overflow: 'visible',
-  //   }
-  // });
 
-  // 2. Intuition layer will now be created lazily when Intuition() is invoked
-  // window.$('intuition', {
-  //   parent: document.body,
-
-  // });
-
-  // console.log('✅ Kickstart demo initialized');
-
-  // === READY EVENT NOW ===
-  // Framework truly ready: Core + Kickstart finished!
   window.dispatchEvent(new CustomEvent('squirrel:ready'));
-  // console.log('🎉 Squirrel framework is truly ready!');
 }
 
 
