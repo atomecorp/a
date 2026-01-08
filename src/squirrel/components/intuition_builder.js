@@ -2669,7 +2669,6 @@ const toolbox = {
     type: 'toolbox',
     parent: '#intuition',
     css: {
-        background: currentTheme.tool_bg,
         position: 'fixed',
         display: 'flex',
         alignItems: 'center',
@@ -4766,6 +4765,7 @@ function apply_layout() {
     if (triggerEl) {
         ['top', 'right', 'bottom', 'left'].forEach(k => triggerEl.style[k] = 'auto');
         Object.assign(triggerEl.style, calculatedCSS.toolbox);
+        triggerEl.style.background = currentTheme.toolbox_bg || currentTheme.tool_bg || '';
     }
     // Re-ensure scroll proxy after layout updates
     setupToolboxScrollProxy();
@@ -7101,5 +7101,3 @@ Intuition.setContent = function setContentBridge(content) {
 };
 
 export default Intuition;
-
-
