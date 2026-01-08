@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+
+#eVe
+src/application/eVe
+
 # Database storage (outside src/ to avoid Tauri hot-reload)
 database_storage/
 *.db
@@ -65,21 +69,8 @@ server/data/*.json
 
 # Process files
 .watcher.pid
-src/assets/audios/Alive.mp3
-src/assets/audios/Evolutions.m4a
-src/assets/audios/GhostBox.m4a
-src/assets/audios/Last chances.m4a
-src/assets/audios/Runaway.m4a
-src/assets/audios/Social Smiles.m4a
-src/assets/audios/Vampire.m4a
-src/assets/audios/wWw.m4a
-src/assets/audios/Big Brother.m4a
-src/assets/audios/Alive.m4a
-src/assets/audios/After The War.m4a
-src/assets/audios/Change the world.m4a
 src-tauri/Cargo.lock
 src-tauri/gen/schemas/acl-manifests.json
 src-tauri/gen/schemas/desktop-schema.json
-src/assets/audios/Ices From Hells.m4a
 src/assets/videos/avengers.mp4
 src-Auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
