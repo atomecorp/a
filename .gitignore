@@ -2,9 +2,6 @@
 node_modules/
 
 
-#eVe
-src/application/eVe
-
 # Database storage (outside src/ to avoid Tauri hot-reload)
 database_storage/
 *.db
@@ -74,3 +71,4 @@ src-tauri/gen/schemas/acl-manifests.json
 src-tauri/gen/schemas/desktop-schema.json
 src/assets/videos/avengers.mp4
 src-Auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
+src/application/eVe
