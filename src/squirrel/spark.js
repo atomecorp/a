@@ -114,6 +114,105 @@ window.observeMutations = observeMutations;
 window.body = document.body;
 window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
+// === ATOME UI LAYER (between #intuition and #view) ===
+let atomeUiLayerScheduled = false;
+let atomeUiObserver = null;
+
+function resolveLayerZIndex(intuitionEl, viewEl) {
+  const parseZ = (el) => {
+    if (!el || !el.ownerDocument) return NaN;
+    const z = window.getComputedStyle(el).zIndex;
+    const parsed = parseInt(z, 10);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+  const intuitionZ = parseZ(intuitionEl);
+  if (Number.isFinite(intuitionZ)) {
+    return Math.max(0, intuitionZ - 1);
+  }
+  const viewZ = parseZ(viewEl);
+  if (Number.isFinite(viewZ)) {
+    return viewZ + 1;
+  }
+  return 1;
+}
+
+function placeAtomeUiLayer(layer) {
+  const body = document.body || document.documentElement;
+  if (!body || !layer) return;
+  const intuition = document.getElementById('intuition');
+  const view = document.getElementById('view');
+
+  if (intuition && intuition.parentElement === body) {
+    if (intuition.nextSibling !== layer) {
+      body.insertBefore(layer, intuition.nextSibling);
+    }
+  } else if (view && view.parentElement === body) {
+    if (view.previousSibling !== layer) {
+      body.insertBefore(layer, view);
+    }
+  } else if (layer.parentElement !== body) {
+    body.appendChild(layer);
+  }
+
+  layer.style.zIndex = String(resolveLayerZIndex(intuition, view));
+}
+
+function ensureAtomeUiLayer() {
+  if (typeof document === 'undefined') return null;
+  const body = document.body || document.documentElement;
+  if (!body) return null;
+  let layer = document.getElementById('atomeUI');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'atomeUI';
+    layer.className = 'atome';
+    layer.style.position = 'fixed';
+    layer.style.inset = '0';
+    layer.style.width = '100%';
+    layer.style.height = '100%';
+    layer.style.background = 'transparent';
+    layer.style.pointerEvents = 'none';
+    layer.style.overflow = 'visible';
+  }
+  placeAtomeUiLayer(layer);
+  return layer;
+}
+
+function scheduleAtomeUiLayer() {
+  if (atomeUiLayerScheduled) return;
+  atomeUiLayerScheduled = true;
+  const run = () => {
+    atomeUiLayerScheduled = false;
+    ensureAtomeUiLayer();
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(run);
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
+function initAtomeUiLayer() {
+  const start = () => {
+    ensureAtomeUiLayer();
+    if (!atomeUiObserver && typeof MutationObserver !== 'undefined') {
+      atomeUiObserver = new MutationObserver(scheduleAtomeUiLayer);
+      const root = document.body || document.documentElement;
+      if (root) {
+        atomeUiObserver.observe(root, { childList: true });
+      }
+    }
+    window.addEventListener('squirrel:ready', scheduleAtomeUiLayer);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
+}
+
+initAtomeUiLayer();
+
 // === COMPONENT EXPOSURE ===
 window.Button = Button;
 window.Slider = Slider;
