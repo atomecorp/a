@@ -172,7 +172,7 @@ function ensureAtomeUiLayer() {
     layer.style.height = '100%';
     layer.style.background = 'transparent';
     layer.style.pointerEvents = 'none';
-    layer.style.overflow = 'visible';
+    layer.style.overflow = 'auto';
   }
   placeAtomeUiLayer(layer);
   return layer;
