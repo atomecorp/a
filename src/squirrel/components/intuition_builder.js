@@ -1466,7 +1466,7 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
     const uniqueId = opts.customId || `${idPrefix}_${info.nameKeys.length}`;
     const params = {
         id: uniqueId,
-        label: def.label || nameKey,
+        label: resolveIntuitionLabel(def, nameKey),
         icon: Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : nameKey,
         nameKey: datasetNameKey,
         parent: `#${host.id}`
@@ -1496,7 +1496,7 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
         created.style.alignSelf = 'stretch';
         applyBackdropStyle(created, themeRef && themeRef.tool_backDrop_effect);
         applyThemeToFloatingEntry(created, themeRef, typeName);
-        setupEditModeDrag(created, { nameKey: datasetNameKey, label: def.label || nameKey, typeName });
+        setupEditModeDrag(created, { nameKey: datasetNameKey, label: resolveIntuitionLabel(def, nameKey), typeName });
     }
     info.nameKeys.push(datasetNameKey);
     return created;
@@ -1510,7 +1510,7 @@ function spawnFloatingFromMenuItem(nameKey, opts = {}) {
     let iconTop;
     let iconLeft;
     let iconSize;
-    let hostTitle = opts.label || (def && def.label) || nameKey;
+    let hostTitle = opts.label || resolveIntuitionLabel(def, nameKey);
     const themeDefaultIcon = (currentTheme && currentTheme.toolbox_icon) || 'menu';
     const themeDefaultIconColor = (currentTheme && currentTheme.toolbox_icon_color)
         || (currentTheme && currentTheme.icon_color)
@@ -2709,11 +2709,20 @@ function openMenu(parent) {
         const created = [];
         methods.forEach(name => {
             const def = intuition_content[name] || {};
-            const label = def.label || name;
+            const label = resolveIntuitionLabel(def, name);
             const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
             const fct_exec = def.type;
             if (typeof fct_exec === 'function') {
-                const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support', ...(intuitionAddOn[name] || {}) };
+                const optionalParams = {
+                    id: `_intuition_${name}`,
+                    label,
+                    labelKey: def.labelKey,
+                    labelFallback: def.labelFallback,
+                    icon,
+                    nameKey: name,
+                    parent: '#toolbox_support',
+                    ...(intuitionAddOn[name] || {})
+                };
                 fct_exec(optionalParams);
                 // Apply blur to the newly created item
                 const itemEl = grab(`_intuition_${name}`);
@@ -2788,38 +2797,103 @@ function intuitionCommon(cfg) {
 
     return el;
 }
-function createLabel(cfg) {
-    if (cfg.label) {
-        const rawText = String(cfg.label);
-        const maxChars = parseInt(currentTheme.text_char_max, 10);
-        let displayText = rawText;
-        if (!isNaN(maxChars) && maxChars > 0 && rawText.length > maxChars) {
-            // Réserver 1 caractère pour l'ellipse si possible
-            displayText = maxChars > 1 ? rawText.slice(0, maxChars - 1) + '.' : rawText.slice(0, maxChars);
-        }
-        const labelEl = $('div', {
-            parent: `#${cfg.id}`,
-            text: displayText,
-            attrs: { title: rawText },
-            class: 'intuition-label',
-            css: {
-                position: 'absolute',
-                top: '9%',             // à l'intérieur de l'item pour éviter overflow hidden du parent
-                left: '50%',
-                transform: 'translateX(-50%)',
-                // taille fixe pour être identique dans toutes les divs
-                fontSize: (currentTheme.tool_font_px || 13) + 'px',
-                lineHeight: '1',
-                color: currentTheme.tool_text,
-                padding: '0 4px',
-                backgroundColor: 'transparent',
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
-                userSelect: 'none'
-            }
-        });
-        // Taille fixée via currentTheme.tool_font_px
+const getIntuitionI18n = () => {
+    if (typeof window === 'undefined') return null;
+    if (!window.eveI18n || typeof window.eveI18n.t !== 'function') return null;
+    return window.eveI18n;
+};
+const translateIntuitionLabel = (key, fallback) => {
+    const i18n = getIntuitionI18n();
+    if (i18n && typeof i18n.t === 'function') {
+        return i18n.t(key, fallback);
     }
+    return fallback || key || '';
+};
+const applyIntuitionLabelText = (labelEl) => {
+    if (!labelEl) return;
+    const key = labelEl.dataset.intuitionI18nKey;
+    const fallback = labelEl.dataset.intuitionI18nFallback || '';
+    const rawText = key ? translateIntuitionLabel(key, fallback) : (labelEl.dataset.intuitionLabelRaw || labelEl.textContent || '');
+    labelEl.dataset.intuitionLabelRaw = rawText;
+    const maxChars = parseInt(currentTheme.text_char_max, 10);
+    let displayText = rawText;
+    if (!isNaN(maxChars) && maxChars > 0 && rawText.length > maxChars) {
+        // Reserve 1 char for ellipsis if possible
+        displayText = maxChars > 1 ? rawText.slice(0, maxChars - 1) + '.' : rawText.slice(0, maxChars);
+    }
+    labelEl.textContent = displayText;
+    labelEl.setAttribute('title', rawText);
+};
+const refreshIntuitionLabels = (root = typeof document !== 'undefined' ? document : null) => {
+    if (!root || !root.querySelectorAll) return;
+    ensureIntuitionI18nRefresh();
+    root.querySelectorAll('.intuition-label').forEach((labelEl) => {
+        if (!labelEl.dataset.intuitionI18nKey) {
+            const host = labelEl.closest('[data-name-key]');
+            const nameKey = host?.dataset?.nameKey;
+            const def = nameKey ? intuition_content[nameKey] : null;
+            if (def && def.labelKey) {
+                labelEl.dataset.intuitionI18nKey = def.labelKey;
+                labelEl.dataset.intuitionI18nFallback = def.label || def.labelFallback || labelEl.dataset.intuitionLabelRaw || nameKey || '';
+            }
+        }
+        applyIntuitionLabelText(labelEl);
+    });
+};
+const ensureIntuitionI18nRefresh = (() => {
+    let bound = false;
+    return () => {
+        if (bound) return;
+        const i18n = getIntuitionI18n();
+        if (!i18n || typeof i18n.onLocaleChange !== 'function') return;
+        bound = true;
+        i18n.onLocaleChange(() => refreshIntuitionLabels());
+    };
+})();
+const resolveIntuitionLabel = (def, fallback) => {
+    if (def && def.labelKey) {
+        return translateIntuitionLabel(def.labelKey, def.label || def.labelFallback || fallback || '');
+    }
+    return (def && def.label) || fallback || '';
+};
+
+function createLabel(cfg) {
+    const def = cfg?.nameKey ? intuition_content[cfg.nameKey] : null;
+    const resolvedLabelKey = cfg?.labelKey || def?.labelKey;
+    const resolvedFallback = cfg?.label || cfg?.labelFallback || def?.label || def?.labelFallback || cfg?.nameKey || '';
+    if (!cfg?.label && !resolvedLabelKey) return;
+    const rawText = resolvedLabelKey
+        ? translateIntuitionLabel(resolvedLabelKey, resolvedFallback)
+        : String(cfg.label || resolvedFallback);
+    const labelEl = $('div', {
+        parent: `#${cfg.id}`,
+        text: rawText,
+        attrs: { title: rawText },
+        class: 'intuition-label',
+        css: {
+            position: 'absolute',
+            top: '9%',             // à l'intérieur de l'item pour éviter overflow hidden du parent
+            left: '50%',
+            transform: 'translateX(-50%)',
+            // taille fixe pour être identique dans toutes les divs
+            fontSize: (currentTheme.tool_font_px || 13) + 'px',
+            lineHeight: '1',
+            color: currentTheme.tool_text,
+            padding: '0 4px',
+            backgroundColor: 'transparent',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            userSelect: 'none'
+        }
+    });
+    labelEl.dataset.intuitionLabelRaw = rawText;
+    if (resolvedLabelKey) {
+        labelEl.dataset.intuitionI18nKey = resolvedLabelKey;
+        labelEl.dataset.intuitionI18nFallback = resolvedFallback || '';
+        ensureIntuitionI18nRefresh();
+    }
+    applyIntuitionLabelText(labelEl);
+    // Taille fixée via currentTheme.tool_font_px
 }
 
 
@@ -4654,7 +4728,7 @@ function expandToolInline(el, cfg) {
         const id = `_intuition_${name}`;
         let childEl = document.getElementById(id);
         if (!childEl) {
-            const label = def.label || name;
+            const label = resolveIntuitionLabel(def, name);
             const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
             const params = { id, label, icon, nameKey: name, parent: '#toolbox_support' };
             def.type(params);
@@ -5747,7 +5821,7 @@ function handleFloatingPaletteClick(el, cfg) {
     const floatingMenuKey = def && def.floatingMenuKey;
     const floatingDef = floatingMenuKey ? intuition_content[floatingMenuKey] : null;
     let children = [];
-    let paletteTitle = def.label || nameKey;
+    let paletteTitle = resolveIntuitionLabel(def, nameKey);
     if (floatingDef && Array.isArray(floatingDef.children)) {
         children = floatingDef.children.filter(Boolean);
         if (floatingDef.label) {
@@ -5794,11 +5868,19 @@ function popOutPaletteByName(name, opts = {}) {
     const id = `_intuition_${name}`;
     const def = intuition_content[name];
     if (!def || typeof def.type !== 'function') return null;
-    const label = def.label || name;
+    const label = resolveIntuitionLabel(def, name);
     const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
     let el = grab(id);
     if (!el) {
-        const optionalParams = { id, label, icon, nameKey: name, parent: '#toolbox_support' };
+        const optionalParams = {
+            id,
+            label,
+            labelKey: def.labelKey,
+            labelFallback: def.labelFallback,
+            icon,
+            nameKey: name,
+            parent: '#toolbox_support'
+        };
         def.type(optionalParams);
         el = grab(id);
         if (!el) return null;
@@ -5946,9 +6028,17 @@ function rebuildSupportWithChildren(childrenNames, excludeId) {
         childrenNames.forEach(name => {
             const def = intuition_content[name];
             if (!def || typeof def.type !== 'function') return;
-            const label = def.label || name;
+            const label = resolveIntuitionLabel(def, name);
             const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
-            const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support' };
+            const optionalParams = {
+                id: `_intuition_${name}`,
+                label,
+                labelKey: def.labelKey,
+                labelFallback: def.labelFallback,
+                icon,
+                nameKey: name,
+                parent: '#toolbox_support'
+            };
             if (excludeId && optionalParams.id === excludeId) return; // éviter doublon avec l'élément pop-out
             def.type(optionalParams);
             const childEl = grab(`_intuition_${name}`);
@@ -5993,9 +6083,17 @@ function rebuildSupportToNames(names) {
         names.forEach(name => {
             const def = intuition_content[name];
             if (!def || typeof def.type !== 'function') return;
-            const label = def.label || name;
+            const label = resolveIntuitionLabel(def, name);
             const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
-            const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support' };
+            const optionalParams = {
+                id: `_intuition_${name}`,
+                label,
+                labelKey: def.labelKey,
+                labelFallback: def.labelFallback,
+                icon,
+                nameKey: name,
+                parent: '#toolbox_support'
+            };
             def.type(optionalParams);
             const childEl = grab(`_intuition_${name}`);
             if (childEl) {
