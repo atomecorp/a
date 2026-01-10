@@ -31,6 +31,7 @@ Both backends implement identical APIs, allowing the same frontend code to work 
 - **JWT Authentication**: Secure token-based auth with bcrypt password hashing
 - **Offline Support**: Queue operations when offline, sync when connected
 - **Real-time Sync**: WebSocket broadcasting for instant updates
+- **CRUD as a facade**: CRUD endpoints are translated into Command Bus/ADOLE operations internally (append-only, auditable)
 
 ---
 
@@ -227,7 +228,8 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "atome_type": "document",
+  "type": "document",
+  "kind": "document",
   "properties": {
     "name": "My Document",
     "content": "Hello World",
@@ -236,14 +238,18 @@ Content-Type: application/json
 }
 ```
 
+**Note:** `kind` is optional but validated against `type`. If omitted, the server derives it from `type`.
+`renderer` is optional and only used as a UI hint.
+
 **Response:**
 
 ```json
 {
   "success": true,
   "data": {
-    "atome_id": "abc123-def456-ghi789",
-    "atome_type": "document",
+    "id": "abc123-def456-ghi789",
+    "type": "document",
+    "kind": "document",
     "created_at": "2024-01-15T10:30:00Z",
     "properties": {
       "name": "My Document",
@@ -267,8 +273,9 @@ Authorization: Bearer <token>
 {
   "success": true,
   "data": {
-    "atome_id": "abc123-def456-ghi789",
-    "atome_type": "document",
+    "id": "abc123-def456-ghi789",
+    "type": "document",
+    "kind": "document",
     "properties": { ... },
     "created_at": "2024-01-15T10:30:00Z",
     "updated_at": "2024-01-15T11:00:00Z"
@@ -276,7 +283,7 @@ Authorization: Bearer <token>
 }
 ```
 
-#### Update an atome (full replacement)
+#### Update an atome (properties update)
 
 ```http
 PUT /api/atome/:id
@@ -292,6 +299,8 @@ Content-Type: application/json
 }
 ```
 
+**Note:** CRUD updates are translated into ADOLE/Command Bus operations internally (append-only). Unspecified properties remain unchanged unless explicitly cleared by the client.
+
 #### List all atomes
 
 ```http
@@ -301,7 +310,7 @@ Authorization: Bearer <token>
 
 **Query parameters:**
 
-- `type`: Filter by atome_type (e.g., `?type=document`)
+- `type`: Filter by type (e.g., `?type=document`)
 - `limit`: Max number of results (default: 100)
 - `offset`: Pagination offset
 
@@ -311,8 +320,8 @@ Authorization: Bearer <token>
 {
   "success": true,
   "data": [
-    { "atome_id": "abc123", "atome_type": "document", ... },
-    { "atome_id": "def456", "atome_type": "document", ... }
+    { "id": "abc123", "type": "document", ... },
+    { "id": "def456", "type": "document", ... }
   ],
   "count": 2
 }
@@ -361,7 +370,7 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "atome_id": "abc123",
+    "id": "abc123",
     "alterations_applied": 3,
     "alterations": [
       {
@@ -395,7 +404,7 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "atome_id": "abc123",
+    "id": "abc123",
     "old_name": "My Document",
     "new_name": "Renamed Document"
   }
@@ -454,7 +463,7 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "atome_id": "abc123",
+    "id": "abc123",
     "key": "content",
     "previous_value": "Current content",
     "restored_value": "Old content from version 2",
@@ -485,8 +494,8 @@ Authorization: Bearer <token>
     "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "atomes": [
       {
-        "atome_id": "abc123",
-        "atome_type": "document",
+        "id": "abc123",
+        "type": "document",
         "properties": { ... },
         "history": {
           "content": [
@@ -568,7 +577,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "atome_id": "abc123",
+  "id": "abc123",
   "resolution": "keep_local"  // or "keep_cloud" or "merge"
 }
 ```
@@ -597,22 +606,22 @@ const doc = await atome.create('document', {
 });
 
 // Alter with ADOLE
-await atome.alter(doc.atome_id, [
+await atome.alter(doc.id, [
   { key: 'content', value: 'Updated content' },
   { key: 'tags', value: ['important'] }
 ]);
 
 // Get history
-const history = await atome.getHistory(doc.atome_id, 'content');
+const history = await atome.getHistory(doc.id, 'content');
 
 // Restore previous version
-await atome.restore(doc.atome_id, 'content', 1);
+await atome.restore(doc.id, 'content', 1);
 
 // List all documents
 const docs = await atome.list({ type: 'document' });
 
 // Delete
-await atome.delete(doc.atome_id);
+await atome.delete(doc.id);
 ```
 
 ### cURL (Command line)
@@ -628,7 +637,7 @@ TOKEN=$(curl -s -X POST http://localhost:3001/api/auth/login \
 curl -X POST http://localhost:3001/api/atome/create \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"atome_type":"document","properties":{"name":"Test","content":"Hello"}}'
+  -d '{"type":"document","kind":"document","properties":{"name":"Test","content":"Hello"}}'
 
 # Alter atome
 curl -X POST http://localhost:3001/api/atome/abc123/alter \

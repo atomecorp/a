@@ -37,7 +37,7 @@ atome({
     name: 'Scale'
   },
   traits: ['ui.tool'],         // derived from type definition
-  props: {
+  properties: {
     label: 'Scale',             // text label
     icon: 'scale',              // icon reference or atome
     group: 'transform',         // toolbar group/category
@@ -83,7 +83,7 @@ atome({
     name: 'Scale Drag'
   },
   traits: ['code.behavior'],
-  props: {
+  properties: {
     language: 'javascript',
 
     capabilities: ['atome.write'], // optional: for policy engine
@@ -163,7 +163,7 @@ Every tool invocation must receive the same `input` shape:
 
 * **Deterministic**: no direct time/random/IO (inject via `input` if needed).
 * **Sandboxed**: no raw FS/network/process access.
-* **Capability-gated**: `props.capabilities` + policy decision required.
+* **Capability-gated**: `properties.capabilities` + policy decision required.
 * **Idempotent**: include `idempotency_key` in emitted commands when effectful.
 * **Auditable**: every command must be traceable and logged.
 
@@ -182,8 +182,8 @@ Code atoms must return **only** canonical Command Bus intentions:
       "actor": { "user_id": "...", "agent_id": "...", "session_id": "..." },
       "idempotency_key": "hash",
       "action": "PATCH",
-      "target": { "atome_id": "logo" },
-      "patch": { "props": { "size": [300, 120] } },
+      "target": { "id": "logo" },
+      "patch": { "properties": { "size": [300, 120] } },
       "preconditions": { "etag": "..." }
     }
   ],
@@ -205,7 +205,7 @@ atome({
   meta: {
     name: 'Scale'
   },
-  props: {
+  properties: {
     label: 'Scale',
     icon: 'scale',
     group: 'transform',
@@ -227,7 +227,7 @@ atome({
   id: 'code_scale_drag',
   type: 'code',
   kind: 'code',
-  props: {
+  properties: {
     language: 'javascript',
 
     code: async ({ ctx, input }) => {
@@ -237,21 +237,21 @@ atome({
       const scale = 1 + (gesture?.dx || 0) / 200
       if (scale <= 0) return { action: 'BATCH', commands: [] }
 
-      const objs = await ctx.getMany(selection, ['id', 'props.position', 'props.size'])
+      const objs = await ctx.getMany(selection, ['id', 'properties.position', 'properties.size'])
       const commands = []
 
       for (const o of objs) {
-        const [w, h] = o.props?.size || [0, 0]
-        const cx = o.props?.position?.x || 0
-        const cy = o.props?.position?.y || 0
+        const [w, h] = o.properties?.size || [0, 0]
+        const cx = o.properties?.position?.x || 0
+        const cy = o.properties?.position?.y || 0
         const px = pivot?.x ?? cx
         const py = pivot?.y ?? cy
 
         commands.push({
           action: 'PATCH',
-          target: { atome_id: o.id },
+          target: { id: o.id },
           patch: {
-            props: {
+            properties: {
               size: [w * scale, h * scale],
               position: {
                 x: cx + (cx - px) * (scale - 1),

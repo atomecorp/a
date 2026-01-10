@@ -17,6 +17,7 @@ This document is a **spec + backlog**: what must exist, what must be enforced, a
 1. **No direct mutations**
 
    * All writes must go through **ADOLE / Command Bus**.
+   * CRUD endpoints (if exposed) are a facade and must translate into Command Bus intentions internally.
    * Scripts return **intentions** (commands), never mutate state directly.
 
 2. **Security by design**
@@ -54,6 +55,7 @@ atome({
   id: 'string',                 // globally unique
   type: 'string',               // e.g. 'shape.rect', 'user', 'tool', 'code.module'
   kind: 'string',               // broad category: 'visual'|'media'|'identity'|'tool'|'code'|'service'|'policy'
+  renderer: 'string?',          // UI renderer hint (e.g. 'dom', 'webgl', 'native')
 
   meta: {
     name: 'string?',
@@ -64,7 +66,7 @@ atome({
 
   traits: ['string'],           // e.g. ['spatial2d','selectable','visual']
 
-  props: {                      // type-specific properties only
+  properties: {                  // type-specific properties only
     // validated by the type schema
   }
 })
@@ -74,9 +76,10 @@ atome({
 
 * `id` is immutable.
 * `type` chooses a **type definition** (schema + traits + defaults).
-* `kind` is derived from the type definition (not user-editable, except by type author).
+* `kind` may be provided by the client but must be validated against the type definition (server may normalize).
+* `renderer` is an optional UI hint and must not affect logical state or ACL.
 * `traits` are derived from the type definition, optionally augmented by composition.
-* `props` must validate against the type schema; unknown properties are rejected (or stored as `meta.extra` if explicitly allowed).
+* `properties` must validate against the type schema; unknown properties are rejected (or stored as `meta.extra` if explicitly allowed).
 
 ### 1.3 Why `traits`
 
@@ -116,7 +119,7 @@ atomeType({
     color:    { type: 'color', default: '#ffffff' }
   },
 
-  allow_unknown_props: false,
+  allow_unknown_properties: false,
   migrations: []
 })
 ```
@@ -124,8 +127,8 @@ atomeType({
 ### 2.2 Implementation requirements
 
 * Global registry accessible via `ctx.types.get(typeName)`.
-* Validation engine for `props` based on schema.
-* Defaulting engine to fill missing `props`.
+* Validation engine for `properties` based on schema.
+* Defaulting engine to fill missing `properties`.
 * Migration mechanism (type version upgrades).
 
 ---
@@ -146,8 +149,8 @@ All object changes must be expressed with a small set of canonical actions.
   "dry_run": false,
 
   "action": "CREATE|PATCH|DELETE|SOFT_DELETE|HARD_DELETE|UPDATE_ACL|BATCH",
-  "target": { "atome_id": "..." } ,
-  "patch": { "props": { ... }, "meta": { ... } },
+  "target": { "id": "..." } ,
+  "patch": { "properties": { ... }, "meta": { ... } },
   "preconditions": { "etag": "..." }
 }
 ```
@@ -178,7 +181,7 @@ atome({
   meta: { name: 'Scale' },
   traits: ['ui.tool'],
 
-  props: {
+  properties: {
     label: 'Scale',
     icon: 'scale',
     group: 'transform',
@@ -207,7 +210,7 @@ atome({
   kind: 'code',
   traits: ['code.behavior'],
 
-  props: {
+  properties: {
     language: 'javascript',
 
     // security metadata (policy inputs)
@@ -268,9 +271,9 @@ Notes:
 
 Atome properties must be **canonical** (stable vocabulary) and **context-free**.
 
-* Tools and AI manipulate **canonical props** only.
+* Tools and AI manipulate **canonical properties** only.
 * Rendering targets (DOM, native, audio engine, timeline) are handled by **adapters**.
-* `props.dom.css` exists as an **escape hatch**, not the base model.
+* `properties.dom.css` exists as an **escape hatch**, not the base model.
 
 ### 6.2 Canonical namespaces (v1)
 
@@ -318,13 +321,13 @@ These namespaces are recommended as the stable public surface for tools/AI:
 
 * `dom.*` – DOM-specific overrides (optional)
 
-  * `dom.tag: string?`
+  * `dom.element: string?`
   * `dom.attrs: object?`
   * `dom.css: object|string?`  ← escape hatch only
 
 ### 6.3 Trait-driven mapping rules (example)
 
-Canonical props are mapped to target-specific properties using **traits**.
+Canonical properties are mapped to target-specific properties using **traits**.
 
 Example for `paint.fill`:
 
@@ -335,7 +338,7 @@ This prevents having multiple names like `color` vs `backgroundColor` in the Ato
 
 ### 6.4 Adapters (required)
 
-Adapters translate canonical Atome props into target-specific updates.
+Adapters translate canonical Atome properties into target-specific updates.
 
 Minimum adapters (v1):
 
@@ -352,13 +355,13 @@ Future adapters (planned):
 
 ## 7) Examples
 
-### 7.1 Create a rectangle (canonical props)
+### 7.1 Create a rectangle (canonical properties)
 
 ```js
 atome({
   id: 'logo',
   type: 'shape.rect',
-  props: {
+  properties: {
     layout: { position: [100,50], size: [200,80] },
     paint: { fill: '#ff0000' },
     visual: { opacity: 1, visible: true }
@@ -373,8 +376,8 @@ Command Bus intent:
 ```jsonc
 {
   "action": "PATCH",
-  "target": { "atome_id": "logo" },
-  "patch": { "props": { "layout": { "size": [300,120] } } }
+  "target": { "id": "logo" },
+  "patch": { "properties": { "layout": { "size": [300,120] } } }
 }
 ```
 
@@ -383,12 +386,12 @@ Command Bus intent:
 ```jsonc
 {
   "action": "UPDATE_ACL",
-  "target": { "atome_id": "logo" },
+  "target": { "id": "logo" },
   "patch": {
     "target_user_id": "user_2",
     "permissions": {
-      "props.paint.fill": "write",
-      "props.layout.size": "read"
+      "properties.paint.fill": "write",
+      "properties.layout.size": "read"
     }
   }
 }
@@ -398,8 +401,8 @@ Command Bus intent:
 
 The scale tool should require trait `spatial2d` and only patch:
 
-* `props.layout.size`
-* optionally `props.layout.position` when scaling around a pivot.
+* `properties.layout.size`
+* optionally `properties.layout.position` when scaling around a pivot.
 
 ---
 
@@ -431,7 +434,7 @@ We stay **dynamic end-to-end** while using:
 
 ### 8.3 Fast paths
 
-Provide optimized paths for frequent props:
+Provide optimized paths for frequent properties:
 
 * `layout.position`, `layout.size`, `layout.rotation`, `visual.opacity`, `visual.visible`
 
@@ -446,10 +449,10 @@ Validation strategy:
 
 ### 7.1 Syntax / data model
 
-* [ ] Enforce **Core Object Contract** (id/type/kind/meta/traits/props)
+* [ ] Enforce **Core Object Contract** (id/type/kind/renderer/meta/traits/properties)
 * [ ] Add `traits` as first-class concept
 * [ ] Add `atomeType()` registry + schema validation + defaults
-* [ ] Decide prop addressing convention (suggested: `props.<name>`)
+* [ ] Decide prop addressing convention (suggested: `properties.<name>`)
 
 ### 7.2 Command Bus
 
@@ -492,8 +495,8 @@ Validation strategy:
 * Naming: `kind` values list
 * Canonical trait vocabulary (v1)
 * Schema format (Zod-like vs JSON Schema-like)
-* `props` flattening vs nested (recommended: nested `props`)
-* Strictness: reject unknown props vs allow in `meta.extra`
+* `properties` flattening vs nested (recommended: nested `properties`)
+* Strictness: reject unknown properties vs allow in `meta.extra`
 
 ---
 

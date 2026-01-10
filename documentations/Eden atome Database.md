@@ -6,6 +6,7 @@ Proposed syntax:
 
 atome_create({
   id: 'a12365',
+  type: 'project',
   kind: 'project',
   properties: {
     name: 'my_prj',
@@ -15,6 +16,7 @@ atome_create({
 
 atome_create({
   id: 'a65465',
+  type: 'shape',
   kind: 'shape',
   parent: 'a12365',
   properties: {
@@ -44,8 +46,8 @@ $('div', {
   text: 'Demo project'
 })
 
- • kind represents the logical nature.
- • tag (UI renderer) will remain separate.
+ • type is the canonical schema identifier; kind is optional but validated (or derived).
+ • renderer (UI) will remain separate.
 
 ⸻
 
@@ -61,7 +63,9 @@ Designed for:
 
 1. TABLE objects (universal object)
  • id (PK)
- • kind (user, project, atom, group…)
+ • type (canonical type, e.g. project, user, shape...)
+ • kind (optional, validated)
+ • renderer (optional UI hint)
  • created_at
  • created_by_id
  • updated_at
@@ -96,7 +100,7 @@ Everything else → particles.
  • id (PK, FK → objects.id)
  • project_id
  • parent_id
- • kind (shape, sound, video, text…)
+ • type (shape, sound, video, text…)
 
 Visual/logical attributes → particles.
 
@@ -171,11 +175,13 @@ Used to assign ACL to groups.
 
 ⸻
 
-9. Separation of tag (UI) and kind (logic)
+9. Separation of renderer (UI) and kind/type (logic)
 
 In Atome/Squirrel:
- • kind = domain logic (project, user, atom, sound…)
- • tag = renderer (div, text, image, webgl-quad…)
+ • type = canonical schema (shape.rect, tool, code, user…)
+ • kind = optional logical category (project, user, atom, sound…)
+ • renderer = UI renderer (dom, text, image, webgl-quad…)
+ • tags = classification metadata (e.g. "rock", "solo", "draft")
 
 Why this separation is required:
  • Some objects are not visual (project, user).
@@ -190,7 +196,7 @@ This separation is a structural requirement, not an option.
 
 10. Validated Technical Points
  • Coherent API: Atome.create / update / delete
- • Strict separation tag (UI) / kind (logic)
+ • Strict separation renderer (UI) / kind/type (logic)
  • Particles flattened in DB and reconstructed client-side
  • Flexible schema with particle-level versioning
  • Granular ACL per object or particle
