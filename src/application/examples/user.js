@@ -1,6 +1,6 @@
+import { isDebugEnabled } from '../../shared/debug.js';
 
-
-const CHECK_DEBUG = (typeof window !== 'undefined' && window.__CHECK_DEBUG__ === true);
+const CHECK_DEBUG = isDebugEnabled();
 function checkDebugPuts(message) {
   if (!CHECK_DEBUG) return;
   if (typeof puts === 'function') puts(message);

@@ -3,6 +3,7 @@ import {
   coerceLogEnvelope,
   isValidLogEnvelope
 } from '../../shared/logging.js';
+import { isDebugEnabled, shouldLogLevel } from '../../shared/debug.js';
 
 const LOG_ENDPOINT = '/dev/client-log';
 const FASTIFY_FALLBACK = 'http://127.0.0.1:3001';
@@ -28,16 +29,8 @@ function isTauriRuntime() {
   return typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__);
 }
 
-function isTruthyFlag(value) {
-  return value === true || value === '1' || value === 'true';
-}
-
 function isUiLoggingDisabled() {
-  if (typeof window === 'undefined') return false;
-  if (isTruthyFlag(window.__SQUIRREL_DISABLE_UI_LOGS__)) return true;
-  const config = window.__SQUIRREL_SERVER_CONFIG__;
-  if (config && config.logging && isTruthyFlag(config.logging.disableUiLogs)) return true;
-  return false;
+  return !isDebugEnabled();
 }
 
 function getTauriInvoke() {
@@ -135,20 +128,10 @@ function formatArgs(args) {
 }
 
 function getLogAllowlist() {
-  if (typeof window === 'undefined') return DEFAULT_LOG_ALLOWLIST;
-  const custom = window.__SQUIRREL_LOG_ALLOWLIST__;
-  if (Array.isArray(custom) && custom.length) {
-    return custom.filter((entry) => {
-      if (entry instanceof RegExp) return true;
-      return typeof entry === 'string' && entry.trim();
-    });
-  }
   return DEFAULT_LOG_ALLOWLIST;
 }
 
 function isStrictLogFilter() {
-  if (typeof window === 'undefined') return true;
-  if (window.__SQUIRREL_LOG_FILTER_STRICT__ === false) return false;
   return true;
 }
 
@@ -238,6 +221,7 @@ function installConsoleWrapper() {
     original[method] = console[method];
     console[method] = (...args) => {
       const level = method === 'log' ? 'info' : method;
+      if (!shouldLogLevel(level)) return;
       original[method](...args);
       if (!shouldAllowConsoleLog(level, args)) {
         return;
@@ -253,6 +237,7 @@ function installConsoleWrapper() {
   });
 
   window.atomeLog = (level, message, data = null) => {
+    if (!shouldLogLevel(level)) return;
     if (!shouldAllowConsoleLog(level, [message, data])) return;
     emitLog(level, [message, data]);
   };
