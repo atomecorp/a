@@ -2956,7 +2956,7 @@ function createTool(cfg) {
             handleToolSemanticEvent('touch_up', el, def, e);
         }, true);
     });
-    attachToolLockBehavior(el, cfg);
+    attachToolLockBehavior(el, cfg, def);
 }
 function createParticle(cfg) {
     const finalCss = { ...items_common, ...(cfg?.css || {}) };
@@ -3035,8 +3035,89 @@ function createZonespecial(cfg) {
 }
 
 // Gestion du mode lock (long press) pour les tools
-function attachToolLockBehavior(el, cfg) {
+function attachToolHoldBehavior(el, cfg, def) {
+    if (!el || !def) return;
+    const rawDelay = def.longPressDelay;
+    const longPressDelay = (typeof rawDelay === 'number' && isFinite(rawDelay)) ? Math.max(0, rawDelay) : 450;
+    let pressTimer = null;
+    let pressActive = false;
+    let holdActive = false;
+    let suppressNextClick = false;
+    let restoreToggleActive = false;
+    let previousBg = '';
+    const nameKey = (cfg && cfg.nameKey) || (el.dataset && el.dataset.nameKey) || null;
+
+    const applyHoldActive = (rawEvent) => {
+        if (holdActive) return;
+        holdActive = true;
+        restoreToggleActive = el.dataset.simpleActive === 'true';
+        previousBg = el.style.background || '';
+        const defaultBg = currentTheme.tool_bg || '';
+        const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
+        if (!restoreToggleActive) {
+            try { el.style.background = activeBg; } catch (_) { }
+        }
+        runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
+    };
+
+    const clearHoldActive = (rawEvent) => {
+        if (!holdActive) return;
+        holdActive = false;
+        if (!restoreToggleActive) {
+            if (previousBg) {
+                try { el.style.background = previousBg; } catch (_) { }
+            } else {
+                try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
+            }
+        }
+        runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
+        restoreToggleActive = false;
+        previousBg = '';
+    };
+
+    el.addEventListener('click', (ev) => {
+        if (!suppressNextClick) return;
+        suppressNextClick = false;
+        ev.stopPropagation();
+        ev.preventDefault();
+    }, true);
+
+    const startPress = (ev) => {
+        if (suppressInteractionDuringEdit(ev)) return;
+        pressActive = true;
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+            pressTimer = null;
+            if (!pressActive) return;
+            suppressNextClick = true;
+            applyHoldActive(ev);
+        }, longPressDelay);
+    };
+
+    const cancelPress = (ev) => {
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        if (holdActive) {
+            clearHoldActive(ev);
+        }
+        pressActive = false;
+    };
+
+    ['mousedown', 'pointerdown', 'touchstart'].forEach(ev => el.addEventListener(ev, startPress, { passive: true }));
+    ['mouseleave', 'touchcancel', 'pointercancel', 'mouseup', 'pointerup', 'touchend'].forEach(ev => el.addEventListener(ev, cancelPress));
+}
+
+function attachToolLockBehavior(el, cfg, def) {
     if (!el) return;
+    if (!def && cfg && cfg.nameKey) {
+        try { def = intuition_content[cfg.nameKey]; } catch (_) { }
+    }
+    const longPressAction = (def && typeof def.longPressAction === 'string')
+        ? def.longPressAction.trim().toLowerCase()
+        : null;
+    if (longPressAction === 'hold' || longPressAction === 'momentary' || longPressAction === 'press') {
+        attachToolHoldBehavior(el, cfg, def);
+        return;
+    }
     const longPressDelay = 450; // ms
     let pressTimer = null;
     let locking = false;
