@@ -137,3 +137,73 @@ Short summary
  • This enables true time‑travel, branching, and causal editing for objects, including generative ones
 
 This is the foundation of Atome’s temporal and creative power.
+
+⸻
+
+Snapshot format (v1)
+
+Snapshots are optional caches used to restore a project quickly. They are
+derived from canonical Atome data and do not replace ADOLE history.
+
+```jsonc
+{
+  "snapshot_id": "uuid",
+  "project_id": "uuid",
+  "created_at": "iso",
+  "created_by": "user_id",
+  "validation": {
+    "id": "uuid",
+    "status": "validated",
+    "reason": "manual|auto",
+    "created_at": "iso"
+  },
+  "history_pointer": {
+    "at": "iso",
+    "last_event_id": "uuid"
+  },
+  "hash": "sha256",
+  "state": {
+    "atomes": [
+      {
+        "id": "uuid",
+        "type": "shape.rect",
+        "kind": "shape",
+        "renderer": "dom",
+        "parent_id": "uuid?",
+        "meta": { "name": "Box", "tags": ["draft"] },
+        "properties": { "layout": { "size": [100, 80] } }
+      }
+    ]
+  }
+}
+```
+
+Rules:
+ • Snapshots are immutable once created.
+ • Validation points always include a snapshot payload.
+ • Restore can use the snapshot for speed, then verify with history_pointer.
+
+⸻
+
+MCP event schema (history + snapshots)
+
+All history/snapshot actions must be exposed to AI through MCP and routed
+through the same Command Bus validation.
+
+Generic MCP envelope:
+
+```jsonc
+{
+  "tool": "atome.history.get",
+  "params": { ... },
+  "meta": { "trace_id": "uuid", "actor_id": "user_id", "source": "ai" }
+}
+```
+
+Supported MCP tools (v1):
+ • `atome.history.get` { id, key?, branch?, limit? }
+ • `atome.history.restore` { id, key, at?, version_index?, mode: "copy|replay" }
+ • `atome.snapshot.create` { project_id, reason?, validation?: { status, reason } }
+ • `atome.snapshot.list` { project_id, limit?, offset? }
+ • `atome.snapshot.get` { snapshot_id }
+ • `atome.snapshot.restore` { snapshot_id, mode: "fast|verify" }
