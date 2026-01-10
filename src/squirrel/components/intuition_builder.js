@@ -6935,6 +6935,36 @@ function linkChildToParent(childKey, parentKey) {
     }
 }
 
+function syncMenuStackWithContent() {
+    if (!Array.isArray(menuStack) || !menuStack.length) return;
+    menuStack.forEach((entry) => {
+        if (!entry || !entry.parent) return;
+        const def = intuition_content[entry.parent];
+        if (def && Array.isArray(def.children)) {
+            entry.children = def.children.slice();
+        }
+    });
+}
+
+function refreshOpenMenuContents() {
+    if (menuOpen === 'false') return;
+    syncMenuStackWithContent();
+    const topEntry = Array.isArray(menuStack) && menuStack.length
+        ? menuStack[menuStack.length - 1]
+        : null;
+    const children = topEntry && Array.isArray(topEntry.children)
+        ? topEntry.children.slice()
+        : [];
+    const activePalette = (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active && handlePaletteClick.active.el)
+        ? handlePaletteClick.active.el
+        : null;
+    if (activePalette && activePalette.id) {
+        rebuildSupportWithChildren(children, activePalette.id);
+    } else {
+        rebuildSupportToNames(children);
+    }
+}
+
 function applyMenuAdditionEntries(entries, options = {}) {
     if (!entries.length) return [];
     const pendingLinks = [];
@@ -7007,7 +7037,7 @@ function applyMenuAdditionEntries(entries, options = {}) {
         const wasOpen = menuOpen !== 'false';
         window.refreshMenu({});
         if (wasOpen) {
-            openMenu('toolbox');
+            refreshOpenMenuContents();
         }
     }
 
@@ -7141,7 +7171,7 @@ function removeMenuEntries(keys) {
         const wasOpen = menuOpen !== 'false';
         window.refreshMenu({});
         if (wasOpen) {
-            openMenu('toolbox');
+            refreshOpenMenuContents();
         }
     }
 
