@@ -211,6 +211,27 @@ intuition_content.new_action = { type: tool, label: 'Action', icon: 'action', to
 
 After updating `intuition_content`, call your toolbox rebuild routine (if not automatic) or insert manually via the same loading logic used on startup.
 
+### 2.1. Menu API (new_menu)
+
+The toolbox exposes a small runtime API on `window.new_menu`:
+
+| Method | Effect | Notes |
+|--------|--------|-------|
+| `new_menu.open(parent)` | Opens the menu at a given parent key | `parent` is trimmed; empty/omitted = `toolbox` (root). |
+| `new_menu.close()` | Closes the menu | Keeps the toolbox trigger visible. |
+| `new_menu.hide()` | Closes and hides the toolbox UI | Also hides floating palettes layer. |
+| `new_menu.reveal()` | Shows the toolbox UI again | Reopens the last parent if it was open before `hide()`. |
+
+Minimal examples (2 seconds between each call):
+
+```js
+new_menu.open();
+setTimeout(() => new_menu.open('activities '), 2000);
+setTimeout(() => new_menu.close(), 4000);
+setTimeout(() => new_menu.hide(), 6000);
+setTimeout(() => new_menu.reveal(), 8000);
+```
+
 ### 3. Helper Components (Slider / Button)
 
 For particles only:

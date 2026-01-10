@@ -117,6 +117,11 @@ const DIRECTIONS = [
 ];
 let menuOpen = 'false';
 let menuStack = [];
+const menuVisibilityState = {
+    hidden: false,
+    wasOpen: false,
+    parent: null
+};
 const unitDropdownRegistry = new Map();
 const floatingRegistry = new Map();
 const floatingPersistence = new Map();
@@ -4945,6 +4950,9 @@ function apply_layout() {
     }
     repositionUnitDropdowns();
     updateFloatingGripLayout();
+    if (menuVisibilityState.hidden) {
+        setMenuElementsHidden(true);
+    }
 }
 
 
@@ -6230,6 +6238,53 @@ function closeMenu() {
     menuStack = [];
 }
 
+function setMenuElementsHidden(hidden) {
+    if (typeof document === 'undefined') return;
+    const ids = ['toolbox', 'toolbox_support', 'intuition-floating-layer'];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (hidden) {
+            if (!Object.prototype.hasOwnProperty.call(el.dataset, 'intuitionPrevDisplay')) {
+                el.dataset.intuitionPrevDisplay = el.style.display || '';
+            }
+            el.style.display = 'none';
+            el.setAttribute('aria-hidden', 'true');
+        } else {
+            if (Object.prototype.hasOwnProperty.call(el.dataset, 'intuitionPrevDisplay')) {
+                el.style.display = el.dataset.intuitionPrevDisplay;
+                delete el.dataset.intuitionPrevDisplay;
+            } else {
+                el.style.display = '';
+            }
+            el.removeAttribute('aria-hidden');
+        }
+    });
+}
+
+function hideMenu() {
+    if (menuVisibilityState.hidden) return;
+    menuVisibilityState.hidden = true;
+    menuVisibilityState.wasOpen = menuOpen !== 'false';
+    menuVisibilityState.parent = menuVisibilityState.wasOpen ? menuOpen : null;
+    closeMenu();
+    setMenuElementsHidden(true);
+}
+
+function revealMenu() {
+    if (!menuVisibilityState.hidden) return;
+    menuVisibilityState.hidden = false;
+    setMenuElementsHidden(false);
+    if (menuVisibilityState.wasOpen) {
+        const target = menuVisibilityState.parent || 'toolbox';
+        menuVisibilityState.wasOpen = false;
+        menuVisibilityState.parent = null;
+        openMenu(target);
+    } else {
+        menuVisibilityState.parent = null;
+    }
+}
+
 function repositionPoppedPalette() {
     const state = handlePaletteClick.active;
     if (!state || !state.el || !state.placeholder) return;
@@ -7145,6 +7200,24 @@ function registerMenuAdditionAPI() {
     if (!window.new_menu) {
         window.new_menu = {};
     }
+    window.new_menu.open = (parent = 'toolbox') => {
+        const normalized = parent == null ? '' : String(parent).trim();
+        const target = normalized || 'toolbox';
+        if (menuVisibilityState.hidden) {
+            menuVisibilityState.hidden = false;
+            menuVisibilityState.wasOpen = false;
+            menuVisibilityState.parent = null;
+            setMenuElementsHidden(false);
+        }
+        if (menuOpen === target && menuOpen !== 'false') {
+            return target;
+        }
+        openMenu(target);
+        return target;
+    };
+    window.new_menu.close = () => closeMenu();
+    window.new_menu.hide = () => hideMenu();
+    window.new_menu.reveal = () => revealMenu();
     window.new_menu.add = (payload) => {
         const entries = normalizeMenuAdditionEntries(payload);
         if (!entries.length) {
@@ -7158,6 +7231,13 @@ function registerMenuAdditionAPI() {
     };
     attachMenuAddToToolboxSupport();
 }
+
+// Minimal examples (2s between each call):
+// new_menu.open();
+// setTimeout(() => new_menu.open('activities'), 2000);
+// setTimeout(() => new_menu.close(), 4000);
+// setTimeout(() => new_menu.hide(), 6000);
+// setTimeout(() => new_menu.reveal(), 8000);
 
 const Intuition = function Intuition(options = {}) {
     if (options && options.type === 'extract') {
