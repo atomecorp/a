@@ -1,1 +1,1 @@
-window.__CHECK_DEBUG__ = true;
+window.__CHECK_DEBUG__ = false;
