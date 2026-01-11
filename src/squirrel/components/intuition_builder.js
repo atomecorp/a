@@ -2944,6 +2944,15 @@ function createTool(cfg) {
     // Base click: behaves as 'touch' semantic event
     el.addEventListener('click', (e) => {
         if (suppressInteractionDuringEdit(e)) return;
+        if (def && def.childrenOnLongPress && typeof handlePaletteClick === 'function') {
+            const isActivePalette = handlePaletteClick.active && handlePaletteClick.active.el === el;
+            if (isActivePalette) {
+                e.stopPropagation();
+                e.preventDefault();
+                handlePaletteClick(el, finalCfg);
+                return;
+            }
+        }
         e.stopPropagation();
         handleToolSemanticEvent('touch', el, def, e);
     });
@@ -3039,6 +3048,22 @@ function createZonespecial(cfg) {
 
 }
 
+function openPaletteFromTool(el, cfg = {}) {
+    const nameKey = cfg.nameKey
+        || (el && el.dataset && el.dataset.nameKey)
+        || (cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    if (!nameKey) return;
+    const def = intuition_content[nameKey];
+    const children = def && Array.isArray(def.children) ? def.children.filter(Boolean) : [];
+    if (!children.length) return;
+    const targetEl = el || grab(`_intuition_${nameKey}`);
+    if (!targetEl) return;
+    if (handlePaletteClick && handlePaletteClick.active && handlePaletteClick.active.el === targetEl) {
+        return;
+    }
+    handlePaletteClick(targetEl, { id: targetEl.id, nameKey });
+}
+
 // Gestion du mode lock (long press) pour les tools
 function attachToolHoldBehavior(el, cfg, def) {
     if (!el || !def) return;
@@ -3048,43 +3073,76 @@ function attachToolHoldBehavior(el, cfg, def) {
     let pressActive = false;
     let holdActive = false;
     let suppressNextClick = false;
+    let suppressClickUntil = 0;
     let restoreToggleActive = false;
     let previousBg = '';
+    const openChildrenOnHold = !!(def && def.childrenOnLongPress);
     const nameKey = (cfg && cfg.nameKey) || (el.dataset && el.dataset.nameKey) || null;
+    const resolveHoldHandler = (phase) => {
+        const hasLongPressHandler = !!(def.longPressActive || def.longPressInactive);
+        if (hasLongPressHandler) {
+            if (phase === 'active') return def.longPressActive ? 'longPressActive' : null;
+            return def.longPressInactive ? 'longPressInactive' : null;
+        }
+        return phase;
+    };
 
     const applyHoldActive = (rawEvent) => {
         if (holdActive) return;
         holdActive = true;
-        restoreToggleActive = el.dataset.simpleActive === 'true';
-        previousBg = el.style.background || '';
-        const defaultBg = currentTheme.tool_bg || '';
-        const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
-        if (!restoreToggleActive) {
-            try { el.style.background = activeBg; } catch (_) { }
+        if (!openChildrenOnHold) {
+            restoreToggleActive = el.dataset.simpleActive === 'true';
+            previousBg = el.style.background || '';
+            const defaultBg = currentTheme.tool_bg || '';
+            const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
+            if (!restoreToggleActive) {
+                try { el.style.background = activeBg; } catch (_) { }
+            }
         }
-        runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
+        const handler = resolveHoldHandler('active');
+        if (handler) {
+            runContentHandler(def, handler, { el, event: rawEvent, nameKey, kind: handler });
+        }
+        if (openChildrenOnHold) {
+            suppressClickUntil = Date.now() + 250;
+            openPaletteFromTool(el, { nameKey });
+        }
     };
 
     const clearHoldActive = (rawEvent) => {
         if (!holdActive) return;
         holdActive = false;
-        if (!restoreToggleActive) {
+        if (!openChildrenOnHold && !restoreToggleActive) {
             if (previousBg) {
                 try { el.style.background = previousBg; } catch (_) { }
             } else {
                 try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
             }
         }
-        runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
+        const handler = resolveHoldHandler('inactive');
+        if (handler) {
+            runContentHandler(def, handler, { el, event: rawEvent, nameKey, kind: handler });
+        }
         restoreToggleActive = false;
         previousBg = '';
     };
 
     el.addEventListener('click', (ev) => {
         if (!suppressNextClick) return;
+        if (!openChildrenOnHold) {
+            suppressNextClick = false;
+            ev.stopPropagation();
+            ev.preventDefault();
+            return;
+        }
+        const now = Date.now();
+        if (now < suppressClickUntil) {
+            suppressNextClick = false;
+            ev.stopPropagation();
+            ev.preventDefault();
+            return;
+        }
         suppressNextClick = false;
-        ev.stopPropagation();
-        ev.preventDefault();
     }, true);
 
     const startPress = (ev) => {
@@ -3322,7 +3380,8 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
         if (!def) return;
         if (el.dataset.locked === 'true') return; // ne pas toucher si lock actif
         const hasChildren = def && Array.isArray(def.children) && def.children.length > 0;
-        if (hasChildren) return;
+        const allowToggleWithChildren = hasChildren && def.childrenOnLongPress === true;
+        if (hasChildren && !allowToggleWithChildren) return;
         const defaultBg = currentTheme.tool_bg || '';
         const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
         const isActive = el.dataset.simpleActive === 'true';
@@ -3341,6 +3400,8 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
 
     const basePayload = { el, event: rawEvent, nameKey };
     const hasChildren = def && Array.isArray(def.children) && def.children.length > 0;
+    const childrenOnLongPress = !!(def && def.childrenOnLongPress);
+    const expandChildrenOnClick = hasChildren && !childrenOnLongPress && def.expandChildrenOnClick !== false;
     const actionMode = (def && typeof def.action === 'string') ? def.action.trim().toLowerCase() : null;
 
     switch (kind) {
@@ -3355,13 +3416,13 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             runContentHandler(def, 'touch', { ...basePayload, kind: 'touch' });
             if (actionMode === 'momentary') {
                 triggerMomentaryPulse();
-                if (hasChildren) {
+                if (expandChildrenOnClick) {
                     try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
                 }
                 break;
             }
             // Si tool avec enfants -> comportement historique (expand). Sinon toggle actif simple.
-            if (hasChildren) {
+            if (expandChildrenOnClick) {
                 try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
             } else {
                 toggleChildlessActive();
