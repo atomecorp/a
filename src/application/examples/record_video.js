@@ -108,6 +108,17 @@
         }
     }
 
+    function shouldAllowChunkedUpload(base) {
+        if (!isBrowser()) return false;
+        if (!base) return false;
+        try {
+            const parsed = new URL(base, location.href);
+            return parsed.origin === location.origin;
+        } catch (_) {
+            return false;
+        }
+    }
+
     function buildAuthHeaders(extra = {}) {
         const token = getAuthToken();
         const headers = { ...extra };
@@ -385,7 +396,8 @@
     async function uploadToFastify({ fileName, bytes, mimeType, chunkSize, forceChunked = false, filePath = null }) {
         const base = getFastifyBaseUrl();
         if (!base) throw new Error('Fastify base URL is not configured');
-        if (forceChunked || bytes.length >= CHUNKED_UPLOAD_THRESHOLD) {
+        const allowChunked = shouldAllowChunkedUpload(base);
+        if ((forceChunked || bytes.length >= CHUNKED_UPLOAD_THRESHOLD) && allowChunked) {
             return await uploadToFastifyChunked({ fileName, bytes, mimeType, chunkSize, filePath });
         }
         const res = await fetch(`${base}/api/uploads`, {
@@ -399,7 +411,10 @@
         });
         if (!res.ok) {
             if (res.status === 413) {
-                return await uploadToFastifyChunked({ fileName, bytes, mimeType, chunkSize, filePath });
+                if (allowChunked) {
+                    return await uploadToFastifyChunked({ fileName, bytes, mimeType, chunkSize, filePath });
+                }
+                throw new Error('Upload too large for this server (chunked disabled by CORS)');
             }
             const json = await res.json().catch(() => null);
             const msg = json && json.error ? json.error : `Upload failed (${res.status})`;

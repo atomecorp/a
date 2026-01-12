@@ -595,6 +595,25 @@
         return { ok: true, files };
     }
 
+    function looksLikeRecordingAtomeId(raw) {
+        if (typeof raw !== 'string') return false;
+        return raw.startsWith('audio_recording_') || raw.startsWith('video_recording_');
+    }
+
+    async function resolveRecordingAtomeIdByName(name) {
+        const listing = await listRecordingAtomes(['audio_recording', 'video_recording']);
+        if (!listing?.ok || !Array.isArray(listing.files)) return null;
+        const base = name || '';
+        const match = listing.files.find((entry) => {
+            const fileName = entry.file_name || entry.name || '';
+            if (fileName === base) return true;
+            const filePath = entry.file_path || '';
+            const fileBase = filePath.split('/').pop().split('\\').pop();
+            return fileBase === base;
+        });
+        return match ? (match.id || match.atome_id || null) : null;
+    }
+
     async function listAudioRecordingAtomes() {
         return listRecordingAtomes(['audio_recording']);
     }
@@ -715,9 +734,14 @@
             if (isTauriRuntime()) {
                 const tauriBase = getTauriHttpBaseUrl();
                 if (!tauriBase) return { ok: false, error: 'Tauri base URL is not configured' };
+                let targetId = identifier;
+                if (!looksLikeRecordingAtomeId(targetId)) {
+                    const mapped = await resolveRecordingAtomeIdByName(targetId);
+                    if (mapped) targetId = mapped;
+                }
                 let res;
                 try {
-                    res = await fetch(`${tauriBase}/api/recordings/${encodeURIComponent(identifier)}`, {
+                    res = await fetch(`${tauriBase}/api/recordings/${encodeURIComponent(targetId)}`, {
                         method: 'GET',
                         headers: buildLocalAuthHeaders(),
                         credentials: 'omit'
@@ -760,7 +784,7 @@
                 res = await fetch(`${base}/api/uploads/${encodeURIComponent(downloadId)}`, {
                     method: 'GET',
                     headers: buildAuthHeaders(),
-                    credentials: 'omit'
+                    credentials: 'include'
                 });
             } catch (e) {
                 return { ok: false, error: e && e.message ? e.message : String(e) };
@@ -796,7 +820,7 @@
             res = await fetch(`${base}/api/uploads/${encodeURIComponent(identifier)}`, {
                 method: 'GET',
                 headers: buildAuthHeaders(),
-                credentials: 'omit'
+                credentials: 'include'
             });
         } catch (e) {
             return { ok: false, error: e && e.message ? e.message : String(e) };
