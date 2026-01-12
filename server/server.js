@@ -366,11 +366,30 @@ async function listUploadsForUser(userId) {
       ? entry.file_name
       : sanitizeFileName(entry.original_name || entry.name || 'upload.bin');
     let stats = null;
-    try {
-      const filePath = await resolveUserFilePath(projectRoot, ownerId, safeName);
-      stats = await fs.stat(filePath);
-    } catch (_) {
-      stats = null;
+    const rawPath = entry.file_path || entry.filePath || null;
+    if (rawPath) {
+      try {
+        const normalizedRelative = normalizeUserRelativePath(rawPath, ownerId);
+        if (normalizedRelative) {
+          const resolved = await resolveUserAssetPath(
+            projectRoot,
+            { id: ownerId },
+            normalizedRelative
+          );
+          stats = await fs.stat(resolved.filePath);
+        }
+      } catch (_) {
+        stats = null;
+      }
+    }
+
+    if (!stats) {
+      try {
+        const filePath = await resolveUserFilePath(projectRoot, ownerId, safeName);
+        stats = await fs.stat(filePath);
+      } catch (_) {
+        stats = null;
+      }
     }
 
     const parsedSize = typeof entry.size === 'number' ? entry.size : Number(entry.size);
@@ -446,14 +465,31 @@ async function resolveDownloadTarget(fileParam, userId) {
               { id: meta.owner_id || userId },
               normalizedRelative
             );
+            await fs.access(resolved.filePath);
             return { filePath: resolved.filePath, downloadName, meta };
           }
         } catch (_) {
           // Fallback to Downloads resolution below.
         }
       }
-      const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
-      return { filePath, downloadName, meta };
+      try {
+        const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
+        await fs.access(filePath);
+        return { filePath, downloadName, meta };
+      } catch (_) {
+        // Continue to recordings fallback.
+      }
+
+      try {
+        const recordingsPath = normalizeUserRelativePath(`recordings/${safeName}`, meta.owner_id || userId);
+        if (recordingsPath) {
+          const resolved = await resolveUserAssetPath(projectRoot, { id: meta.owner_id || userId }, recordingsPath);
+          await fs.access(resolved.filePath);
+          return { filePath: resolved.filePath, downloadName, meta };
+        }
+      } catch (_) {
+        // Fallback handled below.
+      }
     }
   }
 
@@ -472,8 +508,21 @@ async function resolveDownloadTarget(fileParam, userId) {
     await fs.access(userPath);
     return { filePath: userPath, downloadName: fallbackName, meta: null };
   } catch (_) {
-    return null;
+    // keep searching
   }
+
+  try {
+    const recordingsPath = normalizeUserRelativePath(`recordings/${fallbackName}`, userId);
+    if (recordingsPath) {
+      const resolved = await resolveUserAssetPath(projectRoot, { id: userId }, recordingsPath);
+      await fs.access(resolved.filePath);
+      return { filePath: resolved.filePath, downloadName: fallbackName, meta: null };
+    }
+  } catch (_) {
+    // fallthrough
+  }
+
+  return null;
 }
 
 // HTTPS Configuration
@@ -807,6 +856,11 @@ async function startServer() {
         'Accept',
         'X-Client-Id',
         'X-Filename',
+        'X-Upload-Id',
+        'X-Chunk-Index',
+        'X-Chunk-Count',
+        'X-Chunk-Size',
+        'X-Total-Size',
         'X-Original-Name',
         'X-File-Path',
         'X-Atome-Id',
