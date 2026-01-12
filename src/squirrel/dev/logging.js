@@ -100,19 +100,22 @@ function getSessionId() {
 }
 
 function safeStringify(value) {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
   if (typeof value === 'string') return value;
   if (value instanceof Error) {
     return `${value.name}: ${value.message}`;
   }
   try {
     const seen = new WeakSet();
-    return JSON.stringify(value, (key, val) => {
+    const serialized = JSON.stringify(value, (key, val) => {
       if (typeof val === 'object' && val !== null) {
         if (seen.has(val)) return '[Circular]';
         seen.add(val);
       }
       return val;
     });
+    return serialized === undefined ? String(value) : serialized;
   } catch (_) {
     return String(value);
   }
