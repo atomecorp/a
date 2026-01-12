@@ -48,6 +48,17 @@ function normalizeNoTrailingSlash(url) {
     return url.trim().replace(/\/$/, '');
 }
 
+function isLocalFastifyBase(base) {
+    if (typeof base !== 'string' || !base.trim()) return false;
+    try {
+        const parsed = new URL(base.trim());
+        const host = parsed.hostname;
+        return host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
+    } catch (_) {
+        return false;
+    }
+}
+
 function readTauriFastifyOverride() {
     if (typeof window === 'undefined') return '';
     try {
@@ -169,6 +180,24 @@ export async function loadServerConfigOnce() {
     _loadPromise = (async () => {
         const isTauriRuntime = isInTauriRuntime();
         let tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';
+        const applyFallbackBase = () => {
+            if (typeof window === 'undefined') return;
+            const existing = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+                ? window.__SQUIRREL_FASTIFY_URL__.trim()
+                : '';
+            if (existing) return;
+            if (isTauriRuntime) {
+                const fallback = resolveTauriProdFastifyHttpBase();
+                if (fallback) {
+                    applyFastifyGlobalsFromHttpBase(fallback, window.__SQUIRREL_SERVER_CONFIG__ || null);
+                }
+                return;
+            }
+            const origin = window.location?.origin;
+            if (typeof origin === 'string' && origin && origin !== 'null') {
+                applyFastifyGlobalsFromHttpBase(origin, window.__SQUIRREL_SERVER_CONFIG__ || null);
+            }
+        };
 
         if (tauriOverride) {
             window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;
@@ -184,6 +213,7 @@ export async function loadServerConfigOnce() {
         try {
             const res = await fetch(configUrl, { cache: 'no-store' });
             if (!res || !res.ok) {
+                applyFallbackBase();
                 return null;
             }
 
@@ -203,6 +233,14 @@ export async function loadServerConfigOnce() {
                 return config;
             }
 
+            if (isTauriRuntime) {
+                const cloudBase = resolveTauriProdFastifyHttpBase();
+                if (cloudBase && !isLocalFastifyBase(cloudBase)) {
+                    applyFastifyGlobalsFromHttpBase(cloudBase, config);
+                    return config;
+                }
+            }
+
             const httpBase = buildFastifyHttpBase(config);
             if (httpBase) {
                 applyFastifyGlobalsFromHttpBase(httpBase, config);
@@ -210,6 +248,7 @@ export async function loadServerConfigOnce() {
 
             return config;
         } catch {
+            applyFallbackBase();
             return null;
         }
     })();
