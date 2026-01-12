@@ -363,6 +363,69 @@ function loadEnvFile(filePath, override = false) {
   }
 }
 
+function parseEnvAssignments(value) {
+  const items = [];
+  let buf = '';
+  let quote = null;
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        buf += ch;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (buf) {
+        items.push(buf);
+        buf = '';
+      }
+      continue;
+    }
+    buf += ch;
+  }
+  if (buf) items.push(buf);
+  return items;
+}
+
+function applyEnvAssignment(token, override = false) {
+  const idx = token.indexOf('=');
+  if (idx === -1) return;
+  const key = token.slice(0, idx).trim();
+  if (!key) return;
+  const value = token.slice(idx + 1);
+  if (override || !(key in process.env)) process.env[key] = value;
+}
+
+function loadSystemdUnit(unitPath) {
+  if (!fs.existsSync(unitPath)) return;
+  const unitText = fs.readFileSync(unitPath, 'utf8');
+  for (const raw of unitText.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('EnvironmentFile=')) {
+      let value = line.slice('EnvironmentFile='.length).trim();
+      if (value.startsWith('-')) value = value.slice(1).trim();
+      value = value.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+      const filePath = value.split(/\s+/)[0];
+      if (filePath) loadEnvFile(filePath, true);
+      continue;
+    }
+    if (line.startsWith('Environment=')) {
+      const value = line.slice('Environment='.length).trim();
+      for (const token of parseEnvAssignments(value)) {
+        applyEnvAssignment(token, true);
+      }
+    }
+  }
+}
+
 // Load env files if present (common patterns)
 loadEnvFile(path.join(projectRoot, '.env'), false);
 loadEnvFile(path.join(projectRoot, '.env.local'), true);
@@ -377,18 +440,14 @@ loadEnvFile('/usr/local/etc/squirrel/squirrel.env', true);
 try {
     const unitName = process.env.SQUIRREL_SERVICE_NAME || 'squirrel';
     const unitPath = `/etc/systemd/system/${unitName}.service`;
-    if (fs.existsSync(unitPath)) {
-        const unitText = fs.readFileSync(unitPath, 'utf8');
-        for (const raw of unitText.split(/\r?\n/)) {
-            const line = raw.trim();
-            if (!line || line.startsWith('#')) continue;
-            if (!line.startsWith('EnvironmentFile=')) continue;
-            let value = line.slice('EnvironmentFile='.length).trim();
-            if (value.startsWith('-')) value = value.slice(1).trim();
-            // Remove optional quotes and only take the first token.
-            value = value.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
-            const filePath = value.split(/\s+/)[0];
-            if (filePath) loadEnvFile(filePath, true);
+    loadSystemdUnit(unitPath);
+    const dropInDir = `/etc/systemd/system/${unitName}.service.d`;
+    if (fs.existsSync(dropInDir)) {
+        const entries = fs.readdirSync(dropInDir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (!entry.isFile()) continue;
+            if (!entry.name.endsWith('.conf')) continue;
+            loadSystemdUnit(path.join(dropInDir, entry.name));
         }
     }
 } catch {
@@ -403,19 +462,27 @@ const sqlitePath = sqliteRaw
   : sqliteDefault;
 const userRootRaw = process.env.SQUIRREL_SHELL_USER_ROOT || 'data/users';
 const userRootPath = path.isAbsolute(userRootRaw) ? userRootRaw : path.join(projectRoot, userRootRaw);
+const uploadsRaw = process.env.SQUIRREL_UPLOADS_DIR || '';
+const uploadsPath = uploadsRaw ? (path.isAbsolute(uploadsRaw) ? uploadsRaw : path.join(projectRoot, uploadsRaw)) : '';
+const monitoredRaw = process.env.SQUIRREL_MONITORED_DIR || '';
+const monitoredPath = monitoredRaw ? (path.isAbsolute(monitoredRaw) ? monitoredRaw : path.join(projectRoot, monitoredRaw)) : '';
 
-process.stdout.write(`LIBSQL_URL=${libsqlUrl}\nSQLITE_PATH=${sqlitePath}\nUSER_ROOT=${userRootPath}\n`);
+process.stdout.write(`LIBSQL_URL=${libsqlUrl}\nSQLITE_PATH=${sqlitePath}\nUSER_ROOT=${userRootPath}\nUPLOADS_DIR=${uploadsPath}\nMONITORED_DIR=${monitoredPath}\n`);
 NODE
 
     LIBSQL_URL_VALUE=""
     SQLITE_PATH_VALUE=""
     USER_ROOT_VALUE=""
+    UPLOADS_DIR_VALUE=""
+    MONITORED_DIR_VALUE=""
     if [ -f "$DB_INFO_TMP" ]; then
         while IFS= read -r line; do
             case "$line" in
                 LIBSQL_URL=*) LIBSQL_URL_VALUE="${line#LIBSQL_URL=}" ;;
                 SQLITE_PATH=*) SQLITE_PATH_VALUE="${line#SQLITE_PATH=}" ;;
                 USER_ROOT=*) USER_ROOT_VALUE="${line#USER_ROOT=}" ;;
+                UPLOADS_DIR=*) UPLOADS_DIR_VALUE="${line#UPLOADS_DIR=}" ;;
+                MONITORED_DIR=*) MONITORED_DIR_VALUE="${line#MONITORED_DIR=}" ;;
             esac
         done <"$DB_INFO_TMP"
         rm -f "$DB_INFO_TMP" 2>/dev/null || true
@@ -429,6 +496,12 @@ NODE
     fi
     echo "    - SQLITE_PATH: $SQLITE_PATH_VALUE"
     echo "    - USER_ROOT: ${USER_ROOT_VALUE:-data/users}"
+    if [ -n "$UPLOADS_DIR_VALUE" ]; then
+        echo "    - UPLOADS_DIR: $UPLOADS_DIR_VALUE"
+    fi
+    if [ -n "$MONITORED_DIR_VALUE" ]; then
+        echo "    - MONITORED_DIR: $MONITORED_DIR_VALUE"
+    fi
 
     if [ -n "$LIBSQL_URL_VALUE" ]; then
         echo "ℹ️  Fastify DB appears remote (LIBSQL_URL/TURSO_DATABASE_URL is set)."
@@ -487,6 +560,30 @@ if [ -n "$USER_ROOT_VALUE" ]; then
     fi
 fi
 
+if [ -n "$UPLOADS_DIR_VALUE" ]; then
+    if is_safe_project_path "$UPLOADS_DIR_VALUE"; then
+        remove_dir "$UPLOADS_DIR_VALUE" "🗂️  Removing uploads dir (env)"
+    else
+        if [[ "$ALLOW_ABSOLUTE_DATA_DELETE" == "1" ]]; then
+            remove_dir "$UPLOADS_DIR_VALUE" "🗂️  Removing uploads dir (absolute)"
+        else
+            echo "⚠️  Refusing to delete uploads dir outside project root: $UPLOADS_DIR_VALUE"
+        fi
+    fi
+fi
+
+if [ -n "$MONITORED_DIR_VALUE" ]; then
+    if is_safe_project_path "$MONITORED_DIR_VALUE"; then
+        remove_dir "$MONITORED_DIR_VALUE" "🗂️  Removing monitored dir (env)"
+    else
+        if [[ "$ALLOW_ABSOLUTE_DATA_DELETE" == "1" ]]; then
+            remove_dir "$MONITORED_DIR_VALUE" "🗂️  Removing monitored dir (absolute)"
+        else
+            echo "⚠️  Refusing to delete monitored dir outside project root: $MONITORED_DIR_VALUE"
+        fi
+    fi
+fi
+
 # Purge DB content (local or remote) so user creation starts clean.
 if [[ "$AUTO_DB_PURGE" == "1" ]]; then
     echo "🧨 Purging ADOLE database content..."
@@ -516,6 +613,69 @@ function loadEnvFile(filePath, override = false) {
   }
 }
 
+function parseEnvAssignments(value) {
+  const items = [];
+  let buf = '';
+  let quote = null;
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        buf += ch;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (buf) {
+        items.push(buf);
+        buf = '';
+      }
+      continue;
+    }
+    buf += ch;
+  }
+  if (buf) items.push(buf);
+  return items;
+}
+
+function applyEnvAssignment(token, override = false) {
+  const idx = token.indexOf('=');
+  if (idx === -1) return;
+  const key = token.slice(0, idx).trim();
+  if (!key) return;
+  const value = token.slice(idx + 1);
+  if (override || !(key in process.env)) process.env[key] = value;
+}
+
+function loadSystemdUnit(unitPath) {
+  if (!fs.existsSync(unitPath)) return;
+  const unitText = fs.readFileSync(unitPath, 'utf8');
+  for (const raw of unitText.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('EnvironmentFile=')) {
+      let value = line.slice('EnvironmentFile='.length).trim();
+      if (value.startsWith('-')) value = value.slice(1).trim();
+      value = value.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+      const filePath = value.split(/\s+/)[0];
+      if (filePath) loadEnvFile(filePath, true);
+      continue;
+    }
+    if (line.startsWith('Environment=')) {
+      const value = line.slice('Environment='.length).trim();
+      for (const token of parseEnvAssignments(value)) {
+        applyEnvAssignment(token, true);
+      }
+    }
+  }
+}
+
 loadEnvFile(path.join(projectRoot, '.env'), false);
 loadEnvFile(path.join(projectRoot, '.env.local'), true);
 loadEnvFile(path.join(projectRoot, 'server', '.env'), false);
@@ -526,17 +686,14 @@ loadEnvFile('/usr/local/etc/squirrel/squirrel.env', true);
 try {
   const unitName = process.env.SQUIRREL_SERVICE_NAME || 'squirrel';
   const unitPath = `/etc/systemd/system/${unitName}.service`;
-  if (fs.existsSync(unitPath)) {
-    const unitText = fs.readFileSync(unitPath, 'utf8');
-    for (const raw of unitText.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
-      if (!line.startsWith('EnvironmentFile=')) continue;
-      let value = line.slice('EnvironmentFile='.length).trim();
-      if (value.startsWith('-')) value = value.slice(1).trim();
-      value = value.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
-      const filePath = value.split(/\s+/)[0];
-      if (filePath) loadEnvFile(filePath, true);
+  loadSystemdUnit(unitPath);
+  const dropInDir = `/etc/systemd/system/${unitName}.service.d`;
+  if (fs.existsSync(dropInDir)) {
+    const entries = fs.readdirSync(dropInDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith('.conf')) continue;
+      loadSystemdUnit(path.join(dropInDir, entry.name));
     }
   }
 } catch {
