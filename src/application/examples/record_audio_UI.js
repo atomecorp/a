@@ -57,10 +57,8 @@
     async function ensureWebAudioRecorder() {
         if (typeof window.record_audio === 'function') return window.record_audio;
         try {
-            await import('./record_audio.js');
-        } catch (_) {
-            return null;
-        }
+            await import('../eVe/APIS/audio_api.js');
+        } catch (_) { }
         return (typeof window.record_audio === 'function') ? window.record_audio : null;
     }
 
@@ -69,10 +67,8 @@
             return { listMediaFiles: window.record_audio_list_media, play: window.record_audio_play };
         }
         try {
-            await import('./record_audio.js');
-        } catch (_) {
-            return null;
-        }
+            await import('../eVe/APIS/audio_api.js');
+        } catch (_) { }
         const listMediaFiles = (typeof window.record_audio_list_media === 'function')
             ? window.record_audio_list_media
             : (typeof window.list_user_media_files === 'function' ? window.list_user_media_files : null);
