@@ -217,6 +217,26 @@ function coerceWsChunkSize(raw) {
   return Math.min(parsed, WS_FILE_CHUNK_MAX);
 }
 
+const RECORDING_NAME_PREFIXES = [
+  'audio_',
+  'video_',
+  'recording_',
+  'audio_recording_',
+  'video_recording_'
+];
+const RECORDING_ATOME_TYPES = new Set(['audio_recording', 'video_recording']);
+
+function looksLikeRecordingName(name) {
+  const raw = typeof name === 'string' ? name.trim().toLowerCase() : '';
+  if (!raw) return false;
+  return RECORDING_NAME_PREFIXES.some((prefix) => raw.startsWith(prefix));
+}
+
+function looksLikeRecordingType(atomeType) {
+  const type = typeof atomeType === 'string' ? atomeType.trim().toLowerCase() : '';
+  return type && RECORDING_ATOME_TYPES.has(type);
+}
+
 function logStructured(level, { source = 'fastify', component = 'server', request_id = null, session_id = null, message = '', data = null } = {}) {
   const payload = {
     source,
@@ -939,6 +959,26 @@ async function startServer() {
       return text || null;
     };
 
+    const shouldStoreInRecordings = (fileName, atomeType) => {
+      if (looksLikeRecordingName(fileName)) return true;
+      return looksLikeRecordingType(atomeType);
+    };
+
+    const resolveRecordingUploadPath = async ({ fileName, userId, user }) => {
+      const safeName = sanitizeFileName(fileName || 'recording.bin');
+      const relative = path.join('recordings', safeName);
+      const resolved = await resolveUserAssetPath(
+        projectRoot,
+        { id: userId, username: user?.username },
+        relative
+      );
+      return {
+        fileName: safeName || resolved.fileName,
+        filePath: resolved.filePath,
+        relativePath: resolved.relativePath
+      };
+    };
+
     const resolveUserFromHeaders = (request) => {
       const userId = getHeaderValue(request, 'x-user-id') || getHeaderValue(request, 'x-userid');
       const username = getHeaderValue(request, 'x-username') || getHeaderValue(request, 'x-user-name');
@@ -1030,6 +1070,8 @@ async function startServer() {
         const pathHeader = Array.isArray(request.headers['x-file-path'])
           ? request.headers['x-file-path'][0]
           : request.headers['x-file-path'];
+        const atomeTypeHeader = getHeaderValue(request, 'x-atome-type');
+        const mimeHeader = getHeaderValue(request, 'x-mime-type') || request.headers['content-type'] || null;
 
         if (!headerValue && !pathHeader) {
           reply.code(400);
@@ -1064,6 +1106,15 @@ async function startServer() {
           fileName = fileName || resolved.fileName;
           filePath = resolved.filePath;
           relativePath = resolved.relativePath;
+        } else if (shouldStoreInRecordings(decodedName, atomeTypeHeader)) {
+          const resolved = await resolveRecordingUploadPath({
+            fileName: decodedName || 'recording.bin',
+            userId,
+            user
+          });
+          fileName = resolved.fileName;
+          filePath = resolved.filePath;
+          relativePath = resolved.relativePath;
         } else {
           const resolved = await resolveUserUploadPath(
             projectRoot,
@@ -1082,21 +1133,15 @@ async function startServer() {
           const atomeIdHeader = Array.isArray(request.headers['x-atome-id'])
             ? request.headers['x-atome-id'][0]
             : request.headers['x-atome-id'];
-          const atomeTypeHeader = Array.isArray(request.headers['x-atome-type'])
-            ? request.headers['x-atome-type'][0]
-            : request.headers['x-atome-type'];
           const originalNameHeader = Array.isArray(request.headers['x-original-name'])
             ? request.headers['x-original-name'][0]
             : request.headers['x-original-name'];
-          const mimeHeader = Array.isArray(request.headers['x-mime-type'])
-            ? request.headers['x-mime-type'][0]
-            : request.headers['x-mime-type'];
 
           await registerFileUpload(fileName, userId, {
             atomeId: atomeIdHeader || null,
             atomeType: atomeTypeHeader || null,
             originalName: originalNameHeader || decodedName || fileName,
-            mimeType: mimeHeader || request.headers['content-type'] || null,
+            mimeType: mimeHeader || null,
             size: bodyBuffer.length,
             filePath: relativePath || null
           });
@@ -1193,6 +1238,11 @@ async function startServer() {
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
           : request.headers['x-filename'];
+        const pathHeader = Array.isArray(request.headers['x-file-path'])
+          ? request.headers['x-file-path'][0]
+          : request.headers['x-file-path'];
+        const atomeTypeHeader = getHeaderValue(request, 'x-atome-type');
+        const mimeHeader = getHeaderValue(request, 'x-mime-type') || request.headers['content-type'] || null;
         if (!headerValue) {
           reply.code(400);
           return { success: false, error: 'Missing X-Filename header' };
@@ -1239,6 +1289,15 @@ async function startServer() {
           fileName = fileName || resolved.fileName;
           filePath = resolved.filePath;
           relativePath = resolved.relativePath;
+        } else if (shouldStoreInRecordings(decodedName, atomeTypeHeader)) {
+          const resolved = await resolveRecordingUploadPath({
+            fileName: decodedName || 'recording.bin',
+            userId,
+            user
+          });
+          fileName = resolved.fileName;
+          filePath = resolved.filePath;
+          relativePath = resolved.relativePath;
         } else {
           const resolved = await resolveUserUploadPath(
             projectRoot,
@@ -1271,7 +1330,7 @@ async function startServer() {
         } catch (_) { }
 
         if (DATABASE_ENABLED) {
-          const mimeType = request.headers['x-mime-type'] || null;
+          const mimeType = mimeHeader || null;
           const stats = await fs.stat(filePath).catch(() => null);
           await registerFileUpload(fileName, userId, {
             originalName: decodedName,

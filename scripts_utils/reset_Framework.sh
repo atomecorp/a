@@ -22,6 +22,8 @@ set -e
 # - AUTO_DEV_START=1|0       (default: 0)  Start local Fastify dev server via ./run.sh --server
 # - DEV_FASTIFY_PORT=3001    (default: 3001)
 # - AUTO_RUN_SH_FULL=1|0     (default: 0)  Start full dev framework via ./run.sh (background)
+# - AUTO_DB_PURGE=1|0        (default: 1)  Purge DB content (local or remote) after cleanup
+# - ALLOW_ABSOLUTE_DATA_DELETE=1|0  Allow deleting user data dir outside project root
 
 AUTO_SERVICE_STOP="${AUTO_SERVICE_STOP:-1}"
 AUTO_SERVICE_START="${AUTO_SERVICE_START:-1}"
@@ -34,6 +36,9 @@ DEV_FASTIFY_PORT="${DEV_FASTIFY_PORT:-3001}"
 STOPPED_DEV_FASTIFY=0
 
 AUTO_RUN_SH_FULL="${AUTO_RUN_SH_FULL:-0}"
+AUTO_DB_PURGE="${AUTO_DB_PURGE:-1}"
+ALLOW_ABSOLUTE_DB_DELETE="${ALLOW_ABSOLUTE_DB_DELETE:-1}"
+ALLOW_ABSOLUTE_DATA_DELETE="${ALLOW_ABSOLUTE_DATA_DELETE:-1}"
 
 PROD_START_DONE=0
 DEV_START_DONE=0
@@ -396,17 +401,21 @@ const sqliteDefault = path.join(projectRoot, 'database_storage', 'adole.db');
 const sqlitePath = sqliteRaw
   ? (path.isAbsolute(sqliteRaw) ? sqliteRaw : path.join(projectRoot, sqliteRaw))
   : sqliteDefault;
+const userRootRaw = process.env.SQUIRREL_SHELL_USER_ROOT || 'data/users';
+const userRootPath = path.isAbsolute(userRootRaw) ? userRootRaw : path.join(projectRoot, userRootRaw);
 
-process.stdout.write(`LIBSQL_URL=${libsqlUrl}\nSQLITE_PATH=${sqlitePath}\n`);
+process.stdout.write(`LIBSQL_URL=${libsqlUrl}\nSQLITE_PATH=${sqlitePath}\nUSER_ROOT=${userRootPath}\n`);
 NODE
 
     LIBSQL_URL_VALUE=""
     SQLITE_PATH_VALUE=""
+    USER_ROOT_VALUE=""
     if [ -f "$DB_INFO_TMP" ]; then
         while IFS= read -r line; do
             case "$line" in
                 LIBSQL_URL=*) LIBSQL_URL_VALUE="${line#LIBSQL_URL=}" ;;
                 SQLITE_PATH=*) SQLITE_PATH_VALUE="${line#SQLITE_PATH=}" ;;
+                USER_ROOT=*) USER_ROOT_VALUE="${line#USER_ROOT=}" ;;
             esac
         done <"$DB_INFO_TMP"
         rm -f "$DB_INFO_TMP" 2>/dev/null || true
@@ -419,6 +428,7 @@ NODE
         echo "    - LIBSQL_URL: (not set)"
     fi
     echo "    - SQLITE_PATH: $SQLITE_PATH_VALUE"
+    echo "    - USER_ROOT: ${USER_ROOT_VALUE:-data/users}"
 
     if [ -n "$LIBSQL_URL_VALUE" ]; then
         echo "ℹ️  Fastify DB appears remote (LIBSQL_URL/TURSO_DATABASE_URL is set)."
@@ -429,7 +439,7 @@ NODE
                 echo "🗃️  Removing Fastify SQLite DB (if present): $SQLITE_PATH_VALUE"
                 remove_file_and_sidecars "$SQLITE_PATH_VALUE" || true
             else
-                if [[ "${ALLOW_ABSOLUTE_DB_DELETE:-}" == "1" ]]; then
+                if [[ "$ALLOW_ABSOLUTE_DB_DELETE" == "1" ]]; then
                     echo "⚠️  Removing SQLite DB outside project root (ALLOW_ABSOLUTE_DB_DELETE=1): $SQLITE_PATH_VALUE"
                     remove_file_and_sidecars "$SQLITE_PATH_VALUE" || true
                 else
@@ -461,6 +471,127 @@ NODE
     fi
 else
     echo "ℹ️  Skipping Fastify DB cleanup: node is not installed"
+fi
+
+# Remove Fastify user data root (recordings/downloads) if configured outside project root.
+if [ -n "$USER_ROOT_VALUE" ]; then
+    if is_safe_project_path "$USER_ROOT_VALUE"; then
+        remove_dir "$USER_ROOT_VALUE" "🗃️  Removing user data root"
+    else
+        if [[ "$ALLOW_ABSOLUTE_DATA_DELETE" == "1" ]]; then
+            remove_dir "$USER_ROOT_VALUE" "🗃️  Removing user data root (absolute)"
+        else
+            echo "⚠️  Refusing to delete user data outside project root: $USER_ROOT_VALUE"
+            echo "    If this is intended, re-run with ALLOW_ABSOLUTE_DATA_DELETE=1"
+        fi
+    fi
+fi
+
+# Purge DB content (local or remote) so user creation starts clean.
+if [[ "$AUTO_DB_PURGE" == "1" ]]; then
+    echo "🧨 Purging ADOLE database content..."
+    PROJECT_ROOT="$PROJECT_ROOT" node --input-type=module - <<'NODE' || echo "⚠️  DB purge failed (check env/credentials)."
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const projectRoot = process.env.PROJECT_ROOT || process.cwd();
+
+function loadEnvFile(filePath, override = false) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, 'utf8');
+  for (const raw of content.split(/\r?\n/)) {
+    let line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('export ')) line = line.slice('export '.length).trim();
+    const idx = line.indexOf('=');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    if (!key) continue;
+    let value = line.slice(idx + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (override || !(key in process.env)) process.env[key] = value;
+  }
+}
+
+loadEnvFile(path.join(projectRoot, '.env'), false);
+loadEnvFile(path.join(projectRoot, '.env.local'), true);
+loadEnvFile(path.join(projectRoot, 'server', '.env'), false);
+loadEnvFile(path.join(projectRoot, 'server', '.env.local'), true);
+loadEnvFile('/etc/squirrel/squirrel.env', true);
+loadEnvFile('/usr/local/etc/squirrel/squirrel.env', true);
+
+try {
+  const unitName = process.env.SQUIRREL_SERVICE_NAME || 'squirrel';
+  const unitPath = `/etc/systemd/system/${unitName}.service`;
+  if (fs.existsSync(unitPath)) {
+    const unitText = fs.readFileSync(unitPath, 'utf8');
+    for (const raw of unitText.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      if (!line.startsWith('EnvironmentFile=')) continue;
+      let value = line.slice('EnvironmentFile='.length).trim();
+      if (value.startsWith('-')) value = value.slice(1).trim();
+      value = value.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+      const filePath = value.split(/\s+/)[0];
+      if (filePath) loadEnvFile(filePath, true);
+    }
+  }
+} catch {
+  // ignore
+}
+
+const driverUrl = pathToFileURL(path.join(projectRoot, 'database', 'driver.js')).href;
+const driver = await import(driverUrl);
+const db = await driver.connect();
+const dbType = db?.type || 'unknown';
+
+try {
+  await db.exec('PRAGMA foreign_keys = OFF');
+} catch (_) { }
+
+const tables = [
+  'permissions',
+  'particles_versions',
+  'particles',
+  'snapshots',
+  'sync_queue',
+  'sync_state',
+  'atomes'
+];
+
+for (const table of tables) {
+  try {
+    const exists = await Promise.resolve(
+      typeof db.tableExists === 'function' ? db.tableExists(table) : true
+    );
+    if (!exists) continue;
+    await db.run(`DELETE FROM ${table}`);
+  } catch (error) {
+    console.warn(`[reset] skip table ${table}:`, error?.message || error);
+  }
+}
+
+try {
+  if (dbType === 'sqlite') {
+    await db.run('DELETE FROM sqlite_sequence');
+  }
+} catch (_) { }
+
+try {
+  await db.exec('PRAGMA foreign_keys = ON');
+} catch (_) { }
+
+try {
+  await driver.closeDatabase();
+} catch (_) { }
+
+console.log(`[reset] DB purge complete (${dbType})`);
+NODE
+else
+    echo "ℹ️  AUTO_DB_PURGE!=1; skipping DB content purge"
 fi
 
 # Remove Tauri local data directory (includes local ADOLE DB + user data)
