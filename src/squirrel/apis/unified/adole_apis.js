@@ -3766,7 +3766,8 @@ async function create_atome(options, callback) {
 
     const atomeType = options.type || 'shape';
     const atomeColor = options.color || 'blue';
-    const projectId = options.projectId || null;
+    const projectId = options.projectId || options.project_id || null;
+    const parentId = options.parentId || options.parent_id || projectId || null;
     const desiredId = options.id || generateUUID();
 
     const results = {
@@ -3794,7 +3795,7 @@ async function create_atome(options, callback) {
         id: desiredId, // Always use a UUID so both backends match
         type: atomeType,
         ownerId: ownerId,
-        parentId: projectId, // Link to project if provided
+        parentId: parentId, // Link to project by default, or to explicit parent
         particles: {
             color: atomeColor,
             created_at: new Date().toISOString(),
