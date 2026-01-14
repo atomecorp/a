@@ -603,7 +603,7 @@ async function createUploadAtome({ fileName, originalName, relPath, mimeType, si
     const atomeType = inferUploadAtomeType(originalName || fileName, mimeType);
     const resolvedId = atomeId || `file_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     const relativePath = normalizeUserRelativePath(relPath, ownerId) || relPath || null;
-    const particles = {
+    const properties = {
         kind: atomeType,
         file_name: fileName,
         original_name: originalName || fileName,
@@ -618,7 +618,7 @@ async function createUploadAtome({ fileName, originalName, relPath, mimeType, si
             id: resolvedId,
             type: atomeType,
             ownerId,
-            particles,
+            properties,
             deferFastify: isTauriRuntime() && !requireFastify
         });
         const okTauri = !!(res?.tauri?.success || res?.tauri?.ok);
@@ -913,8 +913,11 @@ function normalizeAtomeEntry(atome) {
     if (!atome || typeof atome !== 'object') return null;
     const id = atome.atome_id || atome.id || null;
     const type = atome.atome_type || atome.type || atome.kind || 'unknown';
-    const particles = atome.particles || atome.data || {};
-    const filePath = particles.file_path || particles.filePath || particles.path || particles.rel_path || '';
+    const data = atome.data;
+    const properties = atome.properties || atome.particles
+        || (data && typeof data === 'object' ? (data.properties || data.particles || data) : {})
+        || {};
+    const filePath = properties.file_path || properties.filePath || properties.path || properties.rel_path || '';
     return { id, type, filePath };
 }
 

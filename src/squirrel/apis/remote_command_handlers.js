@@ -293,25 +293,25 @@ const _shareSyncDedup = new Map();
 
 /**
  * Handler: share-sync
- * Applies incoming particle changes for an atome (linked-share realtime)
+ * Applies incoming property changes for an atome (linked-share realtime)
  *
  * Params:
  *   - atomeId: string
- *   - particles: object
+ *   - properties: object
  */
 function handleShareSync(params, sender) {
     const atomeId = params?.atomeId || params?.atome_id || params?.id;
-    const particles = params?.particles || params?.patch || null;
+    const properties = params?.properties || params?.particles || params?.patch || null;
 
     // Some apps may send legacy direction-based payloads (handled elsewhere).
     // Builtin handler should ignore those quietly.
     if (!atomeId) return;
-    if (!particles || typeof particles !== 'object') {
+    if (!properties || typeof properties !== 'object') {
         return;
     }
 
     // Deletion broadcast (realtimePatch uses { __deleted: true })
-    if (particles.__deleted === true || particles.deleted === true || particles.__action === 'delete') {
+    if (properties.__deleted === true || properties.deleted === true || properties.__action === 'delete') {
         const candidatesToRemove = [
             document.getElementById('atome_' + atomeId),
             document.getElementById(atomeId)
@@ -325,7 +325,7 @@ function handleShareSync(params, sender) {
 
     // Dedupe identical patches arriving close together (e.g. server broadcast + direct message)
     try {
-        const payload = JSON.stringify(particles);
+        const payload = JSON.stringify(properties);
         const now = Date.now();
         const last = _shareSyncDedup.get(String(atomeId));
         if (last && last.payload === payload && (now - last.at) < 100) return;
@@ -353,32 +353,32 @@ function handleShareSync(params, sender) {
     };
 
     for (const el of candidates) {
-        if ('left' in particles) {
-            const v = normalizeCssValue('left', particles.left);
+        if ('left' in properties) {
+            const v = normalizeCssValue('left', properties.left);
             if (v !== null) el.style.left = v;
         }
-        if ('top' in particles) {
-            const v = normalizeCssValue('top', particles.top);
+        if ('top' in properties) {
+            const v = normalizeCssValue('top', properties.top);
             if (v !== null) el.style.top = v;
         }
 
         // Color can arrive as `color` (Adole particle) or `backgroundColor` (some UIs)
-        if ('color' in particles) {
-            const v = normalizeCssValue('backgroundColor', particles.color);
+        if ('color' in properties) {
+            const v = normalizeCssValue('backgroundColor', properties.color);
             if (v !== null) el.style.backgroundColor = v;
         }
-        if ('backgroundColor' in particles) {
-            const v = normalizeCssValue('backgroundColor', particles.backgroundColor);
+        if ('backgroundColor' in properties) {
+            const v = normalizeCssValue('backgroundColor', properties.backgroundColor);
             if (v !== null) el.style.backgroundColor = v;
         }
 
-        if ('borderRadius' in particles) {
-            const v = normalizeCssValue('borderRadius', particles.borderRadius);
+        if ('borderRadius' in properties) {
+            const v = normalizeCssValue('borderRadius', properties.borderRadius);
             if (v !== null) el.style.borderRadius = v;
         }
 
-        if ('opacity' in particles) {
-            const raw = particles.opacity;
+        if ('opacity' in properties) {
+            const raw = properties.opacity;
             const v = (typeof raw === 'number') ? String(raw) : normalizeCssValue('opacity', raw);
             if (v !== null) el.style.opacity = v;
         }
@@ -388,7 +388,7 @@ function handleShareSync(params, sender) {
         console.log('[BuiltinHandlers] share-sync applied', {
             atomeId: String(atomeId).substring(0, 8),
             from: sender?.userId || sender?.username || 'unknown',
-            keys: Object.keys(particles)
+            keys: Object.keys(properties)
         });
     }
 }

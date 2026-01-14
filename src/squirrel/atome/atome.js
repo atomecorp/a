@@ -586,8 +586,8 @@ function getAtomeIdFromInstance(instance) {
     return elId;
 }
 
-function queueRealtimePatch(instance, particles) {
-    if (!instance || !particles || typeof particles !== 'object') return;
+function queueRealtimePatch(instance, properties) {
+    if (!instance || !properties || typeof properties !== 'object') return;
 
     const api = globalThis.AdoleAPI;
     if (!api || !api.atomes || typeof api.atomes.realtimePatch !== 'function') return;
@@ -598,7 +598,7 @@ function queueRealtimePatch(instance, particles) {
     const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     const state = _realtimePatchStateByInstance.get(instance) || { lastAt: 0, timer: null, pending: null };
 
-    state.pending = state.pending ? { ...state.pending, ...particles } : { ...particles };
+    state.pending = state.pending ? { ...state.pending, ...properties } : { ...properties };
 
     const flush = () => {
         state.timer = null;

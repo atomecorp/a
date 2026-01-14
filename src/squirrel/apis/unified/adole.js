@@ -964,6 +964,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             async create(data) {
                 const token = getToken(tokenKey);
                 const ownerId = data.ownerId || data.owner_id || data.owner || null;
+                const properties = data?.properties || data?.particles || data;
                 const payload = {
                     type: 'atome',
                     action: 'create',
@@ -974,7 +975,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     atome_type: data.type || data.kind,
                     parentId: data.parentId || data.parent,
                     parent_id: data.parentId || data.parent,
-                    particles: data.particles || data
+                    particles: properties
                 };
                 if (ownerId) {
                     payload.userId = ownerId;
@@ -1027,37 +1028,40 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async alter(id, data) {
                 const token = getToken(tokenKey);
+                const properties = data?.properties || data?.particles || data;
                 return getWs().send({
                     type: 'atome',
                     action: 'alter',
                     token,
                     atomeId: id,
                     atome_id: id,
-                    particles: data
+                    particles: properties
                 });
             },
             async update(id, data) {
                 const token = getToken(tokenKey);
+                const properties = data?.properties || data?.particles || data;
                 return getWs().send({
                     type: 'atome',
                     action: 'update',
                     token,
                     atomeId: id,
                     atome_id: id,
-                    particles: data
+                    particles: properties
                 });
             },
 
             // Broadcast-only realtime patch (no DB write)
             async realtime(atomeId, particles) {
                 const token = getToken(tokenKey);
+                const properties = particles?.properties || particles?.particles || particles;
                 const ws = getWs();
                 const message = {
                     type: 'atome',
                     action: 'realtime',
                     token,
                     atomeId,
-                    particles,
+                    particles: properties,
                     noReply: true
                 };
 

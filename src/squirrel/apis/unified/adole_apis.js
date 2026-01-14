@@ -19,14 +19,21 @@ function is_file_asset_type(value) {
 function normalizeAtomeRecord(raw) {
     if (!raw || typeof raw !== 'object') return raw;
 
+    const propertiesFromPropertiesField = (raw.properties && typeof raw.properties === 'object')
+        ? raw.properties
+        : null;
+
     const particlesFromParticlesField = (raw.particles && typeof raw.particles === 'object')
         ? raw.particles
         : null;
 
     // Tauri returns dynamic properties under `data` (legacy naming).
     // Fastify typically returns them flattened at top-level.
-    const particlesFromDataField = (!particlesFromParticlesField && raw.data && typeof raw.data === 'object')
+    const particlesFromDataField = (raw.data && typeof raw.data === 'object')
         ? raw.data
+        : null;
+    const propertiesFromSnapshotField = (raw.snapshot && typeof raw.snapshot === 'object')
+        ? raw.snapshot
         : null;
 
     const parsePendingId = (value) => {
@@ -66,12 +73,12 @@ function normalizeAtomeRecord(raw) {
         // common aliases
         'id', 'type', 'kind', 'parent', 'parentId', 'owner', 'ownerId', 'userId',
         // response/meta
-        'data', 'particles', 'atomes', 'count',
+        'data', 'particles', 'properties', 'snapshot', 'atomes', 'count',
         '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
     ]);
 
-    // Fastify WS list flattens particles at top-level (e.g. atome.left/top/color).
-    // Rehydrate them into `particles` so UI persistence works.
+    // Fastify WS list flattens properties at top-level (e.g. atome.left/top/color).
+    // Rehydrate them into `properties` so UI persistence works.
     const stripPending = (obj) => {
         if (!obj || typeof obj !== 'object') return obj;
         const copy = { ...obj };
@@ -84,22 +91,28 @@ function normalizeAtomeRecord(raw) {
         return copy;
     };
 
-    const particles = particlesFromParticlesField
-        ? stripPending(particlesFromParticlesField)
-        : (particlesFromDataField ? stripPending(particlesFromDataField) : {});
-
-    // If both exist, merge them (prefer explicit `particles` over `data`).
-    if (particlesFromParticlesField && raw.data && typeof raw.data === 'object') {
-        for (const [k, v] of Object.entries(raw.data)) {
-            if (particles[k] === undefined) particles[k] = v;
+    const properties = {};
+    const mergeProperties = (source) => {
+        if (!source || typeof source !== 'object') return;
+        for (const [key, val] of Object.entries(source)) {
+            if (properties[key] === undefined) {
+                properties[key] = val;
+            }
         }
-    }
+    };
+
+    mergeProperties(stripPending(propertiesFromPropertiesField));
+    mergeProperties(stripPending(particlesFromParticlesField));
+    mergeProperties(stripPending(particlesFromDataField));
+    mergeProperties(stripPending(propertiesFromSnapshotField));
 
     for (const key of Object.keys(raw)) {
         if (coreKeys.has(key)) continue;
         const val = raw[key];
         if (val === undefined) continue;
-        particles[key] = val;
+        if (properties[key] === undefined) {
+            properties[key] = val;
+        }
     }
 
     const createdAt = raw.created_at ?? raw.createdAt;
@@ -135,9 +148,26 @@ function normalizeAtomeRecord(raw) {
         updated_at: updatedAt,
         deleted_at: deletedAt,
         last_sync: lastSync,
-        particles
+        properties
     };
 }
+
+const resolveAtomePropertiesInput = (input) => {
+    if (!input || typeof input !== 'object') return {};
+    const fromProperties = (input.properties && typeof input.properties === 'object') ? input.properties : null;
+    const fromParticles = (input.particles && typeof input.particles === 'object') ? input.particles : null;
+    if (fromProperties && fromParticles) {
+        return { ...fromParticles, ...fromProperties };
+    }
+    return fromProperties || fromParticles || {};
+};
+
+const resolveAtomePropertiesPayload = (payload) => {
+    if (!payload || typeof payload !== 'object') return null;
+    if (payload.properties && typeof payload.properties === 'object') return payload.properties;
+    if (payload.particles && typeof payload.particles === 'object') return payload.particles;
+    return payload;
+};
 
 /**
  * Grant Fastify share permissions WITHOUT creating share_request atomes.
@@ -392,11 +422,11 @@ function safe_parse_json(value) {
 function normalize_user_entry(raw) {
     if (!raw || typeof raw !== 'object') return null;
 
-    const particles = raw.particles || raw.data?.particles || raw.data || raw;
+    const properties = raw.properties || raw.particles || raw.data?.particles || raw.data || raw;
     const userId = raw.user_id || raw.userId || raw.atome_id || raw.id || null;
-    const username = safe_parse_json(particles?.username) || raw.username || null;
-    const phone = safe_parse_json(particles?.phone) || raw.phone || null;
-    const visibility = safe_parse_json(particles?.visibility) || raw.visibility || 'public';
+    const username = safe_parse_json(properties?.username) || raw.username || null;
+    const phone = safe_parse_json(properties?.phone) || raw.phone || null;
+    const visibility = safe_parse_json(properties?.visibility) || raw.visibility || 'public';
 
     // Phone number is the stable lookup key for sharing/discovery.
     // Drop entries that do not have a usable phone.
@@ -1019,15 +1049,19 @@ async function get_machine_last_user() {
 
     try {
         const result = await get_atome(machineId);
-        const particles = result?.tauri?.data?.particles ||
+        const properties = result?.tauri?.data?.properties ||
+            result?.fastify?.data?.properties ||
+            result?.tauri?.atome?.properties ||
+            result?.fastify?.atome?.properties ||
+            result?.tauri?.data?.particles ||
             result?.fastify?.data?.particles ||
             result?.tauri?.atome?.particles ||
             result?.fastify?.atome?.particles ||
             {};
 
         return {
-            userId: particles.last_user_id || null,
-            lastLogin: particles.last_login || null
+            userId: properties.last_user_id || null,
+            lastLogin: properties.last_login || null
         };
     } catch (e) {
         console.warn('[AdoleAPI] Could not get machine last user:', e.message);
@@ -1226,14 +1260,18 @@ async function load_saved_current_project() {
 
         // Get user atome to read current_project_id particle
         const atomeResult = await get_atome(userId);
-        const particles = atomeResult?.tauri?.data?.particles ||
+        const properties = atomeResult?.tauri?.data?.properties ||
+            atomeResult?.fastify?.data?.properties ||
+            atomeResult?.tauri?.properties ||
+            atomeResult?.fastify?.properties ||
+            atomeResult?.tauri?.data?.particles ||
             atomeResult?.fastify?.data?.particles ||
             atomeResult?.tauri?.particles ||
             atomeResult?.fastify?.particles ||
             {};
 
-        const savedProjectId = particles.current_project_id || null;
-        const savedProjectName = particles.current_project_name || null;
+        const savedProjectId = properties.current_project_id || null;
+        const savedProjectName = properties.current_project_name || null;
 
         if (savedProjectId) {
             _currentProjectId = savedProjectId;
@@ -1392,10 +1430,7 @@ async function set_user_visibility(visibility, callback) {
     // Update visibility particle on user atome
     // Try Tauri
     try {
-        const tauriResult = await TauriAdapter.atome.alter({
-            atomeId: userId,
-            particles: { visibility: normalizedVisibility }
-        });
+        const tauriResult = await TauriAdapter.atome.alter(userId, { visibility: normalizedVisibility });
         if (tauriResult.ok || tauriResult.success) {
             results.tauri = { success: true, error: null };
         } else {
@@ -1407,10 +1442,7 @@ async function set_user_visibility(visibility, callback) {
 
     // Try Fastify
     try {
-        const fastifyResult = await FastifyAdapter.atome.alter({
-            atomeId: userId,
-            particles: { visibility: normalizedVisibility }
-        });
+        const fastifyResult = await FastifyAdapter.atome.alter(userId, { visibility: normalizedVisibility });
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, error: null };
         } else {
@@ -1999,7 +2031,7 @@ async function list_tables() {
 
 /**
  * List all unsynced atomes between Tauri (local) and Fastify (remote)
- * Compares both presence and content (particles) to detect modifications
+ * Compares both presence and content (properties) to detect modifications
  * Also detects soft-deleted atomes that need to be propagated
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<Object>} Sync status with categorized atomes
@@ -2165,34 +2197,35 @@ async function list_unsynced_atomes(callback) {
         if (id) fastifyMap.set(id, atome);
     });
 
-    // Helper function to extract particles from an atome (handles inline format)
-    const extractParticlesForComparison = (atome) => {
-        // If data field exists and has content, use it
+    // Helper function to extract properties from an atome (handles inline format)
+    const extractPropertiesForComparison = (atome) => {
+        if (atome.properties && typeof atome.properties === 'object' && Object.keys(atome.properties).length > 0) {
+            return atome.properties;
+        }
         if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
             return atome.data;
         }
-        // If particles field exists and has content, use it
         if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
             return atome.particles;
         }
 
-        // Otherwise, extract inline particles (all fields except metadata)
+        // Otherwise, extract inline properties (all fields except metadata)
         const metadataFields = [
             'atome_id', 'atome_type', 'atomeId', 'atomeType',
             'parent_id', 'parentId', 'owner_id', 'ownerId', 'creator_id', 'userId',
             'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
             'createdAt', 'updatedAt', 'deletedAt', 'lastSync',
-            'created_source', 'id', 'type', 'data', 'particles',
+            'created_source', 'id', 'type', 'data', 'particles', 'properties', 'snapshot',
             '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
         ];
 
-        const inlineParticles = {};
+        const inlineProps = {};
         for (const [key, value] of Object.entries(atome)) {
             if (!metadataFields.includes(key) && value !== null && value !== undefined) {
-                inlineParticles[key] = value;
+                inlineProps[key] = value;
             }
         }
-        return inlineParticles;
+        return inlineProps;
     };
 
     // Helper function to compare atome content
@@ -2236,16 +2269,16 @@ async function list_unsynced_atomes(callback) {
         const metadataComparison = compareMetadata(atome1, atome2);
         if (metadataComparison !== 'equal') return metadataComparison;
 
-        // Then compare particles content (the actual data)
-        const particles1 = extractParticlesForComparison(atome1);
-        const particles2 = extractParticlesForComparison(atome2);
+        // Then compare properties content (the actual data)
+        const properties1 = extractPropertiesForComparison(atome1);
+        const properties2 = extractPropertiesForComparison(atome2);
 
-        const count1 = Object.keys(particles1).length;
-        const count2 = Object.keys(particles2).length;
+        const count1 = Object.keys(properties1).length;
+        const count2 = Object.keys(properties2).length;
 
         // Sort keys for consistent comparison
-        const sortedP1 = JSON.stringify(particles1, Object.keys(particles1).sort());
-        const sortedP2 = JSON.stringify(particles2, Object.keys(particles2).sort());
+        const sortedP1 = JSON.stringify(properties1, Object.keys(properties1).sort());
+        const sortedP2 = JSON.stringify(properties2, Object.keys(properties2).sort());
 
         // If content is identical, they are synced
         if (sortedP1 === sortedP2) {
@@ -2476,12 +2509,15 @@ async function sync_atomes(callback) {
         }
     }
 
-    // Helper: extract particles from an atome object
-    // - Prefers atome.data / atome.particles when present
-    // - Falls back to inline fields (Fastify list returns particles inline)
-    const extractParticles = (atome) => {
+    // Helper: extract properties from an atome object
+    // - Prefers atome.properties / atome.data / atome.particles when present
+    // - Falls back to inline fields (Fastify list returns properties inline)
+    const extractProperties = (atome) => {
         if (!atome || typeof atome !== 'object') return {};
 
+        if (atome.properties && typeof atome.properties === 'object' && Object.keys(atome.properties).length > 0) {
+            return atome.properties;
+        }
         if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
             return atome.data;
         }
@@ -2494,17 +2530,17 @@ async function sync_atomes(callback) {
             'parent_id', 'parentId', 'owner_id', 'ownerId', 'creator_id', 'userId',
             'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
             'createdAt', 'updatedAt', 'deletedAt', 'lastSync',
-            'created_source', 'id', 'type', 'data', 'particles',
+            'created_source', 'id', 'type', 'data', 'particles', 'properties', 'snapshot',
             '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
         ];
 
-        const inlineParticles = {};
+        const inlineProps = {};
         for (const [key, value] of Object.entries(atome)) {
             if (!metadataFields.includes(key) && value !== null && value !== undefined) {
-                inlineParticles[key] = value;
+                inlineProps[key] = value;
             }
         }
-        return inlineParticles;
+        return inlineProps;
     };
 
     const normalizeRefId = (value) => {
@@ -2538,14 +2574,14 @@ async function sync_atomes(callback) {
         const type = atome?.atome_type || atome?.type || atome?.atomeType || atome?.kind;
         const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
         const parentId = resolveParentForSync(atome);
-        const particles = extractParticles(atome);
+        const properties = extractProperties(atome);
 
         return {
             id,
             type,
             ownerId,
             parentId,
-            particles
+            properties
         };
     };
 
@@ -2905,13 +2941,13 @@ const logTauriFsStatusOnce = (mode, localPath) => {
     };
 
     const extractFileMeta = (atome) => {
-        const particles = extractParticles(atome);
-        const fileName = particles.file_name || particles.fileName || atome?.file_name || '';
-        const originalName = particles.original_name || particles.originalName || fileName;
-        const filePath = particles.file_path || particles.filePath || particles.path || particles.rel_path || '';
-        const mimeType = particles.mime_type || particles.mimeType || '';
-        const sizeBytes = particles.size_bytes || particles.sizeBytes || particles.size || null;
-        return { particles, fileName, originalName, filePath, mimeType, sizeBytes };
+        const properties = extractProperties(atome);
+        const fileName = properties.file_name || properties.fileName || atome?.file_name || '';
+        const originalName = properties.original_name || properties.originalName || fileName;
+        const filePath = properties.file_path || properties.filePath || properties.path || properties.rel_path || '';
+        const mimeType = properties.mime_type || properties.mimeType || '';
+        const sizeBytes = properties.size_bytes || properties.sizeBytes || properties.size || null;
+        return { properties, fileName, originalName, filePath, mimeType, sizeBytes };
     };
 
     const downloadFileAssetFromFastify = async (atome) => {
@@ -3552,13 +3588,14 @@ async function create_project(projectName, callback) {
         return results;
     }
 
+    const projectProperties = {
+        name: projectName,
+        created_at: new Date().toISOString()
+    };
     const projectData = {
         type: 'project',
         ownerId: ownerId,
-        particles: {
-            name: projectName,
-            created_at: new Date().toISOString()
-        }
+        properties: projectProperties
     };
 
     const extractCreatedAtomeId = (res) => {
@@ -3753,7 +3790,7 @@ async function delete_project(projectId, callback) {
 
 /**
  * Create an atome within a project
- * @param {Object} options - Atome options { type, color, projectId, particles }
+ * @param {Object} options - Atome options { type, color, projectId, properties }
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<Object>} Results from both backends
  */
@@ -3791,21 +3828,24 @@ async function create_atome(options, callback) {
     // This allows creating atomes for other users (e.g., messages to recipients)
     const ownerId = options.ownerId || currentUserId;
 
+    const properties = {
+        color: atomeColor,
+        created_at: new Date().toISOString(),
+        ...resolveAtomePropertiesInput(options)
+    };
+
     const atomeData = {
         id: desiredId, // Always use a UUID so both backends match
         type: atomeType,
         ownerId: ownerId,
         parentId: parentId, // Link to project by default, or to explicit parent
-        particles: {
-            color: atomeColor,
-            created_at: new Date().toISOString(),
-            ...options.particles
-        }
+        properties
     };
 
     const deferFastify = !!(options.deferFastify || options.defer_fastify);
     const shouldDeferFastify = deferFastify
-        || (is_tauri_runtime() && is_file_asset_type(atomeType) && (options.particles?.file_path || options.particles?.filePath));
+        || (is_tauri_runtime() && is_file_asset_type(atomeType)
+            && (properties.file_path || properties.filePath));
 
     const extractCreatedAtomeId = (res) => {
         try {
@@ -3965,9 +4005,9 @@ async function list_atomes(options = {}, callback) {
                 const target = String(projectId);
                 normalized = normalized.filter((item) => {
                     const parentId = item.parentId || item.parent_id || null;
-                    const particles = item.particles || item.data || {};
-                    const particleProjectId = particles.projectId || particles.project_id || null;
-                    return String(parentId || '') === target || String(particleProjectId || '') === target;
+                    const properties = item.properties || item.particles || item.data || {};
+                    const propertyProjectId = properties.projectId || properties.project_id || null;
+                    return String(parentId || '') === target || String(propertyProjectId || '') === target;
                 });
             }
 
@@ -4067,25 +4107,26 @@ async function delete_atome(atomeId, callback) {
 }
 
 /**
- * Alter an atome's particles (update with history tracking)
+ * Alter an atome's properties (update with history tracking)
  * The particles_versions table stores each change for undo functionality
  * @param {string} atomeId - ID of the atome to alter (REQUIRED)
- * @param {Object} newParticles - New particle values to set/update (REQUIRED)
+ * @param {Object} newProperties - New property values to set/update (REQUIRED)
  * @param {Function} [callback] - Optional callback function(result)
  * @returns {Promise<Object>} Results from both backends
  */
-async function alter_atome(atomeId, newParticles, callback) {
+async function alter_atome(atomeId, newProperties, callback) {
     // Handle callback as second argument
-    if (typeof newParticles === 'function') {
-        callback = newParticles;
-        newParticles = null;
+    if (typeof newProperties === 'function') {
+        callback = newProperties;
+        newProperties = null;
     }
 
     // Both atomeId and newParticles are required
-    if (!atomeId || !newParticles || typeof newParticles !== 'object') {
+    const payload = resolveAtomePropertiesPayload(newProperties);
+    if (!atomeId || !payload || typeof payload !== 'object') {
         const error = !atomeId
             ? 'atomeId parameter is required'
-            : 'newParticles object is required';
+            : 'properties object is required';
         const results = {
             tauri: { success: false, data: null, error },
             fastify: { success: false, data: null, error }
@@ -4101,7 +4142,7 @@ async function alter_atome(atomeId, newParticles, callback) {
 
     // Update on Tauri (particles_versions are automatically updated in the backend)
     try {
-        const tauriResult = await TauriAdapter.atome.update(atomeId, newParticles);
+        const tauriResult = await TauriAdapter.atome.update(atomeId, payload);
         if (tauriResult.ok || tauriResult.success) {
             results.tauri = { success: true, data: tauriResult, error: null };
         } else {
@@ -4113,7 +4154,7 @@ async function alter_atome(atomeId, newParticles, callback) {
 
     // Update on Fastify
     try {
-        const fastifyResult = await FastifyAdapter.atome.update(atomeId, newParticles);
+        const fastifyResult = await FastifyAdapter.atome.update(atomeId, payload);
         if (fastifyResult.ok || fastifyResult.success) {
             results.fastify = { success: true, data: fastifyResult, error: null };
         } else {
@@ -4131,17 +4172,18 @@ async function alter_atome(atomeId, newParticles, callback) {
  * Broadcast-only realtime patch for an atome (no DB write)
  * Used for continuous drag so collaborators see movement immediately.
  * @param {string} atomeId
- * @param {Object} particles
+ * @param {Object} properties
  * @param {Function} [callback]
  */
-async function realtime_patch(atomeId, particles, callback) {
-    if (typeof particles === 'function') {
-        callback = particles;
-        particles = null;
+async function realtime_patch(atomeId, properties, callback) {
+    if (typeof properties === 'function') {
+        callback = properties;
+        properties = null;
     }
 
-    if (!atomeId || !particles || typeof particles !== 'object') {
-        const error = !atomeId ? 'atomeId parameter is required' : 'particles object is required';
+    const payload = resolveAtomePropertiesPayload(properties);
+    if (!atomeId || !payload || typeof payload !== 'object') {
+        const error = !atomeId ? 'atomeId parameter is required' : 'properties object is required';
         const results = {
             tauri: { success: false, data: null, error },
             fastify: { success: false, data: null, error }
@@ -4163,7 +4205,7 @@ async function realtime_patch(atomeId, particles, callback) {
     if (isTauriRuntime && TauriAdapter?.atome?.realtime) {
         tasks.push((async () => {
             try {
-                const tauriResult = await TauriAdapter.atome.realtime(atomeId, particles);
+                const tauriResult = await TauriAdapter.atome.realtime(atomeId, payload);
                 if (tauriResult.ok || tauriResult.success) {
                     results.tauri = { success: true, data: tauriResult, error: null };
                 } else {
@@ -4178,7 +4220,7 @@ async function realtime_patch(atomeId, particles, callback) {
     if (FastifyAdapter?.atome?.realtime) {
         tasks.push((async () => {
             try {
-                const fastifyResult = await FastifyAdapter.atome.realtime(atomeId, particles);
+                const fastifyResult = await FastifyAdapter.atome.realtime(atomeId, payload);
                 if (fastifyResult.ok || fastifyResult.success) {
                     results.fastify = { success: true, data: fastifyResult, error: null };
                 } else {
@@ -4199,10 +4241,10 @@ async function realtime_patch(atomeId, particles, callback) {
 }
 
 /**
- * Get an atome with all its particles and history
+ * Get an atome with all its properties and history
  * @param {string} atomeId - ID of the atome to retrieve (REQUIRED)
  * @param {Function} [callback] - Optional callback function(result)
- * @returns {Promise<Object>} Atome data with particles
+ * @returns {Promise<Object>} Atome data with properties
  */
 async function get_atome(atomeId, callback) {
     // Handle callback as first argument

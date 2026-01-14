@@ -90,7 +90,7 @@ const registerDefaultTools = () => {
 
     Agent.registerTool({
         name: 'adole.atomes.create',
-        description: 'Create an atome (type/particles/parentId/ownerId). Useful for messages, documents, shapes, etc.',
+        description: 'Create an atome (type/properties/parentId/ownerId). Useful for messages, documents, shapes, etc.',
         capabilities: ['atome.write'],
         risk_level: 'MEDIUM',
         params_schema: {
@@ -99,7 +99,9 @@ const registerDefaultTools = () => {
                 type: { type: 'string' },
                 parentId: { type: 'string' },
                 ownerId: { type: 'string' },
-                color: { type: 'string' }
+                color: { type: 'string' },
+                properties: { type: 'object' },
+                particles: { type: 'object' }
             }
         },
         handler: async ({ params }) => {
@@ -113,7 +115,8 @@ const registerDefaultTools = () => {
                 ...(params?.color ? { color: String(params.color) } : {}),
                 ...(params?.parentId ? { projectId: String(params.parentId) } : {}),
                 ...(params?.ownerId ? { ownerId: String(params.ownerId) } : {}),
-                ...(params?.particles && typeof params.particles === 'object' ? { particles: params.particles } : {})
+                ...(params?.properties && typeof params.properties === 'object' ? { properties: params.properties } : {}),
+                ...(params?.particles && typeof params.particles === 'object' && !params?.properties ? { particles: params.particles } : {})
             };
 
             return fn(payload);
@@ -123,13 +126,14 @@ const registerDefaultTools = () => {
 
     Agent.registerTool({
         name: 'adole.atomes.alter',
-        description: 'Alter/patch an atome particles by id.',
+        description: 'Alter/patch atome properties by id.',
         capabilities: ['atome.write'],
         risk_level: 'MEDIUM',
         params_schema: {
-            required: ['id', 'particles'],
+            required: ['id'],
             properties: {
                 id: { type: 'string' },
+                properties: { type: 'object' },
                 particles: { type: 'object' }
             }
         },
@@ -139,10 +143,11 @@ const registerDefaultTools = () => {
             if (typeof fn !== 'function') throw new Error('AdoleAPI.atomes.alter is not available');
             const id = safeString(params?.id);
             if (!id) throw new Error('Missing atome id');
-            if (!params?.particles || typeof params.particles !== 'object') {
-                throw new Error('Missing particles payload');
+            const payload = params?.properties || params?.particles;
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('Missing properties payload');
             }
-            return fn(id, params.particles);
+            return fn(id, payload);
         },
         summary: (params) => `Alter atome ${params?.id || ''}`
     });

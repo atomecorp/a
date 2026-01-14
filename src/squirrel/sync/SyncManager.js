@@ -9,7 +9,7 @@
  * - Bidirectional sync with conflict resolution based on logical clocks
  * - Full ADOLE compliance (objects, properties, commits, changes)
  * - Device-aware synchronization with device_id tracking
- * - Granular property-level sync (particles in ADOLE terminology)
+ * - Granular property-level sync (properties in ADOLE terminology)
  * 
  * @module src/squirrel/sync/SyncManager
  * @version 2.0.0
