@@ -8,6 +8,7 @@
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::{
     collections::HashSet,
     path::PathBuf,
@@ -182,8 +183,12 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         "CREATE TABLE IF NOT EXISTS snapshots (
             snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
             atome_id TEXT NOT NULL,
+            project_id TEXT,
             snapshot_data TEXT NOT NULL,
+            state_blob TEXT,
+            label TEXT,
             snapshot_type TEXT DEFAULT 'manual',
+            actor TEXT,
             created_by TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
@@ -195,9 +200,61 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         "CREATE INDEX IF NOT EXISTS idx_snapshots_atome ON snapshots(atome_id)",
         [],
     )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_project ON snapshots(project_id)",
+        [],
+    )?;
 
     // =========================================================================
-    // Table 5: permissions - Granular access control (per atome or particle)
+    // Table 5: events - Append-only event log
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS events (
+            id TEXT PRIMARY KEY,
+            ts TEXT NOT NULL DEFAULT (datetime('now')),
+            atome_id TEXT,
+            project_id TEXT,
+            kind TEXT NOT NULL,
+            payload TEXT,
+            actor TEXT,
+            tx_id TEXT,
+            gesture_id TEXT
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_project_ts ON events(project_id, ts)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_atome_ts ON events(atome_id, ts)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_tx ON events(tx_id)",
+        [],
+    )?;
+
+    // =========================================================================
+    // Table 6: state_current - Materialized projection cache
+    // =========================================================================
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS state_current (
+            atome_id TEXT PRIMARY KEY,
+            project_id TEXT,
+            properties TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            version INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id)",
+        [],
+    )?;
+
+    // =========================================================================
+    // Table 7: permissions - Granular access control (per atome or particle)
     // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS permissions (
@@ -231,9 +288,10 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     )?;
 
     ensure_permissions_columns(&conn)?;
+    ensure_snapshot_columns(&conn)?;
 
     // =========================================================================
-    // Table 6: sync_queue - Persistent synchronization queue
+    // Table 8: sync_queue - Persistent synchronization queue
     // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS sync_queue (
@@ -264,7 +322,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     )?;
 
     // =========================================================================
-    // Table 7: sync_state - Synchronization state per atome (with hash)
+    // Table 9: sync_state - Synchronization state per atome (with hash)
     // =========================================================================
     conn.execute(
         "CREATE TABLE IF NOT EXISTS sync_state (
@@ -280,7 +338,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
         [],
     )?;
 
-    println!("ADOLE v3.0 database initialized (7 tables): {:?}", db_path);
+    println!("ADOLE v3.0 database initialized (9 tables): {:?}", db_path);
 
     Ok(conn)
 }
@@ -312,6 +370,30 @@ fn ensure_permissions_columns(conn: &Connection) -> Result<(), rusqlite::Error> 
     Ok(())
 }
 
+fn ensure_snapshot_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let mut stmt = conn.prepare("PRAGMA table_info(snapshots)")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    let mut names = HashSet::new();
+    for name in rows.filter_map(|r| r.ok()) {
+        names.insert(name);
+    }
+
+    if !names.contains("project_id") {
+        conn.execute("ALTER TABLE snapshots ADD COLUMN project_id TEXT", [])?;
+    }
+    if !names.contains("state_blob") {
+        conn.execute("ALTER TABLE snapshots ADD COLUMN state_blob TEXT", [])?;
+    }
+    if !names.contains("label") {
+        conn.execute("ALTER TABLE snapshots ADD COLUMN label TEXT", [])?;
+    }
+    if !names.contains("actor") {
+        conn.execute("ALTER TABLE snapshots ADD COLUMN actor TEXT", [])?;
+    }
+
+    Ok(())
+}
+
 // =============================================================================
 // WEBSOCKET MESSAGE HANDLER
 // =============================================================================
@@ -336,6 +418,63 @@ pub async fn handle_atome_message(
         "alter" => handle_alter(message, user_id, state, request_id).await,
         _ => WsResponse {
             msg_type: "atome-response".into(),
+            request_id,
+            success: false,
+            error: Some(format!("Unknown action: {}", action)),
+            data: None,
+            atomes: None,
+            count: None,
+        },
+    }
+}
+
+// =============================================================================
+// EVENTS + STATE_CURRENT MESSAGE HANDLERS
+// =============================================================================
+
+pub async fn handle_events_message(
+    message: JsonValue,
+    user_id: &str,
+    state: &LocalAtomeState,
+) -> WsResponse {
+    let action = message.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    let request_id = message
+        .get("requestId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    match action {
+        "commit" => handle_event_commit(message, user_id, state, request_id).await,
+        "commit-batch" => handle_event_commit_batch(message, user_id, state, request_id).await,
+        "list" => handle_event_list(message, user_id, state, request_id).await,
+        _ => WsResponse {
+            msg_type: "events-response".into(),
+            request_id,
+            success: false,
+            error: Some(format!("Unknown action: {}", action)),
+            data: None,
+            atomes: None,
+            count: None,
+        },
+    }
+}
+
+pub async fn handle_state_current_message(
+    message: JsonValue,
+    _user_id: &str,
+    state: &LocalAtomeState,
+) -> WsResponse {
+    let action = message.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    let request_id = message
+        .get("requestId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    match action {
+        "get" => handle_state_current_get(message, state, request_id).await,
+        "list" => handle_state_current_list(message, state, request_id).await,
+        _ => WsResponse {
+            msg_type: "state-current-response".into(),
             request_id,
             success: false,
             error: Some(format!("Unknown action: {}", action)),
@@ -537,6 +676,14 @@ async fn handle_create(
                 rusqlite::params![&atome_id, key, &value_str, value_type, &now],
             );
         }
+    }
+
+    let patch = match data.as_object() {
+        Some(obj) => obj.clone(),
+        None => JsonMap::new(),
+    };
+    if let Err(err) = upsert_state_current_from_patch(&db, &atome_id, atome_type, parent_id, patch, &now) {
+        println!("[Create Debug] state_current update failed: {}", err);
     }
 
     if let Some(parent) = parent_id {
@@ -860,6 +1007,25 @@ async fn handle_update(
         }
     }
 
+    let meta = db
+        .query_row(
+            "SELECT atome_type, parent_id FROM atomes WHERE atome_id = ?1",
+            rusqlite::params![atome_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .optional();
+    let (meta_type, meta_parent) = match meta {
+        Ok(Some((meta_type, meta_parent))) => (meta_type, meta_parent),
+        _ => ("generic".to_string(), None),
+    };
+    let patch = match data.as_object() {
+        Some(obj) => obj.clone(),
+        None => JsonMap::new(),
+    };
+    if let Err(err) = upsert_state_current_from_patch(&db, atome_id, &meta_type, meta_parent.as_deref(), patch, &now) {
+        println!("[Update Debug] state_current update failed: {}", err);
+    }
+
     match load_atome(&db, atome_id, None) {
         Ok(atome) => WsResponse {
             msg_type: "atome-response".into(),
@@ -920,15 +1086,30 @@ async fn handle_delete(
 
     match result {
         Ok(0) => error_response(request_id, "Atome not found or access denied"),
-        Ok(_) => WsResponse {
-            msg_type: "atome-response".into(),
-            request_id,
-            success: true,
-            error: None,
-            data: None,
-            atomes: None,
-            count: None,
-        },
+        Ok(_) => {
+            let delete_event = EventRecord {
+                id: Uuid::new_v4().to_string(),
+                ts: now.clone(),
+                atome_id: Some(atome_id.to_string()),
+                project_id: None,
+                kind: "delete".into(),
+                payload: None,
+                actor: None,
+                tx_id: None,
+                gesture_id: None,
+            };
+            let _ = apply_event_to_state_current(&db, &delete_event);
+
+            WsResponse {
+                msg_type: "atome-response".into(),
+                request_id,
+                success: true,
+                error: None,
+                data: None,
+                atomes: None,
+                count: None,
+            }
+        }
         Err(e) => error_response(request_id, &e.to_string()),
     }
 }
@@ -1044,6 +1225,25 @@ async fn handle_alter(
         }
     }
 
+    let meta = db
+        .query_row(
+            "SELECT atome_type, parent_id FROM atomes WHERE atome_id = ?1",
+            rusqlite::params![atome_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .optional();
+    let (meta_type, meta_parent) = match meta {
+        Ok(Some((meta_type, meta_parent))) => (meta_type, meta_parent),
+        _ => ("generic".to_string(), None),
+    };
+    let patch = match particles.as_object() {
+        Some(obj) => obj.clone(),
+        None => JsonMap::new(),
+    };
+    if let Err(err) = upsert_state_current_from_patch(&db, atome_id, &meta_type, meta_parent.as_deref(), patch, &now) {
+        println!("[Alter Debug] state_current update failed: {}", err);
+    }
+
     match load_atome(&db, atome_id, None) {
         Ok(atome) => WsResponse {
             msg_type: "atome-response".into(),
@@ -1055,6 +1255,820 @@ async fn handle_alter(
             count: None,
         },
         Err(e) => error_response(request_id, &e),
+    }
+}
+
+// =============================================================================
+// EVENTS + STATE_CURRENT OPERATIONS
+// =============================================================================
+
+#[derive(Debug, Clone)]
+struct EventRecord {
+    id: String,
+    ts: String,
+    atome_id: Option<String>,
+    project_id: Option<String>,
+    kind: String,
+    payload: Option<JsonValue>,
+    actor: Option<JsonValue>,
+    tx_id: Option<String>,
+    gesture_id: Option<String>,
+}
+
+async fn handle_event_commit(
+    message: JsonValue,
+    user_id: &str,
+    state: &LocalAtomeState,
+    request_id: Option<String>,
+) -> WsResponse {
+    let event = match message.get("event") {
+        Some(v) => v,
+        None => return error_response(request_id, "Missing event payload"),
+    };
+
+    let normalized = match normalize_event_input(event, user_id, None) {
+        Ok(v) => v,
+        Err(e) => return error_response(request_id, &e),
+    };
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let result = with_transaction(&db, |conn| {
+        insert_event_record(conn, &normalized)?;
+        let _ = apply_event_to_state_current(conn, &normalized)?;
+        apply_event_to_atomes(conn, &normalized, user_id)?;
+        Ok(())
+    });
+
+    if let Err(e) = result {
+        return error_response(request_id, &e);
+    }
+
+    let payload = json!({ "event": event_with_actor(normalized) });
+    WsResponse {
+        msg_type: "events-response".into(),
+        request_id,
+        success: true,
+        error: None,
+        data: Some(payload),
+        atomes: None,
+        count: None,
+    }
+}
+
+async fn handle_event_commit_batch(
+    message: JsonValue,
+    user_id: &str,
+    state: &LocalAtomeState,
+    request_id: Option<String>,
+) -> WsResponse {
+    let body = message.get("events").or_else(|| message.get("event")).cloned();
+    let events = match body {
+        Some(JsonValue::Array(list)) => list,
+        _ => return error_response(request_id, "Missing events array"),
+    };
+
+    let tx_id = message
+        .get("tx_id")
+        .or_else(|| message.get("txId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let mut normalized_events = Vec::with_capacity(events.len());
+    for evt in events.iter() {
+        let normalized = match normalize_event_input(evt, user_id, tx_id.clone()) {
+            Ok(v) => v,
+            Err(e) => return error_response(request_id, &e),
+        };
+        normalized_events.push(normalized);
+    }
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let result = with_transaction(&db, |conn| {
+        for evt in normalized_events.iter() {
+            insert_event_record(conn, evt)?;
+            let _ = apply_event_to_state_current(conn, evt)?;
+            apply_event_to_atomes(conn, evt, user_id)?;
+        }
+        Ok(())
+    });
+
+    if let Err(e) = result {
+        return error_response(request_id, &e);
+    }
+
+    let events_payload: Vec<JsonValue> = normalized_events
+        .into_iter()
+        .map(event_with_actor)
+        .collect();
+
+    let payload = json!({ "events": events_payload });
+    WsResponse {
+        msg_type: "events-response".into(),
+        request_id,
+        success: true,
+        error: None,
+        data: Some(payload),
+        atomes: None,
+        count: None,
+    }
+}
+
+async fn handle_event_list(
+    message: JsonValue,
+    _user_id: &str,
+    state: &LocalAtomeState,
+    request_id: Option<String>,
+) -> WsResponse {
+    let project_id = message
+        .get("project_id")
+        .or_else(|| message.get("projectId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let atome_id = message
+        .get("atome_id")
+        .or_else(|| message.get("atomeId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let tx_id = message
+        .get("tx_id")
+        .or_else(|| message.get("txId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let gesture_id = message
+        .get("gesture_id")
+        .or_else(|| message.get("gestureId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let since = message.get("since").and_then(|v| v.as_str()).map(String::from);
+    let until = message.get("until").and_then(|v| v.as_str()).map(String::from);
+    let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(1000);
+    let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
+    let order = message.get("order").and_then(|v| v.as_str()).unwrap_or("asc");
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let mut conditions: Vec<String> = Vec::new();
+    let mut params: Vec<String> = Vec::new();
+
+    if let Some(pid) = project_id {
+        conditions.push("project_id = ?".to_string());
+        params.push(pid);
+    }
+    if let Some(aid) = atome_id {
+        conditions.push("atome_id = ?".to_string());
+        params.push(aid);
+    }
+    if let Some(tid) = tx_id {
+        conditions.push("tx_id = ?".to_string());
+        params.push(tid);
+    }
+    if let Some(gid) = gesture_id {
+        conditions.push("gesture_id = ?".to_string());
+        params.push(gid);
+    }
+    if let Some(since_val) = since {
+        conditions.push("ts >= ?".to_string());
+        params.push(since_val);
+    }
+    if let Some(until_val) = until {
+        conditions.push("ts <= ?".to_string());
+        params.push(until_val);
+    }
+
+    let where_clause = if conditions.is_empty() {
+        "".to_string()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+    let order_clause = if order.eq_ignore_ascii_case("desc") { "DESC" } else { "ASC" };
+
+    let query = format!(
+        "SELECT id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id
+         FROM events {} ORDER BY ts {} LIMIT ? OFFSET ?",
+        where_clause, order_clause
+    );
+
+    let mut stmt = match db.prepare(&query) {
+        Ok(s) => s,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let mut query_params: Vec<rusqlite::types::Value> = params
+        .into_iter()
+        .map(rusqlite::types::Value::from)
+        .collect();
+    query_params.push(rusqlite::types::Value::from(limit));
+    query_params.push(rusqlite::types::Value::from(offset));
+
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(query_params), |row| {
+            let payload: Option<String> = row.get(5)?;
+            let actor: Option<String> = row.get(6)?;
+            Ok(json!({
+                "id": row.get::<_, String>(0)?,
+                "ts": row.get::<_, String>(1)?,
+                "atome_id": row.get::<_, Option<String>>(2)?,
+                "project_id": row.get::<_, Option<String>>(3)?,
+                "kind": row.get::<_, String>(4)?,
+                "payload": parse_json_value(payload.as_ref()),
+                "actor": parse_json_value(actor.as_ref()),
+                "tx_id": row.get::<_, Option<String>>(7)?,
+                "gesture_id": row.get::<_, Option<String>>(8)?
+            }))
+        })
+        .map_err(|e| e.to_string());
+
+    let events = match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+        Err(e) => return error_response(request_id, &e),
+    };
+
+    let payload = json!({ "events": events });
+    WsResponse {
+        msg_type: "events-response".into(),
+        request_id,
+        success: true,
+        error: None,
+        data: Some(payload),
+        atomes: None,
+        count: None,
+    }
+}
+
+async fn handle_state_current_get(
+    message: JsonValue,
+    state: &LocalAtomeState,
+    request_id: Option<String>,
+) -> WsResponse {
+    let atome_id = match message
+        .get("atome_id")
+        .or_else(|| message.get("atomeId"))
+        .and_then(|v| v.as_str())
+    {
+        Some(id) => id,
+        None => return error_response(request_id, "Missing atome_id"),
+    };
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let row: Option<(String, Option<String>, Option<String>, String, i64)> = db
+        .query_row(
+            "SELECT atome_id, project_id, properties, updated_at, version FROM state_current WHERE atome_id = ?1",
+            rusqlite::params![atome_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        )
+        .optional()
+        .unwrap_or(None);
+
+    let state_payload = row.map(|(id, project_id, properties, updated_at, version)| {
+        json!({
+            "atome_id": id,
+            "project_id": project_id,
+            "properties": parse_json_value(properties.as_ref()),
+            "updated_at": updated_at,
+            "version": version
+        })
+    });
+
+    let payload = json!({ "state": state_payload });
+    WsResponse {
+        msg_type: "state-current-response".into(),
+        request_id,
+        success: true,
+        error: None,
+        data: Some(payload),
+        atomes: None,
+        count: None,
+    }
+}
+
+async fn handle_state_current_list(
+    message: JsonValue,
+    state: &LocalAtomeState,
+    request_id: Option<String>,
+) -> WsResponse {
+    let project_id = message
+        .get("project_id")
+        .or_else(|| message.get("projectId"))
+        .and_then(|v| v.as_str());
+    let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(1000);
+    let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let (query, params): (String, Vec<rusqlite::types::Value>) = if let Some(pid) = project_id {
+        (
+            "SELECT atome_id, project_id, properties, updated_at, version FROM state_current WHERE project_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
+            vec![
+                rusqlite::types::Value::from(pid.to_string()),
+                rusqlite::types::Value::from(limit),
+                rusqlite::types::Value::from(offset),
+            ],
+        )
+    } else {
+        (
+            "SELECT atome_id, project_id, properties, updated_at, version FROM state_current ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
+            vec![
+                rusqlite::types::Value::from(limit),
+                rusqlite::types::Value::from(offset),
+            ],
+        )
+    };
+
+    let mut stmt = match db.prepare(&query) {
+        Ok(s) => s,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(params), |row| {
+            let properties: Option<String> = row.get(2)?;
+            Ok(json!({
+                "atome_id": row.get::<_, String>(0)?,
+                "project_id": row.get::<_, Option<String>>(1)?,
+                "properties": parse_json_value(properties.as_ref()),
+                "updated_at": row.get::<_, String>(3)?,
+                "version": row.get::<_, i64>(4)?
+            }))
+        })
+        .map_err(|e| e.to_string());
+
+    let states = match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+        Err(e) => return error_response(request_id, &e),
+    };
+
+    let payload = json!({ "states": states });
+    WsResponse {
+        msg_type: "state-current-response".into(),
+        request_id,
+        success: true,
+        error: None,
+        data: Some(payload),
+        atomes: None,
+        count: None,
+    }
+}
+
+fn normalize_event_input(
+    event: &JsonValue,
+    user_id: &str,
+    default_tx_id: Option<String>,
+) -> Result<EventRecord, String> {
+    let kind = event
+        .get("kind")
+        .or_else(|| event.get("event"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if kind.is_empty() {
+        return Err("Missing event kind".to_string());
+    }
+
+    let id = event
+        .get("id")
+        .or_else(|| event.get("event_id"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    let ts = event
+        .get("ts")
+        .or_else(|| event.get("timestamp"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+
+    let atome_id = event
+        .get("atome_id")
+        .or_else(|| event.get("atomeId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let project_id = event
+        .get("project_id")
+        .or_else(|| event.get("projectId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let payload = resolve_event_payload(event);
+
+    let actor = event
+        .get("actor")
+        .cloned()
+        .or_else(|| Some(json!({ "type": "user", "id": user_id })));
+
+    let tx_id = event
+        .get("tx_id")
+        .or_else(|| event.get("txId"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .or(default_tx_id);
+
+    let gesture_id = event
+        .get("gesture_id")
+        .or_else(|| event.get("gestureId"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    Ok(EventRecord {
+        id,
+        ts,
+        atome_id,
+        project_id,
+        kind,
+        payload,
+        actor,
+        tx_id,
+        gesture_id,
+    })
+}
+
+fn resolve_event_payload(event: &JsonValue) -> Option<JsonValue> {
+    if let Some(payload) = event.get("payload") {
+        return Some(payload.clone());
+    }
+    let props = event
+        .get("props")
+        .or_else(|| event.get("properties"))
+        .or_else(|| event.get("patch"))
+        .or_else(|| event.get("delta"));
+    props.map(|value| json!({ "props": value.clone() }))
+}
+
+fn extract_event_patch(
+    kind: &str,
+    payload: &Option<JsonValue>,
+    ts: &str,
+) -> Option<JsonMap<String, JsonValue>> {
+    if kind == "delete" {
+        let mut map = JsonMap::new();
+        map.insert("__deleted".to_string(), JsonValue::Bool(true));
+        map.insert("deleted_at".to_string(), JsonValue::String(ts.to_string()));
+        return Some(map);
+    }
+
+    let payload_value = payload.as_ref()?;
+    let payload_obj = match payload_value {
+        JsonValue::Object(map) => Some(map.clone()),
+        JsonValue::String(raw) => {
+            let parsed: JsonValue = serde_json::from_str(raw).ok()?;
+            if let JsonValue::Object(map) = parsed {
+                Some(map)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }?;
+
+    for key in ["props", "properties", "patch", "delta"] {
+        if let Some(JsonValue::Object(map)) = payload_obj.get(key) {
+            return Some(map.clone());
+        }
+    }
+
+    None
+}
+
+fn resolve_state_project_id(
+    patch: &JsonMap<String, JsonValue>,
+    atome_id: &str,
+    atome_type: &str,
+    parent_id: Option<&str>,
+) -> Option<String> {
+    let project_id = patch
+        .get("project_id")
+        .or_else(|| patch.get("projectId"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+    if project_id.is_some() {
+        return project_id;
+    }
+    if atome_type == "project" {
+        return Some(atome_id.to_string());
+    }
+    parent_id.map(|v| v.to_string())
+}
+
+fn ensure_state_patch_fields(
+    mut patch: JsonMap<String, JsonValue>,
+    atome_type: &str,
+    parent_id: Option<&str>,
+    project_id: Option<&str>,
+) -> JsonMap<String, JsonValue> {
+    if !patch.contains_key("type") && !patch.contains_key("atome_type") && !patch.contains_key("kind") {
+        patch.insert("type".to_string(), JsonValue::String(atome_type.to_string()));
+    }
+    if let Some(parent) = parent_id {
+        if !patch.contains_key("parent_id") && !patch.contains_key("parentId") {
+            patch.insert("parent_id".to_string(), JsonValue::String(parent.to_string()));
+        }
+    }
+    if let Some(project) = project_id {
+        if !patch.contains_key("project_id") && !patch.contains_key("projectId") {
+            patch.insert("project_id".to_string(), JsonValue::String(project.to_string()));
+        }
+    }
+    patch
+}
+
+fn upsert_state_current_from_patch(
+    db: &Connection,
+    atome_id: &str,
+    atome_type: &str,
+    parent_id: Option<&str>,
+    patch: JsonMap<String, JsonValue>,
+    ts: &str,
+) -> Result<(), String> {
+    let project_id = resolve_state_project_id(&patch, atome_id, atome_type, parent_id);
+    let payload_patch = ensure_state_patch_fields(
+        patch,
+        atome_type,
+        parent_id,
+        project_id.as_deref(),
+    );
+    let event = EventRecord {
+        id: Uuid::new_v4().to_string(),
+        ts: ts.to_string(),
+        atome_id: Some(atome_id.to_string()),
+        project_id: project_id.clone(),
+        kind: "set".into(),
+        payload: Some(json!({ "props": JsonValue::Object(payload_patch) })),
+        actor: None,
+        tx_id: None,
+        gesture_id: None,
+    };
+    let _ = apply_event_to_state_current(db, &event)?;
+    Ok(())
+}
+
+fn apply_event_to_state_current(
+    db: &Connection,
+    event: &EventRecord,
+) -> Result<Option<JsonValue>, String> {
+    let atome_id = match event.atome_id.as_ref() {
+        Some(id) => id,
+        None => return Ok(None),
+    };
+
+    let mut patch = match extract_event_patch(&event.kind, &event.payload, &event.ts) {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    if !patch.contains_key("type") && !patch.contains_key("atome_type") && !patch.contains_key("kind") {
+        let meta: Result<Option<(Option<String>, Option<String>)>, _> = db
+            .query_row(
+                "SELECT atome_type, parent_id FROM atomes WHERE atome_id = ?1",
+                rusqlite::params![atome_id],
+                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional();
+        if let Ok(Some((meta_type, meta_parent))) = meta {
+            if let Some(meta_type) = meta_type {
+                patch.insert("type".to_string(), JsonValue::String(meta_type));
+            }
+            if let Some(meta_parent) = meta_parent {
+                if !patch.contains_key("parent_id") && !patch.contains_key("parentId") {
+                    patch.insert("parent_id".to_string(), JsonValue::String(meta_parent));
+                }
+            }
+        }
+    }
+
+    let existing: Option<(Option<String>, i64, Option<String>)> = db
+        .query_row(
+            "SELECT properties, version, project_id FROM state_current WHERE atome_id = ?1",
+            rusqlite::params![atome_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    let mut current_props = parse_json_map(existing.as_ref().and_then(|row| row.0.as_ref()));
+    for (key, value) in patch.into_iter() {
+        current_props.insert(key, value);
+    }
+
+    let next_version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);
+    let project_id = event
+        .project_id
+        .clone()
+        .or_else(|| existing.as_ref().and_then(|row| row.2.clone()));
+
+    let props_json = serde_json::to_string(&current_props).map_err(|e| e.to_string())?;
+
+    if existing.is_some() {
+        db.execute(
+            "UPDATE state_current SET properties = ?1, updated_at = ?2, version = ?3, project_id = COALESCE(?4, project_id) WHERE atome_id = ?5",
+            rusqlite::params![props_json, event.ts, next_version, project_id, atome_id],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        db.execute(
+            "INSERT INTO state_current (atome_id, project_id, properties, updated_at, version) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![atome_id, project_id, props_json, event.ts, next_version],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(Some(json!({
+        "atome_id": atome_id,
+        "project_id": project_id,
+        "properties": JsonValue::Object(current_props),
+        "updated_at": event.ts,
+        "version": next_version
+    })))
+}
+
+fn apply_event_to_atomes(
+    db: &Connection,
+    event: &EventRecord,
+    user_id: &str,
+) -> Result<(), String> {
+    let atome_id = match event.atome_id.as_ref() {
+        Some(id) => id,
+        None => return Ok(()),
+    };
+
+    let patch = match extract_event_patch(&event.kind, &event.payload, &event.ts) {
+        Some(p) => p,
+        None => return Ok(()),
+    };
+
+    let mut atome_type = None;
+    if let Some(JsonValue::String(value)) = patch.get("type") {
+        if !value.trim().is_empty() {
+            atome_type = Some(value.trim().to_string());
+        }
+    }
+    if atome_type.is_none() {
+        if let Some(JsonValue::String(value)) = patch.get("kind") {
+            if !value.trim().is_empty() {
+                atome_type = Some(value.trim().to_string());
+            }
+        }
+    }
+    if atome_type.is_none() {
+        if let Some(JsonValue::String(value)) = patch.get("atome_type") {
+            if !value.trim().is_empty() {
+                atome_type = Some(value.trim().to_string());
+            }
+        }
+    }
+    let atome_type = atome_type.unwrap_or_else(|| "atome".to_string());
+
+    let parent_id = patch
+        .get("parent_id")
+        .or_else(|| patch.get("parentId"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+
+    let existing: Option<(String, Option<String>)> = db
+        .query_row(
+            "SELECT atome_id, atome_type FROM atomes WHERE atome_id = ?1",
+            rusqlite::params![atome_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if existing.is_some() {
+        if event.kind == "delete" {
+            let _ = db.execute(
+                "UPDATE atomes SET deleted_at = ?1, updated_at = ?1, sync_status = 'pending' WHERE atome_id = ?2",
+                rusqlite::params![event.ts, atome_id],
+            );
+        } else {
+            let _ = db.execute(
+                "UPDATE atomes SET updated_at = ?1, sync_status = 'pending', parent_id = COALESCE(?2, parent_id) WHERE atome_id = ?3",
+                rusqlite::params![event.ts, parent_id, atome_id],
+            );
+        }
+    } else {
+        let _ = db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
+             VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?5, NULL, 'tauri', 'pending')",
+            rusqlite::params![atome_id, atome_type, parent_id, user_id, event.ts],
+        );
+    }
+
+    if event.kind == "delete" {
+        return Ok(());
+    }
+
+    for (key, value) in patch.into_iter() {
+        if key.starts_with("__") {
+            continue;
+        }
+        let value_str = serde_json::to_string(&value).unwrap_or_default();
+        let _ = db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                particle_value = excluded.particle_value,
+                updated_at = excluded.updated_at",
+            rusqlite::params![atome_id, key, value_str, event.ts],
+        );
+    }
+
+    Ok(())
+}
+
+fn insert_event_record(db: &Connection, event: &EventRecord) -> Result<(), String> {
+    let payload_json: Option<String> = match &event.payload {
+        Some(payload) => Some(serde_json::to_string(payload).map_err(|e| e.to_string())?),
+        None => None,
+    };
+    let actor_json: Option<String> = match &event.actor {
+        Some(actor) => Some(serde_json::to_string(actor).map_err(|e| e.to_string())?),
+        None => None,
+    };
+    db.execute(
+        "INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        rusqlite::params![
+            event.id,
+            event.ts,
+            event.atome_id,
+            event.project_id,
+            event.kind,
+            payload_json,
+            actor_json,
+            event.tx_id,
+            event.gesture_id
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn event_with_actor(event: EventRecord) -> JsonValue {
+    json!({
+        "id": event.id,
+        "ts": event.ts,
+        "atome_id": event.atome_id,
+        "project_id": event.project_id,
+        "kind": event.kind,
+        "payload": event.payload,
+        "actor": event.actor,
+        "tx_id": event.tx_id,
+        "gesture_id": event.gesture_id
+    })
+}
+
+fn parse_json_map(raw: Option<&String>) -> JsonMap<String, JsonValue> {
+    if let Some(value) = raw {
+        if let Ok(parsed) = serde_json::from_str::<JsonValue>(value) {
+            if let JsonValue::Object(map) = parsed {
+                return map;
+            }
+        }
+    }
+    JsonMap::new()
+}
+
+fn parse_json_value(raw: Option<&String>) -> JsonValue {
+    if let Some(value) = raw {
+        if let Ok(parsed) = serde_json::from_str::<JsonValue>(value) {
+            return parsed;
+        }
+    }
+    JsonValue::Null
+}
+
+fn with_transaction<F>(db: &Connection, work: F) -> Result<(), String>
+where
+    F: FnOnce(&Connection) -> Result<(), String>,
+{
+    db.execute("BEGIN IMMEDIATE", [])
+        .map_err(|e| e.to_string())?;
+    match work(db) {
+        Ok(result) => {
+            db.execute("COMMIT", []).map_err(|e| e.to_string())?;
+            Ok(result)
+        }
+        Err(e) => {
+            let _ = db.execute("ROLLBACK", []);
+            Err(e)
+        }
     }
 }
 

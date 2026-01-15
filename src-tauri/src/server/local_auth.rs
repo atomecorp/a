@@ -9,8 +9,9 @@
 use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -205,6 +206,10 @@ async fn handle_bootstrap(
             )
             .unwrap_or_else(|_| now.clone());
 
+        if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now) {
+            println!("[Auth Debug] state_current update failed: {}", err);
+        }
+
         let token = match generate_token(&state.jwt_secret, &existing_id, &username, &phone) {
             Ok(t) => t,
             Err(e) => return error_response(request_id, &e.to_string()),
@@ -247,6 +252,10 @@ async fn handle_bootstrap(
              VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
             rusqlite::params![&user_id, key, &value_json, &now],
         );
+    }
+
+    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now) {
+        println!("[Auth Debug] state_current update failed: {}", err);
     }
 
     let token = match generate_token(&state.jwt_secret, &user_id, &username, &phone) {
@@ -352,6 +361,10 @@ async fn handle_register(
             }
 
             // Generate JWT for reactivated user
+            if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now) {
+                println!("[Auth Debug] state_current update failed: {}", err);
+            }
+
             let token = match generate_token(&state.jwt_secret, &existing_id, &username, &phone) {
                 Ok(t) => t,
                 Err(e) => return error_response(request_id, &e.to_string()),
@@ -400,6 +413,10 @@ async fn handle_register(
              VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
             rusqlite::params![&user_id, key, &value_json, &now],
         );
+    }
+
+    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now) {
+        println!("[Auth Debug] state_current update failed: {}", err);
     }
 
     // Generate JWT
@@ -469,6 +486,20 @@ async fn handle_login(
     // Verify password
     if !verify(password, &password_hash).unwrap_or(false) {
         return error_response(request_id, "Invalid credentials");
+    }
+
+    let visibility = db
+        .query_row(
+            "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = 'visibility'",
+            rusqlite::params![&user_id],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|v| serde_json::from_str::<String>(&v).ok())
+        .unwrap_or_else(|| "public".to_string());
+    let now = Utc::now().to_rfc3339();
+    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now) {
+        println!("[Auth Debug] state_current update failed: {}", err);
     }
 
     // Generate JWT
@@ -790,6 +821,67 @@ pub fn extract_user_id_from_token(secret: &str, token: Option<&str>) -> String {
         },
         _ => "anonymous".to_string(),
     }
+}
+
+fn parse_json_map(raw: Option<&String>) -> JsonMap<String, JsonValue> {
+    if let Some(value) = raw {
+        if let Ok(parsed) = serde_json::from_str::<JsonValue>(value) {
+            if let JsonValue::Object(map) = parsed {
+                return map;
+            }
+        }
+    }
+    JsonMap::new()
+}
+
+fn upsert_user_state_current(
+    db: &Connection,
+    user_id: &str,
+    username: &str,
+    phone: &str,
+    visibility: &str,
+    ts: &str,
+) -> Result<(), String> {
+    let mut patch = JsonMap::new();
+    patch.insert("type".to_string(), JsonValue::String("user".to_string()));
+    patch.insert("name".to_string(), JsonValue::String(username.to_string()));
+    patch.insert("username".to_string(), JsonValue::String(username.to_string()));
+    patch.insert("phone".to_string(), JsonValue::String(phone.to_string()));
+    patch.insert("visibility".to_string(), JsonValue::String(visibility.to_string()));
+
+    let existing: Option<(Option<String>, i64, Option<String>)> = db
+        .query_row(
+            "SELECT properties, version, project_id FROM state_current WHERE atome_id = ?1",
+            rusqlite::params![user_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    let mut current_props = parse_json_map(existing.as_ref().and_then(|row| row.0.as_ref()));
+    for (key, value) in patch.into_iter() {
+        current_props.insert(key, value);
+    }
+
+    let next_version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);
+    let project_id = existing.as_ref().and_then(|row| row.2.clone());
+    let props_json = serde_json::to_string(&current_props).map_err(|e| e.to_string())?;
+
+    if existing.is_some() {
+        db.execute(
+            "UPDATE state_current SET properties = ?1, updated_at = ?2, version = ?3, project_id = COALESCE(?4, project_id) WHERE atome_id = ?5",
+            rusqlite::params![props_json, ts, next_version, project_id, user_id],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        db.execute(
+            "INSERT INTO state_current (atome_id, project_id, properties, updated_at, version) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![user_id, project_id, props_json, ts, next_version],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 fn error_response(request_id: Option<String>, error: &str) -> AuthResponse {

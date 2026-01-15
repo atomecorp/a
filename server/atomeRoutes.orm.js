@@ -665,6 +665,240 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
     });
 
+    // ========================================================================
+    // EVENT LOG + STATE CURRENT (new pipeline)
+    // ========================================================================
+
+    server.post('/api/events/commit', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const event = request.body;
+        if (!event || typeof event !== 'object') {
+            return reply.code(400).send({ success: false, error: 'Invalid event payload' });
+        }
+
+        const actor = event.actor || { type: 'user', id: user.id };
+
+        try {
+            const created = await db.appendEvent({ ...event, actor });
+            return reply.send({ success: true, event: created });
+        } catch (error) {
+            console.error('[Events] Commit error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
+    server.post('/api/events/commit-batch', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const body = request.body || {};
+        const events = Array.isArray(body) ? body : body.events;
+        if (!Array.isArray(events)) {
+            return reply.code(400).send({ success: false, error: 'Missing events array' });
+        }
+
+        const txId = body.tx_id || body.txId || null;
+        const fallbackActor = body.actor || { type: 'user', id: user.id };
+        const normalizedEvents = events.map((evt) => ({
+            ...evt,
+            actor: evt?.actor || fallbackActor
+        }));
+
+        try {
+            const created = await db.appendEvents(normalizedEvents, { txId });
+            return reply.send({ success: true, events: created });
+        } catch (error) {
+            console.error('[Events] Commit batch error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
+    server.get('/api/events', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const {
+            projectId,
+            project_id,
+            atomeId,
+            atome_id,
+            txId,
+            tx_id,
+            gestureId,
+            gesture_id,
+            since,
+            until,
+            limit,
+            offset,
+            order
+        } = request.query || {};
+
+        try {
+            const events = await db.listEvents({
+                projectId: projectId || project_id || null,
+                atomeId: atomeId || atome_id || null,
+                txId: txId || tx_id || null,
+                gestureId: gestureId || gesture_id || null,
+                since: since || null,
+                until: until || null,
+                limit: limit !== undefined ? Number(limit) : undefined,
+                offset: offset !== undefined ? Number(offset) : undefined,
+                order: order || 'asc'
+            });
+
+            return reply.send({ success: true, events });
+        } catch (error) {
+            console.error('[Events] List error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
+    server.get('/api/state_current/:id', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { id } = request.params || {};
+        if (!id) {
+            return reply.code(400).send({ success: false, error: 'Missing atome id' });
+        }
+
+        try {
+            const entry = await db.getStateCurrent(id);
+            if (!entry) {
+                return reply.code(404).send({ success: false, error: 'State not found' });
+            }
+            return reply.send({ success: true, state: entry });
+        } catch (error) {
+            console.error('[State] Get error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
+    server.get('/api/state_current', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { projectId, project_id, limit, offset } = request.query || {};
+
+        try {
+            const states = await db.listStateCurrent(projectId || project_id || null, {
+                limit: limit !== undefined ? Number(limit) : undefined,
+                offset: offset !== undefined ? Number(offset) : undefined
+            });
+
+            return reply.send({ success: true, states });
+        } catch (error) {
+            console.error('[State] List error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
+    server.post('/api/snapshots', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const body = request.body || {};
+        const projectId = body.projectId || body.project_id || null;
+        const atomeId = body.atomeId || body.atome_id || null;
+        const label = body.label || null;
+        const actor = body.actor || { type: 'user', id: user.id };
+        const state = body.state || body.state_blob || body.stateBlob || null;
+        const snapshotType = body.snapshot_type || body.snapshotType || 'manual';
+
+        if (!projectId && !atomeId) {
+            return reply.code(400).send({ success: false, error: 'Missing projectId or atomeId' });
+        }
+
+        try {
+            const snapshotId = await db.createStateSnapshot({
+                projectId,
+                atomeId,
+                label,
+                actor,
+                state,
+                snapshotType
+            });
+
+            if (projectId || atomeId) {
+                try {
+                    await db.appendEvent({
+                        kind: 'snapshot',
+                        atome_id: atomeId || projectId,
+                        project_id: projectId,
+                        actor,
+                        payload: { snapshot_id: snapshotId, label }
+                    });
+                } catch (_) { }
+            }
+
+            return reply.send({ success: true, snapshotId });
+        } catch (error) {
+            console.error('[Snapshots] Create error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
+    server.get('/api/snapshots', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { projectId, project_id, limit, offset } = request.query || {};
+        const targetProject = projectId || project_id || null;
+        if (!targetProject) {
+            return reply.code(400).send({ success: false, error: 'Missing projectId' });
+        }
+
+        try {
+            const snapshots = await db.listStateSnapshots(targetProject, {
+                limit: limit !== undefined ? Number(limit) : undefined,
+                offset: offset !== undefined ? Number(offset) : undefined
+            });
+            return reply.send({ success: true, snapshots });
+        } catch (error) {
+            console.error('[Snapshots] List error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
+    server.get('/api/snapshots/:id', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.code(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        const { id } = request.params || {};
+        if (!id) {
+            return reply.code(400).send({ success: false, error: 'Missing snapshot id' });
+        }
+
+        try {
+            const snapshot = await db.getStateSnapshot(id);
+            if (!snapshot) {
+                return reply.code(404).send({ success: false, error: 'Snapshot not found' });
+            }
+            return reply.send({ success: true, snapshot });
+        } catch (error) {
+            console.error('[Snapshots] Get error:', error);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
     // NOTE: All sync routes (pull, push, hash, reconcile, queue-status) are deprecated
     // Synchronization is now handled in real-time via WebSocket EventBus
 

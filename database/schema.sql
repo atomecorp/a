@@ -11,9 +11,11 @@
 --   2. particles           - Propriétés des atomes
 --   3. particles_versions  - Historique des modifications
 --   4. snapshots           - Backups complets
---   5. permissions         - Contrôle d'accès
---   6. sync_queue          - File de synchronisation
---   7. sync_state          - État de synchronisation
+--   5. events              - Event log append-only (source de verite)
+--   6. state_current       - Projection materialisee (cache)
+--   7. permissions         - Contrôle d'accès
+--   8. sync_queue          - File de synchronisation
+--   9. sync_state          - État de synchronisation
 --
 -- ============================================================================
 
@@ -104,9 +106,13 @@ CREATE INDEX IF NOT EXISTS idx_particles_versions_atome ON particles_versions(at
 
 CREATE TABLE IF NOT EXISTS snapshots (
     snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    atome_id TEXT NOT NULL,                         -- L'atome concerné
-    snapshot_data TEXT NOT NULL,                    -- JSON complet (atome + toutes ses particles)
+    atome_id TEXT NOT NULL,                         -- L'atome concerné (fallback project)
+    project_id TEXT,                                -- Projet associé
+    snapshot_data TEXT NOT NULL,                    -- JSON complet (legacy atome + particles)
+    state_blob TEXT,                                -- JSON complet (snapshot pipeline)
+    label TEXT,                                     -- Label utilisateur
     snapshot_type TEXT DEFAULT 'manual',            -- 'manual', 'auto', 'sync', 'export'
+    actor TEXT,                                     -- JSON actor (pipeline)
     created_by TEXT,                                -- atome_id de l'utilisateur
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     
@@ -114,9 +120,46 @@ CREATE TABLE IF NOT EXISTS snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_atome ON snapshots(atome_id);
+CREATE INDEX IF NOT EXISTS idx_snapshots_project ON snapshots(project_id);
 
 -- ============================================================================
--- 5. TABLE permissions
+-- 5. TABLE events
+-- Event log append-only (source de verite)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,                            -- UUID event id
+    ts TEXT NOT NULL DEFAULT (datetime('now')),
+    atome_id TEXT,
+    project_id TEXT,
+    kind TEXT NOT NULL,
+    payload TEXT,                                   -- JSON payload
+    actor TEXT,                                     -- JSON actor
+    tx_id TEXT,
+    gesture_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_project_ts ON events(project_id, ts);
+CREATE INDEX IF NOT EXISTS idx_events_atome_ts ON events(atome_id, ts);
+CREATE INDEX IF NOT EXISTS idx_events_tx ON events(tx_id);
+
+-- ============================================================================
+-- 6. TABLE state_current
+-- Projection materialisee (cache)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS state_current (
+    atome_id TEXT PRIMARY KEY,
+    project_id TEXT,
+    properties TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    version INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id);
+
+-- ============================================================================
+-- 7. TABLE permissions
 -- Contrôle d'accès granulaire (par atome ou par particle)
 -- Utilisé pour: partage ADOLE, multi-tenant via hiérarchie
 -- ============================================================================
@@ -145,7 +188,7 @@ CREATE INDEX IF NOT EXISTS idx_permissions_atome ON permissions(atome_id);
 CREATE INDEX IF NOT EXISTS idx_permissions_principal ON permissions(principal_id);
 
 -- ============================================================================
--- 6. TABLE sync_queue
+-- 8. TABLE sync_queue
 -- File d'attente de synchronisation persistante
 -- Garantit la fiabilité de la sync même en cas de déconnexion
 -- ============================================================================
@@ -171,7 +214,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at);
 
 -- ============================================================================
--- 7. TABLE sync_state
+-- 9. TABLE sync_state
 -- État de synchronisation par atome (avec hash pour détecter les changements)
 -- ============================================================================
 

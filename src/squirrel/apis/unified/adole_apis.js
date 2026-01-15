@@ -309,6 +309,29 @@ function load_fastify_login_cache() {
     }
 }
 
+function load_pending_register_credentials() {
+    if (!is_tauri_runtime() || typeof localStorage === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(AUTH_PENDING_SYNC_KEY);
+        if (!raw) return null;
+        const queue = JSON.parse(raw);
+        if (!Array.isArray(queue) || queue.length === 0) return null;
+        for (let i = queue.length - 1; i >= 0; i -= 1) {
+            const data = queue[i]?.data;
+            if (data?.phone && data?.password) {
+                return {
+                    phone: data.phone,
+                    password: data.password,
+                    username: data.username || null
+                };
+            }
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
 function clear_fastify_login_cache() {
     if (!is_tauri_runtime() || typeof localStorage === 'undefined') return;
     try {
@@ -345,6 +368,22 @@ async function ensure_fastify_token() {
         }
     };
 
+    const tryRegisterAndLogin = async (phone, password, username) => {
+        try {
+            const reg = await FastifyAdapter.auth.register({
+                phone,
+                password,
+                username: username || phone,
+                visibility: 'public'
+            });
+            if (reg && (reg.ok || reg.success || is_already_exists_error(reg))) {
+                const retry = await attemptLogin(phone, password, 'login_after_register_failed');
+                if (retry.ok) return retry;
+            }
+        } catch { }
+        return { ok: false, reason: 'register_failed' };
+    };
+
     if (cached?.phone && cached?.password) {
         const result = await attemptLogin(cached.phone, cached.password, 'login_failed');
         if (result.ok) return result;
@@ -359,17 +398,36 @@ async function ensure_fastify_token() {
             try {
                 const current = await current_user();
                 const registerUsername = current?.user?.username || cached.phone;
-                const reg = await FastifyAdapter.auth.register({
-                    phone: cached.phone,
-                    password: cached.password,
-                    username: registerUsername,
-                    visibility: 'public'
-                });
-                if (reg && (reg.ok || reg.success || is_already_exists_error(reg))) {
-                    const retry = await attemptLogin(cached.phone, cached.password, 'login_after_register_failed');
-                    if (retry.ok) return retry;
-                }
+                const retry = await tryRegisterAndLogin(cached.phone, cached.password, registerUsername);
+                if (retry.ok) return retry;
             } catch { }
+        }
+    }
+
+    const pendingCreds = load_pending_register_credentials();
+    if (pendingCreds?.phone && pendingCreds?.password) {
+        const result = await attemptLogin(pendingCreds.phone, pendingCreds.password, 'pending_login_failed');
+        if (result.ok) {
+            save_fastify_login_cache({ phone: pendingCreds.phone, password: pendingCreds.password });
+            return result;
+        }
+
+        const errMsg = String(result?.reason || '').toLowerCase();
+        const shouldRegister = errMsg.includes('user not found')
+            || errMsg.includes('no user')
+            || errMsg.includes('not found')
+            || errMsg.includes('invalid credentials');
+
+        if (shouldRegister) {
+            const retry = await tryRegisterAndLogin(
+                pendingCreds.phone,
+                pendingCreds.password,
+                pendingCreds.username || pendingCreds.phone
+            );
+            if (retry.ok) {
+                save_fastify_login_cache({ phone: pendingCreds.phone, password: pendingCreds.password });
+                return retry;
+            }
         }
     }
 
@@ -852,6 +910,12 @@ async function process_pending_registers() {
                 const r = await FastifyAdapter.auth.register({ username, phone, password, visibility: 'public' });
                 if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
+                    if (is_tauri_runtime()) {
+                        save_fastify_login_cache({ phone, password });
+                        if (!FastifyAdapter.getToken?.()) {
+                            try { await FastifyAdapter.auth.login({ phone, password }); } catch { }
+                        }
+                    }
                     continue;
                 }
             } else if (createdOn === 'fastify') {

@@ -5,11 +5,13 @@
  * This module provides a unified interface to the ADOLE database layer.
  * Pure SQLite/libSQL implementation - no ORM.
  * 
- * Schema (7 tables):
+ * Schema (9 tables):
  *   - atomes: All entities (users, documents, etc.)
  *   - particles: Properties of atomes (key-value)
  *   - particles_versions: History of changes
  *   - snapshots: Full backups
+ *   - events: Event log (append-only)
+ *   - state_current: Projection cache
  *   - permissions: Access control
  *   - sync_queue: Sync queue
  *   - sync_state: Sync state

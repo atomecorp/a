@@ -10,6 +10,8 @@
  * - particles_versions: Full history for undo/redo, time-travel, sync
  * - permissions: Fine-grained ACL per particle
  * - snapshots: Full state backups
+ * - events: Event log (append-only)
+ * - state_current: Projection cache
  * - sync_queue: Pending sync operations
  * - sync_state: Sync metadata per server
  * 
@@ -58,6 +60,12 @@ export async function initDatabase(config = {}) {
         console.log('[ADOLE v3.0] Permissions migration skipped:', e.message);
     }
 
+    try {
+        await ensureSnapshotColumns();
+    } catch (e) {
+        console.log('[ADOLE v3.0] Snapshot migration skipped:', e.message);
+    }
+
     return db;
 }
 
@@ -84,6 +92,88 @@ async function ensurePermissionsColumns() {
     }
 }
 
+async function ensureSnapshotColumns() {
+    const columns = await query('all', "PRAGMA table_info(snapshots)");
+    const names = new Set((columns || []).map((col) => col.name));
+
+    if (!names.has('project_id')) {
+        await query('run', "ALTER TABLE snapshots ADD COLUMN project_id TEXT");
+    }
+    if (!names.has('state_blob')) {
+        await query('run', "ALTER TABLE snapshots ADD COLUMN state_blob TEXT");
+    }
+    if (!names.has('label')) {
+        await query('run', "ALTER TABLE snapshots ADD COLUMN label TEXT");
+    }
+    if (!names.has('actor')) {
+        await query('run', "ALTER TABLE snapshots ADD COLUMN actor TEXT");
+    }
+}
+
+function safeParseJson(value) {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+}
+
+function serializeJson(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string') return value;
+    return JSON.stringify(value);
+}
+
+function resolveEventPayload(event) {
+    if (!event || typeof event !== 'object') return null;
+    if (event.payload !== undefined) return event.payload;
+    const props = event.props || event.properties || event.patch || null;
+    if (props && typeof props === 'object') {
+        return { props };
+    }
+    return null;
+}
+
+function extractEventPatch(kind, payload, ts) {
+    if (!kind) return null;
+    if (kind === 'delete') {
+        return { __deleted: true, deleted_at: ts };
+    }
+
+    const payloadObj = safeParseJson(payload);
+    if (!payloadObj || typeof payloadObj !== 'object') return null;
+
+    const patch =
+        payloadObj.props ||
+        payloadObj.properties ||
+        payloadObj.patch ||
+        payloadObj.delta ||
+        null;
+
+    if (patch && typeof patch === 'object') {
+        return patch;
+    }
+
+    return null;
+}
+
+async function withTransaction(work) {
+    if (!db) await initDatabase();
+    try {
+        await db.beginTransaction();
+        const result = await work();
+        await db.commit();
+        return result;
+    } catch (error) {
+        try {
+            await db.rollback();
+        } catch (_) { }
+        throw error;
+    }
+}
+
 export function getDatabase() {
     return db;
 }
@@ -93,6 +183,66 @@ export async function closeDatabase() {
         await closeDriver();
         db = null;
     }
+}
+
+function resolveStateProjectId({ atomeId, atomeType, parentId, properties }) {
+    const props = properties && typeof properties === 'object' ? properties : {};
+    const explicitProject = props.projectId || props.project_id || null;
+    if (explicitProject) return explicitProject;
+    if (atomeType === 'project' && atomeId) return atomeId;
+    const explicitParent = props.parentId || props.parent_id || null;
+    if (explicitParent) return explicitParent;
+    return parentId || null;
+}
+
+function buildStatePatch({ atomeType, kind, parentId, projectId, properties }) {
+    const patch = properties && typeof properties === 'object' ? { ...properties } : {};
+    if (atomeType && patch.type == null && patch.atome_type == null && patch.kind == null) {
+        patch.type = atomeType;
+    }
+    if (kind && patch.kind == null) {
+        patch.kind = kind;
+    }
+    if (parentId && patch.parent_id == null && patch.parentId == null) {
+        patch.parent_id = parentId;
+    }
+    if (projectId && patch.project_id == null && patch.projectId == null) {
+        patch.project_id = projectId;
+    }
+    return patch;
+}
+
+async function upsertStateCurrentFromMutation({
+    atomeId,
+    type,
+    kind,
+    parentId,
+    properties,
+    projectId,
+    ts
+}) {
+    if (!atomeId) return null;
+    const resolvedProjectId = projectId || resolveStateProjectId({
+        atomeId,
+        atomeType: type,
+        parentId,
+        properties
+    });
+    const patch = buildStatePatch({
+        atomeType: type,
+        kind,
+        parentId,
+        projectId: resolvedProjectId,
+        properties
+    });
+    if (!patch || Object.keys(patch).length === 0) return null;
+    return applyEventToStateCurrent({
+        atome_id: atomeId,
+        project_id: resolvedProjectId,
+        kind: 'set',
+        payload: { props: patch },
+        ts: ts || new Date().toISOString()
+    });
 }
 
 // ============================================================================
@@ -177,6 +327,19 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     // Store all properties as particles
     if (properties && Object.keys(properties).length > 0) {
         await setParticles(atomeId, properties, creatorId);
+    }
+
+    try {
+        await upsertStateCurrentFromMutation({
+            atomeId,
+            type,
+            kind,
+            parentId: parentId,
+            properties,
+            ts: now
+        });
+    } catch (e) {
+        console.warn('[createAtome] state_current update failed:', e.message);
     }
 
     return {
@@ -445,6 +608,18 @@ export async function updateAtomeMetadata(id, updates) {
  */
 export async function updateAtome(id, properties, author = null) {
     await setParticles(id, properties, author);
+    try {
+        const existing = await getAtomeById(id);
+        await upsertStateCurrentFromMutation({
+            atomeId: id,
+            type: existing?.atome_type || null,
+            parentId: existing?.parent_id || null,
+            properties,
+            ts: new Date().toISOString()
+        });
+    } catch (e) {
+        console.warn('[updateAtome] state_current update failed:', e.message);
+    }
     return await getAtome(id);
 }
 
@@ -457,6 +632,16 @@ export async function deleteAtome(id) {
         'UPDATE atomes SET deleted_at = ?, updated_at = ?, sync_status = ? WHERE atome_id = ?',
         [now, now, 'pending', id]
     );
+    try {
+        await applyEventToStateCurrent({
+            atome_id: id,
+            kind: 'delete',
+            payload: null,
+            ts: now
+        });
+    } catch (e) {
+        console.warn('[deleteAtome] state_current update failed:', e.message);
+    }
 }
 
 /**
@@ -715,6 +900,356 @@ export async function restoreSnapshot(snapshotId, author = null) {
     }
 
     return data;
+}
+
+// ============================================================================
+// EVENT LOG + STATE CURRENT (Projection)
+// ============================================================================
+
+function normalizeEventInput(event, options = {}) {
+    if (!event || typeof event !== 'object') {
+        throw new Error('Invalid event payload');
+    }
+
+    const kind = String(event.kind || '').trim();
+    if (!kind) {
+        throw new Error('Missing event kind');
+    }
+
+    const now = new Date().toISOString();
+    const id = event.id || event.event_id || uuidv4();
+    const ts = event.ts || event.timestamp || options.ts || now;
+    const atomeId = event.atome_id || event.atomeId || null;
+    const projectId = event.project_id || event.projectId || null;
+    const payload = resolveEventPayload(event);
+    const actor = event.actor ?? null;
+    const txId = event.tx_id || event.txId || options.txId || null;
+    const gestureId = event.gesture_id || event.gestureId || null;
+
+    return {
+        id,
+        ts,
+        atome_id: atomeId,
+        project_id: projectId,
+        kind,
+        payload,
+        actor,
+        tx_id: txId,
+        gesture_id: gestureId
+    };
+}
+
+async function applyEventToStateCurrent(event) {
+    const atomeId = event.atome_id;
+    if (!atomeId) return null;
+
+    const ts = event.ts || new Date().toISOString();
+    const patch = extractEventPatch(event.kind, event.payload, ts);
+    if (!patch) return null;
+
+    if (patch.type == null && patch.atome_type == null && patch.kind == null) {
+        const row = await query(
+            'get',
+            'SELECT atome_type, parent_id FROM atomes WHERE atome_id = ?',
+            [atomeId]
+        );
+        if (row?.atome_type) {
+            patch.type = row.atome_type;
+        }
+        if (row?.parent_id && patch.parent_id == null && patch.parentId == null) {
+            patch.parent_id = row.parent_id;
+        }
+    }
+
+    const existing = await query(
+        'get',
+        'SELECT properties, version, project_id FROM state_current WHERE atome_id = ?',
+        [atomeId]
+    );
+
+    const parsed = safeParseJson(existing?.properties);
+    const currentProps = parsed && typeof parsed === 'object' ? parsed : {};
+    const nextProps = { ...currentProps, ...patch };
+    const nextVersion = (existing?.version || 0) + 1;
+    const projectId = event.project_id || existing?.project_id || null;
+
+    if (existing) {
+        await query(
+            'run',
+            'UPDATE state_current SET properties = ?, updated_at = ?, version = ?, project_id = COALESCE(?, project_id) WHERE atome_id = ?',
+            [JSON.stringify(nextProps), ts, nextVersion, projectId, atomeId]
+        );
+    } else {
+        await query(
+            'run',
+            'INSERT INTO state_current (atome_id, project_id, properties, updated_at, version) VALUES (?, ?, ?, ?, ?)',
+            [atomeId, projectId, JSON.stringify(nextProps), ts, nextVersion]
+        );
+    }
+
+    return {
+        atome_id: atomeId,
+        project_id: projectId,
+        properties: nextProps,
+        updated_at: ts,
+        version: nextVersion
+    };
+}
+
+export async function appendEvent(event, options = {}) {
+    const normalized = normalizeEventInput(event, options);
+    const payloadJson = serializeJson(normalized.payload);
+    const actorJson = serializeJson(normalized.actor);
+
+    await withTransaction(async () => {
+        await query(
+            'run',
+            `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                normalized.id,
+                normalized.ts,
+                normalized.atome_id,
+                normalized.project_id,
+                normalized.kind,
+                payloadJson,
+                actorJson,
+                normalized.tx_id,
+                normalized.gesture_id
+            ]
+        );
+
+        await applyEventToStateCurrent({
+            ...normalized,
+            payload: normalized.payload
+        });
+    });
+
+    return normalized;
+}
+
+export async function appendEvents(events, options = {}) {
+    if (!Array.isArray(events)) {
+        throw new Error('Events must be an array');
+    }
+
+    const results = [];
+    const txId = options.tx_id || options.txId || null;
+
+    await withTransaction(async () => {
+        for (const evt of events) {
+            const normalized = normalizeEventInput(evt, { txId });
+            const payloadJson = serializeJson(normalized.payload);
+            const actorJson = serializeJson(normalized.actor);
+
+            await query(
+                'run',
+                `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    normalized.id,
+                    normalized.ts,
+                    normalized.atome_id,
+                    normalized.project_id,
+                    normalized.kind,
+                    payloadJson,
+                    actorJson,
+                    normalized.tx_id,
+                    normalized.gesture_id
+                ]
+            );
+
+            await applyEventToStateCurrent({
+                ...normalized,
+                payload: normalized.payload
+            });
+
+            results.push(normalized);
+        }
+    });
+
+    return results;
+}
+
+export async function listEvents(options = {}) {
+    const {
+        projectId = null,
+        atomeId = null,
+        txId = null,
+        gestureId = null,
+        since = null,
+        until = null,
+        limit = 1000,
+        offset = 0,
+        order = 'asc'
+    } = options || {};
+
+    const conditions = [];
+    const params = [];
+
+    if (projectId) {
+        conditions.push('project_id = ?');
+        params.push(projectId);
+    }
+    if (atomeId) {
+        conditions.push('atome_id = ?');
+        params.push(atomeId);
+    }
+    if (txId) {
+        conditions.push('tx_id = ?');
+        params.push(txId);
+    }
+    if (gestureId) {
+        conditions.push('gesture_id = ?');
+        params.push(gestureId);
+    }
+    if (since) {
+        conditions.push('ts >= ?');
+        params.push(since);
+    }
+    if (until) {
+        conditions.push('ts <= ?');
+        params.push(until);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const orderBy = String(order).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+
+    const rows = await query(
+        'all',
+        `SELECT * FROM events ${where} ORDER BY ts ${orderBy} LIMIT ? OFFSET ?`,
+        [...params, Number(limit) || 1000, Number(offset) || 0]
+    );
+
+    return (rows || []).map((row) => ({
+        ...row,
+        payload: safeParseJson(row.payload),
+        actor: safeParseJson(row.actor)
+    }));
+}
+
+export async function getEvent(eventId) {
+    if (!eventId) return null;
+    const row = await query('get', 'SELECT * FROM events WHERE id = ?', [eventId]);
+    if (!row) return null;
+    return {
+        ...row,
+        payload: safeParseJson(row.payload),
+        actor: safeParseJson(row.actor)
+    };
+}
+
+export async function getStateCurrent(atomeId) {
+    if (!atomeId) return null;
+    const row = await query('get', 'SELECT * FROM state_current WHERE atome_id = ?', [atomeId]);
+    if (!row) return null;
+    return {
+        ...row,
+        properties: safeParseJson(row.properties) || {}
+    };
+}
+
+export async function listStateCurrent(projectId, options = {}) {
+    const limit = Number(options.limit) || 1000;
+    const offset = Number(options.offset) || 0;
+
+    const params = [];
+    let where = '';
+    if (projectId) {
+        where = 'WHERE project_id = ?';
+        params.push(projectId);
+    }
+
+    const rows = await query(
+        'all',
+        `SELECT * FROM state_current ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+    );
+
+    return (rows || []).map((row) => ({
+        ...row,
+        properties: safeParseJson(row.properties) || {}
+    }));
+}
+
+export async function createStateSnapshot(options = {}) {
+    const {
+        projectId = null,
+        atomeId = null,
+        label = null,
+        actor = null,
+        state = null,
+        snapshotType = 'manual'
+    } = options || {};
+
+    const snapshotAtomeId = atomeId || projectId;
+    if (!snapshotAtomeId) {
+        throw new Error('Snapshot requires projectId or atomeId');
+    }
+
+    const now = new Date().toISOString();
+    const actorJson = serializeJson(actor);
+    const createdBy =
+        actor && typeof actor === 'object'
+            ? (actor.id || actor.user_id || actor.userId || null)
+            : (typeof actor === 'string' ? actor : null);
+
+    const statePayload = state || (projectId ? await listStateCurrent(projectId) : null);
+    const blob = JSON.stringify(statePayload || {});
+
+    await query(
+        'run',
+        `INSERT INTO snapshots (atome_id, project_id, snapshot_data, state_blob, label, snapshot_type, actor, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            snapshotAtomeId,
+            projectId,
+            blob,
+            blob,
+            label,
+            snapshotType,
+            actorJson,
+            createdBy,
+            now
+        ]
+    );
+
+    const inserted = await query(
+        'get',
+        'SELECT snapshot_id FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT 1',
+        [snapshotAtomeId]
+    );
+
+    return inserted?.snapshot_id;
+}
+
+export async function listStateSnapshots(projectId, options = {}) {
+    if (!projectId) return [];
+    const limit = Number(options.limit) || 20;
+    const offset = Number(options.offset) || 0;
+
+    const rows = await query(
+        'all',
+        'SELECT * FROM snapshots WHERE project_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+        [projectId, limit, offset]
+    );
+
+    return (rows || []).map((row) => ({
+        ...row,
+        state_blob: safeParseJson(row.state_blob || row.snapshot_data),
+        actor: safeParseJson(row.actor)
+    }));
+}
+
+export async function getStateSnapshot(snapshotId) {
+    if (!snapshotId) return null;
+    const row = await query('get', 'SELECT * FROM snapshots WHERE snapshot_id = ?', [snapshotId]);
+    if (!row) return null;
+    return {
+        ...row,
+        state_blob: safeParseJson(row.state_blob || row.snapshot_data),
+        actor: safeParseJson(row.actor)
+    };
 }
 
 // ============================================================================
@@ -1174,6 +1709,17 @@ export default {
     createSnapshot,
     getSnapshots,
     restoreSnapshot,
+    createStateSnapshot,
+    listStateSnapshots,
+    getStateSnapshot,
+
+    // Event log + projection
+    appendEvent,
+    appendEvents,
+    listEvents,
+    getEvent,
+    getStateCurrent,
+    listStateCurrent,
 
     // Permissions
     setPermission,

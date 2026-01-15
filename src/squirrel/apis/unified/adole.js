@@ -712,6 +712,23 @@ class TauriWebSocket {
                 return;
             }
 
+            const fallbackId = message.request_id || message.requestId;
+            if (fallbackId) {
+                const pending = this.pendingRequests.get(fallbackId);
+                if (pending) {
+                    this.pendingRequests.delete(fallbackId);
+                    clearTimeout(pending.timeout);
+                    const success = message.success ?? message.ok;
+                    pending.resolve({
+                        ok: success !== false,
+                        success: success !== false,
+                        status: success === false ? 400 : 200,
+                        error: message.error,
+                        data: message.data ?? message
+                    });
+                }
+            }
+
         } catch (e) {
             // Ignore parse errors
         }
@@ -883,6 +900,16 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         getToken: () => getToken(tokenKey),
         setToken: (token) => setToken(tokenKey, token),
         clearToken: () => clearToken(tokenKey),
+        ws: {
+            send: (message) => getWs().send(message),
+            sendFireAndForget: (message) => {
+                const ws = getWs();
+                if (ws && typeof ws.sendFireAndForget === 'function') {
+                    return ws.sendFireAndForget(message);
+                }
+                return ws.send(message);
+            }
+        },
 
         auth: {
             async register(data) {
@@ -965,14 +992,16 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 const token = getToken(tokenKey);
                 const ownerId = data.ownerId || data.owner_id || data.owner || null;
                 const properties = data?.properties || data?.particles || data;
+                const resolvedId = data.id || data.atomeId || data.atome_id || null;
+                const resolvedType = data.type || data.kind || data.atomeType || data.atome_type || null;
                 const payload = {
                     type: 'atome',
                     action: 'create',
                     token,
-                    id: data.id,  // Allow specifying ID for sync operations
-                    atomeId: data.id,  // Also send as atomeId for compatibility
-                    atomeType: data.type || data.kind,
-                    atome_type: data.type || data.kind,
+                    id: resolvedId,  // Allow specifying ID for sync operations
+                    atomeId: resolvedId,  // Also send as atomeId for compatibility
+                    atomeType: resolvedType,
+                    atome_type: resolvedType,
                     parentId: data.parentId || data.parent,
                     parent_id: data.parentId || data.parent,
                     particles: properties

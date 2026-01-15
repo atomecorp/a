@@ -2027,6 +2027,70 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
+                // Route to events handler (event log + state projection)
+                if msg_type == "events" {
+                    if let Some(ref atome_state) = state.atome_state {
+                        let user_id = if let Some(ref auth_state) = state.auth_state {
+                            let token = data.get("token").and_then(|v| v.as_str());
+                            local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token)
+                        } else {
+                            data.get("userId")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("anonymous")
+                                .to_string()
+                        };
+                        let response =
+                            local_atome::handle_events_message(data, &user_id, atome_state).await;
+                        let _ = socket
+                            .send(Message::Text(
+                                serde_json::to_string(&response).unwrap_or_default(),
+                            ))
+                            .await;
+                    } else {
+                        let _ = socket
+                            .send(Message::Text(
+                                json!({"type": "error", "message": "Atome state not initialized"})
+                                    .to_string(),
+                            ))
+                            .await;
+                    }
+                    continue;
+                }
+
+                // Route to state-current handler (projection cache)
+                if msg_type == "state-current" {
+                    if let Some(ref atome_state) = state.atome_state {
+                        let user_id = if let Some(ref auth_state) = state.auth_state {
+                            let token = data.get("token").and_then(|v| v.as_str());
+                            local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token)
+                        } else {
+                            data.get("userId")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("anonymous")
+                                .to_string()
+                        };
+                        let response = local_atome::handle_state_current_message(
+                            data,
+                            &user_id,
+                            atome_state,
+                        )
+                        .await;
+                        let _ = socket
+                            .send(Message::Text(
+                                serde_json::to_string(&response).unwrap_or_default(),
+                            ))
+                            .await;
+                    } else {
+                        let _ = socket
+                            .send(Message::Text(
+                                json!({"type": "error", "message": "Atome state not initialized"})
+                                    .to_string(),
+                            ))
+                            .await;
+                    }
+                    continue;
+                }
+
                 // Route to auth handler
                 if msg_type == "auth" {
                     if let Some(ref auth_state) = state.auth_state {

@@ -54,6 +54,52 @@ function generateDeterministicUserId(phone) {
     return userId;
 }
 
+async function upsertUserStateCurrent(dataSource, userId, username, phone, visibility, now) {
+    if (!dataSource || !userId) return;
+    const patch = {
+        type: 'user',
+        name: username,
+        username,
+        phone,
+        visibility
+    };
+
+    let existing = [];
+    try {
+        existing = await dataSource.query(
+            'SELECT properties, version, project_id FROM state_current WHERE atome_id = ?',
+            [userId]
+        );
+    } catch {
+        existing = [];
+    }
+
+    let currentProps = {};
+    if (existing.length > 0 && existing[0]?.properties) {
+        try {
+            currentProps = JSON.parse(existing[0].properties);
+        } catch {
+            currentProps = {};
+        }
+    }
+
+    const nextProps = { ...currentProps, ...patch };
+    const nextVersion = Number(existing[0]?.version || 0) + 1;
+    const projectId = existing[0]?.project_id || null;
+
+    if (existing.length > 0) {
+        await dataSource.query(
+            'UPDATE state_current SET properties = ?, updated_at = ?, version = ?, project_id = COALESCE(?, project_id) WHERE atome_id = ?',
+            [JSON.stringify(nextProps), now, nextVersion, projectId, userId]
+        );
+    } else {
+        await dataSource.query(
+            'INSERT INTO state_current (atome_id, project_id, properties, updated_at, version) VALUES (?, ?, ?, ?, ?)',
+            [userId, projectId, JSON.stringify(nextProps), now, nextVersion]
+        );
+    }
+}
+
 // In-memory OTP storage (use Redis in production for multi-instance deployments)
 const otpStore = new Map();
 
@@ -186,6 +232,8 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
                 [JSON.stringify(passwordHash), now, userId]
             );
 
+            await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now);
+
             console.log(`✅ [ADOLE] User reactivated: ${username} (${phone}) [${userId}]`);
 
             return {
@@ -224,6 +272,8 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
             [userId, p.key, p.value, now]
         );
     }
+
+    await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now);
 
     console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}]`);
 
@@ -750,6 +800,25 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             if (!passwordValid) {
                 // Return 200 with success:false to avoid browser console error
                 return { success: false, error: 'Invalid credentials' };
+            }
+
+            try {
+                const visibilityRows = await dataSource.query(
+                    'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ? LIMIT 1',
+                    [user.user_id, 'visibility']
+                );
+                const visibilityRaw = visibilityRows[0]?.particle_value || null;
+                const visibility = visibilityRaw ? JSON.parse(visibilityRaw) : 'public';
+                await upsertUserStateCurrent(
+                    dataSource,
+                    user.user_id,
+                    user.username,
+                    user.phone,
+                    visibility || 'public',
+                    new Date().toISOString()
+                );
+            } catch {
+                // Ignore state_current sync issues on login.
             }
 
             // Generate JWT (ADOLE v3.0: no tenant_id, user_id is atome_id)

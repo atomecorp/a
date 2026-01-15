@@ -855,6 +855,29 @@ NODE
     }
 
     if [[ "$OS_NAME" == "Darwin" ]]; then
+        # macOS-only: also remove Tauri app data (local DB lives here).
+        for id in "${APP_ID_VARIANTS[@]}"; do
+            TAURI_APP_DATA_PATH="$HOME/Library/Application Support/${id}/squirrel/Data"
+            if is_safe_user_path "$TAURI_APP_DATA_PATH"; then
+                echo "🧹 Removing Tauri app data: $TAURI_APP_DATA_PATH"
+                rm -rf "$TAURI_APP_DATA_PATH" || true
+            else
+                echo "⚠️  Refusing to remove unsafe path: $TAURI_APP_DATA_PATH"
+            fi
+        done
+
+        # Extra sweep: remove any Tauri data dir matching */squirrel/Data/adole.db.
+        while IFS= read -r candidate; do
+            [ -n "$candidate" ] || continue
+            TAURI_SWEEP_DIR="$(dirname "$candidate")"
+            if is_safe_user_path "$TAURI_SWEEP_DIR"; then
+                echo "🧹 Removing Tauri app data (sweep): $TAURI_SWEEP_DIR"
+                rm -rf "$TAURI_SWEEP_DIR" || true
+            else
+                echo "⚠️  Refusing to remove unsafe path: $TAURI_SWEEP_DIR"
+            fi
+        done < <(find "$HOME/Library/Application Support" -type f -path "*/squirrel/Data/adole.db" 2>/dev/null)
+
         for id in "${APP_ID_VARIANTS[@]}"; do
             purge_webview_path "$HOME/Library/WebKit/$id"
             purge_webview_path "$HOME/Library/Containers/$id"
