@@ -16,6 +16,18 @@ function is_file_asset_type(value) {
     return FILE_ASSET_TYPES.has(type);
 }
 
+function normalize_phone_input(phone) {
+    if (phone === null || phone === undefined) return '';
+    const trimmed = String(phone).trim();
+    if (!trimmed) return '';
+    const cleaned = trimmed.replace(/[^\d+]/g, '');
+    if (!cleaned) return '';
+    if (cleaned.startsWith('+')) {
+        return `+${cleaned.slice(1).replace(/\+/g, '')}`;
+    }
+    return cleaned.replace(/\+/g, '');
+}
+
 function normalizeAtomeRecord(raw) {
     if (!raw || typeof raw !== 'object') return raw;
 
@@ -355,10 +367,12 @@ async function ensure_fastify_token() {
     const cached = load_fastify_login_cache();
 
     const attemptLogin = async (phone, password, reasonLabel) => {
-        if (!phone || !password) return { ok: false, reason: reasonLabel };
+        const normalizedPhone = normalize_phone_input(phone);
+        const resolvedPhone = normalizedPhone || phone;
+        if (!resolvedPhone || !password) return { ok: false, reason: reasonLabel };
         _lastFastifyAutoLoginAttempt = now;
         try {
-            const res = await FastifyAdapter.auth.login({ phone, password });
+            const res = await FastifyAdapter.auth.login({ phone: resolvedPhone, password });
             if (res && (res.ok || res.success)) {
                 return { ok: true, reason: 'login_ok' };
             }
@@ -369,15 +383,17 @@ async function ensure_fastify_token() {
     };
 
     const tryRegisterAndLogin = async (phone, password, username) => {
+        const normalizedPhone = normalize_phone_input(phone);
+        const resolvedPhone = normalizedPhone || phone;
         try {
             const reg = await FastifyAdapter.auth.register({
-                phone,
+                phone: resolvedPhone,
                 password,
-                username: username || phone,
+                username: username || resolvedPhone,
                 visibility: 'public'
             });
             if (reg && (reg.ok || reg.success || is_already_exists_error(reg))) {
-                const retry = await attemptLogin(phone, password, 'login_after_register_failed');
+                const retry = await attemptLogin(resolvedPhone, password, 'login_after_register_failed');
                 if (retry.ok) return retry;
             }
         } catch { }
@@ -408,7 +424,7 @@ async function ensure_fastify_token() {
     if (pendingCreds?.phone && pendingCreds?.password) {
         const result = await attemptLogin(pendingCreds.phone, pendingCreds.password, 'pending_login_failed');
         if (result.ok) {
-            save_fastify_login_cache({ phone: pendingCreds.phone, password: pendingCreds.password });
+            save_fastify_login_cache({ phone: normalize_phone_input(pendingCreds.phone) || pendingCreds.phone, password: pendingCreds.password });
             return result;
         }
 
@@ -425,7 +441,7 @@ async function ensure_fastify_token() {
                 pendingCreds.username || pendingCreds.phone
             );
             if (retry.ok) {
-                save_fastify_login_cache({ phone: pendingCreds.phone, password: pendingCreds.password });
+                save_fastify_login_cache({ phone: normalize_phone_input(pendingCreds.phone) || pendingCreds.phone, password: pendingCreds.password });
                 return retry;
             }
         }
@@ -621,7 +637,7 @@ async function seed_public_user_directory_if_needed() {
 
 async function lookup_user_by_phone(phone) {
     if (!phone) return null;
-    const clean = String(phone).trim().replace(/\s+/g, '');
+    const clean = normalize_phone_input(phone);
     if (!clean) return null;
 
     try {
@@ -649,7 +665,7 @@ async function lookup_user_by_phone(phone) {
 
     // Offline-only: use directory cache.
     const cache = load_public_user_directory_cache();
-    const hit = cache.find(u => String(u.phone).trim() === clean);
+    const hit = cache.find((u) => normalize_phone_input(u.phone) === clean);
     if (!hit) return null;
     return { id: hit.user_id, user_id: hit.user_id, username: hit.username, phone: hit.phone, visibility: hit.visibility };
 }
@@ -897,6 +913,7 @@ async function process_pending_registers() {
         const data = item.data;
         const username = data.username;
         const phone = data.phone;
+        const cleanPhone = normalize_phone_input(phone) || phone;
         const password = data.password;
         const createdOn = data.createdOn;
         const optional = data.optional || null;
@@ -908,19 +925,19 @@ async function process_pending_registers() {
         // Only sync to the opposite backend.
         try {
             if (createdOn === 'tauri') {
-                const r = await FastifyAdapter.auth.register({ username, phone, password, visibility: 'public', optional });
+                const r = await FastifyAdapter.auth.register({ username, phone: cleanPhone, password, visibility: 'public', optional });
                 if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
                     if (is_tauri_runtime()) {
-                        save_fastify_login_cache({ phone, password });
+                        save_fastify_login_cache({ phone: cleanPhone, password });
                         if (!FastifyAdapter.getToken?.()) {
-                            try { await FastifyAdapter.auth.login({ phone, password }); } catch { }
+                            try { await FastifyAdapter.auth.login({ phone: cleanPhone, password }); } catch { }
                         }
                     }
                     continue;
                 }
             } else if (createdOn === 'fastify') {
-                const r = await TauriAdapter.auth.register({ username, phone, password, visibility: 'public', optional });
+                const r = await TauriAdapter.auth.register({ username, phone: cleanPhone, password, visibility: 'public', optional });
                 if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
                     continue;
@@ -1374,6 +1391,9 @@ async function create_user(phone, password, username, options = {}, callback) {
     const optional = options.optional || null;
     const autoLogin = options.autoLogin !== false;
     const clearAuthTokens = options.clearAuthTokens !== false;
+    const tauriPhone = String(phone ?? '').trim();
+    const fastifyPhone = normalize_phone_input(phone) || tauriPhone;
+    const resolvedUsername = username || fastifyPhone || tauriPhone;
 
     const results = {
         tauri: { success: false, data: null, error: null },
@@ -1393,9 +1413,9 @@ async function create_user(phone, password, username, options = {}, callback) {
     // Try Tauri first (local SQLite)
     try {
         const tauriResult = await TauriAdapter.auth.register({
-            phone,
+            phone: tauriPhone,
             password,
-            username,
+            username: resolvedUsername,
             visibility,
             optional
         });
@@ -1413,9 +1433,9 @@ async function create_user(phone, password, username, options = {}, callback) {
     // Also try Fastify (LibSQL)
     try {
         const fastifyResult = await FastifyAdapter.auth.register({
-            phone,
+            phone: fastifyPhone,
             password,
-            username,
+            username: resolvedUsername,
             visibility,
             optional
         });
@@ -1433,16 +1453,16 @@ async function create_user(phone, password, username, options = {}, callback) {
     // Bidirectional reliability: if one backend was offline, queue a register for later.
     // This keeps "created offline in Tauri" and "created in Fastify" converging over time.
     if (results.tauri.success && !results.fastify.success) {
-        queue_pending_register({ username, phone, password, createdOn: 'tauri', optional });
+        queue_pending_register({ username: resolvedUsername, phone: tauriPhone, password, createdOn: 'tauri', optional });
     } else if (results.fastify.success && !results.tauri.success) {
-        queue_pending_register({ username, phone, password, createdOn: 'fastify', optional });
+        queue_pending_register({ username: resolvedUsername, phone: fastifyPhone, password, createdOn: 'fastify', optional });
     }
 
     // IMPORTANT (browser/Fastify): auth.register may not issue a usable JWT for ws/api.
     // Ensure we explicitly login to get a token and set current user state.
     if (autoLogin && (results.tauri.success || results.fastify.success)) {
         try {
-            const loginResults = await log_user(phone, password, username);
+            const loginResults = await log_user(tauriPhone, password, resolvedUsername);
             results.login = loginResults;
         } catch (e) {
             results.login = { error: e.message };
@@ -1456,8 +1476,8 @@ async function create_user(phone, password, username, options = {}, callback) {
             try {
                 await set_current_user_state(
                     registeredId,
-                    registeredUser?.username || username || null,
-                    registeredUser?.phone || phone || null,
+                    registeredUser?.username || resolvedUsername || null,
+                    registeredUser?.phone || fastifyPhone || tauriPhone || null,
                     false
                 );
             } catch { }
@@ -1537,6 +1557,9 @@ async function set_user_visibility(visibility, callback) {
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
 async function log_user(phone, password, username, callback) {
+    const tauriPhone = String(phone ?? '').trim();
+    const fastifyPhone = normalize_phone_input(phone) || tauriPhone;
+    const resolvedUsername = username || fastifyPhone || tauriPhone;
     const results = {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
@@ -1545,7 +1568,7 @@ async function log_user(phone, password, username, callback) {
     // Try Tauri first (local SQLite)
     try {
         const tauriResult = await TauriAdapter.auth.login({
-            phone,
+            phone: tauriPhone,
             password
         });
         if (tauriResult.ok || tauriResult.success) {
@@ -1560,7 +1583,7 @@ async function log_user(phone, password, username, callback) {
     // Also try Fastify (LibSQL)
     try {
         const fastifyResult = await FastifyAdapter.auth.login({
-            phone,
+            phone: fastifyPhone,
             password
         });
         if (fastifyResult.ok || fastifyResult.success) {
@@ -1589,20 +1612,20 @@ async function log_user(phone, password, username, callback) {
 
         if (shouldBootstrapFastify) {
             const tauriUser = results.tauri.data?.user || {};
-            const registerUsername = tauriUser.username || username || phone;
-            const shouldAttemptRegister = !!(phone && password && registerUsername);
+            const registerUsername = tauriUser.username || resolvedUsername;
+            const shouldAttemptRegister = !!(fastifyPhone && password && registerUsername);
 
             if (shouldAttemptRegister) {
                 try {
                     const reg = await FastifyAdapter.auth.register({
-                        phone,
+                        phone: fastifyPhone,
                         password,
                         username: registerUsername,
                         visibility: 'public'
                     });
 
                     if (reg && (reg.ok || reg.success || is_already_exists_error(reg))) {
-                        const retry = await FastifyAdapter.auth.login({ phone, password });
+                        const retry = await FastifyAdapter.auth.login({ phone: fastifyPhone, password });
                         if (retry && (retry.ok || retry.success)) {
                             results.fastify = { success: true, data: retry, error: null };
                         }
@@ -1613,7 +1636,7 @@ async function log_user(phone, password, username, callback) {
             }
 
             if (!results.fastify.success) {
-                queue_pending_register({ username: registerUsername, phone, password, createdOn: 'tauri' });
+                queue_pending_register({ username: registerUsername, phone: tauriPhone, password, createdOn: 'tauri' });
             }
         }
     } catch (_) {
@@ -1634,12 +1657,12 @@ async function log_user(phone, password, username, callback) {
 
         if (canBootstrap) {
             const fastifyUser = results.fastify.data?.user || {};
-            const registerUsername = fastifyUser.username || username;
+            const registerUsername = fastifyUser.username || resolvedUsername;
             let bootstrapOk = false;
 
             try {
                 const reg = await TauriAdapter.auth.bootstrap({
-                    phone,
+                    phone: tauriPhone,
                     password,
                     username: registerUsername,
                     visibility: 'public'
@@ -1659,7 +1682,7 @@ async function log_user(phone, password, username, callback) {
 
             if (!bootstrapOk) {
                 try {
-                    const tauriRetry = await TauriAdapter.auth.login({ phone, password });
+                    const tauriRetry = await TauriAdapter.auth.login({ phone: tauriPhone, password });
                     if (tauriRetry && (tauriRetry.ok || tauriRetry.success)) {
                         results.tauri = { success: true, data: tauriRetry, error: null };
                     }
@@ -1674,12 +1697,12 @@ async function log_user(phone, password, username, callback) {
 
     // If login succeeded, update current user state and machine association
     if (results.tauri.success || results.fastify.success) {
-        save_fastify_login_cache({ phone, password });
+        save_fastify_login_cache({ phone: fastifyPhone || tauriPhone, password });
 
         const userData = results.tauri.data?.user || results.fastify.data?.user || {};
         const userId = userData.user_id || userData.id || userData.userId;
-        const userName = userData.username || username;
-        const userPhone = userData.phone || phone;
+        const userName = userData.username || resolvedUsername;
+        const userPhone = userData.phone || fastifyPhone || tauriPhone;
 
         if (userId) {
             await set_current_user_state(userId, userName, userPhone, true);
@@ -1872,6 +1895,7 @@ async function unlog_user(callback = null) {
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
 async function delete_user(phone, password, username, callback) {
+    const cleanPhone = normalize_phone_input(phone) || phone;
     const results = {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
@@ -1880,7 +1904,7 @@ async function delete_user(phone, password, username, callback) {
     // Try Tauri first (local SQLite)
     try {
         const tauriResult = await TauriAdapter.auth.deleteAccount({
-            phone,
+            phone: cleanPhone,
             password
         });
         if (tauriResult.ok || tauriResult.success) {
@@ -1895,7 +1919,7 @@ async function delete_user(phone, password, username, callback) {
     // Also try Fastify (LibSQL)
     try {
         const fastifyResult = await FastifyAdapter.auth.deleteAccount({
-            phone,
+            phone: cleanPhone,
             password
         });
         if (fastifyResult.ok || fastifyResult.success) {
@@ -2918,55 +2942,55 @@ async function sync_atomes(callback) {
         return result.bytes || null;
     };
 
-const WS_FILE_CHUNK_SIZE = 256 * 1024;
-const _localFsLogState = { pull: false, push: false };
+    const WS_FILE_CHUNK_SIZE = 256 * 1024;
+    const _localFsLogState = { pull: false, push: false };
 
-const listTauriDirEntries = async (ownerId, relativePath) => {
-    if (!is_tauri_runtime()) {
-        return { ok: false, error: 'not_tauri', entries: [] };
-    }
-    const base = resolveLocalAxumBase();
-    const headers = buildLocalAuthHeaders(ownerId);
-    const url = `${base}/api/local-files/list?path=${encodeURIComponent(relativePath || '')}`;
-    const result = await fetchLocalJson(url, { method: 'GET', headers });
-    if (!result.ok) {
-        return {
-            ok: false,
-            error: result.data?.error || result.data || 'local_list_failed',
-            entries: []
-        };
-    }
-    const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
-    return { ok: true, entries };
-};
+    const listTauriDirEntries = async (ownerId, relativePath) => {
+        if (!is_tauri_runtime()) {
+            return { ok: false, error: 'not_tauri', entries: [] };
+        }
+        const base = resolveLocalAxumBase();
+        const headers = buildLocalAuthHeaders(ownerId);
+        const url = `${base}/api/local-files/list?path=${encodeURIComponent(relativePath || '')}`;
+        const result = await fetchLocalJson(url, { method: 'GET', headers });
+        if (!result.ok) {
+            return {
+                ok: false,
+                error: result.data?.error || result.data || 'local_list_failed',
+                entries: []
+            };
+        }
+        const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
+        return { ok: true, entries };
+    };
 
-const logLocalDownloadsSnapshot = async (ownerId, filePath, reason) => {
-    if (!is_tauri_runtime()) return;
-    const relativePath = resolveLocalRelativePath(filePath || '', ownerId, null);
-    const result = await listTauriDirEntries(ownerId, relativePath);
-    const entries = result.entries.slice(0, 50).map((entry) => entry.name || entry.path || '');
-    console.log('[sync_atomes] local_dir_snapshot', {
-        reason,
-        ownerId,
-        dir: relativePath || 'Downloads',
-        ok: result.ok,
-        error: result.error,
-        entries
-    });
-};
+    const logLocalDownloadsSnapshot = async (ownerId, filePath, reason) => {
+        if (!is_tauri_runtime()) return;
+        const relativePath = resolveLocalRelativePath(filePath || '', ownerId, null);
+        const result = await listTauriDirEntries(ownerId, relativePath);
+        const entries = result.entries.slice(0, 50).map((entry) => entry.name || entry.path || '');
+        console.log('[sync_atomes] local_dir_snapshot', {
+            reason,
+            ownerId,
+            dir: relativePath || 'Downloads',
+            ok: result.ok,
+            error: result.error,
+            entries
+        });
+    };
 
-const logTauriFsStatusOnce = (mode, localPath) => {
-    if (!is_tauri_runtime()) return;
-    if (_localFsLogState[mode]) return;
-    console.log('[sync_atomes] local_fs', {
-        mode,
-        base: resolveLocalAxumBase(),
-        hasToken: !!TauriAdapter?.getToken?.(),
-        projectRoot: resolveProjectRoot(),
-        localPath
-    });
-    _localFsLogState[mode] = true;
-};
+    const logTauriFsStatusOnce = (mode, localPath) => {
+        if (!is_tauri_runtime()) return;
+        if (_localFsLogState[mode]) return;
+        console.log('[sync_atomes] local_fs', {
+            mode,
+            base: resolveLocalAxumBase(),
+            hasToken: !!TauriAdapter?.getToken?.(),
+            projectRoot: resolveProjectRoot(),
+            localPath
+        });
+        _localFsLogState[mode] = true;
+    };
 
     const bytesToBase64 = (bytes) => {
         if (!bytes || !bytes.length) return '';

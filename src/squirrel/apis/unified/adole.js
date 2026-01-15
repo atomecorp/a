@@ -576,11 +576,72 @@ class TauriWebSocket {
                                 timestamp: message.timestamp || null
                             };
 
+                            const applyDomPatch = (atomeId, properties = {}) => {
+                                if (!atomeId || typeof document === 'undefined') return;
+                                const elements = new Set();
+                                const byId = document.getElementById(`atome_${atomeId}`) || document.getElementById(String(atomeId));
+                                if (byId) elements.add(byId);
+                                const escapedId = (typeof CSS !== 'undefined' && CSS.escape)
+                                    ? CSS.escape(String(atomeId))
+                                    : String(atomeId).replace(/"/g, '\\"');
+                                document.querySelectorAll(`[data-atome-id="${escapedId}"]`).forEach((el) => elements.add(el));
+                                if (!elements.size) return;
+                                const cssProps = properties?.css && typeof properties.css === 'object' ? properties.css : null;
+                                if (cssProps) {
+                                    Object.entries(cssProps).forEach(([key, value]) => {
+                                        elements.forEach((el) => { el.style[key] = typeof value === 'number' ? `${value}px` : String(value); });
+                                    });
+                                }
+                                Object.entries(properties || {}).forEach(([key, value]) => {
+                                    if (value == null) return;
+                                    if (key === 'text') {
+                                        elements.forEach((el) => { el.textContent = String(value); });
+                                        return;
+                                    }
+                                    if (key.startsWith('css.')) {
+                                        const cssKey = key.slice(4);
+                                        elements.forEach((el) => { el.style[cssKey] = typeof value === 'number' ? `${value}px` : String(value); });
+                                        return;
+                                    }
+                                    if (key === 'rotation' || key === 'rotate') {
+                                        const next = String(value).includes('deg') || String(value).includes('rad')
+                                            ? String(value)
+                                            : `${value}deg`;
+                                        elements.forEach((el) => { el.style.transform = `rotate(${next})`; });
+                                        return;
+                                    }
+                                    if (['left', 'top', 'right', 'bottom', 'width', 'height', 'opacity', 'zIndex', 'background', 'backgroundColor', 'color']
+                                        .includes(key)) {
+                                        elements.forEach((el) => { el.style[key] = typeof value === 'number' ? `${value}px` : String(value); });
+                                    }
+                                });
+                            };
+
                             if (commandName === 'share-create' && typeof window !== 'undefined') {
                                 try {
                                     const detail = { ...(params || {}), sender: senderInfo };
                                     window.dispatchEvent(new CustomEvent('adole-share-create', { detail }));
+                                    if (detail?.atomeId || detail?.atome_id) {
+                                        window.dispatchEvent(new CustomEvent('squirrel:atome-created', { detail }));
+                                    }
                                 } catch (_) { }
+                                return;
+                            }
+
+                            if (commandName === 'share-sync' && typeof window !== 'undefined') {
+                                const atomeId = params?.atomeId || params?.atome_id || params?.id || null;
+                                const properties = params?.properties || params?.particles || params?.patch || null;
+                                const isDeleted = properties?.__deleted === true || params?.deletedAt || params?.deleted_at;
+                                if (atomeId) {
+                                    if (isDeleted) {
+                                        window.dispatchEvent(new CustomEvent('squirrel:atome-deleted', { detail: { id: atomeId, atome_id: atomeId, source: 'realtime' } }));
+                                    } else if (properties && typeof properties === 'object') {
+                                        window.dispatchEvent(new CustomEvent('squirrel:atome-updated', {
+                                            detail: { id: atomeId, atome_id: atomeId, properties, source: 'realtime' }
+                                        }));
+                                        applyDomPatch(atomeId, properties);
+                                    }
+                                }
                                 return;
                             }
 

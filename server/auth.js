@@ -34,6 +34,18 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days in seconds
 // This MUST be the same in Fastify and Axum to generate identical user IDs
 const SQUIRREL_USER_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 
+function normalizePhone(phone) {
+    if (phone === null || phone === undefined) return '';
+    const trimmed = String(phone).trim();
+    if (!trimmed) return '';
+    const cleaned = trimmed.replace(/[^\d+]/g, '');
+    if (!cleaned) return '';
+    if (cleaned.startsWith('+')) {
+        return `+${cleaned.slice(1).replace(/\+/g, '')}`;
+    }
+    return cleaned.replace(/\+/g, '');
+}
+
 /**
  * Generate a deterministic user ID from phone number
  * Uses UUID v5 (SHA-1 based) with a fixed namespace
@@ -44,8 +56,7 @@ const SQUIRREL_USER_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
  * @returns {string} - Deterministic UUID
  */
 function generateDeterministicUserId(phone) {
-    // Normalize phone: remove spaces, ensure consistent format
-    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').toLowerCase();
+    const normalizedPhone = normalizePhone(phone).toLowerCase();
 
     // Generate UUID v5 from phone + namespace
     const userId = uuidv5(normalizedPhone, SQUIRREL_USER_NAMESPACE);
@@ -359,7 +370,21 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
  * @returns {Promise<Object|null>} User data or null
  */
 async function findUserByPhone(dataSource, phone) {
-    const rows = await dataSource.query(
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return null;
+
+    const parseUserRow = (user) => ({
+        user_id: user.user_id,
+        username: user.username ? JSON.parse(user.username) : null,
+        phone: user.phone ? JSON.parse(user.phone) : null,
+        password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        last_sync: user.last_sync,
+        created_source: user.created_source
+    });
+
+    const directRows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
@@ -369,23 +394,35 @@ async function findUserByPhone(dataSource, phone) {
          WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
          GROUP BY a.atome_id
          HAVING MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) = ?`,
-        [JSON.stringify(phone)]
+        [JSON.stringify(normalizedPhone)]
     );
 
-    if (rows.length === 0) return null;
+    if (directRows.length > 0) {
+        return parseUserRow(directRows[0]);
+    }
 
-    const user = rows[0];
-    // Parse JSON values
-    return {
-        user_id: user.user_id,
-        username: user.username ? JSON.parse(user.username) : null,
-        phone: user.phone ? JSON.parse(user.phone) : null,
-        password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
-        last_sync: user.last_sync,
-        created_source: user.created_source
-    };
+    const rows = await dataSource.query(
+        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
+                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
+                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
+                MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
+         FROM atomes a
+         LEFT JOIN particles p ON a.atome_id = p.atome_id
+         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
+         GROUP BY a.atome_id`
+    );
+
+    const match = rows.find((row) => {
+        if (!row?.phone) return false;
+        try {
+            const storedPhone = JSON.parse(row.phone);
+            return normalizePhone(storedPhone) === normalizedPhone;
+        } catch {
+            return false;
+        }
+    });
+
+    return match ? parseUserRow(match) : null;
 }
 
 /**
@@ -593,15 +630,15 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     server.post('/api/auth/check-phone', async (request, reply) => {
         const { phone } = request.body || {};
 
-        if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
+        const cleanPhone = normalizePhone(phone);
+
+        if (!cleanPhone || cleanPhone.length < 6) {
             return reply.code(400).send({
                 success: false,
                 exists: false,
                 error: 'Valid phone number is required'
             });
         }
-
-        const cleanPhone = phone.trim().replace(/\s+/g, '');
 
         try {
             // ADOLE v3.0: Check if phone exists in particles
@@ -692,7 +729,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return reply.code(400).send({ success: false, error: 'Username must be at least 2 characters' });
         }
 
-        if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
+        const cleanPhone = normalizePhone(phone);
+
+        if (!cleanPhone || cleanPhone.length < 6) {
             return reply.code(400).send({ success: false, error: 'Valid phone number is required' });
         }
 
@@ -700,7 +739,6 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return reply.code(400).send({ success: false, error: 'Password must be at least 8 characters' });
         }
 
-        const cleanPhone = phone.trim().replace(/\s+/g, '');
         const cleanUsername = username.trim();
         const safeOptional = normalizeUserOptional(optional);
 
@@ -799,7 +837,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return reply.code(400).send({ success: false, error: 'Username must be at least 2 characters' });
         }
 
-        if (!phone || typeof phone !== 'string' || phone.trim().length < 6) {
+        const cleanPhone = normalizePhone(phone);
+
+        if (!cleanPhone || cleanPhone.length < 6) {
             return reply.code(400).send({ success: false, error: 'Valid phone number is required' });
         }
 
@@ -807,7 +847,6 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return reply.code(400).send({ success: false, error: 'Password hash is required for sync' });
         }
 
-        const cleanPhone = phone.trim().replace(/\s+/g, '');
         const cleanUsername = username.trim();
 
         try {
@@ -853,7 +892,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return reply.code(400).send({ success: false, error: 'Phone and password are required' });
         }
 
-        const cleanPhone = phone.trim().replace(/\s+/g, '');
+        const cleanPhone = normalizePhone(phone);
 
         try {
             // ADOLE v3.0: Find user by phone (query particles)
@@ -1086,7 +1125,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return reply.code(400).send({ success: false, error: 'Phone number is required' });
         }
 
-        const cleanPhone = phone.trim().replace(/\s+/g, '');
+        const cleanPhone = normalizePhone(phone);
 
         try {
             // ADOLE v3.0: Check if user exists via particles
@@ -1129,7 +1168,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return reply.code(400).send({ success: false, error: 'Password must be at least 8 characters' });
         }
 
-        const cleanPhone = phone.trim().replace(/\s+/g, '');
+        const cleanPhone = normalizePhone(phone);
 
         // Verify OTP
         const otpResult = verifyOTP(cleanPhone, code);
@@ -1238,11 +1277,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             const { newPhone } = request.body || {};
 
-            if (!newPhone || newPhone.trim().length < 6) {
+            const cleanPhone = normalizePhone(newPhone);
+
+            if (!cleanPhone || cleanPhone.length < 6) {
                 return reply.code(400).send({ success: false, error: 'Valid phone number is required' });
             }
-
-            const cleanPhone = newPhone.trim().replace(/\s+/g, '');
 
             // ADOLE v3.0: Check if new phone is already in use via particles
             const existingUser = await findUserByPhone(dataSource, cleanPhone);
@@ -1291,7 +1330,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: 'Phone and code are required' });
             }
 
-            const cleanPhone = newPhone.trim().replace(/\s+/g, '');
+            const cleanPhone = normalizePhone(newPhone);
 
             // Verify OTP
             const otpResult = verifyOTP(cleanPhone, code);

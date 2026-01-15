@@ -447,6 +447,89 @@ const realtimeState = {
 
 const realtimeListeners = new Map();
 
+const normalizeAtomePayload = (payload = {}) => {
+    const atome = payload.atome || payload.data?.atome || payload.data || payload.record || null;
+    const atomeId = payload.atomeId || payload.atome_id || atome?.atome_id || atome?.id || null;
+    const properties = atome?.properties || atome?.particles || atome?.data || payload.properties || payload.particles || null;
+    return { atome, atomeId, properties };
+};
+
+const coerceStyleValue = (value) => {
+    if (value == null) return '';
+    if (typeof value === 'number') return `${value}px`;
+    return String(value);
+};
+
+const applyAtomePatchToDom = (atomeId, properties = {}) => {
+    if (!atomeId || typeof document === 'undefined') return;
+    const elements = new Set();
+    const idCandidates = [
+        `atome_${atomeId}`,
+        String(atomeId)
+    ];
+    idCandidates.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) elements.add(el);
+    });
+
+    const escapedId = (typeof CSS !== 'undefined' && CSS.escape)
+        ? CSS.escape(String(atomeId))
+        : String(atomeId).replace(/"/g, '\\"');
+    const dataNodes = document.querySelectorAll(`[data-atome-id="${escapedId}"]`);
+    dataNodes.forEach((el) => elements.add(el));
+
+    if (!elements.size) return;
+
+    const cssProps = properties?.css && typeof properties.css === 'object' ? properties.css : null;
+    if (cssProps) {
+        Object.entries(cssProps).forEach(([key, value]) => {
+            elements.forEach((el) => {
+                el.style[key] = coerceStyleValue(value);
+            });
+        });
+    }
+
+    Object.entries(properties || {}).forEach(([key, value]) => {
+        if (value == null) return;
+        if (key === 'text') {
+            elements.forEach((el) => { el.textContent = String(value); });
+            return;
+        }
+        if (key.startsWith('css.')) {
+            const cssKey = key.slice(4);
+            elements.forEach((el) => { el.style[cssKey] = coerceStyleValue(value); });
+            return;
+        }
+        if (key === 'rotation' || key === 'rotate') {
+            const next = String(value).includes('deg') || String(value).includes('rad')
+                ? String(value)
+                : `${value}deg`;
+            elements.forEach((el) => { el.style.transform = `rotate(${next})`; });
+            return;
+        }
+        if (key === 'left' || key === 'top' || key === 'right' || key === 'bottom'
+            || key === 'width' || key === 'height' || key === 'opacity'
+            || key === 'zIndex' || key === 'background' || key === 'backgroundColor'
+            || key === 'color') {
+            elements.forEach((el) => { el.style[key] = coerceStyleValue(value); });
+        }
+    });
+};
+
+const dispatchAtomeEvent = (type, payload) => {
+    if (typeof window === 'undefined') return;
+    const { atome, atomeId, properties } = normalizeAtomePayload(payload);
+    if (!atomeId && !atome) return;
+    const detail = {
+        id: atomeId || atome?.id || atome?.atome_id || null,
+        atome_id: atomeId || atome?.atome_id || atome?.id || null,
+        atome,
+        properties: properties || atome?.properties || atome?.particles || atome?.data || null,
+        source: 'realtime'
+    };
+    window.dispatchEvent(new CustomEvent(type, { detail }));
+};
+
 // =============================================================================
 // REAL-TIME SYNC API
 // =============================================================================
@@ -454,6 +537,20 @@ const realtimeListeners = new Map();
 const connectRealtime = async (options = {}) => {
     const onPayload = (payload) => {
         if (!payload || !payload.type) return;
+
+        if (payload.type === 'atome:created') {
+            dispatchAtomeEvent('squirrel:atome-created', payload);
+            const { atomeId, properties } = normalizeAtomePayload(payload);
+            if (properties) applyAtomePatchToDom(atomeId, properties);
+        }
+        if (payload.type === 'atome:updated' || payload.type === 'atome:altered') {
+            dispatchAtomeEvent('squirrel:atome-updated', payload);
+            const { atomeId, properties } = normalizeAtomePayload(payload);
+            if (properties) applyAtomePatchToDom(atomeId, properties);
+        }
+        if (payload.type === 'atome:deleted') {
+            dispatchAtomeEvent('squirrel:atome-deleted', payload);
+        }
 
         // Forward to external listeners
         const listeners = realtimeListeners.get(payload.type) || [];
@@ -484,6 +581,14 @@ const connectRealtime = async (options = {}) => {
             clientType: runtime,
             timestamp: nowIso()
         });
+
+        try { flushQueue('fastify'); } catch (_) { }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('squirrel:sync-ready', {
+                detail: { endpoint: realtimeSocket.getState().endpoint, runtime, backend: 'fastify' }
+            }));
+        }
 
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('squirrel:sync-connected', {
@@ -756,23 +861,8 @@ const builtinHandlers = {
             const properties = params?.properties || params?.particles || params?.patch || null;
             if (!atomeId || !properties || typeof properties !== 'object') return;
 
-            const candidates = [
-                document.getElementById(`atome_${atomeId}`),
-                document.getElementById(atomeId)
-            ].filter(Boolean);
-
-            candidates.forEach((el) => {
-                Object.entries(properties).forEach(([key, value]) => {
-                    if (key === 'text') {
-                        el.textContent = String(value ?? '');
-                        return;
-                    }
-                    if (key.startsWith('css.')) {
-                        const cssKey = key.replace('css.', '');
-                        el.style[cssKey] = typeof value === 'number' ? `${value}px` : String(value);
-                    }
-                });
-            });
+            applyAtomePatchToDom(atomeId, properties);
+            dispatchAtomeEvent('squirrel:atome-updated', { atomeId, properties });
         });
         return true;
     },
@@ -829,6 +919,14 @@ const UnifiedSync = {
                 retry: () => realtimeSocket.connect()
             };
             window.Squirrel.VersionSync = window.Squirrel.SyncEngine;
+        }
+
+        if (options.autoCommands !== false) {
+            try { commands.builtin.registerAll(); } catch (_) { }
+            try {
+                const uid = getCurrentUserId();
+                if (uid) commands.start(uid);
+            } catch (_) { }
         }
 
         if (options.autoConnect !== false) {
