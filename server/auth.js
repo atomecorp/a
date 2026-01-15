@@ -54,7 +54,63 @@ function generateDeterministicUserId(phone) {
     return userId;
 }
 
-async function upsertUserStateCurrent(dataSource, userId, username, phone, visibility, now) {
+const RESERVED_USER_PARTICLE_KEYS = new Set([
+    'id',
+    'atome_id',
+    'user_id',
+    'type',
+    'kind',
+    'owner_id',
+    'creator_id',
+    'created_at',
+    'updated_at',
+    'deleted_at',
+    'sync_status',
+    'last_sync',
+    'password_hash',
+    'phone',
+    'username',
+    'visibility'
+]);
+
+function normalizeUserOptional(optional) {
+    if (!optional || typeof optional !== 'object' || Array.isArray(optional)) {
+        return {};
+    }
+    const cleaned = {};
+    for (const [key, value] of Object.entries(optional)) {
+        if (!key || RESERVED_USER_PARTICLE_KEYS.has(key)) continue;
+        cleaned[key] = value;
+    }
+    return cleaned;
+}
+
+async function getUserOptionalParticles(dataSource, userId) {
+    if (!dataSource || !userId) return {};
+    try {
+        const rows = await dataSource.query(
+            'SELECT particle_key, particle_value FROM particles WHERE atome_id = ?',
+            [String(userId)]
+        );
+        const optional = {};
+        for (const row of rows || []) {
+            const key = row?.particle_key ? String(row.particle_key) : '';
+            if (!key) continue;
+            if (RESERVED_USER_PARTICLE_KEYS.has(key)) continue;
+            if (key.startsWith('_')) continue;
+            let value = row?.particle_value;
+            if (typeof value === 'string') {
+                try { value = JSON.parse(value); } catch { }
+            }
+            optional[key] = value;
+        }
+        return optional;
+    } catch {
+        return {};
+    }
+}
+
+async function upsertUserStateCurrent(dataSource, userId, username, phone, visibility, now, optional = {}) {
     if (!dataSource || !userId) return;
     const patch = {
         type: 'user',
@@ -63,6 +119,7 @@ async function upsertUserStateCurrent(dataSource, userId, username, phone, visib
         phone,
         visibility
     };
+    const optionalPatch = normalizeUserOptional(optional);
 
     let existing = [];
     try {
@@ -83,7 +140,7 @@ async function upsertUserStateCurrent(dataSource, userId, username, phone, visib
         }
     }
 
-    const nextProps = { ...currentProps, ...patch };
+    const nextProps = { ...currentProps, ...patch, ...optionalPatch };
     const nextVersion = Number(existing[0]?.version || 0) + 1;
     const projectId = existing[0]?.project_id || null;
 
@@ -199,10 +256,11 @@ export async function sendSMS(phone, message) {
  * @param {string} [visibility='public'] - Account visibility: 'public' or 'private'
  * @returns {Promise<Object>} Created user data
  */
-async function createUserAtome(dataSource, userId, username, phone, passwordHash, visibility = 'public') {
+async function createUserAtome(dataSource, userId, username, phone, passwordHash, visibility = 'public', optional = {}) {
     const now = new Date().toISOString();
     // Normalize visibility value
     const normalizedVisibility = (visibility === 'private') ? 'private' : 'public';
+    const optionalParticles = normalizeUserOptional(optional);
 
     // Check if user exists (including soft-deleted)
     const existingRows = await dataSource.query(
@@ -232,7 +290,11 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
                 [JSON.stringify(passwordHash), now, userId]
             );
 
-            await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now);
+            for (const [key, value] of Object.entries(optionalParticles)) {
+                await updateUserParticle(dataSource, userId, key, value);
+            }
+
+            await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now, optionalParticles);
 
             console.log(`✅ [ADOLE] User reactivated: ${username} (${phone}) [${userId}]`);
 
@@ -273,7 +335,11 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
         );
     }
 
-    await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now);
+    for (const [key, value] of Object.entries(optionalParticles)) {
+        await updateUserParticle(dataSource, userId, key, value);
+    }
+
+    await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now, optionalParticles);
 
     console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}]`);
 
@@ -455,10 +521,11 @@ async function deleteUserAtome(dataSource, userId) {
  * @param {string} userId - User's atome_id
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-async function syncUserToTauri(username, phone, passwordHash, userId = null) {
+async function syncUserToTauri(username, phone, passwordHash, userId = null, optional = {}) {
     try {
         const eventBus = getABoxEventBus();
         if (eventBus) {
+            const safeOptional = normalizeUserOptional(optional);
             eventBus.emit('event', {
                 type: 'sync:user-created',
                 timestamp: new Date().toISOString(),
@@ -468,7 +535,8 @@ async function syncUserToTauri(username, phone, passwordHash, userId = null) {
                     username,
                     phone,
                     passwordHash,
-                    source: 'fastify'
+                    source: 'fastify',
+                    optional: safeOptional
                 }
             });
             console.log(`🔄 [WebSocket] User sync event emitted: ${username} (${phone})`);
@@ -634,6 +702,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
         const cleanPhone = phone.trim().replace(/\s+/g, '');
         const cleanUsername = username.trim();
+        const safeOptional = normalizeUserOptional(optional);
 
         try {
             // Check if phone already exists (ADOLE: query particles for phone)
@@ -654,14 +723,14 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             // Create user atome with particles (ADOLE v3.0)
             // visibility: 'public' = visible in user_list, 'private' = hidden (default)
-            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash, visibility);
+            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash, visibility, safeOptional);
 
             console.log(`✅ User registered (ADOLE atome): ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
             // Sync to Tauri server (async, don't block response)
             let syncResult = { success: false };
             try {
-                syncResult = await syncUserToTauri(cleanUsername, cleanPhone, passwordHash);
+                syncResult = await syncUserToTauri(cleanUsername, cleanPhone, passwordHash, principalId, safeOptional);
             } catch (e) {
                 console.warn('[auth] Tauri sync error:', e.message);
             }
@@ -678,7 +747,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                             userId: principalId,
                             username: cleanUsername,
                             phone: cleanPhone,
-                            optional: optional || {}
+                            optional: safeOptional
                         }
                     });
                     console.log('[auth] Emitted sync:account-created event');
@@ -753,7 +822,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Create user atome with pre-hashed password (ADOLE v3.0)
             const principalId = generateDeterministicUserId(cleanPhone);
 
-            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash);
+            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash, 'public', body.optional || {});
 
             // Update last_sync particle
             await updateUserParticle(dataSource, principalId, 'last_sync', new Date().toISOString());
@@ -857,7 +926,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     id: user.user_id,
                     username: user.username,
                     phone: user.phone,
-                    optional: {}
+                    optional: await getUserOptionalParticles(dataSource, user.user_id)
                 }
             };
 
@@ -938,7 +1007,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     id: user.user_id,
                     username: user.username,
                     phone: user.phone,
-                    optional: {}
+                    optional: await getUserOptionalParticles(dataSource, user.user_id)
                 }
             };
 

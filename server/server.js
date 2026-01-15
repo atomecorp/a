@@ -2345,7 +2345,7 @@ async function startServer() {
                 // visibility: 'public' = visible in user_list (default), 'private' = hidden
                 const passwordHash = await hashPassword(password);
                 const userId = generateDeterministicUserId(phone);
-                await createUserAtome(dataSource, userId, username, phone, passwordHash, visibility || 'public');
+                await createUserAtome(dataSource, userId, username, phone, passwordHash, visibility || 'public', data.optional || {});
 
                 // Broadcast account creation for real-time directory sync (ws/sync)
                 try {
@@ -3527,6 +3527,25 @@ async function startServer() {
           // Legacy compatibility
           if (type === 'sync:user-created' || type === 'sync:user-deleted') {
             safeSend(payload);
+            return;
+          }
+
+          // Atome events (real-time sync)
+          if (type === 'atome-sync') {
+            const operation = String(payload.operation || 'update').toLowerCase();
+            const mapType = operation === 'create'
+              ? 'atome:created'
+              : operation === 'delete'
+                ? 'atome:deleted'
+                : 'atome:updated';
+            const atome = payload.atome || null;
+            const atomeId = atome?.id || atome?.atome_id || payload.atomeId || null;
+            safeSend({
+              type: mapType,
+              atome,
+              atomeId,
+              timestamp: payload.timestamp || new Date().toISOString()
+            });
             return;
           }
         };

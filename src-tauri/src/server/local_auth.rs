@@ -133,6 +133,7 @@ async fn handle_bootstrap(
     } else {
         "public".to_string()
     };
+    let optional = normalize_user_optional(message.get("optional"));
 
     let db = match state.db.lock() {
         Ok(d) => d,
@@ -206,7 +207,8 @@ async fn handle_bootstrap(
             )
             .unwrap_or_else(|_| now.clone());
 
-        if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now) {
+        let _ = upsert_optional_particles(&db, &existing_id, &optional, &now);
+        if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now, &optional) {
             println!("[Auth Debug] state_current update failed: {}", err);
         }
 
@@ -254,7 +256,8 @@ async fn handle_bootstrap(
         );
     }
 
-    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now) {
+    let _ = upsert_optional_particles(&db, &user_id, &optional, &now);
+    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now, &optional) {
         println!("[Auth Debug] state_current update failed: {}", err);
     }
 
@@ -306,6 +309,7 @@ async fn handle_register(
     } else {
         "public".to_string()
     };
+    let optional = normalize_user_optional(message.get("optional"));
 
     let db = match state.db.lock() {
         Ok(d) => d,
@@ -361,7 +365,8 @@ async fn handle_register(
             }
 
             // Generate JWT for reactivated user
-            if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now) {
+            let _ = upsert_optional_particles(&db, &existing_id, &optional, &now);
+            if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now, &optional) {
                 println!("[Auth Debug] state_current update failed: {}", err);
             }
 
@@ -415,7 +420,8 @@ async fn handle_register(
         );
     }
 
-    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now) {
+    let _ = upsert_optional_particles(&db, &user_id, &optional, &now);
+    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now, &optional) {
         println!("[Auth Debug] state_current update failed: {}", err);
     }
 
@@ -498,7 +504,8 @@ async fn handle_login(
         .and_then(|v| serde_json::from_str::<String>(&v).ok())
         .unwrap_or_else(|| "public".to_string());
     let now = Utc::now().to_rfc3339();
-    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now) {
+    let empty_optional = JsonMap::new();
+    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now, &empty_optional) {
         println!("[Auth Debug] state_current update failed: {}", err);
     }
 
@@ -834,6 +841,73 @@ fn parse_json_map(raw: Option<&String>) -> JsonMap<String, JsonValue> {
     JsonMap::new()
 }
 
+fn is_reserved_user_particle_key(key: &str) -> bool {
+    matches!(
+        key,
+        "id"
+            | "atome_id"
+            | "user_id"
+            | "type"
+            | "kind"
+            | "owner_id"
+            | "creator_id"
+            | "created_at"
+            | "updated_at"
+            | "deleted_at"
+            | "sync_status"
+            | "last_sync"
+            | "password_hash"
+            | "phone"
+            | "username"
+            | "visibility"
+    )
+}
+
+fn normalize_user_optional(raw: Option<&JsonValue>) -> JsonMap<String, JsonValue> {
+    let mut result = JsonMap::new();
+    let value = match raw {
+        Some(JsonValue::Object(map)) => map,
+        _ => return result,
+    };
+    for (key, value) in value.iter() {
+        if is_reserved_user_particle_key(key) {
+            continue;
+        }
+        result.insert(key.clone(), value.clone());
+    }
+    result
+}
+
+fn upsert_optional_particles(
+    db: &Connection,
+    user_id: &str,
+    optional: &JsonMap<String, JsonValue>,
+    ts: &str,
+) -> Result<(), String> {
+    for (key, value) in optional.iter() {
+        let value_json = serde_json::to_string(value).unwrap_or_default();
+        let value_type = match value {
+            JsonValue::String(_) => "string",
+            JsonValue::Number(_) => "number",
+            JsonValue::Bool(_) => "boolean",
+            JsonValue::Array(_) | JsonValue::Object(_) => "json",
+            _ => "string",
+        };
+        db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)
+             ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                particle_value = excluded.particle_value,
+                value_type = excluded.value_type,
+                version = version + 1,
+                updated_at = excluded.updated_at",
+            rusqlite::params![user_id, key, value_json, value_type, ts],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn upsert_user_state_current(
     db: &Connection,
     user_id: &str,
@@ -841,6 +915,7 @@ fn upsert_user_state_current(
     phone: &str,
     visibility: &str,
     ts: &str,
+    optional: &JsonMap<String, JsonValue>,
 ) -> Result<(), String> {
     let mut patch = JsonMap::new();
     patch.insert("type".to_string(), JsonValue::String("user".to_string()));
@@ -861,6 +936,9 @@ fn upsert_user_state_current(
     let mut current_props = parse_json_map(existing.as_ref().and_then(|row| row.0.as_ref()));
     for (key, value) in patch.into_iter() {
         current_props.insert(key, value);
+    }
+    for (key, value) in optional.iter() {
+        current_props.insert(key.clone(), value.clone());
     }
 
     let next_version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);

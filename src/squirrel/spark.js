@@ -101,8 +101,7 @@ import './default/shortcuts.js';
 
 // === OPTIONAL INTEGRATIONS ===
 import initIPlugWeb from './integrations/iplug_web.js';
-import initSyncEngine from './integrations/sync_engine.js';
-import './integrations/atome_sync.js'; // Exposes window.Atome
+import UnifiedSync from './apis/unified/UnifiedSync.js';
 
 
 
@@ -336,7 +335,7 @@ import('./kickstart.js').then(async () => {
 
   // Toggle optional integrations once core runtime is ready
   try { initIPlugWeb(); } catch (e) { console.warn('iPlug init failed', e); }
-  try { initSyncEngine(); } catch (e) { console.warn('SyncEngine init failed', e); }
+  try { UnifiedSync.init({ autoConnect: true }); } catch (e) { console.warn('UnifiedSync init failed', e); }
 
   // === LOAD APPLICATION ===
   // Setup drag/drop prevention

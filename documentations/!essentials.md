@@ -9,6 +9,12 @@ It focuses on **sync**, **atome creation**, and **general coding rules**.
 
 ---
 
+## first rules : Never use fallback
+
+- **Fallbacks are forbidden.** If something is broken or missing, **fix it** instead of using a fallback.
+
+---
+
 ## 1) Single Mutation Pipeline (Sync is strict)
 
 - **Frontend must not call** `window.AdoleAPI.atomes.*` directly.
@@ -30,6 +36,7 @@ Source: src/application/eVe/documentations/tools.md
 - **Tauri must work fully offline**, and **sync when Fastify becomes available**.
 - **Synchronization is bidirectional** (Fastify ↔ Tauri). If one side is unavailable, **changes are queued and replayed** on reconnection.
 - **Fastify never connects to Tauri**; clients always initiate connections.
+- **Single realtime entry point**: all realtime sync and direct-message commands are centralized in [src/squirrel/apis/unified/UnifiedSync.js](src/squirrel/apis/unified/UnifiedSync.js) and exposed as `window.Squirrel.Sync` and `window.Squirrel.SyncEngine`.
 
 Sources: documentations/realtime_sync_architecture.md, documentations/Adole Offline Online explanations.md
 
@@ -117,7 +124,7 @@ Source: documentations/components.md
 ## 8) i18n Rules (eVe)
 
 - Use `eveT()` for every label/placeholder in new tools and dialogs.
-- Provide a **simple fallback** string to avoid regressions.
+- **No fallbacks**: missing keys must be fixed, not bypassed.
 - Keep keys grouped by domain (e.g., `eve.menu.*`, `eve.user.*`).
 
 Source: src/application/eVe/documentations/int8.md

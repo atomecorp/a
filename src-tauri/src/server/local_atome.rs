@@ -15,6 +15,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
+use crate::server::broadcast_sync_event;
 
 // =============================================================================
 // STATE & TYPES
@@ -1275,6 +1276,58 @@ struct EventRecord {
     gesture_id: Option<String>,
 }
 
+fn sync_event_type(kind: &str) -> &'static str {
+    if kind.eq_ignore_ascii_case("delete") {
+        "atome:deleted"
+    } else {
+        "atome:updated"
+    }
+}
+
+fn format_sync_atome(atome: &AtomeData) -> JsonValue {
+    json!({
+        "id": atome.atome_id,
+        "atome_id": atome.atome_id,
+        "type": atome.atome_type,
+        "atome_type": atome.atome_type,
+        "parent_id": atome.parent_id,
+        "owner_id": atome.owner_id,
+        "created_at": atome.created_at,
+        "updated_at": atome.updated_at,
+        "properties": atome.data,
+        "data": atome.data
+    })
+}
+
+fn emit_atome_sync_from_event(db: &Connection, event: &EventRecord) {
+    if event.kind.eq_ignore_ascii_case("snapshot") {
+        return;
+    }
+    let atome_id = match event.atome_id.as_ref() {
+        Some(id) => id,
+        None => return,
+    };
+    let include_deleted = event.kind.eq_ignore_ascii_case("delete");
+    let atome = match load_atome_with_deleted(db, atome_id, None, include_deleted) {
+        Ok(entry) => entry,
+        Err(_) => {
+            if include_deleted {
+                broadcast_sync_event(json!({
+                    "type": "atome:deleted",
+                    "atomeId": atome_id
+                }));
+            }
+            return;
+        }
+    };
+    let payload = format_sync_atome(&atome);
+    broadcast_sync_event(json!({
+        "type": sync_event_type(&event.kind),
+        "atome": payload,
+        "atomeId": atome_id
+    }));
+}
+
 async fn handle_event_commit(
     message: JsonValue,
     user_id: &str,
@@ -1306,6 +1359,8 @@ async fn handle_event_commit(
     if let Err(e) = result {
         return error_response(request_id, &e);
     }
+
+    emit_atome_sync_from_event(&db, &normalized);
 
     let payload = json!({ "event": event_with_actor(normalized) });
     WsResponse {
@@ -1362,6 +1417,15 @@ async fn handle_event_commit_batch(
 
     if let Err(e) = result {
         return error_response(request_id, &e);
+    }
+
+    let mut emitted = HashSet::new();
+    for evt in normalized_events.iter() {
+        if let Some(atome_id) = evt.atome_id.as_ref() {
+            if emitted.insert(atome_id.clone()) {
+                emit_atome_sync_from_event(&db, evt);
+            }
+        }
     }
 
     let events_payload: Vec<JsonValue> = normalized_events

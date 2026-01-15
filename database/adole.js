@@ -159,6 +159,144 @@ function extractEventPatch(kind, payload, ts) {
     return null;
 }
 
+const EVENT_META_PARTICLE_KEYS = new Set([
+    'type',
+    'atome_type',
+    'kind',
+    'parent_id',
+    'parentId',
+    'project_id',
+    'projectId',
+    '__deleted',
+    'deleted_at'
+]);
+
+function resolveActorId(actor) {
+    if (!actor || typeof actor !== 'object') return null;
+    return actor.id || actor.user_id || actor.userId || null;
+}
+
+function resolveEventType(patch) {
+    if (!patch || typeof patch !== 'object') return null;
+    return patch.type || patch.atome_type || patch.kind || null;
+}
+
+function resolveEventParentId(patch) {
+    if (!patch || typeof patch !== 'object') return null;
+    return patch.parent_id || patch.parentId || patch.project_id || patch.projectId || null;
+}
+
+function stripEventMetaPatch(patch) {
+    if (!patch || typeof patch !== 'object') return {};
+    const filtered = {};
+    for (const [key, value] of Object.entries(patch)) {
+        if (EVENT_META_PARTICLE_KEYS.has(key)) continue;
+        filtered[key] = value;
+    }
+    return filtered;
+}
+
+async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts, deleted, properties }) {
+    if (!atomeId) return;
+    const now = ts || new Date().toISOString();
+
+    const existing = await query(
+        'get',
+        'SELECT atome_id, atome_type, parent_id, owner_id FROM atomes WHERE atome_id = ?',
+        [atomeId]
+    );
+
+    if (!existing) {
+        const safeType = atomeType || 'generic';
+        let insertOwnerId = ownerId || null;
+        let insertParentId = parentId || null;
+        let pendingOwnerId = null;
+        let pendingParentId = null;
+
+        if (insertOwnerId === atomeId) insertOwnerId = null;
+        if (insertParentId === atomeId) insertParentId = null;
+
+        if (insertOwnerId) {
+            const ownerExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [insertOwnerId]);
+            if (!ownerExists) {
+                pendingOwnerId = insertOwnerId;
+                insertOwnerId = null;
+            }
+        }
+
+        if (insertParentId) {
+            const parentExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [insertParentId]);
+            if (!parentExists) {
+                pendingParentId = insertParentId;
+                insertParentId = null;
+            }
+        }
+
+        await query(
+            'run',
+            `INSERT OR REPLACE INTO atomes (
+				atome_id,
+				atome_type,
+				parent_id,
+				owner_id,
+				creator_id,
+				sync_status,
+				created_source,
+				created_at,
+				updated_at,
+				deleted_at
+			) VALUES (?, ?, ?, ?, ?, 'pending', 'fastify', COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?), ?, ?)`,
+            [
+                atomeId,
+                safeType,
+                insertParentId,
+                insertOwnerId,
+                ownerId || null,
+                atomeId,
+                now,
+                now,
+                deleted ? now : null
+            ]
+        );
+
+        if (pendingOwnerId) {
+            await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null);
+        }
+        if (pendingParentId) {
+            await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null);
+        }
+    } else {
+        const updates = [];
+        const values = [];
+        if ((!existing.atome_type || existing.atome_type === 'generic') && atomeType) {
+            updates.push('atome_type = ?');
+            values.push(atomeType);
+        }
+        if (!existing.parent_id && parentId) {
+            updates.push('parent_id = ?');
+            values.push(parentId);
+        }
+        if (!existing.owner_id && ownerId) {
+            updates.push('owner_id = ?');
+            values.push(ownerId);
+        }
+        if (deleted) {
+            updates.push('deleted_at = ?');
+            values.push(now);
+        }
+        if (updates.length > 0) {
+            updates.push('updated_at = ?');
+            values.push(now);
+            values.push(atomeId);
+            await query('run', `UPDATE atomes SET ${updates.join(', ')} WHERE atome_id = ?`, values);
+        }
+    }
+
+    if (properties && Object.keys(properties).length > 0) {
+        await setParticles(atomeId, properties, ownerId || null);
+    }
+}
+
 async function withTransaction(work) {
     if (!db) await initDatabase();
     try {
@@ -297,11 +435,11 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     }
 
     await query('run', `
-        INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id,
-                           sync_status, created_source, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'local', 'fastify',
-                COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?), ?)
-    `, [atomeId, type, insertParentId, insertOwnerId, creatorId, atomeId, now, now]);
+		INSERT OR REPLACE INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id,
+						   sync_status, created_source, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 'local', 'fastify',
+				COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?), ?)
+	`, [atomeId, type, insertParentId, insertOwnerId, creatorId, atomeId, now, now]);
 
     // Store deferred FK references AFTER the atome row exists (particles.atome_id FK)
     if (pendingOwnerId) {
@@ -366,10 +504,10 @@ export async function resolvePendingOwners() {
 
     // Find all atomes with deferred FK references
     const pending = await query('all', `
-        SELECT p.atome_id, p.particle_key, p.particle_value
-        FROM particles p
-        WHERE p.particle_key IN ('_pending_owner_id', '_pending_parent_id')
-    `);
+		SELECT p.atome_id, p.particle_key, p.particle_value
+		FROM particles p
+		WHERE p.particle_key IN ('_pending_owner_id', '_pending_parent_id')
+	`);
 
     let resolved = 0;
     let failed = 0;
@@ -412,22 +550,22 @@ export async function resolvePendingOwners() {
  */
 export async function getAtomeById(id) {
     const row = await query('get', `
-        SELECT atome_id, atome_type, parent_id, owner_id, creator_id,
-               sync_status,  last_sync, created_source,
-               created_at, updated_at, deleted_at
-        FROM atomes WHERE atome_id = ? AND deleted_at IS NULL
-    `, [id]);
+		SELECT atome_id, atome_type, parent_id, owner_id, creator_id,
+			   sync_status,  last_sync, created_source,
+			   created_at, updated_at, deleted_at
+		FROM atomes WHERE atome_id = ? AND deleted_at IS NULL
+	`, [id]);
     return row || null;
 }
 
 async function getPendingOwnerId(atomeId) {
     try {
         const row = await query('get', `
-            SELECT particle_value
-            FROM particles
-            WHERE atome_id = ? AND particle_key = '_pending_owner_id'
-            LIMIT 1
-        `, [atomeId]);
+			SELECT particle_value
+			FROM particles
+			WHERE atome_id = ? AND particle_key = '_pending_owner_id'
+			LIMIT 1
+		`, [atomeId]);
         if (!row?.particle_value) return null;
         return JSON.parse(row.particle_value);
     } catch (_) {
@@ -532,22 +670,22 @@ export async function getAtomesAccessibleToUser(userId, options = {}) {
     const pendingOwner = JSON.stringify(userId);
 
     let sql = `
-        SELECT DISTINCT a.*
-        FROM atomes a
-        LEFT JOIN permissions p
-          ON p.atome_id = a.atome_id
-         AND p.principal_id = ?
-         AND p.can_read = 1
-         AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))
-        WHERE a.deleted_at IS NULL
-          AND (a.owner_id = ? OR p.permission_id IS NOT NULL
-               OR EXISTS (
-                   SELECT 1 FROM particles p2
-                   WHERE p2.atome_id = a.atome_id
-                     AND p2.particle_key = '_pending_owner_id'
-                     AND p2.particle_value = ?
-               ))
-    `;
+		SELECT DISTINCT a.*
+		FROM atomes a
+		LEFT JOIN permissions p
+		  ON p.atome_id = a.atome_id
+		 AND p.principal_id = ?
+		 AND p.can_read = 1
+		 AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))
+		WHERE a.deleted_at IS NULL
+		  AND (a.owner_id = ? OR p.permission_id IS NOT NULL
+			   OR EXISTS (
+				   SELECT 1 FROM particles p2
+				   WHERE p2.atome_id = a.atome_id
+					 AND p2.particle_key = '_pending_owner_id'
+					 AND p2.particle_value = ?
+			   ))
+	`;
 
     const params = [userId, userId, pendingOwner];
 
@@ -697,17 +835,17 @@ export async function setParticle(atomeId, key, value, author = null) {
         // Update existing particle
         version = (existing.version || 1) + 1;
         await query('run', `
-            UPDATE particles SET particle_value = ?, value_type = ?, version = ?, updated_at = ?
-            WHERE atome_id = ? AND particle_key = ?
-        `, [valueStr, valueType, version, now, atomeId, key]);
+			UPDATE particles SET particle_value = ?, value_type = ?, version = ?, updated_at = ?
+			WHERE atome_id = ? AND particle_key = ?
+		`, [valueStr, valueType, version, now, atomeId, key]);
         particleId = existing.particle_id;
     } else {
         // Create new particle (particle_id is AUTOINCREMENT, don't specify it)
         version = 1;
         await query('run', `
-            INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [atomeId, key, valueStr, valueType, version, now, now]);
+			INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, [atomeId, key, valueStr, valueType, version, now, now]);
 
         // Get the auto-generated particle_id
         const inserted = await query('get',
@@ -719,9 +857,9 @@ export async function setParticle(atomeId, key, value, author = null) {
 
     // Record in particles_versions for history (correct column names)
     await query('run', `
-        INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [particleId, atomeId, key, version, oldValue, valueStr, author, now]);
+		INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, [particleId, atomeId, key, version, oldValue, valueStr, author, now]);
 
     // Update atome's updated_at and sync_status
     await query('run',
@@ -797,11 +935,11 @@ export async function deleteParticle(atomeId, key) {
  */
 export async function getParticleHistory(atomeId, key, limit = 50) {
     return await query('all', `
-        SELECT * FROM particles_versions 
-        WHERE atome_id = ? AND particle_key = ?
-        ORDER BY version DESC
-        LIMIT ?
-    `, [atomeId, key, limit]);
+		SELECT * FROM particles_versions 
+		WHERE atome_id = ? AND particle_key = ?
+		ORDER BY version DESC
+		LIMIT ?
+	`, [atomeId, key, limit]);
 }
 
 /**
@@ -809,9 +947,9 @@ export async function getParticleHistory(atomeId, key, limit = 50) {
  */
 export async function restoreParticleVersion(atomeId, key, version, author = null) {
     const versionRow = await query('get', `
-        SELECT particle_value, value_type FROM particles_versions
-        WHERE atome_id = ? AND particle_key = ? AND version = ?
-    `, [atomeId, key, version]);
+		SELECT particle_value, value_type FROM particles_versions
+		WHERE atome_id = ? AND particle_key = ? AND version = ?
+	`, [atomeId, key, version]);
 
     if (!versionRow) throw new Error(`Version ${version} not found for particle ${key}`);
 
@@ -825,21 +963,21 @@ export async function restoreParticleVersion(atomeId, key, version, author = nul
 export async function getChangesSince(sinceTimestamp = null) {
     if (!sinceTimestamp) {
         return await query('all', `
-            SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
-            FROM particles_versions pv
-            JOIN atomes a ON pv.atome_id = a.atome_id
-            ORDER BY pv.created_at ASC
-            LIMIT 1000
-        `);
+			SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
+			FROM particles_versions pv
+			JOIN atomes a ON pv.atome_id = a.atome_id
+			ORDER BY pv.created_at ASC
+			LIMIT 1000
+		`);
     }
     return await query('all', `
-        SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
-        FROM particles_versions pv
-        JOIN atomes a ON pv.atome_id = a.atome_id
-        WHERE pv.created_at > ?
-        ORDER BY pv.created_at ASC
-        LIMIT 1000
-    `, [sinceTimestamp]);
+		SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
+		FROM particles_versions pv
+		JOIN atomes a ON pv.atome_id = a.atome_id
+		WHERE pv.created_at > ?
+		ORDER BY pv.created_at ASC
+		LIMIT 1000
+	`, [sinceTimestamp]);
 }
 
 // ============================================================================
@@ -857,9 +995,9 @@ export async function createSnapshot(atomeId, createdBy = null) {
     const now = new Date().toISOString();
 
     await query('run', `
-        INSERT INTO snapshots (atome_id, snapshot_data, snapshot_type, created_by, created_at)
-        VALUES (?, ?, 'manual', ?, ?)
-    `, [atomeId, snapshotData, createdBy, now]);
+		INSERT INTO snapshots (atome_id, snapshot_data, snapshot_type, created_by, created_at)
+		VALUES (?, ?, 'manual', ?, ?)
+	`, [atomeId, snapshotData, createdBy, now]);
 
     // Get the auto-generated snapshot_id
     const inserted = await query('get',
@@ -875,8 +1013,8 @@ export async function createSnapshot(atomeId, createdBy = null) {
  */
 export async function getSnapshots(atomeId, limit = 10) {
     return await query('all', `
-        SELECT * FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT ?
-    `, [atomeId, limit]);
+		SELECT * FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT ?
+	`, [atomeId, limit]);
 }
 
 /**
@@ -947,6 +1085,22 @@ async function applyEventToStateCurrent(event) {
     const patch = extractEventPatch(event.kind, event.payload, ts);
     if (!patch) return null;
 
+    const actorId = resolveActorId(event.actor);
+    const patchType = resolveEventType(patch);
+    const patchParent = resolveEventParentId(patch);
+    const deleted = patch.__deleted === true;
+    const particlePatch = stripEventMetaPatch(patch);
+
+    await upsertAtomeFromEvent({
+        atomeId,
+        atomeType: patchType,
+        parentId: patchParent,
+        ownerId: actorId,
+        ts,
+        deleted,
+        properties: particlePatch
+    });
+
     if (patch.type == null && patch.atome_type == null && patch.kind == null) {
         const row = await query(
             'get',
@@ -1005,7 +1159,7 @@ export async function appendEvent(event, options = {}) {
         await query(
             'run',
             `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 normalized.id,
                 normalized.ts,
@@ -1045,7 +1199,7 @@ export async function appendEvents(events, options = {}) {
             await query(
                 'run',
                 `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     normalized.id,
                     normalized.ts,
@@ -1200,7 +1354,7 @@ export async function createStateSnapshot(options = {}) {
     await query(
         'run',
         `INSERT INTO snapshots (atome_id, project_id, snapshot_data, state_blob, label, snapshot_type, actor, created_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             snapshotAtomeId,
             projectId,
@@ -1278,18 +1432,18 @@ export async function setPermission(
 
     // Check if exists
     const existing = await query('get', `
-        SELECT permission_id FROM permissions 
-        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR (particle_key IS NULL AND ? IS NULL))
-    `, [atomeId, principalId, particleKey, particleKey]);
+		SELECT permission_id FROM permissions 
+		WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR (particle_key IS NULL AND ? IS NULL))
+	`, [atomeId, principalId, particleKey, particleKey]);
 
     if (existing) {
         await query('run', `
-            UPDATE permissions SET can_read = ?, can_write = ?, can_delete = ?, can_share = ?, can_create = ?,
-                                   share_mode = COALESCE(?, share_mode),
-                                   conditions = COALESCE(?, conditions),
-                                   expires_at = COALESCE(?, expires_at)
-            WHERE permission_id = ?
-        `, [
+			UPDATE permissions SET can_read = ?, can_write = ?, can_delete = ?, can_share = ?, can_create = ?,
+								   share_mode = COALESCE(?, share_mode),
+								   conditions = COALESCE(?, conditions),
+								   expires_at = COALESCE(?, expires_at)
+			WHERE permission_id = ?
+		`, [
             canRead ? 1 : 0,
             canWrite ? 1 : 0,
             canDelete ? 1 : 0,
@@ -1302,10 +1456,10 @@ export async function setPermission(
         ]);
     } else {
         await query('run', `
-            INSERT INTO permissions (atome_id, particle_key, principal_id, can_read, can_write, can_delete, can_share, can_create,
-                                     granted_by, granted_at, share_mode, conditions, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
+			INSERT INTO permissions (atome_id, particle_key, principal_id, can_read, can_write, can_delete, can_share, can_create,
+									 granted_by, granted_at, share_mode, conditions, expires_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, [
             atomeId,
             particleKey,
             principalId,
@@ -1447,11 +1601,11 @@ async function checkPermissionFlag(atomeId, principalId, particleKey, field) {
     if (ownerId && ownerId === principalId) return true;
 
     const perm = await query('get', `
-        SELECT ${field} as flag, expires_at, conditions
-        FROM permissions
-        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
-        ORDER BY particle_key DESC LIMIT 1
-    `, [atomeId, principalId, particleKey]);
+		SELECT ${field} as flag, expires_at, conditions
+		FROM permissions
+		WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
+		ORDER BY particle_key DESC LIMIT 1
+	`, [atomeId, principalId, particleKey]);
 
     if (!perm || perm.flag !== 1) return false;
     return await isPermissionActive(perm, principalId, atomeId);
@@ -1494,11 +1648,11 @@ export async function canCreate(atomeId, principalId, particleKey = null) {
     if (ownerId && ownerId === principalId) return true;
 
     const perm = await query('get', `
-        SELECT can_create as flag, can_share as fallback, expires_at, conditions
-        FROM permissions
-        WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
-        ORDER BY particle_key DESC LIMIT 1
-    `, [atomeId, principalId, particleKey]);
+		SELECT can_create as flag, can_share as fallback, expires_at, conditions
+		FROM permissions
+		WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR particle_key IS NULL)
+		ORDER BY particle_key DESC LIMIT 1
+	`, [atomeId, principalId, particleKey]);
 
     if (!perm || (perm.flag !== 1 && perm.fallback !== 1)) return false;
     return await isPermissionActive(perm, principalId, atomeId);
@@ -1521,14 +1675,14 @@ export async function getSyncState(atomeId) {
 export async function updateSyncState(atomeId, localHash = null, remoteHash = null, syncStatus = 'synced') {
     const now = new Date().toISOString();
     await query('run', `
-        INSERT INTO sync_state (atome_id, local_hash, remote_hash, last_sync_at, sync_status)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(atome_id) DO UPDATE SET 
-            local_hash = ?, 
-            remote_hash = ?, 
-            last_sync_at = ?, 
-            sync_status = ?
-    `, [atomeId, localHash, remoteHash, now, syncStatus, localHash, remoteHash, now, syncStatus]);
+		INSERT INTO sync_state (atome_id, local_hash, remote_hash, last_sync_at, sync_status)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(atome_id) DO UPDATE SET 
+			local_hash = ?, 
+			remote_hash = ?, 
+			last_sync_at = ?, 
+			sync_status = ?
+	`, [atomeId, localHash, remoteHash, now, syncStatus, localHash, remoteHash, now, syncStatus]);
 }
 
 /**
@@ -1536,19 +1690,19 @@ export async function updateSyncState(atomeId, localHash = null, remoteHash = nu
  */
 export async function getPendingForSync(ownerId) {
     const atomes = await query('all', `
-                SELECT DISTINCT a.*
-                FROM atomes a
-                LEFT JOIN particles po
-                    ON po.atome_id = a.atome_id
-                 AND po.particle_key = '_pending_owner_id'
-                WHERE a.sync_status = 'pending'
-                    AND a.deleted_at IS NULL
-                    AND (
-                        a.owner_id = ?
-                        OR json_extract(po.particle_value, '$') = ?
-                    )
-                ORDER BY a.updated_at ASC
-        `, [ownerId, ownerId]);
+				SELECT DISTINCT a.*
+				FROM atomes a
+				LEFT JOIN particles po
+					ON po.atome_id = a.atome_id
+				 AND po.particle_key = '_pending_owner_id'
+				WHERE a.sync_status = 'pending'
+					AND a.deleted_at IS NULL
+					AND (
+						a.owner_id = ?
+						OR json_extract(po.particle_value, '$') = ?
+					)
+				ORDER BY a.updated_at ASC
+		`, [ownerId, ownerId]);
 
     const result = [];
     for (const atome of atomes) {

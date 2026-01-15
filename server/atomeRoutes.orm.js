@@ -35,24 +35,40 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             return;
         }
 
+        const atomeId = atome?.atome_id || atome?.id;
+        if (!atomeId) {
+            console.warn('⚠️ [AtomeSync] Missing atome id for sync payload');
+            return;
+        }
+        const atomeType = atome?.atome_type || atome?.type || 'atome';
+        const parentId = atome?.parent_id || atome?.parent || atome?.parentId || null;
+        const ownerId = atome?.owner_id || atome?.owner || atome?.ownerId || null;
+        const particles = atome?.particles || atome?.data || atome?.properties || {};
+
         // Emit sync event to all connected clients
         eventBus.emit('event', {
             type: 'atome-sync',
             operation,
             atome: {
-                atome_id: atome.atome_id || atome.id,
-                atome_type: atome.atome_type || atome.type,
-                parent_id: atome.parent_id || atome.parent,
-                owner_id: atome.owner_id || atome.owner,
+                atome_id: atomeId,
+                atome_type: atomeType,
+                parent_id: parentId,
+                owner_id: ownerId,
                 created_at: atome.created_at,
                 updated_at: atome.updated_at,
-                particles: atome.particles || atome.data || atome.properties || {},
-                deleted: operation === 'delete'
+                particles,
+                deleted: operation === 'delete',
+                id: atomeId,
+                type: atomeType,
+                parentId,
+                ownerId,
+                properties: particles,
+                data: particles
             },
             timestamp: new Date().toISOString()
         });
 
-        console.log(`🔄 [AtomeSync] Emitted ${operation} event for atome ${atome.atome_id || atome.id}`);
+        console.log(`🔄 [AtomeSync] Emitted ${operation} event for atome ${atomeId}`);
     } catch (error) {
         console.error(`⚠️ [AtomeSync] WebSocket emit failed: ${error.message}`);
     }
@@ -150,6 +166,54 @@ function formatAtome(obj) {
         parent: obj.parent_id || obj.parent,
         owner: obj.owner_id || obj.owner,
         data: obj.particles || obj.properties || obj.data || {}
+    };
+}
+
+function resolveSyncOperation(kind) {
+    if (!kind) return 'update';
+    const normalized = String(kind).toLowerCase();
+    if (normalized === 'delete') return 'delete';
+    if (normalized === 'create') return 'create';
+    return 'update';
+}
+
+async function resolveAtomeForSync(event) {
+    const atomeId = event?.atome_id || event?.atomeId || null;
+    if (!atomeId) return null;
+
+    const [state, atome] = await Promise.all([
+        db.getStateCurrent(atomeId),
+        db.getAtome(atomeId)
+    ]);
+
+    const properties = state?.properties || atome?.data || atome?.properties || {};
+    const atomeType = atome?.atome_type
+        || properties.type
+        || properties.kind
+        || properties.atome_type
+        || 'atome';
+    const parentId = atome?.parent_id
+        || properties.parent_id
+        || properties.parentId
+        || null;
+    const ownerId = atome?.owner_id
+        || properties.owner_id
+        || properties.ownerId
+        || null;
+
+    return {
+        atome_id: atomeId,
+        atome_type: atomeType,
+        parent_id: parentId,
+        owner_id: ownerId,
+        created_at: atome?.created_at || state?.updated_at || null,
+        updated_at: state?.updated_at || atome?.updated_at || null,
+        particles: properties,
+        id: atomeId,
+        type: atomeType,
+        parentId,
+        ownerId,
+        properties
     };
 }
 
@@ -684,6 +748,15 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
         try {
             const created = await db.appendEvent({ ...event, actor });
+            if (created?.atome_id && created?.kind !== 'snapshot') {
+                const syncAtome = await resolveAtomeForSync(created);
+                if (syncAtome) {
+                    const op = resolveSyncOperation(created.kind);
+                    syncAtomeViaWebSocket(syncAtome, op);
+                } else if (created.kind === 'delete') {
+                    syncAtomeViaWebSocket({ atome_id: created.atome_id }, 'delete');
+                }
+            }
             return reply.send({ success: true, event: created });
         } catch (error) {
             console.error('[Events] Commit error:', error);
@@ -712,6 +785,22 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
         try {
             const created = await db.appendEvents(normalizedEvents, { txId });
+            const latestByAtome = new Map();
+            for (const evt of created || []) {
+                const atomeId = evt?.atome_id || evt?.atomeId;
+                if (!atomeId || evt?.kind === 'snapshot') continue;
+                latestByAtome.set(atomeId, evt);
+            }
+            if (latestByAtome.size) {
+                await Promise.all(Array.from(latestByAtome.values()).map(async (evt) => {
+                    const syncAtome = await resolveAtomeForSync(evt);
+                    if (syncAtome) {
+                        syncAtomeViaWebSocket(syncAtome, resolveSyncOperation(evt.kind));
+                    } else if (evt?.kind === 'delete' && evt?.atome_id) {
+                        syncAtomeViaWebSocket({ atome_id: evt.atome_id }, 'delete');
+                    }
+                }));
+            }
             return reply.send({ success: true, events: created });
         } catch (error) {
             console.error('[Events] Commit batch error:', error);

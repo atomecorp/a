@@ -21,7 +21,6 @@ const DEFAULT_LOG_ALLOWLIST = [
   '[Squirrel] __SQUIRREL_FASTIFY_URL__:',
   '[Squirrel] __SQUIRREL_FASTIFY_WS_API_URL__:',
   '[Squirrel] __SQUIRREL_FASTIFY_WS_SYNC_URL__:',
-  /\[sync_engine\]/,
   /\[sync_atomes\]/
 ];
 

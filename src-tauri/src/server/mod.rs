@@ -11,10 +11,10 @@ use axum::{
     routing::{get, get_service, post},
     Json, Router,
 };
-use futures_util::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use rusqlite::params;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 use std::{
     borrow::Cow,
     fs as stdfs,
@@ -26,6 +26,7 @@ use std::{
 use tokio::{
     fs,
     net::TcpStream,
+    sync::broadcast,
     time::{timeout, Duration},
 };
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
@@ -57,6 +58,21 @@ const SERVER_TYPE: &str = "Tauri frontend process";
 const MAX_UPLOAD_BYTES: usize = 1024 * 1024 * 1024; // 1 GiB
 
 static RECENT_ERRORS: OnceLock<Mutex<Vec<serde_json::Value>>> = OnceLock::new();
+static SYNC_EVENT_TX: OnceLock<broadcast::Sender<JsonValue>> = OnceLock::new();
+
+fn sync_event_sender() -> broadcast::Sender<JsonValue> {
+    SYNC_EVENT_TX
+        .get_or_init(|| {
+            let (tx, _rx) = broadcast::channel(512);
+            tx
+        })
+        .clone()
+}
+
+pub fn broadcast_sync_event(payload: JsonValue) {
+    let sender = sync_event_sender();
+    let _ = sender.send(payload);
+}
 
 fn record_recent_error(entry: serde_json::Value) {
     let store = RECENT_ERRORS.get_or_init(|| Mutex::new(Vec::new()));
@@ -2234,47 +2250,66 @@ async fn handle_ws_sync(mut socket: WebSocket) {
         ))
         .await;
 
-    while let Some(msg) = socket.next().await {
-        let msg = match msg {
-            Ok(m) => m,
-            Err(_) => break,
-        };
+    let mut sync_rx = sync_event_sender().subscribe();
+    let (mut ws_sender, mut ws_receiver) = socket.split();
 
-        match msg {
-            Message::Text(text) => {
-                let data: serde_json::Value = match serde_json::from_str(&text) {
-                    Ok(v) => v,
-                    Err(_) => continue,
+    loop {
+        tokio::select! {
+            maybe_msg = ws_receiver.next() => {
+                let msg = match maybe_msg {
+                    Some(Ok(m)) => m,
+                    Some(Err(_)) => break,
+                    None => break,
                 };
 
-                // Handle ping
-                if data.get("type").and_then(|v| v.as_str()) == Some("ping") {
-                    let _ = socket
-                        .send(Message::Text(json!({"type": "pong"}).to_string()))
-                        .await;
-                    continue;
-                }
+                match msg {
+                    Message::Text(text) => {
+                        let data: serde_json::Value = match serde_json::from_str(&text) {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
 
-                // Handle heartbeat
-                if data.get("type").and_then(|v| v.as_str()) == Some("heartbeat") {
-                    let _ = socket
-                        .send(Message::Text(json!({"type": "heartbeat_ack"}).to_string()))
-                        .await;
-                    continue;
-                }
+                        // Handle ping
+                        if data.get("type").and_then(|v| v.as_str()) == Some("ping") {
+                            let _ = ws_sender
+                                .send(Message::Text(json!({"type": "pong"}).to_string()))
+                                .await;
+                            continue;
+                        }
 
-                // Echo other messages for now
-                let _ = socket
-                    .send(Message::Text(
-                        json!({"type": "ack", "received": data}).to_string(),
-                    ))
-                    .await;
+                        // Handle heartbeat
+                        if data.get("type").and_then(|v| v.as_str()) == Some("heartbeat") {
+                            let _ = ws_sender
+                                .send(Message::Text(json!({"type": "heartbeat_ack"}).to_string()))
+                                .await;
+                            continue;
+                        }
+
+                        // Echo other messages for now
+                        let _ = ws_sender
+                            .send(Message::Text(
+                                json!({"type": "ack", "received": data}).to_string(),
+                            ))
+                            .await;
+                    }
+                    Message::Ping(data) => {
+                        let _ = ws_sender.send(Message::Pong(data)).await;
+                    }
+                    Message::Close(_) => break,
+                    _ => {}
+                }
             }
-            Message::Ping(data) => {
-                let _ = socket.send(Message::Pong(data)).await;
+            sync_msg = sync_rx.recv() => {
+                match sync_msg {
+                    Ok(payload) => {
+                        let _ = ws_sender.send(Message::Text(payload.to_string())).await;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        continue;
+                    }
+                    Err(_) => break,
+                }
             }
-            Message::Close(_) => break,
-            _ => {}
         }
     }
 

@@ -711,13 +711,13 @@ function merge_user_directories(tauriUsers, fastifyUsers) {
     return Array.from(byPhoneOrId.values());
 }
 
-function queue_pending_register({ username, phone, password, createdOn }) {
+function queue_pending_register({ username, phone, password, createdOn, optional }) {
     if (typeof localStorage === 'undefined') return;
     try {
         const queue = JSON.parse(localStorage.getItem(AUTH_PENDING_SYNC_KEY) || '[]');
         queue.push({
             operation: 'register',
-            data: { username, phone, password, createdOn },
+            data: { username, phone, password, createdOn, optional },
             queuedAt: new Date().toISOString()
         });
         localStorage.setItem(AUTH_PENDING_SYNC_KEY, JSON.stringify(queue));
@@ -899,6 +899,7 @@ async function process_pending_registers() {
         const phone = data.phone;
         const password = data.password;
         const createdOn = data.createdOn;
+        const optional = data.optional || null;
 
         if (!username || !phone || !password) {
             continue;
@@ -907,7 +908,7 @@ async function process_pending_registers() {
         // Only sync to the opposite backend.
         try {
             if (createdOn === 'tauri') {
-                const r = await FastifyAdapter.auth.register({ username, phone, password, visibility: 'public' });
+                const r = await FastifyAdapter.auth.register({ username, phone, password, visibility: 'public', optional });
                 if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
                     if (is_tauri_runtime()) {
@@ -919,7 +920,7 @@ async function process_pending_registers() {
                     continue;
                 }
             } else if (createdOn === 'fastify') {
-                const r = await TauriAdapter.auth.register({ username, phone, password, visibility: 'public' });
+                const r = await TauriAdapter.auth.register({ username, phone, password, visibility: 'public', optional });
                 if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
                     continue;
@@ -1370,6 +1371,7 @@ async function create_user(phone, password, username, options = {}, callback) {
     }
 
     const visibility = options.visibility || 'public';
+    const optional = options.optional || null;
     const autoLogin = options.autoLogin !== false;
     const clearAuthTokens = options.clearAuthTokens !== false;
 
@@ -1394,7 +1396,8 @@ async function create_user(phone, password, username, options = {}, callback) {
             phone,
             password,
             username,
-            visibility
+            visibility,
+            optional
         });
         const tauriOk = !!(tauriResult.ok || tauriResult.success);
         const tauriAlready = is_already_exists_error(tauriResult);
@@ -1413,7 +1416,8 @@ async function create_user(phone, password, username, options = {}, callback) {
             phone,
             password,
             username,
-            visibility
+            visibility,
+            optional
         });
         const fastifyOk = !!(fastifyResult.ok || fastifyResult.success);
         const fastifyAlready = is_already_exists_error(fastifyResult);
@@ -1429,9 +1433,9 @@ async function create_user(phone, password, username, options = {}, callback) {
     // Bidirectional reliability: if one backend was offline, queue a register for later.
     // This keeps "created offline in Tauri" and "created in Fastify" converging over time.
     if (results.tauri.success && !results.fastify.success) {
-        queue_pending_register({ username, phone, password, createdOn: 'tauri' });
+        queue_pending_register({ username, phone, password, createdOn: 'tauri', optional });
     } else if (results.fastify.success && !results.tauri.success) {
-        queue_pending_register({ username, phone, password, createdOn: 'fastify' });
+        queue_pending_register({ username, phone, password, createdOn: 'fastify', optional });
     }
 
     // IMPORTANT (browser/Fastify): auth.register may not issue a usable JWT for ws/api.
@@ -2009,6 +2013,38 @@ try {
             try { await maybe_sync_atomes('sync-connected'); } catch { }
         });
 
+        const build_remote_atome_payload = (detail = {}) => {
+            const normalized = normalizeAtomeRecord(detail);
+            if (!normalized || typeof normalized !== 'object') return null;
+            const id = normalized.id || normalized.atome_id || normalized.atomeId || null;
+            if (!id) return null;
+            let properties = normalized.properties || normalized.data || normalized.particles || {};
+            if ((!properties || Object.keys(properties).length === 0) && detail?.newName) {
+                properties = { name: detail.newName };
+            }
+            return {
+                id,
+                type: normalized.type || normalized.atome_type || normalized.kind || properties.type || properties.kind || 'atome',
+                parentId: normalized.parentId || normalized.parent_id || properties.parent_id || properties.parentId || null,
+                ownerId: normalized.ownerId || normalized.owner_id || properties.owner_id || properties.ownerId || null,
+                properties
+            };
+        };
+
+        const apply_remote_atome_upsert = async (detail) => {
+            if (!is_tauri_runtime()) return;
+            const payload = build_remote_atome_payload(detail);
+            if (!payload) return;
+            try {
+                const res = await TauriAdapter.atome.create(payload);
+                if (!(res?.ok || res?.success)) {
+                    console.warn('[AdoleAPI] Failed to apply remote upsert locally:', res?.error || 'unknown');
+                }
+            } catch (e) {
+                console.warn('[AdoleAPI] Failed to apply remote upsert locally:', e?.message || 'unknown');
+            }
+        };
+
         window.addEventListener('squirrel:atome-deleted', async (event) => {
             if (!is_tauri_runtime()) return;
             const detail = event?.detail || {};
@@ -2025,6 +2061,17 @@ try {
                     console.warn('[AdoleAPI] Failed to apply remote delete locally:', e?.message || 'unknown');
                 }
             }
+        });
+
+        ['squirrel:atome-created',
+            'squirrel:atome-updated',
+            'squirrel:atome-altered',
+            'squirrel:atome-renamed',
+            'squirrel:atome-restored'
+        ].forEach((evt) => {
+            window.addEventListener(evt, (event) => {
+                apply_remote_atome_upsert(event?.detail || {});
+            });
         });
 
         start_pending_register_monitor();
@@ -3876,9 +3923,13 @@ async function create_atome(options, callback) {
         fastify: { success: false, data: null, error: null }
     };
 
-    // Get current user
-    const currentUserResult = await current_user();
-    const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+    // Get current user (prefer in-memory state to avoid slow WS roundtrip in browser)
+    const cachedUser = get_current_user_info();
+    let currentUserId = cachedUser?.id || null;
+    if (!currentUserId) {
+        const currentUserResult = await current_user();
+        currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+    }
 
     if (!currentUserId) {
         const error = 'No user logged in. Please log in first.';
