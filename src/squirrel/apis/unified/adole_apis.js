@@ -9,7 +9,17 @@
 // - Used by UI-facing unified modules (UnifiedAuth/UnifiedAtome/etc.).
 // ============================================
 
-import { TauriAdapter, FastifyAdapter, CONFIG, generateUUID, checkBackends } from './adole.js';
+import {
+    TauriAdapter,
+    FastifyAdapter,
+    CONFIG,
+    generateUUID,
+    checkBackends,
+    resolveAuthSource,
+    resolveProfileSource,
+    resolveDataSource,
+    resolveSyncDirection
+} from './adole.js';
 
 const FILE_ASSET_TYPES = new Set([
     'file', 'image', 'video', 'sound', 'text', 'shape', 'raw',
@@ -31,6 +41,61 @@ function normalize_phone_input(phone) {
         return `+${cleaned.slice(1).replace(/\+/g, '')}`;
     }
     return cleaned.replace(/\+/g, '');
+}
+
+const FLOW_LOG_TOKEN = '[AdoleFlow]';
+
+function now_ms() {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+        return performance.now();
+    }
+    return Date.now();
+}
+
+function is_flow_logging_enabled() {
+    if (typeof window === 'undefined') return false;
+    return window.__CHECK_DEBUG__ === true;
+}
+
+function create_flow(scope) {
+    return {
+        id: generateUUID(),
+        scope: scope || 'flow',
+        startedAt: now_ms()
+    };
+}
+
+function log_flow(flow, stage, data = null) {
+    if (!is_flow_logging_enabled() || !flow) return;
+    const elapsed = Math.round(now_ms() - flow.startedAt);
+    const prefix = `${FLOW_LOG_TOKEN} ${flow.scope} ${flow.id} +${elapsed}ms`;
+    if (data !== null && data !== undefined) {
+        console.log(prefix, stage, data);
+    } else {
+        console.log(prefix, stage);
+    }
+}
+
+function resolve_backend_plan(kind) {
+    const key = String(kind || '').toLowerCase();
+    const source = key === 'auth'
+        ? resolveAuthSource()
+        : (key === 'profile' ? resolveProfileSource() : resolveDataSource());
+    const primary = source === 'fastify' ? FastifyAdapter : TauriAdapter;
+    const secondary = source === 'fastify' ? TauriAdapter : FastifyAdapter;
+    const secondaryName = source === 'fastify' ? 'tauri' : 'fastify';
+    return { source, primary, secondary, secondaryName };
+}
+
+function resolve_sync_policy() {
+    const direction = resolveSyncDirection();
+    if (direction === 'tauri_to_fastify') {
+        return { from: 'tauri', to: 'fastify' };
+    }
+    if (direction === 'fastify_to_tauri') {
+        return { from: 'fastify', to: 'tauri' };
+    }
+    return { from: null, to: null };
 }
 
 const ATOME_METADATA_FIELDS = new Set([
@@ -427,6 +492,15 @@ function clear_fastify_login_cache() {
 }
 
 async function ensure_fastify_token() {
+    const authSource = resolveAuthSource();
+    const dataSource = resolveDataSource();
+    const syncPolicy = resolve_sync_policy();
+    const needsFastify = authSource === 'fastify'
+        || dataSource === 'fastify'
+        || syncPolicy.from === 'fastify'
+        || syncPolicy.to === 'fastify';
+
+    if (!needsFastify) return { ok: false, reason: 'fastify_not_required' };
     if (!is_tauri_runtime()) return { ok: !!FastifyAdapter.getToken?.(), reason: 'not_tauri' };
 
     const existing = FastifyAdapter.getToken?.();
@@ -639,6 +713,9 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
 
 async function maybe_sync_atomes(reason = 'auto') {
     if (_syncAtomesInProgress) return { skipped: true, reason: 'in_progress' };
+    const syncPolicy = resolve_sync_policy();
+    if (!syncPolicy.from || !syncPolicy.to) return { skipped: true, reason: 'sync_off' };
+    if (!is_tauri_runtime()) return { skipped: true, reason: 'not_tauri' };
     if (!_currentUserId) {
         try {
             const currentResult = await current_user();
@@ -661,24 +738,35 @@ async function maybe_sync_atomes(reason = 'auto') {
         return { skipped: true, reason: 'backend_check_failed' };
     }
 
-    if (!backends.tauri || !backends.fastify) {
-        return { skipped: true, reason: 'backend_unavailable' };
+    if (syncPolicy.from === 'tauri' && !backends.tauri) {
+        return { skipped: true, reason: 'source_unavailable' };
+    }
+    if (syncPolicy.from === 'fastify' && !backends.fastify) {
+        return { skipped: true, reason: 'source_unavailable' };
+    }
+    if (syncPolicy.to === 'tauri' && !backends.tauri) {
+        return { skipped: true, reason: 'target_unavailable' };
+    }
+    if (syncPolicy.to === 'fastify' && !backends.fastify) {
+        return { skipped: true, reason: 'target_unavailable' };
     }
 
-    const tauriToken = TauriAdapter.getToken?.();
-    let fastifyToken = FastifyAdapter.getToken?.();
-    if (!fastifyToken && backends.fastify) {
+    const sourceToken = syncPolicy.from === 'tauri' ? TauriAdapter.getToken?.() : FastifyAdapter.getToken?.();
+    let targetToken = syncPolicy.to === 'fastify' ? FastifyAdapter.getToken?.() : TauriAdapter.getToken?.();
+    if (!targetToken && syncPolicy.to === 'fastify') {
         try { await ensure_fastify_token(); } catch { }
-        fastifyToken = FastifyAdapter.getToken?.();
+        targetToken = FastifyAdapter.getToken?.();
     }
-    if (!tauriToken || !fastifyToken) {
+    if (!sourceToken || !targetToken) {
         return { skipped: true, reason: 'missing_token' };
     }
 
     _syncAtomesInProgress = true;
     _lastSyncAtomesAttempt = now;
     try {
-        await process_pending_deletes();
+        if (syncPolicy.to === 'fastify') {
+            await process_pending_deletes();
+        }
         return await sync_atomes();
     } catch (e) {
         return { skipped: false, error: e.message, reason };
@@ -872,6 +960,10 @@ function is_delete_already_applied(errorMessage) {
 async function process_pending_deletes() {
     const queue = load_pending_deletes();
     if (!queue.length) return { processed: 0, remaining: 0 };
+    const syncPolicy = resolve_sync_policy();
+    if (syncPolicy.to !== 'fastify') {
+        return { processed: 0, remaining: queue.length, error: 'sync_off' };
+    }
 
     if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
         try { await ensure_fastify_token(); } catch { }
@@ -918,14 +1010,20 @@ function start_pending_register_monitor() {
 
     const pollInterval = Math.max(CONFIG.CHECK_INTERVAL || 30000, 15000);
     pendingRegisterMonitorId = setInterval(async () => {
+        const syncPolicy = resolve_sync_policy();
+        if (!syncPolicy.from || !syncPolicy.to) return;
         const hasRegisters = has_pending_registers();
         const hasDeletes = load_pending_deletes().length > 0;
         if (!hasRegisters && !hasDeletes) return;
         try {
             const { fastify } = await checkBackends(true);
-            if (fastify) {
+            if (syncPolicy.to === 'fastify' && fastify) {
                 if (hasRegisters) await process_pending_registers();
                 if (hasDeletes) await process_pending_deletes();
+            }
+            if (syncPolicy.to === 'tauri' && syncPolicy.from === 'fastify') {
+                const { tauri } = await checkBackends(true);
+                if (tauri && hasRegisters) await process_pending_registers();
             }
         } catch {
             // Ignore
@@ -965,6 +1063,11 @@ async function process_pending_registers() {
     }
     if (!Array.isArray(queue) || queue.length === 0) return { processed: 0, remaining: 0 };
 
+    const syncPolicy = resolve_sync_policy();
+    if (!syncPolicy.from || !syncPolicy.to) {
+        return { processed: 0, remaining: queue.length, error: 'sync_off' };
+    }
+
     const remaining = [];
     let processed = 0;
 
@@ -985,13 +1088,13 @@ async function process_pending_registers() {
             continue;
         }
 
-        // Only sync to the opposite backend.
+        // Only sync to the configured target backend.
         try {
-            if (createdOn === 'tauri') {
+            if (createdOn === syncPolicy.from && syncPolicy.to === 'fastify') {
                 const r = await FastifyAdapter.auth.register({ username, phone: cleanPhone, password, visibility: 'public', optional });
                 if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
-                    if (is_tauri_runtime()) {
+                    if (is_tauri_runtime() && syncPolicy.to === 'fastify') {
                         save_fastify_login_cache({ phone: cleanPhone, password });
                         if (!FastifyAdapter.getToken?.()) {
                             try { await FastifyAdapter.auth.login({ phone: cleanPhone, password }); } catch { }
@@ -999,7 +1102,7 @@ async function process_pending_registers() {
                     }
                     continue;
                 }
-            } else if (createdOn === 'fastify') {
+            } else if (createdOn === syncPolicy.from && syncPolicy.to === 'tauri') {
                 const r = await TauriAdapter.auth.register({ username, phone: cleanPhone, password, visibility: 'public', optional });
                 if (r && (r.ok || r.success || is_already_exists_error(r))) {
                     processed += 1;
@@ -1456,14 +1559,20 @@ async function create_user(phone, password, username, options = {}, callback) {
     const clearAuthTokens = options.clearAuthTokens !== false;
     const rawPhone = String(phone ?? '').trim();
     const normalizedPhone = normalize_phone_input(phone) || rawPhone;
-    const tauriPhone = normalizedPhone;
-    const fastifyPhone = normalizedPhone;
-    const resolvedUsername = username || fastifyPhone || tauriPhone;
+    const resolvedUsername = username || normalizedPhone;
+    const flow = create_flow('auth:create');
+    const authPlan = resolve_backend_plan('auth');
+    const syncPolicy = resolve_sync_policy();
 
     const results = {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+
+    log_flow(flow, 'start', {
+        source: authPlan.source,
+        sync: resolveSyncDirection()
+    });
 
     if (clearAuthTokens) {
         try { TauriAdapter.clearToken?.(); } catch { }
@@ -1498,27 +1607,40 @@ async function create_user(phone, password, username, options = {}, callback) {
         }
     };
 
-    const [tauriRegister, fastifyRegister] = await Promise.all([
-        registerWith(TauriAdapter, tauriPhone),
-        registerWith(FastifyAdapter, fastifyPhone)
-    ]);
+    const primaryStart = now_ms();
+    const primaryResult = await registerWith(authPlan.primary, normalizedPhone);
+    log_flow(flow, 'primary_register', {
+        source: authPlan.source,
+        ok: !!primaryResult?.success,
+        ms: Math.round(now_ms() - primaryStart),
+        error: primaryResult?.error || null
+    });
 
-    results.tauri = tauriRegister;
-    results.fastify = fastifyRegister;
+    results[authPlan.source] = primaryResult;
+    results[authPlan.secondaryName] = {
+        success: false,
+        data: null,
+        error: 'skipped',
+        skipped: true
+    };
 
-    // Bidirectional reliability: if one backend was offline, queue a register for later.
-    // This keeps "created offline in Tauri" and "created in Fastify" converging over time.
-    if (results.tauri.success && !results.fastify.success) {
-        queue_pending_register({ username: resolvedUsername, phone: tauriPhone, password, createdOn: 'tauri', optional });
-    } else if (results.fastify.success && !results.tauri.success) {
-        queue_pending_register({ username: resolvedUsername, phone: fastifyPhone, password, createdOn: 'fastify', optional });
+    // Unidirectional auth sync: queue a register for the secondary backend if configured.
+    if (primaryResult.success && syncPolicy.from === authPlan.source && syncPolicy.to === authPlan.secondaryName) {
+        queue_pending_register({
+            username: resolvedUsername,
+            phone: normalizedPhone,
+            password,
+            createdOn: authPlan.source,
+            optional
+        });
+        log_flow(flow, 'queued_secondary_register', { target: authPlan.secondaryName });
     }
 
     // IMPORTANT (browser/Fastify): auth.register may not issue a usable JWT for ws/api.
     // Ensure we explicitly login to get a token and set current user state.
-    if (autoLogin && (results.tauri.success || results.fastify.success)) {
+    if (autoLogin && primaryResult.success) {
         try {
-            const loginResults = await log_user(tauriPhone, password, resolvedUsername);
+            const loginResults = await log_user(normalizedPhone, password, resolvedUsername);
             results.login = loginResults;
         } catch (e) {
             results.login = { error: e.message };
@@ -1526,14 +1648,14 @@ async function create_user(phone, password, username, options = {}, callback) {
     }
     const loginSuccess = results?.login?.tauri?.success || results?.login?.fastify?.success;
     if (!loginSuccess && is_tauri_runtime()) {
-        const registeredUser = results.tauri?.data?.user || results.fastify?.data?.user || null;
+        const registeredUser = results[authPlan.source]?.data?.user || null;
         const registeredId = registeredUser?.user_id || registeredUser?.id || registeredUser?.atome_id || null;
         if (registeredId) {
             try {
                 await set_current_user_state(
                     registeredId,
                     registeredUser?.username || resolvedUsername || null,
-                    registeredUser?.phone || fastifyPhone || tauriPhone || null,
+                    registeredUser?.phone || normalizedPhone || null,
                     false
                 );
             } catch { }
@@ -1545,6 +1667,10 @@ async function create_user(phone, password, username, options = {}, callback) {
         callback(results);
     }
 
+    log_flow(flow, 'done', {
+        ok: !!primaryResult.success,
+        login: !!loginSuccess
+    });
     return results;
 }
 
@@ -1615,13 +1741,19 @@ async function set_user_visibility(visibility, callback) {
 async function log_user(phone, password, username, callback) {
     const rawPhone = String(phone ?? '').trim();
     const normalizedPhone = normalize_phone_input(phone) || rawPhone;
-    const tauriPhone = normalizedPhone;
-    const fastifyPhone = normalizedPhone;
-    const resolvedUsername = username || fastifyPhone || tauriPhone;
+    const resolvedUsername = username || normalizedPhone;
+    const flow = create_flow('auth:login');
+    const authPlan = resolve_backend_plan('auth');
+    const syncPolicy = resolve_sync_policy();
     const results = {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+
+    log_flow(flow, 'start', {
+        source: authPlan.source,
+        sync: resolveSyncDirection()
+    });
 
     const loginWith = async (adapter, phoneValue) => {
         if (!adapter?.auth?.login) {
@@ -1638,128 +1770,41 @@ async function log_user(phone, password, username, callback) {
         }
     };
 
-    const [tauriLogin, fastifyLogin] = await Promise.all([
-        loginWith(TauriAdapter, tauriPhone),
-        loginWith(FastifyAdapter, fastifyPhone)
-    ]);
+    const primaryStart = now_ms();
+    const primaryResult = await loginWith(authPlan.primary, normalizedPhone);
+    log_flow(flow, 'primary_login', {
+        source: authPlan.source,
+        ok: !!primaryResult?.success,
+        ms: Math.round(now_ms() - primaryStart),
+        error: primaryResult?.error || null
+    });
 
-    results.tauri = tauriLogin;
-    results.fastify = fastifyLogin;
-
-    // If running in Tauri and the account exists locally but not on Fastify yet,
-    // bootstrap the cloud account so sync can resume.
-    try {
-        const isTauriRuntime = is_tauri_runtime();
-        const fastifyLoginError = String(results.fastify?.error || '').toLowerCase();
-        const shouldBootstrapFastify = isTauriRuntime
-            && results.tauri.success
-            && !results.fastify.success
-            && (fastifyLoginError.includes('user not found')
-                || fastifyLoginError.includes('no user')
-                || fastifyLoginError.includes('not found')
-                || fastifyLoginError.includes('invalid credentials')
-                || fastifyLoginError.includes('server unreachable')
-                || fastifyLoginError.includes('failed to fetch'));
-
-        if (shouldBootstrapFastify) {
-            const tauriUser = results.tauri.data?.user || {};
-            const registerUsername = tauriUser.username || resolvedUsername;
-            const shouldAttemptRegister = !!(fastifyPhone && password && registerUsername);
-
-            if (shouldAttemptRegister) {
-                try {
-                    const reg = await FastifyAdapter.auth.register({
-                        phone: fastifyPhone,
-                        password,
-                        username: registerUsername,
-                        visibility: 'public'
-                    });
-
-                    if (reg && (reg.ok || reg.success || is_already_exists_error(reg))) {
-                        const retry = await FastifyAdapter.auth.login({ phone: fastifyPhone, password });
-                        if (retry && (retry.ok || retry.success)) {
-                            results.fastify = { success: true, data: retry, error: null };
-                        }
-                    }
-                } catch (_) {
-                    // Ignore; we'll fall back to pending register queue.
-                }
-            }
-
-            if (!results.fastify.success) {
-                queue_pending_register({ username: registerUsername, phone: tauriPhone, password, createdOn: 'tauri' });
-            }
-        }
-    } catch (_) {
-        // Never fail login flow because of bootstrap attempt.
-    }
-
-    // If running in Tauri and the account exists on Fastify but not yet locally,
-    // bootstrap the local account on first login using the provided credentials.
-    // This makes "created in browser/Fastify" accounts usable in Tauri without manual re-creation.
-    try {
-        const isTauriRuntime = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-        const tauriLoginError = String(results.tauri?.error || '').toLowerCase();
-        const canBootstrap = isTauriRuntime
-            && results.fastify.success
-            && !results.tauri.success
-            && (tauriLoginError.includes('user not found') || tauriLoginError.includes('no user') || tauriLoginError.includes('not found') || tauriLoginError.includes('invalid credentials'))
-            && !tauriLoginError.includes('server unreachable');
-
-        if (canBootstrap) {
-            const fastifyUser = results.fastify.data?.user || {};
-            const registerUsername = fastifyUser.username || resolvedUsername;
-            let bootstrapOk = false;
-
-            try {
-                const reg = await TauriAdapter.auth.bootstrap({
-                    phone: tauriPhone,
-                    password,
-                    username: registerUsername,
-                    visibility: 'public'
-                });
-
-                const regOk = reg && (reg.ok || reg.success);
-                const regErr = String(reg?.error || '').toLowerCase();
-                if (regOk) {
-                    results.tauri = { success: true, data: reg, error: null };
-                    bootstrapOk = true;
-                } else if (!regErr || !(regErr.includes('already') || regErr.includes('exists') || regErr.includes('registered'))) {
-                    // Keep original tauri error; bootstrap failed.
-                }
-            } catch (_) {
-                // Ignore bootstrap errors; we'll return original login results.
-            }
-
-            if (!bootstrapOk) {
-                try {
-                    const tauriRetry = await TauriAdapter.auth.login({ phone: tauriPhone, password });
-                    if (tauriRetry && (tauriRetry.ok || tauriRetry.success)) {
-                        results.tauri = { success: true, data: tauriRetry, error: null };
-                    }
-                } catch (_) {
-                    // Ignore
-                }
-            }
-        }
-    } catch (_) {
-        // Never fail login flow because of bootstrap attempt.
-    }
+    results[authPlan.source] = primaryResult;
+    results[authPlan.secondaryName] = {
+        success: false,
+        data: null,
+        error: 'skipped',
+        skipped: true
+    };
 
     // If login succeeded, update current user state and machine association
-    if (results.tauri.success || results.fastify.success) {
-        save_fastify_login_cache({ phone: fastifyPhone || tauriPhone, password });
+    if (primaryResult.success) {
+        if (authPlan.source === 'fastify' || syncPolicy.to === 'fastify') {
+            save_fastify_login_cache({ phone: normalizedPhone, password });
+        }
 
-        const userData = results.tauri.data?.user || results.fastify.data?.user || {};
+        const userData = primaryResult.data?.user || {};
         const userId = userData.user_id || userData.id || userData.userId;
         const userName = userData.username || resolvedUsername;
-        const userPhone = userData.phone || fastifyPhone || tauriPhone;
+        const userPhone = userData.phone || normalizedPhone;
 
         if (userId) {
             await set_current_user_state(userId, userName, userPhone, true);
         }
 
-        try { await maybe_sync_atomes('login'); } catch { }
+        if (syncPolicy.from === authPlan.source) {
+            try { await maybe_sync_atomes('login'); } catch { }
+        }
     }
 
     // Call callback if provided
@@ -1767,6 +1812,7 @@ async function log_user(phone, password, username, callback) {
         callback(results);
     }
 
+    log_flow(flow, 'done', { ok: !!primaryResult.success });
     return results;
 }
 
@@ -1781,6 +1827,8 @@ async function current_user(callback) {
         user: null,
         source: null
     };
+    const flow = create_flow('auth:me');
+    const authPlan = resolve_backend_plan('auth');
     const hydrateCurrentUserState = async (user) => {
         if (!user || typeof user !== 'object') return;
         const userId = user.user_id || user.atome_id || user.id || null;
@@ -1797,77 +1845,43 @@ async function current_user(callback) {
         }
     };
 
-    // Try Tauri first
+    result.source = authPlan.source;
+    log_flow(flow, 'start', { source: authPlan.source });
+
+    // Query primary auth backend only.
     try {
-        const tauriResult = await TauriAdapter.auth.me();
-        if (tauriResult.ok || tauriResult.success) {
-            if (tauriResult.user) {
+        const primaryResult = await authPlan.primary.auth.me();
+        if (primaryResult.ok || primaryResult.success) {
+            if (primaryResult.user) {
                 result.logged = true;
-                result.user = tauriResult.user;
-                result.source = 'tauri';
-                await hydrateCurrentUserState(tauriResult.user);
-
-                if (is_tauri_runtime()) {
-                    try {
-                        await syncFastifyFileAssetsToTauri();
-                    } catch (_) { }
-                }
-
+                result.user = primaryResult.user;
+                await hydrateCurrentUserState(primaryResult.user);
+                log_flow(flow, 'ok', { source: authPlan.source });
                 if (typeof callback === 'function') {
                     callback(result);
                 }
                 return result;
             }
         }
-        if (tauriResult?.error && typeof tauriResult.error === 'string') {
-            const msg = tauriResult.error.toLowerCase();
+        if (primaryResult?.error && typeof primaryResult.error === 'string') {
+            const msg = primaryResult.error.toLowerCase();
             if (msg.includes('user not found') || msg.includes('invalid token') || msg.includes('token')) {
-                try { TauriAdapter.clearToken?.(); } catch { }
-            }
-        }
-    } catch (e) {
-        // Silent failure
-    }
-
-    // Try Fastify if Tauri didn't have a user
-    try {
-        const fastifyResult = await FastifyAdapter.auth.me();
-        if (fastifyResult.ok || fastifyResult.success) {
-            if (fastifyResult.user) {
-                result.logged = true;
-                result.user = fastifyResult.user;
-                result.source = 'fastify';
-                await hydrateCurrentUserState(fastifyResult.user);
-
-                if (is_tauri_runtime()) {
+                try { authPlan.primary.clearToken?.(); } catch { }
+                if (authPlan.source === 'fastify') {
                     try {
-                        await syncFastifyFileAssetsToTauri();
-                    } catch (_) { }
+                        if (typeof localStorage !== 'undefined') {
+                            localStorage.removeItem('auth_token');
+                        }
+                    } catch { }
                 }
-
-                if (typeof callback === 'function') {
-                    callback(result);
-                }
-                return result;
-            }
-        }
-        if (fastifyResult?.error && typeof fastifyResult.error === 'string') {
-            const msg = fastifyResult.error.toLowerCase();
-            if (msg.includes('user not found') || msg.includes('invalid token') || msg.includes('token')) {
-                try { FastifyAdapter.clearToken?.(); } catch { }
-                try {
-                    if (typeof localStorage !== 'undefined') {
-                        localStorage.removeItem('auth_token');
-                    }
-                } catch { }
             }
         }
     } catch (e) {
-        // Silent failure
+        log_flow(flow, 'error', { source: authPlan.source, error: e?.message || String(e) });
     }
 
     // No user logged in
-    if (_currentUserId && is_tauri_runtime()) {
+    if (_currentUserId && authPlan.source === 'tauri' && is_tauri_runtime()) {
         result.logged = true;
         result.user = {
             user_id: _currentUserId,
@@ -1881,12 +1895,7 @@ async function current_user(callback) {
         callback(result);
     }
 
-    if (is_tauri_runtime()) {
-        try {
-            await syncFastifyFileAssetsToTauri();
-        } catch (_) { }
-    }
-
+    log_flow(flow, 'done', { logged: result.logged });
     return result;
 }
 
@@ -1895,30 +1904,30 @@ async function unlog_user(callback = null) {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+    const flow = create_flow('auth:logout');
+    const authPlan = resolve_backend_plan('auth');
 
-    // Tauri logout
+    log_flow(flow, 'start', { source: authPlan.source });
+
+    // Primary logout
     try {
-        const tauriResult = await TauriAdapter.auth.logout();
-        if (tauriResult.ok && tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
+        const primaryResult = await authPlan.primary.auth.logout();
+        const target = authPlan.source;
+        if (primaryResult.ok && primaryResult.success) {
+            results[target] = { success: true, data: primaryResult, error: null };
         } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+            results[target] = { success: false, data: null, error: primaryResult.error };
         }
     } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
+        results[authPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    // Fastify logout
-    try {
-        const fastifyResult = await FastifyAdapter.auth.logout();
-        if (fastifyResult.ok && fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
-    }
+    results[authPlan.secondaryName] = {
+        success: false,
+        data: null,
+        error: 'skipped',
+        skipped: true
+    };
 
     clear_fastify_login_cache();
     _currentUserId = null;
@@ -1932,6 +1941,7 @@ async function unlog_user(callback = null) {
         callback(results);
     }
 
+    log_flow(flow, 'done', { ok: !!results[authPlan.source]?.success });
     return results;
 }
 
@@ -1951,42 +1961,39 @@ async function delete_user(phone, password, username, callback) {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+    const flow = create_flow('auth:delete');
+    const authPlan = resolve_backend_plan('auth');
 
-    // Try Tauri first (local SQLite)
+    log_flow(flow, 'start', { source: authPlan.source });
+
+    // Primary delete
     try {
-        const tauriResult = await TauriAdapter.auth.deleteAccount({
+        const primaryResult = await authPlan.primary.auth.deleteAccount({
             phone: cleanPhone,
             password
         });
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
+        if (primaryResult.ok || primaryResult.success) {
+            results[authPlan.source] = { success: true, data: primaryResult, error: null };
         } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+            results[authPlan.source] = { success: false, data: null, error: primaryResult.error };
         }
     } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
+        results[authPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    // Also try Fastify (LibSQL)
-    try {
-        const fastifyResult = await FastifyAdapter.auth.deleteAccount({
-            phone: cleanPhone,
-            password
-        });
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
-    }
+    results[authPlan.secondaryName] = {
+        success: false,
+        data: null,
+        error: 'skipped',
+        skipped: true
+    };
 
     // Call callback if provided
     if (typeof callback === 'function') {
         callback(results);
     }
 
+    log_flow(flow, 'done', { ok: !!results[authPlan.source]?.success });
     return results;
 }
 
@@ -2010,27 +2017,18 @@ async function change_password(data, callback) {
         return result;
     }
 
-    const { tauri, fastify } = await checkBackends();
+    const authPlan = resolve_backend_plan('auth');
     const results = { tauri: null, fastify: null };
     let anySuccess = false;
 
-    if (tauri && TauriAdapter.getToken()) {
-        try {
-            results.tauri = await TauriAdapter.auth.changePassword(data);
-            if (results.tauri?.success || results.tauri?.ok) anySuccess = true;
-        } catch (error) {
-            results.tauri = { success: false, error: error.message };
-        }
+    try {
+        results[authPlan.source] = await authPlan.primary.auth.changePassword(data);
+        if (results[authPlan.source]?.success || results[authPlan.source]?.ok) anySuccess = true;
+    } catch (error) {
+        results[authPlan.source] = { success: false, error: error.message };
     }
 
-    if (fastify && FastifyAdapter.getToken()) {
-        try {
-            results.fastify = await FastifyAdapter.auth.changePassword(data);
-            if (results.fastify?.success || results.fastify?.ok) anySuccess = true;
-        } catch (error) {
-            results.fastify = { success: false, error: error.message };
-        }
-    }
+    results[authPlan.secondaryName] = { success: false, error: 'skipped' };
 
     const result = {
         success: anySuccess,
@@ -2056,33 +2054,21 @@ async function delete_account(data, callback) {
         return result;
     }
 
-    const { tauri, fastify } = await checkBackends();
+    const authPlan = resolve_backend_plan('auth');
     const results = { tauri: null, fastify: null };
     let anySuccess = false;
 
-    if (tauri && TauriAdapter.getToken()) {
-        try {
-            results.tauri = await TauriAdapter.auth.deleteAccount(data);
-            if (results.tauri?.success || results.tauri?.ok) {
-                try { TauriAdapter.clearToken(); } catch { }
-                anySuccess = true;
-            }
-        } catch (error) {
-            results.tauri = { success: false, error: error.message };
+    try {
+        results[authPlan.source] = await authPlan.primary.auth.deleteAccount(data);
+        if (results[authPlan.source]?.success || results[authPlan.source]?.ok) {
+            try { authPlan.primary.clearToken?.(); } catch { }
+            anySuccess = true;
         }
+    } catch (error) {
+        results[authPlan.source] = { success: false, error: error.message };
     }
 
-    if (fastify && FastifyAdapter.getToken()) {
-        try {
-            results.fastify = await FastifyAdapter.auth.deleteAccount(data);
-            if (results.fastify?.success || results.fastify?.ok) {
-                try { FastifyAdapter.clearToken(); } catch { }
-                anySuccess = true;
-            }
-        } catch (error) {
-            results.fastify = { success: false, error: error.message };
-        }
-    }
+    results[authPlan.secondaryName] = { success: false, error: 'skipped' };
 
     const result = {
         success: anySuccess,
@@ -2099,31 +2085,20 @@ async function delete_account(data, callback) {
  * @returns {Promise<{success: boolean, token: string|null, backends: Object}>}
  */
 async function refresh_token(callback) {
-    const { tauri, fastify } = await checkBackends();
+    const authPlan = resolve_backend_plan('auth');
     const results = { tauri: null, fastify: null };
     let primaryToken = null;
 
-    if (tauri && TauriAdapter.getToken()) {
-        try {
-            results.tauri = await TauriAdapter.auth.refreshToken();
-            if ((results.tauri?.success || results.tauri?.ok) && results.tauri?.token) {
-                primaryToken = results.tauri.token;
-            }
-        } catch (error) {
-            results.tauri = { success: false, error: error.message };
+    try {
+        results[authPlan.source] = await authPlan.primary.auth.refreshToken();
+        if ((results[authPlan.source]?.success || results[authPlan.source]?.ok) && results[authPlan.source]?.token) {
+            primaryToken = results[authPlan.source].token;
         }
+    } catch (error) {
+        results[authPlan.source] = { success: false, error: error.message };
     }
 
-    if (fastify && FastifyAdapter.getToken()) {
-        try {
-            results.fastify = await FastifyAdapter.auth.refreshToken();
-            if ((results.fastify?.success || results.fastify?.ok) && results.fastify?.token && !primaryToken) {
-                primaryToken = results.fastify.token;
-            }
-        } catch (error) {
-            results.fastify = { success: false, error: error.message };
-        }
-    }
+    results[authPlan.secondaryName] = { success: false, error: 'skipped' };
 
     const result = {
         success: !!primaryToken,
@@ -2670,6 +2645,7 @@ async function list_unsynced_atomes(callback) {
  * @returns {Promise<Object>} Sync results with success/failure counts
  */
 async function sync_atomes(callback) {
+    const syncPolicy = resolve_sync_policy();
     const result = {
         pushed: { success: 0, failed: 0, errors: [] },
         pulled: { success: 0, failed: 0, errors: [] },
@@ -2680,13 +2656,24 @@ async function sync_atomes(callback) {
         },
         conflicts: { count: 0, items: [] },
         alreadySynced: 0,
-        error: null
+        error: null,
+        direction: { from: syncPolicy.from, to: syncPolicy.to }
     };
+    const flow = create_flow('sync:atomes');
+
+    if (!syncPolicy.from || !syncPolicy.to) {
+        result.skipped = true;
+        result.reason = 'sync_off';
+        log_flow(flow, 'skipped', { reason: result.reason });
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
 
     if (!is_tauri_runtime()) {
         result.skipped = true;
         result.reason = 'not_tauri';
         console.log('[sync_atomes] sync skipped (not tauri)');
+        log_flow(flow, 'skipped', { reason: result.reason });
         if (typeof callback === 'function') callback(result);
         return result;
     }
@@ -2698,6 +2685,7 @@ async function sync_atomes(callback) {
         const uploadBase = resolveFastifyUploadBase();
         const tokenPresent = !!FastifyAdapter.getToken?.();
         console.log('[sync_atomes] sync start', { fastifyBase, uploadBase, tokenPresent });
+        log_flow(flow, 'start', { fastifyBase, uploadBase, tokenPresent });
     } catch (_) { }
 
     // First, get the list of unsynced atomes
@@ -3838,6 +3826,7 @@ async function create_project(projectName, callback) {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+    const dataPlan = resolve_backend_plan('data');
 
     // Get current user to set as owner
     const currentUserResult = await current_user();
@@ -3861,50 +3850,20 @@ async function create_project(projectName, callback) {
         properties: projectProperties
     };
 
-    let tauriCreatedId = null;
-
-    // Create on Tauri
     try {
-        const tauriResult = await TauriAdapter.atome.create(projectData);
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
-            tauriCreatedId = extract_created_atome_id(tauriResult);
+        const primaryResult = await dataPlan.primary.atome.create(projectData);
+        if (primaryResult.ok || primaryResult.success) {
+            results[dataPlan.source] = { success: true, data: primaryResult, error: null };
         } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+            results[dataPlan.source] = { success: false, data: null, error: primaryResult.error };
         }
     } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
+        results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    // Create on Fastify (reuse the Tauri-generated ID when available to avoid duplicates)
-    try {
-        const fastifyPayload = tauriCreatedId
-            ? { ...projectData, id: tauriCreatedId, atome_id: tauriCreatedId }
-            : projectData;
+    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
 
-        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-            try { await ensure_fastify_token(); } catch { }
-        }
-
-        let fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
-        if (!(fastifyResult.ok || fastifyResult.success)) {
-            const errMsg = String(fastifyResult.error || '').toLowerCase();
-            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-            if (is_tauri_runtime() && authError) {
-                try { await ensure_fastify_token(); } catch { }
-                fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
-            }
-        }
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
-    }
-
-    if (is_tauri_runtime()) {
+    if (is_tauri_runtime() && resolve_sync_policy().from === dataPlan.source) {
         try { await maybe_sync_atomes('create_project'); } catch { }
     }
 
@@ -3922,6 +3881,8 @@ async function list_projects(callback) {
         tauri: { projects: [], error: null },
         fastify: { projects: [], error: null }
     };
+    const dataPlan = resolve_backend_plan('data');
+    const syncPolicy = resolve_sync_policy();
 
     const currentUserResult = await current_user();
     const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
@@ -3934,7 +3895,7 @@ async function list_projects(callback) {
         return results;
     }
 
-    if (is_tauri_runtime()) {
+    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
         try { await maybe_sync_atomes('list_projects'); } catch { }
     }
 
@@ -3973,6 +3934,8 @@ async function delete_project(projectId, callback) {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+    const dataPlan = resolve_backend_plan('data');
+    const syncPolicy = resolve_sync_policy();
 
     if (!projectId) {
         const error = 'No project ID provided';
@@ -3988,46 +3951,25 @@ async function delete_project(projectId, callback) {
         ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
     } catch { }
 
-    // Soft delete on Tauri
+    // Soft delete on primary backend only.
     try {
-        const tauriResult = await TauriAdapter.atome.softDelete(projectId);
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
+        const primaryResult = await dataPlan.primary.atome.softDelete(projectId);
+        if (primaryResult.ok || primaryResult.success) {
+            results[dataPlan.source] = { success: true, data: primaryResult, error: null };
         } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+            results[dataPlan.source] = { success: false, data: null, error: primaryResult.error };
         }
     } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
+        results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    // Soft delete on Fastify
-    try {
-        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-            try { await ensure_fastify_token(); } catch { }
-        }
+    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
 
-        let fastifyResult = await FastifyAdapter.atome.softDelete(projectId);
-        if (!(fastifyResult.ok || fastifyResult.success)) {
-            const errMsg = String(fastifyResult.error || '').toLowerCase();
-            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-            if (is_tauri_runtime() && authError) {
-                try { await ensure_fastify_token(); } catch { }
-                fastifyResult = await FastifyAdapter.atome.softDelete(projectId);
-            }
-        }
-
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-            queue_pending_delete({ atomeId: projectId, ownerId, type: 'project' });
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
+    if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId) {
         queue_pending_delete({ atomeId: projectId, ownerId, type: 'project' });
     }
 
-    if (is_tauri_runtime()) {
+    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
         try { await process_pending_deletes(); } catch { }
         try { await maybe_sync_atomes('delete_project'); } catch { }
     }
@@ -4054,6 +3996,8 @@ async function create_atome(options, callback) {
     const projectId = options.projectId || options.project_id || null;
     const parentId = options.parentId || options.parent_id || projectId || null;
     const desiredId = options.id || generateUUID();
+    const dataPlan = resolve_backend_plan('data');
+    const syncPolicy = resolve_sync_policy();
 
     const results = {
         tauri: { success: false, data: null, error: null },
@@ -4094,60 +4038,21 @@ async function create_atome(options, callback) {
         properties
     };
 
-    const deferFastify = !!(options.deferFastify || options.defer_fastify);
-    const shouldDeferFastify = deferFastify
-        || (is_tauri_runtime() && is_file_asset_type(atomeType)
-            && (properties.file_path || properties.filePath));
-
-    let tauriCreatedId = null;
-
-    // Create on Tauri
+    // Create only on primary backend.
     try {
-        const tauriResult = await TauriAdapter.atome.create(atomeData);
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
-            tauriCreatedId = extract_created_atome_id(tauriResult);
+        const primaryResult = await dataPlan.primary.atome.create(atomeData);
+        if (primaryResult.ok || primaryResult.success) {
+            results[dataPlan.source] = { success: true, data: primaryResult, error: null };
         } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+            results[dataPlan.source] = { success: false, data: null, error: primaryResult.error };
         }
     } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
+        results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    // Create on Fastify (reuse the Tauri-generated ID when available to avoid duplicates)
-    if (shouldDeferFastify) {
-        results.fastify = { success: false, data: null, error: 'deferred' };
-    } else {
-        try {
-            const canonicalId = desiredId || tauriCreatedId || null;
-            const fastifyPayload = canonicalId
-                ? { ...atomeData, id: canonicalId, atome_id: canonicalId }
-                : atomeData;
+    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
 
-            if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-                try { await ensure_fastify_token(); } catch { }
-            }
-
-            let fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
-            if (!(fastifyResult.ok || fastifyResult.success)) {
-                const errMsg = String(fastifyResult.error || '').toLowerCase();
-                const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-                if (is_tauri_runtime() && authError) {
-                    try { await ensure_fastify_token(); } catch { }
-                    fastifyResult = await FastifyAdapter.atome.create(fastifyPayload);
-                }
-            }
-            if (fastifyResult.ok || fastifyResult.success) {
-                results.fastify = { success: true, data: fastifyResult, error: null };
-            } else {
-                results.fastify = { success: false, data: null, error: fastifyResult.error };
-            }
-        } catch (e) {
-            results.fastify = { success: false, data: null, error: e.message };
-        }
-    }
-
-    if (is_tauri_runtime()) {
+    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
         try { await maybe_sync_atomes('create_atome'); } catch { }
     }
 
@@ -4171,11 +4076,12 @@ async function list_atomes(options = {}, callback) {
     const projectId = options.projectId || options.project_id || null;
     let ownerId = options.ownerId || null;
     const includeShared = !!options.includeShared;
+    const dataPlan = resolve_backend_plan('data');
 
     const results = {
         tauri: { atomes: [], error: null },
         fastify: { atomes: [], error: null },
-        meta: { preferFastify: includeShared }
+        meta: { source: dataPlan.source, includeShared }
     };
 
     // Default behavior: list current user's atomes.
@@ -4204,56 +4110,57 @@ async function list_atomes(options = {}, callback) {
     if (options.includeDeleted !== undefined) queryOptions.includeDeleted = options.includeDeleted;
     if (projectId && queryOptions.limit === undefined) queryOptions.limit = 1000;
 
-    // Try Tauri
-    try {
-        const tauriResult = await TauriAdapter.atome.list(queryOptions);
-        if (tauriResult.ok || tauriResult.success) {
-            const rawAtomes = tauriResult.atomes || tauriResult.data || [];
-            results.tauri.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-        } else {
-            results.tauri.error = tauriResult.error;
+    if (dataPlan.source === 'tauri') {
+        try {
+            const tauriResult = await TauriAdapter.atome.list(queryOptions);
+            if (tauriResult.ok || tauriResult.success) {
+                const rawAtomes = tauriResult.atomes || tauriResult.data || [];
+                results.tauri.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+            } else {
+                results.tauri.error = tauriResult.error;
+            }
+        } catch (e) {
+            results.tauri.error = e.message;
         }
-    } catch (e) {
-        results.tauri.error = e.message;
-    }
-
-    // Try Fastify
-    try {
-        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-            try { await ensure_fastify_token(); } catch { }
-        }
-
-        // Fastify WS list already includes shared atomes via permissions.
-        let fastifyResult = await FastifyAdapter.atome.list(queryOptions);
-        if (!(fastifyResult.ok || fastifyResult.success)) {
-            const errMsg = String(fastifyResult.error || '').toLowerCase();
-            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-            if (is_tauri_runtime() && authError) {
+        results.fastify = { atomes: [], error: 'skipped', skipped: true };
+    } else {
+        try {
+            if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
                 try { await ensure_fastify_token(); } catch { }
-                fastifyResult = await FastifyAdapter.atome.list(queryOptions);
-            }
-        }
-
-        if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
-            const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
-            let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-
-            if (projectId) {
-                const target = String(projectId);
-                normalized = normalized.filter((item) => {
-                    const parentId = item.parentId || item.parent_id || null;
-                    const properties = item.properties || item.particles || item.data || {};
-                    const propertyProjectId = properties.projectId || properties.project_id || null;
-                    return String(parentId || '') === target || String(propertyProjectId || '') === target;
-                });
             }
 
-            results.fastify.atomes = normalized;
-        } else if (!results.fastify.error) {
-            results.fastify.error = fastifyResult?.error || null;
+            let fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+            if (!(fastifyResult.ok || fastifyResult.success)) {
+                const errMsg = String(fastifyResult.error || '').toLowerCase();
+                const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+                if (is_tauri_runtime() && authError) {
+                    try { await ensure_fastify_token(); } catch { }
+                    fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+                }
+            }
+
+            if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
+                const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
+                let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+
+                if (projectId) {
+                    const target = String(projectId);
+                    normalized = normalized.filter((item) => {
+                        const parentId = item.parentId || item.parent_id || null;
+                        const properties = item.properties || item.particles || item.data || {};
+                        const propertyProjectId = properties.projectId || properties.project_id || null;
+                        return String(parentId || '') === target || String(propertyProjectId || '') === target;
+                    });
+                }
+
+                results.fastify.atomes = normalized;
+            } else if (!results.fastify.error) {
+                results.fastify.error = fastifyResult?.error || null;
+            }
+        } catch (e) {
+            results.fastify.error = e.message;
         }
-    } catch (e) {
-        results.fastify.error = e.message;
+        results.tauri = { atomes: [], error: 'skipped', skipped: true };
     }
 
     if (typeof callback === 'function') callback(results);
@@ -4288,6 +4195,8 @@ async function delete_atome(atomeId, callback) {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+    const dataPlan = resolve_backend_plan('data');
+    const syncPolicy = resolve_sync_policy();
 
     let ownerId = null;
     try {
@@ -4295,46 +4204,25 @@ async function delete_atome(atomeId, callback) {
         ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
     } catch { }
 
-    // Soft delete on Tauri
+    // Soft delete on primary backend only.
     try {
-        const tauriResult = await TauriAdapter.atome.softDelete(atomeId);
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
+        const primaryResult = await dataPlan.primary.atome.softDelete(atomeId);
+        if (primaryResult.ok || primaryResult.success) {
+            results[dataPlan.source] = { success: true, data: primaryResult, error: null };
         } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+            results[dataPlan.source] = { success: false, data: null, error: primaryResult.error };
         }
     } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
+        results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    // Soft delete on Fastify
-    try {
-        if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-            try { await ensure_fastify_token(); } catch { }
-        }
+    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
 
-        let fastifyResult = await FastifyAdapter.atome.softDelete(atomeId);
-        if (!(fastifyResult.ok || fastifyResult.success)) {
-            const errMsg = String(fastifyResult.error || '').toLowerCase();
-            const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-            if (is_tauri_runtime() && authError) {
-                try { await ensure_fastify_token(); } catch { }
-                fastifyResult = await FastifyAdapter.atome.softDelete(atomeId);
-            }
-        }
-
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-            queue_pending_delete({ atomeId, ownerId, type: null });
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
+    if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId) {
         queue_pending_delete({ atomeId, ownerId, type: null });
     }
 
-    if (is_tauri_runtime()) {
+    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
         try { await process_pending_deletes(); } catch { }
         try { await maybe_sync_atomes('delete_atome'); } catch { }
     }
@@ -4376,30 +4264,21 @@ async function alter_atome(atomeId, newProperties, callback) {
         tauri: { success: false, data: null, error: null },
         fastify: { success: false, data: null, error: null }
     };
+    const dataPlan = resolve_backend_plan('data');
 
-    // Update on Tauri (particles_versions are automatically updated in the backend)
+    // Update only on primary backend.
     try {
-        const tauriResult = await TauriAdapter.atome.update(atomeId, payload);
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
+        const primaryResult = await dataPlan.primary.atome.update(atomeId, payload);
+        if (primaryResult.ok || primaryResult.success) {
+            results[dataPlan.source] = { success: true, data: primaryResult, error: null };
         } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+            results[dataPlan.source] = { success: false, data: null, error: primaryResult.error };
         }
     } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
+        results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    // Update on Fastify
-    try {
-        const fastifyResult = await FastifyAdapter.atome.update(atomeId, payload);
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
-    }
+    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
 
     if (typeof callback === 'function') callback(results);
     return results;
@@ -4500,86 +4379,49 @@ async function get_atome(atomeId, callback) {
         tauri: { atome: null, error: null },
         fastify: { atome: null, error: null }
     };
+    const dataPlan = resolve_backend_plan('data');
 
     const DEBUG = (typeof window !== 'undefined' && window.__ADOLE_API_DEBUG__ === true);
 
-    // Try Tauri
+    // Query only the primary backend.
     try {
-        if (DEBUG) console.log('🔍 Calling TauriAdapter.atome.get for atome ID:', atomeId);
-        // Use the proper get API to find the atome by ID
-        const tauriResult = await TauriAdapter.atome.get(atomeId);
-        if (DEBUG) console.log('🔍 Tauri raw result:', tauriResult);
-        if (DEBUG) console.log('🔍 Tauri result structure:', {
-            hasAtome: !!tauriResult.atome,
-            hasData: !!tauriResult.data,
-            allKeys: Object.keys(tauriResult)
-        });
+        const isFastify = dataPlan.source === 'fastify';
+        if (DEBUG) {
+            console.log(`🔍 Calling ${isFastify ? 'Fastify' : 'Tauri'}Adapter.atome.get for atome ID:`, atomeId);
+        }
+        const primaryResult = await dataPlan.primary.atome.get(atomeId);
+        if (DEBUG) {
+            console.log('🔍 Primary raw result:', primaryResult);
+            console.log('🔍 Primary result structure:', {
+                hasAtome: !!primaryResult.atome,
+                hasData: !!primaryResult.data,
+                allKeys: Object.keys(primaryResult)
+            });
+        }
 
-        if (tauriResult.ok || tauriResult.success) {
-            // Extract atome from response
+        if (primaryResult.ok || primaryResult.success) {
             let extractedAtome = null;
 
-            if (tauriResult.atome) {
-                extractedAtome = tauriResult.atome;
-                if (DEBUG) console.log('🔍 Tauri: Found atome in .atome');
-            } else if (tauriResult.data && typeof tauriResult.data === 'object') {
-                extractedAtome = tauriResult.data;
-                if (DEBUG) console.log('🔍 Tauri: Found atome in .data');
+            if (primaryResult.atome) {
+                extractedAtome = primaryResult.atome;
+            } else if (primaryResult.data && typeof primaryResult.data === 'object') {
+                extractedAtome = primaryResult.data;
             }
 
             if (extractedAtome) {
-                if (DEBUG) console.log('🔍 Tauri: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
-                results.tauri.atome = extractedAtome;
-                results.tauri.success = true;
+                results[dataPlan.source].atome = extractedAtome;
+                results[dataPlan.source].success = true;
             } else {
-                if (DEBUG) console.log('🔍 Tauri: No atome found with ID:', atomeId);
-                results.tauri.error = 'Atome not found';
+                results[dataPlan.source].error = 'Atome not found';
             }
         } else {
-            results.tauri.error = tauriResult.error || 'Atome not found';
+            results[dataPlan.source].error = primaryResult.error || 'Atome not found';
         }
     } catch (e) {
-        results.tauri.error = e.message;
+        results[dataPlan.source].error = e.message;
     }
 
-    // Try Fastify
-    try {
-        if (DEBUG) console.log('🔍 Calling FastifyAdapter.atome.get for atome ID:', atomeId);
-        // Use the proper get API to find the atome by ID
-        const fastifyResult = await FastifyAdapter.atome.get(atomeId);
-        if (DEBUG) console.log('🔍 Fastify raw result:', fastifyResult);
-        if (DEBUG) console.log('🔍 Fastify result structure:', {
-            hasAtome: !!fastifyResult.atome,
-            hasData: !!fastifyResult.data,
-            allKeys: Object.keys(fastifyResult)
-        });
-
-        if (fastifyResult.ok || fastifyResult.success) {
-            // Extract atome from response
-            let extractedAtome = null;
-
-            if (fastifyResult.atome) {
-                extractedAtome = fastifyResult.atome;
-                if (DEBUG) console.log('🔍 Fastify: Found atome in .atome');
-            } else if (fastifyResult.data && typeof fastifyResult.data === 'object') {
-                extractedAtome = fastifyResult.data;
-                if (DEBUG) console.log('🔍 Fastify: Found atome in .data');
-            }
-
-            if (extractedAtome) {
-                if (DEBUG) console.log('🔍 Fastify: Extracted atome type:', extractedAtome.atome_type || extractedAtome.type);
-                results.fastify.atome = extractedAtome;
-                results.fastify.success = true;
-            } else {
-                if (DEBUG) console.log('🔍 Fastify: No atome found with ID:', atomeId);
-                results.fastify.error = 'Atome not found';
-            }
-        } else {
-            results.fastify.error = fastifyResult.error || 'Atome not found';
-        }
-    } catch (e) {
-        results.fastify.error = e.message;
-    }
+    results[dataPlan.secondaryName] = { atome: null, error: 'skipped', skipped: true };
 
     if (typeof callback === 'function') callback(results);
     return results;

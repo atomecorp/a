@@ -203,7 +203,15 @@ async fn handle_bootstrap(
             .unwrap_or_else(|_| now.clone());
 
         let _ = upsert_optional_particles(&db, &existing_id, &optional, &now);
-        if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now, &optional) {
+        if let Err(err) = upsert_user_state_current(
+            &db,
+            &existing_id,
+            &username,
+            &phone,
+            &visibility,
+            &now,
+            &optional,
+        ) {
             println!("[Auth Debug] state_current update failed: {}", err);
         }
 
@@ -252,7 +260,15 @@ async fn handle_bootstrap(
     }
 
     let _ = upsert_optional_particles(&db, &user_id, &optional, &now);
-    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now, &optional) {
+    if let Err(err) = upsert_user_state_current(
+        &db,
+        &user_id,
+        &username,
+        &phone,
+        &visibility,
+        &now,
+        &optional,
+    ) {
         println!("[Auth Debug] state_current update failed: {}", err);
     }
 
@@ -306,13 +322,14 @@ async fn handle_register(
     };
     let optional = normalize_user_optional(message.get("optional"));
 
-    let db = match state.db.lock() {
+    let mut db = match state.db.lock() {
         Ok(d) => d,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
     // Check if user already exists (including soft-deleted, even if mistyped)
-    let existing_user = find_user_record_by_phone(&db, &phone);
+    let existing_user = find_user_record_by_phone(&db, &phone)
+        .or_else(|| find_user_record_by_id(&db, &generate_user_id(&phone)));
 
     // Hash password
     let password_hash = match hash(password, DEFAULT_COST) {
@@ -328,6 +345,7 @@ async fn handle_register(
         if existing_type != "user" {
             let _ = coerce_user_atome_type(&db, &existing_id, &now);
         }
+
         if deleted_at.is_some() {
             // Reactivate soft-deleted user
             if let Err(e) = db.execute(
@@ -337,26 +355,28 @@ async fn handle_register(
                 return error_response(request_id, &e.to_string());
             }
 
-            // Update particles with version increment
-            let particles = [
-                ("username", &username),
-                ("phone", &phone),
-                ("password_hash", &password_hash),
-                ("visibility", &visibility),
-            ];
-
-            for (key, value) in particles {
-                let value_json = serde_json::to_string(value).unwrap_or_default();
-                let _ = db.execute(
-                    "UPDATE particles SET particle_value = ?1, version = version + 1, updated_at = ?2 
-                     WHERE atome_id = ?3 AND particle_key = ?4",
-                    rusqlite::params![&value_json, &now, &existing_id, key],
-                );
+            if let Err(err) = upsert_required_user_particles(
+                &db,
+                &existing_id,
+                &username,
+                &phone,
+                &password_hash,
+                &visibility,
+                &now,
+            ) {
+                println!("[Auth Debug] required particle upsert failed: {}", err);
             }
 
-            // Generate JWT for reactivated user
             let _ = upsert_optional_particles(&db, &existing_id, &optional, &now);
-            if let Err(err) = upsert_user_state_current(&db, &existing_id, &username, &phone, &visibility, &now, &optional) {
+            if let Err(err) = upsert_user_state_current(
+                &db,
+                &existing_id,
+                &username,
+                &phone,
+                &visibility,
+                &now,
+                &optional,
+            ) {
                 println!("[Auth Debug] state_current update failed: {}", err);
             }
 
@@ -378,14 +398,66 @@ async fn handle_register(
                 }),
                 token: Some(token),
             };
-        } else {
-            // User exists and is not deleted
-            return error_response(request_id, "Phone already registered");
         }
+
+        // User exists and is not deleted.
+        // If required particles are missing (corrupted record), repair them.
+        if get_user_particles(&db, &existing_id).is_err() {
+            if let Err(err) = upsert_required_user_particles(
+                &db,
+                &existing_id,
+                &username,
+                &phone,
+                &password_hash,
+                &visibility,
+                &now,
+            ) {
+                return error_response(request_id, &err);
+            }
+
+            let _ = upsert_optional_particles(&db, &existing_id, &optional, &now);
+            if let Err(err) = upsert_user_state_current(
+                &db,
+                &existing_id,
+                &username,
+                &phone,
+                &visibility,
+                &now,
+                &optional,
+            ) {
+                println!("[Auth Debug] state_current update failed: {}", err);
+            }
+
+            let token = match generate_token(&state.jwt_secret, &existing_id, &username, &phone) {
+                Ok(t) => t,
+                Err(e) => return error_response(request_id, &e.to_string()),
+            };
+
+            return AuthResponse {
+                msg_type: "auth-response".into(),
+                request_id,
+                success: true,
+                error: None,
+                user: Some(UserInfo {
+                    user_id: existing_id,
+                    username,
+                    phone,
+                    created_at: Some(now),
+                }),
+                token: Some(token),
+            };
+        }
+
+        return error_response(request_id, "Phone already registered");
     }
 
-    // Create new user atome
-    if let Err(e) = db.execute(
+    // Create new user atome (atomic)
+    let tx = match db.transaction() {
+        Ok(t) => t,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    if let Err(e) = tx.execute(
         "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
          VALUES (?1, 'user', ?1, ?1, ?2, ?2, NULL, 'tauri', 'pending')",
         rusqlite::params![&user_id, &now],
@@ -393,26 +465,36 @@ async fn handle_register(
         return error_response(request_id, &e.to_string());
     }
 
-    // Create user particles with value_type and version
-    let particles = [
-        ("username", &username),
-        ("phone", &phone),
-        ("password_hash", &password_hash),
-        ("visibility", &visibility),
-    ];
-
-    for (key, value) in particles {
-        let value_json = serde_json::to_string(value).unwrap_or_default();
-        let _ = db.execute(
-            "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
-             VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
-            rusqlite::params![&user_id, key, &value_json, &now],
-        );
+    if let Err(e) = upsert_required_user_particles(
+        &tx,
+        &user_id,
+        &username,
+        &phone,
+        &password_hash,
+        &visibility,
+        &now,
+    ) {
+        return error_response(request_id, &e);
     }
 
-    let _ = upsert_optional_particles(&db, &user_id, &optional, &now);
-    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now, &optional) {
-        println!("[Auth Debug] state_current update failed: {}", err);
+    if let Err(e) = upsert_optional_particles(&tx, &user_id, &optional, &now) {
+        return error_response(request_id, &e);
+    }
+
+    if let Err(err) = upsert_user_state_current(
+        &tx,
+        &user_id,
+        &username,
+        &phone,
+        &visibility,
+        &now,
+        &optional,
+    ) {
+        return error_response(request_id, &err);
+    }
+
+    if let Err(e) = tx.commit() {
+        return error_response(request_id, &e.to_string());
     }
 
     // Generate JWT
@@ -458,25 +540,20 @@ async fn handle_login(
 
     // Find user by phone (accept mistyped atomes and fix them)
     let now = Utc::now().to_rfc3339();
-    let user_record = find_user_record_by_phone(&db, &phone);
-    let (user_id, existing_type, deleted_at) = match user_record {
-        Some((id, atome_type, deleted_at)) if deleted_at.is_none() => (id, atome_type, deleted_at),
+    let mut found_by_phone = true;
+    let user_record = find_user_record_by_phone(&db, &phone).or_else(|| {
+        found_by_phone = false;
+        find_user_record_by_id(&db, &generate_user_id(&phone))
+    });
+    let (user_id, existing_type, _deleted_at) = match user_record {
+        Some((id, atome_type, _deleted_at)) if _deleted_at.is_none() => {
+            (id, atome_type, _deleted_at)
+        }
         _ => return error_response(request_id, "Invalid credentials"),
     };
 
     if existing_type != "user" {
         let _ = coerce_user_atome_type(&db, &user_id, &now);
-    }
-
-    // Get user particles
-    let (username, password_hash, created_at) = match get_user_particles(&db, &user_id) {
-        Ok(p) => p,
-        Err(e) => return error_response(request_id, &e),
-    };
-
-    // Verify password
-    if !verify(password, &password_hash).unwrap_or(false) {
-        return error_response(request_id, "Invalid credentials");
     }
 
     let visibility = db
@@ -488,8 +565,54 @@ async fn handle_login(
         .ok()
         .and_then(|v| serde_json::from_str::<String>(&v).ok())
         .unwrap_or_else(|| "public".to_string());
+
+    // Ensure phone/username particles exist if the lookup succeeded by id
+    if !found_by_phone {
+        let _ = ensure_user_particle(&db, &user_id, "phone", &phone, &now);
+        let _ = ensure_user_particle(&db, &user_id, "username", &phone, &now);
+    }
+
+    // Get user particles (repair if corrupted)
+    let (username, password_hash, created_at) = match get_user_particles(&db, &user_id) {
+        Ok(p) => p,
+        Err(_) => {
+            let repaired_hash = match hash(password, DEFAULT_COST) {
+                Ok(h) => h,
+                Err(e) => return error_response(request_id, &e.to_string()),
+            };
+            if let Err(err) = upsert_required_user_particles(
+                &db,
+                &user_id,
+                &phone,
+                &phone,
+                &repaired_hash,
+                &visibility,
+                &now,
+            ) {
+                return error_response(request_id, &err);
+            }
+            match get_user_particles(&db, &user_id) {
+                Ok(p) => p,
+                Err(e) => return error_response(request_id, &e),
+            }
+        }
+    };
+
+    // Verify password
+    if !verify(password, &password_hash).unwrap_or(false) {
+        return error_response(request_id, "Invalid credentials");
+    }
+
     let empty_optional = JsonMap::new();
-    if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now, &empty_optional) {
+    if let Err(err) = upsert_user_state_current(
+        &db,
+        &user_id,
+        &username,
+        &phone,
+        &visibility,
+        &now,
+        &empty_optional,
+    ) {
         println!("[Auth Debug] state_current update failed: {}", err);
     }
 
@@ -839,8 +962,7 @@ fn parse_json_map(raw: Option<&String>) -> JsonMap<String, JsonValue> {
 fn is_reserved_user_particle_key(key: &str) -> bool {
     matches!(
         key,
-        "id"
-            | "atome_id"
+        "id" | "atome_id"
             | "user_id"
             | "type"
             | "kind"
@@ -873,7 +995,10 @@ fn normalize_user_optional(raw: Option<&JsonValue>) -> JsonMap<String, JsonValue
     result
 }
 
-fn find_user_record_by_phone(db: &Connection, phone: &str) -> Option<(String, String, Option<String>)> {
+fn find_user_record_by_phone(
+    db: &Connection,
+    phone: &str,
+) -> Option<(String, String, Option<String>)> {
     let phone_json = format!("\"{}\"", phone);
     db.query_row(
         "SELECT a.atome_id, a.atome_type, a.deleted_at FROM particles p
@@ -886,6 +1011,72 @@ fn find_user_record_by_phone(db: &Connection, phone: &str) -> Option<(String, St
     .optional()
     .ok()
     .flatten()
+}
+
+fn find_user_record_by_id(
+    db: &Connection,
+    user_id: &str,
+) -> Option<(String, String, Option<String>)> {
+    db.query_row(
+        "SELECT atome_id, atome_type, deleted_at FROM atomes WHERE atome_id = ?1 LIMIT 1",
+        rusqlite::params![user_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
+    .optional()
+    .ok()
+    .flatten()
+}
+
+fn ensure_user_particle(
+    db: &Connection,
+    user_id: &str,
+    key: &str,
+    value: &str,
+    ts: &str,
+) -> Result<(), String> {
+    let value_json = serde_json::to_string(value).unwrap_or_default();
+    db.execute(
+        "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)
+         ON CONFLICT(atome_id, particle_key) DO NOTHING",
+        rusqlite::params![user_id, key, value_json, ts],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn upsert_required_user_particles(
+    db: &Connection,
+    user_id: &str,
+    username: &str,
+    phone: &str,
+    password_hash: &str,
+    visibility: &str,
+    ts: &str,
+) -> Result<(), String> {
+    let particles = [
+        ("username", username),
+        ("phone", phone),
+        ("password_hash", password_hash),
+        ("visibility", visibility),
+    ];
+
+    for (key, value) in particles {
+        let value_json = serde_json::to_string(&value).unwrap_or_default();
+        db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)
+             ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                particle_value = excluded.particle_value,
+                value_type = excluded.value_type,
+                version = version + 1,
+                updated_at = excluded.updated_at",
+            rusqlite::params![user_id, key, value_json, ts],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 fn coerce_user_atome_type(db: &Connection, user_id: &str, ts: &str) -> Result<(), String> {
@@ -940,9 +1131,15 @@ fn upsert_user_state_current(
     let mut patch = JsonMap::new();
     patch.insert("type".to_string(), JsonValue::String("user".to_string()));
     patch.insert("name".to_string(), JsonValue::String(username.to_string()));
-    patch.insert("username".to_string(), JsonValue::String(username.to_string()));
+    patch.insert(
+        "username".to_string(),
+        JsonValue::String(username.to_string()),
+    );
     patch.insert("phone".to_string(), JsonValue::String(phone.to_string()));
-    patch.insert("visibility".to_string(), JsonValue::String(visibility.to_string()));
+    patch.insert(
+        "visibility".to_string(),
+        JsonValue::String(visibility.to_string()),
+    );
 
     let existing: Option<(Option<String>, i64, Option<String>)> = db
         .query_row(

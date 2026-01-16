@@ -16,6 +16,10 @@ export const CONFIG = {
     FASTIFY_BASE_URL: null,
     TAURI_TOKEN_KEY: 'local_auth_token',
     FASTIFY_TOKEN_KEY: 'cloud_auth_token',
+    AUTH_SOURCE: 'auto',          // 'auto' | 'tauri' | 'fastify'
+    PROFILE_SOURCE: 'auto',       // defaults to AUTH_SOURCE if auto
+    DATA_SOURCE: 'auto',          // defaults to AUTH_SOURCE if auto
+    SYNC_DIRECTION: 'auto',       // 'auto' | 'tauri_to_fastify' | 'fastify_to_tauri' | 'off'
     CHECK_INTERVAL: 30000,      // 30 seconds backend check cache
     SYNC_COOLDOWN: 5000,        // 5 seconds cooldown between syncs
     RECONNECT_INITIAL_DELAY: 30000,
@@ -78,6 +82,74 @@ async function silentPing(baseUrl) {
  */
 function isInTauri() {
     return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+}
+
+const BACKEND_SOURCES = new Set(['tauri', 'fastify', 'auto']);
+const SYNC_DIRECTIONS = new Set(['tauri_to_fastify', 'fastify_to_tauri', 'off', 'auto']);
+
+function normalizeSource(value) {
+    if (!value) return null;
+    const normalized = String(value).trim().toLowerCase();
+    if (!BACKEND_SOURCES.has(normalized)) return null;
+    return normalized;
+}
+
+function normalizeSyncDirection(value) {
+    if (!value) return null;
+    const normalized = String(value).trim().toLowerCase();
+    if (!SYNC_DIRECTIONS.has(normalized)) return null;
+    return normalized;
+}
+
+function readServerConfig() {
+    if (typeof window === 'undefined') return null;
+    return window.__SQUIRREL_SERVER_CONFIG__ || null;
+}
+
+function readGlobalOverride(key) {
+    if (typeof window === 'undefined') return null;
+    const value = window[key];
+    return typeof value === 'string' ? value : null;
+}
+
+function resolveBackendSource(kind) {
+    const key = String(kind || '').toLowerCase();
+    const cfg = readServerConfig();
+    const configValue = cfg?.[key]?.source || cfg?.sources?.[key] || null;
+    const globalKey = `__SQUIRREL_${key.toUpperCase()}_SOURCE__`;
+    const globalValue = readGlobalOverride(globalKey);
+    const configDefault = CONFIG[`${key.toUpperCase()}_SOURCE`];
+    const explicit = normalizeSource(globalValue || configValue || configDefault);
+    if (explicit && explicit !== 'auto') return explicit;
+    return isInTauri() ? 'tauri' : 'fastify';
+}
+
+export function resolveAuthSource() {
+    return resolveBackendSource('auth');
+}
+
+export function resolveProfileSource() {
+    const explicit = resolveBackendSource('profile');
+    return explicit || resolveAuthSource();
+}
+
+export function resolveDataSource() {
+    const explicit = resolveBackendSource('data');
+    return explicit || resolveAuthSource();
+}
+
+export function resolveSyncDirection() {
+    const cfg = readServerConfig();
+    const globalValue = readGlobalOverride('__SQUIRREL_SYNC_DIRECTION__');
+    const configValue = cfg?.sync?.direction || cfg?.sync?.mode || null;
+    const configDefault = CONFIG.SYNC_DIRECTION;
+    const explicit = normalizeSyncDirection(globalValue || configValue || configDefault);
+    if (explicit && explicit !== 'auto') return explicit;
+
+    const dataSource = resolveDataSource();
+    if (dataSource === 'tauri') return 'tauri_to_fastify';
+    if (dataSource === 'fastify') return 'fastify_to_tauri';
+    return 'off';
 }
 
 function getTauriHttpBaseUrl() {
@@ -1385,6 +1457,10 @@ export default {
     getToken,
     setToken,
     clearToken,
+    resolveAuthSource,
+    resolveProfileSource,
+    resolveDataSource,
+    resolveSyncDirection,
     createWebSocketAdapter,
     TauriAdapter,
     FastifyAdapter
