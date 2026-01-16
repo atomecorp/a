@@ -33,6 +33,81 @@ function normalize_phone_input(phone) {
     return cleaned.replace(/\+/g, '');
 }
 
+const ATOME_METADATA_FIELDS = new Set([
+    'atome_id', 'atome_type', 'atomeId', 'atomeType',
+    'parent_id', 'parentId', 'owner_id', 'ownerId', 'creator_id', 'userId',
+    'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
+    'createdAt', 'updatedAt', 'deletedAt', 'lastSync',
+    'created_source', 'id', 'type', 'data', 'particles', 'properties', 'snapshot',
+    '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
+]);
+
+function normalize_ref_id(value) {
+    if (value === null || value === undefined) return null;
+    const str = String(value);
+    if (!str || str === 'anonymous') return null;
+    return str;
+}
+
+function extract_atome_properties(atome) {
+    if (!atome || typeof atome !== 'object') return {};
+    if (atome.properties && typeof atome.properties === 'object' && Object.keys(atome.properties).length > 0) {
+        return atome.properties;
+    }
+    if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
+        return atome.data;
+    }
+    if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
+        return atome.particles;
+    }
+
+    const inlineProps = {};
+    for (const [key, value] of Object.entries(atome)) {
+        if (!ATOME_METADATA_FIELDS.has(key) && value !== null && value !== undefined) {
+            inlineProps[key] = value;
+        }
+    }
+    return inlineProps;
+}
+
+function resolve_owner_for_sync(atome) {
+    if (!atome || typeof atome !== 'object') return null;
+    return normalize_ref_id(
+        atome.owner_id ||
+        atome.ownerId ||
+        atome.owner ||
+        atome.userId ||
+        atome.pending_owner_id ||
+        atome.pendingOwnerId
+    );
+}
+
+function resolve_parent_for_sync(atome) {
+    if (!atome || typeof atome !== 'object') return null;
+    return normalize_ref_id(
+        atome.parent_id ||
+        atome.parentId ||
+        atome.parent ||
+        atome.pending_parent_id ||
+        atome.pendingParentId
+    );
+}
+
+function extract_created_atome_id(res) {
+    try {
+        return (
+            res?.atome_id || res?.id ||
+            res?.data?.atome_id || res?.data?.id ||
+            res?.data?.data?.atome_id || res?.data?.data?.id ||
+            res?.atome?.atome_id || res?.atome?.id ||
+            res?.data?.atome?.atome_id || res?.data?.atome?.id ||
+            null
+        );
+    } catch (_) {
+        return null;
+    }
+}
+
 function normalizeAtomeRecord(raw) {
     if (!raw || typeof raw !== 'object') return raw;
 
@@ -137,17 +212,10 @@ function normalizeAtomeRecord(raw) {
     const deletedAt = raw.deleted_at ?? raw.deletedAt;
     const lastSync = raw.last_sync ?? raw.lastSync;
 
-    const normalizeId = (value) => {
-        if (value === null || value === undefined) return null;
-        const str = String(value);
-        if (!str || str === 'anonymous') return null;
-        return str;
-    };
-
     const atomeId = raw.atome_id || raw.atomeId || raw.id;
     const atomeType = raw.atome_type || raw.atomeType || raw.type;
-    const resolvedOwnerId = normalizeId(raw.owner_id || raw.ownerId || raw.owner || raw.userId || pendingOwnerId);
-    const resolvedParentId = normalizeId(raw.parent_id || raw.parentId || raw.parent || pendingParentId);
+    const resolvedOwnerId = normalize_ref_id(raw.owner_id || raw.ownerId || raw.owner || raw.userId || pendingOwnerId);
+    const resolvedParentId = normalize_ref_id(raw.parent_id || raw.parentId || raw.parent || pendingParentId);
 
     return {
         ...raw,
@@ -2387,45 +2455,15 @@ async function list_unsynced_atomes(callback) {
         return allAtomes;
     };
 
-    const normalizeRefId = (value) => {
-        if (value === null || value === undefined) return null;
-        const str = String(value);
-        if (!str || str === 'anonymous') return null;
-        return str;
-    };
-
-    const resolveOwnerForSync = (atome) => {
-        if (!atome || typeof atome !== 'object') return null;
-        return normalizeRefId(
-            atome.owner_id ||
-            atome.ownerId ||
-            atome.owner ||
-            atome.userId ||
-            atome.pending_owner_id ||
-            atome.pendingOwnerId
-        );
-    };
-
-    const resolveParentForSync = (atome) => {
-        if (!atome || typeof atome !== 'object') return null;
-        return normalizeRefId(
-            atome.parent_id ||
-            atome.parentId ||
-            atome.parent ||
-            atome.pending_parent_id ||
-            atome.pendingParentId
-        );
-    };
-
     const filterOwnedAtomes = (atomes, owner) => {
         if (!owner) return atomes;
         return (Array.isArray(atomes) ? atomes : []).filter((atome) => {
             const atomeId = atome?.atome_id || atome?.id;
             const atomeType = atome?.atome_type || atome?.type;
             if (atomeType === 'user') {
-                return normalizeRefId(atomeId) === owner;
+                return normalize_ref_id(atomeId) === owner;
             }
-            const ownerId = resolveOwnerForSync(atome);
+            const ownerId = resolve_owner_for_sync(atome);
             return ownerId === owner;
         });
     };
@@ -2475,45 +2513,14 @@ async function list_unsynced_atomes(callback) {
         if (id) fastifyMap.set(id, atome);
     });
 
-    // Helper function to extract properties from an atome (handles inline format)
-    const extractPropertiesForComparison = (atome) => {
-        if (atome.properties && typeof atome.properties === 'object' && Object.keys(atome.properties).length > 0) {
-            return atome.properties;
-        }
-        if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
-            return atome.data;
-        }
-        if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
-            return atome.particles;
-        }
-
-        // Otherwise, extract inline properties (all fields except metadata)
-        const metadataFields = [
-            'atome_id', 'atome_type', 'atomeId', 'atomeType',
-            'parent_id', 'parentId', 'owner_id', 'ownerId', 'creator_id', 'userId',
-            'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
-            'createdAt', 'updatedAt', 'deletedAt', 'lastSync',
-            'created_source', 'id', 'type', 'data', 'particles', 'properties', 'snapshot',
-            '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
-        ];
-
-        const inlineProps = {};
-        for (const [key, value] of Object.entries(atome)) {
-            if (!metadataFields.includes(key) && value !== null && value !== undefined) {
-                inlineProps[key] = value;
-            }
-        }
-        return inlineProps;
-    };
-
     // Helper function to compare atome content
     const compareMetadata = (atome1, atome2) => {
         const type1 = atome1.atome_type || atome1.atomeType || atome1.type || null;
         const type2 = atome2.atome_type || atome2.atomeType || atome2.type || null;
-        const owner1 = resolveOwnerForSync(atome1);
-        const owner2 = resolveOwnerForSync(atome2);
-        const parent1 = resolveParentForSync(atome1);
-        const parent2 = resolveParentForSync(atome2);
+        const owner1 = resolve_owner_for_sync(atome1);
+        const owner2 = resolve_owner_for_sync(atome2);
+        const parent1 = resolve_parent_for_sync(atome1);
+        const parent2 = resolve_parent_for_sync(atome2);
 
         const typeDiff = type1 && type2 && type1 !== type2;
         const ownerDiff = owner1 !== owner2;
@@ -2548,8 +2555,8 @@ async function list_unsynced_atomes(callback) {
         if (metadataComparison !== 'equal') return metadataComparison;
 
         // Then compare properties content (the actual data)
-        const properties1 = extractPropertiesForComparison(atome1);
-        const properties2 = extractPropertiesForComparison(atome2);
+        const properties1 = extract_atome_properties(atome1);
+        const properties2 = extract_atome_properties(atome2);
 
         const count1 = Object.keys(properties1).length;
         const count2 = Object.keys(properties2).length;
@@ -2787,72 +2794,12 @@ async function sync_atomes(callback) {
         }
     }
 
-    // Helper: extract properties from an atome object
-    // - Prefers atome.properties / atome.data / atome.particles when present
-    // - Falls back to inline fields (Fastify list returns properties inline)
-    const extractProperties = (atome) => {
-        if (!atome || typeof atome !== 'object') return {};
-
-        if (atome.properties && typeof atome.properties === 'object' && Object.keys(atome.properties).length > 0) {
-            return atome.properties;
-        }
-        if (atome.data && typeof atome.data === 'object' && Object.keys(atome.data).length > 0) {
-            return atome.data;
-        }
-        if (atome.particles && typeof atome.particles === 'object' && Object.keys(atome.particles).length > 0) {
-            return atome.particles;
-        }
-
-        const metadataFields = [
-            'atome_id', 'atome_type', 'atomeId', 'atomeType',
-            'parent_id', 'parentId', 'owner_id', 'ownerId', 'creator_id', 'userId',
-            'sync_status', 'created_at', 'updated_at', 'deleted_at', 'last_sync',
-            'createdAt', 'updatedAt', 'deletedAt', 'lastSync',
-            'created_source', 'id', 'type', 'data', 'particles', 'properties', 'snapshot',
-            '_pending_owner_id', '_pending_parent_id', 'pending_owner_id', 'pending_parent_id', 'pendingOwnerId', 'pendingParentId'
-        ];
-
-        const inlineProps = {};
-        for (const [key, value] of Object.entries(atome)) {
-            if (!metadataFields.includes(key) && value !== null && value !== undefined) {
-                inlineProps[key] = value;
-            }
-        }
-        return inlineProps;
-    };
-
-    const normalizeRefId = (value) => {
-        if (value === null || value === undefined) return null;
-        const str = String(value);
-        if (!str || str === 'anonymous') return null;
-        return str;
-    };
-
-    const resolveOwnerForSync = (atome) => normalizeRefId(
-        atome?.owner_id ||
-        atome?.ownerId ||
-        atome?.owner ||
-        atome?.userId ||
-        atome?.pending_owner_id ||
-        atome?.pendingOwnerId ||
-        null
-    );
-
-    const resolveParentForSync = (atome) => normalizeRefId(
-        atome?.parent_id ||
-        atome?.parentId ||
-        atome?.parent ||
-        atome?.pending_parent_id ||
-        atome?.pendingParentId ||
-        null
-    );
-
     const buildUpsertPayload = (atome) => {
         const id = atome?.atome_id || atome?.id;
         const type = atome?.atome_type || atome?.type || atome?.atomeType || atome?.kind;
-        const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
-        const parentId = resolveParentForSync(atome);
-        const properties = extractProperties(atome);
+        const ownerId = resolve_owner_for_sync(atome) || currentUserId || null;
+        const parentId = resolve_parent_for_sync(atome);
+        const properties = extract_atome_properties(atome);
 
         return {
             id,
@@ -3219,7 +3166,7 @@ async function sync_atomes(callback) {
     };
 
     const extractFileMeta = (atome) => {
-        const properties = extractProperties(atome);
+        const properties = extract_atome_properties(atome);
         const fileName = properties.file_name || properties.fileName || atome?.file_name || '';
         const originalName = properties.original_name || properties.originalName || fileName;
         const filePath = properties.file_path || properties.filePath || properties.path || properties.rel_path || '';
@@ -3240,7 +3187,7 @@ async function sync_atomes(callback) {
             return { ok: false, error: 'missing_atome_id' };
         }
 
-        const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
+        const ownerId = resolve_owner_for_sync(atome) || currentUserId || null;
         const { fileName, originalName, filePath, sizeBytes } = extractFileMeta(atome);
         const safeFileName = fileName || originalName || atomeId;
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
@@ -3504,7 +3451,7 @@ async function sync_atomes(callback) {
         if (!atomeId) return { ok: false, error: 'missing_atome_id' };
 
         await ensureProjectRoot();
-        const ownerId = resolveOwnerForSync(atome) || currentUserId || null;
+        const ownerId = resolve_owner_for_sync(atome) || currentUserId || null;
         const type = String(atome?.atome_type || atome?.type || '').trim().toLowerCase();
         const { fileName, originalName, filePath, mimeType, sizeBytes } = extractFileMeta(atome);
         const safeFileName = fileName || originalName || atomeId;
@@ -3876,21 +3823,6 @@ async function create_project(projectName, callback) {
         properties: projectProperties
     };
 
-    const extractCreatedAtomeId = (res) => {
-        try {
-            return (
-                res?.atome_id || res?.id ||
-                res?.data?.atome_id || res?.data?.id ||
-                res?.data?.data?.atome_id || res?.data?.data?.id ||
-                res?.atome?.atome_id || res?.atome?.id ||
-                res?.data?.atome?.atome_id || res?.data?.atome?.id ||
-                null
-            );
-        } catch (_) {
-            return null;
-        }
-    };
-
     let tauriCreatedId = null;
 
     // Create on Tauri
@@ -3898,7 +3830,7 @@ async function create_project(projectName, callback) {
         const tauriResult = await TauriAdapter.atome.create(projectData);
         if (tauriResult.ok || tauriResult.success) {
             results.tauri = { success: true, data: tauriResult, error: null };
-            tauriCreatedId = extractCreatedAtomeId(tauriResult);
+            tauriCreatedId = extract_created_atome_id(tauriResult);
         } else {
             results.tauri = { success: false, data: null, error: tauriResult.error };
         }
@@ -4129,21 +4061,6 @@ async function create_atome(options, callback) {
         || (is_tauri_runtime() && is_file_asset_type(atomeType)
             && (properties.file_path || properties.filePath));
 
-    const extractCreatedAtomeId = (res) => {
-        try {
-            return (
-                res?.atome_id || res?.id ||
-                res?.data?.atome_id || res?.data?.id ||
-                res?.data?.data?.atome_id || res?.data?.data?.id ||
-                res?.atome?.atome_id || res?.atome?.id ||
-                res?.data?.atome?.atome_id || res?.data?.atome?.id ||
-                null
-            );
-        } catch (_) {
-            return null;
-        }
-    };
-
     let tauriCreatedId = null;
 
     // Create on Tauri
@@ -4151,7 +4068,7 @@ async function create_atome(options, callback) {
         const tauriResult = await TauriAdapter.atome.create(atomeData);
         if (tauriResult.ok || tauriResult.success) {
             results.tauri = { success: true, data: tauriResult, error: null };
-            tauriCreatedId = extractCreatedAtomeId(tauriResult);
+            tauriCreatedId = extract_created_atome_id(tauriResult);
         } else {
             results.tauri = { success: false, data: null, error: tauriResult.error };
         }
