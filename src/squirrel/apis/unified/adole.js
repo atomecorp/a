@@ -1,10 +1,10 @@
 /**
- * _shared.js
- * 
- * Shared utilities for all Unified API modules
- * Eliminates code duplication across UnifiedAuth, UnifiedAtome, UnifiedSync, etc.
- * 
- * @module unified/_shared
+ * adole.js
+ *
+ * Shared connectivity + adapter utilities for Unified APIs.
+ * Provides backend detection, URL resolution, and connection state.
+ *
+ * @module unified/adole
  */
 
 // ============================================

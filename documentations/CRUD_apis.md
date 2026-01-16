@@ -591,13 +591,13 @@ Content-Type: application/json
 ```javascript
 import { UnifiedAuth, UnifiedAtome } from './squirrel/apis/unified/index.js';
 
-// Initialize with preferred backend
-const auth = new UnifiedAuth('tauri'); // or 'fastify' or 'auto'
-const atome = new UnifiedAtome('tauri');
+// Unified APIs are singleton objects (no instantiation needed)
+const auth = UnifiedAuth;
+const atome = UnifiedAtome;
 
 // Register and login
-await auth.register('+33612345678', 'password123', 'username');
-const { token } = await auth.login('+33612345678', 'password123');
+await auth.register({ phone: '+33612345678', password: 'password123', username: 'username' });
+const { token } = await auth.login({ phone: '+33612345678', password: 'password123' });
 
 // Create a document
 const doc = await atome.create('document', {

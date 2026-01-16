@@ -1,7 +1,12 @@
 
 
 // ============================================
-// ADOLE v3.0 - WebSocket API Functions
+// ADOLE v3.0 - Canonical Data Layer (WS + HTTP)
+//
+// Role:
+// - Single source of truth for CRUD + auth + sync helpers.
+// - Normalizes backend payloads (Tauri/Fastify) into consistent shapes.
+// - Used by UI-facing unified modules (UnifiedAuth/UnifiedAtome/etc.).
 // ============================================
 
 import { TauriAdapter, FastifyAdapter, CONFIG, generateUUID, checkBackends } from './adole.js';
@@ -446,16 +451,6 @@ async function ensure_fastify_token() {
             }
         }
     }
-
-    // Fallback: in this app the password is typically the phone number.
-    // This allows Tauri to re-auth Fastify after offline use without a manual login.
-    try {
-        const current = await current_user();
-        const phone = current?.user?.phone || null;
-        if (phone) {
-            return await attemptLogin(phone, phone, 'fallback_phone_password_failed');
-        }
-    } catch { }
 
     return { ok: false, reason: cached ? 'login_failed' : 'no_cached_credentials' };
 }
@@ -1391,8 +1386,10 @@ async function create_user(phone, password, username, options = {}, callback) {
     const optional = options.optional || null;
     const autoLogin = options.autoLogin !== false;
     const clearAuthTokens = options.clearAuthTokens !== false;
-    const tauriPhone = String(phone ?? '').trim();
-    const fastifyPhone = normalize_phone_input(phone) || tauriPhone;
+    const rawPhone = String(phone ?? '').trim();
+    const normalizedPhone = normalize_phone_input(phone) || rawPhone;
+    const tauriPhone = normalizedPhone;
+    const fastifyPhone = normalizedPhone;
     const resolvedUsername = username || fastifyPhone || tauriPhone;
 
     const results = {
@@ -1557,8 +1554,10 @@ async function set_user_visibility(visibility, callback) {
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
 async function log_user(phone, password, username, callback) {
-    const tauriPhone = String(phone ?? '').trim();
-    const fastifyPhone = normalize_phone_input(phone) || tauriPhone;
+    const rawPhone = String(phone ?? '').trim();
+    const normalizedPhone = normalize_phone_input(phone) || rawPhone;
+    const tauriPhone = normalizedPhone;
+    const fastifyPhone = normalizedPhone;
     const resolvedUsername = username || fastifyPhone || tauriPhone;
     const results = {
         tauri: { success: false, data: null, error: null },
@@ -1937,6 +1936,150 @@ async function delete_user(phone, password, username, callback) {
     }
 
     return results;
+}
+
+/**
+ * Change password for the currently authenticated user
+ * @param {Object} data - Password change data
+ * @param {string} data.currentPassword - Current password (for verification)
+ * @param {string} data.newPassword - New password (min 6 chars)
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<{success: boolean, message: string, backends: Object}>}
+ */
+async function change_password(data, callback) {
+    if (!data?.currentPassword || !data?.newPassword) {
+        const result = { success: false, message: 'Current and new passwords are required', backends: { tauri: null, fastify: null } };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
+    if (String(data.newPassword).length < 6) {
+        const result = { success: false, message: 'New password must be at least 6 characters', backends: { tauri: null, fastify: null } };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
+
+    const { tauri, fastify } = await checkBackends();
+    const results = { tauri: null, fastify: null };
+    let anySuccess = false;
+
+    if (tauri && TauriAdapter.getToken()) {
+        try {
+            results.tauri = await TauriAdapter.auth.changePassword(data);
+            if (results.tauri?.success || results.tauri?.ok) anySuccess = true;
+        } catch (error) {
+            results.tauri = { success: false, error: error.message };
+        }
+    }
+
+    if (fastify && FastifyAdapter.getToken()) {
+        try {
+            results.fastify = await FastifyAdapter.auth.changePassword(data);
+            if (results.fastify?.success || results.fastify?.ok) anySuccess = true;
+        } catch (error) {
+            results.fastify = { success: false, error: error.message };
+        }
+    }
+
+    const result = {
+        success: anySuccess,
+        message: anySuccess ? 'Password updated' : 'Password change failed',
+        backends: results
+    };
+    if (typeof callback === 'function') callback(result);
+    return result;
+}
+
+/**
+ * Delete the currently authenticated account
+ * @param {Object} data - Deletion data
+ * @param {string} data.password - Password (for verification)
+ * @param {boolean} [data.deleteData=true] - Also delete all user data
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<{success: boolean, message: string, backends: Object}>}
+ */
+async function delete_account(data, callback) {
+    if (!data?.password) {
+        const result = { success: false, message: 'Password is required to delete account', backends: { tauri: null, fastify: null } };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
+
+    const { tauri, fastify } = await checkBackends();
+    const results = { tauri: null, fastify: null };
+    let anySuccess = false;
+
+    if (tauri && TauriAdapter.getToken()) {
+        try {
+            results.tauri = await TauriAdapter.auth.deleteAccount(data);
+            if (results.tauri?.success || results.tauri?.ok) {
+                try { TauriAdapter.clearToken(); } catch { }
+                anySuccess = true;
+            }
+        } catch (error) {
+            results.tauri = { success: false, error: error.message };
+        }
+    }
+
+    if (fastify && FastifyAdapter.getToken()) {
+        try {
+            results.fastify = await FastifyAdapter.auth.deleteAccount(data);
+            if (results.fastify?.success || results.fastify?.ok) {
+                try { FastifyAdapter.clearToken(); } catch { }
+                anySuccess = true;
+            }
+        } catch (error) {
+            results.fastify = { success: false, error: error.message };
+        }
+    }
+
+    const result = {
+        success: anySuccess,
+        message: anySuccess ? 'Account deleted' : 'Account deletion failed',
+        backends: results
+    };
+    if (typeof callback === 'function') callback(result);
+    return result;
+}
+
+/**
+ * Refresh authentication tokens for authenticated backends
+ * @param {Function} [callback] - Optional callback function(result)
+ * @returns {Promise<{success: boolean, token: string|null, backends: Object}>}
+ */
+async function refresh_token(callback) {
+    const { tauri, fastify } = await checkBackends();
+    const results = { tauri: null, fastify: null };
+    let primaryToken = null;
+
+    if (tauri && TauriAdapter.getToken()) {
+        try {
+            results.tauri = await TauriAdapter.auth.refreshToken();
+            if ((results.tauri?.success || results.tauri?.ok) && results.tauri?.token) {
+                primaryToken = results.tauri.token;
+            }
+        } catch (error) {
+            results.tauri = { success: false, error: error.message };
+        }
+    }
+
+    if (fastify && FastifyAdapter.getToken()) {
+        try {
+            results.fastify = await FastifyAdapter.auth.refreshToken();
+            if ((results.fastify?.success || results.fastify?.ok) && results.fastify?.token && !primaryToken) {
+                primaryToken = results.fastify.token;
+            }
+        } catch (error) {
+            results.fastify = { success: false, error: error.message };
+        }
+    }
+
+    const result = {
+        success: !!primaryToken,
+        token: primaryToken,
+        backends: results
+    };
+    if (typeof callback === 'function') callback(result);
+    return result;
 }
 
 /**
@@ -4689,6 +4832,9 @@ export const AdoleAPI = {
         logout: unlog_user,
         current: current_user,
         delete: delete_user,
+        changePassword: change_password,
+        deleteAccount: delete_account,
+        refreshToken: refresh_token,
         list: user_list,
         lookupPhone: lookup_user_by_phone,
         // Current user state management

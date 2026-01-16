@@ -1,9 +1,12 @@
 /**
  * Atome/Squirrel Core Updater API
- * 
- * Core update system from GitHub
+ *
+ * Role:
+ * - Framework updater only (pulls code from GitHub).
+ * - Not related to Atome CRUD, ADOLE data, or sync.
+ *
  * Source: https://github.com/atomecorp/a/tree/main/src
- * 
+ *
  * @module update_atome
  */
 

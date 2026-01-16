@@ -86,12 +86,39 @@ const result = await AdoleAPI.auth.current();
 // result: { logged: true, user: { user_id, username, phone, ... }, source: 'tauri'|'fastify' }
 ```
 
-### `delete(callback?)`
+### `delete(phone, password, username?, callback?)`
 
-Delete the current user's account.
+Delete a user account by phone (requires password).
 
 ```javascript
-await AdoleAPI.auth.delete();
+await AdoleAPI.auth.delete('33333333', 'mypassword', 'john');
+```
+
+### `deleteAccount({ password, deleteData? }, callback?)`
+
+Delete the currently authenticated account.
+
+```javascript
+await AdoleAPI.auth.deleteAccount({ password: 'mypassword', deleteData: true });
+```
+
+### `changePassword({ currentPassword, newPassword }, callback?)`
+
+Change the password for the currently authenticated account.
+
+```javascript
+await AdoleAPI.auth.changePassword({
+    currentPassword: 'OldPass123!',
+    newPassword: 'NewPass456!'
+});
+```
+
+### `refreshToken(callback?)`
+
+Refresh authentication tokens for active backends.
+
+```javascript
+const result = await AdoleAPI.auth.refreshToken();
 ```
 
 ### `list(callback?)`

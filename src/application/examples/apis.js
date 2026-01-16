@@ -19,12 +19,6 @@
 //     UnifiedSync
 // } from '../../squirrel/apis/unified/index.js';
 
-// // For simple operations, you can also use unifiedAtomeSync directly
-// import UnifiedAtomeSync, {
-//     getServerAvailability,
-//     isAuthenticated
-// } from '../../squirrel/apis/unifiedAtomeSync.js';
-
 // // =============================================================================
 // // CONFIGURATION
 // // =============================================================================
@@ -47,7 +41,7 @@
 //     console.log('🔐 Authentication Examples\n');
 
 //     // 1. Check which servers are available
-//     const servers = await getServerAvailability();
+//     const servers = await auth.checkAvailability();
 //     console.log('Available servers:', servers);
 //     // { tauri: true, fastify: true }
 
@@ -69,20 +63,17 @@
 
 //     // 3. Login
 //     const loginResult = await auth.login({
-//         username: '+33612345678',
+//         phone: '+33612345678',
 //         password: 'SecurePassword123!'
 //     });
 //     console.log('✅ Logged in:', loginResult.user);
-
-//     // The token is automatically stored for subsequent requests
-//     console.log('Token stored:', auth.getToken ? (auth.getToken() ? 'Yes' : 'No') : 'N/A');
 
 //     // 4. Get current user info
 //     const me = await auth.me();
 //     console.log('👤 Current user:', me);
 
 //     // 5. Refresh the token (extends expiry)
-//     const refreshResult = await auth.refresh();
+//     const refreshResult = await auth.refreshToken();
 //     console.log('🔄 Token refreshed:', refreshResult.success);
 
 //     // 6. Change password
@@ -108,7 +99,7 @@
 
 //     // Re-login for following examples
 //     await auth.login({
-//         username: '+33612345678',
+//         phone: '+33612345678',
 //         password: 'SecurePassword123!'
 //     });
 // }

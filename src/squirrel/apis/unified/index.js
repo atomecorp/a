@@ -15,8 +15,8 @@
  * import { UnifiedAuth, UnifiedAtome, UnifiedSync } from '../../squirrel/apis/unified/index.js';
  * 
  * // Register and login
- * await UnifiedAuth.register({ username: "user", password: "pass123" });
- * await UnifiedAuth.login({ username: "user", password: "pass123" });
+ * await UnifiedAuth.register({ username: "user", phone: "33000000000", password: "pass123" });
+ * await UnifiedAuth.login({ phone: "33000000000", password: "pass123" });
  * 
  * // Create document
  * const doc = await UnifiedAtome.create({
