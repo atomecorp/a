@@ -5,6 +5,7 @@
 // Schema: atomes + particles (unified with Fastify)
 // =============================================================================
 
+use crate::server::broadcast_sync_event;
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -15,7 +16,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 use uuid::Uuid;
-use crate::server::broadcast_sync_event;
 
 // =============================================================================
 // STATE & TYPES
@@ -564,11 +564,13 @@ async fn handle_create(
 
     if !owner_id.is_empty() && owner_id != "anonymous" {
         let owner_id_string = owner_id.to_string();
-        let owner_exists = db.query_row(
-            "SELECT 1 FROM atomes WHERE atome_id = ?1",
-            rusqlite::params![&owner_id_string],
-            |_| Ok(()),
-        ).is_ok();
+        let owner_exists = db
+            .query_row(
+                "SELECT 1 FROM atomes WHERE atome_id = ?1",
+                rusqlite::params![&owner_id_string],
+                |_| Ok(()),
+            )
+            .is_ok();
 
         if owner_id_string == atome_id || !owner_exists {
             pending_owner_id = Some(owner_id_string);
@@ -579,11 +581,13 @@ async fn handle_create(
 
     if let Some(parent) = parent_id {
         let parent_string = parent.to_string();
-        let parent_exists = db.query_row(
-            "SELECT 1 FROM atomes WHERE atome_id = ?1",
-            rusqlite::params![&parent_string],
-            |_| Ok(()),
-        ).is_ok();
+        let parent_exists = db
+            .query_row(
+                "SELECT 1 FROM atomes WHERE atome_id = ?1",
+                rusqlite::params![&parent_string],
+                |_| Ok(()),
+            )
+            .is_ok();
 
         if parent_string == atome_id || !parent_exists {
             pending_parent_id = Some(parent_string);
@@ -629,7 +633,8 @@ async fn handle_create(
     }
 
     if let Some(pending_owner) = pending_owner_id.as_ref() {
-        let pending_value = serde_json::to_string(pending_owner).unwrap_or_else(|_| format!("\"{}\"", pending_owner));
+        let pending_value = serde_json::to_string(pending_owner)
+            .unwrap_or_else(|_| format!("\"{}\"", pending_owner));
         let _ = db.execute(
             "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
              VALUES (?1, '_pending_owner_id', ?2, 'string', 1, ?3, ?3)",
@@ -638,7 +643,8 @@ async fn handle_create(
     }
 
     if let Some(pending_parent) = pending_parent_id.as_ref() {
-        let pending_value = serde_json::to_string(pending_parent).unwrap_or_else(|_| format!("\"{}\"", pending_parent));
+        let pending_value = serde_json::to_string(pending_parent)
+            .unwrap_or_else(|_| format!("\"{}\"", pending_parent));
         let _ = db.execute(
             "INSERT OR REPLACE INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
              VALUES (?1, '_pending_parent_id', ?2, 'string', 1, ?3, ?3)",
@@ -655,7 +661,10 @@ async fn handle_create(
                     summary.resolved, summary.failed, summary.total
                 );
             } else if summary.resolved > 0 {
-                println!("[Create Debug] Resolved {} pending references", summary.resolved);
+                println!(
+                    "[Create Debug] Resolved {} pending references",
+                    summary.resolved
+                );
             }
         }
     }
@@ -683,12 +692,16 @@ async fn handle_create(
         Some(obj) => obj.clone(),
         None => JsonMap::new(),
     };
-    if let Err(err) = upsert_state_current_from_patch(&db, &atome_id, atome_type, parent_id, patch, &now) {
+    if let Err(err) =
+        upsert_state_current_from_patch(&db, &atome_id, atome_type, parent_id, patch, &now)
+    {
         println!("[Create Debug] state_current update failed: {}", err);
     }
 
     if let Some(parent) = parent_id {
-        if let Err(err) = inherit_permissions_from_parent(&db, parent, &atome_id, Some(owner_id), user_id) {
+        if let Err(err) =
+            inherit_permissions_from_parent(&db, parent, &atome_id, Some(owner_id), user_id)
+        {
             println!("[Create Debug] Permission inheritance failed: {}", err);
         }
     }
@@ -813,7 +826,8 @@ async fn handle_list(
     };
 
     // Build query based on whether we have an owner or just a type
-    let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match (effective_owner, atome_type) {
+    let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match (effective_owner, atome_type)
+    {
         (Some(owner), atome_type) => {
             let mut query = String::from(
                 "SELECT DISTINCT a.atome_id
@@ -831,7 +845,8 @@ async fn handle_list(
                        AND p2.particle_value = ?3
                    ))",
             );
-            let pending_owner = serde_json::to_string(owner).unwrap_or_else(|_| format!("\"{}\"", owner));
+            let pending_owner =
+                serde_json::to_string(owner).unwrap_or_else(|_| format!("\"{}\"", owner));
             let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![
                 Box::new(owner.to_string()),
                 Box::new(owner.to_string()),
@@ -1023,7 +1038,14 @@ async fn handle_update(
         Some(obj) => obj.clone(),
         None => JsonMap::new(),
     };
-    if let Err(err) = upsert_state_current_from_patch(&db, atome_id, &meta_type, meta_parent.as_deref(), patch, &now) {
+    if let Err(err) = upsert_state_current_from_patch(
+        &db,
+        atome_id,
+        &meta_type,
+        meta_parent.as_deref(),
+        patch,
+        &now,
+    ) {
         println!("[Update Debug] state_current update failed: {}", err);
     }
 
@@ -1241,7 +1263,14 @@ async fn handle_alter(
         Some(obj) => obj.clone(),
         None => JsonMap::new(),
     };
-    if let Err(err) = upsert_state_current_from_patch(&db, atome_id, &meta_type, meta_parent.as_deref(), patch, &now) {
+    if let Err(err) = upsert_state_current_from_patch(
+        &db,
+        atome_id,
+        &meta_type,
+        meta_parent.as_deref(),
+        patch,
+        &now,
+    ) {
         println!("[Alter Debug] state_current update failed: {}", err);
     }
 
@@ -1382,7 +1411,10 @@ async fn handle_event_commit_batch(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    let body = message.get("events").or_else(|| message.get("event")).cloned();
+    let body = message
+        .get("events")
+        .or_else(|| message.get("event"))
+        .cloned();
     let events = match body {
         Some(JsonValue::Array(list)) => list,
         _ => return error_response(request_id, "Missing events array"),
@@ -1475,11 +1507,23 @@ async fn handle_event_list(
         .or_else(|| message.get("gestureId"))
         .and_then(|v| v.as_str())
         .map(String::from);
-    let since = message.get("since").and_then(|v| v.as_str()).map(String::from);
-    let until = message.get("until").and_then(|v| v.as_str()).map(String::from);
-    let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(1000);
+    let since = message
+        .get("since")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let until = message
+        .get("until")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let limit = message
+        .get("limit")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1000);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
-    let order = message.get("order").and_then(|v| v.as_str()).unwrap_or("asc");
+    let order = message
+        .get("order")
+        .and_then(|v| v.as_str())
+        .unwrap_or("asc");
 
     let db = match state.db.lock() {
         Ok(d) => d,
@@ -1519,7 +1563,11 @@ async fn handle_event_list(
     } else {
         format!("WHERE {}", conditions.join(" AND "))
     };
-    let order_clause = if order.eq_ignore_ascii_case("desc") { "DESC" } else { "ASC" };
+    let order_clause = if order.eq_ignore_ascii_case("desc") {
+        "DESC"
+    } else {
+        "ASC"
+    };
 
     let query = format!(
         "SELECT id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id
@@ -1633,7 +1681,10 @@ async fn handle_state_current_list(
         .get("project_id")
         .or_else(|| message.get("projectId"))
         .and_then(|v| v.as_str());
-    let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(1000);
+    let limit = message
+        .get("limit")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1000);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
 
     let db = match state.db.lock() {
@@ -1842,17 +1893,29 @@ fn ensure_state_patch_fields(
     parent_id: Option<&str>,
     project_id: Option<&str>,
 ) -> JsonMap<String, JsonValue> {
-    if !patch.contains_key("type") && !patch.contains_key("atome_type") && !patch.contains_key("kind") {
-        patch.insert("type".to_string(), JsonValue::String(atome_type.to_string()));
+    if !patch.contains_key("type")
+        && !patch.contains_key("atome_type")
+        && !patch.contains_key("kind")
+    {
+        patch.insert(
+            "type".to_string(),
+            JsonValue::String(atome_type.to_string()),
+        );
     }
     if let Some(parent) = parent_id {
         if !patch.contains_key("parent_id") && !patch.contains_key("parentId") {
-            patch.insert("parent_id".to_string(), JsonValue::String(parent.to_string()));
+            patch.insert(
+                "parent_id".to_string(),
+                JsonValue::String(parent.to_string()),
+            );
         }
     }
     if let Some(project) = project_id {
         if !patch.contains_key("project_id") && !patch.contains_key("projectId") {
-            patch.insert("project_id".to_string(), JsonValue::String(project.to_string()));
+            patch.insert(
+                "project_id".to_string(),
+                JsonValue::String(project.to_string()),
+            );
         }
     }
     patch
@@ -1867,12 +1930,8 @@ fn upsert_state_current_from_patch(
     ts: &str,
 ) -> Result<(), String> {
     let project_id = resolve_state_project_id(&patch, atome_id, atome_type, parent_id);
-    let payload_patch = ensure_state_patch_fields(
-        patch,
-        atome_type,
-        parent_id,
-        project_id.as_deref(),
-    );
+    let payload_patch =
+        ensure_state_patch_fields(patch, atome_type, parent_id, project_id.as_deref());
     let event = EventRecord {
         id: Uuid::new_v4().to_string(),
         ts: ts.to_string(),
@@ -1901,12 +1960,20 @@ fn apply_event_to_state_current(
         Some(p) => p,
         None => return Ok(None),
     };
-    if !patch.contains_key("type") && !patch.contains_key("atome_type") && !patch.contains_key("kind") {
+    if !patch.contains_key("type")
+        && !patch.contains_key("atome_type")
+        && !patch.contains_key("kind")
+    {
         let meta: Result<Option<(Option<String>, Option<String>)>, _> = db
             .query_row(
                 "SELECT atome_type, parent_id FROM atomes WHERE atome_id = ?1",
                 rusqlite::params![atome_id],
-                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                },
             )
             .optional();
         if let Ok(Some((meta_type, meta_parent))) = meta {
@@ -2001,7 +2068,16 @@ fn apply_event_to_atomes(
             }
         }
     }
-    let atome_type = atome_type.unwrap_or_else(|| "atome".to_string());
+    let mut atome_type = atome_type.unwrap_or_else(|| "atome".to_string());
+    if atome_type == "atome" {
+        let has_user_identity = patch.contains_key("phone")
+            || patch.contains_key("username")
+            || patch.contains_key("password_hash")
+            || patch.contains_key("visibility");
+        if has_user_identity {
+            atome_type = "user".to_string();
+        }
+    }
 
     let parent_id = patch
         .get("parent_id")
@@ -2347,7 +2423,11 @@ fn resolve_path<'a>(path: &str, context: &'a serde_json::Value) -> Option<&'a se
     Some(current)
 }
 
-fn compare_values(actual: Option<&serde_json::Value>, op: &str, expected: &serde_json::Value) -> bool {
+fn compare_values(
+    actual: Option<&serde_json::Value>,
+    op: &str,
+    expected: &serde_json::Value,
+) -> bool {
     let actual = match actual {
         Some(val) => val,
         None => {
@@ -2369,7 +2449,9 @@ fn compare_values(actual: Option<&serde_json::Value>, op: &str, expected: &serde
                     .any(|candidate| candidate == left);
             }
             let left_str = coerce_string(actual);
-            return values.iter().any(|candidate| coerce_string(candidate) == left_str);
+            return values
+                .iter()
+                .any(|candidate| coerce_string(candidate) == left_str);
         }
         return false;
     }
@@ -2407,7 +2489,9 @@ fn evaluate_condition_node(node: &serde_json::Value, context: &serde_json::Value
     }
 
     if let serde_json::Value::Array(children) = node {
-        return children.iter().all(|child| evaluate_condition_node(child, context));
+        return children
+            .iter()
+            .all(|child| evaluate_condition_node(child, context));
     }
 
     let obj = match node.as_object() {
@@ -2416,11 +2500,15 @@ fn evaluate_condition_node(node: &serde_json::Value, context: &serde_json::Value
     };
 
     if let Some(serde_json::Value::Array(children)) = obj.get("all") {
-        return children.iter().all(|child| evaluate_condition_node(child, context));
+        return children
+            .iter()
+            .all(|child| evaluate_condition_node(child, context));
     }
 
     if let Some(serde_json::Value::Array(children)) = obj.get("any") {
-        return children.iter().any(|child| evaluate_condition_node(child, context));
+        return children
+            .iter()
+            .any(|child| evaluate_condition_node(child, context));
     }
 
     if obj.get("after").is_some() || obj.get("before").is_some() {
@@ -2521,14 +2609,22 @@ fn resolve_pending_references(db: &Connection) -> Result<PendingResolveSummary, 
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)))
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
         .map_err(|e| e.to_string())?;
 
     let mut total = 0usize;
     for row in rows.filter_map(|r| r.ok()) {
         total += 1;
         let (atome_id, particle_key, particle_value) = row;
-        let pending_id: Option<String> = serde_json::from_str(&particle_value).ok().or(Some(particle_value.clone()));
+        let pending_id: Option<String> = serde_json::from_str(&particle_value)
+            .ok()
+            .or(Some(particle_value.clone()));
 
         let pending_id = match pending_id {
             Some(id) if !id.is_empty() && id != "anonymous" => id,
@@ -2542,11 +2638,13 @@ fn resolve_pending_references(db: &Connection) -> Result<PendingResolveSummary, 
             }
         };
 
-        let exists = db.query_row(
-            "SELECT 1 FROM atomes WHERE atome_id = ?1",
-            rusqlite::params![&pending_id],
-            |_| Ok(()),
-        ).is_ok();
+        let exists = db
+            .query_row(
+                "SELECT 1 FROM atomes WHERE atome_id = ?1",
+                rusqlite::params![&pending_id],
+                |_| Ok(()),
+            )
+            .is_ok();
 
         if exists {
             if particle_key == "_pending_owner_id" {
@@ -2571,7 +2669,11 @@ fn resolve_pending_references(db: &Connection) -> Result<PendingResolveSummary, 
         }
     }
 
-    Ok(PendingResolveSummary { resolved, failed, total })
+    Ok(PendingResolveSummary {
+        resolved,
+        failed,
+        total,
+    })
 }
 
 fn get_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
@@ -2744,7 +2846,10 @@ fn inherit_permissions_from_parent(
     }
 
     if let Some(parent_owner_id) = get_owner_id(db, parent_id) {
-        if !child_owner_id.map(|id| id == parent_owner_id).unwrap_or(false) {
+        if !child_owner_id
+            .map(|id| id == parent_owner_id)
+            .unwrap_or(false)
+        {
             upsert_permission(
                 db,
                 child_id,

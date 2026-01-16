@@ -7,6 +7,8 @@
  * @module unified/adole
  */
 
+import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
+
 // ============================================
 // CONSTANTS
 // ============================================
@@ -40,6 +42,8 @@ const _connectionState = {
     tauri: { online: null, lastCheck: 0, failCount: 0 },
     fastify: { online: null, lastCheck: 0, failCount: 0 }
 };
+
+// Real-time dedupe is handled by realtime_dedupe.js
 
 /**
  * Silent ping - checks server availability WITHOUT console errors
@@ -708,6 +712,9 @@ class TauriWebSocket {
                                     if (isDeleted) {
                                         window.dispatchEvent(new CustomEvent('squirrel:atome-deleted', { detail: { id: atomeId, atome_id: atomeId, source: 'realtime' } }));
                                     } else if (properties && typeof properties === 'object') {
+                                        if (shouldIgnoreRealtimePatch(atomeId, properties)) {
+                                            return;
+                                        }
                                         window.dispatchEvent(new CustomEvent('squirrel:atome-updated', {
                                             detail: { id: atomeId, atome_id: atomeId, properties, source: 'realtime' }
                                         }));

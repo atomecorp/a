@@ -13,6 +13,8 @@
  * This module intentionally replaces legacy sync and command modules.
  */
 
+import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
+
 // =============================================================================
 // CONSTANTS
 // =============================================================================
@@ -544,8 +546,11 @@ const connectRealtime = async (options = {}) => {
             if (properties) applyAtomePatchToDom(atomeId, properties);
         }
         if (payload.type === 'atome:updated' || payload.type === 'atome:altered') {
-            dispatchAtomeEvent('squirrel:atome-updated', payload);
             const { atomeId, properties } = normalizeAtomePayload(payload);
+            if (properties && shouldIgnoreRealtimePatch(atomeId, properties)) {
+                return;
+            }
+            dispatchAtomeEvent('squirrel:atome-updated', payload);
             if (properties) applyAtomePatchToDom(atomeId, properties);
         }
         if (payload.type === 'atome:deleted') {
@@ -860,6 +865,7 @@ const builtinHandlers = {
             const atomeId = params?.atomeId || params?.atome_id || params?.id;
             const properties = params?.properties || params?.particles || params?.patch || null;
             if (!atomeId || !properties || typeof properties !== 'object') return;
+            if (shouldIgnoreRealtimePatch(atomeId, properties)) return;
 
             applyAtomePatchToDom(atomeId, properties);
             dispatchAtomeEvent('squirrel:atome-updated', { atomeId, properties });

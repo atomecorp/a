@@ -491,6 +491,44 @@ function clear_fastify_login_cache() {
     }
 }
 
+function clear_pending_register_queue(phone) {
+    if (!is_tauri_runtime() || typeof localStorage === 'undefined') return;
+    try {
+        const raw = localStorage.getItem(AUTH_PENDING_SYNC_KEY);
+        if (!raw) return;
+        const queue = JSON.parse(raw);
+        if (!Array.isArray(queue) || queue.length === 0) return;
+        const normalizedPhone = normalize_phone_input(phone);
+        const filtered = queue.filter((item) => {
+            const itemPhone = normalize_phone_input(item?.data?.phone);
+            if (!normalizedPhone) return true;
+            return itemPhone !== normalizedPhone;
+        });
+        localStorage.setItem(AUTH_PENDING_SYNC_KEY, JSON.stringify(filtered));
+    } catch {
+        // Ignore
+    }
+}
+
+function clear_auth_credentials_for_phone(phone) {
+    if (!is_tauri_runtime() || typeof localStorage === 'undefined') return;
+    const normalizedPhone = normalize_phone_input(phone);
+    if (!normalizedPhone) return;
+    try {
+        const raw = localStorage.getItem(FASTIFY_LOGIN_CACHE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            const cachedPhone = normalize_phone_input(parsed?.phone);
+            if (cachedPhone && cachedPhone === normalizedPhone) {
+                localStorage.removeItem(FASTIFY_LOGIN_CACHE_KEY);
+            }
+        }
+    } catch {
+        // Ignore
+    }
+    clear_pending_register_queue(normalizedPhone);
+}
+
 async function ensure_fastify_token() {
     const authSource = resolveAuthSource();
     const dataSource = resolveDataSource();
@@ -641,7 +679,7 @@ function normalize_user_entry(raw) {
 
     // Phone number is the stable lookup key for sharing/discovery.
     // Drop entries that do not have a usable phone.
-    const phoneStr = (phone === null || phone === undefined) ? '' : String(phone).trim();
+    const phoneStr = normalize_phone_input(phone);
     if (!phoneStr || phoneStr.toLowerCase() === 'unknown') return null;
 
     return {
@@ -840,7 +878,7 @@ function save_public_user_directory_cache(users) {
         for (const u of (Array.isArray(users) ? users : [])) {
             const nu = normalize_user_entry(u);
             if (!nu) continue;
-            const key = String(nu.phone || nu.user_id || '').trim();
+            const key = normalize_phone_input(nu.phone) || String(nu.user_id || '').trim();
             if (!key) continue;
             unique.set(key, nu);
         }
@@ -855,7 +893,7 @@ function merge_user_directories(tauriUsers, fastifyUsers) {
     const add = (u) => {
         const nu = normalize_user_entry(u);
         if (!nu) return;
-        const key = String(nu.phone || nu.user_id || '').trim();
+        const key = normalize_phone_input(nu.phone) || String(nu.user_id || '').trim();
         if (!key) return;
         const existing = byPhoneOrId.get(key);
         if (!existing) {
@@ -1987,6 +2025,10 @@ async function delete_user(phone, password, username, callback) {
         error: 'skipped',
         skipped: true
     };
+
+    if (results[authPlan.source]?.success) {
+        clear_auth_credentials_for_phone(cleanPhone);
+    }
 
     // Call callback if provided
     if (typeof callback === 'function') {
@@ -4077,6 +4119,7 @@ async function list_atomes(options = {}, callback) {
     let ownerId = options.ownerId || null;
     const includeShared = !!options.includeShared;
     const dataPlan = resolve_backend_plan('data');
+    const shouldMergeSources = is_tauri_runtime() && includeShared;
 
     const results = {
         tauri: { atomes: [], error: null },
@@ -4110,7 +4153,92 @@ async function list_atomes(options = {}, callback) {
     if (options.includeDeleted !== undefined) queryOptions.includeDeleted = options.includeDeleted;
     if (projectId && queryOptions.limit === undefined) queryOptions.limit = 1000;
 
-    if (dataPlan.source === 'tauri') {
+    const mergeAtomeLists = (primary = [], secondary = []) => {
+        const byId = new Map();
+        const addItem = (item, source) => {
+            const normalized = normalizeAtomeRecord(item);
+            if (!normalized) return;
+            const id = normalized.id || normalized.atome_id || normalized.atomeId || null;
+            if (!id) return;
+            const existing = byId.get(id);
+            if (!existing) {
+                byId.set(id, normalized);
+                return;
+            }
+            const existingProps = existing.properties || existing.particles || existing.data || {};
+            const nextProps = normalized.properties || normalized.particles || normalized.data || {};
+            const mergedProps = source === 'tauri'
+                ? { ...nextProps, ...existingProps }
+                : { ...existingProps, ...nextProps };
+            byId.set(id, {
+                ...existing,
+                ...normalized,
+                properties: mergedProps
+            });
+        };
+
+        primary.forEach((item) => addItem(item, 'tauri'));
+        secondary.forEach((item) => addItem(item, 'fastify'));
+        return Array.from(byId.values());
+    };
+
+    if (shouldMergeSources) {
+        let tauriList = [];
+        let fastifyList = [];
+
+        try {
+            const tauriResult = await TauriAdapter.atome.list(queryOptions);
+            if (tauriResult.ok || tauriResult.success) {
+                const rawAtomes = tauriResult.atomes || tauriResult.data || [];
+                tauriList = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+            } else {
+                results.tauri.error = tauriResult.error;
+            }
+        } catch (e) {
+            results.tauri.error = e.message;
+        }
+
+        try {
+            if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
+                try { await ensure_fastify_token(); } catch { }
+            }
+
+            let fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+            if (!(fastifyResult.ok || fastifyResult.success)) {
+                const errMsg = String(fastifyResult.error || '').toLowerCase();
+                const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+                if (is_tauri_runtime() && authError) {
+                    try { await ensure_fastify_token(); } catch { }
+                    fastifyResult = await FastifyAdapter.atome.list(queryOptions);
+                }
+            }
+
+            if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
+                const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
+                let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+
+                if (projectId) {
+                    const target = String(projectId);
+                    normalized = normalized.filter((item) => {
+                        const parentId = item.parentId || item.parent_id || null;
+                        const properties = item.properties || item.particles || item.data || {};
+                        const propertyProjectId = properties.projectId || properties.project_id || null;
+                        return String(parentId || '') === target || String(propertyProjectId || '') === target;
+                    });
+                }
+
+                fastifyList = normalized;
+            } else if (!results.fastify.error) {
+                results.fastify.error = fastifyResult?.error || null;
+            }
+        } catch (e) {
+            results.fastify.error = e.message;
+        }
+
+        results.fastify.atomes = fastifyList;
+        results.tauri.atomes = mergeAtomeLists(tauriList, fastifyList);
+        results.meta.merged = true;
+    } else if (dataPlan.source === 'tauri') {
         try {
             const tauriResult = await TauriAdapter.atome.list(queryOptions);
             if (tauriResult.ok || tauriResult.success) {
