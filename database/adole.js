@@ -66,6 +66,12 @@ export async function initDatabase(config = {}) {
         console.log('[ADOLE v3.0] Snapshot migration skipped:', e.message);
     }
 
+    try {
+        await ensureEventColumns();
+    } catch (e) {
+        console.log('[ADOLE v3.0] Event migration skipped:', e.message);
+    }
+
     return db;
 }
 
@@ -107,6 +113,24 @@ async function ensureSnapshotColumns() {
     }
     if (!names.has('actor')) {
         await query('run', "ALTER TABLE snapshots ADD COLUMN actor TEXT");
+    }
+}
+
+async function ensureEventColumns() {
+    const columns = await query('all', "PRAGMA table_info(events)");
+    const names = new Set((columns || []).map((col) => col.name));
+
+    if (!names.has('project_id')) {
+        await query('run', "ALTER TABLE events ADD COLUMN project_id TEXT");
+    }
+    if (!names.has('actor')) {
+        await query('run', "ALTER TABLE events ADD COLUMN actor TEXT");
+    }
+    if (!names.has('tx_id')) {
+        await query('run', "ALTER TABLE events ADD COLUMN tx_id TEXT");
+    }
+    if (!names.has('gesture_id')) {
+        await query('run', "ALTER TABLE events ADD COLUMN gesture_id TEXT");
     }
 }
 
