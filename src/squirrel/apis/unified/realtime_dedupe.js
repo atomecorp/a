@@ -10,6 +10,7 @@ const REALTIME_KEYS = [
     'y',
     'rotation',
     'rotate',
+    'transform',
     'opacity',
     'zIndex',
     'background',
@@ -31,9 +32,34 @@ const dedupMap = new Map();
 const normalizeValue = (value) => {
     if (value == null) return null;
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-    if (typeof value === 'string') return value;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return '';
+        const numericMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)(px|deg|rad)?$/i);
+        if (numericMatch) {
+            const num = Number.parseFloat(numericMatch[1]);
+            if (Number.isFinite(num)) {
+                if (numericMatch[2] && numericMatch[2].toLowerCase() === 'rad') {
+                    return Number.parseFloat((num * 180 / Math.PI).toFixed(4));
+                }
+                return num;
+            }
+        }
+        return trimmed;
+    }
     if (typeof value === 'boolean') return value;
     return null;
+};
+
+const canonicalKey = (key) => {
+    const base = String(key || '').startsWith('css.')
+        ? String(key).slice(4)
+        : String(key || '');
+    if (base === 'x') return 'left';
+    if (base === 'y') return 'top';
+    if (base === 'rotation') return 'rotate';
+    if (base === 'radius') return 'borderRadius';
+    return base;
 };
 
 const extractKeys = (source, target, prefix = '') => {
@@ -41,7 +67,8 @@ const extractKeys = (source, target, prefix = '') => {
     REALTIME_KEYS.forEach((key) => {
         const normalized = normalizeValue(source[key]);
         if (normalized != null) {
-            target[`${prefix}${key}`] = normalized;
+            const normalizedKey = canonicalKey(`${prefix}${key}`);
+            target[normalizedKey] = normalized;
         }
     });
 };
@@ -61,7 +88,8 @@ const buildFingerprint = (payload) => {
         if (!key.startsWith('css.')) return;
         const normalized = normalizeValue(props[key]);
         if (normalized != null) {
-            fingerprint[key] = normalized;
+            const normalizedKey = canonicalKey(key.replace(/^css\./, ''));
+            fingerprint[normalizedKey] = normalized;
         }
     });
 
