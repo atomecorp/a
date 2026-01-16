@@ -5,17 +5,17 @@
  * - Minimal keyboard shortcut utility.
  */
 
-(function(){
-	const ORDER = ['ctrl','alt','shift','meta'];
+(function () {
+	const ORDER = ['ctrl', 'alt', 'shift', 'meta'];
 	const MOD_SYNONYMS = new Map([
-		['cmd','meta'], ['command','meta'], ['win','meta'], ['super','meta'],
-		['ctl','ctrl'], ['control','ctrl'],
-		['opt','alt'], ['option','alt']
+		['cmd', 'meta'], ['command', 'meta'], ['win', 'meta'], ['super', 'meta'],
+		['ctl', 'ctrl'], ['control', 'ctrl'],
+		['opt', 'alt'], ['option', 'alt']
 	]);
 
 	const registry = new Map(); // combo -> Set<callback>
 
-	function normToken(tok){
+	function normToken(tok) {
 		if (!tok) return '';
 		tok = String(tok).trim().toLowerCase();
 		if (MOD_SYNONYMS.has(tok)) tok = MOD_SYNONYMS.get(tok);
@@ -28,7 +28,7 @@
 		return tok;
 	}
 
-	function normalizeCombo(input){
+	function normalizeCombo(input) {
 		if (!input) return '';
 		const rawParts = String(input).split(/[-+]/).map(s => String(s).trim()).filter(Boolean);
 		const mods = new Set();
@@ -53,7 +53,7 @@
 		return [...sortedMods, key].filter(Boolean).join('+');
 	}
 
-	function eventToCombo(e){
+	function eventToCombo(e) {
 		// Build mods in canonical ORDER to match normalizeCombo
 		const mods = [];
 		if (e.ctrlKey) mods.push('ctrl');
@@ -77,7 +77,7 @@
 		return [...mods, k].filter(Boolean).join('+');
 	}
 
-	function addHandler(){
+	function addHandler() {
 		if (addHandler._installed) return;
 		window.addEventListener('keydown', (e) => {
 			const combo = eventToCombo(e);
@@ -85,21 +85,21 @@
 			if (!cbs || cbs.size === 0) return;
 			// Call all callbacks with the normalized combo and the event
 			for (const cb of cbs) {
-				try { cb(combo, e); } catch(_) {}
+				try { cb(combo, e); } catch (_) { }
 			}
 		}, true);
 		addHandler._installed = true;
 	}
 
-	function shortcut(key_cmb, fctToCall){
+	function shortcut(key_cmb, fctToCall) {
 		const combo = normalizeCombo(key_cmb);
-		if (!combo || typeof fctToCall !== 'function') return () => {};
+		if (!combo || typeof fctToCall !== 'function') return () => { };
 		addHandler();
 		let set = registry.get(combo);
 		if (!set) { set = new Set(); registry.set(combo, set); }
 		set.add(fctToCall);
 		// return an unsubscribe function
-		return function unsubscribe(){
+		return function unsubscribe() {
 			const s = registry.get(combo);
 			if (!s) return;
 			s.delete(fctToCall);
