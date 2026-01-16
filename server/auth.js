@@ -121,6 +121,21 @@ async function getUserOptionalParticles(dataSource, userId) {
     }
 }
 
+async function ensureUserAtomeType(dataSource, userId, currentType = null) {
+    if (!dataSource || !userId) return false;
+    if (currentType === 'user') return false;
+    const now = new Date().toISOString();
+    try {
+        await dataSource.query(
+            "UPDATE atomes SET atome_type = 'user', updated_at = ?, sync_status = 'local' WHERE atome_id = ? AND atome_type != 'user'",
+            [now, userId]
+        );
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function upsertUserStateCurrent(dataSource, userId, username, phone, visibility, now, optional = {}) {
     if (!dataSource || !userId) return;
     const patch = {
@@ -275,15 +290,21 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
 
     // Check if user exists (including soft-deleted)
     const existingRows = await dataSource.query(
-        `SELECT atome_id, deleted_at FROM atomes WHERE atome_id = ?`,
+        `SELECT atome_id, deleted_at, atome_type FROM atomes WHERE atome_id = ?`,
         [userId]
     );
 
     if (existingRows.length > 0) {
         const existing = existingRows[0];
+        const existingType = existing.atome_type || null;
+        const needsTypeRepair = !existingType || existingType !== 'user';
         if (existing.deleted_at) {
             // Reactivate soft-deleted user
             console.log(`🔄 [ADOLE] Reactivating soft-deleted user: ${userId}`);
+
+            if (needsTypeRepair) {
+                await ensureUserAtomeType(dataSource, userId, existingType);
+            }
 
             // Clear deleted_at and update timestamp
             await dataSource.query(
@@ -317,10 +338,48 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
                 created_source: 'fastify',
                 reactivated: true
             };
-        } else {
-            // User exists and is not deleted - throw error
-            throw new Error('User already exists');
         }
+
+        if (needsTypeRepair) {
+            console.log(`🧩 [ADOLE] Repairing mistyped user atome: ${userId}`);
+            await ensureUserAtomeType(dataSource, userId, existingType);
+
+            const particles = [
+                { key: 'phone', value: JSON.stringify(phone) },
+                { key: 'username', value: JSON.stringify(username) },
+                { key: 'password_hash', value: JSON.stringify(passwordHash) },
+                { key: 'visibility', value: JSON.stringify(normalizedVisibility) }
+            ];
+
+            for (const p of particles) {
+                await dataSource.query(
+                    `INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
+                     VALUES (?, ?, ?, ?)
+                     ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                        particle_value = excluded.particle_value,
+                        updated_at = excluded.updated_at`,
+                    [userId, p.key, p.value, now]
+                );
+            }
+
+            for (const [key, value] of Object.entries(optionalParticles)) {
+                await updateUserParticle(dataSource, userId, key, value);
+            }
+
+            await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now, optionalParticles);
+
+            return {
+                user_id: userId,
+                username,
+                phone,
+                created_at: now,
+                created_source: 'fastify',
+                repaired: true
+            };
+        }
+
+        // User exists and is not deleted - throw error
+        throw new Error('User already exists');
     }
 
     // Create the atome with type 'user'
@@ -381,11 +440,12 @@ async function findUserByPhone(dataSource, phone) {
         created_at: user.created_at,
         updated_at: user.updated_at,
         last_sync: user.last_sync,
-        created_source: user.created_source
+        created_source: user.created_source,
+        atome_type: user.atome_type || 'user'
     });
 
     const directRows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
+        `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                 MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
@@ -398,22 +458,26 @@ async function findUserByPhone(dataSource, phone) {
     );
 
     if (directRows.length > 0) {
-        return parseUserRow(directRows[0]);
+        const hit = parseUserRow(directRows[0]);
+        if (hit.atome_type !== 'user') {
+            await ensureUserAtomeType(dataSource, hit.user_id, hit.atome_type);
+        }
+        return hit;
     }
 
     const rows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
+        `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                 MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
          FROM atomes a
          LEFT JOIN particles p ON a.atome_id = p.atome_id
-         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
+         WHERE a.deleted_at IS NULL
          GROUP BY a.atome_id`
     );
 
     const match = rows.find((row) => {
-        if (!row?.phone) return false;
+        if (!row?.phone || !row?.password_hash) return false;
         try {
             const storedPhone = JSON.parse(row.phone);
             return normalizePhone(storedPhone) === normalizedPhone;
@@ -422,7 +486,12 @@ async function findUserByPhone(dataSource, phone) {
         }
     });
 
-    return match ? parseUserRow(match) : null;
+    if (!match) return null;
+    const parsed = parseUserRow(match);
+    if (parsed.atome_type !== 'user') {
+        await ensureUserAtomeType(dataSource, parsed.user_id, parsed.atome_type);
+    }
+    return parsed;
 }
 
 /**
@@ -433,7 +502,7 @@ async function findUserByPhone(dataSource, phone) {
  */
 async function findUserById(dataSource, userId) {
     const rows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
+        `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                 MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
@@ -444,9 +513,38 @@ async function findUserById(dataSource, userId) {
         [userId]
     );
 
-    if (rows.length === 0) return null;
+    if (rows.length > 0) {
+        const user = rows[0];
+        return {
+            user_id: user.user_id,
+            username: user.username ? JSON.parse(user.username) : null,
+            phone: user.phone ? JSON.parse(user.phone) : null,
+            password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+            last_sync: user.last_sync,
+            created_source: user.created_source
+        };
+    }
 
-    const user = rows[0];
+    const fallback = await dataSource.query(
+        `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
+                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
+                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
+                MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
+         FROM atomes a
+         LEFT JOIN particles p ON a.atome_id = p.atome_id
+         WHERE a.atome_id = ? AND a.deleted_at IS NULL
+         GROUP BY a.atome_id`,
+        [userId]
+    );
+
+    if (fallback.length === 0) return null;
+    const user = fallback[0];
+    if (!user.password_hash) return null;
+    if (user.atome_type && user.atome_type !== 'user') {
+        await ensureUserAtomeType(dataSource, user.user_id, user.atome_type);
+    }
     return {
         user_id: user.user_id,
         username: user.username ? JSON.parse(user.username) : null,

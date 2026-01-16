@@ -1350,9 +1350,11 @@ async fn handle_event_commit(
     };
 
     let result = with_transaction(&db, |conn| {
-        insert_event_record(conn, &normalized)?;
-        let _ = apply_event_to_state_current(conn, &normalized)?;
-        apply_event_to_atomes(conn, &normalized, user_id)?;
+        let inserted = insert_event_record(conn, &normalized)?;
+        if inserted {
+            let _ = apply_event_to_state_current(conn, &normalized)?;
+            apply_event_to_atomes(conn, &normalized, user_id)?;
+        }
         Ok(())
     });
 
@@ -1408,9 +1410,11 @@ async fn handle_event_commit_batch(
 
     let result = with_transaction(&db, |conn| {
         for evt in normalized_events.iter() {
-            insert_event_record(conn, evt)?;
-            let _ = apply_event_to_state_current(conn, evt)?;
-            apply_event_to_atomes(conn, evt, user_id)?;
+            let inserted = insert_event_record(conn, evt)?;
+            if inserted {
+                let _ = apply_event_to_state_current(conn, evt)?;
+                apply_event_to_atomes(conn, evt, user_id)?;
+            }
         }
         Ok(())
     });
@@ -2005,7 +2009,7 @@ fn apply_event_to_atomes(
         .and_then(|v| v.as_str())
         .map(|v| v.to_string());
 
-    let existing: Option<(String, Option<String>)> = db
+    let existing: Option<(String, String)> = db
         .query_row(
             "SELECT atome_id, atome_type FROM atomes WHERE atome_id = ?1",
             rusqlite::params![atome_id],
@@ -2013,6 +2017,15 @@ fn apply_event_to_atomes(
         )
         .optional()
         .map_err(|e| e.to_string())?;
+
+    if let Some((_id, existing_type)) = existing.as_ref() {
+        if atome_type == "user" && existing_type != "user" {
+            let _ = db.execute(
+                "UPDATE atomes SET atome_type = 'user', updated_at = ?1, sync_status = 'pending' WHERE atome_id = ?2",
+                rusqlite::params![event.ts, atome_id],
+            );
+        }
+    }
 
     if existing.is_some() {
         if event.kind == "delete" {
@@ -2056,7 +2069,18 @@ fn apply_event_to_atomes(
     Ok(())
 }
 
-fn insert_event_record(db: &Connection, event: &EventRecord) -> Result<(), String> {
+fn insert_event_record(db: &Connection, event: &EventRecord) -> Result<bool, String> {
+    let exists: Option<i64> = db
+        .query_row(
+            "SELECT 1 FROM events WHERE id = ?1",
+            rusqlite::params![event.id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if exists.is_some() {
+        return Ok(false);
+    }
     let payload_json: Option<String> = match &event.payload {
         Some(payload) => Some(serde_json::to_string(payload).map_err(|e| e.to_string())?),
         None => None,
@@ -2081,7 +2105,7 @@ fn insert_event_record(db: &Connection, event: &EventRecord) -> Result<(), Strin
         ],
     )
     .map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(true)
 }
 
 fn event_with_actor(event: EventRecord) -> JsonValue {

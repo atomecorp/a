@@ -140,15 +140,7 @@ async fn handle_bootstrap(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    let existing_user: Option<(String, Option<String>)> = db
-        .query_row(
-            "SELECT a.atome_id, a.deleted_at FROM particles p
-             JOIN atomes a ON p.atome_id = a.atome_id
-             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1",
-            rusqlite::params![format!("\"{}\"", phone)],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .ok();
+    let existing_user = find_user_record_by_phone(&db, &phone);
 
     let password_hash = match hash(password, DEFAULT_COST) {
         Ok(h) => h,
@@ -158,7 +150,10 @@ async fn handle_bootstrap(
     let user_id = generate_user_id(&phone);
     let now = Utc::now().to_rfc3339();
 
-    if let Some((existing_id, deleted_at)) = existing_user {
+    if let Some((existing_id, existing_type, deleted_at)) = existing_user {
+        if existing_type != "user" {
+            let _ = coerce_user_atome_type(&db, &existing_id, &now);
+        }
         if deleted_at.is_some() {
             if let Err(e) = db.execute(
                 "UPDATE atomes SET deleted_at = NULL, updated_at = ?1 WHERE atome_id = ?2",
@@ -316,16 +311,8 @@ async fn handle_register(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Check if user already exists (including soft-deleted)
-    let existing_user: Option<(String, Option<String>)> = db
-        .query_row(
-            "SELECT a.atome_id, a.deleted_at FROM particles p
-             JOIN atomes a ON p.atome_id = a.atome_id
-             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1",
-            rusqlite::params![format!("\"{}\"", phone)],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .ok();
+    // Check if user already exists (including soft-deleted, even if mistyped)
+    let existing_user = find_user_record_by_phone(&db, &phone);
 
     // Hash password
     let password_hash = match hash(password, DEFAULT_COST) {
@@ -337,7 +324,10 @@ async fn handle_register(
     let user_id = generate_user_id(&phone);
     let now = Utc::now().to_rfc3339();
 
-    if let Some((existing_id, deleted_at)) = existing_user {
+    if let Some((existing_id, existing_type, deleted_at)) = existing_user {
+        if existing_type != "user" {
+            let _ = coerce_user_atome_type(&db, &existing_id, &now);
+        }
         if deleted_at.is_some() {
             // Reactivate soft-deleted user
             if let Err(e) = db.execute(
@@ -466,22 +456,17 @@ async fn handle_login(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Find user by phone
-    let user_id: Option<String> = db
-        .query_row(
-            "SELECT a.atome_id FROM atomes a
-             JOIN particles p ON a.atome_id = p.atome_id
-             WHERE a.atome_type = 'user' AND p.particle_key = 'phone' AND p.particle_value = ?1
-             AND a.deleted_at IS NULL",
-            rusqlite::params![format!("\"{}\"", phone)],
-            |row| row.get(0),
-        )
-        .ok();
-
-    let user_id = match user_id {
-        Some(id) => id,
-        None => return error_response(request_id, "Invalid credentials"),
+    // Find user by phone (accept mistyped atomes and fix them)
+    let now = Utc::now().to_rfc3339();
+    let user_record = find_user_record_by_phone(&db, &phone);
+    let (user_id, existing_type, deleted_at) = match user_record {
+        Some((id, atome_type, deleted_at)) if deleted_at.is_none() => (id, atome_type, deleted_at),
+        _ => return error_response(request_id, "Invalid credentials"),
     };
+
+    if existing_type != "user" {
+        let _ = coerce_user_atome_type(&db, &user_id, &now);
+    }
 
     // Get user particles
     let (username, password_hash, created_at) = match get_user_particles(&db, &user_id) {
@@ -503,7 +488,6 @@ async fn handle_login(
         .ok()
         .and_then(|v| serde_json::from_str::<String>(&v).ok())
         .unwrap_or_else(|| "public".to_string());
-    let now = Utc::now().to_rfc3339();
     let empty_optional = JsonMap::new();
     if let Err(err) = upsert_user_state_current(&db, &user_id, &username, &phone, &visibility, &now, &empty_optional) {
         println!("[Auth Debug] state_current update failed: {}", err);
@@ -550,17 +534,28 @@ async fn handle_me(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Verify user still exists
-    let exists: bool = db
+    // Verify user still exists (and fix mistyped atome_type)
+    let meta: Option<(String, Option<String>)> = db
         .query_row(
-            "SELECT 1 FROM atomes WHERE atome_id = ?1 AND atome_type = 'user' AND deleted_at IS NULL",
+            "SELECT atome_type, deleted_at FROM atomes WHERE atome_id = ?1",
             rusqlite::params![&claims.sub],
-            |_| Ok(true),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
-        .unwrap_or(false);
+        .optional()
+        .map_err(|e| e.to_string())
+        .ok()
+        .flatten();
 
-    if !exists {
+    let (atome_type, deleted_at) = match meta {
+        Some(meta) => meta,
+        None => return error_response(request_id, "User not found"),
+    };
+    if deleted_at.is_some() {
         return error_response(request_id, "User not found");
+    }
+    if atome_type != "user" {
+        let now = Utc::now().to_rfc3339();
+        let _ = coerce_user_atome_type(&db, &claims.sub, &now);
     }
 
     let (username, _, created_at) = match get_user_particles(&db, &claims.sub) {
@@ -876,6 +871,31 @@ fn normalize_user_optional(raw: Option<&JsonValue>) -> JsonMap<String, JsonValue
         result.insert(key.clone(), value.clone());
     }
     result
+}
+
+fn find_user_record_by_phone(db: &Connection, phone: &str) -> Option<(String, String, Option<String>)> {
+    let phone_json = format!("\"{}\"", phone);
+    db.query_row(
+        "SELECT a.atome_id, a.atome_type, a.deleted_at FROM particles p
+         JOIN atomes a ON p.atome_id = a.atome_id
+         WHERE p.particle_key = 'phone' AND p.particle_value = ?1
+         LIMIT 1",
+        rusqlite::params![phone_json],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
+    .optional()
+    .ok()
+    .flatten()
+}
+
+fn coerce_user_atome_type(db: &Connection, user_id: &str, ts: &str) -> Result<(), String> {
+    db.execute(
+        "UPDATE atomes SET atome_type = 'user', updated_at = ?1, sync_status = 'pending'
+         WHERE atome_id = ?2 AND atome_type != 'user'",
+        rusqlite::params![ts, user_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn upsert_optional_particles(

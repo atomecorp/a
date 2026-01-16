@@ -292,7 +292,16 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
     } else {
         const updates = [];
         const values = [];
-        if ((!existing.atome_type || existing.atome_type === 'generic') && atomeType) {
+        const existingType = existing.atome_type || '';
+        const shouldUpgradeType = !!(
+            atomeType
+            && (
+                !existingType
+                || existingType === 'generic'
+                || (atomeType === 'user' && existingType !== 'user')
+            )
+        );
+        if (shouldUpgradeType) {
             updates.push('atome_type = ?');
             values.push(atomeType);
         }
@@ -1180,6 +1189,12 @@ export async function appendEvent(event, options = {}) {
     const actorJson = serializeJson(normalized.actor);
 
     await withTransaction(async () => {
+        const existing = await query(
+            'get',
+            'SELECT 1 FROM events WHERE id = ?',
+            [normalized.id]
+        );
+        if (existing) return;
         await query(
             'run',
             `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
@@ -1219,6 +1234,16 @@ export async function appendEvents(events, options = {}) {
             const normalized = normalizeEventInput(evt, { txId });
             const payloadJson = serializeJson(normalized.payload);
             const actorJson = serializeJson(normalized.actor);
+
+            const existing = await query(
+                'get',
+                'SELECT 1 FROM events WHERE id = ?',
+                [normalized.id]
+            );
+            if (existing) {
+                results.push(normalized);
+                continue;
+            }
 
             await query(
                 'run',

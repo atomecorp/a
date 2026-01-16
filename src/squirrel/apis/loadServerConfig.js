@@ -233,14 +233,6 @@ export async function loadServerConfigOnce() {
                 return config;
             }
 
-            if (isTauriRuntime) {
-                const cloudBase = resolveTauriProdFastifyHttpBase();
-                if (cloudBase && !isLocalFastifyBase(cloudBase)) {
-                    applyFastifyGlobalsFromHttpBase(cloudBase, config);
-                    return config;
-                }
-            }
-
             const httpBase = buildFastifyHttpBase(config);
             if (httpBase) {
                 applyFastifyGlobalsFromHttpBase(httpBase, config);

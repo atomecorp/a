@@ -1475,45 +1475,36 @@ async function create_user(phone, password, username, options = {}, callback) {
         } catch { }
     }
 
-    // Try Tauri first (local SQLite)
-    try {
-        const tauriResult = await TauriAdapter.auth.register({
-            phone: tauriPhone,
-            password,
-            username: resolvedUsername,
-            visibility,
-            optional
-        });
-        const tauriOk = !!(tauriResult.ok || tauriResult.success);
-        const tauriAlready = is_already_exists_error(tauriResult);
-        if (tauriOk || tauriAlready) {
-            results.tauri = { success: true, data: tauriResult, error: null, alreadyExists: tauriAlready && !tauriOk };
-        } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+    const registerWith = async (adapter, phoneValue) => {
+        if (!adapter?.auth?.register) {
+            return { success: false, data: null, error: 'Auth register unavailable' };
         }
-    } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
-    }
+        try {
+            const res = await adapter.auth.register({
+                phone: phoneValue,
+                password,
+                username: resolvedUsername,
+                visibility,
+                optional
+            });
+            const ok = !!(res.ok || res.success);
+            const already = is_already_exists_error(res);
+            if (ok || already) {
+                return { success: true, data: res, error: null, alreadyExists: already && !ok };
+            }
+            return { success: false, data: null, error: res.error };
+        } catch (e) {
+            return { success: false, data: null, error: e.message };
+        }
+    };
 
-    // Also try Fastify (LibSQL)
-    try {
-        const fastifyResult = await FastifyAdapter.auth.register({
-            phone: fastifyPhone,
-            password,
-            username: resolvedUsername,
-            visibility,
-            optional
-        });
-        const fastifyOk = !!(fastifyResult.ok || fastifyResult.success);
-        const fastifyAlready = is_already_exists_error(fastifyResult);
-        if (fastifyOk || fastifyAlready) {
-            results.fastify = { success: true, data: fastifyResult, error: null, alreadyExists: fastifyAlready && !fastifyOk };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
-    }
+    const [tauriRegister, fastifyRegister] = await Promise.all([
+        registerWith(TauriAdapter, tauriPhone),
+        registerWith(FastifyAdapter, fastifyPhone)
+    ]);
+
+    results.tauri = tauriRegister;
+    results.fastify = fastifyRegister;
 
     // Bidirectional reliability: if one backend was offline, queue a register for later.
     // This keeps "created offline in Tauri" and "created in Fastify" converging over time.
@@ -1632,35 +1623,28 @@ async function log_user(phone, password, username, callback) {
         fastify: { success: false, data: null, error: null }
     };
 
-    // Try Tauri first (local SQLite)
-    try {
-        const tauriResult = await TauriAdapter.auth.login({
-            phone: tauriPhone,
-            password
-        });
-        if (tauriResult.ok || tauriResult.success) {
-            results.tauri = { success: true, data: tauriResult, error: null };
-        } else {
-            results.tauri = { success: false, data: null, error: tauriResult.error };
+    const loginWith = async (adapter, phoneValue) => {
+        if (!adapter?.auth?.login) {
+            return { success: false, data: null, error: 'Auth login unavailable' };
         }
-    } catch (e) {
-        results.tauri = { success: false, data: null, error: e.message };
-    }
+        try {
+            const res = await adapter.auth.login({ phone: phoneValue, password });
+            if (res.ok || res.success) {
+                return { success: true, data: res, error: null };
+            }
+            return { success: false, data: null, error: res.error };
+        } catch (e) {
+            return { success: false, data: null, error: e.message };
+        }
+    };
 
-    // Also try Fastify (LibSQL)
-    try {
-        const fastifyResult = await FastifyAdapter.auth.login({
-            phone: fastifyPhone,
-            password
-        });
-        if (fastifyResult.ok || fastifyResult.success) {
-            results.fastify = { success: true, data: fastifyResult, error: null };
-        } else {
-            results.fastify = { success: false, data: null, error: fastifyResult.error };
-        }
-    } catch (e) {
-        results.fastify = { success: false, data: null, error: e.message };
-    }
+    const [tauriLogin, fastifyLogin] = await Promise.all([
+        loginWith(TauriAdapter, tauriPhone),
+        loginWith(FastifyAdapter, fastifyPhone)
+    ]);
+
+    results.tauri = tauriLogin;
+    results.fastify = fastifyLogin;
 
     // If running in Tauri and the account exists locally but not on Fastify yet,
     // bootstrap the cloud account so sync can resume.
@@ -2810,6 +2794,44 @@ async function sync_atomes(callback) {
         };
     };
 
+    const isUserAtome = (atome) => {
+        const type = String(atome?.atome_type || atome?.type || atome?.atomeType || '').trim().toLowerCase();
+        return type === 'user';
+    };
+
+    const hasValidPasswordHash = (properties) => {
+        const value = properties?.password_hash;
+        return typeof value === 'string' && value.trim().length > 0;
+    };
+
+    const unwrapAtomeResponse = (response) => {
+        if (!response || typeof response !== 'object') return null;
+        if (response.atome && typeof response.atome === 'object') return response.atome;
+        if (response.data && typeof response.data === 'object') return response.data;
+        if (Array.isArray(response.atomes) && response.atomes[0]) return response.atomes[0];
+        return null;
+    };
+
+    const ensureUserAtomeProperties = async (atome, adapter) => {
+        const base = extract_atome_properties(atome);
+        if (hasValidPasswordHash(base)) return base;
+
+        const id = atome?.atome_id || atome?.id;
+        if (!id || !adapter?.atome?.get) return base;
+
+        try {
+            const fetched = await adapter.atome.get(id);
+            const rawAtome = unwrapAtomeResponse(fetched);
+            if (!rawAtome) return base;
+            const normalized = normalizeAtomeRecord(rawAtome);
+            const full = extract_atome_properties(normalized);
+            if (!hasValidPasswordHash(full)) return base;
+            return { ...base, ...full };
+        } catch (_) {
+            return base;
+        }
+    };
+
     const normalizePath = (value) => {
         if (!value) return '';
         return String(value).trim().replace(/\\/g, '/').replace(/^file:\/\//i, '');
@@ -3630,6 +3652,9 @@ async function sync_atomes(callback) {
                 }
             }
             const payload = buildUpsertPayload(atome);
+            if (isUserAtome(atome)) {
+                payload.properties = await ensureUserAtomeProperties(atome, TauriAdapter);
+            }
             const createResult = await FastifyAdapter.atome.create(payload);
 
             if (createResult.ok || createResult.success) {
@@ -3651,6 +3676,9 @@ async function sync_atomes(callback) {
     for (const atome of sortedToPull) {
         try {
             const payload = buildUpsertPayload(atome);
+            if (isUserAtome(atome)) {
+                payload.properties = await ensureUserAtomeProperties(atome, FastifyAdapter);
+            }
             const createResult = await TauriAdapter.atome.create(payload);
 
             if (createResult.ok || createResult.success) {
@@ -3691,7 +3719,12 @@ async function sync_atomes(callback) {
                 }
             }
             const payload = buildUpsertPayload(item.tauri);
-            const updateResult = await FastifyAdapter.atome.create(payload);
+            if (isUserAtome(item.tauri)) {
+                payload.properties = await ensureUserAtomeProperties(item.tauri, TauriAdapter);
+            }
+            const updateResult = isUserAtome(item.tauri)
+                ? await FastifyAdapter.atome.alter(payload.id, payload.properties)
+                : await FastifyAdapter.atome.create(payload);
 
             if (updateResult.ok || updateResult.success) {
                 result.updated.success++;
@@ -3709,7 +3742,12 @@ async function sync_atomes(callback) {
     for (const item of unsyncedResult.modifiedOnFastify) {
         try {
             const payload = buildUpsertPayload(item.fastify);
-            const updateResult = await TauriAdapter.atome.create(payload);
+            if (isUserAtome(item.fastify)) {
+                payload.properties = await ensureUserAtomeProperties(item.fastify, FastifyAdapter);
+            }
+            const updateResult = isUserAtome(item.fastify)
+                ? await TauriAdapter.atome.alter(payload.id, payload.properties)
+                : await TauriAdapter.atome.create(payload);
 
             if (updateResult.ok || updateResult.success) {
                 result.updated.success++;
