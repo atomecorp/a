@@ -1,3 +1,11 @@
+/**
+ * loader
+ *
+ * Role:
+ * - Asset loading utilities with cache and Tauri-aware paths.
+ * - Provides SVG rendering helpers for UI.
+ */
+
 // --- Port persistence (survive refresh) -------------------------------------------------
 (function persistLocalPort() {
   if (typeof window === 'undefined') return;
@@ -20,7 +28,6 @@ if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
 }
 
 // (Removed __waitLocalServerReady waiting logic: SVG/data fetch is now immediate on all platforms)
-let __localServerReady = true;
 
 const __inflightData = {};
 function dataFetcher(path, opts = {}) {
@@ -28,7 +35,7 @@ function dataFetcher(path, opts = {}) {
   const key = path + '::' + mode + '::' + (opts.preview || '');
   if (__dataCache[key]) return Promise.resolve(__dataCache[key]);
   if (__inflightData[key]) return __inflightData[key];
-  if (typeof fetch !== 'function') return Promise.reject(new Error('fetch indisponible'));
+  if (typeof fetch !== 'function') return Promise.reject(new Error('fetch unavailable'));
 
   const p = (async () => {
     // Normalize path: remove leading './' or '/', but keep first segment intact
@@ -38,7 +45,7 @@ function dataFetcher(path, opts = {}) {
     // Then strip remaining leading slashes
     cleanPath = cleanPath.replace(/^\/+/, '');
     // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
-    if (!cleanPath) throw new Error('Chemin vide');
+    if (!cleanPath) throw new Error('Empty path');
     const filename = cleanPath.split('/').pop();
     const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
     const looksSvg = ext === 'svg';
@@ -159,14 +166,11 @@ function dataFetcher(path, opts = {}) {
           const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
         }
         return done(u);
-      } catch (e) {
-        errro.log('err found:', e);
-
-      }
+      } catch (_) { }
     }
 
     delete __inflightData[key];
-    throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+    throw new Error('Not found (candidates: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
   })();
   __inflightData[key] = p;
   return p;
@@ -180,11 +184,11 @@ function dataFetcher(path, opts = {}) {
 function sanitizeSVG(raw) { return raw; }
 
 
-//svg creator
+// svg creator
 // render_svg: inserts an SVG string.
-// Signature étendue: sizeMode (dernier param) peut valoir:
-//   null / undefined  => comportement fixe (taille px)
-//   'responsive' ou '%' => width/height 100%, suit le parent
+// Extended signature: sizeMode (last param) can be:
+//   null / undefined  => fixed size (px)
+//   'responsive' or '%' => width/height 100%, follows parent
 function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left = '0px', width = '100px', height = '100px', color = null, path_color = null, sizeMode = null) {
   const parent = document.getElementById(parent_id);
   if (!parent || !svgcontent) return null;
@@ -212,14 +216,14 @@ function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left = '0px
       svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     }
     if (responsive) {
-      // Mode responsive: largeur/hauteur 100%, parent contrôle la taille
+      // Responsive mode: width/height 100%, parent controls sizing
       if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
       if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
       svgEl.style.width = '100%';
       svgEl.style.height = '100%';
       try { svgEl.dataset.intuitionResponsive = '1'; } catch (_) { }
     } else {
-      // Mode fixe: on applique aussi en attribut pour compat rétro + calculs getAttribute
+      // Fixed mode: also set attributes for backward compatibility
       try { svgEl.setAttribute('width', String(targetW)); } catch (_) { }
       try { svgEl.setAttribute('height', String(targetH)); } catch (_) { }
       svgEl.style.width = targetW + 'px';

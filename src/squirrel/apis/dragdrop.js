@@ -1,6 +1,10 @@
-// dragdrop.js
-// Small utility to register drag-and-drop zones and normalize dropped files across browsers
-// Returns File-like metadata: { name, type, size, file, path?, fullPath? }
+/**
+ * dragdrop
+ *
+ * Role:
+ * - Drag-and-drop utility for normalizing dropped files across browsers.
+ * - Returns File-like metadata: { name, type, size, file, path?, fullPath? }
+ */
 
 async function _entryToFiles(entry, pathPrefix = '') {
     const results = [];
@@ -54,7 +58,7 @@ async function _collectFilesFromDataTransfer(dt) {
             if (file) files.push(file);
         }
 
-        // Attendre toutes les promesses avant de continuer
+        // Wait for all promises before continuing
         const results = await Promise.all(promises);
         results.forEach(fileList => {
             if (fileList && fileList.length) {
@@ -118,7 +122,7 @@ export function createDropZone(target, options = {}) {
     const onDrop = async (e) => {
         e.preventDefault();
 
-        // Gestion de la propagation selon l'option 'event'
+        // Handle propagation based on the 'event' option
         if (opts.event === 'stop') {
             e.stopPropagation();
         } else if (opts.event === 'kill' || opts.event === 'killed') {

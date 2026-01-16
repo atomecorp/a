@@ -1,6 +1,13 @@
+/**
+ * utils
+ *
+ * Role:
+ * - Environment detection helpers.
+ */
+
 function current_platform() {
   try {
-    if (typeof window === 'undefined') return 'serveur';
+    if (typeof window === 'undefined') return 'server';
     const ua = navigator.userAgent || '';
     const vendor = navigator.vendor || '';
     const lowerUA = ua.toLowerCase();
@@ -15,7 +22,7 @@ function current_platform() {
     const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
     if (isTauri) {
       if (/Macintosh|Mac OS X/.test(ua)) return 'Tauri Mac';
-      if (/Windows/.test(ua)) return 'Taur Windows';
+      if (/Windows/.test(ua)) return 'Tauri Windows';
       if (/Linux/.test(ua)) return 'Tauri Unix';
       return 'Tauri';
     }
@@ -53,7 +60,7 @@ function current_platform() {
 
     return 'web';
   } catch (_) {
-    return 'inconnu';
+    return 'unknown';
   }
 }
 

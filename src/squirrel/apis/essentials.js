@@ -1,6 +1,9 @@
 /**
- * 🌐 APIS - EXTENSIONS FOR JAVASCRIPT
- * Adding Ruby-like functionalities to JavaScript + MINIMAL REQUIRE SYSTEM FOR SQUIRREL
+ * essentials
+ *
+ * Role:
+ * - Global theme + convenience helpers exposed to the runtime.
+ * - Legacy compatibility helpers for UI workflows.
  */
 const shadowLeft = 0,
   shadowTop = 0,

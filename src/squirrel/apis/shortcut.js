@@ -1,7 +1,9 @@
-// Minimal keyboard shortcut utility
-// Usage:
-//   const myFct = function atest(key){ console.log('you press: ' + key); };
-//   shortcut('cmd-a', myFct);
+/**
+ * shortcut
+ *
+ * Role:
+ * - Minimal keyboard shortcut utility.
+ */
 
 (function(){
 	const ORDER = ['ctrl','alt','shift','meta'];
