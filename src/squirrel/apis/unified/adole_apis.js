@@ -419,11 +419,59 @@ const AUTH_PENDING_SYNC_KEY = 'auth_pending_sync';
 const PUBLIC_USER_DIRECTORY_LAST_SYNC_KEY = 'public_user_directory_last_sync_iso_v1';
 const ATOME_PENDING_DELETE_KEY = 'atome_pending_delete_ops_v1';
 const FASTIFY_LOGIN_CACHE_KEY = 'fastify_login_cache_v1';
+const CURRENT_PROJECT_CACHE_KEY = 'current_project_cache_v1';
 
 let _syncAtomesInProgress = false;
 let _lastSyncAtomesAttempt = 0;
 let _lastFastifyAutoLoginAttempt = 0;
 let _lastFastifyAssetSync = 0;
+
+const read_cached_current_project = () => {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(CURRENT_PROJECT_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.id) return null;
+        return {
+            id: String(parsed.id),
+            name: parsed.name ? String(parsed.name) : null,
+            userId: parsed.userId ? String(parsed.userId) : null
+        };
+    } catch {
+        return null;
+    }
+};
+
+const write_cached_current_project = (projectId, projectName, userId = null) => {
+    if (typeof localStorage === 'undefined' || !projectId) return;
+    try {
+        const payload = {
+            id: String(projectId),
+            name: projectName ? String(projectName) : null,
+            userId: userId ? String(userId) : null,
+            ts: new Date().toISOString()
+        };
+        localStorage.setItem(CURRENT_PROJECT_CACHE_KEY, JSON.stringify(payload));
+    } catch {
+        // Ignore cache failures.
+    }
+};
+
+const clear_cached_current_project = () => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.removeItem(CURRENT_PROJECT_CACHE_KEY);
+    } catch {
+        // Ignore cache failures.
+    }
+};
+
+const cachedProjectBootstrap = read_cached_current_project();
+if (cachedProjectBootstrap?.id) {
+    _currentProjectId = cachedProjectBootstrap.id;
+    _currentProjectName = cachedProjectBootstrap.name || null;
+}
 
 function is_tauri_runtime() {
     try {
@@ -1483,6 +1531,7 @@ function get_current_project() {
 async function set_current_project(projectId, projectName = null, persist = true) {
     _currentProjectId = projectId;
     _currentProjectName = projectName;
+    write_cached_current_project(projectId, projectName, _currentUserId);
 
     console.log(`[AdoleAPI] Current project set: ${projectName || 'unnamed'} (${projectId ? projectId.substring(0, 8) + '...' : 'none'})`);
 
@@ -1535,41 +1584,58 @@ async function set_current_project(projectId, projectName = null, persist = true
  * @returns {Promise<{id: string|null, name: string|null}>} Last saved project info
  */
 async function load_saved_current_project() {
-    try {
-        // Get current user
-        const userResult = await current_user();
-        const userId = userResult?.user?.user_id || userResult?.user?.id;
+    const cached = read_cached_current_project();
+    const cacheMatchesUser = !cached?.userId || !_currentUserId || cached.userId === _currentUserId;
+    if (cached?.id && cacheMatchesUser) {
+        _currentProjectId = cached.id;
+        _currentProjectName = cached.name || null;
+    }
 
-        if (!userId) {
+    const refresh = async () => {
+        try {
+            // Get current user
+            const userResult = await current_user();
+            const userId = userResult?.user?.user_id || userResult?.user?.id;
+
+            if (!userId) {
+                return { id: null, name: null };
+            }
+
+            // Get user atome to read current_project_id particle
+            const atomeResult = await get_atome(userId);
+            const properties = atomeResult?.tauri?.data?.properties ||
+                atomeResult?.fastify?.data?.properties ||
+                atomeResult?.tauri?.properties ||
+                atomeResult?.fastify?.properties ||
+                atomeResult?.tauri?.data?.particles ||
+                atomeResult?.fastify?.data?.particles ||
+                atomeResult?.tauri?.particles ||
+                atomeResult?.fastify?.particles ||
+                {};
+
+            const savedProjectId = properties.current_project_id || null;
+            const savedProjectName = properties.current_project_name || null;
+
+            if (savedProjectId) {
+                _currentProjectId = savedProjectId;
+                _currentProjectName = savedProjectName;
+                write_cached_current_project(savedProjectId, savedProjectName, userId);
+                console.log(`[AdoleAPI] Restored saved project: ${savedProjectName || 'unnamed'} (${savedProjectId.substring(0, 8)}...)`);
+            }
+
+            return { id: savedProjectId, name: savedProjectName };
+        } catch (e) {
+            console.warn('[AdoleAPI] Could not load saved current project:', e.message);
             return { id: null, name: null };
         }
+    };
 
-        // Get user atome to read current_project_id particle
-        const atomeResult = await get_atome(userId);
-        const properties = atomeResult?.tauri?.data?.properties ||
-            atomeResult?.fastify?.data?.properties ||
-            atomeResult?.tauri?.properties ||
-            atomeResult?.fastify?.properties ||
-            atomeResult?.tauri?.data?.particles ||
-            atomeResult?.fastify?.data?.particles ||
-            atomeResult?.tauri?.particles ||
-            atomeResult?.fastify?.particles ||
-            {};
-
-        const savedProjectId = properties.current_project_id || null;
-        const savedProjectName = properties.current_project_name || null;
-
-        if (savedProjectId) {
-            _currentProjectId = savedProjectId;
-            _currentProjectName = savedProjectName;
-            console.log(`[AdoleAPI] Restored saved project: ${savedProjectName || 'unnamed'} (${savedProjectId.substring(0, 8)}...)`);
-        }
-
-        return { id: savedProjectId, name: savedProjectName };
-    } catch (e) {
-        console.warn('[AdoleAPI] Could not load saved current project:', e.message);
-        return { id: null, name: null };
+    if (cached?.id && cacheMatchesUser) {
+        refresh().catch(() => { });
+        return { id: _currentProjectId, name: _currentProjectName };
     }
+
+    return refresh();
 }
 
 /**
@@ -1973,6 +2039,7 @@ async function unlog_user(callback = null) {
     _currentUserPhone = null;
     _currentProjectId = null;
     _currentProjectName = null;
+    clear_cached_current_project();
 
     // Execute callback if provided
     if (callback && typeof callback === 'function') {
