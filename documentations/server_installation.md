@@ -201,7 +201,175 @@ tail -f /var/log/messages  # Logs (or specific app log if configured)
 
 ---
 
-## 🔄 Updating the Server
+## � AiS — Apple iOS Server (AUV3 Platform)
+
+**AiS (Apple iOS Server)** is a specialized HTTP server that runs **exclusively on iOS** within the **AUV3 (Audio Unit V3)** plugin environment. Unlike Fastify (Node.js) or Axum (Rust/Tauri), AiS is a **native Swift implementation** designed for iOS sandboxing and real-time audio constraints.
+
+### Key Characteristics
+
+| Feature | Value |
+|---------|-------|
+| **Platform** | iOS only (AUV3 extension) |
+| **Implementation** | Swift (Network framework) |
+| **Port** | Dynamic (usually 8080+) |
+| **Bind Address** | `127.0.0.1` only (loopback) |
+| **Database** | None (uses App Group Shared Container + iCloud) |
+| **Location** | `/src-Auv3/Common/LocalHTTPServer.swift` |
+
+### Why AiS Exists
+
+* **iOS extensions cannot run Node.js or Rust runtimes** (sandboxing + security)
+* **Audio Unit plugins require ultra-low latency** and minimal memory footprint
+* **WebView needs local HTTP access** for serving audio files (custom schemes have limitations)
+* **Emulates Fastify API** for frontend compatibility across all platforms
+
+### Architecture Differences
+
+Unlike production servers (Fastify/Axum), AiS does **not use SQL databases**:
+
+```
+┌─────────────────────────────────────┐
+│  AUV3 Extension (iOS Sandbox)       │
+├─────────────────────────────────────┤
+│  WKWebView (Squirrel UI)            │
+│    ↓ HTTP requests ↓                │
+│  AiS (LocalHTTPServer.swift)        │
+│    ↓ file operations ↓              │
+│  App Group Shared Container         │
+│    - /audio/ (M4A, MP3, WAV)        │
+│    - /projects/ (JSON)              │
+│    - /cache/                        │
+│  ↓ optional sync ↓                  │
+│  iCloud Drive                       │
+└─────────────────────────────────────┘
+```
+
+### No Installation Required
+
+AiS is **embedded in the iOS app bundle** and starts automatically when:
+
+* The AUV3 plugin is loaded by a DAW (GarageBand, Logic Pro, etc.)
+* The companion iOS app launches
+
+**No manual installation steps needed** — it's part of the Xcode build process.
+
+### Configuration
+
+AiS configuration is handled via iOS app settings, not environment files:
+
+```swift
+// Automatic configuration in AudioUnitViewController.swift
+LocalHTTPServer.shared.start(preferredPort: 8080)
+```
+
+The WebView frontend detects AiS automatically:
+
+```javascript
+// Platform detection in kickstart.js
+if (current_platform().toLowerCase().includes('auv3')) {
+  window.__SQUIRREL_SERVER__ = 'AiS';
+  window.__SQUIRREL_FASTIFY_URL__ = `http://127.0.0.1:${AiS_PORT}`;
+}
+```
+
+### Key API Endpoints
+
+AiS emulates these Fastify routes for compatibility:
+
+* `GET /api/server-info` — Server metadata (version, platform)
+* `GET /audio/*` — Serve audio files with HTTP Range support (streaming)
+* `GET /api/file/*` — Read files from App Group Shared Container
+* `POST /api/file/*` — Write files to App Group Shared Container
+
+### Data Persistence
+
+**Important**: AUV3 extensions use **non-persistent WebView storage** (`WKWebsiteDataStore.nonPersistent()`).
+
+This means:
+
+* **LocalStorage is cleared** on each extension reload
+* **Critical data must be saved to App Group Shared Container**
+* **Use `iCloudFileManager`** for cross-device sync (optional)
+
+Example persistence flow:
+
+```javascript
+// ❌ Don't rely on this in AUV3
+localStorage.setItem('project', JSON.stringify(data));
+
+// ✅ Do this instead (persists across reloads)
+await fetch('/api/file/projects/my-project.json', {
+  method: 'POST',
+  body: JSON.stringify(data)
+});
+```
+
+### Performance
+
+AiS is optimized for iOS Audio Unit constraints:
+
+* **Startup time**: < 50ms (native Swift, no runtime)
+* **Memory footprint**: 2-5 MB (minimal overhead)
+* **Latency**: < 1ms (loopback interface)
+* **Audio streaming**: Gapless playback with Range requests
+* **FastStart optimization**: M4A files are reorganized for progressive playback
+
+### Limitations
+
+* **No WebSocket support** (use `window.webkit.messageHandlers` instead)
+* **Extension lifecycle**: Server stops when DAW closes the plugin
+* **Sandboxed I/O**: Only App Group Shared Container + scoped bookmarks
+* **No external network access** (security requirement)
+* **No PostgreSQL/SQLite** (file-based storage only)
+
+### Development vs Production
+
+| Aspect | Development | Production (AUV3) |
+|--------|-------------|-------------------|
+| **Testing** | iOS Simulator or device via Xcode | DAW host (GarageBand, Logic) |
+| **Debugging** | Xcode debugger attached to extension | Console logs via `os_log` |
+| **Storage** | Local files in simulator | App Group + iCloud |
+| **Updates** | Xcode rebuild + reinstall | App Store updates only |
+
+### Monitoring & Logs
+
+AiS logs are visible in:
+
+* **Xcode Console** (when debugging)
+* **iOS Console.app** (macOS device logs)
+* **Device logs** via `xcrun simctl spawn` (simulator)
+
+Example log filtering:
+
+```bash
+# View AiS logs on connected iOS device
+xcrun devicectl device info logs --device <UDID> | grep "LocalHTTPServer"
+```
+
+### When to Use AiS
+
+Use AiS when:
+
+* Building iOS Audio Unit plugins
+* Testing Squirrel UI in DAW hosts
+* Implementing audio-heavy workflows on iOS
+
+**Do not use AiS for**:
+
+* Production web servers (use Fastify)
+* Desktop apps (use Axum/Tauri)
+* Cross-platform database sync (use Eden/PostgreSQL)
+
+### Related Documentation
+
+* **Architecture details**: `documentations/databas_architecture.md` (Section 6: AiS)
+* **AUV3 implementation**: `/src-Auv3/Common/LocalHTTPServer.swift`
+* **WebView integration**: `/src-Auv3/Common/WebViewManager.swift`
+* **File management**: `/src-Auv3/Common/iCloudFileManager.swift`
+
+---
+
+## �🔄 Updating the Server
 
 `install_server.sh` is meant for **initial provisioning** (system packages, Nginx, SSL, service creation).
 For day-to-day production updates, use the `run.sh` **service commands**.
