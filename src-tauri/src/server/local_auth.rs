@@ -1578,7 +1578,9 @@ pub fn create_state(atome_state: &LocalAtomeState, data_dir: &PathBuf) -> LocalA
                 "DELETE FROM particles WHERE particle_key = 'fastify_token'",
                 rusqlite::params![],
             ) {
-                Ok(_) => println!("[Auth] Cleared stored Fastify tokens after JWT secret regeneration"),
+                Ok(_) => {
+                    println!("[Auth] Cleared stored Fastify tokens after JWT secret regeneration")
+                }
                 Err(e) => println!("[Auth] Failed to clear Fastify tokens: {}", e),
             }
         }
