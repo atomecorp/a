@@ -148,15 +148,15 @@ const buildFingerprint = (payload) => {
 
 export function shouldIgnoreRealtimePatch(atomeId, payload, options = {}) {
     if (!atomeId) return false;
-    
+
     const authorId = options.authorId || payload?.authorId || payload?.author_id || null;
     if (authorId && isFromCurrentUser(authorId)) {
         return true;
     }
-    
+
     const fingerprint = buildFingerprint(payload);
     if (!fingerprint) return false;
-    
+
     if (isSelfPatch(atomeId, fingerprint)) {
         return true;
     }

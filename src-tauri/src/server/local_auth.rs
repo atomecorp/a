@@ -93,12 +93,11 @@ async fn sync_account_to_fastify(
     let fastify_url = env::var("SQUIRREL_FASTIFY_URL")
         .or_else(|_| env::var("FASTIFY_URL"))
         .unwrap_or_else(|_| DEFAULT_FASTIFY_URL.to_string());
-    
-    let sync_secret = env::var("SYNC_SECRET")
-        .unwrap_or_else(|_| "squirrel-sync-2024".to_string());
-    
+
+    let sync_secret = env::var("SYNC_SECRET").unwrap_or_else(|_| "squirrel-sync-2024".to_string());
+
     let url = format!("{}/api/auth/sync-register", fastify_url);
-    
+
     let payload = json!({
         "username": username,
         "phone": phone,
@@ -106,9 +105,9 @@ async fn sync_account_to_fastify(
         "visibility": visibility,
         "source": "tauri"
     });
-    
+
     let client = reqwest::Client::new();
-    
+
     match client
         .post(&url)
         .header("Content-Type", "application/json")
@@ -120,7 +119,10 @@ async fn sync_account_to_fastify(
     {
         Ok(response) => {
             if response.status().is_success() {
-                println!("[Auth] Account synced to Fastify: {} ({})", username, user_id);
+                println!(
+                    "[Auth] Account synced to Fastify: {} ({})",
+                    username, user_id
+                );
             } else {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
@@ -344,7 +346,7 @@ async fn handle_bootstrap(
     let phone_clone = phone.clone();
     let password_hash_clone = password_hash.clone();
     let visibility_clone = visibility.clone();
-    
+
     tokio::spawn(async move {
         sync_account_to_fastify(
             &user_id_clone,
@@ -352,7 +354,8 @@ async fn handle_bootstrap(
             &phone_clone,
             &password_hash_clone,
             &visibility_clone,
-        ).await;
+        )
+        .await;
     });
 
     let token = match generate_token(&state.jwt_secret, &user_id, &username, &phone) {
@@ -606,7 +609,7 @@ async fn handle_register(
     let phone_clone = phone.clone();
     let password_hash_clone = password_hash.clone();
     let visibility_clone = visibility.clone();
-    
+
     tokio::spawn(async move {
         sync_account_to_fastify(
             &user_id_clone,
@@ -614,7 +617,8 @@ async fn handle_register(
             &phone_clone,
             &password_hash_clone,
             &visibility_clone,
-        ).await;
+        )
+        .await;
     });
 
     // Generate JWT
@@ -1395,29 +1399,29 @@ async fn handle_save_fastify_token(
         Some(t) if !t.trim().is_empty() => t.trim().to_string(),
         _ => return error_response(request_id, "Token is required"),
     };
-    
+
     let local_token = match message.get("localToken").and_then(|v| v.as_str()) {
         Some(t) => t,
         _ => return error_response(request_id, "Local token is required for authentication"),
     };
-    
+
     // Verify the local token and get user ID
     let claims = match verify_token(&state.jwt_secret, local_token) {
         Ok(c) => c,
         Err(e) => return error_response(request_id, &format!("Invalid local token: {}", e)),
     };
-    
+
     let user_id = claims.sub;
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     let db = match state.db.lock() {
         Ok(d) => d,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
-    
+
     // Store the Fastify token as a particle
     let token_json = serde_json::to_string(&token).unwrap_or_default();
-    
+
     // Try to update existing particle first
     let updated = db
         .execute(
@@ -1426,7 +1430,7 @@ async fn handle_save_fastify_token(
             rusqlite::params![&token_json, &now, &user_id],
         )
         .unwrap_or(0);
-    
+
     if updated == 0 {
         // Insert new particle
         if let Err(e) = db.execute(
@@ -1437,9 +1441,12 @@ async fn handle_save_fastify_token(
             return error_response(request_id, &e.to_string());
         }
     }
-    
-    println!("[Auth] Fastify token saved for user {}", &user_id[..8.min(user_id.len())]);
-    
+
+    println!(
+        "[Auth] Fastify token saved for user {}",
+        &user_id[..8.min(user_id.len())]
+    );
+
     AuthResponse {
         msg_type: "auth-response".into(),
         request_id,
@@ -1461,20 +1468,20 @@ async fn handle_get_fastify_token(
         Some(t) => t,
         _ => return error_response(request_id, "Local token is required"),
     };
-    
+
     // Verify the local token and get user ID
     let claims = match verify_token(&state.jwt_secret, local_token) {
         Ok(c) => c,
         Err(e) => return error_response(request_id, &format!("Invalid token: {}", e)),
     };
-    
+
     let user_id = claims.sub;
-    
+
     let db = match state.db.lock() {
         Ok(d) => d,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
-    
+
     // Get the Fastify token from particles
     let token_result: Option<String> = db
         .query_row(
@@ -1484,7 +1491,7 @@ async fn handle_get_fastify_token(
         )
         .optional()
         .unwrap_or(None);
-    
+
     match token_result {
         Some(token_json) => {
             // Parse the JSON string to get the actual token

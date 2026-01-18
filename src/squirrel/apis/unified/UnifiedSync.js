@@ -615,7 +615,7 @@ const connectRealtime = async (options = {}) => {
         }
         if (payload.type === 'atome:updated' || payload.type === 'atome:altered') {
             const { atomeId, properties } = normalizeAtomePayload(payload);
-            const authorId = payload.authorId || payload.author_id 
+            const authorId = payload.authorId || payload.author_id
                 || payload.params?.authorId || payload.params?.author_id || null;
             if (authorId && isFromCurrentUser(authorId)) {
                 return;

@@ -583,13 +583,13 @@ async function get_stored_fastify_token_from_axum() {
     try {
         const localToken = TauriAdapter.getToken?.();
         if (!localToken) return null;
-        
+
         const result = await TauriAdapter.send({
             type: 'auth',
             action: 'get-fastify-token',
             token: localToken
         });
-        
+
         if (result?.success && result?.token) {
             return result.token;
         }
@@ -605,14 +605,14 @@ async function save_fastify_token_to_axum(fastifyToken) {
     try {
         const localToken = TauriAdapter.getToken?.();
         if (!localToken) return false;
-        
+
         const result = await TauriAdapter.send({
             type: 'auth',
             action: 'save-fastify-token',
             localToken: localToken,
             token: fastifyToken
         });
-        
+
         return result?.success === true;
     } catch {
         return false;
@@ -677,7 +677,7 @@ async function ensure_fastify_token() {
                 if (newToken) {
                     save_fastify_token_to_axum(newToken).then(saved => {
                         if (saved) console.log('[Auth] Fastify token saved to Axum storage');
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
                 return { ok: true, reason: 'login_ok' };
             }
@@ -1558,7 +1558,7 @@ async function try_auto_login() {
                 true
             );
             console.log(`[AdoleAPI] Already logged in: ${user.username}`);
-            
+
             // P0 FIX: Ensure Fastify token is obtained for sync mirroring
             const syncPolicy = resolve_sync_policy();
             if (syncPolicy.to === 'fastify' && is_tauri_runtime()) {
@@ -1574,7 +1574,7 @@ async function try_auto_login() {
                     console.warn('[Auth] ensure_fastify_token failed:', e.message);
                 }
             }
-            
+
             return { success: true, userId: user.user_id || user.id, userName: user.username };
         }
 

@@ -913,10 +913,10 @@ export async function setParticles(atomeId, particles, author = null) {
         console.warn('[setParticles] Invalid particles:', particles, 'for atome:', atomeId);
         return;
     }
-    
+
     const entries = Object.entries(particles);
     if (entries.length === 0) return;
-    
+
     // For small batches (1-3 particles), use sequential for simplicity
     if (entries.length <= 3) {
         for (const [key, value] of entries) {
@@ -924,27 +924,27 @@ export async function setParticles(atomeId, particles, author = null) {
         }
         return;
     }
-    
+
     // For larger batches, use optimized batch operations
     const now = new Date().toISOString();
-    
+
     // Get all existing particles for this atome in one query
     const existingRows = await query('all',
         'SELECT particle_id, particle_key, particle_value, version FROM particles WHERE atome_id = ?',
         [atomeId]
     );
     const existingMap = new Map(existingRows.map(row => [row.particle_key, row]));
-    
+
     // Prepare batch arrays
     const toInsert = [];
     const toUpdate = [];
     const historyRecords = [];
-    
+
     for (const [key, value] of entries) {
         const valueStr = typeof value === 'object' ? JSON.stringify(value) : JSON.stringify(value);
         const valueType = typeof value === 'object' ? 'json' : typeof value;
         const existing = existingMap.get(key);
-        
+
         if (existing) {
             const newVersion = (existing.version || 1) + 1;
             toUpdate.push({ key, valueStr, valueType, version: newVersion, particleId: existing.particle_id });
@@ -959,7 +959,7 @@ export async function setParticles(atomeId, particles, author = null) {
             toInsert.push({ key, valueStr, valueType });
         }
     }
-    
+
     // Batch update existing particles
     for (const item of toUpdate) {
         await query('run', `
@@ -967,14 +967,14 @@ export async function setParticles(atomeId, particles, author = null) {
             WHERE atome_id = ? AND particle_key = ?
         `, [item.valueStr, item.valueType, item.version, now, atomeId, item.key]);
     }
-    
+
     // Batch insert new particles
     for (const item of toInsert) {
         await query('run', `
             INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
             VALUES (?, ?, ?, ?, 1, ?, ?)
         `, [atomeId, item.key, item.valueStr, item.valueType, now, now]);
-        
+
         // Get the auto-generated particle_id for history
         const inserted = await query('get',
             'SELECT particle_id FROM particles WHERE atome_id = ? AND particle_key = ?',
@@ -990,7 +990,7 @@ export async function setParticles(atomeId, particles, author = null) {
             });
         }
     }
-    
+
     // Batch insert history records
     for (const record of historyRecords) {
         await query('run', `
@@ -998,7 +998,7 @@ export async function setParticles(atomeId, particles, author = null) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `, [record.particleId, atomeId, record.key, record.version, record.oldValue, record.newValue, author, now]);
     }
-    
+
     // Update atome's updated_at only once at the end
     await query('run',
         'UPDATE atomes SET updated_at = ?, sync_status = ? WHERE atome_id = ?',

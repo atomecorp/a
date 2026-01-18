@@ -267,7 +267,7 @@ function attachAccountSyncHandler() {
 
         const data = payload.payload || {};
         const { userId, username, phone, passwordHash, source, optional } = data;
-        
+
         if (!userId || !phone) {
             console.warn('[aBoxServer] sync:account-created missing userId or phone');
             return;
@@ -282,7 +282,7 @@ function attachAccountSyncHandler() {
         try {
             const syncSecret = process.env.SYNC_SECRET || 'squirrel-sync-2024';
             const fastifyUrl = process.env.SQUIRREL_FASTIFY_URL || process.env.FASTIFY_URL;
-            
+
             if (!fastifyUrl) {
                 console.log('[aBoxServer] No Fastify URL configured, skipping cloud sync');
                 return;
