@@ -596,7 +596,9 @@ const connectRealtime = async (options = {}) => {
                 const particles = properties || atome?.particles || atome?.properties || atome?.data || null;
 
                 rememberMirrorCreate(atomeId);
-                if (TauriAdapter?.getToken?.()) {
+                const tauriTokenPresent = !!(TauriAdapter?.getToken && TauriAdapter.getToken());
+                console.log('[UnifiedSync] Mirror create start', { atomeId, hasTauriToken: tauriTokenPresent });
+                if (tauriTokenPresent) {
                     TauriAdapter.atome.create({
                         id: atomeId,
                         type: atomeType,
@@ -605,11 +607,16 @@ const connectRealtime = async (options = {}) => {
                         properties: particles || {},
                         sync: true
                     }).then((res) => {
+                        console.log('[UnifiedSync] Mirror create response', { atomeId, res });
                         if (res && (res.ok || res.success || isAlreadyExistsError(res))) return;
                         mirrorCreateSeen.delete(atomeId);
-                    }).catch(() => {
+                    }).catch((err) => {
+                        console.log('[UnifiedSync] Mirror create error', { atomeId, error: err?.message || err });
                         mirrorCreateSeen.delete(atomeId);
                     });
+                } else {
+                    console.log('[UnifiedSync] Mirror create skipped - no tauri token', { atomeId });
+                    mirrorCreateSeen.delete(atomeId);
                 }
             }
         }

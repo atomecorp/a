@@ -746,6 +746,13 @@ class TauriWebSocket {
                             }
 
                             if (commandName === 'share-sync' && typeof window !== 'undefined') {
+                                // Guard: do not apply realtime share-sync patches to anonymous sessions.
+                                const localUserId = (window.__currentUser && window.__currentUser.id) ? window.__currentUser.id : null;
+                                if (!localUserId) {
+                                    console.log('[AdoleWS] Skipping share-sync delivery: no local user');
+                                    return;
+                                }
+
                                 const atomeId = params?.atomeId || params?.atome_id || params?.id || null;
                                 const properties = params?.properties || params?.particles || params?.patch || null;
                                 const isDeleted = properties?.__deleted === true || params?.deletedAt || params?.deleted_at;

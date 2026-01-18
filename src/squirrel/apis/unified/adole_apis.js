@@ -469,8 +469,12 @@ const clear_cached_current_project = () => {
 
 const cachedProjectBootstrap = read_cached_current_project();
 if (cachedProjectBootstrap?.id) {
-    _currentProjectId = cachedProjectBootstrap.id;
-    _currentProjectName = cachedProjectBootstrap.name || null;
+    // Only apply cached project automatically when the cached entry is NOT user-scoped.
+    // Avoid loading another user's saved project into an anonymous session.
+    if (!cachedProjectBootstrap.userId) {
+        _currentProjectId = cachedProjectBootstrap.id;
+        _currentProjectName = cachedProjectBootstrap.name || null;
+    }
 }
 
 function is_tauri_runtime() {
@@ -648,13 +652,29 @@ async function ensure_fastify_token() {
             try {
                 const meResult = await FastifyAdapter.auth.me();
                 if (meResult?.ok || meResult?.success) {
-                    console.log('[Auth] Fastify token restored from Axum storage');
-                    return { ok: true, reason: 'token_restored_from_axum' };
+                    // If we have a local Tauri identity, ensure the Fastify token maps to the same user.
+                    try {
+                        const tauriMe = await TauriAdapter.auth.me?.();
+                        const fastifyUserId = meResult?.user?.user_id || meResult?.user?.id || null;
+                        const tauriUserId = tauriMe?.user?.user_id || tauriMe?.user?.id || null;
+                        if (tauriUserId && fastifyUserId && tauriUserId !== fastifyUserId) {
+                            console.warn('[Auth] Fastify token restored but user mismatch with Tauri user; refusing token');
+                            FastifyAdapter.clearToken?.();
+                            // Do not accept a token that belongs to a different user than the local Tauri session.
+                        } else {
+                            console.log('[Auth] Fastify token restored from Axum storage');
+                            return { ok: true, reason: 'token_restored_from_axum' };
+                        }
+                    } catch (e) {
+                        // If Tauri.me check fails, be conservative and refuse the token to avoid cross-user leaks.
+                        console.warn('[Auth] Could not validate Tauri user when restoring Fastify token:', e?.message || e);
+                        FastifyAdapter.clearToken?.();
+                    }
                 }
             } catch {
                 // Token expired or invalid, continue to login
             }
-            // Token invalid, clear it
+            // Token invalid or refused, clear it
             FastifyAdapter.clearToken?.();
         }
     } catch {
@@ -1623,7 +1643,10 @@ function get_current_project() {
 async function set_current_project(projectId, projectName = null, persist = true) {
     _currentProjectId = projectId;
     _currentProjectName = projectName;
-    write_cached_current_project(projectId, projectName, _currentUserId);
+    // Do not write a project cache when there's no logged user to avoid cross-user leakage.
+    if (_currentUserId) {
+        write_cached_current_project(projectId, projectName, _currentUserId);
+    }
 
     console.log(`[AdoleAPI] Current project set: ${projectName || 'unnamed'} (${projectId ? projectId.substring(0, 8) + '...' : 'none'})`);
 
@@ -1677,8 +1700,9 @@ async function set_current_project(projectId, projectName = null, persist = true
  */
 async function load_saved_current_project() {
     const cached = read_cached_current_project();
-    const cacheMatchesUser = !cached?.userId || !_currentUserId || cached.userId === _currentUserId;
-    if (cached?.id && cacheMatchesUser) {
+    // Accept cached only if it's not user-scoped OR it matches the currently logged user.
+    const cacheMatchesUser = cached?.id && (!cached.userId || (_currentUserId && cached.userId === _currentUserId));
+    if (cacheMatchesUser) {
         _currentProjectId = cached.id;
         _currentProjectName = cached.name || null;
     }
