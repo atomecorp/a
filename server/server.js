@@ -13,9 +13,9 @@ import { coerceLogEnvelope, isValidLogEnvelope } from '../src/shared/logging.js'
 const SERVER_LOG_LEVEL = (process.env.SQUIRREL_LOG_LEVEL || 'warn').toLowerCase();
 const SERVER_INFO_ENABLED = SERVER_LOG_LEVEL === 'info' || SERVER_LOG_LEVEL === 'debug';
 if (!SERVER_INFO_ENABLED) {
-  console.log = () => {};
-  console.info = () => {};
-  console.debug = () => {};
+  console.log = () => { };
+  console.info = () => { };
+  console.debug = () => { };
 }
 
 // Load environment variables from .env files
@@ -2571,13 +2571,13 @@ async function startServer() {
                 } catch (_) { }
 
                 safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: true,
-                    alreadyExists: false,
-                    userId,
-                    message: 'User created successfully'
-                  });
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  alreadyExists: false,
+                  userId,
+                  message: 'User created successfully'
+                });
               } else if (action === 'lookup-phone') {
                 const rawPhone = data.phone;
                 if (!rawPhone || typeof rawPhone !== 'string') {
