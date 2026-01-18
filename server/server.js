@@ -1783,6 +1783,119 @@ async function startServer() {
               return;
             }
 
+            // Handle incoming event commits over ws/api to allow low-latency client->server sync
+            if (data.type === 'events') {
+              const action = data.action || data.action_type || data.op || null;
+              // Require authenticated ws/api connection
+              const attachedSenderUserId = connection && connection._wsApiUserId ? String(connection._wsApiUserId) : null;
+              if (!attachedSenderUserId) {
+                safeSend({ type: 'events-response', success: false, error: 'Unauthenticated ws/api connection (auth required)' });
+                return;
+              }
+
+              // Simple kind -> operation resolver
+              const resolveSyncOperation = (kind) => {
+                if (!kind) return 'update';
+                const n = String(kind).toLowerCase();
+                if (n === 'delete') return 'delete';
+                if (n === 'create') return 'create';
+                return 'update';
+              };
+
+              try {
+                if (action === 'commit') {
+                  const event = data.event || data.body || data.payload || null;
+                  if (!event || typeof event !== 'object') {
+                    safeSend({ type: 'events-response', success: false, error: 'Invalid event payload' });
+                    return;
+                  }
+                  const actor = event.actor || { type: 'user', id: attachedSenderUserId };
+                  const created = await db.appendEvent({ ...event, actor });
+
+                  // Emit websocket sync for created event (if applicable)
+                  if (created?.atome_id && created?.kind !== 'snapshot') {
+                    const atomeId = created.atome_id;
+                    const [state, atome] = await Promise.all([
+                      db.getStateCurrent(atomeId).catch(() => null),
+                      db.getAtome(atomeId).catch(() => null)
+                    ]);
+                    const properties = (state && state.properties) || (atome && (atome.particles || atome.properties || atome.data)) || {};
+                    const atomePayload = {
+                      atome_id: atomeId,
+                      atome_type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
+                      parent_id: (atome && atome.parent_id) || properties.parent_id || null,
+                      owner_id: (atome && atome.owner_id) || properties.owner_id || null,
+                      created_at: atome?.created_at || null,
+                      updated_at: (state && state.updated_at) || atome?.updated_at || null,
+                      particles: properties,
+                      id: atomeId,
+                      type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
+                      parentId: (atome && atome.parent_id) || properties.parent_id || null,
+                      ownerId: (atome && atome.owner_id) || properties.owner_id || null,
+                      properties
+                    };
+                    syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(created.kind));
+                  }
+
+                  safeSend({ type: 'events-response', success: true, event: created });
+                  return;
+                }
+
+                if (action === 'commit-batch') {
+                  const body = data.body || data || {};
+                  const events = Array.isArray(body) ? body : (body.events || []);
+                  if (!Array.isArray(events) || !events.length) {
+                    safeSend({ type: 'events-response', success: false, error: 'Missing events array' });
+                    return;
+                  }
+
+                  const fallbackActor = body.actor || { type: 'user', id: attachedSenderUserId };
+                  const normalized = events.map((evt) => ({ ...evt, actor: evt?.actor || fallbackActor }));
+                  const created = await db.appendEvents(normalized, { txId: body.tx_id || body.txId || null });
+
+                  // Determine latest event per atome and emit websocket syncs
+                  const latestByAtome = new Map();
+                  for (const evt of created || []) {
+                    const atomeId = evt?.atome_id || evt?.atomeId;
+                    if (!atomeId || evt?.kind === 'snapshot') continue;
+                    latestByAtome.set(atomeId, evt);
+                  }
+                  if (latestByAtome.size) {
+                    for (const evt of Array.from(latestByAtome.values())) {
+                      try {
+                        const atomeId = evt.atome_id;
+                        const [state, atome] = await Promise.all([
+                          db.getStateCurrent(atomeId).catch(() => null),
+                          db.getAtome(atomeId).catch(() => null)
+                        ]);
+                        const properties = (state && state.properties) || (atome && (atome.particles || atome.properties || atome.data)) || {};
+                        const atomePayload = {
+                          atome_id: atomeId,
+                          atome_type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
+                          parent_id: (atome && atome.parent_id) || properties.parent_id || null,
+                          owner_id: (atome && atome.owner_id) || properties.owner_id || null,
+                          created_at: atome?.created_at || null,
+                          updated_at: (state && state.updated_at) || atome?.updated_at || null,
+                          particles: properties,
+                          id: atomeId,
+                          type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
+                          parentId: (atome && atome.parent_id) || properties.parent_id || null,
+                          ownerId: (atome && atome.owner_id) || properties.owner_id || null,
+                          properties
+                        };
+                        syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(evt.kind));
+                      } catch (_) { }
+                    }
+                  }
+
+                  safeSend({ type: 'events-response', success: true, events: created });
+                  return;
+                }
+              } catch (error) {
+                safeSend({ type: 'events-response', success: false, error: error?.message || String(error) });
+                return;
+              }
+            }
             // Reject stale/expired attached identity.
             // We only authenticate once per connection for performance, but we still enforce token expiry.
             const authExpMs = connection && typeof connection._wsApiAuthExpMs === 'number' ? connection._wsApiAuthExpMs : null;
