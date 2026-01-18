@@ -19,6 +19,19 @@ import {
     broadcastAtomeRealtimePatch
 } from './atomeRealtime.js';
 
+const SYNC_DEBUG =
+    process.env.SQUIRREL_SYNC_DEBUG !== '0'
+    && process.env.SQUIRREL_SYNC_DEBUG !== 'false';
+
+function syncDebugLog(message, data = null) {
+    if (!SYNC_DEBUG) return;
+    if (data === null || data === undefined) {
+        console.log(`[SyncDebug] ${message}`);
+        return;
+    }
+    console.log(`[SyncDebug] ${message}`, data);
+}
+
 // =============================================================================
 // WEBSOCKET SYNC - Using EventBus (replaces POST-based sync)
 // =============================================================================
@@ -31,13 +44,13 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
     try {
         const eventBus = getABoxEventBus();
         if (!eventBus) {
-            console.warn('⚠️ [AtomeSync] EventBus not available for sync');
+            console.warn('[SyncDebug] EventBus not available for sync');
             return;
         }
 
         const atomeId = atome?.atome_id || atome?.id;
         if (!atomeId) {
-            console.warn('⚠️ [AtomeSync] Missing atome id for sync payload');
+            console.warn('[SyncDebug] Missing atome id for sync payload');
             return;
         }
         const atomeType = atome?.atome_type || atome?.type || 'atome';
@@ -68,9 +81,15 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             timestamp: new Date().toISOString()
         });
 
-        console.log(`🔄 [AtomeSync] Emitted ${operation} event for atome ${atomeId}`);
+        syncDebugLog('atome sync emitted', {
+            operation,
+            atome_id: atomeId,
+            atome_type: atomeType,
+            parent_id: parentId,
+            owner_id: ownerId
+        });
     } catch (error) {
-        console.error(`⚠️ [AtomeSync] WebSocket emit failed: ${error.message}`);
+        console.error(`[SyncDebug] WebSocket emit failed: ${error.message}`);
     }
 }
 
@@ -734,8 +753,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
     // ========================================================================
 
     server.post('/api/events/commit', async (request, reply) => {
+        console.log('[Fastify] /api/events/commit received');
         const user = await validateToken(request);
         if (!user) {
+            console.log('[Fastify] /api/events/commit UNAUTHORIZED - no valid token');
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
@@ -745,9 +766,25 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const actor = event.actor || { type: 'user', id: user.id };
+        console.log('[Fastify] /api/events/commit processing', {
+            user_id: user.id,
+            atome_id: event.atome_id || event.atomeId || null,
+            kind: event.kind || null
+        });
+        syncDebugLog('commit received', {
+            user_id: user.id,
+            atome_id: event.atome_id || event.atomeId || null,
+            kind: event.kind || null,
+            project_id: event.project_id || event.projectId || null
+        });
 
         try {
             const created = await db.appendEvent({ ...event, actor });
+            syncDebugLog('commit stored', {
+                atome_id: created?.atome_id || created?.atomeId || null,
+                kind: created?.kind || null,
+                event_id: created?.id || created?.event_id || null
+            });
             if (created?.atome_id && created?.kind !== 'snapshot') {
                 const syncAtome = await resolveAtomeForSync(created);
                 if (syncAtome) {
@@ -765,8 +802,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
     });
 
     server.post('/api/events/commit-batch', async (request, reply) => {
+        console.log('[Fastify] /api/events/commit-batch received');
         const user = await validateToken(request);
         if (!user) {
+            console.log('[Fastify] /api/events/commit-batch UNAUTHORIZED');
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
@@ -782,9 +821,22 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             ...evt,
             actor: evt?.actor || fallbackActor
         }));
+        console.log('[Fastify] /api/events/commit-batch processing', {
+            user_id: user.id,
+            count: normalizedEvents.length
+        });
+        syncDebugLog('commit-batch received', {
+            user_id: user.id,
+            count: normalizedEvents.length,
+            tx_id: txId
+        });
 
         try {
             const created = await db.appendEvents(normalizedEvents, { txId });
+            syncDebugLog('commit-batch stored', {
+                count: Array.isArray(created) ? created.length : 0,
+                tx_id: txId
+            });
             const latestByAtome = new Map();
             for (const evt of created || []) {
                 const atomeId = evt?.atome_id || evt?.atomeId;
@@ -993,3 +1045,5 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
     console.log('[Atome] Routes v3.0 registered (ADOLE v3.0 schema with WebSocket sync)');
 }
+
+export { syncAtomeViaWebSocket };

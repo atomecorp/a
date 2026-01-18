@@ -662,7 +662,7 @@ async function syncUserToTauri(username, phone, passwordHash, userId = null, opt
         if (eventBus) {
             const safeOptional = normalizeUserOptional(optional);
             eventBus.emit('event', {
-                type: 'sync:user-created',
+                type: 'sync:account-created',
                 timestamp: new Date().toISOString(),
                 runtime: 'Fastify',
                 payload: {
@@ -820,7 +820,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      * ADOLE v3.0: Users are atomes with atome_type='user', properties in particles
      */
     server.post('/api/auth/register', async (request, reply) => {
-        const { username, phone, password, visibility = 'private', optional = {} } = request.body || {};
+        const { username, phone, password, visibility = 'public', optional = {} } = request.body || {};
 
         // Validation
         if (!username || typeof username !== 'string' || username.trim().length < 2) {
@@ -1578,7 +1578,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 const eventBus = getABoxEventBus();
                 if (eventBus) {
                     eventBus.emit('event', {
-                        type: 'sync:user-deleted',
+                        type: 'sync:account-deleted',
                         timestamp: new Date().toISOString(),
                         runtime: 'Fastify',
                         payload: {
@@ -2079,7 +2079,8 @@ export {
     listAllUsers,
     updateUserParticle,
     deleteUserAtome,
-    generateDeterministicUserId
+    generateDeterministicUserId,
+    normalizePhone
 };
 
 export default { registerAuthRoutes, hashPassword, verifyPassword, generateOTP, sendSMS };

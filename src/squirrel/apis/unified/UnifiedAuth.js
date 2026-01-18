@@ -55,7 +55,7 @@ const UnifiedAuth = {
     * @param {Object} data - Registration data
     * @param {string} data.username - Username (required)
     * @param {string} data.phone - Phone (required)
-    * @param {string} data.password - Password (required, min 6 chars)
+    * @param {string} data.password - Password (required, min 8 chars)
     * @param {string} [data.email] - Email (optional)
      * @returns {Promise<Object>} { success, user, token, backends }
      * 
@@ -73,8 +73,8 @@ const UnifiedAuth = {
         if (!data.phone || String(data.phone).trim().length < 6) {
             return { success: false, error: 'Phone number is required' };
         }
-        if (!data.password || data.password.length < 6) {
-            return { success: false, error: 'Password must be at least 6 characters' };
+        if (!data.password || data.password.length < 8) {
+            return { success: false, error: 'Password must be at least 8 characters' };
         }
 
         const auth = getAdoleAuth();
@@ -182,7 +182,7 @@ const UnifiedAuth = {
      * 
      * @param {Object} data - Password change data
      * @param {string} data.currentPassword - Current password (for verification)
-     * @param {string} data.newPassword - New password (min 6 chars)
+    * @param {string} data.newPassword - New password (min 8 chars)
      * @returns {Promise<Object>} { success, backends }
      * 
      * @example
@@ -195,8 +195,8 @@ const UnifiedAuth = {
         if (!data.currentPassword || !data.newPassword) {
             return { success: false, error: 'Current and new passwords are required' };
         }
-        if (data.newPassword.length < 6) {
-            return { success: false, error: 'New password must be at least 6 characters' };
+        if (data.newPassword.length < 8) {
+            return { success: false, error: 'New password must be at least 8 characters' };
         }
         const auth = getAdoleAuth();
         if (!auth?.changePassword) {

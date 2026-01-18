@@ -577,6 +577,48 @@ function clear_auth_credentials_for_phone(phone) {
     clear_pending_register_queue(normalizedPhone);
 }
 
+// Helper to get stored Fastify token from Axum backend (persists even if localStorage is cleared)
+async function get_stored_fastify_token_from_axum() {
+    if (!is_tauri_runtime()) return null;
+    try {
+        const localToken = TauriAdapter.getToken?.();
+        if (!localToken) return null;
+        
+        const result = await TauriAdapter.send({
+            type: 'auth',
+            action: 'get-fastify-token',
+            token: localToken
+        });
+        
+        if (result?.success && result?.token) {
+            return result.token;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+// Helper to save Fastify token to Axum backend (persists even if localStorage is cleared)
+async function save_fastify_token_to_axum(fastifyToken) {
+    if (!is_tauri_runtime() || !fastifyToken) return false;
+    try {
+        const localToken = TauriAdapter.getToken?.();
+        if (!localToken) return false;
+        
+        const result = await TauriAdapter.send({
+            type: 'auth',
+            action: 'save-fastify-token',
+            localToken: localToken,
+            token: fastifyToken
+        });
+        
+        return result?.success === true;
+    } catch {
+        return false;
+    }
+}
+
 async function ensure_fastify_token() {
     const authSource = resolveAuthSource();
     const dataSource = resolveDataSource();
@@ -597,6 +639,29 @@ async function ensure_fastify_token() {
         return { ok: false, reason: 'cooldown' };
     }
 
+    // Step 1: Try to get stored Fastify token from Axum (survives localStorage clear)
+    try {
+        const storedToken = await get_stored_fastify_token_from_axum();
+        if (storedToken) {
+            // Validate the token by setting it and checking with /me
+            FastifyAdapter.setToken?.(storedToken);
+            try {
+                const meResult = await FastifyAdapter.auth.me();
+                if (meResult?.ok || meResult?.success) {
+                    console.log('[Auth] Fastify token restored from Axum storage');
+                    return { ok: true, reason: 'token_restored_from_axum' };
+                }
+            } catch {
+                // Token expired or invalid, continue to login
+            }
+            // Token invalid, clear it
+            FastifyAdapter.clearToken?.();
+        }
+    } catch {
+        // Ignore errors from Axum token retrieval
+    }
+
+    // Step 2: Fallback to localStorage credentials
     const cached = load_fastify_login_cache();
 
     const attemptLogin = async (phone, password, reasonLabel) => {
@@ -607,6 +672,13 @@ async function ensure_fastify_token() {
         try {
             const res = await FastifyAdapter.auth.login({ phone: resolvedPhone, password });
             if (res && (res.ok || res.success)) {
+                // Save the new Fastify token to Axum for persistence
+                const newToken = FastifyAdapter.getToken?.();
+                if (newToken) {
+                    save_fastify_token_to_axum(newToken).then(saved => {
+                        if (saved) console.log('[Auth] Fastify token saved to Axum storage');
+                    }).catch(() => {});
+                }
                 return { ok: true, reason: 'login_ok' };
             }
             return { ok: false, reason: res?.error || reasonLabel || 'login_failed', error: res?.error };
@@ -860,6 +932,9 @@ async function maybe_sync_atomes(reason = 'auto') {
         _syncAtomesInProgress = false;
     }
 }
+
+// Alias for maybe_sync_atomes - used throughout the codebase for triggering sync
+const request_sync = maybe_sync_atomes;
 
 async function seed_public_user_directory_if_needed() {
     try {
@@ -1125,7 +1200,7 @@ function start_periodic_sync_monitor() {
     periodicSyncId = setInterval(async () => {
         if (!is_tauri_runtime()) return;
         try {
-            await maybe_sync_atomes('periodic');
+            await request_sync('periodic');
         } catch {
             // Ignore
         }
@@ -1483,6 +1558,23 @@ async function try_auto_login() {
                 true
             );
             console.log(`[AdoleAPI] Already logged in: ${user.username}`);
+            
+            // P0 FIX: Ensure Fastify token is obtained for sync mirroring
+            const syncPolicy = resolve_sync_policy();
+            if (syncPolicy.to === 'fastify' && is_tauri_runtime()) {
+                try {
+                    console.log('[Auth] Ensuring Fastify token for mirroring...');
+                    const fastifyResult = await ensure_fastify_token();
+                    if (fastifyResult.ok) {
+                        console.log('[Auth] Fastify token obtained successfully');
+                    } else {
+                        console.warn('[Auth] Could not get Fastify token:', fastifyResult.reason);
+                    }
+                } catch (e) {
+                    console.warn('[Auth] ensure_fastify_token failed:', e.message);
+                }
+            }
+            
             return { success: true, userId: user.user_id || user.id, userName: user.username };
         }
 
@@ -1906,8 +1998,23 @@ async function log_user(phone, password, username, callback) {
             await set_current_user_state(userId, userName, userPhone, true);
         }
 
+        // P0 FIX: After successful Tauri login, also login to Fastify to get token for mirroring
+        if (authPlan.source === 'tauri' && syncPolicy.to === 'fastify') {
+            try {
+                console.log('[Auth] Ensuring Fastify token after Tauri login...');
+                const fastifyResult = await ensure_fastify_token();
+                if (fastifyResult.ok) {
+                    console.log('[Auth] Fastify token obtained successfully');
+                } else {
+                    console.warn('[Auth] Could not get Fastify token:', fastifyResult.reason);
+                }
+            } catch (e) {
+                console.warn('[Auth] ensure_fastify_token failed:', e.message);
+            }
+        }
+
         if (syncPolicy.from === authPlan.source) {
-            try { await maybe_sync_atomes('login'); } catch { }
+            try { await request_sync('login'); } catch { }
         }
     }
 
@@ -2307,17 +2414,21 @@ try {
             if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
             try { await process_pending_registers(); } catch { }
             try { await process_pending_deletes(); } catch { }
-            try { await maybe_sync_atomes('fastify-available'); } catch { }
+            try { await request_sync('fastify-available'); } catch { }
         });
 
         window.addEventListener('squirrel:sync-connected', async (event) => {
             if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
             if (!is_tauri_runtime()) return;
-            try { await maybe_sync_atomes('sync-connected'); } catch { }
+            try { await request_sync('sync-connected'); } catch { }
         });
 
         const build_remote_atome_payload = (detail = {}) => {
             const normalized = normalizeAtomeRecord(detail);
+            const fromAtome = detail && typeof detail === 'object' ? detail.atome : null;
+            const normalizedFromAtome = fromAtome && typeof fromAtome === 'object'
+                ? normalizeAtomeRecord(fromAtome)
+                : null;
             if (!normalized || typeof normalized !== 'object') return null;
             const id = normalized.id || normalized.atome_id || normalized.atomeId || null;
             if (!id) return null;
@@ -2327,9 +2438,15 @@ try {
             }
             return {
                 id,
-                type: normalized.type || normalized.atome_type || normalized.kind || properties.type || properties.kind || 'atome',
-                parentId: normalized.parentId || normalized.parent_id || properties.parent_id || properties.parentId || null,
-                ownerId: normalized.ownerId || normalized.owner_id || properties.owner_id || properties.ownerId || null,
+                type: normalized.type || normalized.atome_type || normalized.kind
+                    || normalizedFromAtome?.type || normalizedFromAtome?.atome_type
+                    || properties.type || properties.kind || 'atome',
+                parentId: normalized.parentId || normalized.parent_id
+                    || normalizedFromAtome?.parentId || normalizedFromAtome?.parent_id
+                    || properties.parent_id || properties.parentId || null,
+                ownerId: normalized.ownerId || normalized.owner_id
+                    || normalizedFromAtome?.ownerId || normalizedFromAtome?.owner_id
+                    || properties.owner_id || properties.ownerId || null,
                 properties
             };
         };
@@ -2339,7 +2456,7 @@ try {
             const payload = build_remote_atome_payload(detail);
             if (!payload) return;
             try {
-                const res = await TauriAdapter.atome.create(payload);
+                const res = await TauriAdapter.atome.create({ ...payload, sync: true });
                 if (!(res?.ok || res?.success)) {
                     console.warn('[AdoleAPI] Failed to apply remote upsert locally:', res?.error || 'unknown');
                 }
@@ -3972,8 +4089,47 @@ async function create_project(projectName, callback) {
 
     results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
 
+    const primaryOk = results[dataPlan.source]?.success === true;
+    if (primaryOk) {
+        try {
+            const backends = await checkBackends(true);
+            const secondaryAvailable = dataPlan.secondaryName === 'fastify' ? backends.fastify : backends.tauri;
+
+            if (secondaryAvailable) {
+                if (dataPlan.secondaryName === 'fastify') {
+                    try { await ensure_fastify_token(); } catch { }
+                    const hasFastifyToken = !!FastifyAdapter.getToken?.();
+                    if (!hasFastifyToken) {
+                        results.fastify = { success: false, data: null, error: 'fastify_token_missing' };
+                    } else {
+                        const res = await FastifyAdapter.atome.create(atomeData);
+                        if (res && (res.ok || res.success || is_already_exists_error(res))) {
+                            results.fastify = { success: true, data: res, error: null, alreadyExists: is_already_exists_error(res) };
+                        } else {
+                            results.fastify = { success: false, data: res, error: res?.error || 'fastify_create_failed' };
+                        }
+                    }
+                } else {
+                    const hasTauriToken = !!TauriAdapter.getToken?.();
+                    if (!hasTauriToken) {
+                        results.tauri = { success: false, data: null, error: 'tauri_token_missing' };
+                    } else {
+                        const res = await TauriAdapter.atome.create(atomeData);
+                        if (res && (res.ok || res.success || is_already_exists_error(res))) {
+                            results.tauri = { success: true, data: res, error: null, alreadyExists: is_already_exists_error(res) };
+                        } else {
+                            results.tauri = { success: false, data: res, error: res?.error || 'tauri_create_failed' };
+                        }
+                    }
+                }
+            }
+        } catch (_) {
+            // Ignore secondary errors; primary success already recorded.
+        }
+    }
+
     if (is_tauri_runtime() && resolve_sync_policy().from === dataPlan.source) {
-        try { await maybe_sync_atomes('create_project'); } catch { }
+        try { await request_sync('create_project'); } catch { }
     }
 
     if (typeof callback === 'function') callback(results);
@@ -4005,7 +4161,7 @@ async function list_projects(callback) {
     }
 
     if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
-        try { await maybe_sync_atomes('list_projects'); } catch { }
+        try { await request_sync('list_projects'); } catch { }
     }
 
     // Avoid ownerId filtering so shared projects (owned by others) appear.
@@ -4080,7 +4236,7 @@ async function delete_project(projectId, callback) {
 
     if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
         try { await process_pending_deletes(); } catch { }
-        try { await maybe_sync_atomes('delete_project'); } catch { }
+        try { await request_sync('delete_project'); } catch { }
     }
 
     if (typeof callback === 'function') callback(results);
@@ -4147,7 +4303,7 @@ async function create_atome(options, callback) {
         properties
     };
 
-    // Create only on primary backend.
+    // Create on primary backend first.
     try {
         const primaryResult = await dataPlan.primary.atome.create(atomeData);
         if (primaryResult.ok || primaryResult.success) {
@@ -4159,10 +4315,33 @@ async function create_atome(options, callback) {
         results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
-
-    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
-        try { await maybe_sync_atomes('create_atome'); } catch { }
+    // Real-time sync: also create on secondary backend if available.
+    // This ensures immediate sync instead of waiting for batch sync.
+    if (results[dataPlan.source]?.success) {
+        try {
+            const secondaryAvailable = await dataPlan.secondary.isAvailable?.();
+            const secondaryToken = dataPlan.secondary.getToken?.();
+            if (secondaryAvailable && secondaryToken) {
+                const secondaryResult = await dataPlan.secondary.atome.create(atomeData);
+                if (secondaryResult.ok || secondaryResult.success) {
+                    results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null };
+                } else {
+                    // Check if "already exists" - this is acceptable
+                    const errMsg = String(secondaryResult.error || '').toLowerCase();
+                    if (errMsg.includes('already') || errMsg.includes('exists')) {
+                        results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null, alreadyExists: true };
+                    } else {
+                        results[dataPlan.secondaryName] = { success: false, data: null, error: secondaryResult.error, skipped: false };
+                    }
+                }
+            } else {
+                results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_unavailable', skipped: true };
+            }
+        } catch (e) {
+            results[dataPlan.secondaryName] = { success: false, data: null, error: e.message, skipped: false };
+        }
+    } else {
+        results[dataPlan.secondaryName] = { success: false, data: null, error: 'primary_failed', skipped: true };
     }
 
     if (typeof callback === 'function') callback(results);
@@ -4399,7 +4578,7 @@ async function delete_atome(atomeId, callback) {
         ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
     } catch { }
 
-    // Soft delete on primary backend only.
+    // Soft delete on primary backend first.
     try {
         const primaryResult = await dataPlan.primary.atome.softDelete(atomeId);
         if (primaryResult.ok || primaryResult.success) {
@@ -4411,15 +4590,36 @@ async function delete_atome(atomeId, callback) {
         results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
-
-    if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId) {
-        queue_pending_delete({ atomeId, ownerId, type: null });
-    }
-
-    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
-        try { await process_pending_deletes(); } catch { }
-        try { await maybe_sync_atomes('delete_atome'); } catch { }
+    // Real-time sync: also delete on secondary backend if available.
+    if (results[dataPlan.source]?.success) {
+        try {
+            const secondaryAvailable = await dataPlan.secondary.isAvailable?.();
+            const secondaryToken = dataPlan.secondary.getToken?.();
+            if (secondaryAvailable && secondaryToken) {
+                const secondaryResult = await dataPlan.secondary.atome.softDelete(atomeId);
+                if (secondaryResult.ok || secondaryResult.success) {
+                    results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null };
+                } else {
+                    // 404 is acceptable - atome may not exist on secondary
+                    const errMsg = String(secondaryResult.error || '').toLowerCase();
+                    if (errMsg.includes('not found') || secondaryResult.status === 404) {
+                        results[dataPlan.secondaryName] = { success: true, data: null, error: null, alreadyDeleted: true };
+                    } else {
+                        results[dataPlan.secondaryName] = { success: false, data: null, error: secondaryResult.error, skipped: false };
+                    }
+                }
+            } else {
+                // Queue for later sync if secondary unavailable
+                if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId) {
+                    queue_pending_delete({ atomeId, ownerId, type: null });
+                }
+                results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_unavailable', skipped: true };
+            }
+        } catch (e) {
+            results[dataPlan.secondaryName] = { success: false, data: null, error: e.message, skipped: false };
+        }
+    } else {
+        results[dataPlan.secondaryName] = { success: false, data: null, error: 'primary_failed', skipped: true };
     }
 
     if (typeof callback === 'function') callback(results);
@@ -4461,7 +4661,7 @@ async function alter_atome(atomeId, newProperties, callback) {
     };
     const dataPlan = resolve_backend_plan('data');
 
-    // Update only on primary backend.
+    // Update on primary backend first.
     try {
         const primaryResult = await dataPlan.primary.atome.update(atomeId, payload);
         if (primaryResult.ok || primaryResult.success) {
@@ -4473,7 +4673,33 @@ async function alter_atome(atomeId, newProperties, callback) {
         results[dataPlan.source] = { success: false, data: null, error: e.message };
     }
 
-    results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
+    // Real-time sync: also update on secondary backend if available.
+    if (results[dataPlan.source]?.success) {
+        try {
+            const secondaryAvailable = await dataPlan.secondary.isAvailable?.();
+            const secondaryToken = dataPlan.secondary.getToken?.();
+            if (secondaryAvailable && secondaryToken) {
+                const secondaryResult = await dataPlan.secondary.atome.update(atomeId, payload);
+                if (secondaryResult.ok || secondaryResult.success) {
+                    results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null };
+                } else {
+                    // 404 is acceptable - atome may not exist on secondary yet
+                    const errMsg = String(secondaryResult.error || '').toLowerCase();
+                    if (errMsg.includes('not found') || secondaryResult.status === 404) {
+                        results[dataPlan.secondaryName] = { success: false, data: null, error: 'not_found_on_secondary', skipped: true };
+                    } else {
+                        results[dataPlan.secondaryName] = { success: false, data: null, error: secondaryResult.error, skipped: false };
+                    }
+                }
+            } else {
+                results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_unavailable', skipped: true };
+            }
+        } catch (e) {
+            results[dataPlan.secondaryName] = { success: false, data: null, error: e.message, skipped: false };
+        }
+    } else {
+        results[dataPlan.secondaryName] = { success: false, data: null, error: 'primary_failed', skipped: true };
+    }
 
     if (typeof callback === 'function') callback(results);
     return results;
@@ -4708,7 +4934,7 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
         }
 
         try {
-            await maybe_sync_atomes('share');
+            await request_sync('share');
         } catch (e) {
             console.warn('[Share] Pre-share sync failed', shareDebugContext({
                 error: e?.message || String(e),
@@ -4834,7 +5060,9 @@ export const AdoleAPI = {
         setCurrentState: set_current_user_state,
         tryAutoLogin: try_auto_login,
         // Visibility management
-        setVisibility: set_user_visibility
+        setVisibility: set_user_visibility,
+        // Fastify token management
+        ensureFastifyToken: ensure_fastify_token
     },
     projects: {
         create: create_project,

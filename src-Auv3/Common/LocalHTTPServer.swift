@@ -11,6 +11,7 @@
 import Foundation
 import Network
 import AVFoundation
+import CryptoKit
 
 final class LocalHTTPServer {
     static let shared = LocalHTTPServer()
@@ -30,6 +31,13 @@ final class LocalHTTPServer {
     private var activeAudioKeys: Set<String> = []
     private var pendingAudioWork: [String: [() -> Void]] = [:]
     private var cancelledConnections: Set<ObjectIdentifier> = []
+    private var wsConnections: [ObjectIdentifier: NWConnection] = [:]
+    private var wsStates: [ObjectIdentifier: WebSocketState] = [:]
+
+    private struct WebSocketState {
+        var buffer = Data()
+        var clientId: String
+    }
 
     func start(preferredPort: UInt16? = nil) {
         guard !started else { return }
@@ -96,7 +104,11 @@ final class LocalHTTPServer {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 32 * 1024) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
             if let data = data, !data.isEmpty {
-                self.processRequest(data, on: connection)
+                if self.isWebSocketConnection(connection) {
+                    self.processWebSocketData(data, on: connection)
+                } else {
+                    self.processRequest(data, on: connection)
+                }
             }
             if isComplete || error != nil { self.requestCancel(connection); return }
             self.receive(on: connection) // keep reading pipelined data (simple)
@@ -113,16 +125,25 @@ final class LocalHTTPServer {
         let method = parts[0]
         let path = String(parts[1])
         print("📥 HTTP req: \(method) \(path)")
-        var rawHeaders: [String] = []
+        var headers: [String: String] = [:]
         var rangeHeader: String? = nil
         for line in lines.dropFirst() {
-            if line.lowercased().hasPrefix("range:") { rangeHeader = String(line); break }
-            if line.contains(":") { rawHeaders.append(String(line)) }
+            if line.isEmpty { continue }
+            if let idx = line.firstIndex(of: ":") {
+                let key = String(line[..<idx]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let value = String(line[line.index(after: idx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !key.isEmpty { headers[key] = value }
+                if key == "range" { rangeHeader = value }
+            }
         }
         if let rh = rangeHeader { print("   ↪︎ Range hdr: \(rh)") }
-        if !rawHeaders.isEmpty { print("   ↪︎ Headers count=\(rawHeaders.count)") }
+        if !headers.isEmpty { print("   ↪︎ Headers count=\(headers.count)") }
         if method != "GET" {
             sendSimple(status: 405, reason: "Method Not Allowed", body: "Method Not Allowed", on: connection)
+            return
+        }
+        if path == "/ws/sync" && isWebSocketUpgrade(headers: headers) {
+            handleWebSocketUpgrade(connection, headers: headers)
             return
         }
     // Opportunistic sync trigger (throttled inside coordinator)
@@ -157,6 +178,252 @@ final class LocalHTTPServer {
             serveServerInfo(on: connection)
         } else {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
+        }
+    }
+
+    // MARK: - WebSocket (/ws/sync)
+
+    private func isWebSocketUpgrade(headers: [String: String]) -> Bool {
+        let upgrade = headers["upgrade"]?.lowercased() ?? ""
+        let connection = headers["connection"]?.lowercased() ?? ""
+        return upgrade == "websocket" && connection.contains("upgrade")
+    }
+
+    private func isWebSocketConnection(_ connection: NWConnection) -> Bool {
+        return wsConnections[ObjectIdentifier(connection)] != nil
+    }
+
+    private func websocketAcceptKey(_ key: String) -> String? {
+        let guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        let source = key.trimmingCharacters(in: .whitespacesAndNewlines) + guid
+        let digest = Insecure.SHA1.hash(data: Data(source.utf8))
+        return Data(digest).base64EncodedString()
+    }
+
+    private func handleWebSocketUpgrade(_ connection: NWConnection, headers: [String: String]) {
+        guard let key = headers["sec-websocket-key"], let accept = websocketAcceptKey(key) else {
+            sendSimple(status: 400, reason: "Bad Request", body: "missing websocket key", on: connection)
+            return
+        }
+
+        let response = [
+            "HTTP/1.1 101 Switching Protocols",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            "Sec-WebSocket-Accept: \(accept)",
+            "\r\n"
+        ].joined(separator: "\r\n")
+
+        let clientId = "ais_" + UUID().uuidString
+        let id = ObjectIdentifier(connection)
+        wsConnections[id] = connection
+        wsStates[id] = WebSocketState(buffer: Data(), clientId: clientId)
+
+        let payload: [String: Any] = [
+            "type": "welcome",
+            "clientId": clientId,
+            "server": "ais",
+            "version": "1.0.0",
+            "capabilities": ["events", "sync_request", "file-events", "atome-events", "account-events"],
+            "timestamp": ISO8601DateFormatter().string(from: Date())
+        ]
+
+        connection.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] _ in
+            guard let self = self else { return }
+            self.sendWebSocketJson(payload, on: connection)
+            FastifySyncRelay.shared.connectIfConfigured()
+        })
+    }
+
+    private func processWebSocketData(_ data: Data, on connection: NWConnection) {
+        let id = ObjectIdentifier(connection)
+        guard var state = wsStates[id] else { return }
+        state.buffer.append(data)
+
+        while true {
+            if state.buffer.count < 2 { break }
+            let b0 = state.buffer[state.buffer.startIndex]
+            let b1 = state.buffer[state.buffer.startIndex + 1]
+            let opcode = b0 & 0x0f
+            let masked = (b1 & 0x80) != 0
+            var payloadLen = Int(b1 & 0x7f)
+            var index = 2
+
+            if payloadLen == 126 {
+                if state.buffer.count < index + 2 { break }
+                let lenBytes = state.buffer[index..<(index + 2)]
+                payloadLen = Int(lenBytes.reduce(0) { ($0 << 8) | Int($1) })
+                index += 2
+            } else if payloadLen == 127 {
+                if state.buffer.count < index + 8 { break }
+                let lenBytes = state.buffer[index..<(index + 8)]
+                payloadLen = lenBytes.reduce(0) { ($0 << 8) | UInt64($1) }.asIntSafe()
+                index += 8
+            }
+
+            var maskKey: [UInt8] = []
+            if masked {
+                if state.buffer.count < index + 4 { break }
+                maskKey = Array(state.buffer[index..<(index + 4)])
+                index += 4
+            }
+
+            if state.buffer.count < index + payloadLen { break }
+            var payload = Data(state.buffer[index..<(index + payloadLen)])
+            if masked {
+                for i in 0..<payload.count {
+                    payload[i] ^= maskKey[i % 4]
+                }
+            }
+            state.buffer.removeSubrange(0..<(index + payloadLen))
+            handleWebSocketFrame(opcode: opcode, payload: payload, on: connection)
+        }
+
+        wsStates[id] = state
+    }
+
+    private func handleWebSocketFrame(opcode: UInt8, payload: Data, on connection: NWConnection) {
+        switch opcode {
+        case 0x1:
+            if let text = String(data: payload, encoding: .utf8) {
+                handleWebSocketText(text, on: connection)
+            }
+        case 0x8:
+            sendWebSocketClose(on: connection)
+            requestCancel(connection)
+        case 0x9:
+            sendWebSocketPong(payload, on: connection)
+        case 0xA:
+            break
+        default:
+            break
+        }
+    }
+
+    private func handleWebSocketText(_ text: String, on connection: NWConnection) {
+        guard let data = text.data(using: .utf8) else { return }
+        guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
+              let payload = obj as? [String: Any] else {
+            return
+        }
+
+        let type = (payload["type"] as? String) ?? ""
+        if type == "register" {
+            if let provided = payload["clientId"] as? String {
+                let id = ObjectIdentifier(connection)
+                if var state = wsStates[id] {
+                    state.clientId = provided
+                    wsStates[id] = state
+                }
+            }
+            let clientId = wsStates[ObjectIdentifier(connection)]?.clientId ?? "unknown"
+            let welcome: [String: Any] = [
+                "type": "welcome",
+                "clientId": clientId,
+                "server": "ais",
+                "version": "1.0.0",
+                "capabilities": ["events", "sync_request", "file-events", "atome-events", "account-events"],
+                "timestamp": ISO8601DateFormatter().string(from: Date())
+            ]
+            sendWebSocketJson(welcome, on: connection)
+            return
+        }
+
+        if type == "ping" {
+            let pong: [String: Any] = [
+                "type": "pong",
+                "timestamp": ISO8601DateFormatter().string(from: Date())
+            ]
+            sendWebSocketJson(pong, on: connection)
+            return
+        }
+
+        if type == "sync_request" {
+            FileSyncCoordinator.shared.syncAll(force: true)
+            let response: [String: Any] = [
+                "type": "sync_started",
+                "mode": "local",
+                "timestamp": ISO8601DateFormatter().string(from: Date())
+            ]
+            sendWebSocketJson(response, on: connection)
+            FastifySyncRelay.shared.send(text: text)
+            return
+        }
+
+        if shouldBroadcastLocalEvent(payload: payload) {
+            broadcastWebSocketText(text, excluding: connection)
+        }
+
+        FastifySyncRelay.shared.send(text: text)
+    }
+
+    private func shouldBroadcastLocalEvent(payload: [String: Any]) -> Bool {
+        let type = (payload["type"] as? String) ?? ""
+        if type == "event" { return true }
+        if type.hasPrefix("atome:") || type.hasPrefix("sync:") { return true }
+        if type == "file-event" || type == "atome-sync" { return true }
+        return false
+    }
+
+    private func sendWebSocketJson(_ payload: [String: Any], on connection: NWConnection) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []) else { return }
+        sendWebSocketText(String(decoding: data, as: UTF8.self), on: connection)
+    }
+
+    private func sendWebSocketText(_ text: String, on connection: NWConnection) {
+        let payload = Data(text.utf8)
+        let frame = buildWebSocketFrame(opcode: 0x1, payload: payload)
+        connection.send(content: frame, completion: .contentProcessed { _ in })
+    }
+
+    private func sendWebSocketPong(_ payload: Data, on connection: NWConnection) {
+        let frame = buildWebSocketFrame(opcode: 0xA, payload: payload)
+        connection.send(content: frame, completion: .contentProcessed { _ in })
+    }
+
+    private func sendWebSocketClose(on connection: NWConnection) {
+        let frame = buildWebSocketFrame(opcode: 0x8, payload: Data())
+        connection.send(content: frame, completion: .contentProcessed { _ in })
+    }
+
+    private func buildWebSocketFrame(opcode: UInt8, payload: Data) -> Data {
+        var frame = Data()
+        frame.append(0x80 | opcode)
+        let length = payload.count
+        if length < 126 {
+            frame.append(UInt8(length))
+        } else if length <= 0xffff {
+            frame.append(126)
+            frame.append(UInt8((length >> 8) & 0xff))
+            frame.append(UInt8(length & 0xff))
+        } else {
+            frame.append(127)
+            let len64 = UInt64(length)
+            for shift in stride(from: 56, through: 0, by: -8) {
+                frame.append(UInt8((len64 >> UInt64(shift)) & 0xff))
+            }
+        }
+        frame.append(payload)
+        return frame
+    }
+
+    private func broadcastWebSocketText(_ text: String, excluding: NWConnection? = nil) {
+        let payload = Data(text.utf8)
+        let frame = buildWebSocketFrame(opcode: 0x1, payload: payload)
+        for (id, connection) in wsConnections {
+            if let excluded = excluding, ObjectIdentifier(excluded) == id { continue }
+            connection.send(content: frame, completion: .contentProcessed { _ in })
+        }
+    }
+
+    fileprivate func handleFastifyRelayMessage(_ text: String) {
+        guard let data = text.data(using: .utf8) else { return }
+        guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
+              let payload = obj as? [String: Any] else {
+            return
+        }
+        if shouldBroadcastLocalEvent(payload: payload) {
+            broadcastWebSocketText(text)
         }
     }
 
@@ -570,7 +837,10 @@ final class LocalHTTPServer {
     }
 
     private func clearConnectionStateLocked(_ connection: NWConnection) {
-        cancelledConnections.remove(ObjectIdentifier(connection))
+        let id = ObjectIdentifier(connection)
+        cancelledConnections.remove(id)
+        wsConnections.removeValue(forKey: id)
+        wsStates.removeValue(forKey: id)
     }
 
     // MARK: - Text file serving
@@ -705,6 +975,111 @@ final class LocalHTTPServer {
         if writer.status == .completed { print("✅ Re-encode success: \(outURL.lastPathComponent)") ; return outURL }
         print("❌ Re-encode failed: status=\(writer.status) error=\(writer.error?.localizedDescription ?? "unknown")")
         return nil
+    }
+}
+
+final class FastifySyncRelay {
+    static let shared = FastifySyncRelay()
+
+    private let queue = DispatchQueue(label: "ais.fastify.relay.queue")
+    private var session: URLSession?
+    private var task: URLSessionWebSocketTask?
+    private var reconnectDelay: TimeInterval = 1.0
+    private var connecting = false
+    private(set) var isConnected = false
+
+    func connectIfConfigured() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.connecting, !self.isConnected else { return }
+            guard let endpoint = self.resolveEndpoint() else { return }
+            self.connecting = true
+            let session = URLSession(configuration: .default)
+            self.session = session
+            let task = session.webSocketTask(with: endpoint)
+            self.task = task
+            task.resume()
+            self.isConnected = true
+            self.connecting = false
+            self.reconnectDelay = 1.0
+            self.receiveLoop()
+        }
+    }
+
+    func send(text: String) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            guard let task = self.task, self.isConnected else { return }
+            task.send(.string(text)) { _ in }
+        }
+    }
+
+    private func receiveLoop() {
+        guard let task = task else { return }
+        task.receive { [weak self] result in
+            guard let self = self else { return }
+            switch result {
+            case .success(let message):
+                switch message {
+                case .string(let text):
+                    LocalHTTPServer.shared.handleFastifyRelayMessage(text)
+                case .data(let data):
+                    let text = String(decoding: data, as: UTF8.self)
+                    LocalHTTPServer.shared.handleFastifyRelayMessage(text)
+                @unknown default:
+                    break
+                }
+                self.receiveLoop()
+            case .failure:
+                self.scheduleReconnect()
+            }
+        }
+    }
+
+    private func scheduleReconnect() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.isConnected = false
+            self.task?.cancel(with: .goingAway, reason: nil)
+            self.task = nil
+            let delay = self.reconnectDelay
+            self.reconnectDelay = min(self.reconnectDelay * 2, 30)
+            self.queue.asyncAfter(deadline: .now() + delay) {
+                self.connectIfConfigured()
+            }
+        }
+    }
+
+    private func resolveEndpoint() -> URL? {
+        let keys = [
+            "SQUIRREL_FASTIFY_WS_SYNC_URL",
+            "SQUIRREL_FASTIFY_URL",
+            "SQUIRREL_TAURI_FASTIFY_URL"
+        ]
+
+        let userDefaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? UserDefaults.standard
+        for key in keys {
+            if let raw = userDefaults.string(forKey: key), !raw.isEmpty {
+                if key == "SQUIRREL_FASTIFY_WS_SYNC_URL" {
+                    return URL(string: raw)
+                }
+                let base = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if base.isEmpty { continue }
+                let wsBase = base
+                    .replacingOccurrences(of: "https://", with: "wss://")
+                    .replacingOccurrences(of: "http://", with: "ws://")
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                return URL(string: wsBase + "/ws/sync")
+            }
+        }
+        return nil
+    }
+}
+
+private extension UInt64 {
+    func asIntSafe() -> Int {
+        if self > UInt64(Int.max) { return Int.max }
+        return Int(self)
     }
 }
 

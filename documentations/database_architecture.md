@@ -316,6 +316,12 @@ if (platform.toLowerCase().includes('auv3')) {
 
 All API calls (`fetch`, `XMLHttpRequest`) transparently use AiS when running in AUV3 context.
 
+### Real-time Sync Alignment (AiS ↔ Fastify)
+
+- AiS should implement the same `/ws/sync` protocol as Axum (see `documentations/sync_protocol.md`).
+- Fastify remains the **authoritative sync hub**; AiS should relay or mirror realtime events with Fastify when network is available.
+- When offline, AiS remains the local authority for read/write, and replays to Fastify once reconnected.
+
 ---
 
 ## Performance Characteristics

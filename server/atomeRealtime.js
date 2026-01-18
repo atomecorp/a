@@ -124,6 +124,7 @@ async function broadcastAtomeCreate({ atomeId, atomeType, parentId, particles, s
   if (!recipients || recipients.length === 0) return;
 
   const nowIso = new Date().toISOString();
+  const authorIdStr = String(senderUserId);
   const msgText = JSON.stringify({
     command: 'share-create',
     params: {
@@ -132,33 +133,26 @@ async function broadcastAtomeCreate({ atomeId, atomeType, parentId, particles, s
       parentId,
       particles,
       createdAt: nowIso,
-      authorId: String(senderUserId)
+      authorId: authorIdStr
     }
   });
 
   for (const recipientId of recipients) {
     if (!recipientId) continue;
+    if (String(recipientId) === authorIdStr) continue;
 
     const payload = {
       type: 'console-message',
+      authorId: authorIdStr,
       message: msgText,
-      from: { userId: String(senderUserId), phone: null, username: null },
+      from: { userId: authorIdStr, phone: null, username: null },
       to: { userId: String(recipientId), phone: null },
       timestamp: nowIso
     };
 
     try {
       const targetUserId = String(recipientId);
-      if (String(recipientId) === String(senderUserId)) {
-        wsSendJsonToUserExcept(
-          targetUserId,
-          payload,
-          senderConnection,
-          { scope: 'ws/api', op: 'share-create', targetUserId }
-        );
-      } else {
-        wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-create', targetUserId });
-      }
+      wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-create', targetUserId });
     } catch (_) { }
   }
 }
@@ -171,39 +165,33 @@ async function broadcastAtomeDelete({ atomeId, senderUserId, senderConnection = 
   if (!recipients || recipients.length === 0) return;
 
   const nowIso = new Date().toISOString();
+  const authorIdStr = String(senderUserId);
   const msgText = JSON.stringify({
     command: 'share-sync',
     params: {
       atomeId,
       particles: { __deleted: true },
       deletedAt: nowIso,
-      authorId: String(senderUserId)
+      authorId: authorIdStr
     }
   });
 
   for (const recipientId of recipients) {
     if (!recipientId) continue;
+    if (String(recipientId) === authorIdStr) continue;
 
     const payload = {
       type: 'console-message',
+      authorId: authorIdStr,
       message: msgText,
-      from: { userId: String(senderUserId), phone: null, username: null },
+      from: { userId: authorIdStr, phone: null, username: null },
       to: { userId: String(recipientId), phone: null },
       timestamp: nowIso
     };
 
     try {
       const targetUserId = String(recipientId);
-      if (String(recipientId) === String(senderUserId)) {
-        wsSendJsonToUserExcept(
-          targetUserId,
-          payload,
-          senderConnection,
-          { scope: 'ws/api', op: 'share-sync', targetUserId }
-        );
-      } else {
-        wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
-      }
+      wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
     } catch (_) { }
   }
 }
@@ -217,39 +205,33 @@ async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId, s
   if (!recipients || recipients.length === 0) return;
 
   const nowIso = new Date().toISOString();
+  const authorIdStr = String(senderUserId);
   const msgText = JSON.stringify({
     command: 'share-sync',
     params: {
       atomeId,
       particles,
       updatedAt: nowIso,
-      authorId: String(senderUserId)
+      authorId: authorIdStr
     }
   });
 
   for (const recipientId of recipients) {
     if (!recipientId) continue;
+    if (String(recipientId) === authorIdStr) continue;
 
     const payload = {
       type: 'console-message',
+      authorId: authorIdStr,
       message: msgText,
-      from: { userId: String(senderUserId), phone: null, username: null },
+      from: { userId: authorIdStr, phone: null, username: null },
       to: { userId: String(recipientId), phone: null },
       timestamp: nowIso
     };
 
     try {
       const targetUserId = String(recipientId);
-      if (String(recipientId) === String(senderUserId)) {
-        wsSendJsonToUserExcept(
-          targetUserId,
-          payload,
-          senderConnection,
-          { scope: 'ws/api', op: 'share-sync', targetUserId }
-        );
-      } else {
-        wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
-      }
+      wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
     } catch (_) { }
   }
 }

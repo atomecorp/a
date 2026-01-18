@@ -5,6 +5,7 @@ import { startFileSyncWatcher, getSyncEventBus } from './sync/fileSyncWatcher.js
 let watcherHandle = null;
 let watcherLogListener = null;
 let watcherSyncListener = null;
+let accountSyncListener = null;
 let watcherSyncConfig = null;
 let watcherPathsEnsured = false;
 const MIRROR_GUARD_TTL_MS = 2000;
@@ -254,6 +255,77 @@ function detachWatcherSync() {
     watcherSyncListener = null;
 }
 
+function attachAccountSyncHandler() {
+    if (accountSyncListener) {
+        return;
+    }
+
+    accountSyncListener = async (payload) => {
+        if (!payload || payload.type !== 'sync:account-created') {
+            return;
+        }
+
+        const data = payload.payload || {};
+        const { userId, username, phone, passwordHash, source, optional } = data;
+        
+        if (!userId || !phone) {
+            console.warn('[aBoxServer] sync:account-created missing userId or phone');
+            return;
+        }
+
+        if (source === 'fastify') {
+            return;
+        }
+
+        console.log(`[aBoxServer] Processing account sync: ${username} (${phone}) from ${source || 'unknown'}`);
+
+        try {
+            const syncSecret = process.env.SYNC_SECRET || 'squirrel-sync-2024';
+            const fastifyUrl = process.env.SQUIRREL_FASTIFY_URL || process.env.FASTIFY_URL;
+            
+            if (!fastifyUrl) {
+                console.log('[aBoxServer] No Fastify URL configured, skipping cloud sync');
+                return;
+            }
+
+            const response = await fetch(`${fastifyUrl}/api/auth/sync-register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Sync-Secret': syncSecret
+                },
+                body: JSON.stringify({
+                    username,
+                    phone,
+                    passwordHash,
+                    source: 'tauri',
+                    optional: optional || {}
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log(`[aBoxServer] Account synced to Fastify: ${result.principalId || userId}`);
+            } else {
+                const errorText = await response.text();
+                console.warn(`[aBoxServer] Account sync failed: ${response.status} - ${errorText}`);
+            }
+        } catch (error) {
+            console.warn('[aBoxServer] Account sync error:', error?.message || error);
+        }
+    };
+
+    getSyncEventBus().on('event', accountSyncListener);
+}
+
+function detachAccountSyncHandler() {
+    if (!accountSyncListener) {
+        return;
+    }
+    getSyncEventBus().off('event', accountSyncListener);
+    accountSyncListener = null;
+}
+
 function attachWatcherLogging() {
     if (watcherLogListener) {
         return;
@@ -302,6 +374,7 @@ export function startABoxMonitoring(options = {}) {
     ensureWatcherTargets();
     attachWatcherLogging();
     attachWatcherSync();
+    attachAccountSyncHandler();
     return watcherHandle;
 }
 
@@ -315,6 +388,7 @@ export async function stopABoxMonitoring() {
     } finally {
         detachWatcherLogging();
         detachWatcherSync();
+        detachAccountSyncHandler();
         watcherPathsEnsured = false;
         watcherHandle = null;
     }

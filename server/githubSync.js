@@ -360,12 +360,16 @@ async function handleClientMessage(clientId, message) {
                     client.lastSeen = Date.now();
                 }
 
-                // Send current version back
+                // Send current version back using the unified welcome envelope
                 const currentVersion = await getLocalVersion();
                 return {
-                    type: 'version_info',
+                    type: 'welcome',
+                    clientId,
+                    server: 'fastify',
                     version: currentVersion.version,
-                    protectedPaths: currentVersion.protectedPaths || []
+                    protectedPaths: currentVersion.protectedPaths || [],
+                    capabilities: ['events', 'sync_request', 'file-events', 'atome-events', 'account-events'],
+                    timestamp: new Date().toISOString()
                 };
 
             case 'sync_request':

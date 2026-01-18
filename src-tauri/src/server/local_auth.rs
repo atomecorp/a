@@ -11,8 +11,9 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map as JsonMap, Value as JsonValue};
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::{
+    env,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -28,6 +29,9 @@ use super::local_atome::LocalAtomeState;
 const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
     0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
 ]);
+
+/// Default Fastify server URL for sync (port 3001 in dev mode)
+const DEFAULT_FASTIFY_URL: &str = "http://localhost:3001";
 
 // =============================================================================
 // TYPES
@@ -49,6 +53,8 @@ pub struct AuthResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub already_exists: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,6 +79,62 @@ pub struct LocalAuthState {
 }
 
 // =============================================================================
+// FASTIFY SYNC
+// =============================================================================
+
+/// Sync a newly created account to Fastify server (fire and forget)
+async fn sync_account_to_fastify(
+    user_id: &str,
+    username: &str,
+    phone: &str,
+    password_hash: &str,
+    visibility: &str,
+) {
+    let fastify_url = env::var("SQUIRREL_FASTIFY_URL")
+        .or_else(|_| env::var("FASTIFY_URL"))
+        .unwrap_or_else(|_| DEFAULT_FASTIFY_URL.to_string());
+    
+    let sync_secret = env::var("SYNC_SECRET")
+        .unwrap_or_else(|_| "squirrel-sync-2024".to_string());
+    
+    let url = format!("{}/api/auth/sync-register", fastify_url);
+    
+    let payload = json!({
+        "username": username,
+        "phone": phone,
+        "passwordHash": password_hash,
+        "visibility": visibility,
+        "source": "tauri"
+    });
+    
+    let client = reqwest::Client::new();
+    
+    match client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("X-Sync-Secret", &sync_secret)
+        .json(&payload)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!("[Auth] Account synced to Fastify: {} ({})", username, user_id);
+            } else {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                println!("[Auth] Fastify sync failed: {} - {}", status, body);
+            }
+        }
+        Err(e) => {
+            // Don't fail registration if Fastify is unreachable
+            println!("[Auth] Fastify sync error (will retry later): {}", e);
+        }
+    }
+}
+
+// =============================================================================
 // WEBSOCKET MESSAGE HANDLER
 // =============================================================================
 
@@ -90,10 +152,13 @@ pub async fn handle_auth_message(
         "register" => handle_register(message, state, request_id).await,
         "bootstrap" => handle_bootstrap(message, state, request_id).await,
         "login" => handle_login(message, state, request_id).await,
+        "lookup-phone" => handle_lookup_phone(message, state, request_id).await,
         "me" => handle_me(message, state, request_id).await,
         "logout" => handle_logout(request_id),
         "change-password" => handle_change_password(message, state, request_id).await,
         "delete" => handle_delete(message, state, request_id).await,
+        "save-fastify-token" => handle_save_fastify_token(message, state, request_id).await,
+        "get-fastify-token" => handle_get_fastify_token(message, state, request_id).await,
         _ => error_response(request_id, &format!("Unknown action: {}", action)),
     }
 }
@@ -120,8 +185,8 @@ async fn handle_bootstrap(
     };
 
     let password = match message.get("password").and_then(|v| v.as_str()) {
-        Some(p) if p.len() >= 6 => p,
-        _ => return error_response(request_id, "Password must be at least 6 characters"),
+        Some(p) if p.len() >= 8 => p,
+        _ => return error_response(request_id, "Password must be at least 8 characters"),
     };
 
     let visibility = message
@@ -224,6 +289,7 @@ async fn handle_bootstrap(
             msg_type: "auth-response".into(),
             request_id,
             success: true,
+            already_exists: None,
             error: None,
             user: Some(UserInfo {
                 user_id: existing_id,
@@ -272,6 +338,23 @@ async fn handle_bootstrap(
         println!("[Auth Debug] state_current update failed: {}", err);
     }
 
+    // Sync account to Fastify (fire and forget - don't block bootstrap)
+    let user_id_clone = user_id.clone();
+    let username_clone = username.clone();
+    let phone_clone = phone.clone();
+    let password_hash_clone = password_hash.clone();
+    let visibility_clone = visibility.clone();
+    
+    tokio::spawn(async move {
+        sync_account_to_fastify(
+            &user_id_clone,
+            &username_clone,
+            &phone_clone,
+            &password_hash_clone,
+            &visibility_clone,
+        ).await;
+    });
+
     let token = match generate_token(&state.jwt_secret, &user_id, &username, &phone) {
         Ok(t) => t,
         Err(e) => return error_response(request_id, &e.to_string()),
@@ -281,6 +364,7 @@ async fn handle_bootstrap(
         msg_type: "auth-response".into(),
         request_id,
         success: true,
+        already_exists: None,
         error: None,
         user: Some(UserInfo {
             user_id,
@@ -308,8 +392,8 @@ async fn handle_register(
     };
 
     let password = match message.get("password").and_then(|v| v.as_str()) {
-        Some(p) if p.len() >= 6 => p,
-        _ => return error_response(request_id, "Password must be at least 6 characters"),
+        Some(p) if p.len() >= 8 => p,
+        _ => return error_response(request_id, "Password must be at least 8 characters"),
     };
     let visibility = message
         .get("visibility")
@@ -389,6 +473,7 @@ async fn handle_register(
                 msg_type: "auth-response".into(),
                 request_id,
                 success: true,
+                already_exists: None,
                 error: None,
                 user: Some(UserInfo {
                     user_id: existing_id,
@@ -437,6 +522,7 @@ async fn handle_register(
                 msg_type: "auth-response".into(),
                 request_id,
                 success: true,
+                already_exists: None,
                 error: None,
                 user: Some(UserInfo {
                     user_id: existing_id,
@@ -448,7 +534,24 @@ async fn handle_register(
             };
         }
 
-        return error_response(request_id, "Phone already registered");
+        let (username, _, created_at) = match get_user_particles(&db, &existing_id) {
+            Ok(particles) => particles,
+            Err(_) => (phone.clone(), String::new(), now.clone()),
+        };
+        return AuthResponse {
+            msg_type: "auth-response".into(),
+            request_id,
+            success: true,
+            already_exists: Some(true),
+            error: None,
+            user: Some(UserInfo {
+                user_id: existing_id,
+                username,
+                phone,
+                created_at: Some(created_at),
+            }),
+            token: None,
+        };
     }
 
     // Create new user atome (atomic)
@@ -497,6 +600,23 @@ async fn handle_register(
         return error_response(request_id, &e.to_string());
     }
 
+    // Sync account to Fastify (fire and forget - don't block registration)
+    let user_id_clone = user_id.clone();
+    let username_clone = username.clone();
+    let phone_clone = phone.clone();
+    let password_hash_clone = password_hash.clone();
+    let visibility_clone = visibility.clone();
+    
+    tokio::spawn(async move {
+        sync_account_to_fastify(
+            &user_id_clone,
+            &username_clone,
+            &phone_clone,
+            &password_hash_clone,
+            &visibility_clone,
+        ).await;
+    });
+
     // Generate JWT
     let token = match generate_token(&state.jwt_secret, &user_id, &username, &phone) {
         Ok(t) => t,
@@ -507,9 +627,10 @@ async fn handle_register(
         msg_type: "auth-response".into(),
         request_id,
         success: true,
+        already_exists: None,
         error: None,
         user: Some(UserInfo {
-            user_id,
+            user_id: user_id.clone(),
             username,
             phone,
             created_at: Some(now),
@@ -626,6 +747,7 @@ async fn handle_login(
         msg_type: "auth-response".into(),
         request_id,
         success: true,
+        already_exists: None,
         error: None,
         user: Some(UserInfo {
             user_id,
@@ -634,6 +756,54 @@ async fn handle_login(
             created_at: Some(created_at),
         }),
         token: Some(token),
+    }
+}
+
+async fn handle_lookup_phone(
+    message: serde_json::Value,
+    state: &LocalAuthState,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let phone = match message.get("phone").and_then(|v| v.as_str()) {
+        Some(p) if p.trim().len() >= 6 => normalize_phone(p),
+        _ => return error_response(request_id, "Phone must be at least 6 characters"),
+    };
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    let now = Utc::now().to_rfc3339();
+    let user_record = find_user_record_by_phone(&db, &phone)
+        .or_else(|| find_user_record_by_id(&db, &generate_user_id(&phone)));
+    let (user_id, existing_type, _deleted_at) = match user_record {
+        Some((id, atome_type, deleted_at)) if deleted_at.is_none() => (id, atome_type, deleted_at),
+        _ => return error_response(request_id, "User not found"),
+    };
+
+    if existing_type != "user" {
+        let _ = coerce_user_atome_type(&db, &user_id, &now);
+    }
+
+    let (username, _, created_at) = match get_user_particles(&db, &user_id) {
+        Ok(particles) => particles,
+        Err(_) => (phone.clone(), String::new(), now.clone()),
+    };
+
+    AuthResponse {
+        msg_type: "auth-response".into(),
+        request_id,
+        success: true,
+        already_exists: None,
+        error: None,
+        user: Some(UserInfo {
+            user_id,
+            username,
+            phone,
+            created_at: Some(created_at),
+        }),
+        token: None,
     }
 }
 
@@ -690,6 +860,7 @@ async fn handle_me(
         msg_type: "auth-response".into(),
         request_id,
         success: true,
+        already_exists: None,
         error: None,
         user: Some(UserInfo {
             user_id: claims.sub,
@@ -707,6 +878,7 @@ fn handle_logout(request_id: Option<String>) -> AuthResponse {
         msg_type: "auth-response".into(),
         request_id,
         success: true,
+        already_exists: None,
         error: None,
         user: None,
         token: None,
@@ -782,6 +954,7 @@ async fn handle_change_password(
         msg_type: "auth-response".into(),
         request_id,
         success: true,
+        already_exists: None,
         error: None,
         user: None,
         token: None,
@@ -837,6 +1010,7 @@ async fn handle_delete(
         msg_type: "auth-response".into(),
         request_id,
         success: true,
+        already_exists: None,
         error: None,
         user: None,
         token: None,
@@ -848,17 +1022,33 @@ async fn handle_delete(
 // =============================================================================
 
 fn generate_user_id(phone: &str) -> String {
-    let normalized: String = phone
-        .chars()
-        .filter(|c| !c.is_whitespace() && *c != '-' && *c != '(' && *c != ')')
-        .collect::<String>()
-        .to_lowercase();
-
+    let normalized = normalize_phone(phone).to_lowercase();
     Uuid::new_v5(&SQUIRREL_USER_NAMESPACE, normalized.as_bytes()).to_string()
 }
 
 fn normalize_phone(phone: &str) -> String {
-    phone.trim().replace(" ", "")
+    let trimmed = phone.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let mut cleaned = String::new();
+    for ch in trimmed.chars() {
+        if ch.is_ascii_digit() || ch == '+' {
+            cleaned.push(ch);
+        }
+    }
+
+    if cleaned.is_empty() {
+        return String::new();
+    }
+
+    if cleaned.starts_with('+') {
+        let tail: String = cleaned.chars().skip(1).filter(|c| *c != '+').collect();
+        return format!("+{}", tail);
+    }
+
+    cleaned.chars().filter(|c| *c != '+').collect()
 }
 
 fn get_user_particles(db: &Connection, user_id: &str) -> Result<(String, String, String), String> {
@@ -1184,9 +1374,135 @@ fn error_response(request_id: Option<String>, error: &str) -> AuthResponse {
         msg_type: "auth-response".into(),
         request_id,
         success: false,
+        already_exists: None,
         error: Some(error.into()),
         user: None,
         token: None,
+    }
+}
+
+// =============================================================================
+// FASTIFY TOKEN STORAGE (for persistent sync authentication)
+// =============================================================================
+
+/// Save a Fastify JWT token for a user (stored as a particle)
+async fn handle_save_fastify_token(
+    message: serde_json::Value,
+    state: &LocalAuthState,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let token = match message.get("token").and_then(|v| v.as_str()) {
+        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => return error_response(request_id, "Token is required"),
+    };
+    
+    let local_token = match message.get("localToken").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        _ => return error_response(request_id, "Local token is required for authentication"),
+    };
+    
+    // Verify the local token and get user ID
+    let claims = match verify_token(&state.jwt_secret, local_token) {
+        Ok(c) => c,
+        Err(e) => return error_response(request_id, &format!("Invalid local token: {}", e)),
+    };
+    
+    let user_id = claims.sub;
+    let now = chrono::Utc::now().to_rfc3339();
+    
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+    
+    // Store the Fastify token as a particle
+    let token_json = serde_json::to_string(&token).unwrap_or_default();
+    
+    // Try to update existing particle first
+    let updated = db
+        .execute(
+            "UPDATE particles SET particle_value = ?1, version = version + 1, updated_at = ?2
+             WHERE atome_id = ?3 AND particle_key = 'fastify_token'",
+            rusqlite::params![&token_json, &now, &user_id],
+        )
+        .unwrap_or(0);
+    
+    if updated == 0 {
+        // Insert new particle
+        if let Err(e) = db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+             VALUES (?1, 'fastify_token', ?2, 'string', 1, ?3, ?3)",
+            rusqlite::params![&user_id, &token_json, &now],
+        ) {
+            return error_response(request_id, &e.to_string());
+        }
+    }
+    
+    println!("[Auth] Fastify token saved for user {}", &user_id[..8.min(user_id.len())]);
+    
+    AuthResponse {
+        msg_type: "auth-response".into(),
+        request_id,
+        success: true,
+        already_exists: None,
+        error: None,
+        user: None,
+        token: None,
+    }
+}
+
+/// Get the stored Fastify token for a user
+async fn handle_get_fastify_token(
+    message: serde_json::Value,
+    state: &LocalAuthState,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let local_token = match message.get("token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        _ => return error_response(request_id, "Local token is required"),
+    };
+    
+    // Verify the local token and get user ID
+    let claims = match verify_token(&state.jwt_secret, local_token) {
+        Ok(c) => c,
+        Err(e) => return error_response(request_id, &format!("Invalid token: {}", e)),
+    };
+    
+    let user_id = claims.sub;
+    
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+    
+    // Get the Fastify token from particles
+    let token_result: Option<String> = db
+        .query_row(
+            "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = 'fastify_token'",
+            rusqlite::params![&user_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .unwrap_or(None);
+    
+    match token_result {
+        Some(token_json) => {
+            // Parse the JSON string to get the actual token
+            let token: String = serde_json::from_str(&token_json).unwrap_or_default();
+            if token.is_empty() {
+                return error_response(request_id, "No Fastify token stored");
+            }
+            AuthResponse {
+                msg_type: "auth-response".into(),
+                request_id,
+                success: true,
+                already_exists: None,
+                error: None,
+                user: None,
+                token: Some(token),
+            }
+        }
+        None => error_response(request_id, "No Fastify token stored"),
     }
 }
 
@@ -1202,6 +1518,11 @@ pub fn create_state(atome_state: &LocalAtomeState, data_dir: &PathBuf) -> LocalA
 }
 
 fn get_or_create_jwt_secret(data_dir: &PathBuf) -> String {
+    if let Ok(secret) = std::env::var("JWT_SECRET") {
+        if !secret.trim().is_empty() {
+            return secret;
+        }
+    }
     if let Ok(secret) = std::env::var("LOCAL_JWT_SECRET") {
         return secret;
     }

@@ -62,8 +62,8 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId } from './auth.js';
-import { registerAtomeRoutes } from './atomeRoutes.orm.js';
+import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId, normalizePhone } from './auth.js';
+import { registerAtomeRoutes, syncAtomeViaWebSocket } from './atomeRoutes.orm.js';
 import { registerSharingRoutes, handleShareMessage } from './sharing.js';
 import {
   initUserFiles,
@@ -187,7 +187,7 @@ const legacyUploadsDir = (() => {
 const VERSION_FILE = path.join(projectRoot, 'version.txt');
 let SERVER_VERSION = 'unknown';
 const SERVER_TYPE = 'Fastify';
-const syncEventBus = getABoxEventBus();
+const getSyncEventBus = () => getABoxEventBus();
 let fileSyncWatcherHandle = null;
 const recentErrors = [];
 const MAX_RECENT_ERRORS = 100;
@@ -225,6 +225,10 @@ const RECORDING_NAME_PREFIXES = [
   'video_recording_'
 ];
 const RECORDING_ATOME_TYPES = new Set(['audio_recording', 'video_recording']);
+const WS_DEDUPE_TTL_MS = 3000;
+const WS_ATOME_CREATE_DEDUPE_MS = 2000;
+const wsRecentRequestIds = new WeakMap();
+const wsRecentAtomeCreates = new Map();
 
 function looksLikeRecordingName(name) {
   const raw = typeof name === 'string' ? name.trim().toLowerCase() : '';
@@ -251,6 +255,41 @@ function logStructured(level, { source = 'fastify', component = 'server', reques
     const fallback = { ...payload, level, timestamp: new Date().toISOString(), message };
     process.stdout.write(`${JSON.stringify(fallback)}\n`);
   }
+}
+
+function isDuplicateWsRequest(connection, requestId) {
+  if (!connection || !requestId) return false;
+  const now = Date.now();
+  let cache = wsRecentRequestIds.get(connection);
+  if (!cache) {
+    cache = new Map();
+    wsRecentRequestIds.set(connection, cache);
+  }
+  const last = cache.get(requestId);
+  if (last && now - last < WS_DEDUPE_TTL_MS) return true;
+  cache.set(requestId, now);
+  if (cache.size > 200) {
+    for (const [id, ts] of cache) {
+      if (now - ts > WS_DEDUPE_TTL_MS) cache.delete(id);
+    }
+  }
+  return false;
+}
+
+function isDuplicateAtomeCreate(atomeId) {
+  if (!atomeId) return false;
+  const now = Date.now();
+  const last = wsRecentAtomeCreates.get(atomeId);
+  if (last && now - last < WS_ATOME_CREATE_DEDUPE_MS) return true;
+  wsRecentAtomeCreates.set(atomeId, now);
+  if (wsRecentAtomeCreates.size > 2000) {
+    for (const [id, ts] of wsRecentAtomeCreates) {
+      if (now - ts > WS_ATOME_CREATE_DEDUPE_MS * 2) {
+        wsRecentAtomeCreates.delete(id);
+      }
+    }
+  }
+  return false;
 }
 
 async function loadServerVersion() {
@@ -594,6 +633,9 @@ if (process.env.USE_HTTPS === 'true') {
 }
 
 const logLevel = process.env.LOG_LEVEL || 'info';
+const MINIMAL_LOGS =
+  process.env.SQUIRREL_MINIMAL_LOGS !== '0'
+  && process.env.SQUIRREL_MINIMAL_LOGS !== 'false';
 const logStreams = pino.multistream([
   { stream: process.stdout },
   { stream: pino.destination({ dest: FASTIFY_LOG_FILE, sync: false }) }
@@ -692,6 +734,7 @@ async function startServer() {
     });
 
     server.addHook('onResponse', async (request, reply) => {
+      if (MINIMAL_LOGS && reply.statusCode < 400) return;
       const durationMs = Date.now() - (request._requestStartMs || Date.now());
       logStructured('info', {
         component: 'http',
@@ -2328,15 +2371,42 @@ async function startServer() {
                   });
                   return;
                 }
-
-                // Check if user already exists
-                const existingUser = await findUserByPhone(dataSource, phone);
-                if (existingUser) {
+                if (typeof password !== 'string' || password.length < 8) {
                   safeSend({
                     type: 'auth-response',
                     requestId,
                     success: false,
-                    error: 'User with this phone already exists'
+                    error: 'Password must be at least 8 characters'
+                  });
+                  return;
+                }
+
+                const cleanPhone = normalizePhone(phone);
+                if (!cleanPhone || cleanPhone.length < 6) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Valid phone number is required'
+                  });
+                  return;
+                }
+
+                // Check if user already exists
+                const existingUser = await findUserByPhone(dataSource, cleanPhone);
+                if (existingUser) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: true,
+                    alreadyExists: true,
+                    user: {
+                      id: existingUser.user_id,
+                      user_id: existingUser.user_id,
+                      username: existingUser.username,
+                      phone: existingUser.phone
+                    },
+                    message: 'User already exists - ready to login'
                   });
                   return;
                 }
@@ -2344,11 +2414,33 @@ async function startServer() {
                 // Hash password and create user
                 // visibility: 'public' = visible in user_list (default), 'private' = hidden
                 const passwordHash = await hashPassword(password);
-                const userId = generateDeterministicUserId(phone);
-                await createUserAtome(dataSource, userId, username, phone, passwordHash, visibility || 'public', data.optional || {});
+                const userId = generateDeterministicUserId(cleanPhone);
+                try {
+                  await createUserAtome(dataSource, userId, username, cleanPhone, passwordHash, visibility || 'public', data.optional || {});
+                } catch (err) {
+                  const message = err?.message || String(err);
+                  if (message.includes('User already exists')) {
+                    safeSend({
+                      type: 'auth-response',
+                      requestId,
+                      success: true,
+                      alreadyExists: true,
+                      user: {
+                        id: userId,
+                        user_id: userId,
+                        username,
+                        phone: cleanPhone
+                      },
+                      message: 'User already exists - ready to login'
+                    });
+                    return;
+                  }
+                  throw err;
+                }
 
                 // Broadcast account creation for real-time directory sync (ws/sync)
                 try {
+                  const syncEventBus = getSyncEventBus();
                   if (syncEventBus) {
                     const now = new Date().toISOString();
                     syncEventBus.emit('event', {
@@ -2362,29 +2454,17 @@ async function startServer() {
                         optional: data.optional || {}
                       }
                     });
-
-                    // Legacy compatibility
-                    syncEventBus.emit('event', {
-                      type: 'sync:user-created',
-                      timestamp: now,
-                      runtime: 'Fastify',
-                      payload: {
-                        userId,
-                        username,
-                        phone,
-                        source: 'fastify'
-                      }
-                    });
                   }
                 } catch (_) { }
 
                 safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  userId,
-                  message: 'User created successfully'
-                });
+                    type: 'auth-response',
+                    requestId,
+                    success: true,
+                    alreadyExists: false,
+                    userId,
+                    message: 'User created successfully'
+                  });
               } else if (action === 'lookup-phone') {
                 const rawPhone = data.phone;
                 if (!rawPhone || typeof rawPhone !== 'string') {
@@ -2465,6 +2545,7 @@ async function startServer() {
 
                 // Broadcast account deletion for real-time directory sync
                 try {
+                  const syncEventBus = getSyncEventBus();
                   if (syncEventBus) {
                     const now = new Date().toISOString();
                     syncEventBus.emit('event', {
@@ -2727,7 +2808,17 @@ async function startServer() {
           // Handle atome requests (ADOLE v3.0 WebSocket-only)
           if (data.type === 'atome') {
             const action = data.action || '';
-            const requestId = data.requestId;
+            const requestId = data.requestId || data.request_id;
+            const mutatingActions = new Set(['create', 'update', 'alter', 'delete', 'soft-delete']);
+            if (requestId && mutatingActions.has(action) && isDuplicateWsRequest(connection, requestId)) {
+              safeSend({
+                type: 'atome-response',
+                requestId,
+                success: true,
+                duplicate: true
+              });
+              return;
+            }
 
             // Resolve requester identity:
             // - Prefer the attached ws identity (fast path)
@@ -2773,6 +2864,16 @@ async function startServer() {
               if (action === 'create') {
                 // Support multiple field names for ADOLE v3.0 compatibility
                 const atomeId = data.id || data.atomeId || data.atome_id || uuidv4();
+                if (isDuplicateAtomeCreate(atomeId)) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: true,
+                    duplicate: true,
+                    atome: { atome_id: atomeId }
+                  });
+                  return;
+                }
                 const atomeType = data.atomeType || data.atome_type || data.type || 'generic';
                 const parentId = data.parentId || data.parent_id || data.parent;
                 let ownerId = data.userId || data.ownerId || data.owner_id || data.owner;
@@ -2842,6 +2943,16 @@ async function startServer() {
                     senderUserId: requesterId,
                     senderConnection: connection
                   });
+                } catch (_) { }
+
+                try {
+                  syncAtomeViaWebSocket({
+                    atome_id: atomeId,
+                    atome_type: atomeType,
+                    parent_id: parentId || null,
+                    owner_id: ownerId || requesterId || null,
+                    particles
+                  }, 'create');
                 } catch (_) { }
 
                 safeSend({
@@ -3012,6 +3123,16 @@ async function startServer() {
                   await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
                 } catch (_) { }
 
+                try {
+                  syncAtomeViaWebSocket({
+                    atome_id: atomeId,
+                    atome_type: data.atomeType || data.atome_type || data.type || 'atome',
+                    parent_id: data.parentId || data.parent_id || null,
+                    owner_id: data.ownerId || data.owner_id || requesterId || null,
+                    particles
+                  }, 'update');
+                } catch (_) { }
+
                 safeSend({
                   type: 'atome-response',
                   requestId,
@@ -3064,6 +3185,16 @@ async function startServer() {
                   await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
                 } catch (_) { }
 
+                try {
+                  syncAtomeViaWebSocket({
+                    atome_id: atomeId,
+                    atome_type: data.atomeType || data.atome_type || data.type || 'atome',
+                    parent_id: data.parentId || data.parent_id || null,
+                    owner_id: data.ownerId || data.owner_id || requesterId || null,
+                    particles
+                  }, 'update');
+                } catch (_) { }
+
                 safeSend({
                   type: 'atome-response',
                   requestId,
@@ -3108,6 +3239,10 @@ async function startServer() {
                     senderUserId: requesterId,
                     senderConnection: connection
                   });
+                } catch (_) { }
+
+                try {
+                  syncAtomeViaWebSocket({ atome_id: atomeId }, 'delete');
                 } catch (_) { }
 
                 safeSend({
@@ -3486,8 +3621,18 @@ async function startServer() {
           console.log('🔗 Nouvelle connexion sync:', clientId);
         }
 
+        const allowLegacySyncPayload = process.env.SQUIRREL_SYNC_LEGACY_PAYLOAD === '1';
+
         // Helper for safe sending
         const safeSend = (payload) => wsSendJson(connection, payload, { scope: 'ws/sync', op: 'send' });
+        const safeSendEvent = (eventType, payload, timestamp = null) => {
+          safeSend({
+            type: 'event',
+            eventType,
+            payload,
+            timestamp: timestamp || new Date().toISOString()
+          });
+        };
 
         // Register client
         registerClient(clientId, connection, 'unknown');
@@ -3497,11 +3642,13 @@ async function startServer() {
         safeSend({
           type: 'welcome',
           clientId,
+          server: 'fastify',
           version: version.version,
           protectedPaths: version.protectedPaths || [],
           timestamp: new Date().toISOString(),
           watcherEnabled: Boolean(fileSyncWatcherHandle),
-          watcherConfig: fileSyncWatcherHandle?.config ?? null
+          watcherConfig: fileSyncWatcherHandle?.config ?? null,
+          capabilities: ['events', 'sync_request', 'file-events', 'atome-events', 'account-events']
         });
 
         // Forward selected sync events to this client.
@@ -3514,19 +3661,28 @@ async function startServer() {
 
           // File events (only meaningful if watcher is enabled)
           if (type === 'sync:file-event' || type === 'file-event') {
-            if (fileSyncWatcherHandle) safeSend(payload);
+            if (fileSyncWatcherHandle) {
+              safeSendEvent('sync:file-event', payload, payload.timestamp);
+              if (allowLegacySyncPayload) {
+                safeSend(payload);
+              }
+            }
             return;
           }
 
-          // Account events (always forward)
-          if (type === 'sync:account-created' || type === 'sync:account-deleted' || type === 'account-created' || type === 'account-deleted') {
-            safeSend(payload);
-            return;
-          }
-
-          // Legacy compatibility
-          if (type === 'sync:user-created' || type === 'sync:user-deleted') {
-            safeSend(payload);
+          // Account events (always forward) + legacy user aliases.
+          if (
+            type === 'sync:account-created' || type === 'sync:account-deleted'
+            || type === 'account-created' || type === 'account-deleted'
+            || type === 'sync:user-created' || type === 'sync:user-deleted'
+          ) {
+            let eventType = type.startsWith('sync:') ? type : `sync:${type}`;
+            if (eventType === 'sync:user-created') eventType = 'sync:account-created';
+            if (eventType === 'sync:user-deleted') eventType = 'sync:account-deleted';
+            safeSendEvent(eventType, payload, payload.timestamp);
+            if (allowLegacySyncPayload) {
+              safeSend(payload);
+            }
             return;
           }
 
@@ -3540,16 +3696,24 @@ async function startServer() {
                 : 'atome:updated';
             const atome = payload.atome || null;
             const atomeId = atome?.id || atome?.atome_id || payload.atomeId || null;
-            safeSend({
-              type: mapType,
-              atome,
-              atomeId,
-              timestamp: payload.timestamp || new Date().toISOString()
-            });
+            safeSendEvent(mapType, payload, payload.timestamp);
+            if (allowLegacySyncPayload) {
+              safeSend({
+                type: mapType,
+                atome,
+                atomeId,
+                timestamp: payload.timestamp || new Date().toISOString()
+              });
+            }
             return;
           }
         };
-        syncEventBus.on('event', fileEventForwarder);
+        const syncEventBus = getSyncEventBus();
+        if (syncEventBus) {
+          syncEventBus.on('event', fileEventForwarder);
+        } else if (process.env.WS_CONNECTION_DEBUG === '1') {
+          console.warn('⚠️ ws/sync event bus unavailable - realtime events disabled');
+        }
 
         connection.on('message', async (message) => {
           try {
@@ -3563,7 +3727,8 @@ async function startServer() {
         });
 
         connection.on('close', () => {
-          if (fileEventForwarder) {
+          const syncEventBus = getSyncEventBus();
+          if (fileEventForwarder && syncEventBus) {
             syncEventBus.off('event', fileEventForwarder);
           }
           unregisterClient(clientId);
@@ -3571,7 +3736,8 @@ async function startServer() {
 
         connection.on('error', (error) => {
           console.error('❌ Erreur WebSocket sync:', error);
-          if (fileEventForwarder) {
+          const syncEventBus = getSyncEventBus();
+          if (fileEventForwarder && syncEventBus) {
             syncEventBus.off('event', fileEventForwarder);
           }
           unregisterClient(clientId);

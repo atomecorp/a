@@ -294,40 +294,9 @@ import('./kickstart.js').then(async () => {
     if (!cloud || cloud.length < 10) {
       if (legacy && legacy.length > 10) {
         localStorage.setItem('cloud_auth_token', legacy);
-      } else {
-        const local = localStorage.getItem('local_auth_token');
-        if (local && local.length > 10) {
-          const isTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-          const host = window.location?.hostname || '';
-          const isTauriProd = isTauriRuntime && host === 'tauri.localhost';
-
-          let allowPromoteLocalToCloud = !isTauriRuntime; // browser-only default
-
-          if (isTauriRuntime && !isTauriProd) {
-            // In Tauri dev, local Fastify often shares auth with the local backend.
-            // Only promote local->cloud when Fastify target is clearly local.
-            const fastifyBase = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
-              ? window.__SQUIRREL_FASTIFY_URL__.trim()
-              : '';
-
-            if (!fastifyBase) {
-              allowPromoteLocalToCloud = true;
-            } else {
-              try {
-                const parsed = new URL(fastifyBase);
-                const fastifyHost = parsed.hostname;
-                allowPromoteLocalToCloud = (fastifyHost === '127.0.0.1' || fastifyHost === 'localhost' || fastifyHost === '0.0.0.0');
-              } catch {
-                allowPromoteLocalToCloud = false;
-              }
-            }
-          }
-
-          if (allowPromoteLocalToCloud) {
-            localStorage.setItem('cloud_auth_token', local);
-          }
-        }
       }
+      // Never promote local_auth_token to cloud_auth_token.
+      // Tauri and Fastify often use different JWT secrets, which causes 401s.
     }
   } catch (e) {
     // Ignore storage errors

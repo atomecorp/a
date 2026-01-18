@@ -178,6 +178,13 @@ function getFastifyHttpBaseUrl() {
         return custom.trim().replace(/\/$/, '');
     }
 
+    // In Tauri mode, default to local Fastify on port 3001
+    if (isInTauri()) {
+        const config = window.__SQUIRREL_SERVER_CONFIG__;
+        const port = config?.fastify?.port || 3001;
+        return `http://127.0.0.1:${port}`;
+    }
+
     const loc = window.location;
     if (loc && loc.hostname && loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
         return loc.origin;
@@ -426,7 +433,41 @@ export function generateClientId() {
  */
 export function getToken(key) {
     if (typeof localStorage !== 'undefined') {
-        return localStorage.getItem(key);
+        const token = localStorage.getItem(key);
+        if (token) return token;
+
+        const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
+        const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
+        if (key === localKey) {
+            const fallback = localStorage.getItem(cloudKey) || localStorage.getItem('auth_token');
+            if (fallback) {
+                localStorage.setItem(localKey, fallback);
+                return fallback;
+            }
+        }
+
+        if (key === cloudKey) {
+            const fallback = localStorage.getItem(localKey) || localStorage.getItem('auth_token');
+            if (fallback) {
+                localStorage.setItem(cloudKey, fallback);
+                return fallback;
+            }
+        }
+
+        if (key === CONFIG.FASTIFY_TOKEN_KEY || key === 'cloud_auth_token') {
+            const legacy = localStorage.getItem('auth_token');
+            if (legacy) {
+                localStorage.setItem(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
+                return legacy;
+            }
+        }
+
+        if (key !== localKey && key !== cloudKey) {
+            const fallback = localStorage.getItem(localKey)
+                || localStorage.getItem(cloudKey)
+                || localStorage.getItem('auth_token');
+            if (fallback) return fallback;
+        }
     }
     return null;
 }
@@ -1062,7 +1103,29 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     visibility: data.visibility || 'public', // 'public' (default) or 'private'
                     optional: data.optional || undefined
                 });
-                if (result.token) setToken(tokenKey, result.token);
+                if (result.token) {
+                    setToken(tokenKey, result.token);
+                    // Save credentials for Fastify login (needed for real-time sync)
+                    try {
+                        if (typeof localStorage !== 'undefined' && data.phone && data.password) {
+                            localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
+                                phone: String(data.phone),
+                                password: String(data.password),
+                                savedAt: new Date().toISOString()
+                            }));
+                            console.log('[Auth] Credentials saved for Fastify sync (register)');
+                            // Immediately attempt to get Fastify token for real-time sync
+                            if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
+                                window.AdoleAPI.auth.ensureFastifyToken().then(r => {
+                                    if (r?.ok) console.log('[Auth] Fastify token obtained after register');
+                                    else console.warn('[Auth] Fastify token not obtained:', r?.reason);
+                                }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[Auth] Failed to save credentials for Fastify sync:', e);
+                    }
+                }
                 return result;
             },
             async bootstrap(data) {
@@ -1075,7 +1138,29 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     visibility: data.visibility || 'public',
                     optional: data.optional || undefined
                 });
-                if (result.token) setToken(tokenKey, result.token);
+                if (result.token) {
+                    setToken(tokenKey, result.token);
+                    // Save credentials for Fastify login (needed for real-time sync)
+                    try {
+                        if (typeof localStorage !== 'undefined' && data.phone && data.password) {
+                            localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
+                                phone: String(data.phone),
+                                password: String(data.password),
+                                savedAt: new Date().toISOString()
+                            }));
+                            console.log('[Auth] Credentials saved for Fastify sync');
+                            // Immediately attempt to get Fastify token for real-time sync
+                            if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
+                                window.AdoleAPI.auth.ensureFastifyToken().then(r => {
+                                    if (r?.ok) console.log('[Auth] Fastify token obtained after bootstrap');
+                                    else console.warn('[Auth] Fastify token not obtained:', r?.reason);
+                                }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[Auth] Failed to save credentials for Fastify sync:', e);
+                    }
+                }
                 return result;
             },
             async login(data) {
@@ -1085,7 +1170,29 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     phone: data.phone,
                     password: data.password
                 });
-                if (result.token) setToken(tokenKey, result.token);
+                if (result.token) {
+                    setToken(tokenKey, result.token);
+                    // Save credentials for Fastify login (needed for real-time sync)
+                    try {
+                        if (typeof localStorage !== 'undefined' && data.phone && data.password) {
+                            localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
+                                phone: String(data.phone),
+                                password: String(data.password),
+                                savedAt: new Date().toISOString()
+                            }));
+                            console.log('[Auth] Credentials saved for Fastify sync (login)');
+                            // Immediately attempt to get Fastify token for real-time sync
+                            if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
+                                window.AdoleAPI.auth.ensureFastifyToken().then(r => {
+                                    if (r?.ok) console.log('[Auth] Fastify token obtained after login');
+                                    else console.warn('[Auth] Fastify token not obtained:', r?.reason);
+                                }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[Auth] Failed to save credentials for Fastify sync:', e);
+                    }
+                }
                 return result;
             },
             async logout() {
@@ -1148,6 +1255,9 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     parent_id: data.parentId || data.parent,
                     particles: properties
                 };
+                if (data && Object.prototype.hasOwnProperty.call(data, 'sync')) {
+                    payload.sync = data.sync;
+                }
                 if (ownerId) {
                     payload.userId = ownerId;
                     payload.ownerId = ownerId;

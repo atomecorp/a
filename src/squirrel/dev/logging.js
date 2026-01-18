@@ -10,18 +10,11 @@ const FASTIFY_FALLBACK = 'http://127.0.0.1:3001';
 const SESSION_KEY = 'atome_session_id';
 const MAX_ARG_STRING = 2000;
 const DEFAULT_LOG_ALLOWLIST = [
-  /Tone\.js v\d+/,
-  '[Atome] Config:',
-  '[Squirrel] Error handlers installed',
-  '[Squirrel] AdoleAPI v3.0 loaded globally',
-  'Current platform:',
-  /^Squirrel\s+\d+/,
-  /^Server\s+\d+/,
-  '[Squirrel] server_config.json loaded',
-  '[Squirrel] __SQUIRREL_FASTIFY_URL__:',
-  '[Squirrel] __SQUIRREL_FASTIFY_WS_API_URL__:',
-  '[Squirrel] __SQUIRREL_FASTIFY_WS_SYNC_URL__:',
-  /\[sync_atomes\]/
+  /\[SyncDebug\]/,
+  /\[SyncCommit\]/,
+  /\[SyncWS\]/,
+  /\[SyncAuth\]/,
+  /\[AtomeSync\]/
 ];
 
 function isTauriRuntime() {
@@ -150,6 +143,12 @@ function shouldAllowConsoleLog(level, args) {
   });
 }
 
+function shouldPrintConsole(level, args) {
+  if (!isStrictLogFilter()) return true;
+  if (level === 'error' || level === 'warn') return true;
+  return shouldAllowConsoleLog(level, args);
+}
+
 async function sendToFastify(payload) {
   const base = resolveFastifyBase();
   const url = `${base}${LOG_ENDPOINT}`;
@@ -224,6 +223,7 @@ function installConsoleWrapper() {
     console[method] = (...args) => {
       const level = method === 'log' ? 'info' : method;
       if (!shouldLogLevel(level)) return;
+      if (!shouldPrintConsole(level, args)) return;
       original[method](...args);
       if (!shouldAllowConsoleLog(level, args)) {
         return;

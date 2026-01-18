@@ -2238,16 +2238,62 @@ async fn ws_sync_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
 async fn handle_ws_sync(mut socket: WebSocket) {
     println!("🔗 New WebSocket sync connection");
 
-    // Send welcome message
+    let now_iso = || chrono::Utc::now().to_rfc3339();
+    let build_welcome = |client_id: Option<String>| {
+        json!({
+            "type": "welcome",
+            "clientId": client_id.unwrap_or_else(|| "unknown".to_string()),
+            "server": "axum",
+            "version": "1.0.0",
+            "capabilities": ["events", "sync_request", "file-events", "atome-events", "account-events"],
+            "timestamp": now_iso()
+        })
+    };
+    let wrap_event_payload = |payload: &JsonValue| {
+        let event_type = payload
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if event_type == "event" {
+            return payload.clone();
+        }
+
+        let mut mapped_event = event_type.to_string();
+        if event_type == "atome-sync" {
+            let op = payload
+                .get("operation")
+                .and_then(|v| v.as_str())
+                .unwrap_or("update")
+                .to_lowercase();
+            mapped_event = if op == "create" {
+                "atome:created".to_string()
+            } else if op == "delete" {
+                "atome:deleted".to_string()
+            } else {
+                "atome:updated".to_string()
+            };
+        } else if event_type == "file-event" {
+            mapped_event = "sync:file-event".to_string();
+        } else if event_type == "account-created" || event_type == "account-deleted" {
+            mapped_event = format!("sync:{}", event_type);
+        } else if event_type == "sync:user-created" {
+            mapped_event = "sync:account-created".to_string();
+        } else if event_type == "sync:user-deleted" {
+            mapped_event = "sync:account-deleted".to_string();
+        }
+
+        json!({
+            "type": "event",
+            "eventType": mapped_event,
+            "payload": payload,
+            "timestamp": payload.get("timestamp").cloned().unwrap_or_else(|| json!(now_iso()))
+        })
+    };
+
+    // Send welcome message (immediate)
     let _ = socket
-        .send(Message::Text(
-            json!({
-                "type": "connected",
-                "server": "Tauri",
-                "version": "1.0.0"
-            })
-            .to_string(),
-        ))
+        .send(Message::Text(build_welcome(None).to_string()))
         .await;
 
     let mut sync_rx = sync_event_sender().subscribe();
@@ -2272,12 +2318,12 @@ async fn handle_ws_sync(mut socket: WebSocket) {
                         // Handle ping
                         if data.get("type").and_then(|v| v.as_str()) == Some("ping") {
                             let _ = ws_sender
-                                .send(Message::Text(json!({"type": "pong"}).to_string()))
+                                .send(Message::Text(json!({"type": "pong", "timestamp": now_iso()}).to_string()))
                                 .await;
                             continue;
                         }
 
-                        // Handle heartbeat
+                        // Handle heartbeat (legacy)
                         if data.get("type").and_then(|v| v.as_str()) == Some("heartbeat") {
                             let _ = ws_sender
                                 .send(Message::Text(json!({"type": "heartbeat_ack"}).to_string()))
@@ -2285,11 +2331,33 @@ async fn handle_ws_sync(mut socket: WebSocket) {
                             continue;
                         }
 
-                        // Echo other messages for now
+                        // Handle register (preferred)
+                        if data.get("type").and_then(|v| v.as_str()) == Some("register") {
+                            let client_id = data
+                                .get("clientId")
+                                .and_then(|v| v.as_str())
+                                .map(|v| v.to_string());
+                            let _ = ws_sender
+                                .send(Message::Text(build_welcome(client_id).to_string()))
+                                .await;
+                            continue;
+                        }
+
+                        // Handle sync_request (offline/local)
+                        if data.get("type").and_then(|v| v.as_str()) == Some("sync_request") {
+                            let _ = ws_sender
+                                .send(Message::Text(json!({
+                                    "type": "sync_started",
+                                    "mode": "local",
+                                    "timestamp": now_iso()
+                                }).to_string()))
+                                .await;
+                            continue;
+                        }
+
+                        // Echo other messages for now (legacy ack)
                         let _ = ws_sender
-                            .send(Message::Text(
-                                json!({"type": "ack", "received": data}).to_string(),
-                            ))
+                            .send(Message::Text(json!({"type": "ack", "received": data}).to_string()))
                             .await;
                     }
                     Message::Ping(data) => {
@@ -2302,6 +2370,8 @@ async fn handle_ws_sync(mut socket: WebSocket) {
             sync_msg = sync_rx.recv() => {
                 match sync_msg {
                     Ok(payload) => {
+                        let wrapped = wrap_event_payload(&payload);
+                        let _ = ws_sender.send(Message::Text(wrapped.to_string())).await;
                         let _ = ws_sender.send(Message::Text(payload.to_string())).await;
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => {

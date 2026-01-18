@@ -1,4 +1,5 @@
 const REALTIME_DEDUP_WINDOW_MS = 5000;
+const SELF_PATCH_TTL_MS = 3000;
 const REALTIME_KEYS = [
     'left',
     'top',
@@ -28,6 +29,51 @@ const REALTIME_KEYS = [
 ];
 
 const dedupMap = new Map();
+const selfPatchMap = new Map();
+
+const getCurrentUserId = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const api = window.AdoleAPI;
+        if (api?.auth?.getCurrentInfo) {
+            const info = api.auth.getCurrentInfo();
+            return info?.user_id || info?.userId || info?.id || info?.atome_id || null;
+        }
+    } catch (_) { }
+    return null;
+};
+
+export function rememberSelfPatch(atomeId, fingerprint) {
+    if (!atomeId || !fingerprint) return;
+    const key = `${atomeId}:${fingerprint}`;
+    selfPatchMap.set(key, Date.now());
+    if (selfPatchMap.size > 500) {
+        const now = Date.now();
+        for (const [k, ts] of selfPatchMap.entries()) {
+            if (now - ts > SELF_PATCH_TTL_MS * 2) selfPatchMap.delete(k);
+        }
+    }
+}
+
+export function isSelfPatch(atomeId, fingerprint) {
+    if (!atomeId || !fingerprint) return false;
+    const key = `${atomeId}:${fingerprint}`;
+    const ts = selfPatchMap.get(key);
+    if (!ts) return false;
+    const now = Date.now();
+    if (now - ts > SELF_PATCH_TTL_MS) {
+        selfPatchMap.delete(key);
+        return false;
+    }
+    return true;
+}
+
+export function isFromCurrentUser(authorId) {
+    if (!authorId) return false;
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) return false;
+    return String(authorId) === String(currentUserId);
+}
 
 const normalizeValue = (value) => {
     if (value == null) return null;
@@ -100,10 +146,20 @@ const buildFingerprint = (payload) => {
     return JSON.stringify(Object.fromEntries(entries));
 };
 
-export function shouldIgnoreRealtimePatch(atomeId, payload) {
+export function shouldIgnoreRealtimePatch(atomeId, payload, options = {}) {
     if (!atomeId) return false;
+    
+    const authorId = options.authorId || payload?.authorId || payload?.author_id || null;
+    if (authorId && isFromCurrentUser(authorId)) {
+        return true;
+    }
+    
     const fingerprint = buildFingerprint(payload);
     if (!fingerprint) return false;
+    
+    if (isSelfPatch(atomeId, fingerprint)) {
+        return true;
+    }
 
     const now = Date.now();
     const key = `${atomeId}:${fingerprint}`;
@@ -123,6 +179,9 @@ export function shouldIgnoreRealtimePatch(atomeId, payload) {
     return false;
 }
 
+export { buildFingerprint };
+
 export function resetRealtimeDedup() {
     dedupMap.clear();
+    selfPatchMap.clear();
 }

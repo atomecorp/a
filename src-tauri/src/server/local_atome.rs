@@ -11,7 +11,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet, VecDeque},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -24,6 +24,8 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct LocalAtomeState {
     pub db: Arc<Mutex<Connection>>,
+    pub recent_request_ids: Arc<Mutex<DedupeCache>>,
+    pub recent_fingerprints: Arc<Mutex<FingerprintCache>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -63,6 +65,132 @@ pub struct WsResponse {
     pub atomes: Option<Vec<AtomeData>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<i64>,
+}
+
+pub(crate) struct DedupeCache {
+    order: VecDeque<String>,
+    set: HashSet<String>,
+    limit: usize,
+}
+
+impl DedupeCache {
+    fn new(limit: usize) -> Self {
+        Self {
+            order: VecDeque::new(),
+            set: HashSet::new(),
+            limit,
+        }
+    }
+
+    fn is_duplicate(&mut self, key: &str) -> bool {
+        if key.is_empty() {
+            return false;
+        }
+        if self.set.contains(key) {
+            return true;
+        }
+        self.set.insert(key.to_string());
+        self.order.push_back(key.to_string());
+        while self.order.len() > self.limit {
+            if let Some(oldest) = self.order.pop_front() {
+                self.set.remove(&oldest);
+            }
+        }
+        false
+    }
+}
+
+pub(crate) struct FingerprintCache {
+    order: VecDeque<(String, i64)>,
+    map: HashMap<String, i64>,
+    limit: usize,
+    ttl_ms: i64,
+}
+
+impl FingerprintCache {
+    fn new(limit: usize, ttl_ms: i64) -> Self {
+        Self {
+            order: VecDeque::new(),
+            map: HashMap::new(),
+            limit,
+            ttl_ms,
+        }
+    }
+
+    fn was_seen(&mut self, key: &str, now_ms: i64) -> bool {
+        self.prune(now_ms);
+        self.map
+            .get(key)
+            .map(|ts| now_ms - *ts <= self.ttl_ms)
+            .unwrap_or(false)
+    }
+
+    fn remember(&mut self, key: &str, now_ms: i64) {
+        self.prune(now_ms);
+        self.map.insert(key.to_string(), now_ms);
+        self.order.push_back((key.to_string(), now_ms));
+        while self.map.len() > self.limit {
+            if let Some((oldest, ts)) = self.order.pop_front() {
+                if self.map.get(&oldest) == Some(&ts) {
+                    self.map.remove(&oldest);
+                }
+            }
+        }
+    }
+
+    fn prune(&mut self, now_ms: i64) {
+        while let Some((key, ts)) = self.order.front().cloned() {
+            if now_ms - ts <= self.ttl_ms && self.map.len() <= self.limit {
+                break;
+            }
+            self.order.pop_front();
+            if self.map.get(&key) == Some(&ts) {
+                self.map.remove(&key);
+            }
+        }
+    }
+}
+
+fn sync_debug_enabled() -> bool {
+    std::env::var("SYNC_DEBUG")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn sync_debug(message: &str) {
+    if sync_debug_enabled() {
+        println!("[SyncDebug] {}", message);
+    }
+}
+
+fn should_dedupe_request_id(state: &LocalAtomeState, request_id: &Option<String>) -> bool {
+    let Some(id) = request_id.as_deref() else {
+        return false;
+    };
+    let mut cache = match state.recent_request_ids.lock() {
+        Ok(cache) => cache,
+        Err(_) => return false,
+    };
+    cache.is_duplicate(id)
+}
+
+fn create_fingerprint(
+    atome_id: &str,
+    atome_type: &str,
+    parent_id: Option<&str>,
+    owner_id: &str,
+    data: &JsonValue,
+) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    atome_id.hash(&mut hasher);
+    atome_type.hash(&mut hasher);
+    parent_id.unwrap_or("").hash(&mut hasher);
+    owner_id.hash(&mut hasher);
+    serde_json::to_string(data).unwrap_or_default().hash(&mut hasher);
+    format!("{:x}", hasher.finish())
 }
 
 // =============================================================================
@@ -410,6 +538,24 @@ pub async fn handle_atome_message(
         .and_then(|v| v.as_str())
         .map(String::from);
 
+    if matches!(action, "create" | "update" | "delete" | "soft-delete" | "alter") {
+        if should_dedupe_request_id(state, &request_id) {
+            sync_debug(&format!(
+                "dedupe request_id action={} request_id={:?} user_id={}",
+                action, request_id, user_id
+            ));
+            return WsResponse {
+                msg_type: "atome-response".into(),
+                request_id,
+                success: true,
+                error: None,
+                data: None,
+                atomes: None,
+                count: None,
+            };
+        }
+    }
+
     match action {
         "create" => handle_create(message, user_id, state, request_id).await,
         "get" => handle_get(message, user_id, state, request_id).await,
@@ -443,6 +589,24 @@ pub async fn handle_events_message(
         .get("requestId")
         .and_then(|v| v.as_str())
         .map(String::from);
+
+    if matches!(action, "commit" | "commit-batch") {
+        if should_dedupe_request_id(state, &request_id) {
+            sync_debug(&format!(
+                "dedupe events action={} request_id={:?} user_id={}",
+                action, request_id, user_id
+            ));
+            return WsResponse {
+                msg_type: "events-response".into(),
+                request_id,
+                success: true,
+                error: None,
+                data: None,
+                atomes: None,
+                count: None,
+            };
+        }
+    }
 
     match action {
         "commit" => handle_event_commit(message, user_id, state, request_id).await,
@@ -496,12 +660,6 @@ async fn handle_create(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    // Debug: print received message
-    println!(
-        "[Create Debug] Received message: {}",
-        serde_json::to_string_pretty(&message).unwrap_or_default()
-    );
-
     // Support multiple field names for ID: id, atomeId, atome_id
     let atome_id = message
         .get("id")
@@ -510,8 +668,6 @@ async fn handle_create(
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-    println!("[Create Debug] Using atome_id: {}", atome_id);
 
     // Support multiple field names for type: atomeType, atome_type
     let atome_type = message
@@ -543,17 +699,56 @@ async fn handle_create(
         .cloned()
         .unwrap_or(serde_json::json!({}));
     let now = Utc::now().to_rfc3339();
+    let now_ms = Utc::now().timestamp_millis();
 
     let db = match state.db.lock() {
         Ok(d) => d,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
+    let sync_mode = message
+        .get("sync")
+        .and_then(|v| v.as_bool())
+        .or_else(|| {
+            message
+                .get("sync")
+                .and_then(|v| v.as_str())
+                .map(|s| s.eq_ignore_ascii_case("true") || s == "1")
+        })
+        .unwrap_or(false);
+
     if let Some(parent) = parent_id {
-        if !can_create(&db, parent, user_id) {
+        if !can_create(&db, parent, user_id) && !sync_mode {
             return error_response(request_id, "Access denied");
         }
     }
+
+    let fingerprint = create_fingerprint(&atome_id, atome_type, parent_id, owner_id, &data);
+    if let Ok(mut cache) = state.recent_fingerprints.lock() {
+        if cache.was_seen(&fingerprint, now_ms) {
+            sync_debug(&format!(
+                "dedupe create payload atome_id={} request_id={:?} user_id={}",
+                atome_id, request_id, user_id
+            ));
+            let existing = load_atome(&db, &atome_id, None)
+                .ok()
+                .map(|atome| serde_json::to_value(&atome).unwrap());
+            return WsResponse {
+                msg_type: "atome-response".into(),
+                request_id,
+                success: true,
+                error: None,
+                data: existing,
+                atomes: None,
+                count: None,
+            };
+        }
+    }
+
+    sync_debug(&format!(
+        "create atome_id={} type={} owner_id={} sync={} request_id={:?}",
+        atome_id, atome_type, owner_id, sync_mode, request_id
+    ));
 
     // Insert or replace atome (upsert for sync operations)
     // Uses owner_id from message if provided, otherwise uses the logged-in user
@@ -623,11 +818,11 @@ async fn handle_create(
                  VALUES (?1, ?2, ?3, ?4, ?5, COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?1), ?6), ?6, NULL, 'tauri', 'pending')",
                 rusqlite::params![&atome_id, atome_type, parent_id_null, owner_id_null, user_id, &now],
             ) {
-                println!("[Create Debug] Insert error: {}", e2);
+                eprintln!("[Create Debug] Insert error: {}", e2);
                 return error_response(request_id, &e2.to_string());
             }
         } else {
-            println!("[Create Debug] Insert error: {}", e);
+            eprintln!("[Create Debug] Insert error: {}", e);
             return error_response(request_id, &e.to_string());
         }
     }
@@ -656,15 +851,15 @@ async fn handle_create(
     if let Ok(summary) = resolve_pending_references(&db) {
         if summary.total > 0 {
             if summary.failed > 0 {
-                println!(
+                sync_debug(&format!(
                     "[Create Debug] Pending references resolved: {} ok, {} failed ({} total)",
                     summary.resolved, summary.failed, summary.total
-                );
+                ));
             } else if summary.resolved > 0 {
-                println!(
+                sync_debug(&format!(
                     "[Create Debug] Resolved {} pending references",
                     summary.resolved
-                );
+                ));
             }
         }
     }
@@ -695,21 +890,25 @@ async fn handle_create(
     if let Err(err) =
         upsert_state_current_from_patch(&db, &atome_id, atome_type, parent_id, patch, &now)
     {
-        println!("[Create Debug] state_current update failed: {}", err);
+        eprintln!("[Create Debug] state_current update failed: {}", err);
     }
 
     if let Some(parent) = parent_id {
         if let Err(err) =
             inherit_permissions_from_parent(&db, parent, &atome_id, Some(owner_id), user_id)
         {
-            println!("[Create Debug] Permission inheritance failed: {}", err);
+            eprintln!("[Create Debug] Permission inheritance failed: {}", err);
         }
     }
 
-    println!(
-        "[Create Debug] Successfully created/updated atome: {} with owner: {}",
+    if let Ok(mut cache) = state.recent_fingerprints.lock() {
+        cache.remember(&fingerprint, now_ms);
+    }
+
+    sync_debug(&format!(
+        "create upserted atome_id={} owner_id={}",
         atome_id, owner_id
-    );
+    ));
 
     let atome = AtomeData {
         atome_id: atome_id.clone(),
@@ -3019,5 +3218,7 @@ pub fn create_state(data_dir: PathBuf) -> LocalAtomeState {
     let conn = init_database(&data_dir).expect("Failed to initialize ADOLE database");
     LocalAtomeState {
         db: Arc::new(Mutex::new(conn)),
+        recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(2000))),
+        recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(5000, 750))),
     }
 }

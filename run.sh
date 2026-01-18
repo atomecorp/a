@@ -12,6 +12,9 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 
+# Dev-only: shared JWT secret so Tauri + Fastify accept the same tokens.
+DEV_SHARED_JWT_SECRET="squirrel_dev_shared_jwt_secret_change_me"
+
 # Guardrail: on production servers, running ./run.sh with no arguments starts dev mode
 # (foreground processes + dependency installs). This is almost always accidental and
 # will stop when the SSH terminal closes. Use service commands instead.
@@ -125,6 +128,35 @@ load_env_file() {
 
 load_env_file "$PROJECT_ROOT/.env"
 load_env_file "$PROJECT_ROOT/.env.local"
+
+write_jwt_secret_to_env() {
+    local secret="$1"
+    local env_file="$PROJECT_ROOT/.env"
+    local tmp
+
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' RETURN
+
+    if [[ -f "$env_file" ]]; then
+        grep -v '^JWT_SECRET=' "$env_file" >"$tmp" || true
+    else
+        : >"$tmp"
+    fi
+
+    printf 'JWT_SECRET=%s\n' "$secret" >>"$tmp"
+    mv "$tmp" "$env_file"
+    trap - RETURN
+
+    chmod 600 "$env_file" 2>/dev/null || true
+}
+
+ensure_dev_jwt_secret() {
+    if [[ -z "${JWT_SECRET:-}" ]]; then
+        export JWT_SECRET="$DEV_SHARED_JWT_SECRET"
+        write_jwt_secret_to_env "$JWT_SECRET"
+        echo "🔐 JWT_SECRET absent: secret dev partagé écrit dans .env pour Tauri + Fastify."
+    fi
+}
 
 prepare_uploads_dir() {
     local raw="${SQUIRREL_UPLOADS_DIR:-}"
@@ -651,6 +683,7 @@ fi
 
 # Mode --server uniquement (pas de Tauri)
 if [ "$SERVER_ONLY" = true ]; then
+    ensure_dev_jwt_secret
     echo "📡 Mode serveur uniquement (Fastify sur port 3001)"
     echo "📂 Répertoire: $(pwd)"
     echo "🔧 Node.js: $(node --version)"
@@ -679,6 +712,7 @@ fi
 
 # Mode --tauri uniquement (pas de Fastify local)
 if [ "$TAURI_ONLY" = true ]; then
+    ensure_dev_jwt_secret
     echo "🖥️  Mode Tauri uniquement (Axum sur port 3000)"
     echo "📂 Répertoire: $(pwd)"
     echo "🔧 Node.js: $(node --version)"
@@ -756,6 +790,7 @@ fi
 # =============================================================================
 
 echo "🚀 Mode complet: Tauri (port 3000) + Fastify (port 3001)"
+ensure_dev_jwt_secret
 echo "📂 Répertoire: $(pwd)"
 echo "🔧 Node.js: $(node --version)"
 echo "📦 NPM: $(npm --version)"

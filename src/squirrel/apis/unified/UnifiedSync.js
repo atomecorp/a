@@ -13,7 +13,8 @@
  * This module intentionally replaces legacy sync and command modules.
  */
 
-import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
+import { shouldIgnoreRealtimePatch, rememberSelfPatch, buildFingerprint, isFromCurrentUser } from './realtime_dedupe.js';
+import { TauriAdapter } from './adole.js';
 
 // =============================================================================
 // CONSTANTS
@@ -128,7 +129,14 @@ const resolveTauriWsApiUrl = () => {
 
 const getFastifyToken = () => {
     try {
-        return localStorage.getItem('cloud_auth_token') || '';
+        const cloud = localStorage.getItem('cloud_auth_token');
+        if (cloud) return cloud;
+        const legacy = localStorage.getItem('auth_token');
+        if (legacy) {
+            localStorage.setItem('cloud_auth_token', legacy);
+            return legacy;
+        }
+        return '';
     } catch (_) {
         return '';
     }
@@ -166,6 +174,31 @@ const writeQueue = (queue) => {
     try {
         localStorage.setItem(STORAGE_KEYS.queue, JSON.stringify(queue));
     } catch (_) { }
+};
+
+const MIRROR_CREATE_TTL_MS = 5000;
+const mirrorCreateSeen = new Map();
+
+const shouldSkipMirrorCreate = (atomeId) => {
+    if (!atomeId) return true;
+    const now = Date.now();
+    for (const [id, ts] of mirrorCreateSeen.entries()) {
+        if (now - ts > MIRROR_CREATE_TTL_MS) mirrorCreateSeen.delete(id);
+    }
+    const ts = mirrorCreateSeen.get(atomeId);
+    return typeof ts === 'number' && (now - ts) <= MIRROR_CREATE_TTL_MS;
+};
+
+const rememberMirrorCreate = (atomeId) => {
+    if (!atomeId) return;
+    mirrorCreateSeen.set(atomeId, Date.now());
+};
+
+const isAlreadyExistsError = (payload) => {
+    if (!payload) return false;
+    if (payload.alreadyExists === true) return true;
+    const msg = String(payload.error || payload.message || payload).toLowerCase();
+    return msg.includes('already') || msg.includes('exists') || msg.includes('registered');
 };
 
 // =============================================================================
@@ -323,6 +356,16 @@ class WsClient {
                 }
                 return;
             }
+        }
+        if (payload.type === 'event' && payload.eventType) {
+            const base = payload.payload && typeof payload.payload === 'object' ? payload.payload : {};
+            const eventPayload = {
+                ...base,
+                type: payload.eventType,
+                timestamp: base.timestamp || payload.timestamp || new Date().toISOString()
+            };
+            this.emit(eventPayload);
+            return;
         }
 
         this.emit(payload);
@@ -544,10 +587,40 @@ const connectRealtime = async (options = {}) => {
             dispatchAtomeEvent('squirrel:atome-created', payload);
             const { atomeId, properties } = normalizeAtomePayload(payload);
             if (properties) applyAtomePatchToDom(atomeId, properties);
+
+            if (runtime === 'tauri' && atomeId && !shouldSkipMirrorCreate(atomeId)) {
+                const { atome } = normalizeAtomePayload(payload);
+                const atomeType = atome?.atome_type || atome?.type || payload.atomeType || payload.atome_type || 'atome';
+                const parentId = atome?.parent_id || atome?.parentId || null;
+                const ownerId = atome?.owner_id || atome?.ownerId || null;
+                const particles = properties || atome?.particles || atome?.properties || atome?.data || null;
+
+                rememberMirrorCreate(atomeId);
+                if (TauriAdapter?.getToken?.()) {
+                    TauriAdapter.atome.create({
+                        id: atomeId,
+                        type: atomeType,
+                        parentId,
+                        ownerId,
+                        properties: particles || {},
+                        sync: true
+                    }).then((res) => {
+                        if (res && (res.ok || res.success || isAlreadyExistsError(res))) return;
+                        mirrorCreateSeen.delete(atomeId);
+                    }).catch(() => {
+                        mirrorCreateSeen.delete(atomeId);
+                    });
+                }
+            }
         }
         if (payload.type === 'atome:updated' || payload.type === 'atome:altered') {
             const { atomeId, properties } = normalizeAtomePayload(payload);
-            if (properties && shouldIgnoreRealtimePatch(atomeId, properties)) {
+            const authorId = payload.authorId || payload.author_id 
+                || payload.params?.authorId || payload.params?.author_id || null;
+            if (authorId && isFromCurrentUser(authorId)) {
+                return;
+            }
+            if (properties && shouldIgnoreRealtimePatch(atomeId, properties, { authorId })) {
                 return;
             }
             dispatchAtomeEvent('squirrel:atome-updated', payload);

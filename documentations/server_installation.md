@@ -176,6 +176,7 @@ Assuming `PORT=3001` (default):
 * `ws://localhost:3001/ws/sync` - sync events WebSocket
 
 For detailed API and WebSocket usage examples, see `server/README.md`.
+For the minimal shared `/ws/sync` protocol, see `documentations/sync_protocol.md`.
 
 ### Manual Service Management (Advanced)
 
@@ -284,6 +285,12 @@ AiS emulates these Fastify routes for compatibility:
 ### Data Persistence
 
 **Important**: AUV3 extensions use **non-persistent WebView storage** (`WKWebsiteDataStore.nonPersistent()`).
+
+### Realtime Sync (AiS + Fastify)
+
+- AiS should expose `/ws/sync` using the same protocol as Axum (see `documentations/sync_protocol.md`).
+- Fastify remains the reference server; AiS should relay realtime sync to/from Fastify when network is available.
+- When offline, AiS remains the local read/write authority and replays changes once Fastify is reachable.
 
 This means:
 
