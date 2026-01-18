@@ -161,6 +161,7 @@ pub async fn handle_auth_message(
         "delete" => handle_delete(message, state, request_id).await,
         "save-fastify-token" => handle_save_fastify_token(message, state, request_id).await,
         "get-fastify-token" => handle_get_fastify_token(message, state, request_id).await,
+        "delete-fastify-token" => handle_delete_fastify_token(message, state, request_id).await,
         _ => error_response(request_id, &format!("Unknown action: {}", action)),
     }
 }
@@ -1513,25 +1514,91 @@ async fn handle_get_fastify_token(
     }
 }
 
+/// Delete the stored Fastify token for the user associated with the provided local token
+async fn handle_delete_fastify_token(
+    message: serde_json::Value,
+    state: &LocalAuthState,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let local_token = match message.get("token").and_then(|v| v.as_str()) {
+        Some(t) => t,
+        _ => return error_response(request_id, "Local token is required"),
+    };
+
+    // Verify the local token and get user ID
+    let claims = match verify_token(&state.jwt_secret, local_token) {
+        Ok(c) => c,
+        Err(e) => return error_response(request_id, &format!("Invalid token: {}", e)),
+    };
+
+    let user_id = claims.sub;
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    // Delete the particle storing the Fastify token
+    match db.execute(
+        "DELETE FROM particles WHERE atome_id = ?1 AND particle_key = 'fastify_token'",
+        rusqlite::params![&user_id],
+    ) {
+        Ok(_) => {
+            println!(
+                "[Auth] Fastify token cleared for user {}",
+                &user_id[..8.min(user_id.len())]
+            );
+            AuthResponse {
+                msg_type: "auth-response".into(),
+                request_id,
+                success: true,
+                already_exists: None,
+                error: None,
+                user: None,
+                token: None,
+            }
+        }
+        Err(e) => error_response(request_id, &e.to_string()),
+    }
+}
+
 // =============================================================================
 // PUBLIC API
 // =============================================================================
 
 pub fn create_state(atome_state: &LocalAtomeState, data_dir: &PathBuf) -> LocalAuthState {
+    // Generate or load JWT secret. If we had to create a new secret file then the
+    // app was effectively reset — clear any stored Fastify tokens to avoid
+    // accidental cross-user restorations tied to previous secrets.
+    let (jwt_secret, created) = get_or_create_jwt_secret(data_dir);
+    if created {
+        // Clear fastify_token particles (best-effort)
+        if let Ok(db) = atome_state.db.lock() {
+            match db.execute(
+                "DELETE FROM particles WHERE particle_key = 'fastify_token'",
+                rusqlite::params![],
+            ) {
+                Ok(_) => println!("[Auth] Cleared stored Fastify tokens after JWT secret regeneration"),
+                Err(e) => println!("[Auth] Failed to clear Fastify tokens: {}", e),
+            }
+        }
+    }
+
     LocalAuthState {
         db: atome_state.db.clone(),
-        jwt_secret: get_or_create_jwt_secret(data_dir),
+        jwt_secret,
     }
 }
 
-fn get_or_create_jwt_secret(data_dir: &PathBuf) -> String {
+fn get_or_create_jwt_secret(data_dir: &PathBuf) -> (String, bool) {
+    // returns (secret, created_flag)
     if let Ok(secret) = std::env::var("JWT_SECRET") {
         if !secret.trim().is_empty() {
-            return secret;
+            return (secret, false);
         }
     }
     if let Ok(secret) = std::env::var("LOCAL_JWT_SECRET") {
-        return secret;
+        return (secret, false);
     }
 
     let secret_path = data_dir.join("jwt_secret.key");
@@ -1540,7 +1607,7 @@ fn get_or_create_jwt_secret(data_dir: &PathBuf) -> String {
         if let Ok(secret) = std::fs::read_to_string(&secret_path) {
             let trimmed = secret.trim();
             if !trimmed.is_empty() {
-                return trimmed.to_string();
+                return (trimmed.to_string(), false);
             }
         }
     }
@@ -1552,5 +1619,5 @@ fn get_or_create_jwt_secret(data_dir: &PathBuf) -> String {
 
     let _ = std::fs::write(&secret_path, &secret);
 
-    secret
+    (secret, true)
 }

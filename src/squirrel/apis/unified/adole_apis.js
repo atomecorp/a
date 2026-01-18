@@ -623,6 +623,28 @@ async function save_fastify_token_to_axum(fastifyToken) {
     }
 }
 
+// Helper to clear stored Fastify token in Axum (delete particle)
+async function clear_stored_fastify_token_in_axum() {
+    if (!is_tauri_runtime()) return false;
+    try {
+        const localToken = TauriAdapter.getToken?.();
+        if (!localToken) return false;
+        const result = await TauriAdapter.send({
+            type: 'auth',
+            action: 'delete-fastify-token',
+            token: localToken
+        });
+        if (result?.success) {
+            console.log('[Auth] Cleared stored Fastify token in Axum for this local token');
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.warn('[Auth] Failed to clear Fastify token in Axum:', e?.message || e);
+        return false;
+    }
+}
+
 async function ensure_fastify_token() {
     const authSource = resolveAuthSource();
     const dataSource = resolveDataSource();
@@ -647,35 +669,46 @@ async function ensure_fastify_token() {
     try {
         const storedToken = await get_stored_fastify_token_from_axum();
         if (storedToken) {
-            // Validate the token by setting it and checking with /me
-            FastifyAdapter.setToken?.(storedToken);
-            try {
-                const meResult = await FastifyAdapter.auth.me();
-                if (meResult?.ok || meResult?.success) {
-                    // If we have a local Tauri identity, ensure the Fastify token maps to the same user.
-                    try {
-                        const tauriMe = await TauriAdapter.auth.me?.();
-                        const fastifyUserId = meResult?.user?.user_id || meResult?.user?.id || null;
-                        const tauriUserId = tauriMe?.user?.user_id || tauriMe?.user?.id || null;
-                        if (tauriUserId && fastifyUserId && tauriUserId !== fastifyUserId) {
-                            console.warn('[Auth] Fastify token restored but user mismatch with Tauri user; refusing token');
+            // Additional safety: only accept a stored Fastify token if the local Tauri
+            // session (local token + current user) can be validated. Otherwise clear
+            // the stored token in Axum to avoid cross-user leakage after resets.
+            const localTauriToken = TauriAdapter.getToken?.();
+            if (!localTauriToken) {
+                console.warn('[Auth] Found stored Fastify token but no local Tauri token; clearing stored mapping');
+                try { await clear_stored_fastify_token_in_axum(); } catch { };
+                FastifyAdapter.clearToken?.();
+            } else {
+                // Validate the token by setting it and checking with /me
+                FastifyAdapter.setToken?.(storedToken);
+                try {
+                    const meResult = await FastifyAdapter.auth.me();
+                    if (meResult?.ok || meResult?.success) {
+                        // If we have a local Tauri identity, ensure the Fastify token maps to the same user.
+                        try {
+                            const tauriMe = await TauriAdapter.auth.me?.();
+                            const fastifyUserId = meResult?.user?.user_id || meResult?.user?.id || null;
+                            const tauriUserId = tauriMe?.user?.user_id || tauriMe?.user?.id || null;
+                            if (tauriUserId && fastifyUserId && tauriUserId !== fastifyUserId) {
+                                console.warn('[Auth] Fastify token restored but user mismatch with Tauri user; refusing token and clearing stored mapping');
+                                try { await clear_stored_fastify_token_in_axum(); } catch { };
+                                FastifyAdapter.clearToken?.();
+                            } else {
+                                console.log('[Auth] Fastify token restored from Axum storage');
+                                return { ok: true, reason: 'token_restored_from_axum' };
+                            }
+                        } catch (e) {
+                            // If Tauri.me check fails, be conservative and refuse the token to avoid cross-user leaks.
+                            console.warn('[Auth] Could not validate Tauri user when restoring Fastify token:', e?.message || e);
+                            try { await clear_stored_fastify_token_in_axum(); } catch { };
                             FastifyAdapter.clearToken?.();
-                            // Do not accept a token that belongs to a different user than the local Tauri session.
-                        } else {
-                            console.log('[Auth] Fastify token restored from Axum storage');
-                            return { ok: true, reason: 'token_restored_from_axum' };
                         }
-                    } catch (e) {
-                        // If Tauri.me check fails, be conservative and refuse the token to avoid cross-user leaks.
-                        console.warn('[Auth] Could not validate Tauri user when restoring Fastify token:', e?.message || e);
-                        FastifyAdapter.clearToken?.();
                     }
+                } catch {
+                    // Token expired or invalid, continue to login
                 }
-            } catch {
-                // Token expired or invalid, continue to login
+                // Token invalid or refused, clear it
+                FastifyAdapter.clearToken?.();
             }
-            // Token invalid or refused, clear it
-            FastifyAdapter.clearToken?.();
         }
     } catch {
         // Ignore errors from Axum token retrieval
@@ -1607,6 +1640,15 @@ async function try_auto_login() {
             return { success: false, userId: machineUser.userId, userName: null, hint: 'last_user_known' };
         }
 
+        // If we reach here there's no current user and no machine last-user hint.
+        // Clear any persisted Fastify token mapping on Axum to avoid accidental
+        // cross-user restoration after resets.
+        try {
+            if (is_tauri_runtime()) {
+                await clear_stored_fastify_token_in_axum();
+            }
+        } catch (e) { }
+
         return { success: false, userId: null, userName: null };
     } catch (e) {
         console.warn('[AdoleAPI] Auto-login check failed:', e.message);
@@ -2171,6 +2213,13 @@ async function unlog_user(callback = null) {
     _currentProjectId = null;
     _currentProjectName = null;
     clear_cached_current_project();
+    // Also clear any persisted Fastify token mapping on the Axum side to avoid leaking
+    // a Fastify session to another user on this machine after logout/reset.
+    try {
+        if (is_tauri_runtime()) {
+            await clear_stored_fastify_token_in_axum();
+        }
+    } catch (e) { }
 
     // Execute callback if provided
     if (callback && typeof callback === 'function') {
