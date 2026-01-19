@@ -426,6 +426,104 @@ let _lastSyncAtomesAttempt = 0;
 let _lastFastifyAutoLoginAttempt = 0;
 let _lastFastifyAssetSync = 0;
 
+// ============================================
+// SECURITY GUARDS
+// ============================================
+
+/**
+ * Check if user is authenticated. Returns user info if yes, null if no.
+ * @returns {{id: string, name: string|null, phone: string|null}|null}
+ */
+function get_authenticated_user() {
+    if (_currentUserId) {
+        return {
+            id: _currentUserId,
+            name: _currentUserName,
+            phone: _currentUserPhone
+        };
+    }
+    return null;
+}
+
+/**
+ * Require authenticated user for an operation.
+ * Throws an error result if no user is logged in.
+ * @param {string} operation - Name of the operation (for error messages)
+ * @returns {{authenticated: boolean, user: object|null, error: string|null}}
+ */
+function require_authenticated_user(operation = 'operation') {
+    const user = get_authenticated_user();
+    if (!user) {
+        console.warn(`[Security] Blocked ${operation}: No authenticated user`);
+        return {
+            authenticated: false,
+            user: null,
+            error: `Authentication required for ${operation}. Please log in first.`
+        };
+    }
+    return {
+        authenticated: true,
+        user,
+        error: null
+    };
+}
+
+/**
+ * Create a blocked result object for unauthenticated operations
+ * @param {string} errorMessage - Error message
+ * @returns {Object} Results object with errors
+ */
+function create_unauthenticated_result(errorMessage) {
+    return {
+        tauri: { success: false, data: null, error: errorMessage },
+        fastify: { success: false, data: null, error: errorMessage },
+        blocked: true,
+        reason: 'unauthenticated'
+    };
+}
+
+/**
+ * Clear the UI by dispatching an event that removes all atomes from view.
+ * Called on logout to prevent displaying previous user's data.
+ */
+function clear_ui_on_logout() {
+    if (typeof window === 'undefined') return;
+
+    console.log('[Security] Clearing UI on logout - removing all atomes from view');
+
+    // Dispatch event for UI to clear all rendered atomes
+    window.dispatchEvent(new CustomEvent('squirrel:user-logged-out', {
+        detail: {
+            reason: 'logout',
+            timestamp: Date.now(),
+            action: 'clear_all_atomes'
+        }
+    }));
+
+    // Also dispatch a more specific event for view cleanup
+    window.dispatchEvent(new CustomEvent('squirrel:clear-view', {
+        detail: {
+            reason: 'user_logout',
+            clearAtomes: true,
+            clearProject: true
+        }
+    }));
+
+    // Clear any cached atome data in localStorage
+    try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('atome_') || key.startsWith('project_') || key.includes('_cache'))) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => {
+            try { localStorage.removeItem(key); } catch { }
+        });
+    } catch { }
+}
+
 const read_cached_current_project = () => {
     if (typeof localStorage === 'undefined') return null;
     try {
@@ -2549,6 +2647,13 @@ async function unlog_user(callback = null) {
     _currentProjectId = null;
     _currentProjectName = null;
     clear_cached_current_project();
+
+    // Clear UI - remove all atomes from view to prevent showing previous user's data
+    clear_ui_on_logout();
+
+    // Clear any pending user sync
+    clear_user_sync_pending();
+
     // Also clear any persisted Fastify token mapping on the Axum side to avoid leaking
     // a Fastify session to another user on this machine after logout/reset.
     try {
@@ -2908,16 +3013,25 @@ try {
         start_pending_register_monitor();
         start_periodic_sync_monitor();
 
-        // Also check if there's a pending user sync from a previous session
-        // This handles the case where app restarts with user logged in but no Fastify token
+        // SECURITY: On app startup/refresh, check if user is logged in.
+        // If not, clear the view to prevent showing previous user's atomes.
         if (is_tauri_runtime()) {
             setTimeout(async () => {
                 try {
                     // Use current_user() to get the actual logged-in user state from the backend
                     const currentResult = await current_user();
                     const hasFastifyToken = !!FastifyAdapter.getToken?.();
-                    console.log('[Auth] Startup check: logged=', currentResult?.logged, 'hasFastifyToken=', hasFastifyToken);
-                    if (currentResult?.logged && currentResult?.user?.user_id && !hasFastifyToken) {
+                    console.log('[Auth] Startup security check: logged=', currentResult?.logged, 'hasFastifyToken=', hasFastifyToken);
+                    
+                    if (!currentResult?.logged || !currentResult?.user?.user_id) {
+                        // NO USER LOGGED IN - Clear the view immediately
+                        console.log('[Security] Startup: No user logged in - clearing view to prevent showing previous user data');
+                        clear_ui_on_logout();
+                        return; // Don't proceed with Fastify sync check
+                    }
+
+                    // User is logged in - check Fastify token sync
+                    if (!hasFastifyToken) {
                         // User is logged in but no Fastify token - mark sync as pending
                         const syncPolicy = resolve_sync_policy();
                         console.log('[Auth] Startup: syncPolicy=', syncPolicy);
@@ -2927,9 +3041,29 @@ try {
                         }
                     }
                 } catch (e) {
-                    console.warn('[Auth] Startup user sync check failed:', e?.message || e);
+                    console.warn('[Auth] Startup security check failed:', e?.message || e);
+                    // On error, be safe and clear the view
+                    console.log('[Security] Startup: Error checking auth state - clearing view for safety');
+                    clear_ui_on_logout();
                 }
-            }, 3000); // Delay to let other init complete (including auto-login)
+            }, 1500); // Delay to let WebSocket connect first
+        } else {
+            // Browser/Fastify mode - also check auth state on startup
+            setTimeout(async () => {
+                try {
+                    const currentResult = await current_user();
+                    console.log('[Auth] Browser startup security check: logged=', currentResult?.logged);
+                    
+                    if (!currentResult?.logged || !currentResult?.user?.user_id) {
+                        console.log('[Security] Browser startup: No user logged in - clearing view');
+                        clear_ui_on_logout();
+                    }
+                } catch (e) {
+                    console.warn('[Auth] Browser startup security check failed:', e?.message || e);
+                    console.log('[Security] Browser startup: Error checking auth - clearing view for safety');
+                    clear_ui_on_logout();
+                }
+            }, 2000);
         }
     }
 } catch {
@@ -4795,7 +4929,20 @@ async function list_atomes(options = {}, callback) {
         options = {};
     }
 
+    // Security guard: require authenticated user for listing atomes
+    // Exception: allow listing 'user' type without authentication (for directory lookup)
     const atomeType = options.type || null;
+    if (atomeType !== 'user') {
+        const authCheck = require_authenticated_user('list_atomes');
+        if (!authCheck.authenticated) {
+            const blockedResult = create_unauthenticated_result(authCheck.error);
+            blockedResult.tauri = { atomes: [], error: authCheck.error };
+            blockedResult.fastify = { atomes: [], error: authCheck.error };
+            if (typeof callback === 'function') callback(blockedResult);
+            return blockedResult;
+        }
+    }
+
     const projectId = options.projectId || options.project_id || null;
     let ownerId = options.ownerId || null;
     const includeShared = !!options.includeShared;
@@ -4989,6 +5136,14 @@ async function delete_atome(atomeId, callback) {
         atomeId = null;
     }
 
+    // Security guard: require authenticated user for deleting atomes
+    const authCheck = require_authenticated_user('delete_atome');
+    if (!authCheck.authenticated) {
+        const blockedResult = create_unauthenticated_result(authCheck.error);
+        if (typeof callback === 'function') callback(blockedResult);
+        return blockedResult;
+    }
+
     // atomeId is required
     if (!atomeId) {
         const error = 'atomeId parameter is required';
@@ -5074,6 +5229,14 @@ async function alter_atome(atomeId, newProperties, callback) {
     if (typeof newProperties === 'function') {
         callback = newProperties;
         newProperties = null;
+    }
+
+    // Security guard: require authenticated user for altering atomes
+    const authCheck = require_authenticated_user('alter_atome');
+    if (!authCheck.authenticated) {
+        const blockedResult = create_unauthenticated_result(authCheck.error);
+        if (typeof callback === 'function') callback(blockedResult);
+        return blockedResult;
     }
 
     // Both atomeId and newParticles are required
@@ -5225,6 +5388,15 @@ async function get_atome(atomeId, callback) {
         atomeId = null;
     }
 
+    // Security guard: require authenticated user for getting atomes
+    const authCheck = require_authenticated_user('get_atome');
+    if (!authCheck.authenticated) {
+        const blockedResult = create_unauthenticated_result(authCheck.error);
+        blockedResult.atome = null;
+        if (typeof callback === 'function') callback(blockedResult);
+        return blockedResult;
+    }
+
     if (!atomeId) {
         const error = 'atomeId parameter is required';
         if (typeof callback === 'function') callback({ error });
@@ -5296,6 +5468,14 @@ async function get_atome(atomeId, callback) {
  */
 
 async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode, propertyOverrides = {}, currentProjectId = null, callback) {
+    // Security guard: require authenticated user for sharing
+    const authCheck = require_authenticated_user('share_atome');
+    if (!authCheck.authenticated) {
+        const blockedResult = create_unauthenticated_result(authCheck.error);
+        if (typeof callback === 'function') callback(blockedResult);
+        return blockedResult;
+    }
+
     const results = {
         tauri: { success: false, data: null, error: 'Share requests are handled by Fastify' },
         fastify: { success: false, data: null, error: null }
@@ -5497,7 +5677,11 @@ export const AdoleAPI = {
         // Visibility management
         setVisibility: set_user_visibility,
         // Fastify token management
-        ensureFastifyToken: ensure_fastify_token
+        ensureFastifyToken: ensure_fastify_token,
+        // Security helpers
+        isAuthenticated: () => !!get_authenticated_user(),
+        getAuthenticatedUser: get_authenticated_user,
+        requireAuth: require_authenticated_user
     },
     projects: {
         create: create_project,
@@ -5534,6 +5718,12 @@ export const AdoleAPI = {
         getCurrent: get_current_machine,
         register: register_machine,
         getLastUser: get_machine_last_user
+    },
+    security: {
+        clearView: clear_ui_on_logout,
+        isAuthenticated: () => !!get_authenticated_user(),
+        getAuthenticatedUser: get_authenticated_user,
+        requireAuth: require_authenticated_user
     },
     debug: {
         listTables: list_tables
