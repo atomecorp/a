@@ -1362,15 +1362,70 @@ async fn download_recording_handler(
         })
         .filter(|v| !v.is_empty());
 
-    let user_id = local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token);
-    if user_id == "anonymous" {
+    let token_user_id = local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token);
+    let user_id = if token_user_id != "anonymous" {
+        token_user_id
+    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
+        header_user_id
+    } else {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({ "success": false, "error": "Unauthorized" })),
         )
             .into_response();
+    };
+
+    // First, try to find the file directly in the user's recordings directory (like downloads)
+    // This handles recordings synced from Fastify that may not be in the local DB
+    let recordings_dir = match resolve_user_storage_dir(&state, &user_id, LocalStorageRoot::Recordings).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            println!("[download_recording_handler] Failed to resolve recordings dir: {}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Failed to resolve recordings directory" })),
+            )
+                .into_response();
+        }
+    };
+
+    // Try direct file lookup first (by sanitized recording_id as filename)
+    let safe_name = sanitize_file_name(&recording_id);
+    let direct_path = recordings_dir.join(&safe_name);
+    
+    println!(
+        "[download_recording_handler] Trying direct lookup: user_id={}, recording_id={}, safe_name={}, recordings_dir={:?}, direct_path={:?}, exists={}",
+        user_id, recording_id, safe_name, recordings_dir, direct_path, direct_path.exists()
+    );
+
+    if direct_path.exists() {
+        match fs::read(&direct_path).await {
+            Ok(bytes) => {
+                println!(
+                    "[download_recording_handler] ✅ Serving recording (direct): {:?} ({} bytes)",
+                    direct_path, bytes.len()
+                );
+                let mut headers = HeaderMap::new();
+                headers.insert(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(guess_mime_from_ext(&safe_name)),
+                );
+                if let Ok(header_value) = HeaderValue::from_str(&format!(
+                    "attachment; filename=\"{}\"",
+                    safe_name
+                )) {
+                    headers.insert(header::CONTENT_DISPOSITION, header_value);
+                }
+                return (StatusCode::OK, headers, bytes).into_response();
+            }
+            Err(err) => {
+                println!("[download_recording_handler] Direct read failed: {}", err);
+                // Fall through to DB lookup
+            }
+        }
     }
 
+    // Fallback: Try to find via database (original logic for locally-created recordings)
     let rel = {
         let atome_state = match &state.atome_state {
             Some(s) => s,

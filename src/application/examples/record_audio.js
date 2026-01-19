@@ -730,7 +730,10 @@
             return { ok: false, error: 'Invalid file identifier' };
         }
 
-        if (entry.source === 'recording') {
+        // Auto-detect if this is a recording based on identifier pattern or source property
+        const isRecording = entry.source === 'recording' || looksLikeRecordingAtomeId(identifier);
+
+        if (isRecording) {
             if (isTauriRuntime()) {
                 const tauriBase = getTauriHttpBaseUrl();
                 if (!tauriBase) return { ok: false, error: 'Tauri base URL is not configured' };
@@ -740,6 +743,8 @@
                     if (mapped) targetId = mapped;
                 }
                 let res;
+                let blob;
+                let usedFastifyFallback = false;
                 try {
                     res = await fetch(`${tauriBase}/api/recordings/${encodeURIComponent(targetId)}`, {
                         method: 'GET',
@@ -750,13 +755,44 @@
                     return { ok: false, error: e && e.message ? e.message : String(e) };
                 }
 
+                // If Tauri returns 403/404, try fetching from Fastify server
+                // This handles files recorded on Fastify that are not yet synced locally
+                if (!res.ok && (res.status === 403 || res.status === 404)) {
+                    const fastifyBase = getFastifyBaseUrl();
+                    if (fastifyBase) {
+                        // Try multiple identifiers: file_name, name, extract from file_path, or atome id
+                        let downloadId = entry.file_name || entry.name || '';
+                        if (!downloadId && entry.file_path) {
+                            // Extract filename from path
+                            const pathParts = String(entry.file_path).split('/');
+                            downloadId = pathParts[pathParts.length - 1] || '';
+                        }
+                        if (!downloadId) {
+                            downloadId = identifier;
+                        }
+                        try {
+                            const fastifyRes = await fetch(`${fastifyBase}/api/uploads/${encodeURIComponent(downloadId)}`, {
+                                method: 'GET',
+                                headers: buildAuthHeaders(),
+                                credentials: 'include'
+                            });
+                            if (fastifyRes.ok) {
+                                res = fastifyRes;
+                                usedFastifyFallback = true;
+                            }
+                        } catch (_) {
+                            // Fastify fallback failed, continue with original error
+                        }
+                    }
+                }
+
                 if (!res.ok) {
                     const payload = await res.json().catch(() => null);
                     const msg = payload && payload.error ? payload.error : `Download failed (${res.status})`;
                     return { ok: false, error: msg };
                 }
 
-                const blob = await res.blob();
+                blob = await res.blob();
                 const name = entry.name || entry.file_name || identifier;
                 const mime = blob.type || entry.mime_type || guessMimeFromExt(name) || '';
                 const kind = detectMediaKind({ name, mime });
