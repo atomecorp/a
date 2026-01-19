@@ -629,15 +629,16 @@ async fn upload_handler(
 
     let decoded: Cow<'_, str> =
         urlencoding::decode(file_name_raw).unwrap_or_else(|_| Cow::from(file_name_raw));
-    let (file_name, file_path) = match resolve_user_upload_path(&state, &user_id, decoded.as_ref()).await {
-        Ok(path) => path,
-        Err(err) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "success": false, "error": err.to_string() })),
-            );
-        }
-    };
+    let (file_name, file_path) =
+        match resolve_user_upload_path(&state, &user_id, decoded.as_ref()).await {
+            Ok(path) => path,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "success": false, "error": err.to_string() })),
+                );
+            }
+        };
 
     if let Err(err) = fs::write(&file_path, &body).await {
         eprintln!("Erreur écriture upload {:?}: {}", file_path, err);
@@ -751,10 +752,9 @@ async fn local_file_read_handler(
     let mime = guess_mime_from_ext(file_name);
 
     let mut response = Response::new(Body::from(data));
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static(mime),
-    );
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static(mime));
     response.headers_mut().insert(
         header::CONTENT_DISPOSITION,
         HeaderValue::from_str(&format!("inline; filename=\"{}\"", file_name))
@@ -1136,7 +1136,10 @@ async fn user_recordings_upload_handler(
     )
 }
 
-async fn list_uploads_handler(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+async fn list_uploads_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let auth_state = match &state.auth_state {
         Some(s) => s,
         None => {
@@ -1290,7 +1293,11 @@ async fn download_upload_handler(
 
     match fs::read(&file_path).await {
         Ok(bytes) => {
-            println!("[download_upload_handler] ✅ Serving file: {:?} ({} bytes)", file_path, bytes.len());
+            println!(
+                "[download_upload_handler] ✅ Serving file: {:?} ({} bytes)",
+                file_path,
+                bytes.len()
+            );
             let mut headers = HeaderMap::new();
             headers.insert(
                 header::CONTENT_TYPE,
@@ -1305,7 +1312,10 @@ async fn download_upload_handler(
             (StatusCode::OK, headers, bytes).into_response()
         }
         Err(err) => {
-            println!("[download_upload_handler] ❌ File not found: {:?}, error: {}", file_path, err);
+            println!(
+                "[download_upload_handler] ❌ File not found: {:?}, error: {}",
+                file_path, err
+            );
             (
                 StatusCode::NOT_FOUND,
                 Json(json!({ "success": false, "error": "File not found", "path": file_path.to_string_lossy() })),
@@ -1384,18 +1394,21 @@ async fn download_recording_handler(
             }
         };
 
-    // Debug: First check if the atome exists at all
-    let exists: bool = match db.query_row(
-        "SELECT 1 FROM atomes WHERE atome_id = ?1",
-        params![safe_id],
-        |_| Ok(true),
-    ) {
-        Ok(v) => v,
-        Err(_) => false,
-    };
-    println!("[download_recording_handler] Atome exists check: id={}, exists={}", safe_id, exists);
+        // Debug: First check if the atome exists at all
+        let exists: bool = match db.query_row(
+            "SELECT 1 FROM atomes WHERE atome_id = ?1",
+            params![safe_id],
+            |_| Ok(true),
+        ) {
+            Ok(v) => v,
+            Err(_) => false,
+        };
+        println!(
+            "[download_recording_handler] Atome exists check: id={}, exists={}",
+            safe_id, exists
+        );
 
-    let owner_id: Option<String> = match db.query_row(
+        let owner_id: Option<String> = match db.query_row(
         "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND atome_type IN ('audio_recording', 'video_recording') AND deleted_at IS NULL",
         params![safe_id],
         |row| row.get(0),
@@ -1411,7 +1424,10 @@ async fn download_recording_handler(
             }
         };
 
-        println!("[download_recording_handler] Owner check: recording_id={}, owner_id={:?}, user_id={}", safe_id, owner_id, user_id);
+        println!(
+            "[download_recording_handler] Owner check: recording_id={}, owner_id={:?}, user_id={}",
+            safe_id, owner_id, user_id
+        );
 
         let owner = match owner_id {
             Some(id) if id == user_id => id,
@@ -1420,7 +1436,7 @@ async fn download_recording_handler(
                 // TODO: Implement proper permission checking
                 println!("[download_recording_handler] ⚠️ Owner mismatch but allowing: owner={}, user={}", id, user_id);
                 id
-            },
+            }
             _ => {
                 // No owner set - allow authenticated user to access
                 println!("[download_recording_handler] ⚠️ No owner set, allowing authenticated access: user={}", user_id);
@@ -1491,11 +1507,18 @@ async fn download_recording_handler(
 
     let bytes = match fs::read(&target_path).await {
         Ok(b) => {
-            println!("[download_recording_handler] ✅ Serving recording: {:?} ({} bytes)", target_path, b.len());
+            println!(
+                "[download_recording_handler] ✅ Serving recording: {:?} ({} bytes)",
+                target_path,
+                b.len()
+            );
             b
         }
         Err(err) => {
-            println!("[download_recording_handler] ❌ File not found: {:?}, error: {}", target_path, err);
+            println!(
+                "[download_recording_handler] ❌ File not found: {:?}, error: {}",
+                target_path, err
+            );
             return (
                 StatusCode::NOT_FOUND,
                 Json(json!({ "success": false, "error": "File not found", "path": target_path.to_string_lossy() })),
@@ -1509,9 +1532,10 @@ async fn download_recording_handler(
         header::CONTENT_TYPE,
         HeaderValue::from_static(guess_mime_from_ext(&rel)),
     );
-    if let Ok(header_value) =
-        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", sanitize_file_name(&rel)))
-    {
+    if let Ok(header_value) = HeaderValue::from_str(&format!(
+        "attachment; filename=\"{}\"",
+        sanitize_file_name(&rel)
+    )) {
         headers.insert(header::CONTENT_DISPOSITION, header_value);
     }
 
@@ -2131,12 +2155,9 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                                 .unwrap_or("anonymous")
                                 .to_string()
                         };
-                        let response = local_atome::handle_state_current_message(
-                            data,
-                            &user_id,
-                            atome_state,
-                        )
-                        .await;
+                        let response =
+                            local_atome::handle_state_current_message(data, &user_id, atome_state)
+                                .await;
                         let _ = socket
                             .send(Message::Text(
                                 serde_json::to_string(&response).unwrap_or_default(),
@@ -2296,10 +2317,7 @@ async fn handle_ws_sync(mut socket: WebSocket) {
         })
     };
     let wrap_event_payload = |payload: &JsonValue| {
-        let event_type = payload
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let event_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
         if event_type == "event" {
             return payload.clone();
@@ -2500,7 +2518,11 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     // Log the project root for debugging media path issues
     println!("📂 Project root for media files: {:?}", project_root);
     let expected_data_path = project_root.join("data").join("users");
-    println!("📂 Expected user data directory: {:?} (exists: {})", expected_data_path, expected_data_path.exists());
+    println!(
+        "📂 Expected user data directory: {:?} (exists: {})",
+        expected_data_path,
+        expected_data_path.exists()
+    );
 
     let state = AppState {
         static_dir: Arc::new(static_dir_abs),
