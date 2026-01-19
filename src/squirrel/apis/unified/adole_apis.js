@@ -645,6 +645,56 @@ async function clear_stored_fastify_token_in_axum() {
     }
 }
 
+/**
+ * Attempt direct HTTP login to Fastify (bypasses WebSocket).
+ * Useful when the WebSocket is not yet connected but HTTP is reachable.
+ * @param {string} phone
+ * @param {string} password
+ * @returns {Promise<{success: boolean, data: object|null, error: string|null, token: string|null}>}
+ */
+async function fastify_http_login(phone, password) {
+    const cleanPhone = normalize_phone_input(phone) || String(phone || '').trim();
+    if (!cleanPhone || !password) {
+        return { success: false, data: null, error: 'Phone and password required', token: null };
+    }
+    try {
+        // Determine Fastify base URL
+        let baseUrl = '';
+        if (typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
+            baseUrl = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
+        }
+        if (!baseUrl) {
+            const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
+            const port = config?.fastify?.port || 3001;
+            baseUrl = `http://127.0.0.1:${port}`;
+        }
+        const url = `${baseUrl}/api/auth/login`;
+        console.log('[Auth] Attempting direct HTTP login to Fastify:', url);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: cleanPhone, password }),
+            credentials: 'omit'
+        });
+        if (!res || !res.ok) {
+            const errBody = await res.text().catch(() => '');
+            console.warn('[Auth] Fastify HTTP login failed:', res?.status, errBody);
+            return { success: false, data: null, error: errBody || `HTTP ${res?.status}`, token: null };
+        }
+        const data = await res.json();
+        const token = data?.token || null;
+        const ok = !!(data?.ok || data?.success || token);
+        if (ok && token) {
+            FastifyAdapter.setToken?.(token);
+        }
+        console.log('[Auth] Fastify HTTP login result:', { ok, hasToken: !!token });
+        return { success: ok, data, error: ok ? null : (data?.error || 'Login failed'), token };
+    } catch (e) {
+        console.warn('[Auth] Fastify HTTP login threw:', e?.message || e);
+        return { success: false, data: null, error: e?.message || String(e), token: null };
+    }
+}
+
 async function ensure_fastify_token() {
     const authSource = resolveAuthSource();
     const dataSource = resolveDataSource();
@@ -2033,7 +2083,7 @@ async function log_user(phone, password, username, callback) {
     };
 
     const primaryStart = now_ms();
-    const primaryResult = await loginWith(authPlan.primary, normalizedPhone);
+    let primaryResult = await loginWith(authPlan.primary, normalizedPhone);
     log_flow(flow, 'primary_login', {
         source: authPlan.source,
         ok: !!primaryResult?.success,
@@ -2048,6 +2098,54 @@ async function log_user(phone, password, username, callback) {
         error: 'skipped',
         skipped: true
     };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FASTIFY → TAURI SYNC: If primary is Tauri and login failed (user not found),
+    // try to login on Fastify via HTTP (reliable even if WS not connected).
+    // If that succeeds, bootstrap the user locally so subsequent logins work on Tauri.
+    // ─────────────────────────────────────────────────────────────────────────
+    if (!primaryResult.success && authPlan.source === 'tauri' && is_tauri_runtime()) {
+        const errorMsg = String(primaryResult.error || '').toLowerCase();
+        const isUserNotFound = errorMsg.includes('user not found') || errorMsg.includes('invalid credentials') || errorMsg.includes('phone');
+        if (isUserNotFound) {
+            console.log('[Auth] Tauri login failed; attempting Fastify HTTP fallback...');
+            try {
+                // Use direct HTTP login (more reliable than WebSocket which may not be connected)
+                const fastifyLoginResult = await fastify_http_login(normalizedPhone, password);
+                if (fastifyLoginResult.success) {
+                    console.log('[Auth] Fastify HTTP login succeeded; bootstrapping user locally on Tauri...');
+                    // Bootstrap the user on Tauri so future logins work locally
+                    try {
+                        const bootstrapRes = await TauriAdapter.auth.register({
+                            phone: normalizedPhone,
+                            password,
+                            username: resolvedUsername,
+                            visibility: 'public'
+                        });
+                        if (bootstrapRes?.ok || bootstrapRes?.success || is_already_exists_error(bootstrapRes)) {
+                            console.log('[Auth] User bootstrapped on Tauri from Fastify credentials');
+                            // Retry local login now that user exists
+                            primaryResult = await loginWith(authPlan.primary, normalizedPhone);
+                            results[authPlan.source] = primaryResult;
+                            if (primaryResult.success) {
+                                console.log('[Auth] Tauri login succeeded after bootstrap');
+                            }
+                        } else {
+                            console.warn('[Auth] Bootstrap on Tauri failed:', bootstrapRes?.error);
+                        }
+                    } catch (bootstrapErr) {
+                        console.warn('[Auth] Bootstrap on Tauri threw:', bootstrapErr?.message || bootstrapErr);
+                    }
+                    // Keep Fastify result for reference
+                    results.fastify = { success: true, data: fastifyLoginResult.data, error: null };
+                } else {
+                    console.log('[Auth] Fastify HTTP login also failed:', fastifyLoginResult.error);
+                }
+            } catch (e) {
+                console.warn('[Auth] Fastify HTTP fallback login threw:', e?.message || e);
+            }
+        }
+    }
 
     // If login succeeded, update current user state and machine association
     if (primaryResult.success) {
