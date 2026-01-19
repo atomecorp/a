@@ -420,11 +420,134 @@ const PUBLIC_USER_DIRECTORY_LAST_SYNC_KEY = 'public_user_directory_last_sync_iso
 const ATOME_PENDING_DELETE_KEY = 'atome_pending_delete_ops_v1';
 const FASTIFY_LOGIN_CACHE_KEY = 'fastify_login_cache_v1';
 const CURRENT_PROJECT_CACHE_KEY = 'current_project_cache_v1';
+const TAURI_USER_SESSION_KEY = 'tauri_user_session_v1'; // Persisted session state
+
+// ============================================
+// AUTH GATE: Block project loading until auth verified
+// ============================================
+if (typeof window !== 'undefined') {
+    window.__authCheckComplete = false;
+    window.__authCheckResult = null; // { authenticated: boolean, userId: string|null }
+}
+
+/**
+ * Signal that auth check is complete. Dispatches 'squirrel:auth-checked' event.
+ * @param {boolean} authenticated - Whether a user is logged in
+ * @param {string|null} userId - The logged-in user ID (or null)
+ */
+function signal_auth_check_complete(authenticated, userId = null) {
+    if (typeof window === 'undefined') return;
+    window.__authCheckComplete = true;
+    window.__authCheckResult = { authenticated, userId };
+    console.log('[Auth] Auth check complete:', authenticated ? `authenticated (${userId})` : 'not authenticated');
+    window.dispatchEvent(new CustomEvent('squirrel:auth-checked', {
+        detail: { authenticated, userId }
+    }));
+}
+
+/**
+ * Wait for auth check to complete. Returns immediately if already done.
+ * @param {number} timeoutMs - Max wait time (default 10s)
+ * @returns {Promise<{authenticated: boolean, userId: string|null}>}
+ */
+function wait_for_auth_check(timeoutMs = 10000) {
+    return new Promise((resolve) => {
+        if (typeof window === 'undefined') {
+            resolve({ authenticated: false, userId: null });
+            return;
+        }
+        if (window.__authCheckComplete) {
+            resolve(window.__authCheckResult || { authenticated: false, userId: null });
+            return;
+        }
+        let resolved = false;
+        const handler = (event) => {
+            if (resolved) return;
+            resolved = true;
+            window.removeEventListener('squirrel:auth-checked', handler);
+            resolve(event?.detail || { authenticated: false, userId: null });
+        };
+        window.addEventListener('squirrel:auth-checked', handler);
+        setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+            window.removeEventListener('squirrel:auth-checked', handler);
+            console.warn('[Auth] Auth check timeout - proceeding as not authenticated');
+            resolve({ authenticated: false, userId: null });
+        }, timeoutMs);
+    });
+}
 
 let _syncAtomesInProgress = false;
 let _lastSyncAtomesAttempt = 0;
 let _lastFastifyAutoLoginAttempt = 0;
 let _lastFastifyAssetSync = 0;
+
+// ============================================
+// SESSION PERSISTENCE (Same strategy as Fastify)
+// ============================================
+
+/**
+ * Save user session to localStorage (called on successful login)
+ * This allows session to persist across page refreshes
+ * @param {string} userId
+ * @param {string} userName
+ * @param {string} userPhone
+ */
+function save_user_session(userId, userName, userPhone) {
+    if (typeof localStorage === 'undefined' || !userId) return;
+    try {
+        const session = {
+            userId,
+            userName: userName || null,
+            userPhone: userPhone || null,
+            loggedAt: new Date().toISOString()
+        };
+        localStorage.setItem(TAURI_USER_SESSION_KEY, JSON.stringify(session));
+        console.log('[Session] User session saved to localStorage');
+    } catch (e) {
+        console.warn('[Session] Failed to save user session:', e?.message);
+    }
+}
+
+/**
+ * Load user session from localStorage
+ * @returns {{userId: string, userName: string|null, userPhone: string|null, loggedAt: string}|null}
+ */
+function load_user_session() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(TAURI_USER_SESSION_KEY);
+        if (!raw) return null;
+        const session = JSON.parse(raw);
+        if (!session?.userId) return null;
+        return session;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Clear user session from localStorage (called on logout)
+ */
+function clear_user_session() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.removeItem(TAURI_USER_SESSION_KEY);
+        console.log('[Session] User session cleared from localStorage');
+    } catch (e) {
+        console.warn('[Session] Failed to clear user session:', e?.message);
+    }
+}
+
+/**
+ * Check if a valid user session exists in localStorage
+ * @returns {boolean}
+ */
+function has_user_session() {
+    const session = load_user_session();
+    return !!session?.userId;
+}
 
 // ============================================
 // SECURITY GUARDS
@@ -722,25 +845,15 @@ async function save_fastify_token_to_axum(fastifyToken) {
 }
 
 // Helper to clear stored Fastify token in Axum (delete particle)
+// Note: The Fastify token in Axum SQLite is automatically invalidated when the user logs out
+// from Fastify. We only need to clear the client-side token which is done via FastifyAdapter.clearToken().
+// This function is a no-op as there's no WebSocket endpoint for this operation.
 async function clear_stored_fastify_token_in_axum() {
     if (!is_tauri_runtime()) return false;
-    try {
-        const localToken = TauriAdapter.getToken?.();
-        if (!localToken) return false;
-        const result = await TauriAdapter.send({
-            type: 'auth',
-            action: 'delete-fastify-token',
-            token: localToken
-        });
-        if (result?.success) {
-            console.log('[Auth] Cleared stored Fastify token in Axum for this local token');
-            return true;
-        }
-        return false;
-    } catch (e) {
-        console.warn('[Auth] Failed to clear Fastify token in Axum:', e?.message || e);
-        return false;
-    }
+    // The Fastify token stored in Axum's SQLite was for persistence across app restarts.
+    // On logout, we clear the localStorage token (FastifyAdapter.clearToken) which is sufficient.
+    // The SQLite particle will be overwritten on next successful Fastify login.
+    return true;
 }
 
 /**
@@ -1203,7 +1316,7 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
 
 async function maybe_sync_atomes(reason = 'auto') {
     console.log('[maybe_sync_atomes] Called with reason:', reason);
-    
+
     if (_syncAtomesInProgress) {
         console.log('[maybe_sync_atomes] Skipped: in_progress');
         return { skipped: true, reason: 'in_progress' };
@@ -1265,7 +1378,7 @@ async function maybe_sync_atomes(reason = 'auto') {
     const sourceToken = syncPolicy.from === 'tauri' ? TauriAdapter.getToken?.() : FastifyAdapter.getToken?.();
     let targetToken = syncPolicy.to === 'fastify' ? FastifyAdapter.getToken?.() : TauriAdapter.getToken?.();
     console.log('[maybe_sync_atomes] Tokens before ensure: source=', !!sourceToken, 'target=', !!targetToken);
-    
+
     if (!targetToken && syncPolicy.to === 'fastify') {
         console.log('[maybe_sync_atomes] No target token, calling ensure_fastify_token...');
         try { await ensure_fastify_token(); } catch { }
@@ -1602,10 +1715,10 @@ function is_user_sync_pending() {
 function start_fastify_connection_polling() {
     if (_fastifyConnectionPollingStarted || typeof window === 'undefined') return;
     if (!is_tauri_runtime()) return;
-    
+
     const syncPolicy = resolve_sync_policy();
     if (syncPolicy.to !== 'fastify') return; // Only needed for tauri→fastify sync
-    
+
     _fastifyConnectionPollingStarted = true;
     const pollInterval = 1000; // Check EVERY SECOND
     console.log('[Sync] Starting aggressive Fastify connection polling (every 1s)');
@@ -1628,20 +1741,20 @@ function start_fastify_connection_polling() {
             const { fastify } = await checkBackends(true);
             if (fastify) {
                 console.log('[Sync] Fastify now available (aggressive poll) - attempting connection...');
-                
+
                 // Try to sync the current user to Fastify
                 const result = await sync_current_user_to_fastify();
                 if (result.synced) {
                     console.log('[Sync] User synced to Fastify successfully via aggressive polling');
                     clear_user_sync_pending();
-                    
+
                     // CRITICAL: Now sync all existing atomes
                     console.log('[Sync] Triggering full atomes sync after Fastify connection...');
                     setTimeout(async () => {
                         try {
                             const syncResult = await maybe_sync_atomes('fastify_connection_restored');
                             console.log('[Sync] Atomes sync result after Fastify connection:', syncResult);
-                            
+
                             // If sync failed due to cooldown or was skipped, retry after a short delay
                             if (syncResult.skipped && syncResult.reason === 'cooldown') {
                                 setTimeout(async () => {
@@ -1711,7 +1824,7 @@ function start_user_sync_polling() {
                 if (result.synced) {
                     clear_user_sync_pending();
                     console.log('[Auth] Pending user sync completed successfully');
-                    
+
                     // CRITICAL: Trigger atomes sync after user sync
                     console.log('[Auth] Triggering atomes sync after user sync...');
                     setTimeout(async () => {
@@ -2037,6 +2150,11 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
     _currentUserPhone = userPhone;
 
     console.log(`[AdoleAPI] Current user set: ${userName || 'unnamed'} (${userId ? userId.substring(0, 8) + '...' : 'none'})`);
+
+    // PERSIST SESSION: Save to localStorage so session survives page refresh
+    if (userId) {
+        save_user_session(userId, userName, userPhone);
+    }
 
     if (persistMachine && userId) {
         // Update machine with this user
@@ -2618,7 +2736,7 @@ async function log_user(phone, password, username, callback) {
                                     results.fastify = { success: true, data: retryResult.data, error: null };
                                     // Save token to Axum for persistence
                                     if (retryResult.token) {
-                                        save_fastify_token_to_axum(retryResult.token).catch(() => {});
+                                        save_fastify_token_to_axum(retryResult.token).catch(() => { });
                                     }
                                 }
                             } else {
@@ -2772,6 +2890,9 @@ async function unlog_user(callback = null) {
     _currentProjectId = null;
     _currentProjectName = null;
     clear_cached_current_project();
+
+    // CLEAR SESSION: Remove persisted session from localStorage
+    clear_user_session();
 
     // Clear UI - remove all atomes from view to prevent showing previous user's data
     clear_ui_on_logout();
@@ -3137,61 +3258,118 @@ try {
 
         start_pending_register_monitor();
         start_periodic_sync_monitor();
-        
+
         // Start aggressive Fastify connection polling for offline-first sync
         start_fastify_connection_polling();
 
-        // SECURITY: On app startup/refresh, check if user is logged in.
-        // If not, clear the view to prevent showing previous user's atomes.
+        // SECURITY: On app startup/refresh, check if user session is persisted.
+        // If a session exists in localStorage AND the token is valid, restore the logged-in state.
+        // Otherwise, clear the view to prevent showing previous user's atomes.
+        // CRITICAL: This MUST complete and signal before any project loading happens.
         if (is_tauri_runtime()) {
-            setTimeout(async () => {
+            // Run auth check immediately (not in setTimeout) to gate project loading
+            (async () => {
+                // Small delay to let WebSocket connect
+                await new Promise(r => setTimeout(r, 500));
+
                 try {
-                    // Use current_user() to get the actual logged-in user state from the backend
-                    const currentResult = await current_user();
+                    const savedSession = load_user_session();
+                    const token = TauriAdapter.getToken?.();
                     const hasFastifyToken = !!FastifyAdapter.getToken?.();
-                    console.log('[Auth] Startup security check: logged=', currentResult?.logged, 'hasFastifyToken=', hasFastifyToken);
-                    
-                    if (!currentResult?.logged || !currentResult?.user?.user_id) {
-                        // NO USER LOGGED IN - Clear the view immediately
-                        console.log('[Security] Startup: No user logged in - clearing view to prevent showing previous user data');
+
+                    console.log('[Auth] Startup: savedSession=', savedSession ? `userId=${savedSession.userId}` : 'none', 'hasToken=', !!token);
+
+                    if (!savedSession || !savedSession.userId || !token) {
+                        // No session or no token - user must login
+                        console.log('[Security] Startup: No saved session or token - clearing view');
+                        clear_user_session();
                         clear_ui_on_logout();
-                        return; // Don't proceed with Fastify sync check
+                        signal_auth_check_complete(false, null);
+                        return;
                     }
 
-                    // User is logged in - check Fastify token sync
+                    // Session exists - validate token with backend (with retries for slow startup)
+                    let tokenValid = false;
+                    const maxRetries = 5;
+                    const retryDelay = 1000;
+
+                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                        try {
+                            console.log(`[Auth] Startup: Validating token (attempt ${attempt}/${maxRetries})...`);
+                            const currentResult = await current_user();
+
+                            if (currentResult?.logged && currentResult?.user?.user_id) {
+                                tokenValid = true;
+                                console.log('[Auth] Startup: Token valid - user=', currentResult.user.user_id);
+                                break;
+                            } else if (currentResult && !currentResult.logged) {
+                                // Token is invalid (backend responded but user not logged)
+                                console.log('[Auth] Startup: Token invalid (backend says not logged)');
+                                break;
+                            }
+                        } catch (e) {
+                            console.warn(`[Auth] Startup validation attempt ${attempt} failed:`, e?.message || e);
+                            if (attempt < maxRetries) {
+                                await new Promise(r => setTimeout(r, retryDelay));
+                            }
+                        }
+                    }
+
+                    if (!tokenValid) {
+                        // Token invalid or validation failed - clear everything
+                        console.log('[Security] Startup: Token validation failed - clearing session and view');
+                        clear_user_session();
+                        clear_ui_on_logout();
+                        signal_auth_check_complete(false, null);
+                        return;
+                    }
+
+                    // Token is valid - restore user state from session
+                    console.log('[Auth] Startup: Restoring session for user:', savedSession.userId);
+                    set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
+                    signal_auth_check_complete(true, savedSession.userId);
+
+                    // Check Fastify token sync
                     if (!hasFastifyToken) {
-                        // User is logged in but no Fastify token - mark sync as pending
                         const syncPolicy = resolve_sync_policy();
                         console.log('[Auth] Startup: syncPolicy=', syncPolicy);
                         if (syncPolicy.to === 'fastify') {
-                            console.log('[Auth] Startup: User logged in but no Fastify token - marking user sync as pending');
+                            console.log('[Auth] Startup: User restored but no Fastify token - marking user sync as pending');
                             mark_user_sync_pending();
                         }
                     }
                 } catch (e) {
                     console.warn('[Auth] Startup security check failed:', e?.message || e);
-                    // On error, be safe and clear the view
-                    console.log('[Security] Startup: Error checking auth state - clearing view for safety');
+                    console.log('[Security] Startup: Error checking auth state - clearing session and view for safety');
+                    clear_user_session();
                     clear_ui_on_logout();
+                    signal_auth_check_complete(false, null);
                 }
-            }, 1500); // Delay to let WebSocket connect first
+            })();
         } else {
             // Browser/Fastify mode - also check auth state on startup
-            setTimeout(async () => {
+            (async () => {
+                // Small delay to let WebSocket connect
+                await new Promise(r => setTimeout(r, 500));
+
                 try {
                     const currentResult = await current_user();
                     console.log('[Auth] Browser startup security check: logged=', currentResult?.logged);
-                    
+
                     if (!currentResult?.logged || !currentResult?.user?.user_id) {
                         console.log('[Security] Browser startup: No user logged in - clearing view');
                         clear_ui_on_logout();
+                        signal_auth_check_complete(false, null);
+                    } else {
+                        signal_auth_check_complete(true, currentResult.user.user_id);
                     }
                 } catch (e) {
                     console.warn('[Auth] Browser startup security check failed:', e?.message || e);
                     console.log('[Security] Browser startup: Error checking auth - clearing view for safety');
                     clear_ui_on_logout();
+                    signal_auth_check_complete(false, null);
                 }
-            }, 2000);
+            })();
         }
     }
 } catch {
@@ -5851,7 +6029,10 @@ export const AdoleAPI = {
         clearView: clear_ui_on_logout,
         isAuthenticated: () => !!get_authenticated_user(),
         getAuthenticatedUser: get_authenticated_user,
-        requireAuth: require_authenticated_user
+        requireAuth: require_authenticated_user,
+        // Auth gate functions for startup coordination
+        signalAuthComplete: signal_auth_check_complete,
+        waitForAuthCheck: wait_for_auth_check
     },
     debug: {
         listTables: list_tables
