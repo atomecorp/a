@@ -17,6 +17,10 @@ function applyDebugConfig(config) {
     if (typeof window === 'undefined') return;
     const logging = config?.logging;
     if (!logging) return;
+    if (!isInTauriRuntime() && typeof window.__CHECK_DEBUG__ === 'boolean') {
+        globalThis.__CHECK_DEBUG__ = window.__CHECK_DEBUG__;
+        return;
+    }
     if (typeof logging.debugEnabled === 'boolean') {
         window.__CHECK_DEBUG__ = logging.debugEnabled;
         globalThis.__CHECK_DEBUG__ = window.__CHECK_DEBUG__;
