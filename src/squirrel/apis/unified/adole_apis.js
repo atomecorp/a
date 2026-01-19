@@ -695,6 +695,137 @@ async function fastify_http_login(phone, password) {
     }
 }
 
+/**
+ * Attempt direct HTTP registration on Fastify (bypasses WebSocket).
+ * Useful for Tauri→Fastify user sync when user was created offline on Tauri.
+ * @param {string} phone
+ * @param {string} password
+ * @param {string} [username]
+ * @returns {Promise<{success: boolean, data: object|null, error: string|null, alreadyExists: boolean}>}
+ */
+async function fastify_http_register(phone, password, username) {
+    const cleanPhone = normalize_phone_input(phone) || String(phone || '').trim();
+    if (!cleanPhone || !password) {
+        return { success: false, data: null, error: 'Phone and password required', alreadyExists: false };
+    }
+    try {
+        // Determine Fastify base URL
+        let baseUrl = '';
+        if (typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
+            baseUrl = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
+        }
+        if (!baseUrl) {
+            const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
+            const port = config?.fastify?.port || 3001;
+            baseUrl = `http://127.0.0.1:${port}`;
+        }
+        const url = `${baseUrl}/api/auth/register`;
+        console.log('[Auth] Attempting HTTP registration on Fastify:', url);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: cleanPhone,
+                password,
+                username: username || cleanPhone,
+                visibility: 'public'
+            }),
+            credentials: 'omit'
+        });
+        const data = await res.json().catch(() => null);
+        // Check for "already exists" which is fine for sync
+        if (res.status === 409 || (data?.error && String(data.error).toLowerCase().includes('already'))) {
+            console.log('[Auth] User already exists on Fastify (OK for sync)');
+            return { success: true, data, error: null, alreadyExists: true };
+        }
+        if (!res.ok) {
+            console.warn('[Auth] Fastify HTTP register failed:', res.status, data?.error);
+            return { success: false, data: null, error: data?.error || `HTTP ${res.status}`, alreadyExists: false };
+        }
+        console.log('[Auth] Fastify HTTP registration succeeded');
+        return { success: true, data, error: null, alreadyExists: false };
+    } catch (e) {
+        console.warn('[Auth] Fastify HTTP registration threw:', e?.message || e);
+        return { success: false, data: null, error: e?.message || String(e), alreadyExists: false };
+    }
+}
+
+/**
+ * Sync the current Tauri user to Fastify when Fastify becomes available.
+ * This ensures users created on Tauri while Fastify was offline get synced.
+ * @returns {Promise<{synced: boolean, reason: string}>}
+ */
+async function sync_current_user_to_fastify() {
+    if (!is_tauri_runtime()) {
+        return { synced: false, reason: 'not_tauri_runtime' };
+    }
+    const syncPolicy = resolve_sync_policy();
+    if (syncPolicy.from !== 'tauri' || syncPolicy.to !== 'fastify') {
+        return { synced: false, reason: 'sync_direction_not_tauri_to_fastify' };
+    }
+
+    // Get current logged-in user from Tauri
+    const userInfo = get_current_user_info();
+    if (!userInfo?.id || !userInfo?.phone) {
+        // No user logged in or no phone - cannot sync
+        return { synced: false, reason: 'no_current_user' };
+    }
+
+    // Check if we already have a Fastify token (user already synced)
+    const existingFastifyToken = FastifyAdapter.getToken?.();
+    if (existingFastifyToken) {
+        // Already connected to Fastify - user likely exists there
+        return { synced: false, reason: 'already_has_fastify_token' };
+    }
+
+    console.log('[Auth] Fastify became available - checking if current Tauri user needs sync...');
+
+    // Try to get cached credentials for this user
+    const cachedCreds = load_cached_credentials();
+    if (!cachedCreds || cachedCreds.phone !== userInfo.phone || !cachedCreds.password) {
+        console.log('[Auth] No cached credentials for current user - cannot sync to Fastify');
+        return { synced: false, reason: 'no_cached_credentials' };
+    }
+
+    // Try to login on Fastify first
+    const loginResult = await fastify_http_login(userInfo.phone, cachedCreds.password);
+    if (loginResult.success && loginResult.token) {
+        // User exists on Fastify - login succeeded
+        FastifyAdapter.setToken?.(loginResult.token);
+        try { await store_fastify_token_in_axum(loginResult.token); } catch { }
+        console.log('[Auth] Current user already exists on Fastify - token obtained');
+        return { synced: true, reason: 'user_exists_login_succeeded' };
+    }
+
+    // User doesn't exist on Fastify - register them
+    console.log('[Auth] User not found on Fastify - attempting registration...');
+    const registerResult = await fastify_http_register(
+        userInfo.phone,
+        cachedCreds.password,
+        userInfo.name || userInfo.phone
+    );
+
+    if (!registerResult.success && !registerResult.alreadyExists) {
+        console.warn('[Auth] Failed to sync user to Fastify:', registerResult.error);
+        // Mark as pending for retry
+        mark_user_sync_pending();
+        return { synced: false, reason: 'registration_failed', error: registerResult.error };
+    }
+
+    console.log('[Auth] User registered on Fastify - obtaining token...');
+
+    // Now login to get the token
+    const postRegisterLogin = await fastify_http_login(userInfo.phone, cachedCreds.password);
+    if (postRegisterLogin.success && postRegisterLogin.token) {
+        FastifyAdapter.setToken?.(postRegisterLogin.token);
+        try { await store_fastify_token_in_axum(postRegisterLogin.token); } catch { }
+        console.log('[Auth] User synced to Fastify successfully');
+        return { synced: true, reason: 'user_synced' };
+    }
+
+    return { synced: false, reason: 'post_register_login_failed' };
+}
+
 async function ensure_fastify_token() {
     const authSource = resolveAuthSource();
     const dataSource = resolveDataSource();
@@ -1267,6 +1398,9 @@ let pendingRegisterMonitorStarted = false;
 let pendingRegisterMonitorId = null;
 let periodicSyncStarted = false;
 let periodicSyncId = null;
+let userSyncPollingStarted = false;
+let userSyncPollingId = null;
+let _pendingUserSync = false; // Flag: user sync pending when Fastify becomes available
 
 function start_pending_register_monitor() {
     if (pendingRegisterMonitorStarted || typeof window === 'undefined') return;
@@ -1306,6 +1440,75 @@ function start_periodic_sync_monitor() {
             await request_sync('periodic');
         } catch {
             // Ignore
+        }
+    }, pollInterval);
+}
+
+/**
+ * Mark that user sync to Fastify is pending (will retry when Fastify becomes available)
+ */
+function mark_user_sync_pending() {
+    _pendingUserSync = true;
+    console.log('[Auth] User sync to Fastify marked as pending - will retry when available');
+    start_user_sync_polling();
+}
+
+/**
+ * Clear the pending user sync flag
+ */
+function clear_user_sync_pending() {
+    _pendingUserSync = false;
+}
+
+/**
+ * Check if user sync to Fastify is pending
+ */
+function is_user_sync_pending() {
+    return _pendingUserSync;
+}
+
+/**
+ * Start polling for Fastify availability to sync the current user.
+ * This runs independently of pending registers and ensures user sync happens
+ * when Fastify comes online after user was created on Tauri.
+ */
+function start_user_sync_polling() {
+    if (userSyncPollingStarted || typeof window === 'undefined') return;
+    if (!is_tauri_runtime()) return;
+    userSyncPollingStarted = true;
+
+    const pollInterval = 10000; // Check every 10 seconds
+    console.log('[Auth] Starting user sync polling (every 10s)');
+
+    userSyncPollingId = setInterval(async () => {
+        // Only proceed if we have a pending user sync and no Fastify token
+        if (!_pendingUserSync) return;
+        const existingToken = FastifyAdapter.getToken?.();
+        if (existingToken) {
+            // Already have token, clear pending flag
+            clear_user_sync_pending();
+            return;
+        }
+
+        // Check if Fastify is now available
+        try {
+            const { fastify } = await checkBackends(true);
+            if (fastify) {
+                console.log('[Auth] Fastify now available - attempting pending user sync...');
+                const result = await sync_current_user_to_fastify();
+                if (result.synced) {
+                    clear_user_sync_pending();
+                    console.log('[Auth] Pending user sync completed successfully');
+                } else {
+                    console.log('[Auth] Pending user sync not completed:', result.reason);
+                    // Keep retrying unless it's a permanent failure
+                    if (result.reason === 'no_current_user' || result.reason === 'no_cached_credentials') {
+                        clear_user_sync_pending();
+                    }
+                }
+            }
+        } catch (e) {
+            // Ignore errors, will retry
         }
     }, pollInterval);
 }
@@ -2163,6 +2366,7 @@ async function log_user(phone, password, username, callback) {
         }
 
         // P0 FIX: After successful Tauri login, also login to Fastify to get token for mirroring
+        // TAURI→FASTIFY SYNC: If Tauri login succeeded, try to ensure Fastify has this user too
         if (authPlan.source === 'tauri' && syncPolicy.to === 'fastify') {
             try {
                 console.log('[Auth] Ensuring Fastify token after Tauri login...');
@@ -2170,7 +2374,41 @@ async function log_user(phone, password, username, callback) {
                 if (fastifyResult.ok) {
                     console.log('[Auth] Fastify token obtained successfully');
                 } else {
-                    console.warn('[Auth] Could not get Fastify token:', fastifyResult.reason);
+                    // Fastify login failed - user might not exist on Fastify yet
+                    // Trigger HTTP sync regardless of reason (could be login_failed, no_cached_credentials, etc.)
+                    const reasonLower = String(fastifyResult.reason || '').toLowerCase();
+                    const shouldSync = reasonLower.includes('login_failed')
+                        || reasonLower.includes('no_cached')
+                        || reasonLower.includes('user not found')
+                        || reasonLower.includes('register_failed')
+                        || reasonLower === 'cooldown'; // Even on cooldown, try HTTP sync once
+                    if (shouldSync || !fastifyResult.ok) {
+                        console.log('[Auth] Fastify login failed (reason:', fastifyResult.reason, '), attempting HTTP sync to Fastify...');
+                        try {
+                            const syncResult = await fastify_http_register(normalizedPhone, password, resolvedUsername);
+                            if (syncResult.success) {
+                                console.log('[Auth] User synced to Fastify successfully' + (syncResult.alreadyExists ? ' (already existed)' : ''));
+                                // Now try to get Fastify token via HTTP login
+                                const retryResult = await fastify_http_login(normalizedPhone, password);
+                                if (retryResult.success) {
+                                    console.log('[Auth] Fastify token obtained after sync');
+                                    results.fastify = { success: true, data: retryResult.data, error: null };
+                                    // Save token to Axum for persistence
+                                    if (retryResult.token) {
+                                        save_fastify_token_to_axum(retryResult.token).catch(() => {});
+                                    }
+                                }
+                            } else {
+                                console.warn('[Auth] Could not sync user to Fastify:', syncResult.error);
+                                // Mark as pending - will retry when Fastify becomes available
+                                mark_user_sync_pending();
+                            }
+                        } catch (syncErr) {
+                            console.warn('[Auth] Tauri→Fastify sync threw:', syncErr?.message || syncErr);
+                            // Mark as pending - will retry when Fastify becomes available
+                            mark_user_sync_pending();
+                        }
+                    }
                 }
             } catch (e) {
                 console.warn('[Auth] ensure_fastify_token failed:', e.message);
@@ -2585,12 +2823,14 @@ try {
             if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
             try { await process_pending_registers(); } catch { }
             try { await process_pending_deletes(); } catch { }
+            try { await sync_current_user_to_fastify(); } catch { }
             try { await request_sync('fastify-available'); } catch { }
         });
 
         window.addEventListener('squirrel:sync-connected', async (event) => {
             if (event?.detail?.backend && event.detail.backend !== 'fastify') return;
             if (!is_tauri_runtime()) return;
+            try { await sync_current_user_to_fastify(); } catch { }
             try { await request_sync('sync-connected'); } catch { }
         });
 
@@ -2667,6 +2907,30 @@ try {
 
         start_pending_register_monitor();
         start_periodic_sync_monitor();
+
+        // Also check if there's a pending user sync from a previous session
+        // This handles the case where app restarts with user logged in but no Fastify token
+        if (is_tauri_runtime()) {
+            setTimeout(async () => {
+                try {
+                    // Use current_user() to get the actual logged-in user state from the backend
+                    const currentResult = await current_user();
+                    const hasFastifyToken = !!FastifyAdapter.getToken?.();
+                    console.log('[Auth] Startup check: logged=', currentResult?.logged, 'hasFastifyToken=', hasFastifyToken);
+                    if (currentResult?.logged && currentResult?.user?.user_id && !hasFastifyToken) {
+                        // User is logged in but no Fastify token - mark sync as pending
+                        const syncPolicy = resolve_sync_policy();
+                        console.log('[Auth] Startup: syncPolicy=', syncPolicy);
+                        if (syncPolicy.to === 'fastify') {
+                            console.log('[Auth] Startup: User logged in but no Fastify token - marking user sync as pending');
+                            mark_user_sync_pending();
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Auth] Startup user sync check failed:', e?.message || e);
+                }
+            }, 3000); // Delay to let other init complete (including auto-login)
+        }
     }
 } catch {
     // Ignore
