@@ -3299,12 +3299,12 @@ try {
                     // Check if we have a token but no session (legacy login before session persistence was added)
                     if (token && (!savedSession || !savedSession.userId)) {
                         console.log('[Auth] Startup: Token exists but no session - validating token to restore session...');
-                        current_user().then(function(currentResult) {
+                        current_user().then(function (currentResult) {
                             if (currentResult?.logged && currentResult?.user?.user_id) {
                                 console.log('[Auth] Startup: Token valid - creating session for user:', currentResult.user.user_id);
                                 set_current_user_state(currentResult.user.user_id, currentResult.user.username, currentResult.user.phone);
                                 signal_auth_check_complete(true, currentResult.user.user_id);
-                                
+
                                 // Check Fastify token sync
                                 if (!hasFastifyToken) {
                                     const syncPolicy = resolve_sync_policy();
@@ -3318,7 +3318,7 @@ try {
                                 clear_ui_on_logout();
                                 signal_auth_check_complete(false, null);
                             }
-                        }).catch(function(e) {
+                        }).catch(function (e) {
                             console.warn('[Auth] Startup: Token validation failed:', e?.message || e);
                             clear_user_session();
                             clear_ui_on_logout();
@@ -3326,7 +3326,7 @@ try {
                         });
                         return;
                     }
-                    
+
                     console.log('[Security] Startup: No saved session or token - clearing view');
                     clear_user_session();
                     clear_ui_on_logout();
@@ -3341,7 +3341,7 @@ try {
                 console.log('[Auth] Startup: Restoring session for user:', savedSession.userId);
                 set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
                 signal_auth_check_complete(true, savedSession.userId);
-                
+
                 // Check Fastify token sync
                 if (!hasFastifyToken) {
                     const syncPolicy = resolve_sync_policy();
