@@ -4,6 +4,7 @@ import {
   isValidLogEnvelope
 } from '../../shared/logging.js';
 import { isDebugEnabled, shouldLogLevel } from '../../shared/debug.js';
+import { loadServerConfigOnce } from '../apis/loadServerConfig.js';
 
 const LOG_ENDPOINT = '/dev/client-log';
 const FASTIFY_FALLBACK = 'http://127.0.0.1:3001';
@@ -127,13 +128,11 @@ function getLogAllowlist() {
 }
 
 function isStrictLogFilter() {
-  return true;
+  return !isDebugEnabled();
 }
 
 function shouldAllowConsoleLog(level, args) {
-  if (!isStrictLogFilter() && (level === 'error' || level === 'warn')) {
-    return true;
-  }
+  if (!isStrictLogFilter()) return true;
   const allowlist = getLogAllowlist();
   if (!allowlist.length) return true;
   const message = formatArgs(args);
@@ -245,4 +244,18 @@ function installConsoleWrapper() {
   };
 }
 
-installConsoleWrapper();
+function bootstrapLogging() {
+  if (typeof window === 'undefined') {
+    installConsoleWrapper();
+    return;
+  }
+
+  Promise.resolve()
+    .then(() => loadServerConfigOnce())
+    .catch(() => null)
+    .finally(() => {
+      installConsoleWrapper();
+    });
+}
+
+bootstrapLogging();

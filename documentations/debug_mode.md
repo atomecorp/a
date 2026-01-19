@@ -6,7 +6,7 @@ Ce document explique comment activer/désactiver le mode debug pour l'ensemble d
 
 - Drapeau central retenu : `window.__CHECK_DEBUG__` (valeur boolean).
 - Helper central : `src/shared/debug.js` (exporte `isDebugEnabled()`, `shouldLogLevel()`, `wrapConsoleForDebug()`).
-- Emplacement recommandé pour activer le debug au démarrage : `src/squirrel/early-init.js`.
+- Source unique : variable d'environnement `.env` exposée via `server_config.json`.
 
 ## Pourquoi centraliser ?
 
@@ -14,28 +14,12 @@ Consolider le debug sur un seul flag évite la dispersion des contrôles (plus s
 
 ## Où et comment activer
 
-1) Recommandé — activation au démarrage (exécuter avant tout autre script) :
+1) Recommandé — via `.env` (servi par `server_config.json`) :
 
-  - Fichier : `src/squirrel/early-init.js`
+  - Ajoutez `__CHECK_DEBUG__=1` (ou `true`) dans `.env`.
+  - Le serveur l'expose dans `server_config.json` et `loadServerConfigOnce()` positionne `window.__CHECK_DEBUG__`.
 
-  Exemple :
-
-  ```javascript
-  // early-init.js (début du fichier)
-  // active le debug pour toute l'app
-  window.__CHECK_DEBUG__ = true; // true = ON, false = OFF
-
-  // optionnel : wrapper console (affiche/silence log/info/debug)
-  import { wrapConsoleForDebug } from '../shared/debug.js';
-  wrapConsoleForDebug(console);
-  ```
-
-2) Alternative — build-time via `.env` :
-
-  - Définissez un env var (ex: `DEBUG=true`) et injectez sa valeur lors du build dans un script qui positionne `window.__CHECK_DEBUG__` dans `early-init.js` ou `index.html`.
-  - Note : `.env` seul n'a d'effet que si votre processus de build lit cette variable et la transfère dans le code livré.
-
-3) À chaud dans la console devtools :
+2) À chaud dans la console devtools :
 
   ```javascript
   window.__CHECK_DEBUG__ = true;  // activer
@@ -53,7 +37,7 @@ Consolider le debug sur un seul flag évite la dispersion des contrôles (plus s
 
 - Helper debug central : `src/shared/debug.js` (utilisez `isDebugEnabled()` dans votre code).
 - Logging / envoi centralisé : `src/squirrel/dev/logging.js` (gestion emission/forwarding), désormais respectueux du flag central.
-- Point d'initialisation recommandé : `src/squirrel/early-init.js`.
+- Point d'application automatique : `src/squirrel/apis/loadServerConfig.js` (après chargement de `server_config.json`).
 
 ## Migration / nettoyage
 

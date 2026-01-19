@@ -13,6 +13,21 @@
 
 let _loadPromise = null;
 
+function applyDebugConfig(config) {
+    if (typeof window === 'undefined') return;
+    const logging = config?.logging;
+    if (!logging) return;
+    if (typeof logging.debugEnabled === 'boolean') {
+        window.__CHECK_DEBUG__ = logging.debugEnabled;
+        globalThis.__CHECK_DEBUG__ = window.__CHECK_DEBUG__;
+        return;
+    }
+    if (logging.disableUiLogs === true) {
+        window.__CHECK_DEBUG__ = false;
+        globalThis.__CHECK_DEBUG__ = window.__CHECK_DEBUG__;
+    }
+}
+
 function isInTauriRuntime() {
     if (typeof window === 'undefined') return false;
     return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -219,6 +234,7 @@ export async function loadServerConfigOnce() {
 
             const config = await res.json();
             window.__SQUIRREL_SERVER_CONFIG__ = config;
+            applyDebugConfig(config);
 
             if (isTauriProdWebview()) {
                 applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), config);

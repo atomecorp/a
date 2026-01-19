@@ -791,14 +791,14 @@ async function startServer() {
           return raw;
         }
 
-        const disableUiLogs =
-          process.env.SQUIRREL_DISABLE_UI_LOGS === '1'
-          || process.env.SQUIRREL_DISABLE_UI_LOGS === 'true';
-
-        if (disableUiLogs) {
+        const rawUiDebug = typeof process.env.__CHECK_DEBUG__ === 'string'
+          ? process.env.__CHECK_DEBUG__.trim()
+          : '';
+        if (rawUiDebug !== '') {
+          const uiDebugEnabled = rawUiDebug === '1' || rawUiDebug === 'true';
           config.logging = {
             ...(config.logging || {}),
-            disableUiLogs: true
+            debugEnabled: uiDebugEnabled
           };
         }
 

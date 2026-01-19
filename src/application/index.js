@@ -88,7 +88,7 @@
 
 // //eVe below:
 import('./eVe/eVe.js');
-
+console.log('eVe loaded');
 
 // import('./examples/AI.js');
 

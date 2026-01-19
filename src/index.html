@@ -9,8 +9,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="App">
   <title>atome</title>
-  <!-- CRITICAL: Load error handlers FIRST (non-module for synchronous execution) -->
+  <!-- Ensure global debug flag exists before any module scripts run -->
   <script src="squirrel/early-init.js"></script>
+  <!-- Error handlers are installed early by squirrel/spark.js -->
   <script src="tauri-plugin-fs/api-iife.js"></script>
   <link rel="stylesheet" href="js/leaflet.min.css">
   <link rel="stylesheet" href="js/event-calendar.css">

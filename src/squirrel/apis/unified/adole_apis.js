@@ -3149,7 +3149,9 @@ async function user_list() {
 // Keep user directory fresh when the sync engine reports new accounts.
 // This is intentionally lightweight: it updates the local cache, it does not create accounts.
 try {
+    console.log('[AdoleAPI] Module init block - window:', typeof window !== 'undefined', '__ADOLE_USER_DIRECTORY_LISTENERS__:', typeof window !== 'undefined' ? window.__ADOLE_USER_DIRECTORY_LISTENERS__ : 'N/A');
     if (typeof window !== 'undefined' && !window.__ADOLE_USER_DIRECTORY_LISTENERS__) {
+        console.log('[AdoleAPI] Setting up event listeners and startup checks...');
         window.__ADOLE_USER_DIRECTORY_LISTENERS__ = true;
         window.addEventListener('squirrel:account-created', async (evt) => {
             try {
@@ -3266,92 +3268,94 @@ try {
         // If a session exists in localStorage AND the token is valid, restore the logged-in state.
         // Otherwise, clear the view to prevent showing previous user's atomes.
         // CRITICAL: This MUST complete and signal before any project loading happens.
+        console.log('[Auth] Checking runtime... is_tauri_runtime()=', is_tauri_runtime());
         if (is_tauri_runtime()) {
-            // Run auth check immediately (not in setTimeout) to gate project loading
-            (async () => {
-                // Small delay to let WebSocket connect
-                await new Promise(r => setTimeout(r, 500));
+            console.log('[Auth] Tauri runtime detected - registering auth check on squirrel:ready...');
+            // Use squirrel:ready event which fires reliably after DOM is ready
+            window.addEventListener('squirrel:ready', function onSquirrelReadyAuthCheck() {
+                window.removeEventListener('squirrel:ready', onSquirrelReadyAuthCheck);
+                console.log('[Auth] squirrel:ready fired - checking localStorage...');
 
-                try {
-                    const savedSession = load_user_session();
-                    const token = TauriAdapter.getToken?.();
-                    const hasFastifyToken = !!FastifyAdapter.getToken?.();
+                const savedSession = load_user_session();
+                const token = TauriAdapter.getToken?.();
+                const hasFastifyToken = !!FastifyAdapter.getToken?.();
 
-                    console.log('[Auth] Startup: savedSession=', savedSession ? `userId=${savedSession.userId}` : 'none', 'hasToken=', !!token);
+                // === DETAILED STARTUP STATE LOG ===
+                console.log('='.repeat(60));
+                console.log('[Auth] TAURI STARTUP - LocalStorage State:');
+                console.log('  - Session in localStorage:', savedSession ? 'YES' : 'NO');
+                if (savedSession) {
+                    console.log('    - userId:', savedSession.userId || 'missing');
+                    console.log('    - userName:', savedSession.userName || 'missing');
+                    console.log('    - userPhone:', savedSession.userPhone || 'missing');
+                    console.log('    - loggedAt:', savedSession.loggedAt || 'unknown');
+                }
+                console.log('  - Tauri token:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
+                console.log('  - Fastify token:', hasFastifyToken ? 'YES' : 'NO');
+                console.log('  - Expected state:', savedSession?.userId && token ? 'USER SHOULD BE CONNECTED' : 'USER NOT CONNECTED');
+                console.log('='.repeat(60));
 
-                    if (!savedSession || !savedSession.userId || !token) {
-                        // No session or no token - user must login
-                        console.log('[Security] Startup: No saved session or token - clearing view');
-                        clear_user_session();
-                        clear_ui_on_logout();
-                        signal_auth_check_complete(false, null);
-                        return;
-                    }
-
-                    // Session exists - validate token with backend (with retries for slow startup)
-                    let tokenValid = false;
-                    const maxRetries = 5;
-                    const retryDelay = 1000;
-
-                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                        try {
-                            console.log(`[Auth] Startup: Validating token (attempt ${attempt}/${maxRetries})...`);
-                            const currentResult = await current_user();
-
+                if (!savedSession || !savedSession.userId || !token) {
+                    // Check if we have a token but no session (legacy login before session persistence was added)
+                    if (token && (!savedSession || !savedSession.userId)) {
+                        console.log('[Auth] Startup: Token exists but no session - validating token to restore session...');
+                        current_user().then(function(currentResult) {
                             if (currentResult?.logged && currentResult?.user?.user_id) {
-                                tokenValid = true;
-                                console.log('[Auth] Startup: Token valid - user=', currentResult.user.user_id);
-                                break;
-                            } else if (currentResult && !currentResult.logged) {
-                                // Token is invalid (backend responded but user not logged)
-                                console.log('[Auth] Startup: Token invalid (backend says not logged)');
-                                break;
+                                console.log('[Auth] Startup: Token valid - creating session for user:', currentResult.user.user_id);
+                                set_current_user_state(currentResult.user.user_id, currentResult.user.username, currentResult.user.phone);
+                                signal_auth_check_complete(true, currentResult.user.user_id);
+                                
+                                // Check Fastify token sync
+                                if (!hasFastifyToken) {
+                                    const syncPolicy = resolve_sync_policy();
+                                    if (syncPolicy.to === 'fastify') {
+                                        mark_user_sync_pending();
+                                    }
+                                }
+                            } else {
+                                console.log('[Auth] Startup: Token invalid - clearing');
+                                clear_user_session();
+                                clear_ui_on_logout();
+                                signal_auth_check_complete(false, null);
                             }
-                        } catch (e) {
-                            console.warn(`[Auth] Startup validation attempt ${attempt} failed:`, e?.message || e);
-                            if (attempt < maxRetries) {
-                                await new Promise(r => setTimeout(r, retryDelay));
-                            }
-                        }
-                    }
-
-                    if (!tokenValid) {
-                        // Token invalid or validation failed - clear everything
-                        console.log('[Security] Startup: Token validation failed - clearing session and view');
-                        clear_user_session();
-                        clear_ui_on_logout();
-                        signal_auth_check_complete(false, null);
+                        }).catch(function(e) {
+                            console.warn('[Auth] Startup: Token validation failed:', e?.message || e);
+                            clear_user_session();
+                            clear_ui_on_logout();
+                            signal_auth_check_complete(false, null);
+                        });
                         return;
                     }
-
-                    // Token is valid - restore user state from session
-                    console.log('[Auth] Startup: Restoring session for user:', savedSession.userId);
-                    set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
-                    signal_auth_check_complete(true, savedSession.userId);
-
-                    // Check Fastify token sync
-                    if (!hasFastifyToken) {
-                        const syncPolicy = resolve_sync_policy();
-                        console.log('[Auth] Startup: syncPolicy=', syncPolicy);
-                        if (syncPolicy.to === 'fastify') {
-                            console.log('[Auth] Startup: User restored but no Fastify token - marking user sync as pending');
-                            mark_user_sync_pending();
-                        }
-                    }
-                } catch (e) {
-                    console.warn('[Auth] Startup security check failed:', e?.message || e);
-                    console.log('[Security] Startup: Error checking auth state - clearing session and view for safety');
+                    
+                    console.log('[Security] Startup: No saved session or token - clearing view');
                     clear_user_session();
                     clear_ui_on_logout();
                     signal_auth_check_complete(false, null);
+                    return;
                 }
-            })();
+
+                // Session AND token exist - trust the saved session without backend validation
+                // The token will be validated on the first actual API call
+                // This avoids hanging on backend calls during early startup
+                console.log('[Auth] Startup: Session and token exist - restoring user state...');
+                console.log('[Auth] Startup: Restoring session for user:', savedSession.userId);
+                set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
+                signal_auth_check_complete(true, savedSession.userId);
+                
+                // Check Fastify token sync
+                if (!hasFastifyToken) {
+                    const syncPolicy = resolve_sync_policy();
+                    console.log('[Auth] Startup: syncPolicy=', syncPolicy);
+                    if (syncPolicy.to === 'fastify') {
+                        console.log('[Auth] Startup: User restored but no Fastify token - marking user sync as pending');
+                        mark_user_sync_pending();
+                    }
+                }
+            }, true); // capture phase to run early
+            console.log('[Auth] squirrel:ready listener registered');
         } else {
             // Browser/Fastify mode - also check auth state on startup
-            (async () => {
-                // Small delay to let WebSocket connect
-                await new Promise(r => setTimeout(r, 500));
-
+            setTimeout(async function browserStartupAuthCheck() {
                 try {
                     const currentResult = await current_user();
                     console.log('[Auth] Browser startup security check: logged=', currentResult?.logged);
@@ -3369,11 +3373,11 @@ try {
                     clear_ui_on_logout();
                     signal_auth_check_complete(false, null);
                 }
-            })();
+            }, 500);
         }
     }
-} catch {
-    // Ignore
+} catch (moduleInitError) {
+    console.error('[AdoleAPI] Module initialization error:', moduleInitError);
 }
 
 /**
