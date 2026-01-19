@@ -1377,13 +1377,24 @@ async fn download_recording_handler(
 
     // First, try to find the file directly in the user's recordings directory (like downloads)
     // This handles recordings synced from Fastify that may not be in the local DB
-    let recordings_dir = match resolve_user_storage_dir(&state, &user_id, LocalStorageRoot::Recordings).await {
+    let recordings_dir = match resolve_user_storage_dir(
+        &state,
+        &user_id,
+        LocalStorageRoot::Recordings,
+    )
+    .await
+    {
         Ok(dir) => dir,
         Err(err) => {
-            println!("[download_recording_handler] Failed to resolve recordings dir: {}", err);
+            println!(
+                "[download_recording_handler] Failed to resolve recordings dir: {}",
+                err
+            );
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "success": false, "error": "Failed to resolve recordings directory" })),
+                Json(
+                    json!({ "success": false, "error": "Failed to resolve recordings directory" }),
+                ),
             )
                 .into_response();
         }
@@ -1392,7 +1403,7 @@ async fn download_recording_handler(
     // Try direct file lookup first (by sanitized recording_id as filename)
     let safe_name = sanitize_file_name(&recording_id);
     let direct_path = recordings_dir.join(&safe_name);
-    
+
     println!(
         "[download_recording_handler] Trying direct lookup: user_id={}, recording_id={}, safe_name={}, recordings_dir={:?}, direct_path={:?}, exists={}",
         user_id, recording_id, safe_name, recordings_dir, direct_path, direct_path.exists()
@@ -1403,17 +1414,17 @@ async fn download_recording_handler(
             Ok(bytes) => {
                 println!(
                     "[download_recording_handler] ✅ Serving recording (direct): {:?} ({} bytes)",
-                    direct_path, bytes.len()
+                    direct_path,
+                    bytes.len()
                 );
                 let mut headers = HeaderMap::new();
                 headers.insert(
                     header::CONTENT_TYPE,
                     HeaderValue::from_static(guess_mime_from_ext(&safe_name)),
                 );
-                if let Ok(header_value) = HeaderValue::from_str(&format!(
-                    "attachment; filename=\"{}\"",
-                    safe_name
-                )) {
+                if let Ok(header_value) =
+                    HeaderValue::from_str(&format!("attachment; filename=\"{}\"", safe_name))
+                {
                     headers.insert(header::CONTENT_DISPOSITION, header_value);
                 }
                 return (StatusCode::OK, headers, bytes).into_response();
