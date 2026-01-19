@@ -1202,10 +1202,21 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
 }
 
 async function maybe_sync_atomes(reason = 'auto') {
-    if (_syncAtomesInProgress) return { skipped: true, reason: 'in_progress' };
+    console.log('[maybe_sync_atomes] Called with reason:', reason);
+    
+    if (_syncAtomesInProgress) {
+        console.log('[maybe_sync_atomes] Skipped: in_progress');
+        return { skipped: true, reason: 'in_progress' };
+    }
     const syncPolicy = resolve_sync_policy();
-    if (!syncPolicy.from || !syncPolicy.to) return { skipped: true, reason: 'sync_off' };
-    if (!is_tauri_runtime()) return { skipped: true, reason: 'not_tauri' };
+    if (!syncPolicy.from || !syncPolicy.to) {
+        console.log('[maybe_sync_atomes] Skipped: sync_off');
+        return { skipped: true, reason: 'sync_off' };
+    }
+    if (!is_tauri_runtime()) {
+        console.log('[maybe_sync_atomes] Skipped: not_tauri');
+        return { skipped: true, reason: 'not_tauri' };
+    }
     if (!_currentUserId) {
         try {
             const currentResult = await current_user();
@@ -1213,44 +1224,60 @@ async function maybe_sync_atomes(reason = 'auto') {
                 _currentUserId = currentResult.user.user_id || currentResult.user.atome_id || currentResult.user.id || null;
             }
         } catch { }
-        if (!_currentUserId) return { skipped: true, reason: 'no_user' };
+        if (!_currentUserId) {
+            console.log('[maybe_sync_atomes] Skipped: no_user');
+            return { skipped: true, reason: 'no_user' };
+        }
     }
 
     const now = Date.now();
     if (_lastSyncAtomesAttempt && (now - _lastSyncAtomesAttempt < 5000)) {
+        console.log('[maybe_sync_atomes] Skipped: cooldown');
         return { skipped: true, reason: 'cooldown' };
     }
 
     let backends;
     try {
         backends = await checkBackends(true);
+        console.log('[maybe_sync_atomes] Backends:', backends);
     } catch {
+        console.log('[maybe_sync_atomes] Skipped: backend_check_failed');
         return { skipped: true, reason: 'backend_check_failed' };
     }
 
     if (syncPolicy.from === 'tauri' && !backends.tauri) {
+        console.log('[maybe_sync_atomes] Skipped: source tauri unavailable');
         return { skipped: true, reason: 'source_unavailable' };
     }
     if (syncPolicy.from === 'fastify' && !backends.fastify) {
+        console.log('[maybe_sync_atomes] Skipped: source fastify unavailable');
         return { skipped: true, reason: 'source_unavailable' };
     }
     if (syncPolicy.to === 'tauri' && !backends.tauri) {
+        console.log('[maybe_sync_atomes] Skipped: target tauri unavailable');
         return { skipped: true, reason: 'target_unavailable' };
     }
     if (syncPolicy.to === 'fastify' && !backends.fastify) {
+        console.log('[maybe_sync_atomes] Skipped: target fastify unavailable');
         return { skipped: true, reason: 'target_unavailable' };
     }
 
     const sourceToken = syncPolicy.from === 'tauri' ? TauriAdapter.getToken?.() : FastifyAdapter.getToken?.();
     let targetToken = syncPolicy.to === 'fastify' ? FastifyAdapter.getToken?.() : TauriAdapter.getToken?.();
+    console.log('[maybe_sync_atomes] Tokens before ensure: source=', !!sourceToken, 'target=', !!targetToken);
+    
     if (!targetToken && syncPolicy.to === 'fastify') {
+        console.log('[maybe_sync_atomes] No target token, calling ensure_fastify_token...');
         try { await ensure_fastify_token(); } catch { }
         targetToken = FastifyAdapter.getToken?.();
+        console.log('[maybe_sync_atomes] After ensure_fastify_token: target=', !!targetToken);
     }
     if (!sourceToken || !targetToken) {
+        console.log('[maybe_sync_atomes] Skipped: missing_token (source=', !!sourceToken, 'target=', !!targetToken, ')');
         return { skipped: true, reason: 'missing_token' };
     }
 
+    console.log('[maybe_sync_atomes] Starting sync...');
     _syncAtomesInProgress = true;
     _lastSyncAtomesAttempt = now;
     try {
@@ -1499,6 +1526,8 @@ let periodicSyncId = null;
 let userSyncPollingStarted = false;
 let userSyncPollingId = null;
 let _pendingUserSync = false; // Flag: user sync pending when Fastify becomes available
+let _fastifyConnectionPollingStarted = false; // Flag: aggressive polling for Fastify connection
+let _fastifyConnectionPollingId = null;
 
 function start_pending_register_monitor() {
     if (pendingRegisterMonitorStarted || typeof window === 'undefined') return;
@@ -1566,6 +1595,91 @@ function is_user_sync_pending() {
 }
 
 /**
+ * Start AGGRESSIVE polling for Fastify connection (every 1 second).
+ * This ensures that when a user is created on Tauri while Fastify is offline,
+ * the sync happens as soon as Fastify becomes available without needing a refresh.
+ */
+function start_fastify_connection_polling() {
+    if (_fastifyConnectionPollingStarted || typeof window === 'undefined') return;
+    if (!is_tauri_runtime()) return;
+    
+    const syncPolicy = resolve_sync_policy();
+    if (syncPolicy.to !== 'fastify') return; // Only needed for tauri→fastify sync
+    
+    _fastifyConnectionPollingStarted = true;
+    const pollInterval = 1000; // Check EVERY SECOND
+    console.log('[Sync] Starting aggressive Fastify connection polling (every 1s)');
+
+    _fastifyConnectionPollingId = setInterval(async () => {
+        // Check if we already have a Fastify token
+        const existingToken = FastifyAdapter.getToken?.();
+        if (existingToken) {
+            // We have a token - Fastify is connected
+            // But we should still check if there are pending syncs
+            if (_pendingUserSync) {
+                console.log('[Sync] Fastify token exists but user sync still pending - clearing flag');
+                clear_user_sync_pending();
+            }
+            return;
+        }
+
+        // No Fastify token - check if Fastify is now available
+        try {
+            const { fastify } = await checkBackends(true);
+            if (fastify) {
+                console.log('[Sync] Fastify now available (aggressive poll) - attempting connection...');
+                
+                // Try to sync the current user to Fastify
+                const result = await sync_current_user_to_fastify();
+                if (result.synced) {
+                    console.log('[Sync] User synced to Fastify successfully via aggressive polling');
+                    clear_user_sync_pending();
+                    
+                    // CRITICAL: Now sync all existing atomes
+                    console.log('[Sync] Triggering full atomes sync after Fastify connection...');
+                    setTimeout(async () => {
+                        try {
+                            const syncResult = await maybe_sync_atomes('fastify_connection_restored');
+                            console.log('[Sync] Atomes sync result after Fastify connection:', syncResult);
+                            
+                            // If sync failed due to cooldown or was skipped, retry after a short delay
+                            if (syncResult.skipped && syncResult.reason === 'cooldown') {
+                                setTimeout(async () => {
+                                    console.log('[Sync] Retrying atomes sync after cooldown...');
+                                    try {
+                                        const retryResult = await maybe_sync_atomes('fastify_connection_restored_retry');
+                                        console.log('[Sync] Atomes sync retry result:', retryResult);
+                                    } catch (e) {
+                                        console.warn('[Sync] Atomes sync retry failed:', e?.message || e);
+                                    }
+                                }, 6000); // Wait for cooldown to expire
+                            }
+                        } catch (e) {
+                            console.warn('[Sync] Atomes sync failed after Fastify connection:', e?.message || e);
+                        }
+                    }, 500);
+                } else {
+                    console.log('[Sync] User sync not completed:', result.reason);
+                }
+            }
+        } catch (e) {
+            // Fastify still not available, will retry in 1 second
+        }
+    }, pollInterval);
+}
+
+/**
+ * Stop aggressive Fastify connection polling
+ */
+function stop_fastify_connection_polling() {
+    if (_fastifyConnectionPollingId) {
+        clearInterval(_fastifyConnectionPollingId);
+        _fastifyConnectionPollingId = null;
+    }
+    _fastifyConnectionPollingStarted = false;
+}
+
+/**
  * Start polling for Fastify availability to sync the current user.
  * This runs independently of pending registers and ensures user sync happens
  * when Fastify comes online after user was created on Tauri.
@@ -1575,8 +1689,8 @@ function start_user_sync_polling() {
     if (!is_tauri_runtime()) return;
     userSyncPollingStarted = true;
 
-    const pollInterval = 10000; // Check every 10 seconds
-    console.log('[Auth] Starting user sync polling (every 10s)');
+    const pollInterval = 1000; // Check EVERY SECOND (was 10s, now 1s for faster reconnection)
+    console.log('[Auth] Starting user sync polling (every 1s)');
 
     userSyncPollingId = setInterval(async () => {
         // Only proceed if we have a pending user sync and no Fastify token
@@ -1597,6 +1711,17 @@ function start_user_sync_polling() {
                 if (result.synced) {
                     clear_user_sync_pending();
                     console.log('[Auth] Pending user sync completed successfully');
+                    
+                    // CRITICAL: Trigger atomes sync after user sync
+                    console.log('[Auth] Triggering atomes sync after user sync...');
+                    setTimeout(async () => {
+                        try {
+                            const syncResult = await maybe_sync_atomes('user_synced_to_fastify');
+                            console.log('[Auth] Atomes sync result:', syncResult);
+                        } catch (e) {
+                            console.warn('[Auth] Atomes sync failed:', e?.message || e);
+                        }
+                    }, 500);
                 } else {
                     console.log('[Auth] Pending user sync not completed:', result.reason);
                     // Keep retrying unless it's a permanent failure
@@ -3012,6 +3137,9 @@ try {
 
         start_pending_register_monitor();
         start_periodic_sync_monitor();
+        
+        // Start aggressive Fastify connection polling for offline-first sync
+        start_fastify_connection_polling();
 
         // SECURITY: On app startup/refresh, check if user is logged in.
         // If not, clear the view to prevent showing previous user's atomes.
