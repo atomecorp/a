@@ -250,12 +250,10 @@ function bootstrapLogging() {
     return;
   }
 
+  installConsoleWrapper();
   Promise.resolve()
     .then(() => loadServerConfigOnce())
-    .catch(() => null)
-    .finally(() => {
-      installConsoleWrapper();
-    });
+    .catch(() => null);
 }
 
 bootstrapLogging();

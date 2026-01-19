@@ -3300,10 +3300,11 @@ try {
                     if (token && (!savedSession || !savedSession.userId)) {
                         console.log('[Auth] Startup: Token exists but no session - validating token to restore session...');
                         current_user().then(function (currentResult) {
-                            if (currentResult?.logged && currentResult?.user?.user_id) {
-                                console.log('[Auth] Startup: Token valid - creating session for user:', currentResult.user.user_id);
-                                set_current_user_state(currentResult.user.user_id, currentResult.user.username, currentResult.user.phone);
-                                signal_auth_check_complete(true, currentResult.user.user_id);
+                            const resolvedUserId = currentResult?.user?.user_id || currentResult?.user?.atome_id || currentResult?.user?.id || null;
+                            if (currentResult?.logged && resolvedUserId) {
+                                console.log('[Auth] Startup: Token valid - creating session for user:', resolvedUserId);
+                                set_current_user_state(resolvedUserId, currentResult.user.username, currentResult.user.phone);
+                                signal_auth_check_complete(true, resolvedUserId);
 
                                 // Check Fastify token sync
                                 if (!hasFastifyToken) {
@@ -3360,12 +3361,13 @@ try {
                     const currentResult = await current_user();
                     console.log('[Auth] Browser startup security check: logged=', currentResult?.logged);
 
-                    if (!currentResult?.logged || !currentResult?.user?.user_id) {
+                    const resolvedUserId = currentResult?.user?.user_id || currentResult?.user?.atome_id || currentResult?.user?.id || null;
+                    if (!currentResult?.logged || !resolvedUserId) {
                         console.log('[Security] Browser startup: No user logged in - clearing view');
                         clear_ui_on_logout();
                         signal_auth_check_complete(false, null);
                     } else {
-                        signal_auth_check_complete(true, currentResult.user.user_id);
+                        signal_auth_check_complete(true, resolvedUserId);
                     }
                 } catch (e) {
                     console.warn('[Auth] Browser startup security check failed:', e?.message || e);
