@@ -103,6 +103,8 @@ Apply changes to **ALL** files that may be used by UI components:
 |------|---------|
 | `src/application/examples/record_audio.js` | Examples, tests, direct usage |
 | `src/application/eVe/APIS/audio_api.js` | `record_video_UI.js`, eVe components |
+| `src/application/eVe/APIS/media_api_shared.js` | Shared sync utilities |
+| `src/application/eVe/tool_utils/tool_genesis.js` | Atome media hydration |
 
 ---
 
@@ -118,6 +120,27 @@ Apply changes to **ALL** files that may be used by UI components:
 
 1. `src/application/eVe/APIS/audio_api.js` ← **main fix**
 2. `src/application/examples/record_audio.js` ← secondary fix
+3. `src/application/eVe/APIS/media_api_shared.js` ← **sync functions added**
+4. `src/application/eVe/tool_utils/tool_genesis.js` ← **hydration uses sync**
+
+---
+
+## ✅ Sync Solution (January 2026)
+
+Added automatic Fastify → Tauri media synchronization:
+
+### New Functions in `media_api_shared.js`
+
+- **`syncMediaFromFastify(fileName)`**: Downloads media from Fastify `/api/uploads/` and saves to Tauri `/api/user-recordings`
+- **`ensureMediaLocallyAvailable(identifier)`**: Checks local availability, syncs if needed, returns playable URL
+
+### Flow
+
+1. When media is requested in Tauri and returns 403/404
+2. System downloads from Fastify server
+3. File is saved locally via `/api/user-recordings`
+4. Playback uses local file (works offline)
+5. Background sync runs to ensure future offline access
 
 ---
 

@@ -93,6 +93,79 @@
         return json;
     }
 
+    /**
+     * Syncs media from Fastify server to local Tauri storage.
+     * Downloads the file from Fastify /api/uploads/:fileName and saves it
+     * to Tauri /api/user-recordings for local playback.
+     *
+     * @param {string} fileName - The name of the file to sync
+     * @returns {Promise<{ok: boolean, path?: string, error?: string}>}
+     */
+    async function syncMediaFromFastify(fileName) {
+        if (!isTauriRuntime()) {
+            return { ok: true, alreadyLocal: true };
+        }
+        if (!fileName || typeof fileName !== 'string') {
+            return { ok: false, error: 'Invalid fileName' };
+        }
+
+        const fastifyBase = getFastifyBaseUrl();
+        if (!fastifyBase) {
+            return { ok: false, error: 'Fastify base URL not configured' };
+        }
+
+        const tauriBase = getTauriHttpBaseUrl();
+        if (!tauriBase) {
+            return { ok: false, error: 'Tauri base URL not configured' };
+        }
+
+        const localToken = getLocalAuthToken();
+        if (!localToken) {
+            return { ok: false, error: 'Missing local_auth_token' };
+        }
+
+        const cloudToken = getCloudAuthToken() || getAuthToken();
+        const safeName = fileName.split('/').pop().split('\\').pop();
+
+        // Download from Fastify
+        let fileBytes;
+        try {
+            const headers = {};
+            if (cloudToken) headers.Authorization = `Bearer ${cloudToken}`;
+            const downloadRes = await fetch(`${fastifyBase}/api/uploads/${encodeURIComponent(safeName)}`, {
+                method: 'GET',
+                headers,
+                credentials: 'include'
+            });
+            if (!downloadRes.ok) {
+                return { ok: false, error: `Fastify download failed (${downloadRes.status})` };
+            }
+            const blob = await downloadRes.blob();
+            fileBytes = new Uint8Array(await blob.arrayBuffer());
+        } catch (e) {
+            return { ok: false, error: `Download error: ${e?.message || e}` };
+        }
+
+        // Upload to Tauri local storage
+        try {
+            const uploadRes = await fetch(`${tauriBase}/api/user-recordings`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${localToken}`,
+                    'X-Filename': encodeURIComponent(safeName)
+                },
+                body: fileBytes
+            });
+            const json = await uploadRes.json().catch(() => null);
+            if (!uploadRes.ok || !json?.success) {
+                return { ok: false, error: json?.error || `Tauri upload failed (${uploadRes.status})` };
+            }
+            return { ok: true, path: json.path || safeName, synced: true };
+        } catch (e) {
+            return { ok: false, error: `Upload error: ${e?.message || e}` };
+        }
+    }
+
     function getQueue() {
         try {
             const raw = localStorage.getItem(QUEUE_KEY);
@@ -779,6 +852,12 @@
                             if (fastifyRes.ok) {
                                 res = fastifyRes;
                                 usedFastifyFallback = true;
+
+                                // Sync file locally for future offline access
+                                // This runs in background and doesn't block playback
+                                syncMediaFromFastify(downloadId).catch(() => {
+                                    // Silent failure - file will be synced on next attempt
+                                });
                             }
                         } catch (_) {
                             // Fastify fallback failed, continue with original error
