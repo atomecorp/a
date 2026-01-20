@@ -3,9 +3,11 @@
 ## 🔴 The Problem
 
 ### Symptom
+
 Videos (and audio) recorded from the **Fastify browser** returned a **403 Forbidden** error when attempted to be played from **Tauri**.
 
 ### Root Cause
+
 File desynchronization between the two environments:
 
 1. **Fastify** (cloud/browser server) stores files under `/data/uploads/`
@@ -32,6 +34,7 @@ record_video_UI.js
 ```
 
 ### ⚠️ Important Pitfall
+
 - `record_video_UI.js` **does NOT use** `record_audio.js`
 - It imports `../eVe/APIS/audio_api.js`
 - The two files implement `play()` differently
@@ -41,6 +44,7 @@ record_video_UI.js
 ## ✅ Fix Applied
 
 ### 1. Auto-detect recordings
+
 ```javascript
 function looksLikeRecordingAtomeId(id) {
   return /^(audio_recording_|video_recording_)/.test(id);
@@ -50,6 +54,7 @@ const isRecording = entry.source === 'recording' || looksLikeRecordingAtomeId(id
 ```
 
 ### 2. Fallback to Fastify when Tauri fails
+
 ```javascript
 if (!res.ok && (res.status === 403 || res.status === 404)) {
   // Tauri doesn't have the file → try Fastify
@@ -66,13 +71,17 @@ if (!res.ok && (res.status === 403 || res.status === 404)) {
 If a **new media type** encounters the same problem:
 
 ### Step 1: Identify the playback file
+
 Search which file actually performs the `fetch` to `/api/recordings/`:
+
 ```bash
 grep -r "api/recordings" src/application/
 ```
 
 ### Step 2: Verify the ID pattern
+
 If the new media has an ID pattern (e.g., `image_recording_*`, `document_*`), add it to the regex:
+
 ```javascript
 function looksLikeRecordingAtomeId(id) {
   return /^(audio_recording_|video_recording_|NEW_TYPE_)/.test(id);
@@ -80,11 +89,14 @@ function looksLikeRecordingAtomeId(id) {
 ```
 
 ### Step 3: Verify Fastify fallback
+
 Ensure fallback code exists and uses the correct endpoints:
+
 - Tauri: `/api/recordings/:id`
 - Fastify: `/api/uploads/:filename`
 
 ### Step 4: Update all relevant files
+
 Apply changes to **ALL** files that may be used by UI components:
 
 | File | Used by |
@@ -110,4 +122,5 @@ Apply changes to **ALL** files that may be used by UI components:
 ---
 
 ## 📅 Resolution Date
+
 January 20, 2026
