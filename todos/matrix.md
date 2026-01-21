@@ -156,3 +156,64 @@ Supported actions include:
 ## 11. Summary
 
 The Project Matrix is a **core navigational layer** of REV, enabling users to manage multiple projects through animated zoom transitions, persistent tooling, and context‑aware filtering — without ever leaving the main workspace.
+
+---
+
+## 12. Implementation Notes (Restored)
+
+### 12.1 Matrix Behavior
+
+* The matrix shows projects with a 3px gap, 6px rounded corners, and the project name at the bottom (editable via long press).
+* The first tile is a "+" button that creates a new project, opens it immediately, and increments the default name (untitled, untitled 2, etc.).
+* Project <-> matrix transitions use a camera-style zoom/de-zoom with focus on the current project.
+* Thumbnails are based on a stored preview image in the project (`preview_url`) and remain available after refresh.
+* `--project-color` stays transparent so it does not mask the preview.
+
+### 12.2 Preview Generation (Main Pipeline)
+
+* If a `<canvas>` exists inside the project view, export it as WebP and store in `preview_url`.
+  * Advantage: fast and faithful for canvas-based projects.
+  * Limitation: does not cover HTML/DOM content.
+* If `window.html2canvas` is available, capture the DOM.
+  * Advantage: simple if the library is already loaded.
+  * Limitation: external dependency, not always present.
+* Fallback: SVG `foreignObject` (no dependency).
+  * Advantage: works without an external library.
+  * Limitation: some external resources can be blocked depending on context.
+
+### 12.3 Storage
+
+* `preview_url`: WebP data URL for the thumbnail.
+* `preview_updated_at`: ISO timestamp of the last update.
+
+### 12.4 Capture Trigger
+
+* When opening the matrix, generate and save a snapshot of the current project.
+* The matrix reads `preview_url` for each project when rendering tiles.
+
+### 12.5 Checklist (Quick Rebuild)
+
+1) Verify the matrix tool is active in the toolbox and `matrix.js` is loaded.
+2) Verify matrix styles in `eVe_look.js` or `matrix.js` (gap 3px, radius 6px, label editable, `--project-color` transparent).
+3) Confirm tiles render previews from `preview_url` (background image on `.eve-matrix-tile__preview`).
+4) Confirm preview generation on matrix open:
+   * Canvas direct if present.
+   * Else html2canvas if available.
+   * Else SVG `foreignObject` fallback.
+5) Confirm DB write:
+   * `preview_url` (WebP data URL)
+   * `preview_updated_at` (ISO timestamp)
+6) Test the flow:
+   * Open matrix -> snapshot -> refresh -> preview persists.
+7) Test project creation:
+   * "+" creates, increments name, opens immediately.
+8) Test rename:
+   * Long press label -> edit -> save via atome alter API.
+
+### 12.6 Symbolic Preview (Fallback)
+
+* Principle: do not capture real rendering, rebuild a simplified view from data (background + key atomes + media icons).
+* It must respect positions and proportions of elements to keep a faithful miniature.
+* Advantage: light, fast, no CORS issues.
+* Limitation: less visually faithful.
+* During zoom/de-zoom, crossfade between miniature and real project for smoothness.
