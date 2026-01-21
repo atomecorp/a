@@ -18,6 +18,8 @@ const REALTIME_KEYS = [
     'backgroundColor',
     'color',
     'text',
+    'content',
+    'textContent',
     'fontSize',
     'fontFamily',
     'fontWeight',
@@ -30,6 +32,34 @@ const REALTIME_KEYS = [
 
 const dedupMap = new Map();
 const selfPatchMap = new Map();
+const editingAtomes = new Set();
+
+/**
+ * Mark an atome as being actively edited locally.
+ * While marked, remote patches for this atome will be ignored.
+ * @param {string} atomeId - The atome ID being edited
+ */
+export function markAtomeAsEditing(atomeId) {
+    if (atomeId) editingAtomes.add(String(atomeId));
+}
+
+/**
+ * Unmark an atome as being edited.
+ * Remote patches will be allowed again.
+ * @param {string} atomeId - The atome ID that finished editing
+ */
+export function unmarkAtomeAsEditing(atomeId) {
+    if (atomeId) editingAtomes.delete(String(atomeId));
+}
+
+/**
+ * Check if an atome is currently being edited locally.
+ * @param {string} atomeId - The atome ID to check
+ * @returns {boolean} True if the atome is in edit mode
+ */
+export function isAtomeBeingEdited(atomeId) {
+    return atomeId ? editingAtomes.has(String(atomeId)) : false;
+}
 
 const getCurrentUserId = () => {
     if (typeof window === 'undefined') return null;
@@ -149,6 +179,12 @@ const buildFingerprint = (payload) => {
 export function shouldIgnoreRealtimePatch(atomeId, payload, options = {}) {
     if (!atomeId) return false;
 
+    // CRITICAL: Check if this atome is currently being edited locally.
+    // If so, ignore all remote patches to prevent destroying the editing state.
+    if (isAtomeBeingEdited(atomeId)) {
+        return true;
+    }
+
     const authorId = options.authorId || payload?.authorId || payload?.author_id || null;
     if (authorId && isFromCurrentUser(authorId)) {
         return true;
@@ -184,4 +220,5 @@ export { buildFingerprint };
 export function resetRealtimeDedup() {
     dedupMap.clear();
     selfPatchMap.clear();
+    editingAtomes.clear();
 }

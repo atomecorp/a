@@ -505,6 +505,80 @@ const coerceStyleValue = (value) => {
     return String(value);
 };
 
+/**
+ * Check if an atome element is currently in local editing mode.
+ * When true, we must NOT apply remote patches to avoid destroying the editing state.
+ * @param {HTMLElement} el - The atome host element
+ * @returns {boolean} True if the element is being edited locally
+ */
+const isElementInEditMode = (el) => {
+    if (!el) return false;
+    // Check the host's editing flag
+    if (el.dataset?.eveTextEditing === 'true') return true;
+    // Check if any child text container is contenteditable and focused
+    const textContainer = el.querySelector?.('[data-role="atome-text"]');
+    if (textContainer?.isContentEditable) {
+        // Check if this element or its children have focus
+        const activeEl = document.activeElement;
+        if (activeEl === textContainer || textContainer.contains?.(activeEl)) {
+            return true;
+        }
+    }
+    return false;
+};
+
+/**
+ * Extract semantic text content from an atome's text container.
+ * Converts browser-generated div/br structures back to plain text with newlines.
+ * @param {HTMLElement} textContainer - The [data-role="atome-text"] element
+ * @returns {string} Semantic text content with proper line breaks
+ */
+const extractSemanticText = (textContainer) => {
+    if (!textContainer) return '';
+    // Clone to avoid modifying the original
+    const clone = textContainer.cloneNode(true);
+    // Replace <br> with newlines
+    clone.querySelectorAll('br').forEach((br) => {
+        br.replaceWith('\n');
+    });
+    // Replace block-level divs with newline + content
+    clone.querySelectorAll('div').forEach((div) => {
+        const text = div.textContent || '';
+        div.replaceWith('\n' + text);
+    });
+    // Get text and clean up multiple consecutive newlines
+    let text = clone.textContent || '';
+    // Trim leading newline that may result from first div replacement
+    text = text.replace(/^\n/, '');
+    return text;
+};
+
+/**
+ * Apply semantic text content to an atome's text container.
+ * Preserves the DOM structure by targeting [data-role="atome-text"] specifically.
+ * @param {HTMLElement} hostEl - The atome host element
+ * @param {string} textValue - The semantic text content to apply
+ */
+const applySemanticTextToElement = (hostEl, textValue) => {
+    if (!hostEl) return;
+    // Find the dedicated text container
+    const textContainer = hostEl.querySelector?.('[data-role="atome-text"]');
+    if (textContainer) {
+        // Apply text only to the text container, preserving other children (resize-handle, etc.)
+        textContainer.textContent = String(textValue);
+    } else {
+        // Fallback: if no text container exists, check if this is a simple text element
+        // Only set textContent if there are no special child elements to preserve
+        const hasStructuralChildren = hostEl.querySelector?.('[data-role]');
+        if (!hasStructuralChildren) {
+            hostEl.textContent = String(textValue);
+        } else {
+            // Element has structural children but no text container - create one
+            console.warn('[UnifiedSync] Atome has structural children but no [data-role="atome-text"]. Text not applied to preserve structure.');
+        }
+    }
+};
+
 const applyAtomePatchToDom = (atomeId, properties = {}) => {
     if (!atomeId || typeof document === 'undefined') return;
     const elements = new Set();
@@ -525,10 +599,24 @@ const applyAtomePatchToDom = (atomeId, properties = {}) => {
 
     if (!elements.size) return;
 
+    // Filter out elements that are currently being edited locally
+    // to prevent remote patches from destroying the editing state
+    const patchableElements = new Set();
+    elements.forEach((el) => {
+        if (!isElementInEditMode(el)) {
+            patchableElements.add(el);
+        }
+    });
+
+    // If all elements are in edit mode, skip patching entirely
+    if (!patchableElements.size) {
+        return;
+    }
+
     const cssProps = properties?.css && typeof properties.css === 'object' ? properties.css : null;
     if (cssProps) {
         Object.entries(cssProps).forEach(([key, value]) => {
-            elements.forEach((el) => {
+            patchableElements.forEach((el) => {
                 el.style[key] = coerceStyleValue(value);
             });
         });
@@ -536,30 +624,37 @@ const applyAtomePatchToDom = (atomeId, properties = {}) => {
 
     Object.entries(properties || {}).forEach(([key, value]) => {
         if (value == null) return;
-        if (key === 'text') {
-            elements.forEach((el) => { el.textContent = String(value); });
+        if (key === 'text' || key === 'content' || key === 'textContent') {
+            // CRITICAL FIX: Apply text to the dedicated text container,
+            // NOT to the host element, to preserve DOM structure
+            patchableElements.forEach((el) => {
+                applySemanticTextToElement(el, value);
+            });
             return;
         }
         if (key.startsWith('css.')) {
             const cssKey = key.slice(4);
-            elements.forEach((el) => { el.style[cssKey] = coerceStyleValue(value); });
+            patchableElements.forEach((el) => { el.style[cssKey] = coerceStyleValue(value); });
             return;
         }
         if (key === 'rotation' || key === 'rotate') {
             const next = String(value).includes('deg') || String(value).includes('rad')
                 ? String(value)
                 : `${value}deg`;
-            elements.forEach((el) => { el.style.transform = `rotate(${next})`; });
+            patchableElements.forEach((el) => { el.style.transform = `rotate(${next})`; });
             return;
         }
         if (key === 'left' || key === 'top' || key === 'right' || key === 'bottom'
             || key === 'width' || key === 'height' || key === 'opacity'
             || key === 'zIndex' || key === 'background' || key === 'backgroundColor'
             || key === 'color') {
-            elements.forEach((el) => { el.style[key] = coerceStyleValue(value); });
+            patchableElements.forEach((el) => { el.style[key] = coerceStyleValue(value); });
         }
     });
 };
+
+// Export for use by other modules
+export { extractSemanticText, isElementInEditMode };
 
 const dispatchAtomeEvent = (type, payload) => {
     if (typeof window === 'undefined') return;
