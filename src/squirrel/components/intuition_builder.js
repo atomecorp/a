@@ -1712,24 +1712,53 @@ function renderFloatingBody(info, nameKeys) {
     }
 }
 
-function computeFloatingInsertionIndex(info, x, y) {
-    if (!info || !info.body) return 0;
+function getFloatingInsertionRects(info, isHorizontal) {
+    if (!info || !info.body) return [];
     const items = Array.from(info.body.children || []).filter((node) => {
         if (!node || !node.dataset) return false;
         if (!node.dataset.nameKey) return false;
         return true;
     });
-    if (!items.length) return 0;
-    const { isHorizontal } = getDirMeta(info.theme || currentTheme);
-    const axisPoint = isHorizontal ? x : y;
-    let insertionIndex = items.length;
-    for (let i = 0; i < items.length; i += 1) {
-        const rect = items[i].getBoundingClientRect();
-        if (!rect) continue;
+    if (!items.length) return [];
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const scrollLeft = info.body.scrollLeft || 0;
+    const scrollTop = info.body.scrollTop || 0;
+    const cache = info._insertionCache;
+    if (cache
+        && cache.axis === (isHorizontal ? 'x' : 'y')
+        && cache.count === items.length
+        && cache.scrollLeft === scrollLeft
+        && cache.scrollTop === scrollTop
+        && (now - cache.at) < 32) {
+        return cache.rects;
+    }
+    const rects = items.map((el) => {
+        const rect = el.getBoundingClientRect();
         const center = isHorizontal
             ? rect.left + (rect.width || 0) / 2
             : rect.top + (rect.height || 0) / 2;
-        if (axisPoint < center) {
+        return { center };
+    });
+    info._insertionCache = {
+        axis: isHorizontal ? 'x' : 'y',
+        count: items.length,
+        scrollLeft,
+        scrollTop,
+        at: now,
+        rects
+    };
+    return rects;
+}
+
+function computeFloatingInsertionIndex(info, x, y) {
+    if (!info || !info.body) return 0;
+    const { isHorizontal } = getDirMeta(info.theme || currentTheme);
+    const axisPoint = isHorizontal ? x : y;
+    const rects = getFloatingInsertionRects(info, isHorizontal);
+    if (!rects.length) return 0;
+    let insertionIndex = rects.length;
+    for (let i = 0; i < rects.length; i += 1) {
+        if (axisPoint < rects[i].center) {
             insertionIndex = i;
             break;
         }
@@ -2628,7 +2657,7 @@ function calculate_positions() {
     // and to have momentum scrolling enabled. Also hint the primary pan axis.
     support.pointerEvents = 'none';
     support.WebkitOverflowScrolling = 'touch';
-    support.touchtouch = isHorizontal ? 'pan-x' : 'pan-y';
+    support.touchAction = isHorizontal ? 'pan-x' : 'pan-y';
 
 
     return { toolbox_support: support, toolbox: trigger };
@@ -2663,7 +2692,7 @@ const toolbox_support = {
         overflowX: 'auto',
         overflowY: 'hidden',
         pointerEvents: 'none',       // let background interactions pass through; real items stay interactive
-        touchtouch: 'manipulation'
+        touchAction: 'manipulation'
     }
 };
 
@@ -2773,7 +2802,7 @@ function intuitionCommon(cfg) {
             position: 'relative',
             flex: '0 0 auto',
             pointerEvents: 'auto',        // réactive les events sur l’item
-            touchtouch: 'manipulation',  // tap/drag mobiles OK
+            touchAction: 'manipulation',  // tap/drag mobiles OK
             // Hide new menu items until slideIn sets their initial transform to avoid visible nudge
             visibility: (cfg.id && String(cfg.id).startsWith('_intuition_')) ? 'hidden' : 'visible',
             ...(cfg.css || {})
@@ -2936,6 +2965,23 @@ function createPalette(cfg) {
     });
 
 }
+function attachToolPointerHandlers(el, def) {
+    if (!el) return;
+    // Pointer/touch down
+    ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
+        el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
+            handleToolSemanticEvent('touch_down', el, def, e);
+        }, { passive: false });
+    });
+    // Pointer/touch up
+    ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
+        el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
+            handleToolSemanticEvent('touch_up', el, def, e);
+        }, true);
+    });
+}
 function createTool(cfg) {
     const finalCss = { ...items_common, ...(cfg?.css || {}) };
     if (finalCss.background == null) {
@@ -2963,20 +3009,8 @@ function createTool(cfg) {
         e.stopPropagation();
         handleToolSemanticEvent('touch', el, def, e);
     });
-    // Pointer/touch down
-    ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
-        el.addEventListener(ev, (e) => {
-            if (suppressInteractionDuringEdit(e)) return;
-            handleToolSemanticEvent('touch_down', el, def, e);
-        }, { passive: false });
-    });
-    // Pointer/touch up (use capture to ensure firing even if propagation canceled in children)
-    ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
-        el.addEventListener(ev, (e) => {
-            if (suppressInteractionDuringEdit(e)) return;
-            handleToolSemanticEvent('touch_up', el, def, e);
-        }, true);
-    });
+    // Pointer/touch down/up (use capture to ensure firing even if propagation canceled in children)
+    attachToolPointerHandlers(el, def);
     attachToolLockBehavior(el, cfg, def);
 }
 function createParticle(cfg) {
@@ -3009,20 +3043,7 @@ function createOption(cfg) {
         e.stopPropagation();
         handleToolSemanticEvent('touch', el, def, e);
     });
-    // Pointer/touch down
-    ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
-        el.addEventListener(ev, (e) => {
-            if (suppressInteractionDuringEdit(e)) return;
-            handleToolSemanticEvent('touch_down', el, def, e);
-        }, { passive: false });
-    });
-    // Pointer/touch up
-    ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
-        el.addEventListener(ev, (e) => {
-            if (suppressInteractionDuringEdit(e)) return;
-            handleToolSemanticEvent('touch_up', el, def, e);
-        }, true);
-    });
+    attachToolPointerHandlers(el, def);
 }
 function createZonespecial(cfg) {
     const finalCss = { ...items_common, ...(cfg?.css || {}) };
@@ -3040,18 +3061,7 @@ function createZonespecial(cfg) {
         e.stopPropagation();
         handleToolSemanticEvent('touch', el, def, e);
     });
-    ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
-        el.addEventListener(ev, (e) => {
-            if (suppressInteractionDuringEdit(e)) return;
-            handleToolSemanticEvent('touch_down', el, def, e);
-        }, { passive: false });
-    });
-    ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
-        el.addEventListener(ev, (e) => {
-            if (suppressInteractionDuringEdit(e)) return;
-            handleToolSemanticEvent('touch_up', el, def, e);
-        }, true);
-    });
+    attachToolPointerHandlers(el, def);
 
 }
 
@@ -6151,6 +6161,10 @@ function restorePalette(state) {
     el.style.zIndex = '';
     el.style.width = '';
     el.style.height = '';
+    el.style.lineHeight = '';
+    el.style.margin = '';
+    el.style.transform = '';
+    el.style.willChange = '';
     // Restore label position inside menu
     setLabelCentered(el, false);
     // Restore label/icon visibility for in-menu state
