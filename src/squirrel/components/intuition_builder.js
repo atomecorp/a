@@ -2867,6 +2867,13 @@ function createLabel(cfg) {
     const resolvedLabelKey = cfg?.labelKey || def?.labelKey;
     const resolvedFallback = cfg?.label || cfg?.labelFallback || def?.label || def?.labelFallback || cfg?.nameKey || '';
     if (!cfg?.label && !resolvedLabelKey) return;
+    const parentEl = cfg?.id ? document.getElementById(cfg.id) : null;
+    if (parentEl) {
+        const existing = parentEl.querySelector('.intuition-label');
+        if (existing) {
+            try { existing.remove(); } catch (_) { /* ignore */ }
+        }
+    }
     const rawText = resolvedLabelKey
         ? translateIntuitionLabel(resolvedLabelKey, resolvedFallback)
         : String(cfg.label || resolvedFallback);
