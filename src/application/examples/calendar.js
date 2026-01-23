@@ -372,9 +372,9 @@ function buildIcs(events, options = {}) {
 
         const alarms = normalizeArray(event.alarms);
         alarms.forEach((alarm) => {
-        const triggerMinutes = Number(alarm.offsetMinutes ?? alarm.offset ?? DEFAULT_ALARM_MINUTES);
-        const triggerSign = triggerMinutes < 0 ? '-' : '';
-        const trigger = `${triggerSign}PT${Math.abs(triggerMinutes)}M`;
+            const triggerMinutes = Number(alarm.offsetMinutes ?? alarm.offset ?? DEFAULT_ALARM_MINUTES);
+            const triggerSign = triggerMinutes < 0 ? '-' : '';
+            const trigger = `${triggerSign}PT${Math.abs(triggerMinutes)}M`;
             lines.push('BEGIN:VALARM');
             lines.push(`TRIGGER:${trigger}`);
             lines.push('ACTION:DISPLAY');
@@ -704,7 +704,7 @@ const CalendarAPI = {
     expandOccurrences,
     scheduleAlarmsForEvent,
     on(handler) {
-        if (typeof handler !== 'function') return () => {};
+        if (typeof handler !== 'function') return () => { };
         listeners.add(handler);
         return () => listeners.delete(handler);
     },
@@ -715,9 +715,11 @@ const CalendarAPI = {
 
 if (typeof window !== 'undefined') {
     window.CalendarAPI = CalendarAPI;
-    import('./calendarUI.js').catch((err) => {
-        console.warn('[Calendar] UI failed to load:', err?.message || err);
-    });
+    if (!window.__EVE_DISABLE_CALENDAR_UI__) {
+        import('./calendarUI.js').catch((err) => {
+            console.warn('[Calendar] UI failed to load:', err?.message || err);
+        });
+    }
 }
 
 export { CalendarAPI };

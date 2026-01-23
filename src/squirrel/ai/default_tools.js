@@ -11,6 +11,20 @@ const safeString = (value) => {
     return str ? str : null;
 };
 
+const loadCalendarApi = async () => {
+    if (globalThis.CalendarAPI) return globalThis.CalendarAPI;
+    const mod = await import('../../application/eVe/tools/calendar.js');
+    return mod?.CalendarAPI || globalThis.CalendarAPI || null;
+};
+
+const requireCalendarApi = async () => {
+    const api = await loadCalendarApi();
+    if (!api) {
+        throw new Error('CalendarAPI is not available');
+    }
+    return api;
+};
+
 const registerDefaultTools = () => {
     if (typeof globalThis === 'undefined') return;
     const Agent = globalThis.AtomeAI;
@@ -150,6 +164,179 @@ const registerDefaultTools = () => {
             return fn(id, payload);
         },
         summary: (params) => `Alter atome ${params?.id || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'calendar.list_events',
+        description: 'List calendar events.',
+        capabilities: ['calendar.read'],
+        risk_level: 'LOW',
+        params_schema: {
+            properties: {
+                projectId: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            const payload = params?.projectId ? { projectId: String(params.projectId) } : {};
+            return api.listEvents(payload);
+        },
+        summary: () => 'List calendar events'
+    });
+
+    Agent.registerTool({
+        name: 'calendar.get_event',
+        description: 'Get a calendar event by id.',
+        capabilities: ['calendar.read'],
+        risk_level: 'LOW',
+        params_schema: {
+            required: ['eventId'],
+            properties: {
+                eventId: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            const eventId = safeString(params?.eventId);
+            if (!eventId) throw new Error('Missing eventId');
+            return api.getEvent(eventId);
+        },
+        summary: (params) => `Get calendar event ${params?.eventId || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'calendar.create_event',
+        description: 'Create a calendar event.',
+        capabilities: ['calendar.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            properties: {
+                event: { type: 'object' },
+                projectId: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            const payload = params?.event && typeof params.event === 'object'
+                ? { ...params.event }
+                : { ...(params || {}) };
+            if (params?.projectId) payload.projectId = String(params.projectId);
+            delete payload.event;
+            return api.createEvent(payload);
+        },
+        summary: () => 'Create calendar event'
+    });
+
+    Agent.registerTool({
+        name: 'calendar.update_event',
+        description: 'Update a calendar event.',
+        capabilities: ['calendar.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            required: ['eventId'],
+            properties: {
+                eventId: { type: 'string' },
+                changes: { type: 'object' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            const eventId = safeString(params?.eventId);
+            if (!eventId) throw new Error('Missing eventId');
+            const changes = params?.changes && typeof params.changes === 'object'
+                ? params.changes
+                : {};
+            return api.updateEvent(eventId, changes);
+        },
+        summary: (params) => `Update calendar event ${params?.eventId || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'calendar.delete_event',
+        description: 'Delete a calendar event.',
+        capabilities: ['calendar.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            required: ['eventId'],
+            properties: {
+                eventId: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            const eventId = safeString(params?.eventId);
+            if (!eventId) throw new Error('Missing eventId');
+            return api.deleteEvent(eventId);
+        },
+        summary: (params) => `Delete calendar event ${params?.eventId || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'calendar.ensure_calendar',
+        description: 'Ensure a calendar exists (creates default if missing).',
+        capabilities: ['calendar.write'],
+        risk_level: 'LOW',
+        params_schema: {
+            properties: {
+                calendarId: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            const calendarId = safeString(params?.calendarId) || undefined;
+            return api.ensureCalendar(calendarId);
+        },
+        summary: () => 'Ensure calendar exists'
+    });
+
+    Agent.registerTool({
+        name: 'calendar.share',
+        description: 'Share a calendar with another user.',
+        capabilities: ['calendar.write', 'share.write'],
+        risk_level: 'HIGH',
+        params_schema: {
+            required: ['phone'],
+            properties: {
+                phone: { type: 'string' },
+                calendarId: { type: 'string' },
+                permissions: { type: 'object' },
+                shareType: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            const phone = safeString(params?.phone);
+            if (!phone) throw new Error('Missing phone');
+            const options = {
+                calendarId: params?.calendarId ? String(params.calendarId) : undefined,
+                phone,
+                permissions: params?.permissions,
+                shareType: params?.shareType
+            };
+            return api.shareCalendar(options);
+        },
+        summary: () => 'Share calendar'
+    });
+
+    Agent.registerTool({
+        name: 'calendar.export_webcal',
+        description: 'Export calendar events as an ICS feed and optional webcal URL.',
+        capabilities: ['calendar.read'],
+        risk_level: 'LOW',
+        params_schema: {
+            properties: {
+                calendarId: { type: 'string' },
+                baseUrl: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarApi();
+            return api.exportWebcal({
+                calendarId: params?.calendarId ? String(params.calendarId) : undefined,
+                baseUrl: params?.baseUrl ? String(params.baseUrl) : undefined
+            });
+        },
+        summary: () => 'Export calendar webcal'
     });
 
     Agent.registerTool({
