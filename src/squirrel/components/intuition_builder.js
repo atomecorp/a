@@ -3431,6 +3431,9 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             break;
         case 'touch':
             runContentHandler(def, 'touch', { ...basePayload, kind: 'touch' });
+            if (rawEvent && rawEvent.defaultPrevented) {
+                break;
+            }
             if (actionMode === 'momentary') {
                 triggerMomentaryPulse();
                 if (expandChildrenOnClick) {
