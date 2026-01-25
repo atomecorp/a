@@ -1241,6 +1241,12 @@ function normalize_user_entry(raw) {
     const username = safe_parse_json(properties?.username) || raw.username || null;
     const phone = safe_parse_json(properties?.phone) || raw.phone || null;
     const visibility = safe_parse_json(properties?.visibility) || raw.visibility || 'public';
+    const profileRaw = safe_parse_json(properties?.eve_profile || properties?.profile || raw.eve_profile || raw.profile || null);
+    const profile = (profileRaw && typeof profileRaw === 'object' && !Array.isArray(profileRaw)) ? profileRaw : null;
+    const firstName = safe_parse_json(properties?.first_name || properties?.firstname || properties?.firstName
+        || profile?.first_name || profile?.firstname || profile?.firstName
+        || raw.first_name || raw.firstname || raw.firstName || null);
+    const name = safe_parse_json(properties?.name || profile?.name || raw.name || null);
 
     // Phone number is the stable lookup key for sharing/discovery.
     // Drop entries that do not have a usable phone.
@@ -1250,6 +1256,8 @@ function normalize_user_entry(raw) {
     return {
         user_id: userId,
         username: (username && String(username).trim()) ? username : 'Unknown',
+        name: (name && String(name).trim()) ? name : undefined,
+        first_name: (firstName && String(firstName).trim()) ? firstName : undefined,
         phone: phoneStr,
         visibility: visibility === 'private' ? 'private' : 'public'
     };
