@@ -1596,10 +1596,15 @@ fn get_or_create_jwt_secret(data_dir: &PathBuf) -> (String, bool) {
     // returns (secret, created_flag)
     if let Ok(secret) = std::env::var("JWT_SECRET") {
         if !secret.trim().is_empty() {
+            println!(
+                "[Auth] Using JWT_SECRET from environment: {}...",
+                &secret[..std::cmp::min(20, secret.len())]
+            );
             return (secret, false);
         }
     }
     if let Ok(secret) = std::env::var("LOCAL_JWT_SECRET") {
+        println!("[Auth] Using LOCAL_JWT_SECRET from environment");
         return (secret, false);
     }
 
@@ -1609,12 +1614,18 @@ fn get_or_create_jwt_secret(data_dir: &PathBuf) -> (String, bool) {
         if let Ok(secret) = std::fs::read_to_string(&secret_path) {
             let trimmed = secret.trim();
             if !trimmed.is_empty() {
+                println!(
+                    "[Auth] Using JWT secret from file: {:?} ({}... chars)",
+                    secret_path,
+                    std::cmp::min(20, trimmed.len())
+                );
                 return (trimmed.to_string(), false);
             }
         }
     }
 
     // Generate new secret
+    println!("[Auth] Generating new JWT secret (no env var, no file found)");
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..64).map(|_| rand::Rng::gen(&mut rng)).collect();
     let secret = hex::encode(bytes);

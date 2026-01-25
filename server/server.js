@@ -2826,7 +2826,25 @@ async function startServer() {
                   const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
                   const decoded = jwt.default.verify(token, jwtSecret);
                   const decodedUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
-                  const user = decodedUserId ? await findUserById(dataSource, String(decodedUserId)) : null;
+                  let user = decodedUserId ? await findUserById(dataSource, String(decodedUserId)) : null;
+
+                  // If user doesn't exist but JWT is valid, create a shadow user
+                  // This enables Tauri users to authenticate on Fastify without explicit registration
+                  if (!user && decodedUserId && decoded) {
+                    const shadowUsername = decoded.username || decoded.name || `user_${decodedUserId.substring(0, 8)}`;
+                    const shadowPhone = decoded.phone || decoded.phoneNumber || null;
+
+                    console.log(`[ws/api] Creating shadow user from valid JWT: ${decodedUserId.substring(0, 8)}`);
+                    try {
+                      // Create user with a random password hash (they'll auth via JWT only)
+                      const bcrypt = await import('bcrypt');
+                      const randomHash = await bcrypt.hash(`shadow_${Date.now()}_${Math.random()}`, 10);
+                      await createUserAtome(dataSource, decodedUserId, shadowUsername, shadowPhone, randomHash, 'public', {});
+                      user = await findUserById(dataSource, String(decodedUserId));
+                    } catch (createErr) {
+                      console.warn(`[ws/api] Failed to create shadow user: ${createErr.message}`);
+                    }
+                  }
 
                   if (!user) {
                     safeSend({

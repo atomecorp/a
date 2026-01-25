@@ -129,6 +129,21 @@ const resolveTauriWsApiUrl = () => {
 
 const getFastifyToken = () => {
     try {
+        // Check if Fastify is pointing to local server (127.0.0.1 or localhost)
+        const fastifyBase = resolveFastifyHttpBase();
+        const isLocalFastify = fastifyBase && (
+            fastifyBase.includes('127.0.0.1') ||
+            fastifyBase.includes('localhost') ||
+            fastifyBase.includes('0.0.0.0')
+        );
+
+        // Use local_auth_token for local Fastify, cloud_auth_token for cloud
+        if (isLocalFastify) {
+            const local = localStorage.getItem('local_auth_token');
+            if (local) return local;
+            // Fallback to cloud token if local not available
+        }
+
         const cloud = localStorage.getItem('cloud_auth_token');
         if (cloud) return cloud;
         const legacy = localStorage.getItem('auth_token');
@@ -950,8 +965,16 @@ const onCommandMessage = (payload) => {
 
 const ensureCommandAuth = async (userId) => {
     if (commandState.authInFlight) return false;
-    const token = getFastifyToken();
-    if (!token) return false;
+
+    // Try Fastify token first, then Tauri token (they share the same JWT_SECRET)
+    let token = getFastifyToken();
+    if (!token) {
+        token = getTauriToken();
+    }
+    if (!token) {
+        console.log('[UnifiedSync] ensureCommandAuth: no token available');
+        return false;
+    }
 
     commandState.authInFlight = true;
     const authPayload = {
@@ -969,7 +992,10 @@ const ensureCommandAuth = async (userId) => {
             commandState.authInFlight = false;
             return true;
         }
-    } catch (_) { }
+        console.log('[UnifiedSync] ensureCommandAuth: auth failed', response?.error || 'unknown');
+    } catch (err) {
+        console.log('[UnifiedSync] ensureCommandAuth: error', err?.message || err);
+    }
 
     commandState.authInFlight = false;
     return false;
@@ -1016,10 +1042,12 @@ const commands = {
             message
         };
 
-        if (String(targetUserIdOrPhone || '').includes('+') || String(targetUserIdOrPhone || '').length >= 8) {
-            payload.toPhone = String(targetUserIdOrPhone);
+        const rawTarget = String(targetUserIdOrPhone || '');
+        const looksLikeUuid = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-/.test(rawTarget);
+        if (rawTarget.includes('+') || (!looksLikeUuid && rawTarget.length >= 8)) {
+            payload.toPhone = rawTarget;
         } else {
-            payload.toUserId = String(targetUserIdOrPhone);
+            payload.toUserId = rawTarget;
         }
 
         try {

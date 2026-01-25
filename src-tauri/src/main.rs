@@ -55,6 +55,23 @@ fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> 
 }
 
 fn main() {
+    // Load .env file from project root (if exists)
+    // This ensures JWT_SECRET and other env vars are shared with Fastify
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let env_path = cwd.join(".env");
+    if env_path.exists() {
+        if let Err(e) = dotenvy::from_path(&env_path) {
+            eprintln!(
+                "[tauri] Warning: Failed to load .env from {:?}: {}",
+                env_path, e
+            );
+        } else {
+            println!("[tauri] Loaded environment from {:?}", env_path);
+        }
+    } else {
+        println!("[tauri] No .env file found at {:?}", env_path);
+    }
+
     let _log_guard = dev_logging::init_tracing();
 
     tauri::Builder::default()

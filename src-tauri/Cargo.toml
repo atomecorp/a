@@ -52,3 +52,6 @@ reqwest = { version = "0.11", features = ["json"] }
 # ZIP extraction for updates
 zip = "0.6"
 tempfile = "3"
+
+# Environment variables from .env file
+dotenvy = "0.15"

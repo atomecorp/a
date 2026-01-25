@@ -226,7 +226,9 @@ let projectHistoryByAtome = new Map();
 
 // When Share imports/assigns atomes to the current project, refresh the project view.
 if (typeof window !== 'undefined') {
+  console.log('[User] Registering event listeners for share events...');
   window.addEventListener('adole-share-imported', async (e) => {
+    console.log('[User] adole-share-imported event received:', e?.detail);
     try {
       const sharedProjectId = e?.detail?.sharedProjectId || null;
       const shareType = e?.detail?.shareType || null;
@@ -234,10 +236,13 @@ if (typeof window !== 'undefined') {
       const projectId = (sharedProjectId && effectiveShareType === 'linked')
         ? sharedProjectId
         : (e?.detail?.projectId || selectedProjectId);
+      console.log('[User] adole-share-imported - projectId:', projectId, 'selectedProjectId:', selectedProjectId, 'currentProjectDiv:', !!currentProjectDiv);
       if (!projectId) return;
 
       const shouldSwitchProject = !currentProjectDiv || String(projectId) !== String(selectedProjectId || '');
+      console.log('[User] adole-share-imported - shouldSwitchProject:', shouldSwitchProject);
       if (!shouldSwitchProject) {
+        console.log('[User] adole-share-imported - calling loadProjectAtomes:', projectId);
         await loadProjectAtomes(projectId);
         return;
       }
@@ -297,6 +302,95 @@ if (typeof window !== 'undefined') {
       if (!matches && items.length) return;
       await loadProjectAtomes(projectId);
     } catch (_) { }
+  });
+
+  // Handle shared atomes received (for linked shares)
+  window.addEventListener('adole-atome-shared-received', async (e) => {
+    console.log('[User] adole-atome-shared-received event received!', e?.detail);
+    try {
+      const detail = e?.detail || {};
+      const atomeId = detail.atomeId;
+      const atome = detail.atome;
+      const particles = detail.particles || atome?.particles || atome?.data || {};
+      const atomeType = detail.type || atome?.atome_type || atome?.type || 'shape';
+      const projectId = detail.projectId || selectedProjectId;
+
+      console.log('[User] Received shared atome:', { atomeId, atomeType, projectId, particles, currentProjectDiv: !!currentProjectDiv });
+
+      if (!atomeId || !projectId) {
+        console.warn('[User] Missing atomeId or projectId for shared atome');
+        return;
+      }
+
+      // Check if atome is already displayed
+      const existingEl = document.getElementById(atomeId);
+      if (existingEl) {
+        console.log('[User] Shared atome already displayed:', atomeId);
+        return;
+      }
+
+      // Render the shared atome in the current project view
+      if (currentProjectDiv) {
+        const left = particles.left || particles.x || '100px';
+        const top = particles.top || particles.y || '100px';
+        const width = particles.width || '100px';
+        const height = particles.height || '100px';
+        const color = particles.color || particles.backgroundColor || 'rgba(100,180,255,0.8)';
+        const borderRadius = particles.borderRadius || '8px';
+
+        console.log('[User] Creating visual for shared atome:', { atomeId, left, top, width, height, color });
+
+        // Create a visual representation of the shared atome
+        const atomeEl = document.createElement('div');
+        atomeEl.id = atomeId;
+        atomeEl.dataset.shared = 'true';
+        atomeEl.dataset.type = atomeType;
+        atomeEl.style.cssText = `
+          position: absolute;
+          left: ${left};
+          top: ${top};
+          width: ${width};
+          height: ${height};
+          background-color: ${color};
+          border-radius: ${borderRadius};
+          border: 2px dashed rgba(100,255,150,0.7);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          cursor: pointer;
+          z-index: 10;
+        `;
+
+        // Add a label to show it's shared
+        const label = document.createElement('div');
+        label.style.cssText = `
+          position: absolute;
+          top: -20px;
+          left: 0;
+          font-size: 10px;
+          color: rgba(100,255,150,0.9);
+          white-space: nowrap;
+        `;
+        label.textContent = '📤 ' + (detail.from || 'Shared');
+        atomeEl.appendChild(label);
+
+        // Add to project view
+        currentProjectDiv.appendChild(atomeEl);
+
+        // Add to tracking
+        if (!atomeMetaById.has(String(atomeId))) {
+          atomeMetaById.set(String(atomeId), {
+            id: String(atomeId),
+            type: atomeType,
+            projectId: projectId,
+            shared: true,
+            from: detail.from
+          });
+        }
+
+        console.log('[User] Shared atome rendered:', atomeId);
+      }
+    } catch (err) {
+      console.error('[User] Error handling shared atome:', err);
+    }
   });
 }
 
@@ -454,6 +548,14 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
   // Update state
   selectedProjectId = projectId;
   currentProjectName = projectName;
+
+  // Expose current project ID globally for communication.js and other modules
+  if (typeof window !== 'undefined') {
+    window.__CURRENT_PROJECT_ID = projectId;
+    window.currentProjectId = projectId;
+    window.selectedProjectId = projectId;  // Also expose selectedProjectId
+  }
+
   grab('current_project').textContent = projectName;
 
   // Persist current project to database (for restoration at next login)
@@ -590,6 +692,170 @@ async function loadProjectAtomes(projectId) {
   }
 }
 
+// Expose loadProjectAtomes globally for use by communication.js and other modules
+if (typeof window !== 'undefined') {
+  window.loadProjectAtomes = loadProjectAtomes;
+}
+
+/**
+ * Create a media atome element (image, sound, audio, video)
+ * @param {string} atomeId - The atome ID
+ * @param {string} mediaType - The media type (image, sound, audio, video)
+ * @param {string} left - CSS left position
+ * @param {string} top - CSS top position
+ * @param {string} borderRadius - CSS border radius
+ * @param {number} opacity - CSS opacity
+ * @param {Object} particles - Atome particles
+ * @returns {HTMLElement} The created element
+ */
+function createMediaAtome(atomeId, mediaType, left, top, borderRadius, opacity, particles) {
+  console.log('[User] createMediaAtome called:', { atomeId, mediaType, left, top, particles });
+
+  const width = particles.width || '200px';
+  const height = particles.height || '150px';
+  let src = particles.src || particles.media_url || particles.url || particles.path || '';
+  const name = particles.name || particles.label || atomeId.substring(0, 8);
+
+  const tauriUrl = window.__SQUIRREL_TAURI_URL__ || 'http://127.0.0.1:3000';
+  const fastifyUrl = window.__SQUIRREL_FASTIFY_URL__ || 'http://127.0.0.1:3001';
+
+  // Resolve media URL only if relative path
+  if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
+    // Relative path - resolve to full URL using Fastify as main asset server
+    const ownerId = particles.owner_id || particles.ownerId || particles.sharedOwnerId || 'shared';
+    if (src.startsWith('assets/')) {
+      src = `${fastifyUrl}/${src}`;
+    } else {
+      src = `${fastifyUrl}/assets/${ownerId}/${src}`;
+    }
+    console.log('[User] Resolved relative media path:', src);
+  }
+  // For absolute URLs (http://...), use them as-is since both servers are on localhost
+
+  console.log('[User] Final media src:', src);
+
+  // Base container CSS
+  const containerCss = {
+    position: 'absolute',
+    left: left,
+    top: top,
+    width: width,
+    height: height,
+    opacity: opacity,
+    cursor: 'move',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    userSelect: 'none',
+    border: '2px solid transparent',
+    outline: 'none',
+    zIndex: '50',
+    pointerEvents: 'auto',
+    borderRadius: borderRadius,
+    overflow: 'hidden',
+    backgroundColor: '#333'
+  };
+
+  // Create container
+  const container = $('div', {
+    id: 'atome_' + atomeId,
+    parent: currentProjectDiv,
+    css: containerCss,
+    attrs: {
+      'data-atome-type': mediaType,
+      'data-media-src': src
+    },
+    onClick: (e) => {
+      e.stopPropagation();
+      selectVisualAtome(container, atomeId);
+    }
+  });
+
+  // Create inner media element based on type
+  if (mediaType === 'image') {
+    $('img', {
+      parent: container,
+      css: {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        pointerEvents: 'none'
+      },
+      attrs: {
+        src: src,
+        alt: name
+      }
+    });
+  } else if (mediaType === 'sound' || mediaType === 'audio') {
+    // Create audio player with visual representation
+    $('div', {
+      parent: container,
+      css: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        height: '100%',
+        color: 'white',
+        fontSize: '12px',
+        textAlign: 'center',
+        padding: '8px',
+        boxSizing: 'border-box'
+      },
+      children: [
+        $('div', {
+          css: { fontSize: '24px', marginBottom: '8px' },
+          text: '🔊'
+        }),
+        $('div', {
+          css: { marginBottom: '8px', wordBreak: 'break-word' },
+          text: name
+        }),
+        $('audio', {
+          css: { width: '100%', height: '32px' },
+          attrs: {
+            src: src,
+            controls: true,
+            preload: 'metadata'
+          }
+        })
+      ]
+    });
+  } else if (mediaType === 'video') {
+    $('video', {
+      parent: container,
+      css: {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover'
+      },
+      attrs: {
+        src: src,
+        controls: true,
+        preload: 'metadata'
+      }
+    });
+  }
+
+  // Store meta
+  atomeMetaById.set(String(atomeId), {
+    id: String(atomeId),
+    type: mediaType,
+    projectId: selectedProjectId,
+    visualType: mediaType,
+    color: '#333',
+    left,
+    top,
+    borderRadius,
+    opacity,
+    particles: { ...particles }
+  });
+
+  // Make draggable
+  makeAtomeDraggable(container, atomeId);
+
+  return container;
+}
+
 /**
  * TEST ONLY - Create a visual atome element in the project container
  * @param {string} atomeId - The atome ID
@@ -603,12 +869,21 @@ async function loadProjectAtomes(projectId) {
  * @returns {HTMLElement} The created element
  */
 function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px', opacity = 1.0, particles = {}) {
+  console.log('[User] createVisualAtome called:', { atomeId, type, color, left, top, borderRadius, opacity, particles });
   if (!currentProjectDiv) {
     puts('No project loaded. Please load a project first.');
     return null;
   }
 
   const visualType = String(type || 'shape').toLowerCase();
+
+  // Handle media types (image, sound, audio, video) specially
+  const isMediaType = ['image', 'sound', 'audio', 'video'].includes(visualType);
+
+  if (isMediaType) {
+    return createMediaAtome(atomeId, visualType, left, top, borderRadius, opacity, particles);
+  }
+
   const textContent = particles.content || particles.label || particles.text || particles.value || '';
   const placeholder = particles.placeholder || 'Type...';
   const supportsInlineEdit = visualType === 'text' || visualType === 'span' || visualType === 'button';
@@ -850,6 +1125,37 @@ function createVisualAtome(atomeId, type, color, left, top, borderRadius = '8px'
   makeAtomeDraggable(atomeEl, atomeId);
 
   return atomeEl;
+}
+
+// Expose createVisualAtome globally for use by communication.js
+if (typeof window !== 'undefined') {
+  window.createVisualAtome = createVisualAtome;
+
+  // Listen for eve:render-atome events from communication.js
+  // This ensures atomes are rendered even if communication.js runs before user.js
+  window.addEventListener('eve:render-atome', (event) => {
+    const detail = event?.detail || {};
+    console.log('[User] Received eve:render-atome event:', detail);
+
+    const { atomeId, visualType, color, left, top, borderRadius, opacity, particles } = detail;
+
+    if (!atomeId) {
+      console.warn('[User] eve:render-atome missing atomeId');
+      return;
+    }
+
+    // Check if atome is already rendered
+    const existing = document.querySelector(`[data-atome-id="${atomeId}"]`);
+    if (existing) {
+      console.log('[User] Atome already rendered, skipping:', atomeId);
+      return;
+    }
+
+    console.log('[User] Rendering atome from event:', atomeId, visualType);
+    createVisualAtome(atomeId, visualType, color, left, top, borderRadius, opacity, particles);
+  });
+
+  console.log('[User] eve:render-atome listener registered');
 }
 
 /**

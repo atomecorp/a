@@ -3300,6 +3300,15 @@ try {
                 }
                 console.log('  - Tauri token:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
                 console.log('  - Fastify token:', hasFastifyToken ? 'YES' : 'NO');
+
+                // Check if local_auth_token actually exists in localStorage (not fallback)
+                const realLocalToken = localStorage.getItem('local_auth_token');
+                const isTokenFromFallback = token && !realLocalToken;
+                if (isTokenFromFallback) {
+                    console.warn('[Auth] ⚠️ Token is from fallback (cloud_auth_token), not local_auth_token!');
+                    console.warn('[Auth] → This may cause auth issues with local Fastify. Re-login recommended.');
+                }
+
                 console.log('  - Expected state:', savedSession?.userId && token ? 'USER SHOULD BE CONNECTED' : 'USER NOT CONNECTED');
                 console.log('='.repeat(60));
 
@@ -5178,6 +5187,9 @@ async function create_atome(options, callback) {
     // This allows creating atomes for other users (e.g., messages to recipients)
     const ownerId = options.ownerId || currentUserId;
 
+    // Check if sync mode is requested (bypasses ACL checks for import operations)
+    const syncMode = options.sync === true;
+
     const properties = {
         color: atomeColor,
         created_at: new Date().toISOString(),
@@ -5189,7 +5201,8 @@ async function create_atome(options, callback) {
         type: atomeType,
         ownerId: ownerId,
         parentId: parentId, // Link to project by default, or to explicit parent
-        properties
+        properties,
+        sync: syncMode  // Pass sync flag to bypass ACL checks when needed
     };
 
     // Create on primary backend first.

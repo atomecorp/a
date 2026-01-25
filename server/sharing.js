@@ -284,10 +284,25 @@ export async function revokeShare(grantorId, permissionId) {
  * Check if user can share an atome (is owner or has can_share permission)
  */
 async function checkCanShare(userId, atomeId) {
-    if (!userId || !atomeId) return false;
+    if (!userId || !atomeId) {
+        console.warn('[Share] checkCanShare: missing userId or atomeId:', { userId, atomeId });
+        return false;
+    }
     try {
-        return await db.canShare(atomeId, userId);
-    } catch (_) {
+        const result = await db.canShare(atomeId, userId);
+        if (!result) {
+            // Get atome details for debugging
+            const atome = await db.getAtome(atomeId);
+            console.warn('[Share] checkCanShare DENIED:', {
+                userId,
+                atomeId,
+                atomeOwnerId: atome?.owner_id || 'NO_OWNER',
+                atomeType: atome?.atome_type || 'UNKNOWN'
+            });
+        }
+        return result;
+    } catch (err) {
+        console.error('[Share] checkCanShare error:', err);
         return false;
     }
 }
@@ -549,15 +564,23 @@ async function resolveShareAtomeIds(atomeIds) {
 }
 
 async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
+    console.log('[Share] applyShareAcceptance called:', { sharerId, targetUserId, particles: JSON.stringify(particles) });
+
     if (!sharerId || !targetUserId || !particles) {
         return { ok: false, error: 'Missing sharer or target' };
     }
 
     const shareType = extractShareType(particles);
+    console.log('[Share] Extracted shareType:', shareType);
+
     const atomeIdsRaw = extractAtomeIdsFromRequest(particles);
+    console.log('[Share] atomeIdsRaw:', atomeIdsRaw);
+
     const resolved = await resolveShareAtomeIds(atomeIdsRaw);
     if (resolved.error) return { ok: false, error: resolved.error };
     const atomeIds = resolved.ids;
+    console.log('[Share] Resolved atomeIds:', atomeIds);
+
     if (!atomeIds.length) return { ok: false, error: 'No atomes to share' };
 
     const permissions = particles.permissions || {};
@@ -569,17 +592,27 @@ async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
     const expiresAt = normalizeDurationToExpiry(meta?.duration);
     const conditions = meta?.condition || null;
 
+    console.log('[Share] shareType:', shareType, 'shareMode:', shareMode);
+
+    console.log('[Share] shareType check:', { shareType, isLinked: shareType === 'linked' });
+    console.log('[Share] receiverProjectId:', particles?.receiverProjectId || particles?.receiver_project_id || 'NONE');
+
     if (shareType !== 'linked') {
+        console.log('[Share] Creating shared copies (non-linked)...');
+        const receiverProjectId = particles?.receiverProjectId || particles?.receiver_project_id || null;
+        console.log('[Share] receiverProjectId for copies:', receiverProjectId);
         const copied = await createSharedCopies({
             sharerId,
             targetUserId,
             atomeIds,
-            receiverProjectId: particles?.receiverProjectId || particles?.receiver_project_id || null
+            receiverProjectId: receiverProjectId
         });
+        console.log('[Share] createSharedCopies result:', JSON.stringify(copied));
         if (!copied?.ok) return copied;
         return { ok: true, copies: copied.copies || [], mapping: copied.mapping || {} };
     }
 
+    console.log('[Share] Linked share - granting permissions only (no copies created)');
     const permissionPayload = {
         can_read: !!permissions.read,
         can_write: !!permissions.alter,
@@ -738,6 +771,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
             properties.shareType = 'copy';
             if (original.creator_id) properties.originalCreatorId = original.creator_id;
 
+            console.log('[Share] Creating copy with parent:', resolvedParent, 'for owner:', targetUserId);
             const created = await db.createAtome({
                 id: null,
                 type: original.atome_type || original.type || 'shape',
@@ -747,6 +781,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
                 creator: original.creator_id || sharerId,
                 properties
             });
+            console.log('[Share] Created copy result:', JSON.stringify(created));
 
             const newId = created?.atome_id || created?.id;
             if (newId) {
@@ -972,9 +1007,20 @@ export async function handleShareMessage(message, userId) {
                 const ids = resolvedIds.ids;
                 if (!ids.length) return { requestId, success: false, error: 'No atomes to share' };
 
+                console.log('[Share] Checking permissions for share request:', { userId, targetUserId: resolvedTargetUserId, atomeIds: ids });
+
                 for (const atomeId of ids) {
                     const allowed = await checkCanShare(userId, atomeId);
+                    console.log('[Share] checkCanShare result:', { userId, atomeId, allowed });
                     if (!allowed) {
+                        console.warn('[Share] Share request failed:', {
+                            targetPhone,
+                            atomeIds: ids,
+                            mode,
+                            error: 'Access denied (share)',
+                            targetUserId: resolvedTargetUserId,
+                            failedAtomeId: atomeId
+                        });
                         return { requestId, success: false, error: 'Access denied (share)' };
                     }
                 }
@@ -1047,10 +1093,14 @@ export async function handleShareMessage(message, userId) {
 
                 let acceptanceResult = { ok: true };
                 if (newStatus === 'active' || newStatus === 'accepted') {
+                    console.log('[Share] Processing accept - receiverProjectId from message:', receiverProjectId);
+                    console.log('[Share] Processing accept - particles.receiverProjectId:', particles.receiverProjectId);
+                    console.log('[Share] Processing accept - particles.receiver_project_id:', particles.receiver_project_id);
                     const acceptanceParticles = {
                         ...particles,
                         receiverProjectId: receiverProjectId || particles.receiverProjectId || particles.receiver_project_id || null
                     };
+                    console.log('[Share] acceptanceParticles.receiverProjectId:', acceptanceParticles.receiverProjectId);
                     acceptanceResult = await applyShareAcceptance({
                         sharerId,
                         targetUserId: userId,

@@ -422,11 +422,15 @@ const ShareAPI = {
             if (!requestAtomeId) return { ok: false, error: 'Missing requestAtomeId' };
             const receiverProjectId = getCurrentProjectId();
             const shareInfo = await getShareRequestInfo(requestAtomeId);
+            console.log('[ShareAPI] accept_request - requestAtomeId:', requestAtomeId);
+            console.log('[ShareAPI] accept_request - receiverProjectId:', receiverProjectId);
+            console.log('[ShareAPI] accept_request - shareInfo:', JSON.stringify(shareInfo));
             const res = await AdoleAPI.sharing.respond({
                 requestAtomeId: requestAtomeId,
                 status: 'accepted',
                 receiverProjectId: receiverProjectId || null
             });
+            console.log('[ShareAPI] accept_request - respond result:', JSON.stringify(res));
             const ok = !!(res?.ok || res?.success);
             const imported = Array.isArray(res?.data?.copies) ? res.data.copies.length : 0;
             let sharedProjectId = shareInfo.projectId || null;
@@ -495,6 +499,14 @@ const ShareAPI = {
         return window.__selectedAtomeId || null;
     }
 };
+
+// Expose ShareAPI globally for cross-module access
+if (typeof window !== 'undefined') {
+    window.ShareAPI = ShareAPI;
+}
+if (typeof globalThis !== 'undefined') {
+    globalThis.ShareAPI = ShareAPI;
+}
 
 export { ShareAPI };
 export default ShareAPI;
