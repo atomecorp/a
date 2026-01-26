@@ -697,7 +697,7 @@ const connectRealtime = async (options = {}) => {
             const { atome, atomeId, properties } = normalizeAtomePayload(payload);
             const ownerId = atome?.owner_id || atome?.ownerId || payload.owner_id || payload.ownerId || null;
             const currentUserId = getCurrentUserId();
-            
+
             // SECURITY: Check if this atome belongs to the current user or is explicitly shared
             // Only check sharing if we have a valid currentUserId
             const isSharedWithUser = currentUserId && (
@@ -708,10 +708,10 @@ const connectRealtime = async (options = {}) => {
                 || payload.isShared === true
                 || atome?.isShared === true
             );
-            
+
             // Owner check requires both currentUserId and ownerId to be valid
             const isOwnedByCurrentUser = currentUserId && ownerId && String(ownerId) === String(currentUserId);
-            
+
             // If user is not authenticated, don't mirror anything to local DB
             // If user is authenticated, only mirror if owned or shared
             const canMirrorToLocal = currentUserId && (isOwnedByCurrentUser || isSharedWithUser);
@@ -726,7 +726,7 @@ const connectRealtime = async (options = {}) => {
                     // Skip mirroring - this atome belongs to another user and is not shared
                     return;
                 }
-                
+
                 const atomeType = atome?.atome_type || atome?.type || payload.atomeType || payload.atome_type || 'atome';
                 const parentId = atome?.parent_id || atome?.parentId || null;
                 const particles = properties || atome?.particles || atome?.properties || atome?.data || null;

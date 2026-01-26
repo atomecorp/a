@@ -65,7 +65,7 @@ function create_flow(scope) {
     };
 }
 
-function log_flow() {}
+function log_flow() { }
 
 function resolve_backend_plan(kind) {
     const key = String(kind || '').toLowerCase();
@@ -1232,7 +1232,7 @@ async function ensure_fastify_token() {
                     const tauriUserId = tauriMe?.user?.user_id || tauriMe?.user?.id || null;
                     const fastifyMe = await FastifyAdapter.auth.me?.();
                     const fastifyUserId = fastifyMe?.user?.user_id || fastifyMe?.user?.id || null;
-                    
+
                     if (tauriUserId && fastifyUserId && String(tauriUserId) !== String(fastifyUserId)) {
                         console.warn('[Auth] SECURITY: Fastify login succeeded but user ID mismatch with Tauri user. Clearing token.');
                         console.warn(`[Auth] Tauri user: ${tauriUserId}, Fastify user: ${fastifyUserId}`);
@@ -1244,7 +1244,7 @@ async function ensure_fastify_token() {
                     // If we can't verify, be conservative and clear the token
                     console.warn('[Auth] Could not verify user identity after Fastify login:', verifyErr?.message || verifyErr);
                 }
-                
+
                 // Save the new Fastify token to Axum for persistence
                 const newToken = FastifyAdapter.getToken?.();
                 if (newToken) {
@@ -4744,25 +4744,25 @@ async function sync_atomes(callback) {
             // SECURITY: Verify ownership before pulling to local DB
             const atomeOwnerId = resolve_owner_for_sync(atome);
             const atomeType = String(atome?.atome_type || atome?.type || '').toLowerCase();
-            
+
             // Allow user atomes if they match current user, otherwise require owner match
-            const isCurrentUserAtome = atomeType === 'user' && 
+            const isCurrentUserAtome = atomeType === 'user' &&
                 (normalize_ref_id(atome?.atome_id || atome?.id) === currentUserId);
-            const isOwnedByCurrentUser = atomeOwnerId && currentUserId && 
+            const isOwnedByCurrentUser = atomeOwnerId && currentUserId &&
                 String(atomeOwnerId) === String(currentUserId);
-            
+
             if (!isCurrentUserAtome && !isOwnedByCurrentUser) {
                 // Skip this atome - it belongs to another user
                 result.pulled.failed++;
-                result.pulled.errors.push({ 
-                    id: atome.atome_id || atome.id, 
+                result.pulled.errors.push({
+                    id: atome.atome_id || atome.id,
                     error: 'security_blocked_wrong_owner',
                     expected: currentUserId,
                     actual: atomeOwnerId
                 });
                 continue;
             }
-            
+
             const payload = buildUpsertPayload(atome);
             if (isUserAtome(atome)) {
                 payload.properties = await ensureUserAtomeProperties(atome, FastifyAdapter);
@@ -4833,23 +4833,23 @@ async function sync_atomes(callback) {
             // SECURITY: Verify ownership before updating local DB
             const atomeOwnerId = resolve_owner_for_sync(item.fastify);
             const atomeType = String(item.fastify?.atome_type || item.fastify?.type || '').toLowerCase();
-            
-            const isCurrentUserAtome = atomeType === 'user' && 
+
+            const isCurrentUserAtome = atomeType === 'user' &&
                 (normalize_ref_id(item.fastify?.atome_id || item.fastify?.id) === currentUserId);
-            const isOwnedByCurrentUser = atomeOwnerId && currentUserId && 
+            const isOwnedByCurrentUser = atomeOwnerId && currentUserId &&
                 String(atomeOwnerId) === String(currentUserId);
-            
+
             if (!isCurrentUserAtome && !isOwnedByCurrentUser) {
                 result.updated.failed++;
-                result.updated.errors.push({ 
-                    id: item.id, 
+                result.updated.errors.push({
+                    id: item.id,
                     error: 'security_blocked_wrong_owner',
                     expected: currentUserId,
                     actual: atomeOwnerId
                 });
                 continue;
             }
-            
+
             const payload = buildUpsertPayload(item.fastify);
             if (isUserAtome(item.fastify)) {
                 payload.properties = await ensureUserAtomeProperties(item.fastify, FastifyAdapter);
@@ -5410,13 +5410,13 @@ async function list_atomes(options = {}, callback) {
 
         try {
             const tauriResult = await TauriAdapter.atome.list(tauriQueryOptions);
-                if (tauriResult.ok || tauriResult.success) {
-                    const rawAtomes = tauriResult.atomes || tauriResult.data || [];
-                    tauriList = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-                    tauriList = filterOwnerIfNeeded(tauriList);
-                } else {
-                    results.tauri.error = tauriResult.error;
-                }
+            if (tauriResult.ok || tauriResult.success) {
+                const rawAtomes = tauriResult.atomes || tauriResult.data || [];
+                tauriList = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                tauriList = filterOwnerIfNeeded(tauriList);
+            } else {
+                results.tauri.error = tauriResult.error;
+            }
         } catch (e) {
             results.tauri.error = e.message;
         }
@@ -5436,10 +5436,10 @@ async function list_atomes(options = {}, callback) {
                     }
                 }
 
-                    if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
-                        const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
-                        let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-                        normalized = filterOwnerIfNeeded(normalized);
+                if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
+                    const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
+                    let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                    normalized = filterOwnerIfNeeded(normalized);
 
                     if (projectId) {
                         const target = String(projectId);
