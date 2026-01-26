@@ -4985,8 +4985,12 @@ async function list_projects(callback) {
         try { await request_sync('list_projects'); } catch { }
     }
 
-    // Avoid ownerId filtering so shared projects (owned by others) appear.
-    const listResult = await list_atomes({ type: 'project', includeShared: true, skipOwner: true });
+    // SECURITY: never list projects owned by other users unless explicit share support exists.
+    const listResult = await list_atomes({
+        type: 'project',
+        includeShared: true,
+        ownerId: currentUserId
+    });
     results.tauri.projects = Array.isArray(listResult.tauri.atomes) ? listResult.tauri.atomes : [];
     results.fastify.projects = Array.isArray(listResult.fastify.atomes) ? listResult.fastify.atomes : [];
     results.tauri.error = listResult.tauri.error || null;
@@ -5277,6 +5281,15 @@ async function list_atomes(options = {}, callback) {
         }
     };
 
+    const filterOwnerIfNeeded = (list = []) => {
+        if (!ownerId || atomeType !== 'project') return list;
+        return list.filter((item) => {
+            const normalized = normalizeAtomeRecord(item);
+            const itemOwner = normalized?.owner_id || normalized?.ownerId || null;
+            return itemOwner && String(itemOwner) === String(ownerId);
+        });
+    };
+
     const mergeAtomeLists = (primary = [], secondary = []) => {
         const byId = new Map();
         const addItem = (item, source) => {
@@ -5303,7 +5316,7 @@ async function list_atomes(options = {}, callback) {
 
         primary.forEach((item) => addItem(item, 'tauri'));
         secondary.forEach((item) => addItem(item, 'fastify'));
-        return Array.from(byId.values());
+        return filterOwnerIfNeeded(Array.from(byId.values()));
     };
 
     if (shouldMergeSources) {
@@ -5312,12 +5325,13 @@ async function list_atomes(options = {}, callback) {
 
         try {
             const tauriResult = await TauriAdapter.atome.list(tauriQueryOptions);
-            if (tauriResult.ok || tauriResult.success) {
-                const rawAtomes = tauriResult.atomes || tauriResult.data || [];
-                tauriList = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-            } else {
-                results.tauri.error = tauriResult.error;
-            }
+                if (tauriResult.ok || tauriResult.success) {
+                    const rawAtomes = tauriResult.atomes || tauriResult.data || [];
+                    tauriList = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                    tauriList = filterOwnerIfNeeded(tauriList);
+                } else {
+                    results.tauri.error = tauriResult.error;
+                }
         } catch (e) {
             results.tauri.error = e.message;
         }
@@ -5337,9 +5351,10 @@ async function list_atomes(options = {}, callback) {
                     }
                 }
 
-                if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
-                    const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
-                    let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                    if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
+                        const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
+                        let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                        normalized = filterOwnerIfNeeded(normalized);
 
                     if (projectId) {
                         const target = String(projectId);
@@ -5368,7 +5383,9 @@ async function list_atomes(options = {}, callback) {
             const tauriResult = await TauriAdapter.atome.list(tauriQueryOptions);
             if (tauriResult.ok || tauriResult.success) {
                 const rawAtomes = tauriResult.atomes || tauriResult.data || [];
-                results.tauri.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                normalized = filterOwnerIfNeeded(normalized);
+                results.tauri.atomes = normalized;
             } else {
                 results.tauri.error = tauriResult.error;
             }
@@ -5395,6 +5412,7 @@ async function list_atomes(options = {}, callback) {
                 if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
                     const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
                     let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+                    normalized = filterOwnerIfNeeded(normalized);
 
                     if (projectId) {
                         const target = String(projectId);
