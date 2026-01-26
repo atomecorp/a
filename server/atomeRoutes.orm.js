@@ -39,18 +39,25 @@ function syncDebugLog(message, data = null) {
 /**
  * Sync atome to connected clients via WebSocket EventBus
  * This is the new real-time sync mechanism that replaces POST to Tauri
+ * 
+ * SECURITY: Events are broadcast to all clients for file sync purposes,
+ * but clients MUST validate owner_id before mirroring to local DB.
+ * This is defense in depth - see UnifiedSync.js for client-side validation.
+ * 
+ * For atome CRUD operations, the owner_id is always included so clients
+ * can filter events that don't belong to them.
  */
 function syncAtomeViaWebSocket(atome, operation = 'create') {
     try {
         const eventBus = getABoxEventBus();
         if (!eventBus) {
-            console.warn('[SyncDebug] EventBus not available for sync');
+            syncDebugLog('EventBus not available for sync');
             return;
         }
 
         const atomeId = atome?.atome_id || atome?.id;
         if (!atomeId) {
-            console.warn('[SyncDebug] Missing atome id for sync payload');
+            syncDebugLog('Missing atome id for sync payload');
             return;
         }
         const atomeType = atome?.atome_type || atome?.type || 'atome';
@@ -58,7 +65,8 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
         const ownerId = atome?.owner_id || atome?.owner || atome?.ownerId || null;
         const particles = atome?.particles || atome?.data || atome?.properties || {};
 
-        // Emit sync event to all connected clients
+        // Emit sync event - clients MUST validate owner_id before local mirroring
+        // The owner_id is critical for client-side security filtering
         eventBus.emit('event', {
             type: 'atome-sync',
             operation,
@@ -66,7 +74,7 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
                 atome_id: atomeId,
                 atome_type: atomeType,
                 parent_id: parentId,
-                owner_id: ownerId,
+                owner_id: ownerId,  // SECURITY: Clients filter on this field
                 created_at: atome.created_at,
                 updated_at: atome.updated_at,
                 particles,
@@ -74,7 +82,7 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
                 id: atomeId,
                 type: atomeType,
                 parentId,
-                ownerId,
+                ownerId,  // SECURITY: Duplicate for compatibility - clients filter on this field
                 properties: particles,
                 data: particles
             },

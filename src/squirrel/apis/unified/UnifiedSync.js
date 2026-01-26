@@ -694,15 +694,41 @@ const connectRealtime = async (options = {}) => {
         if (!payload || !payload.type) return;
 
         if (payload.type === 'atome:created') {
+            const { atome, atomeId, properties } = normalizeAtomePayload(payload);
+            const ownerId = atome?.owner_id || atome?.ownerId || payload.owner_id || payload.ownerId || null;
+            const currentUserId = getCurrentUserId();
+            
+            // SECURITY: Check if this atome belongs to the current user or is explicitly shared
+            // Only check sharing if we have a valid currentUserId
+            const isSharedWithUser = currentUserId && (
+                payload.shared_with?.includes?.(currentUserId)
+                || payload.sharedWith?.includes?.(currentUserId)
+                || atome?.shared_with?.includes?.(currentUserId)
+                || atome?.sharedWith?.includes?.(currentUserId)
+                || payload.isShared === true
+                || atome?.isShared === true
+            );
+            
+            // Owner check requires both currentUserId and ownerId to be valid
+            const isOwnedByCurrentUser = currentUserId && ownerId && String(ownerId) === String(currentUserId);
+            
+            // If user is not authenticated, don't mirror anything to local DB
+            // If user is authenticated, only mirror if owned or shared
+            const canMirrorToLocal = currentUserId && (isOwnedByCurrentUser || isSharedWithUser);
+
+            // Always dispatch event for UI updates (non-persistent)
             dispatchAtomeEvent('squirrel:atome-created', payload);
-            const { atomeId, properties } = normalizeAtomePayload(payload);
             if (properties) applyAtomePatchToDom(atomeId, properties);
 
+            // SECURITY FIX: Only mirror to Tauri DB if owned by current user or explicitly shared
             if (runtime === 'tauri' && atomeId && !shouldSkipMirrorCreate(atomeId)) {
-                const { atome } = normalizeAtomePayload(payload);
+                if (!canMirrorToLocal) {
+                    // Skip mirroring - this atome belongs to another user and is not shared
+                    return;
+                }
+                
                 const atomeType = atome?.atome_type || atome?.type || payload.atomeType || payload.atome_type || 'atome';
                 const parentId = atome?.parent_id || atome?.parentId || null;
-                const ownerId = atome?.owner_id || atome?.ownerId || null;
                 const particles = properties || atome?.particles || atome?.properties || atome?.data || null;
 
                 rememberMirrorCreate(atomeId);

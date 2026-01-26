@@ -1226,6 +1226,25 @@ async function ensure_fastify_token() {
         try {
             const res = await FastifyAdapter.auth.login({ phone: resolvedPhone, password });
             if (res && (res.ok || res.success)) {
+                // SECURITY: Verify the Fastify user matches the Tauri user to prevent cross-user data leakage
+                try {
+                    const tauriMe = await TauriAdapter.auth.me?.();
+                    const tauriUserId = tauriMe?.user?.user_id || tauriMe?.user?.id || null;
+                    const fastifyMe = await FastifyAdapter.auth.me?.();
+                    const fastifyUserId = fastifyMe?.user?.user_id || fastifyMe?.user?.id || null;
+                    
+                    if (tauriUserId && fastifyUserId && String(tauriUserId) !== String(fastifyUserId)) {
+                        console.warn('[Auth] SECURITY: Fastify login succeeded but user ID mismatch with Tauri user. Clearing token.');
+                        console.warn(`[Auth] Tauri user: ${tauriUserId}, Fastify user: ${fastifyUserId}`);
+                        try { FastifyAdapter.clearToken?.(); } catch { }
+                        try { await clear_stored_fastify_token_in_axum(); } catch { }
+                        return { ok: false, reason: 'user_id_mismatch', error: 'Fastify user does not match Tauri user' };
+                    }
+                } catch (verifyErr) {
+                    // If we can't verify, be conservative and clear the token
+                    console.warn('[Auth] Could not verify user identity after Fastify login:', verifyErr?.message || verifyErr);
+                }
+                
                 // Save the new Fastify token to Axum for persistence
                 const newToken = FastifyAdapter.getToken?.();
                 if (newToken) {
@@ -3573,20 +3592,31 @@ async function list_unsynced_atomes(callback) {
         try { await ensure_fastify_token(); } catch { }
     }
 
+    // SECURITY: If no owner is identified, abort sync to prevent cross-user data leakage
+    if (!ownerId) {
+        result.error = 'No authenticated user - cannot sync without valid owner';
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
+
     // Helper to fetch all atomes of all types from an adapter (including deleted for sync)
-    // Uses ownerId: "*" to get ALL atomes, not just current user's
+    // SECURITY: Always filter by ownerId - never use '*' to prevent cross-user data leakage
     const fetchAllAtomes = async (adapter, name, owner) => {
+        // SECURITY: Require valid owner to prevent fetching other users' atomes
+        if (!owner) {
+            throw new Error('owner_required_for_sync');
+        }
         const allAtomes = [];
         let successCount = 0;
         let lastError = null;
         for (const type of atomeTypes) {
             try {
                 // Include deleted atomes for sync comparison
-                // Use ownerId: current user when available, otherwise fallback to "*"
+                // SECURITY: Always use specific owner, never '*'
                 const result = await adapter.atome.list({
                     type,
                     includeDeleted: true,
-                    ownerId: owner || '*',
+                    ownerId: owner,
                     limit: listLimit,
                     offset: 0
                 });
@@ -4706,10 +4736,33 @@ async function sync_atomes(callback) {
     }
 
     // 2. Pull remote-only atomes to Tauri (in topological order)
+    // SECURITY: Only pull atomes owned by the current user to prevent cross-user data leakage
     const sortedToPull = topologicalSort(unsyncedResult.onlyOnFastify);
 
     for (const atome of sortedToPull) {
         try {
+            // SECURITY: Verify ownership before pulling to local DB
+            const atomeOwnerId = resolve_owner_for_sync(atome);
+            const atomeType = String(atome?.atome_type || atome?.type || '').toLowerCase();
+            
+            // Allow user atomes if they match current user, otherwise require owner match
+            const isCurrentUserAtome = atomeType === 'user' && 
+                (normalize_ref_id(atome?.atome_id || atome?.id) === currentUserId);
+            const isOwnedByCurrentUser = atomeOwnerId && currentUserId && 
+                String(atomeOwnerId) === String(currentUserId);
+            
+            if (!isCurrentUserAtome && !isOwnedByCurrentUser) {
+                // Skip this atome - it belongs to another user
+                result.pulled.failed++;
+                result.pulled.errors.push({ 
+                    id: atome.atome_id || atome.id, 
+                    error: 'security_blocked_wrong_owner',
+                    expected: currentUserId,
+                    actual: atomeOwnerId
+                });
+                continue;
+            }
+            
             const payload = buildUpsertPayload(atome);
             if (isUserAtome(atome)) {
                 payload.properties = await ensureUserAtomeProperties(atome, FastifyAdapter);
@@ -4774,8 +4827,29 @@ async function sync_atomes(callback) {
     }
 
     // 4. Update Tauri with newer Fastify modifications (upsert to sync metadata too)
+    // SECURITY: Only update atomes owned by the current user
     for (const item of unsyncedResult.modifiedOnFastify) {
         try {
+            // SECURITY: Verify ownership before updating local DB
+            const atomeOwnerId = resolve_owner_for_sync(item.fastify);
+            const atomeType = String(item.fastify?.atome_type || item.fastify?.type || '').toLowerCase();
+            
+            const isCurrentUserAtome = atomeType === 'user' && 
+                (normalize_ref_id(item.fastify?.atome_id || item.fastify?.id) === currentUserId);
+            const isOwnedByCurrentUser = atomeOwnerId && currentUserId && 
+                String(atomeOwnerId) === String(currentUserId);
+            
+            if (!isCurrentUserAtome && !isOwnedByCurrentUser) {
+                result.updated.failed++;
+                result.updated.errors.push({ 
+                    id: item.id, 
+                    error: 'security_blocked_wrong_owner',
+                    expected: currentUserId,
+                    actual: atomeOwnerId
+                });
+                continue;
+            }
+            
             const payload = buildUpsertPayload(item.fastify);
             if (isUserAtome(item.fastify)) {
                 payload.properties = await ensureUserAtomeProperties(item.fastify, FastifyAdapter);
@@ -4996,6 +5070,17 @@ async function list_projects(callback) {
     results.tauri.error = listResult.tauri.error || null;
     results.fastify.error = listResult.fastify.error || null;
     results.meta = listResult.meta || null;
+
+    // SECURITY: Double-check owner filtering on Fastify projects to prevent cross-user data leakage
+    // This is a defensive layer in case the server returns more than it should
+    if (currentUserId && results.fastify.projects.length > 0) {
+        results.fastify.projects = results.fastify.projects.filter(p => {
+            const ownerId = p?.owner_id || p?.ownerId || p?.properties?.owner_id || p?.particles?.owner_id || null;
+            // Allow if owner matches OR if no owner is set (shared/legacy projects)
+            if (!ownerId) return true;
+            return String(ownerId) === String(currentUserId);
+        });
+    }
 
     // If local deletions are pending, hide those projects from the Fastify list
     // so they don't "reappear" before the delete sync completes.

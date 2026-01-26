@@ -370,6 +370,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS state_current (
             atome_id TEXT PRIMARY KEY,
+            owner_id TEXT,
             project_id TEXT,
             properties TEXT,
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -379,6 +380,10 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id)",
         [],
     )?;
 
@@ -418,6 +423,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
 
     ensure_permissions_columns(&conn)?;
     ensure_snapshot_columns(&conn)?;
+    ensure_state_current_columns(&conn)?;
 
     // =========================================================================
     // Table 8: sync_queue - Persistent synchronization queue
@@ -518,6 +524,29 @@ fn ensure_snapshot_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
     if !names.contains("actor") {
         conn.execute("ALTER TABLE snapshots ADD COLUMN actor TEXT", [])?;
+    }
+
+    Ok(())
+}
+
+fn ensure_state_current_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let mut stmt = conn.prepare("PRAGMA table_info(state_current)")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    let mut names = HashSet::new();
+    for name in rows.filter_map(|r| r.ok()) {
+        names.insert(name);
+    }
+
+    if !names.contains("owner_id") {
+        conn.execute("ALTER TABLE state_current ADD COLUMN owner_id TEXT", [])?;
+        let _ = conn.execute(
+            "UPDATE state_current
+             SET owner_id = (
+                SELECT owner_id FROM atomes WHERE atomes.atome_id = state_current.atome_id
+             )
+             WHERE owner_id IS NULL",
+            [],
+        );
     }
 
     Ok(())
@@ -1840,18 +1869,19 @@ async fn handle_state_current_get(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    let row: Option<(String, Option<String>, Option<String>, String, i64)> = db
+    let row: Option<(String, Option<String>, Option<String>, Option<String>, String, i64)> = db
         .query_row(
-            "SELECT atome_id, project_id, properties, updated_at, version FROM state_current WHERE atome_id = ?1",
+            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE atome_id = ?1",
             rusqlite::params![atome_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
         )
         .optional()
         .unwrap_or(None);
 
-    let state_payload = row.map(|(id, project_id, properties, updated_at, version)| {
+    let state_payload = row.map(|(id, owner_id, project_id, properties, updated_at, version)| {
         json!({
             "atome_id": id,
+            "owner_id": owner_id,
             "project_id": project_id,
             "properties": parse_json_value(properties.as_ref()),
             "updated_at": updated_at,
@@ -1893,7 +1923,7 @@ async fn handle_state_current_list(
 
     let (query, params): (String, Vec<rusqlite::types::Value>) = if let Some(pid) = project_id {
         (
-            "SELECT atome_id, project_id, properties, updated_at, version FROM state_current WHERE project_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
+            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE project_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
             vec![
                 rusqlite::types::Value::from(pid.to_string()),
                 rusqlite::types::Value::from(limit),
@@ -1902,7 +1932,7 @@ async fn handle_state_current_list(
         )
     } else {
         (
-            "SELECT atome_id, project_id, properties, updated_at, version FROM state_current ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
+            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
             vec![
                 rusqlite::types::Value::from(limit),
                 rusqlite::types::Value::from(offset),
@@ -1917,13 +1947,14 @@ async fn handle_state_current_list(
 
     let rows = stmt
         .query_map(rusqlite::params_from_iter(params), |row| {
-            let properties: Option<String> = row.get(2)?;
+            let properties: Option<String> = row.get(3)?;
             Ok(json!({
                 "atome_id": row.get::<_, String>(0)?,
-                "project_id": row.get::<_, Option<String>>(1)?,
+                "owner_id": row.get::<_, Option<String>>(1)?,
+                "project_id": row.get::<_, Option<String>>(2)?,
                 "properties": parse_json_value(properties.as_ref()),
-                "updated_at": row.get::<_, String>(3)?,
-                "version": row.get::<_, i64>(4)?
+                "updated_at": row.get::<_, String>(4)?,
+                "version": row.get::<_, i64>(5)?
             }))
         })
         .map_err(|e| e.to_string());
@@ -2187,14 +2218,21 @@ fn apply_event_to_state_current(
         }
     }
 
-    let existing: Option<(Option<String>, i64, Option<String>)> = db
+    let existing: Option<(Option<String>, i64, Option<String>, Option<String>)> = db
         .query_row(
-            "SELECT properties, version, project_id FROM state_current WHERE atome_id = ?1",
+            "SELECT properties, version, project_id, owner_id FROM state_current WHERE atome_id = ?1",
             rusqlite::params![atome_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()
         .map_err(|e| e.to_string())?;
+
+    let owner_id_from_patch = patch
+        .get("owner_id")
+        .or_else(|| patch.get("ownerId"))
+        .or_else(|| patch.get("owner"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
 
     let mut current_props = parse_json_map(existing.as_ref().and_then(|row| row.0.as_ref()));
     for (key, value) in patch.into_iter() {
@@ -2207,24 +2245,39 @@ fn apply_event_to_state_current(
         .clone()
         .or_else(|| existing.as_ref().and_then(|row| row.2.clone()));
 
+    let owner_id = owner_id_from_patch
+        .or_else(|| {
+            db.query_row(
+                "SELECT owner_id FROM atomes WHERE atome_id = ?1",
+                rusqlite::params![atome_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .flatten()
+        })
+        .or_else(|| existing.as_ref().and_then(|row| row.3.clone()));
+
     let props_json = serde_json::to_string(&current_props).map_err(|e| e.to_string())?;
 
     if existing.is_some() {
         db.execute(
-            "UPDATE state_current SET properties = ?1, updated_at = ?2, version = ?3, project_id = COALESCE(?4, project_id) WHERE atome_id = ?5",
-            rusqlite::params![props_json, event.ts, next_version, project_id, atome_id],
+            "UPDATE state_current SET properties = ?1, updated_at = ?2, version = ?3, project_id = COALESCE(?4, project_id), owner_id = COALESCE(?5, owner_id) WHERE atome_id = ?6",
+            rusqlite::params![props_json, event.ts, next_version, project_id, owner_id, atome_id],
         )
         .map_err(|e| e.to_string())?;
     } else {
         db.execute(
-            "INSERT INTO state_current (atome_id, project_id, properties, updated_at, version) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![atome_id, project_id, props_json, event.ts, next_version],
+            "INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![atome_id, owner_id, project_id, props_json, event.ts, next_version],
         )
         .map_err(|e| e.to_string())?;
     }
 
     Ok(Some(json!({
         "atome_id": atome_id,
+        "owner_id": owner_id,
         "project_id": project_id,
         "properties": JsonValue::Object(current_props),
         "updated_at": event.ts,
