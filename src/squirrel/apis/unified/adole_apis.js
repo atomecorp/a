@@ -533,8 +533,17 @@ function load_user_session() {
 function clear_user_session() {
     if (typeof localStorage === 'undefined') return;
     try {
+        // Clear session data
         localStorage.removeItem(TAURI_USER_SESSION_KEY);
-        console.log('[Session] User session cleared from localStorage');
+
+        // CRITICAL: Clear ALL auth tokens to prevent cross-user data leakage
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('cloud_auth_token');
+        localStorage.removeItem('local_auth_token');
+        localStorage.removeItem('eve_current_project_id');
+        localStorage.removeItem('eve_last_project_id');
+
+        console.log('[Session] User session and ALL auth tokens cleared from localStorage');
     } catch (e) {
         console.warn('[Session] Failed to clear user session:', e?.message);
     }
@@ -614,6 +623,52 @@ function clear_ui_on_logout() {
 
     console.log('[Security] Clearing UI on logout - removing all atomes from view');
 
+    _currentUserId = null;
+    _currentUserName = null;
+    _currentUserPhone = null;
+    _currentProjectId = null;
+    _currentProjectName = null;
+
+    if (window.__currentUser) {
+        delete window.__currentUser;
+    }
+    if (window.__currentProject) {
+        delete window.__currentProject;
+    }
+    if (window.__selectedAtomeIds) {
+        delete window.__selectedAtomeIds;
+    }
+    if (window.__selectedAtomeId) {
+        delete window.__selectedAtomeId;
+    }
+    if (window.__eveProfilePreferences) {
+        delete window.__eveProfilePreferences;
+    }
+
+    // Clear matrix UI state without removing the element entirely.
+    // The matrix will be recreated/repopulated when the next user opens it.
+    if (typeof document !== 'undefined') {
+        const matrixRoot = document.getElementById('eve_project_matrix');
+        if (matrixRoot) {
+            matrixRoot.classList.remove('is-active');
+            matrixRoot.style.display = 'none';
+            matrixRoot.style.opacity = '';
+            matrixRoot.style.transform = '';
+            matrixRoot.style.transformOrigin = '';
+            // Clear children but keep the container for re-use
+            const scroll = matrixRoot.querySelector('#eve_project_matrix_scroll');
+            if (scroll) {
+                scroll.innerHTML = '';
+            }
+        }
+        const matrixTool = document.getElementById('_intuition_matrix');
+        if (matrixTool) {
+            delete matrixTool.dataset.simpleActive;
+            delete matrixTool.dataset.activeTag;
+            matrixTool.style.removeProperty('background');
+        }
+    }
+
     // Dispatch event for UI to clear all rendered atomes
     window.dispatchEvent(new CustomEvent('squirrel:user-logged-out', {
         detail: {
@@ -632,12 +687,17 @@ function clear_ui_on_logout() {
         }
     }));
 
-    // Clear any cached atome data in localStorage
+    // Clear cached atome/project data but NOT everything (keep machine ID, settings, etc.)
     try {
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && (key.startsWith('atome_') || key.startsWith('project_') || key.includes('_cache'))) {
+            if (key && (
+                key.startsWith('atome_') ||
+                key.startsWith('project_') ||
+                key.includes('_cache') ||
+                key.startsWith('eve_')
+            )) {
                 keysToRemove.push(key);
             }
         }
@@ -645,6 +705,72 @@ function clear_ui_on_logout() {
             try { localStorage.removeItem(key); } catch { }
         });
     } catch { }
+}
+
+/**
+ * Clear UI and cached project state when switching between users (without wiping auth tokens).
+ * This avoids cross-user project/matrix leakage after a successful login.
+ * @param {string} prevUserId
+ * @param {string} nextUserId
+ */
+function clear_ui_for_user_switch(prevUserId, nextUserId) {
+    if (typeof window === 'undefined') return;
+    console.log(`[Security] User switch detected (${prevUserId?.substring(0, 8)}... → ${nextUserId?.substring(0, 8)}...), clearing view`);
+
+    _currentProjectId = null;
+    _currentProjectName = null;
+
+    if (window.__currentProject) {
+        delete window.__currentProject;
+    }
+    if (window.__selectedAtomeIds) {
+        delete window.__selectedAtomeIds;
+    }
+    if (window.__selectedAtomeId) {
+        delete window.__selectedAtomeId;
+    }
+    if (window.__eveProfilePreferences) {
+        delete window.__eveProfilePreferences;
+    }
+
+    // Clear matrix UI state without removing the element entirely.
+    if (typeof document !== 'undefined') {
+        const matrixRoot = document.getElementById('eve_project_matrix');
+        if (matrixRoot) {
+            matrixRoot.classList.remove('is-active');
+            matrixRoot.style.display = 'none';
+            matrixRoot.style.opacity = '';
+            matrixRoot.style.transform = '';
+            matrixRoot.style.transformOrigin = '';
+            // Clear children but keep the container for re-use
+            const scroll = matrixRoot.querySelector('#eve_project_matrix_scroll');
+            if (scroll) {
+                scroll.innerHTML = '';
+            }
+        }
+        const matrixTool = document.getElementById('_intuition_matrix');
+        if (matrixTool) {
+            delete matrixTool.dataset.simpleActive;
+            delete matrixTool.dataset.activeTag;
+            matrixTool.style.removeProperty('background');
+        }
+    }
+
+    // Clear cached project state but keep auth/session tokens intact.
+    clear_cached_current_project();
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('eve_current_project_id');
+        }
+    } catch { }
+
+    window.dispatchEvent(new CustomEvent('squirrel:clear-view', {
+        detail: {
+            reason: 'user_switch',
+            clearAtomes: true,
+            clearProject: true
+        }
+    }));
 }
 
 const read_cached_current_project = () => {
@@ -2153,6 +2279,26 @@ function get_current_user_info() {
  * @returns {Promise<boolean>}
  */
 async function set_current_user_state(userId, userName = null, userPhone = null, persistMachine = true) {
+    const previousUserId = _currentUserId;
+    const switchingUser = previousUserId && userId && String(previousUserId) !== String(userId);
+    // Always clear UI when logging in a user (even if no previous user), to prevent stale data leakage
+    const isNewLogin = userId && !previousUserId;
+    if (switchingUser) {
+        clear_ui_for_user_switch(previousUserId, userId);
+    } else if (isNewLogin) {
+        // First login - clear any stale UI from previous session
+        console.log('[Security] First login detected - clearing any stale UI');
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('squirrel:clear-view', {
+                detail: {
+                    reason: 'first_login',
+                    clearAtomes: true,
+                    clearProject: true
+                }
+            }));
+        }
+    }
+
     _currentUserId = userId;
     _currentUserName = userName;
     _currentUserPhone = userPhone;
@@ -2162,6 +2308,21 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
     // PERSIST SESSION: Save to localStorage so session survives page refresh
     if (userId) {
         save_user_session(userId, userName, userPhone);
+        try { signal_auth_check_complete(true, userId); } catch { }
+        // Dispatch user-logged-in event so UI components can reload for the new user
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('squirrel:user-logged-in', {
+                detail: {
+                    userId,
+                    user_id: userId,
+                    userName,
+                    userPhone,
+                    timestamp: Date.now(),
+                    isSwitch: switchingUser,
+                    isFirstLogin: isNewLogin
+                }
+            }));
+        }
     }
 
     if (persistMachine && userId) {
@@ -2417,6 +2578,11 @@ async function create_user(phone, password, username, options = {}, callback) {
         options = {};
     }
 
+    // NOTE: We no longer call clear_ui_on_logout() here because:
+    // 1. It was too aggressive - it deleted the matrix root element entirely
+    // 2. set_current_user_state() handles the user state after successful registration
+    // 3. If registration fails, the previous user's session should remain intact
+
     const visibility = options.visibility || 'public';
     const optional = options.optional || null;
     const autoLogin = options.autoLogin !== false;
@@ -2603,6 +2769,11 @@ async function set_user_visibility(visibility, callback) {
  * @returns {Promise<{tauri: Object, fastify: Object}>} Results from both backends
  */
 async function log_user(phone, password, username, callback) {
+    // NOTE: We no longer call clear_ui_on_logout() here because:
+    // 1. It was too aggressive - it deleted the matrix root element entirely
+    // 2. set_current_user_state() already handles user switching via clear_ui_for_user_switch()
+    // 3. If login fails, the previous user's session should remain intact
+
     const rawPhone = String(phone ?? '').trim();
     const normalizedPhone = normalize_phone_input(phone) || rawPhone;
     const resolvedUsername = username || normalizedPhone;
@@ -2890,6 +3061,10 @@ async function unlog_user(callback = null) {
         error: 'skipped',
         skipped: true
     };
+
+    // CRITICAL: Clear ALL tokens from both adapters to prevent cross-user leakage
+    try { TauriAdapter.clearToken?.(); } catch (e) { console.warn('[Logout] TauriAdapter.clearToken failed:', e); }
+    try { FastifyAdapter.clearToken?.(); } catch (e) { console.warn('[Logout] FastifyAdapter.clearToken failed:', e); }
 
     clear_fastify_login_cache();
     _currentUserId = null;

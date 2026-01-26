@@ -35,6 +35,47 @@
   console.log('[Squirrel] Error handlers installed (capture + bubble phase)');
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECURITY: Clear any stale UI state from previous session immediately on startup
+// This prevents data leakage between users when the WebView caches DOM state
+// ═══════════════════════════════════════════════════════════════════════════════
+(function clearStaleSessionUI() {
+  if (typeof document === 'undefined') return;
+
+  // Clear project matrix content if it exists from previous session, but keep the container
+  const matrixRoot = document.getElementById('eve_project_matrix');
+  if (matrixRoot) {
+    console.log('[Squirrel] Clearing stale matrix content from previous session');
+    matrixRoot.classList.remove('is-active');
+    matrixRoot.style.display = 'none';
+    matrixRoot.style.opacity = '0';
+    // Clear the scroll container content, not the root
+    const scroll = matrixRoot.querySelector('#eve_project_matrix_scroll');
+    if (scroll) {
+      scroll.innerHTML = '';
+    }
+  }
+
+  // Clear matrix tool state
+  const matrixTool = document.getElementById('_intuition_matrix');
+  if (matrixTool) {
+    delete matrixTool.dataset.simpleActive;
+    delete matrixTool.dataset.activeTag;
+    matrixTool.style.removeProperty('background');
+  }
+
+  // Clear any stale project views - only if they exist AND have visible content
+  // This is a soft clear to prevent cross-user data leakage
+  const projectViews = document.querySelectorAll('[id^="project_view_"]');
+  projectViews.forEach(view => {
+    // Hide but don't remove - let the matrix handle removal properly
+    view.style.display = 'none';
+    view.style.visibility = 'hidden';
+  });
+
+  console.log('[Squirrel] Stale session UI cleared');
+})();
+
 // atome imports
 import './atome/atome.js';
 import './atome/mcp.js';
