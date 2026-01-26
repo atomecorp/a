@@ -559,8 +559,9 @@ async function loadProjectView(projectId, projectName, backgroundColor = '#333')
   grab('current_project').textContent = projectName;
 
   // Persist current project to database (for restoration at next login)
+  // Pass null for ownerId to let adole_apis use the current user
   if (typeof AdoleAPI !== 'undefined' && AdoleAPI.projects?.setCurrent) {
-    AdoleAPI.projects.setCurrent(projectId, projectName, true);
+    AdoleAPI.projects.setCurrent(projectId, projectName, null, true);
   }
 
   // Load atomes for this project and display them

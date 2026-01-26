@@ -394,6 +394,7 @@ async function grant_share_permission(atomeId, principalId, sharePermissions, op
 // Global current project state (accessible everywhere)
 let _currentProjectId = null;
 let _currentProjectName = null;
+let _currentProjectOwnerId = null;
 
 // Global current user state
 let _currentUserId = null;
@@ -632,6 +633,7 @@ function clear_ui_on_logout() {
     _currentUserPhone = null;
     _currentProjectId = null;
     _currentProjectName = null;
+    _currentProjectOwnerId = null;
 
     if (window.__currentUser) {
         delete window.__currentUser;
@@ -712,6 +714,7 @@ function clear_ui_for_user_switch(prevUserId, nextUserId) {
 
     _currentProjectId = null;
     _currentProjectName = null;
+    _currentProjectOwnerId = null;
 
     if (window.__currentProject) {
         delete window.__currentProject;
@@ -2037,7 +2040,9 @@ const MACHINE_ID_KEY = 'squirrel_machine_id';
 if (typeof window !== 'undefined') {
     window.__currentProject = {
         get id() { return _currentProjectId; },
-        get name() { return _currentProjectName; }
+        get name() { return _currentProjectName; },
+        get owner_id() { return _currentProjectOwnerId; },
+        get ownerId() { return _currentProjectOwnerId; }
     };
 
     window.__currentUser = {
@@ -2387,12 +2392,13 @@ function get_current_project_id() {
 
 /**
  * Get the current project info
- * @returns {{id: string|null, name: string|null}} Current project info
+ * @returns {{id: string|null, name: string|null, owner_id: string|null}} Current project info
  */
 function get_current_project() {
     return {
         id: _currentProjectId,
-        name: _currentProjectName
+        name: _currentProjectName,
+        owner_id: _currentProjectOwnerId
     };
 }
 
@@ -2400,12 +2406,25 @@ function get_current_project() {
  * Set the current project (in memory and persist to user particle)
  * @param {string} projectId - Project ID
  * @param {string} [projectName] - Project name (optional)
+ * @param {string} [ownerId] - Owner ID (required for security)
  * @param {boolean} [persist=true] - Whether to save to database
  * @returns {Promise<boolean>} Success status
  */
-async function set_current_project(projectId, projectName = null, persist = true) {
+async function set_current_project(projectId, projectName = null, ownerId = null, persist = true) {
+    // SECURITY: Validate owner matches current user before setting project
+    if (ownerId && _currentUserId && String(ownerId) !== String(_currentUserId)) {
+        console.error('[AdoleAPI] SECURITY: Cannot set project with different owner', {
+            projectId,
+            projectOwner: ownerId,
+            currentUser: _currentUserId
+        });
+        return false;
+    }
+
     _currentProjectId = projectId;
     _currentProjectName = projectName;
+    _currentProjectOwnerId = ownerId || _currentUserId;
+    
     // Do not write a project cache when there's no logged user to avoid cross-user leakage.
     if (_currentUserId) {
         write_cached_current_project(projectId, projectName, _currentUserId);
@@ -3016,6 +3035,7 @@ async function unlog_user(callback = null) {
     _currentUserPhone = null;
     _currentProjectId = null;
     _currentProjectName = null;
+    _currentProjectOwnerId = null;
     clear_cached_current_project();
 
     // CLEAR SESSION: Remove persisted session from localStorage
@@ -4997,7 +5017,7 @@ async function create_project(projectName, callback) {
                     if (!hasFastifyToken) {
                         results.fastify = { success: false, data: null, error: 'fastify_token_missing' };
                     } else {
-                        const res = await FastifyAdapter.atome.create(atomeData);
+                        const res = await FastifyAdapter.atome.create(projectData);
                         if (res && (res.ok || res.success || is_already_exists_error(res))) {
                             results.fastify = { success: true, data: res, error: null, alreadyExists: is_already_exists_error(res) };
                         } else {
@@ -5009,7 +5029,7 @@ async function create_project(projectName, callback) {
                     if (!hasTauriToken) {
                         results.tauri = { success: false, data: null, error: 'tauri_token_missing' };
                     } else {
-                        const res = await TauriAdapter.atome.create(atomeData);
+                        const res = await TauriAdapter.atome.create(projectData);
                         if (res && (res.ok || res.success || is_already_exists_error(res))) {
                             results.tauri = { success: true, data: res, error: null, alreadyExists: is_already_exists_error(res) };
                         } else {

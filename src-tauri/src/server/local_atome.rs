@@ -655,7 +655,7 @@ pub async fn handle_events_message(
 
 pub async fn handle_state_current_message(
     message: JsonValue,
-    _user_id: &str,
+    user_id: &str,
     state: &LocalAtomeState,
 ) -> WsResponse {
     let action = message.get("action").and_then(|v| v.as_str()).unwrap_or("");
@@ -666,7 +666,7 @@ pub async fn handle_state_current_message(
 
     match action {
         "get" => handle_state_current_get(message, state, request_id).await,
-        "list" => handle_state_current_list(message, state, request_id).await,
+        "list" => handle_state_current_list(message, user_id, state, request_id).await,
         _ => WsResponse {
             msg_type: "state-current-response".into(),
             request_id,
@@ -1903,6 +1903,7 @@ async fn handle_state_current_get(
 
 async fn handle_state_current_list(
     message: JsonValue,
+    user_id: &str,
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
@@ -1916,24 +1917,36 @@ async fn handle_state_current_list(
         .unwrap_or(1000);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
 
+    // SECURITY: Get owner_id filter from message or use current user_id
+    let owner_filter = message
+        .get("owner_id")
+        .or_else(|| message.get("ownerId"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| user_id.to_string());
+
     let db = match state.db.lock() {
         Ok(d) => d,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
+    // SECURITY: Always filter by owner_id to prevent cross-user data leakage
     let (query, params): (String, Vec<rusqlite::types::Value>) = if let Some(pid) = project_id {
         (
-            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE project_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
+            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE project_id = ? AND (owner_id = ? OR owner_id IS NULL) ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
             vec![
                 rusqlite::types::Value::from(pid.to_string()),
+                rusqlite::types::Value::from(owner_filter.clone()),
                 rusqlite::types::Value::from(limit),
                 rusqlite::types::Value::from(offset),
             ],
         )
     } else {
+        // SECURITY: When no project_id, still filter by owner to prevent listing all users' data
         (
-            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
+            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE (owner_id = ? OR owner_id IS NULL) ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
             vec![
+                rusqlite::types::Value::from(owner_filter.clone()),
                 rusqlite::types::Value::from(limit),
                 rusqlite::types::Value::from(offset),
             ],
