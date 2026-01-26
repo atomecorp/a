@@ -2424,7 +2424,7 @@ async function set_current_project(projectId, projectName = null, ownerId = null
     _currentProjectId = projectId;
     _currentProjectName = projectName;
     _currentProjectOwnerId = ownerId || _currentUserId;
-    
+
     // Do not write a project cache when there's no logged user to avoid cross-user leakage.
     if (_currentUserId) {
         write_cached_current_project(projectId, projectName, _currentUserId);

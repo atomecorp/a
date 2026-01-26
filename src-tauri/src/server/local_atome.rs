@@ -189,7 +189,9 @@ fn create_fingerprint(
     atome_type.hash(&mut hasher);
     parent_id.unwrap_or("").hash(&mut hasher);
     owner_id.hash(&mut hasher);
-    serde_json::to_string(data).unwrap_or_default().hash(&mut hasher);
+    serde_json::to_string(data)
+        .unwrap_or_default()
+        .hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -567,7 +569,10 @@ pub async fn handle_atome_message(
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    if matches!(action, "create" | "update" | "delete" | "soft-delete" | "alter") {
+    if matches!(
+        action,
+        "create" | "update" | "delete" | "soft-delete" | "alter"
+    ) {
         if should_dedupe_request_id(state, &request_id) {
             sync_debug(&format!(
                 "dedupe request_id action={} request_id={:?} user_id={}",
@@ -1878,16 +1883,18 @@ async fn handle_state_current_get(
         .optional()
         .unwrap_or(None);
 
-    let state_payload = row.map(|(id, owner_id, project_id, properties, updated_at, version)| {
-        json!({
-            "atome_id": id,
-            "owner_id": owner_id,
-            "project_id": project_id,
-            "properties": parse_json_value(properties.as_ref()),
-            "updated_at": updated_at,
-            "version": version
-        })
-    });
+    let state_payload = row.map(
+        |(id, owner_id, project_id, properties, updated_at, version)| {
+            json!({
+                "atome_id": id,
+                "owner_id": owner_id,
+                "project_id": project_id,
+                "properties": parse_json_value(properties.as_ref()),
+                "updated_at": updated_at,
+                "version": version
+            })
+        },
+    );
 
     let payload = json!({ "state": state_payload });
     WsResponse {
