@@ -121,6 +121,33 @@ function getCurrentProjectId() {
     return null;
 }
 
+function resolveReceiverProjectId(explicitId) {
+    if (explicitId) return explicitId;
+    const direct = getCurrentProjectId();
+    if (direct) return direct;
+    if (typeof document !== 'undefined') {
+        const projectViews = document.querySelectorAll('[id^="project_view_"]');
+        if (projectViews.length) {
+            for (const pv of projectViews) {
+                if (pv.offsetParent !== null && pv.id) {
+                    return pv.id.replace('project_view_', '');
+                }
+            }
+            const last = projectViews[projectViews.length - 1];
+            if (last?.id) return last.id.replace('project_view_', '');
+        }
+        const projectViewAlt = document.querySelector('[data-project-id]');
+        if (projectViewAlt?.dataset?.projectId && projectViewAlt.dataset.projectId !== 'default') {
+            return projectViewAlt.dataset.projectId;
+        }
+    }
+    try {
+        const stored = localStorage.getItem('eve_current_project_id');
+        if (stored && stored !== 'default') return stored;
+    } catch (_) { }
+    return null;
+}
+
 function normalizeAtomeIds(raw) {
     if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
     if (raw) return [String(raw)];
@@ -417,10 +444,10 @@ const ShareAPI = {
         }
     },
 
-    async accept_request(requestAtomeId) {
+    async accept_request(requestAtomeId, receiverProjectIdOverride) {
         try {
             if (!requestAtomeId) return { ok: false, error: 'Missing requestAtomeId' };
-            const receiverProjectId = getCurrentProjectId();
+            const receiverProjectId = resolveReceiverProjectId(receiverProjectIdOverride);
             const shareInfo = await getShareRequestInfo(requestAtomeId);
             console.log('[ShareAPI] accept_request - requestAtomeId:', requestAtomeId);
             console.log('[ShareAPI] accept_request - receiverProjectId:', receiverProjectId);
