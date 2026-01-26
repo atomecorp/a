@@ -385,14 +385,15 @@ const ShareAPI = {
         const results = [];
         for (const target of targets) {
             const phone = target?.phone || null;
-            if (!phone) {
-                results.push({ ok: false, error: 'Missing target phone' });
+            const userId = target?.userId || target?.id || null;
+            if (!phone && !userId) {
+                results.push({ ok: false, error: 'Missing target phone and user id' });
                 continue;
             }
 
             const overrides = {
                 __shareType: shareType,
-                __targetUserId: target?.userId ? String(target.userId) : undefined
+                __targetUserId: userId ? String(userId) : undefined
             };
 
             if (duration || shareCondition) {
@@ -402,7 +403,8 @@ const ShareAPI = {
                 };
             }
 
-            const shareResult = await AdoleAPI.sharing.share(phone, atomeIds, permissions, mode, overrides, null);
+            const shareTarget = phone || String(userId);
+            const shareResult = await AdoleAPI.sharing.share(shareTarget, atomeIds, permissions, mode, overrides, null);
             const ok = !!(shareResult?.tauri?.success || shareResult?.fastify?.success);
             results.push({
                 ok,
