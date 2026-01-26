@@ -65,16 +65,7 @@ function create_flow(scope) {
     };
 }
 
-function log_flow(flow, stage, data = null) {
-    if (!is_flow_logging_enabled() || !flow) return;
-    const elapsed = Math.round(now_ms() - flow.startedAt);
-    const prefix = `${FLOW_LOG_TOKEN} ${flow.scope} ${flow.id} +${elapsed}ms`;
-    if (data !== null && data !== undefined) {
-        console.log(prefix, stage, data);
-    } else {
-        console.log(prefix, stage);
-    }
-}
+function log_flow() {}
 
 function resolve_backend_plan(kind) {
     const key = String(kind || '').toLowerCase();
@@ -439,7 +430,6 @@ function signal_auth_check_complete(authenticated, userId = null) {
     if (typeof window === 'undefined') return;
     window.__authCheckComplete = true;
     window.__authCheckResult = { authenticated, userId };
-    console.log('[Auth] Auth check complete:', authenticated ? `authenticated (${userId})` : 'not authenticated');
     window.dispatchEvent(new CustomEvent('squirrel:auth-checked', {
         detail: { authenticated, userId }
     }));
@@ -504,7 +494,6 @@ function save_user_session(userId, userName, userPhone) {
             loggedAt: new Date().toISOString()
         };
         localStorage.setItem(TAURI_USER_SESSION_KEY, JSON.stringify(session));
-        console.log('[Session] User session saved to localStorage');
     } catch (e) {
         console.warn('[Session] Failed to save user session:', e?.message);
     }
@@ -543,7 +532,6 @@ function clear_user_session() {
         localStorage.removeItem('eve_current_project_id');
         localStorage.removeItem('eve_last_project_id');
 
-        console.log('[Session] User session and ALL auth tokens cleared from localStorage');
     } catch (e) {
         console.warn('[Session] Failed to clear user session:', e?.message);
     }
@@ -621,7 +609,6 @@ function create_unauthenticated_result(errorMessage) {
 function clear_ui_on_logout() {
     if (typeof window === 'undefined') return;
 
-    console.log('[Security] Clearing UI on logout - removing all atomes from view');
 
     _currentUserId = null;
     _currentUserName = null;
@@ -715,7 +702,6 @@ function clear_ui_on_logout() {
  */
 function clear_ui_for_user_switch(prevUserId, nextUserId) {
     if (typeof window === 'undefined') return;
-    console.log(`[Security] User switch detected (${prevUserId?.substring(0, 8)}... → ${nextUserId?.substring(0, 8)}...), clearing view`);
 
     _currentProjectId = null;
     _currentProjectName = null;
@@ -1006,7 +992,6 @@ async function fastify_http_login(phone, password) {
             baseUrl = `http://127.0.0.1:${port}`;
         }
         const url = `${baseUrl}/api/auth/login`;
-        console.log('[Auth] Attempting direct HTTP login to Fastify:', url);
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1024,7 +1009,6 @@ async function fastify_http_login(phone, password) {
         if (ok && token) {
             FastifyAdapter.setToken?.(token);
         }
-        console.log('[Auth] Fastify HTTP login result:', { ok, hasToken: !!token });
         return { success: ok, data, error: ok ? null : (data?.error || 'Login failed'), token };
     } catch (e) {
         console.warn('[Auth] Fastify HTTP login threw:', e?.message || e);
@@ -1057,7 +1041,6 @@ async function fastify_http_register(phone, password, username) {
             baseUrl = `http://127.0.0.1:${port}`;
         }
         const url = `${baseUrl}/api/auth/register`;
-        console.log('[Auth] Attempting HTTP registration on Fastify:', url);
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1072,14 +1055,12 @@ async function fastify_http_register(phone, password, username) {
         const data = await res.json().catch(() => null);
         // Check for "already exists" which is fine for sync
         if (res.status === 409 || (data?.error && String(data.error).toLowerCase().includes('already'))) {
-            console.log('[Auth] User already exists on Fastify (OK for sync)');
             return { success: true, data, error: null, alreadyExists: true };
         }
         if (!res.ok) {
             console.warn('[Auth] Fastify HTTP register failed:', res.status, data?.error);
             return { success: false, data: null, error: data?.error || `HTTP ${res.status}`, alreadyExists: false };
         }
-        console.log('[Auth] Fastify HTTP registration succeeded');
         return { success: true, data, error: null, alreadyExists: false };
     } catch (e) {
         console.warn('[Auth] Fastify HTTP registration threw:', e?.message || e);
@@ -1115,12 +1096,10 @@ async function sync_current_user_to_fastify() {
         return { synced: false, reason: 'already_has_fastify_token' };
     }
 
-    console.log('[Auth] Fastify became available - checking if current Tauri user needs sync...');
 
     // Try to get cached credentials for this user
     const cachedCreds = load_cached_credentials();
     if (!cachedCreds || cachedCreds.phone !== userInfo.phone || !cachedCreds.password) {
-        console.log('[Auth] No cached credentials for current user - cannot sync to Fastify');
         return { synced: false, reason: 'no_cached_credentials' };
     }
 
@@ -1130,12 +1109,10 @@ async function sync_current_user_to_fastify() {
         // User exists on Fastify - login succeeded
         FastifyAdapter.setToken?.(loginResult.token);
         try { await store_fastify_token_in_axum(loginResult.token); } catch { }
-        console.log('[Auth] Current user already exists on Fastify - token obtained');
         return { synced: true, reason: 'user_exists_login_succeeded' };
     }
 
     // User doesn't exist on Fastify - register them
-    console.log('[Auth] User not found on Fastify - attempting registration...');
     const registerResult = await fastify_http_register(
         userInfo.phone,
         cachedCreds.password,
@@ -1149,14 +1126,12 @@ async function sync_current_user_to_fastify() {
         return { synced: false, reason: 'registration_failed', error: registerResult.error };
     }
 
-    console.log('[Auth] User registered on Fastify - obtaining token...');
 
     // Now login to get the token
     const postRegisterLogin = await fastify_http_login(userInfo.phone, cachedCreds.password);
     if (postRegisterLogin.success && postRegisterLogin.token) {
         FastifyAdapter.setToken?.(postRegisterLogin.token);
         try { await store_fastify_token_in_axum(postRegisterLogin.token); } catch { }
-        console.log('[Auth] User synced to Fastify successfully');
         return { synced: true, reason: 'user_synced' };
     }
 
@@ -1211,7 +1186,6 @@ async function ensure_fastify_token() {
                                 try { await clear_stored_fastify_token_in_axum(); } catch { };
                                 FastifyAdapter.clearToken?.();
                             } else {
-                                console.log('[Auth] Fastify token restored from Axum storage');
                                 return { ok: true, reason: 'token_restored_from_axum' };
                             }
                         } catch (e) {
@@ -1247,7 +1221,6 @@ async function ensure_fastify_token() {
                 const newToken = FastifyAdapter.getToken?.();
                 if (newToken) {
                     save_fastify_token_to_axum(newToken).then(saved => {
-                        if (saved) console.log('[Auth] Fastify token saved to Axum storage');
                     }).catch(() => { });
                 }
                 return { ok: true, reason: 'login_ok' };
@@ -1449,19 +1422,15 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
 }
 
 async function maybe_sync_atomes(reason = 'auto') {
-    console.log('[maybe_sync_atomes] Called with reason:', reason);
 
     if (_syncAtomesInProgress) {
-        console.log('[maybe_sync_atomes] Skipped: in_progress');
         return { skipped: true, reason: 'in_progress' };
     }
     const syncPolicy = resolve_sync_policy();
     if (!syncPolicy.from || !syncPolicy.to) {
-        console.log('[maybe_sync_atomes] Skipped: sync_off');
         return { skipped: true, reason: 'sync_off' };
     }
     if (!is_tauri_runtime()) {
-        console.log('[maybe_sync_atomes] Skipped: not_tauri');
         return { skipped: true, reason: 'not_tauri' };
     }
     if (!_currentUserId) {
@@ -1472,59 +1441,46 @@ async function maybe_sync_atomes(reason = 'auto') {
             }
         } catch { }
         if (!_currentUserId) {
-            console.log('[maybe_sync_atomes] Skipped: no_user');
             return { skipped: true, reason: 'no_user' };
         }
     }
 
     const now = Date.now();
     if (_lastSyncAtomesAttempt && (now - _lastSyncAtomesAttempt < 5000)) {
-        console.log('[maybe_sync_atomes] Skipped: cooldown');
         return { skipped: true, reason: 'cooldown' };
     }
 
     let backends;
     try {
         backends = await checkBackends(true);
-        console.log('[maybe_sync_atomes] Backends:', backends);
     } catch {
-        console.log('[maybe_sync_atomes] Skipped: backend_check_failed');
         return { skipped: true, reason: 'backend_check_failed' };
     }
 
     if (syncPolicy.from === 'tauri' && !backends.tauri) {
-        console.log('[maybe_sync_atomes] Skipped: source tauri unavailable');
         return { skipped: true, reason: 'source_unavailable' };
     }
     if (syncPolicy.from === 'fastify' && !backends.fastify) {
-        console.log('[maybe_sync_atomes] Skipped: source fastify unavailable');
         return { skipped: true, reason: 'source_unavailable' };
     }
     if (syncPolicy.to === 'tauri' && !backends.tauri) {
-        console.log('[maybe_sync_atomes] Skipped: target tauri unavailable');
         return { skipped: true, reason: 'target_unavailable' };
     }
     if (syncPolicy.to === 'fastify' && !backends.fastify) {
-        console.log('[maybe_sync_atomes] Skipped: target fastify unavailable');
         return { skipped: true, reason: 'target_unavailable' };
     }
 
     const sourceToken = syncPolicy.from === 'tauri' ? TauriAdapter.getToken?.() : FastifyAdapter.getToken?.();
     let targetToken = syncPolicy.to === 'fastify' ? FastifyAdapter.getToken?.() : TauriAdapter.getToken?.();
-    console.log('[maybe_sync_atomes] Tokens before ensure: source=', !!sourceToken, 'target=', !!targetToken);
 
     if (!targetToken && syncPolicy.to === 'fastify') {
-        console.log('[maybe_sync_atomes] No target token, calling ensure_fastify_token...');
         try { await ensure_fastify_token(); } catch { }
         targetToken = FastifyAdapter.getToken?.();
-        console.log('[maybe_sync_atomes] After ensure_fastify_token: target=', !!targetToken);
     }
     if (!sourceToken || !targetToken) {
-        console.log('[maybe_sync_atomes] Skipped: missing_token (source=', !!sourceToken, 'target=', !!targetToken, ')');
         return { skipped: true, reason: 'missing_token' };
     }
 
-    console.log('[maybe_sync_atomes] Starting sync...');
     _syncAtomesInProgress = true;
     _lastSyncAtomesAttempt = now;
     try {
@@ -1823,7 +1779,6 @@ function start_periodic_sync_monitor() {
  */
 function mark_user_sync_pending() {
     _pendingUserSync = true;
-    console.log('[Auth] User sync to Fastify marked as pending - will retry when available');
     start_user_sync_polling();
 }
 
@@ -1855,7 +1810,6 @@ function start_fastify_connection_polling() {
 
     _fastifyConnectionPollingStarted = true;
     const pollInterval = 1000; // Check EVERY SECOND
-    console.log('[Sync] Starting aggressive Fastify connection polling (every 1s)');
 
     _fastifyConnectionPollingId = setInterval(async () => {
         // Check if we already have a Fastify token
@@ -1864,7 +1818,6 @@ function start_fastify_connection_polling() {
             // We have a token - Fastify is connected
             // But we should still check if there are pending syncs
             if (_pendingUserSync) {
-                console.log('[Sync] Fastify token exists but user sync still pending - clearing flag');
                 clear_user_sync_pending();
             }
             return;
@@ -1874,28 +1827,22 @@ function start_fastify_connection_polling() {
         try {
             const { fastify } = await checkBackends(true);
             if (fastify) {
-                console.log('[Sync] Fastify now available (aggressive poll) - attempting connection...');
 
                 // Try to sync the current user to Fastify
                 const result = await sync_current_user_to_fastify();
                 if (result.synced) {
-                    console.log('[Sync] User synced to Fastify successfully via aggressive polling');
                     clear_user_sync_pending();
 
                     // CRITICAL: Now sync all existing atomes
-                    console.log('[Sync] Triggering full atomes sync after Fastify connection...');
                     setTimeout(async () => {
                         try {
                             const syncResult = await maybe_sync_atomes('fastify_connection_restored');
-                            console.log('[Sync] Atomes sync result after Fastify connection:', syncResult);
 
                             // If sync failed due to cooldown or was skipped, retry after a short delay
                             if (syncResult.skipped && syncResult.reason === 'cooldown') {
                                 setTimeout(async () => {
-                                    console.log('[Sync] Retrying atomes sync after cooldown...');
                                     try {
                                         const retryResult = await maybe_sync_atomes('fastify_connection_restored_retry');
-                                        console.log('[Sync] Atomes sync retry result:', retryResult);
                                     } catch (e) {
                                         console.warn('[Sync] Atomes sync retry failed:', e?.message || e);
                                     }
@@ -1906,7 +1853,6 @@ function start_fastify_connection_polling() {
                         }
                     }, 500);
                 } else {
-                    console.log('[Sync] User sync not completed:', result.reason);
                 }
             }
         } catch (e) {
@@ -1937,7 +1883,6 @@ function start_user_sync_polling() {
     userSyncPollingStarted = true;
 
     const pollInterval = 1000; // Check EVERY SECOND (was 10s, now 1s for faster reconnection)
-    console.log('[Auth] Starting user sync polling (every 1s)');
 
     userSyncPollingId = setInterval(async () => {
         // Only proceed if we have a pending user sync and no Fastify token
@@ -1953,24 +1898,19 @@ function start_user_sync_polling() {
         try {
             const { fastify } = await checkBackends(true);
             if (fastify) {
-                console.log('[Auth] Fastify now available - attempting pending user sync...');
                 const result = await sync_current_user_to_fastify();
                 if (result.synced) {
                     clear_user_sync_pending();
-                    console.log('[Auth] Pending user sync completed successfully');
 
                     // CRITICAL: Trigger atomes sync after user sync
-                    console.log('[Auth] Triggering atomes sync after user sync...');
                     setTimeout(async () => {
                         try {
                             const syncResult = await maybe_sync_atomes('user_synced_to_fastify');
-                            console.log('[Auth] Atomes sync result:', syncResult);
                         } catch (e) {
                             console.warn('[Auth] Atomes sync failed:', e?.message || e);
                         }
                     }, 500);
                 } else {
-                    console.log('[Auth] Pending user sync not completed:', result.reason);
                     // Keep retrying unless it's a permanent failure
                     if (result.reason === 'no_current_user' || result.reason === 'no_cached_credentials') {
                         clear_user_sync_pending();
@@ -2136,7 +2076,6 @@ function getOrCreateMachineId() {
             return v.toString(16);
         });
         localStorage.setItem(MACHINE_ID_KEY, machineId);
-        console.log(`[AdoleAPI] New machine ID generated: ${machineId.substring(0, 8)}...`);
     }
 
     return machineId;
@@ -2191,7 +2130,6 @@ async function register_machine(userId = null) {
             // Update existing machine
             try { await TauriAdapter.atome.alter(machineId, particleData); } catch (e) { }
             try { await FastifyAdapter.atome.alter(machineId, particleData); } catch (e) { }
-            console.log(`[AdoleAPI] Machine updated: ${machineId.substring(0, 8)}... (${platform})`);
         } else {
             // Create new machine atome
             try {
@@ -2215,7 +2153,6 @@ async function register_machine(userId = null) {
             } catch (e) {
                 console.warn('[AdoleAPI] Fastify create machine failed:', e.message);
             }
-            console.log(`[AdoleAPI] Machine registered: ${machineId.substring(0, 8)}... (${platform})`);
         }
 
         return true;
@@ -2287,7 +2224,6 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
         clear_ui_for_user_switch(previousUserId, userId);
     } else if (isNewLogin) {
         // First login - clear any stale UI from previous session
-        console.log('[Security] First login detected - clearing any stale UI');
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('squirrel:clear-view', {
                 detail: {
@@ -2303,7 +2239,6 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
     _currentUserName = userName;
     _currentUserPhone = userPhone;
 
-    console.log(`[AdoleAPI] Current user set: ${userName || 'unnamed'} (${userId ? userId.substring(0, 8) + '...' : 'none'})`);
 
     // PERSIST SESSION: Save to localStorage so session survives page refresh
     if (userId) {
@@ -2344,7 +2279,6 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
             await FastifyAdapter.atome.alter(userId, particleData);
         } catch (e) { }
 
-        console.log(`[AdoleAPI] User-machine association updated`);
     }
 
     return true;
@@ -2373,16 +2307,13 @@ async function try_auto_login() {
                 user.phone,
                 true
             );
-            console.log(`[AdoleAPI] Already logged in: ${user.username}`);
 
             // P0 FIX: Ensure Fastify token is obtained for sync mirroring
             const syncPolicy = resolve_sync_policy();
             if (syncPolicy.to === 'fastify' && is_tauri_runtime()) {
                 try {
-                    console.log('[Auth] Ensuring Fastify token for mirroring...');
                     const fastifyResult = await ensure_fastify_token();
                     if (fastifyResult.ok) {
-                        console.log('[Auth] Fastify token obtained successfully');
                     } else {
                         console.warn('[Auth] Could not get Fastify token:', fastifyResult.reason);
                     }
@@ -2397,7 +2328,6 @@ async function try_auto_login() {
         // Check machine's last user
         const machineUser = await get_machine_last_user();
         if (machineUser.userId) {
-            console.log(`[AdoleAPI] Machine's last user: ${machineUser.userId.substring(0, 8)}... (${machineUser.lastLogin})`);
             // Note: We don't auto-login here, just return the info
             // The app can decide whether to auto-login or show login screen
             return { success: false, userId: machineUser.userId, userName: null, hint: 'last_user_known' };
@@ -2453,7 +2383,6 @@ async function set_current_project(projectId, projectName = null, persist = true
         write_cached_current_project(projectId, projectName, _currentUserId);
     }
 
-    console.log(`[AdoleAPI] Current project set: ${projectName || 'unnamed'} (${projectId ? projectId.substring(0, 8) + '...' : 'none'})`);
 
     if (!persist || !projectId) {
         return true;
@@ -2490,7 +2419,6 @@ async function set_current_project(projectId, projectName = null, persist = true
             console.warn('[AdoleAPI] Fastify persist current project failed:', e.message);
         }
 
-        console.log('[AdoleAPI] Current project persisted to user particle');
         return true;
     } catch (e) {
         console.error('[AdoleAPI] Failed to persist current project:', e);
@@ -2541,7 +2469,6 @@ async function load_saved_current_project() {
                 _currentProjectId = savedProjectId;
                 _currentProjectName = savedProjectName;
                 write_cached_current_project(savedProjectId, savedProjectName, userId);
-                console.log(`[AdoleAPI] Restored saved project: ${savedProjectName || 'unnamed'} (${savedProjectId.substring(0, 8)}...)`);
             }
 
             return { id: savedProjectId, name: savedProjectName };
@@ -2753,7 +2680,6 @@ async function set_user_visibility(visibility, callback) {
     }
 
     if (results.tauri.success || results.fastify.success) {
-        console.log(`[AdoleAPI] User visibility changed to: ${normalizedVisibility}`);
     }
 
     if (typeof callback === 'function') callback(results);
@@ -2831,12 +2757,10 @@ async function log_user(phone, password, username, callback) {
         const errorMsg = String(primaryResult.error || '').toLowerCase();
         const isUserNotFound = errorMsg.includes('user not found') || errorMsg.includes('invalid credentials') || errorMsg.includes('phone');
         if (isUserNotFound) {
-            console.log('[Auth] Tauri login failed; attempting Fastify HTTP fallback...');
             try {
                 // Use direct HTTP login (more reliable than WebSocket which may not be connected)
                 const fastifyLoginResult = await fastify_http_login(normalizedPhone, password);
                 if (fastifyLoginResult.success) {
-                    console.log('[Auth] Fastify HTTP login succeeded; bootstrapping user locally on Tauri...');
                     // Bootstrap the user on Tauri so future logins work locally
                     try {
                         const bootstrapRes = await TauriAdapter.auth.register({
@@ -2846,12 +2770,10 @@ async function log_user(phone, password, username, callback) {
                             visibility: 'public'
                         });
                         if (bootstrapRes?.ok || bootstrapRes?.success || is_already_exists_error(bootstrapRes)) {
-                            console.log('[Auth] User bootstrapped on Tauri from Fastify credentials');
                             // Retry local login now that user exists
                             primaryResult = await loginWith(authPlan.primary, normalizedPhone);
                             results[authPlan.source] = primaryResult;
                             if (primaryResult.success) {
-                                console.log('[Auth] Tauri login succeeded after bootstrap');
                             }
                         } else {
                             console.warn('[Auth] Bootstrap on Tauri failed:', bootstrapRes?.error);
@@ -2862,7 +2784,6 @@ async function log_user(phone, password, username, callback) {
                     // Keep Fastify result for reference
                     results.fastify = { success: true, data: fastifyLoginResult.data, error: null };
                 } else {
-                    console.log('[Auth] Fastify HTTP login also failed:', fastifyLoginResult.error);
                 }
             } catch (e) {
                 console.warn('[Auth] Fastify HTTP fallback login threw:', e?.message || e);
@@ -2889,10 +2810,8 @@ async function log_user(phone, password, username, callback) {
         // TAURI→FASTIFY SYNC: If Tauri login succeeded, try to ensure Fastify has this user too
         if (authPlan.source === 'tauri' && syncPolicy.to === 'fastify') {
             try {
-                console.log('[Auth] Ensuring Fastify token after Tauri login...');
                 const fastifyResult = await ensure_fastify_token();
                 if (fastifyResult.ok) {
-                    console.log('[Auth] Fastify token obtained successfully');
                 } else {
                     // Fastify login failed - user might not exist on Fastify yet
                     // Trigger HTTP sync regardless of reason (could be login_failed, no_cached_credentials, etc.)
@@ -2903,15 +2822,12 @@ async function log_user(phone, password, username, callback) {
                         || reasonLower.includes('register_failed')
                         || reasonLower === 'cooldown'; // Even on cooldown, try HTTP sync once
                     if (shouldSync || !fastifyResult.ok) {
-                        console.log('[Auth] Fastify login failed (reason:', fastifyResult.reason, '), attempting HTTP sync to Fastify...');
                         try {
                             const syncResult = await fastify_http_register(normalizedPhone, password, resolvedUsername);
                             if (syncResult.success) {
-                                console.log('[Auth] User synced to Fastify successfully' + (syncResult.alreadyExists ? ' (already existed)' : ''));
                                 // Now try to get Fastify token via HTTP login
                                 const retryResult = await fastify_http_login(normalizedPhone, password);
                                 if (retryResult.success) {
-                                    console.log('[Auth] Fastify token obtained after sync');
                                     results.fastify = { success: true, data: retryResult.data, error: null };
                                     // Save token to Axum for persistence
                                     if (retryResult.token) {
@@ -3332,9 +3248,7 @@ async function user_list() {
 // Keep user directory fresh when the sync engine reports new accounts.
 // This is intentionally lightweight: it updates the local cache, it does not create accounts.
 try {
-    console.log('[AdoleAPI] Module init block - window:', typeof window !== 'undefined', '__ADOLE_USER_DIRECTORY_LISTENERS__:', typeof window !== 'undefined' ? window.__ADOLE_USER_DIRECTORY_LISTENERS__ : 'N/A');
     if (typeof window !== 'undefined' && !window.__ADOLE_USER_DIRECTORY_LISTENERS__) {
-        console.log('[AdoleAPI] Setting up event listeners and startup checks...');
         window.__ADOLE_USER_DIRECTORY_LISTENERS__ = true;
         window.addEventListener('squirrel:account-created', async (evt) => {
             try {
@@ -3451,30 +3365,18 @@ try {
         // If a session exists in localStorage AND the token is valid, restore the logged-in state.
         // Otherwise, clear the view to prevent showing previous user's atomes.
         // CRITICAL: This MUST complete and signal before any project loading happens.
-        console.log('[Auth] Checking runtime... is_tauri_runtime()=', is_tauri_runtime());
         if (is_tauri_runtime()) {
-            console.log('[Auth] Tauri runtime detected - registering auth check on squirrel:ready...');
             // Use squirrel:ready event which fires reliably after DOM is ready
             window.addEventListener('squirrel:ready', function onSquirrelReadyAuthCheck() {
                 window.removeEventListener('squirrel:ready', onSquirrelReadyAuthCheck);
-                console.log('[Auth] squirrel:ready fired - checking localStorage...');
 
                 const savedSession = load_user_session();
                 const token = TauriAdapter.getToken?.();
                 const hasFastifyToken = !!FastifyAdapter.getToken?.();
 
                 // === DETAILED STARTUP STATE LOG ===
-                console.log('='.repeat(60));
-                console.log('[Auth] TAURI STARTUP - LocalStorage State:');
-                console.log('  - Session in localStorage:', savedSession ? 'YES' : 'NO');
                 if (savedSession) {
-                    console.log('    - userId:', savedSession.userId || 'missing');
-                    console.log('    - userName:', savedSession.userName || 'missing');
-                    console.log('    - userPhone:', savedSession.userPhone || 'missing');
-                    console.log('    - loggedAt:', savedSession.loggedAt || 'unknown');
                 }
-                console.log('  - Tauri token:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
-                console.log('  - Fastify token:', hasFastifyToken ? 'YES' : 'NO');
 
                 // Check if local_auth_token actually exists in localStorage (not fallback)
                 const realLocalToken = localStorage.getItem('local_auth_token');
@@ -3484,17 +3386,13 @@ try {
                     console.warn('[Auth] → This may cause auth issues with local Fastify. Re-login recommended.');
                 }
 
-                console.log('  - Expected state:', savedSession?.userId && token ? 'USER SHOULD BE CONNECTED' : 'USER NOT CONNECTED');
-                console.log('='.repeat(60));
 
                 if (!savedSession || !savedSession.userId || !token) {
                     // Check if we have a token but no session (legacy login before session persistence was added)
                     if (token && (!savedSession || !savedSession.userId)) {
-                        console.log('[Auth] Startup: Token exists but no session - validating token to restore session...');
                         current_user().then(function (currentResult) {
                             const resolvedUserId = currentResult?.user?.user_id || currentResult?.user?.atome_id || currentResult?.user?.id || null;
                             if (currentResult?.logged && resolvedUserId) {
-                                console.log('[Auth] Startup: Token valid - creating session for user:', resolvedUserId);
                                 set_current_user_state(resolvedUserId, currentResult.user.username, currentResult.user.phone);
                                 signal_auth_check_complete(true, resolvedUserId);
 
@@ -3506,7 +3404,6 @@ try {
                                     }
                                 }
                             } else {
-                                console.log('[Auth] Startup: Token invalid - clearing');
                                 clear_user_session();
                                 clear_ui_on_logout();
                                 signal_auth_check_complete(false, null);
@@ -3520,7 +3417,6 @@ try {
                         return;
                     }
 
-                    console.log('[Security] Startup: No saved session or token - clearing view');
                     clear_user_session();
                     clear_ui_on_logout();
                     signal_auth_check_complete(false, null);
@@ -3530,32 +3426,25 @@ try {
                 // Session AND token exist - trust the saved session without backend validation
                 // The token will be validated on the first actual API call
                 // This avoids hanging on backend calls during early startup
-                console.log('[Auth] Startup: Session and token exist - restoring user state...');
-                console.log('[Auth] Startup: Restoring session for user:', savedSession.userId);
                 set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
                 signal_auth_check_complete(true, savedSession.userId);
 
                 // Check Fastify token sync
                 if (!hasFastifyToken) {
                     const syncPolicy = resolve_sync_policy();
-                    console.log('[Auth] Startup: syncPolicy=', syncPolicy);
                     if (syncPolicy.to === 'fastify') {
-                        console.log('[Auth] Startup: User restored but no Fastify token - marking user sync as pending');
                         mark_user_sync_pending();
                     }
                 }
             }, true); // capture phase to run early
-            console.log('[Auth] squirrel:ready listener registered');
         } else {
             // Browser/Fastify mode - also check auth state on startup
             setTimeout(async function browserStartupAuthCheck() {
                 try {
                     const currentResult = await current_user();
-                    console.log('[Auth] Browser startup security check: logged=', currentResult?.logged);
 
                     const resolvedUserId = currentResult?.user?.user_id || currentResult?.user?.atome_id || currentResult?.user?.id || null;
                     if (!currentResult?.logged || !resolvedUserId) {
-                        console.log('[Security] Browser startup: No user logged in - clearing view');
                         clear_ui_on_logout();
                         signal_auth_check_complete(false, null);
                     } else {
@@ -3563,7 +3452,6 @@ try {
                     }
                 } catch (e) {
                     console.warn('[Auth] Browser startup security check failed:', e?.message || e);
-                    console.log('[Security] Browser startup: Error checking auth - clearing view for safety');
                     clear_ui_on_logout();
                     signal_auth_check_complete(false, null);
                 }
@@ -3660,7 +3548,6 @@ async function list_unsynced_atomes(callback) {
     } catch {
         ownerId = null;
     }
-    console.log('[sync_atomes] list_unsynced start', { ownerId });
 
     // Known atome types to query (server requires a type when no owner specified)
     const atomeTypes = [
@@ -3676,7 +3563,6 @@ async function list_unsynced_atomes(callback) {
     if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
         try { await ensure_fastify_token(); } catch { }
     }
-    console.log('[sync_atomes] fastify token', { present: !!FastifyAdapter.getToken?.() });
 
     // Helper to fetch all atomes of all types from an adapter (including deleted for sync)
     // Uses ownerId: "*" to get ALL atomes, not just current user's
@@ -3731,10 +3617,8 @@ async function list_unsynced_atomes(callback) {
         tauriAtomes = await fetchAllAtomes(TauriAdapter, 'Tauri', ownerId);
         tauriAtomes = tauriAtomes.map(normalizeAtomeRecord);
         tauriAtomes = filterOwnedAtomes(tauriAtomes, ownerId);
-        console.log('[sync_atomes] list_unsynced tauri count', { count: tauriAtomes.length });
     } catch (e) {
         result.error = 'Tauri connection failed: ' + e.message;
-        console.log('[sync_atomes] list_unsynced tauri error', { error: result.error });
         if (typeof callback === 'function') callback(result);
         return result;
     }
@@ -3744,12 +3628,10 @@ async function list_unsynced_atomes(callback) {
         fastifyAtomes = await fetchAllAtomes(FastifyAdapter, 'Fastify', ownerId);
         fastifyAtomes = fastifyAtomes.map(normalizeAtomeRecord);
         fastifyAtomes = filterOwnedAtomes(fastifyAtomes, ownerId);
-        console.log('[sync_atomes] list_unsynced fastify count', { count: fastifyAtomes.length });
     } catch (e) {
         // If Fastify is offline, all Tauri atomes are "unsynced"
         result.onlyOnTauri = tauriAtomes.filter(a => !a.deleted_at);
         result.error = 'Fastify connection failed - all local atomes considered unsynced';
-        console.log('[sync_atomes] list_unsynced fastify error', { error: result.error });
         if (typeof callback === 'function') callback(result);
         return result;
     }
@@ -3920,17 +3802,6 @@ async function list_unsynced_atomes(callback) {
         callback(result);
     }
 
-    console.log('[sync_atomes] list_unsynced summary', {
-        onlyOnTauri: result.onlyOnTauri.length,
-        onlyOnFastify: result.onlyOnFastify.length,
-        modifiedOnTauri: result.modifiedOnTauri.length,
-        modifiedOnFastify: result.modifiedOnFastify.length,
-        deletedOnTauri: result.deletedOnTauri.length,
-        deletedOnFastify: result.deletedOnFastify.length,
-        conflicts: result.conflicts.length,
-        synced: result.synced.length,
-        error: result.error
-    });
 
     return result;
 }
@@ -3971,7 +3842,6 @@ async function sync_atomes(callback) {
     if (!is_tauri_runtime()) {
         result.skipped = true;
         result.reason = 'not_tauri';
-        console.log('[sync_atomes] sync skipped (not tauri)');
         log_flow(flow, 'skipped', { reason: result.reason });
         if (typeof callback === 'function') callback(result);
         return result;
@@ -3983,7 +3853,6 @@ async function sync_atomes(callback) {
             : '';
         const uploadBase = resolveFastifyUploadBase();
         const tokenPresent = !!FastifyAdapter.getToken?.();
-        console.log('[sync_atomes] sync start', { fastifyBase, uploadBase, tokenPresent });
         log_flow(flow, 'start', { fastifyBase, uploadBase, tokenPresent });
     } catch (_) { }
 
@@ -3993,28 +3862,16 @@ async function sync_atomes(callback) {
         unsyncedResult = await list_unsynced_atomes();
         if (unsyncedResult.error) {
             result.error = unsyncedResult.error;
-            console.log('[sync_atomes] sync aborted', { error: result.error });
             if (typeof callback === 'function') callback(result);
             return result;
         }
     } catch (e) {
         result.error = 'Failed to list unsynced atomes: ' + e.message;
-        console.log('[sync_atomes] sync failed', { error: result.error });
         if (typeof callback === 'function') callback(result);
         return result;
     }
 
     result.alreadySynced = unsyncedResult.synced.length;
-    console.log('[sync_atomes] unsynced counts', {
-        onlyOnTauri: unsyncedResult.onlyOnTauri.length,
-        onlyOnFastify: unsyncedResult.onlyOnFastify.length,
-        modifiedOnTauri: unsyncedResult.modifiedOnTauri.length,
-        modifiedOnFastify: unsyncedResult.modifiedOnFastify.length,
-        deletedOnTauri: unsyncedResult.deletedOnTauri.length,
-        deletedOnFastify: unsyncedResult.deletedOnFastify.length,
-        conflicts: unsyncedResult.conflicts.length,
-        synced: unsyncedResult.synced.length
-    });
 
     let currentUserId = _currentUserId;
     if (!currentUserId) {
@@ -4332,10 +4189,6 @@ async function sync_atomes(callback) {
         const url = `${base}/api/local-files?path=${encodeURIComponent(relativePath)}`;
         const result = await fetchLocalBinary(url, { method: 'GET', headers });
         if (!result.ok) {
-            console.log('[sync_atomes] local_axum read_failed', {
-                path: relativePath,
-                error: result.error || result.data || 'local_read_failed'
-            });
             return null;
         }
         return result.bytes || null;
@@ -4368,26 +4221,11 @@ async function sync_atomes(callback) {
         const relativePath = resolveLocalRelativePath(filePath || '', ownerId, null);
         const result = await listTauriDirEntries(ownerId, relativePath);
         const entries = result.entries.slice(0, 50).map((entry) => entry.name || entry.path || '');
-        console.log('[sync_atomes] local_dir_snapshot', {
-            reason,
-            ownerId,
-            dir: relativePath || 'Downloads',
-            ok: result.ok,
-            error: result.error,
-            entries
-        });
     };
 
     const logTauriFsStatusOnce = (mode, localPath) => {
         if (!is_tauri_runtime()) return;
         if (_localFsLogState[mode]) return;
-        console.log('[sync_atomes] local_fs', {
-            mode,
-            base: resolveLocalAxumBase(),
-            hasToken: !!TauriAdapter?.getToken?.(),
-            projectRoot: resolveProjectRoot(),
-            localPath
-        });
         _localFsLogState[mode] = true;
     };
 
@@ -4446,10 +4284,6 @@ async function sync_atomes(callback) {
         const payload = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes);
         const result = await fetchLocalJson(url, { method: 'POST', headers, body: payload });
         if (!result.ok) {
-            console.log('[sync_atomes] local_axum write_failed', {
-                path: relativePath,
-                error: result.data?.error || result.data || 'local_write_failed'
-            });
             return { ok: false, error: result.data?.error || result.data || 'local_write_failed' };
         }
         return { ok: true, data: result.data };
@@ -4486,13 +4320,11 @@ async function sync_atomes(callback) {
 
     const downloadFileAssetFromFastify = async (atome) => {
         if (!is_tauri_runtime()) {
-            console.log('[sync_atomes] asset pull blocked: not_tauri');
             return { ok: false, error: 'not_tauri' };
         }
         await ensureProjectRoot();
         const atomeId = atome?.atome_id || atome?.id;
         if (!atomeId) {
-            console.log('[sync_atomes] asset pull blocked: missing_atome_id');
             return { ok: false, error: 'missing_atome_id' };
         }
 
@@ -4502,18 +4334,11 @@ async function sync_atomes(callback) {
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
         logTauriFsStatusOnce('pull', localPath);
         if (!localPath) {
-            console.log('[sync_atomes] asset pull blocked: local_path_missing', {
-                atomeId,
-                ownerId,
-                fileName: safeFileName,
-                filePath
-            });
             return { ok: false, error: 'local_path_missing' };
         }
 
         const token = FastifyAdapter?.getToken ? FastifyAdapter.getToken() : null;
         if (!token) {
-            console.log('[sync_atomes] asset pull blocked: fastify_token_missing', { atomeId, ownerId });
             return { ok: false, error: 'fastify_token_missing' };
         }
 
@@ -4523,24 +4348,10 @@ async function sync_atomes(callback) {
                 ? meta.size
                 : (typeof meta?.len === 'number' ? meta.len : null);
             if (localSize != null && Number(localSize) === Number(sizeBytes)) {
-                console.log('[sync_atomes] asset pull skipped: size_match', {
-                    atomeId,
-                    ownerId,
-                    sizeBytes,
-                    localPath
-                });
                 return { ok: true, skipped: true, reason: 'size_match' };
             }
         }
 
-        console.log('[sync_atomes] asset pull attempt', {
-            atomeId,
-            ownerId,
-            fileName: safeFileName,
-            filePath,
-            localPath,
-            sizeBytes
-        });
 
         try {
             const infoResult = await FastifyAdapter.file.downloadInfo({
@@ -4551,17 +4362,11 @@ async function sync_atomes(callback) {
 
             if (!(infoResult?.ok || infoResult?.success)) {
                 const error = infoResult?.error || 'download_info_failed';
-                console.log('[sync_atomes] asset pull failed', {
-                    atomeId,
-                    fileName: safeFileName,
-                    error
-                });
                 return { ok: false, error };
             }
 
             const info = infoResult?.data || {};
             if (info?.downloadsSnapshot) {
-                console.log('[sync_atomes] server_dir_snapshot', info.downloadsSnapshot);
             }
             const totalSize = Number(info.sizeBytes ?? info.size ?? sizeBytes ?? 0);
             const chunkSize = Number(info.chunkSize) || WS_FILE_CHUNK_SIZE;
@@ -4585,12 +4390,6 @@ async function sync_atomes(callback) {
 
                 if (!(chunkResult?.ok || chunkResult?.success)) {
                     const error = chunkResult?.error || 'download_chunk_failed';
-                    console.log('[sync_atomes] asset pull failed', {
-                        atomeId,
-                        fileName: safeFileName,
-                        error,
-                        chunkIndex
-                    });
                     return { ok: false, error };
                 }
 
@@ -4609,12 +4408,6 @@ async function sync_atomes(callback) {
             const finalBytes = useFixedSize ? fixedBuffer : concatChunks(chunks, collectedSize);
             const writeResult = await tryTauriWriteBinaryFile(localPath, finalBytes, ownerId, filePath, safeFileName);
             if (!writeResult.ok) {
-                console.log('[sync_atomes] asset pull failed', {
-                    atomeId,
-                    fileName: safeFileName,
-                    error: writeResult.error || 'write_failed',
-                    localPath
-                });
                 await logLocalDownloadsSnapshot(ownerId, filePath, 'pull_write_failed');
                 return { ok: false, error: writeResult.error || 'write_failed' };
             }
@@ -4622,11 +4415,6 @@ async function sync_atomes(callback) {
             return { ok: true, path: localPath, size: finalBytes.length };
         } catch (e) {
             const error = e?.message || 'download_failed';
-            console.log('[sync_atomes] asset pull failed', {
-                atomeId,
-                fileName: safeFileName,
-                error
-            });
             return { ok: false, error };
         }
     };
@@ -4690,13 +4478,11 @@ async function sync_atomes(callback) {
     const syncFastifyFileAssetsToTauri = async () => {
         if (!is_tauri_runtime()) return { ok: false, reason: 'not_tauri' };
         if (window?.__SQUIRREL_DISABLE_FILE_ASSET_SYNC__ === true) {
-            console.log('[sync_atomes] asset pull skipped: disabled');
             return { ok: false, reason: 'disabled' };
         }
 
         const now = Date.now();
         if (now - _lastFastifyAssetSync < 30_000) {
-            console.log('[sync_atomes] asset pull skipped: throttled');
             return { ok: true, skipped: true, reason: 'throttled' };
         }
         _lastFastifyAssetSync = now;
@@ -4706,7 +4492,6 @@ async function sync_atomes(callback) {
         }
         const token = FastifyAdapter?.getToken?.();
         if (!token) {
-            console.log('[sync_atomes] asset pull blocked: fastify_token_missing');
             return { ok: false, reason: 'fastify_token_missing' };
         }
 
@@ -4718,21 +4503,15 @@ async function sync_atomes(callback) {
             } catch { }
         }
         if (!ownerId) {
-            console.log('[sync_atomes] asset pull blocked: owner_missing');
             return { ok: false, reason: 'owner_missing' };
         }
 
         const fastifyBase = resolveFastifyUploadBase();
-        console.log('[sync_atomes] asset pull start', { ownerId, fastifyBase });
 
         const summary = { ok: true, attempted: 0, downloaded: 0, skipped: 0, failed: 0 };
         for (const type of FILE_ASSET_TYPES) {
             const listResult = await listFastifyAtomesByType(type, ownerId);
             if (!listResult.ok) {
-                console.log('[sync_atomes] asset pull list failed', {
-                    type,
-                    error: listResult.error
-                });
                 continue;
             }
 
@@ -4751,7 +4530,6 @@ async function sync_atomes(callback) {
             }
         }
 
-        console.log('[sync_atomes] asset pull summary', summary);
         return summary;
     };
 
@@ -4769,22 +4547,8 @@ async function sync_atomes(callback) {
 
         const localPath = resolveLocalAssetPath(filePath, ownerId, safeFileName);
         logTauriFsStatusOnce('push', localPath);
-        console.log('[sync_atomes] asset push start', {
-            atomeId,
-            ownerId,
-            fileName: safeFileName,
-            filePath,
-            localPath,
-            sizeBytes
-        });
         const bytes = await readTauriBinaryFile(localPath, ownerId, filePath, safeFileName);
         if (!bytes || !bytes.length) {
-            console.log('[sync_atomes] asset push blocked: local_asset_missing', {
-                atomeId,
-                ownerId,
-                fileName: safeFileName,
-                localPath
-            });
             await logLocalDownloadsSnapshot(ownerId, filePath, 'push_missing');
             return { ok: false, error: 'local_asset_missing' };
         }
@@ -4812,12 +4576,6 @@ async function sync_atomes(callback) {
                 });
                 if (!(chunkResult?.ok || chunkResult?.success)) {
                     const msg = chunkResult?.error || 'upload_chunk_failed';
-                    console.log('[sync_atomes] asset push failed', {
-                        atomeId,
-                        fileName: safeFileName,
-                        chunkIndex,
-                        error: msg
-                    });
                     return { ok: false, error: msg };
                 }
             }
@@ -4836,30 +4594,13 @@ async function sync_atomes(callback) {
 
             if (!(completeResult?.ok || completeResult?.success)) {
                 const msg = completeResult?.error || 'upload_complete_failed';
-                console.log('[sync_atomes] asset push failed', {
-                    atomeId,
-                    fileName: safeFileName,
-                    error: msg
-                });
                 return { ok: false, error: msg };
             }
 
             if (completeResult?.data?.downloadsSnapshot) {
-                console.log('[sync_atomes] server_dir_snapshot', completeResult.data.downloadsSnapshot);
             }
-            console.log('[sync_atomes] asset push ok', {
-                atomeId,
-                fileName: safeFileName,
-                sizeBytes: totalSize,
-                path: relativePath
-            });
             return { ok: true, createdAtome: false, sizeBytes: totalSize, path: relativePath };
         } catch (e) {
-            console.log('[sync_atomes] asset push failed', {
-                atomeId,
-                fileName: safeFileName,
-                error: e?.message || 'upload_failed'
-            });
             return { ok: false, error: e?.message || 'upload_failed' };
         }
     };
@@ -4922,7 +4663,6 @@ async function sync_atomes(callback) {
 
     // 1. Push local-only atomes to Fastify (in topological order)
     const sortedToPush = topologicalSort(unsyncedResult.onlyOnTauri);
-    console.log('[sync_atomes] Push order:', sortedToPush.map(a => `${a.atome_type}:${(a.atome_id || a.id).substring(0, 8)}`).join(' → '));
 
     for (const atome of sortedToPush) {
         try {
@@ -4958,7 +4698,6 @@ async function sync_atomes(callback) {
 
     // 2. Pull remote-only atomes to Tauri (in topological order)
     const sortedToPull = topologicalSort(unsyncedResult.onlyOnFastify);
-    console.log('[sync_atomes] Pull order:', sortedToPull.map(a => `${a.atome_type}:${(a.atome_id || a.id).substring(0, 8)}`).join(' → '));
 
     for (const atome of sortedToPull) {
         try {
@@ -5923,16 +5662,9 @@ async function get_atome(atomeId, callback) {
     try {
         const isFastify = dataPlan.source === 'fastify';
         if (DEBUG) {
-            console.log(`🔍 Calling ${isFastify ? 'Fastify' : 'Tauri'}Adapter.atome.get for atome ID:`, atomeId);
         }
         const primaryResult = await dataPlan.primary.atome.get(atomeId);
         if (DEBUG) {
-            console.log('🔍 Primary raw result:', primaryResult);
-            console.log('🔍 Primary result structure:', {
-                hasAtome: !!primaryResult.atome,
-                hasData: !!primaryResult.data,
-                allKeys: Object.keys(primaryResult)
-            });
         }
 
         if (primaryResult.ok || primaryResult.success) {

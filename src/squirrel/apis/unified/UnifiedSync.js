@@ -707,7 +707,6 @@ const connectRealtime = async (options = {}) => {
 
                 rememberMirrorCreate(atomeId);
                 const tauriTokenPresent = !!(TauriAdapter?.getToken && TauriAdapter.getToken());
-                console.log('[UnifiedSync] Mirror create start', { atomeId, hasTauriToken: tauriTokenPresent });
                 if (tauriTokenPresent) {
                     TauriAdapter.atome.create({
                         id: atomeId,
@@ -717,15 +716,12 @@ const connectRealtime = async (options = {}) => {
                         properties: particles || {},
                         sync: true
                     }).then((res) => {
-                        console.log('[UnifiedSync] Mirror create response', { atomeId, res });
                         if (res && (res.ok || res.success || isAlreadyExistsError(res))) return;
                         mirrorCreateSeen.delete(atomeId);
                     }).catch((err) => {
-                        console.log('[UnifiedSync] Mirror create error', { atomeId, error: err?.message || err });
                         mirrorCreateSeen.delete(atomeId);
                     });
                 } else {
-                    console.log('[UnifiedSync] Mirror create skipped - no tauri token', { atomeId });
                     mirrorCreateSeen.delete(atomeId);
                 }
             }
@@ -972,7 +968,6 @@ const ensureCommandAuth = async (userId) => {
         token = getTauriToken();
     }
     if (!token) {
-        console.log('[UnifiedSync] ensureCommandAuth: no token available');
         return false;
     }
 
@@ -992,9 +987,7 @@ const ensureCommandAuth = async (userId) => {
             commandState.authInFlight = false;
             return true;
         }
-        console.log('[UnifiedSync] ensureCommandAuth: auth failed', response?.error || 'unknown');
     } catch (err) {
-        console.log('[UnifiedSync] ensureCommandAuth: error', err?.message || err);
     }
 
     commandState.authInFlight = false;

@@ -32,7 +32,6 @@
     return true; // Prevents default handling
   };
 
-  console.log('[Squirrel] Error handlers installed (capture + bubble phase)');
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -45,7 +44,6 @@
   // Clear project matrix content if it exists from previous session, but keep the container
   const matrixRoot = document.getElementById('eve_project_matrix');
   if (matrixRoot) {
-    console.log('[Squirrel] Clearing stale matrix content from previous session');
     matrixRoot.classList.remove('is-active');
     matrixRoot.style.display = 'none';
     matrixRoot.style.opacity = '0';
@@ -73,7 +71,6 @@
     view.style.visibility = 'hidden';
   });
 
-  console.log('[Squirrel] Stale session UI cleared');
 })();
 
 // atome imports
@@ -107,7 +104,6 @@ if (typeof global !== 'undefined') {
   global.AdoleAPI = AdoleAPI;
 }
 
-console.log('[Squirrel] AdoleAPI v3.0 loaded globally ✅');
 
 // === COMPONENT IMPORTS ===
 import Button from './components/button_builder.js';
@@ -315,10 +311,6 @@ import('./kickstart.js').then(async () => {
     const cfg = await loadServerConfigOnce();
     if (cfg) {
       // Debug: confirm globals exist (helps diagnose "missing Fastify WebSocket URL")
-      console.log('[Squirrel] server_config.json loaded');
-      console.log('[Squirrel] __SQUIRREL_FASTIFY_URL__:', window.__SQUIRREL_FASTIFY_URL__);
-      console.log('[Squirrel] __SQUIRREL_FASTIFY_WS_API_URL__:', window.__SQUIRREL_FASTIFY_WS_API_URL__);
-      console.log('[Squirrel] __SQUIRREL_FASTIFY_WS_SYNC_URL__:', window.__SQUIRREL_FASTIFY_WS_SYNC_URL__);
     } else {
       console.warn('[Squirrel] server_config.json not loaded (Fastify endpoints may be unavailable)');
     }

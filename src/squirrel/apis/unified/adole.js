@@ -629,7 +629,6 @@ class TauriWebSocket {
                 this.isConnecting = false;
                 this.isConnected = true;
                 this.startPing();
-                console.log('[TauriWS] ✅ Reconnected');
             };
 
             this.socket.onclose = () => {
@@ -749,7 +748,6 @@ class TauriWebSocket {
                                 // Guard: do not apply realtime share-sync patches to anonymous sessions.
                                 const localUserId = (window.__currentUser && window.__currentUser.id) ? window.__currentUser.id : null;
                                 if (!localUserId) {
-                                    console.log('[AdoleWS] Skipping share-sync delivery: no local user');
                                     return;
                                 }
 
@@ -784,7 +782,6 @@ class TauriWebSocket {
                     }
                 } catch (_) { }
 
-                console.log('[Fastify Console Message]', { from, message: message.message, payload: message });
                 return;
             }
 
@@ -1120,12 +1117,10 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                                 password: String(data.password),
                                 savedAt: new Date().toISOString()
                             }));
-                            console.log('[Auth] Credentials saved for Fastify sync (register)');
                             // Immediately attempt to get Fastify token for real-time sync
                             if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
                                 window.AdoleAPI.auth.ensureFastifyToken().then(r => {
-                                    if (r?.ok) console.log('[Auth] Fastify token obtained after register');
-                                    else console.warn('[Auth] Fastify token not obtained:', r?.reason);
+                                    if (!r?.ok) console.warn('[Auth] Fastify token not obtained:', r?.reason);
                                 }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
                             }
                         }
@@ -1155,12 +1150,10 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                                 password: String(data.password),
                                 savedAt: new Date().toISOString()
                             }));
-                            console.log('[Auth] Credentials saved for Fastify sync');
                             // Immediately attempt to get Fastify token for real-time sync
                             if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
                                 window.AdoleAPI.auth.ensureFastifyToken().then(r => {
-                                    if (r?.ok) console.log('[Auth] Fastify token obtained after bootstrap');
-                                    else console.warn('[Auth] Fastify token not obtained:', r?.reason);
+                                    if (!r?.ok) console.warn('[Auth] Fastify token not obtained:', r?.reason);
                                 }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
                             }
                         }
@@ -1187,12 +1180,10 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                                 password: String(data.password),
                                 savedAt: new Date().toISOString()
                             }));
-                            console.log('[Auth] Credentials saved for Fastify sync (login)');
                             // Immediately attempt to get Fastify token for real-time sync
                             if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
                                 window.AdoleAPI.auth.ensureFastifyToken().then(r => {
-                                    if (r?.ok) console.log('[Auth] Fastify token obtained after login');
-                                    else console.warn('[Auth] Fastify token not obtained:', r?.reason);
+                                    if (!r?.ok) console.warn('[Auth] Fastify token not obtained:', r?.reason);
                                 }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
                             }
                         }
