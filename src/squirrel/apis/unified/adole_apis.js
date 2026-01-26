@@ -537,6 +537,23 @@ function clear_user_session() {
     }
 }
 
+function clear_all_storage() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.clear();
+        }
+    } catch (e) {
+        console.warn('[Session] Failed to clear localStorage:', e?.message);
+    }
+    try {
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.clear();
+        }
+    } catch (e) {
+        console.warn('[Session] Failed to clear sessionStorage:', e?.message);
+    }
+}
+
 /**
  * Check if a valid user session exists in localStorage
  * @returns {boolean}
@@ -631,6 +648,12 @@ function clear_ui_on_logout() {
     if (window.__eveProfilePreferences) {
         delete window.__eveProfilePreferences;
     }
+    if (window.__authCheckComplete !== undefined) {
+        window.__authCheckComplete = true;
+    }
+    if (window.__authCheckResult !== undefined) {
+        window.__authCheckResult = { authenticated: false, userId: null };
+    }
 
     // Clear matrix UI state without removing the element entirely.
     // The matrix will be recreated/repopulated when the next user opens it.
@@ -674,24 +697,8 @@ function clear_ui_on_logout() {
         }
     }));
 
-    // Clear cached atome/project data but NOT everything (keep machine ID, settings, etc.)
-    try {
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (
-                key.startsWith('atome_') ||
-                key.startsWith('project_') ||
-                key.includes('_cache') ||
-                key.startsWith('eve_')
-            )) {
-                keysToRemove.push(key);
-            }
-        }
-        keysToRemove.forEach(key => {
-            try { localStorage.removeItem(key); } catch { }
-        });
-    } catch { }
+    // Clear all local/session storage to avoid cross-user residue.
+    clear_all_storage();
 }
 
 /**
@@ -718,6 +725,12 @@ function clear_ui_for_user_switch(prevUserId, nextUserId) {
     if (window.__eveProfilePreferences) {
         delete window.__eveProfilePreferences;
     }
+    if (window.__authCheckComplete !== undefined) {
+        window.__authCheckComplete = true;
+    }
+    if (window.__authCheckResult !== undefined) {
+        window.__authCheckResult = { authenticated: false, userId: null };
+    }
 
     // Clear matrix UI state without removing the element entirely.
     if (typeof document !== 'undefined') {
@@ -742,13 +755,9 @@ function clear_ui_for_user_switch(prevUserId, nextUserId) {
         }
     }
 
-    // Clear cached project state but keep auth/session tokens intact.
+    // Clear all local/session storage to avoid cross-user residue.
     clear_cached_current_project();
-    try {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem('eve_current_project_id');
-        }
-    } catch { }
+    clear_all_storage();
 
     window.dispatchEvent(new CustomEvent('squirrel:clear-view', {
         detail: {
@@ -5192,6 +5201,7 @@ async function list_atomes(options = {}, callback) {
 
     const projectId = options.projectId || options.project_id || null;
     let ownerId = options.ownerId || null;
+    let currentUserId = null;
     const includeShared = !!options.includeShared;
     const dataPlan = resolve_backend_plan('data');
     const shouldMergeSources = is_tauri_runtime() && includeShared;
@@ -5206,15 +5216,25 @@ async function list_atomes(options = {}, callback) {
     // Fastify WS list requires ownerId/userId or atomeType; otherwise it returns [].
     // Exception: when listing global users, do not force owner filtering.
     const skipOwnerFilter = !!options.skipOwner;
-    if (!ownerId && atomeType !== 'user' && !skipOwnerFilter) {
+    if (atomeType !== 'user') {
         try {
             const currentUserResult = await current_user();
-            const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
-            if (currentUserId) {
-                ownerId = currentUserId;
-            }
+            currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
         } catch (e) {
             // Silent; will fallback to server behavior
+        }
+    }
+    if (atomeType !== 'user' && !currentUserId) {
+        const error = 'No authenticated user. Cannot list atomes.';
+        const blockedResult = create_unauthenticated_result(error);
+        blockedResult.tauri = { atomes: [], error };
+        blockedResult.fastify = { atomes: [], error };
+        if (typeof callback === 'function') callback(blockedResult);
+        return blockedResult;
+    }
+    if (!ownerId && atomeType !== 'user' && !skipOwnerFilter) {
+        if (currentUserId) {
+            ownerId = currentUserId;
         }
     }
 
@@ -5227,6 +5247,35 @@ async function list_atomes(options = {}, callback) {
     if (options.offset !== undefined) queryOptions.offset = options.offset;
     if (options.includeDeleted !== undefined) queryOptions.includeDeleted = options.includeDeleted;
     if (projectId && queryOptions.limit === undefined) queryOptions.limit = 1000;
+
+    const tauriQueryOptions = { ...queryOptions };
+    const fastifyQueryOptions = { ...queryOptions };
+    // In Tauri, avoid leaking other users' local projects when includeShared + skipOwner.
+    if (is_tauri_runtime() && includeShared && skipOwnerFilter && currentUserId && !ownerId) {
+        tauriQueryOptions.owner_id = currentUserId;
+    }
+
+    const canUseFastifyForShared = async () => {
+        if (!is_tauri_runtime() || !includeShared) return true;
+        if (!currentUserId) return false;
+        if (!FastifyAdapter.getToken?.()) {
+            try { await ensure_fastify_token(); } catch { }
+        }
+        const token = FastifyAdapter.getToken?.();
+        if (!token) return false;
+        try {
+            const me = await FastifyAdapter.auth.me();
+            const fastifyUserId = me?.user?.user_id || me?.user?.id || null;
+            if (!fastifyUserId) return false;
+            if (String(fastifyUserId) !== String(currentUserId)) {
+                try { FastifyAdapter.clearToken?.(); } catch { }
+                return false;
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    };
 
     const mergeAtomeLists = (primary = [], secondary = []) => {
         const byId = new Map();
@@ -5262,7 +5311,7 @@ async function list_atomes(options = {}, callback) {
         let fastifyList = [];
 
         try {
-            const tauriResult = await TauriAdapter.atome.list(queryOptions);
+            const tauriResult = await TauriAdapter.atome.list(tauriQueryOptions);
             if (tauriResult.ok || tauriResult.success) {
                 const rawAtomes = tauriResult.atomes || tauriResult.data || [];
                 tauriList = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
@@ -5274,37 +5323,38 @@ async function list_atomes(options = {}, callback) {
         }
 
         try {
-            if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-                try { await ensure_fastify_token(); } catch { }
-            }
-
-            let fastifyResult = await FastifyAdapter.atome.list(queryOptions);
-            if (!(fastifyResult.ok || fastifyResult.success)) {
-                const errMsg = String(fastifyResult.error || '').toLowerCase();
-                const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-                if (is_tauri_runtime() && authError) {
-                    try { await ensure_fastify_token(); } catch { }
-                    fastifyResult = await FastifyAdapter.atome.list(queryOptions);
-                }
-            }
-
-            if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
-                const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
-                let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-
-                if (projectId) {
-                    const target = String(projectId);
-                    normalized = normalized.filter((item) => {
-                        const parentId = item.parentId || item.parent_id || null;
-                        const properties = item.properties || item.particles || item.data || {};
-                        const propertyProjectId = properties.projectId || properties.project_id || null;
-                        return String(parentId || '') === target || String(propertyProjectId || '') === target;
-                    });
+            const allowFastify = await canUseFastifyForShared();
+            if (!allowFastify) {
+                results.fastify.error = 'fastify_user_mismatch';
+            } else {
+                let fastifyResult = await FastifyAdapter.atome.list(fastifyQueryOptions);
+                if (!(fastifyResult.ok || fastifyResult.success)) {
+                    const errMsg = String(fastifyResult.error || '').toLowerCase();
+                    const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+                    if (is_tauri_runtime() && authError) {
+                        try { await ensure_fastify_token(); } catch { }
+                        fastifyResult = await FastifyAdapter.atome.list(fastifyQueryOptions);
+                    }
                 }
 
-                fastifyList = normalized;
-            } else if (!results.fastify.error) {
-                results.fastify.error = fastifyResult?.error || null;
+                if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
+                    const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
+                    let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+
+                    if (projectId) {
+                        const target = String(projectId);
+                        normalized = normalized.filter((item) => {
+                            const parentId = item.parentId || item.parent_id || null;
+                            const properties = item.properties || item.particles || item.data || {};
+                            const propertyProjectId = properties.projectId || properties.project_id || null;
+                            return String(parentId || '') === target || String(propertyProjectId || '') === target;
+                        });
+                    }
+
+                    fastifyList = normalized;
+                } else if (!results.fastify.error) {
+                    results.fastify.error = fastifyResult?.error || null;
+                }
             }
         } catch (e) {
             results.fastify.error = e.message;
@@ -5315,7 +5365,7 @@ async function list_atomes(options = {}, callback) {
         results.meta.merged = true;
     } else if (dataPlan.source === 'tauri') {
         try {
-            const tauriResult = await TauriAdapter.atome.list(queryOptions);
+            const tauriResult = await TauriAdapter.atome.list(tauriQueryOptions);
             if (tauriResult.ok || tauriResult.success) {
                 const rawAtomes = tauriResult.atomes || tauriResult.data || [];
                 results.tauri.atomes = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
@@ -5328,37 +5378,38 @@ async function list_atomes(options = {}, callback) {
         results.fastify = { atomes: [], error: 'skipped', skipped: true };
     } else {
         try {
-            if (is_tauri_runtime() && !FastifyAdapter.getToken?.()) {
-                try { await ensure_fastify_token(); } catch { }
-            }
-
-            let fastifyResult = await FastifyAdapter.atome.list(queryOptions);
-            if (!(fastifyResult.ok || fastifyResult.success)) {
-                const errMsg = String(fastifyResult.error || '').toLowerCase();
-                const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
-                if (is_tauri_runtime() && authError) {
-                    try { await ensure_fastify_token(); } catch { }
-                    fastifyResult = await FastifyAdapter.atome.list(queryOptions);
-                }
-            }
-
-            if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
-                const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
-                let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
-
-                if (projectId) {
-                    const target = String(projectId);
-                    normalized = normalized.filter((item) => {
-                        const parentId = item.parentId || item.parent_id || null;
-                        const properties = item.properties || item.particles || item.data || {};
-                        const propertyProjectId = properties.projectId || properties.project_id || null;
-                        return String(parentId || '') === target || String(propertyProjectId || '') === target;
-                    });
+            const allowFastify = await canUseFastifyForShared();
+            if (!allowFastify) {
+                results.fastify.error = 'fastify_user_mismatch';
+            } else {
+                let fastifyResult = await FastifyAdapter.atome.list(fastifyQueryOptions);
+                if (!(fastifyResult.ok || fastifyResult.success)) {
+                    const errMsg = String(fastifyResult.error || '').toLowerCase();
+                    const authError = errMsg.includes('unauth') || errMsg.includes('token') || errMsg.includes('login');
+                    if (is_tauri_runtime() && authError) {
+                        try { await ensure_fastify_token(); } catch { }
+                        fastifyResult = await FastifyAdapter.atome.list(fastifyQueryOptions);
+                    }
                 }
 
-                results.fastify.atomes = normalized;
-            } else if (!results.fastify.error) {
-                results.fastify.error = fastifyResult?.error || null;
+                if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
+                    const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
+                    let normalized = Array.isArray(rawAtomes) ? rawAtomes.map(normalizeAtomeRecord) : [];
+
+                    if (projectId) {
+                        const target = String(projectId);
+                        normalized = normalized.filter((item) => {
+                            const parentId = item.parentId || item.parent_id || null;
+                            const properties = item.properties || item.particles || item.data || {};
+                            const propertyProjectId = properties.projectId || properties.project_id || null;
+                            return String(parentId || '') === target || String(propertyProjectId || '') === target;
+                        });
+                    }
+
+                    results.fastify.atomes = normalized;
+                } else if (!results.fastify.error) {
+                    results.fastify.error = fastifyResult?.error || null;
+                }
             }
         } catch (e) {
             results.fastify.error = e.message;
