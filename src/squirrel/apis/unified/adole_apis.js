@@ -584,6 +584,9 @@ function save_user_session(userId, userName, userPhone) {
             loggedAt: new Date().toISOString()
         };
         localStorage.setItem(TAURI_USER_SESSION_KEY, JSON.stringify(session));
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem(TAURI_USER_SESSION_KEY, JSON.stringify(session));
+        }
     } catch (e) {
         console.warn('[Session] Failed to save user session:', e?.message);
     }
@@ -594,11 +597,17 @@ function save_user_session(userId, userName, userPhone) {
  * @returns {{userId: string, userName: string|null, userPhone: string|null, loggedAt: string}|null}
  */
 function load_user_session() {
-    if (typeof localStorage === 'undefined') return null;
+    if (typeof localStorage === 'undefined' && typeof sessionStorage === 'undefined') return null;
     try {
-        const raw = localStorage.getItem(TAURI_USER_SESSION_KEY);
-        if (!raw) return null;
-        const session = JSON.parse(raw);
+        const raw = (typeof localStorage !== 'undefined')
+            ? localStorage.getItem(TAURI_USER_SESSION_KEY)
+            : null;
+        const fallback = (!raw && typeof sessionStorage !== 'undefined')
+            ? sessionStorage.getItem(TAURI_USER_SESSION_KEY)
+            : null;
+        const payload = raw || fallback;
+        if (!payload) return null;
+        const session = JSON.parse(payload);
         if (!session?.userId) return null;
         return session;
     } catch (e) {
@@ -610,17 +619,30 @@ function load_user_session() {
  * Clear user session from localStorage (called on logout)
  */
 function clear_user_session() {
-    if (typeof localStorage === 'undefined') return;
     try {
         // Clear session data
-        localStorage.removeItem(TAURI_USER_SESSION_KEY);
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(TAURI_USER_SESSION_KEY);
+        }
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem(TAURI_USER_SESSION_KEY);
+        }
 
         // CRITICAL: Clear ALL auth tokens to prevent cross-user data leakage
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('cloud_auth_token');
-        localStorage.removeItem('local_auth_token');
-        localStorage.removeItem('eve_current_project_id');
-        localStorage.removeItem('eve_last_project_id');
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('cloud_auth_token');
+            localStorage.removeItem('local_auth_token');
+            localStorage.removeItem('eve_current_project_id');
+            localStorage.removeItem('eve_last_project_id');
+        }
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('auth_token');
+            sessionStorage.removeItem('cloud_auth_token');
+            sessionStorage.removeItem('local_auth_token');
+            sessionStorage.removeItem('eve_current_project_id');
+            sessionStorage.removeItem('eve_last_project_id');
+        }
 
     } catch (e) {
         console.warn('[Session] Failed to clear user session:', e?.message);

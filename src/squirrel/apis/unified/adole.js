@@ -431,10 +431,19 @@ export function generateClientId() {
  * @param {string} key - Storage key
  * @returns {string|null}
  */
+const tokenMemory = new Map();
+
 export function getToken(key) {
+    if (tokenMemory.has(key)) {
+        const cached = tokenMemory.get(key);
+        if (cached) return cached;
+    }
     if (typeof localStorage !== 'undefined') {
         const token = localStorage.getItem(key);
-        if (token) return token;
+        if (token) {
+            tokenMemory.set(key, token);
+            return token;
+        }
 
         const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
         const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
@@ -442,6 +451,7 @@ export function getToken(key) {
             const fallback = localStorage.getItem(cloudKey) || localStorage.getItem('auth_token');
             if (fallback) {
                 localStorage.setItem(localKey, fallback);
+                tokenMemory.set(localKey, fallback);
                 return fallback;
             }
         }
@@ -450,6 +460,7 @@ export function getToken(key) {
             const fallback = localStorage.getItem(localKey) || localStorage.getItem('auth_token');
             if (fallback) {
                 localStorage.setItem(cloudKey, fallback);
+                tokenMemory.set(cloudKey, fallback);
                 return fallback;
             }
         }
@@ -458,6 +469,7 @@ export function getToken(key) {
             const legacy = localStorage.getItem('auth_token');
             if (legacy) {
                 localStorage.setItem(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
+                tokenMemory.set(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
                 return legacy;
             }
         }
@@ -467,6 +479,13 @@ export function getToken(key) {
                 || localStorage.getItem(cloudKey)
                 || localStorage.getItem('auth_token');
             if (fallback) return fallback;
+        }
+    }
+    if (typeof sessionStorage !== 'undefined') {
+        const token = sessionStorage.getItem(key);
+        if (token) {
+            tokenMemory.set(key, token);
+            return token;
         }
     }
     return null;
@@ -481,6 +500,12 @@ export function setToken(key, token) {
     if (typeof localStorage !== 'undefined' && token) {
         localStorage.setItem(key, token);
     }
+    if (typeof sessionStorage !== 'undefined' && token) {
+        sessionStorage.setItem(key, token);
+    }
+    if (token) {
+        tokenMemory.set(key, token);
+    }
 }
 
 /**
@@ -491,6 +516,10 @@ export function clearToken(key) {
     if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(key);
     }
+    if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(key);
+    }
+    tokenMemory.delete(key);
 }
 
 // ============================================
