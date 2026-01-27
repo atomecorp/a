@@ -433,6 +433,15 @@ export function generateClientId() {
  */
 const tokenMemory = new Map();
 
+function isCloudFastifyTarget() {
+    if (typeof window === 'undefined') return false;
+    const base = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
+        ? window.__SQUIRREL_FASTIFY_URL__.trim()
+        : '';
+    if (!base) return false;
+    return base.includes('atome.one') || base.startsWith('https://');
+}
+
 export function getToken(key) {
     if (tokenMemory.has(key)) {
         const cached = tokenMemory.get(key);
@@ -448,7 +457,10 @@ export function getToken(key) {
         const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
         const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
         if (key === localKey) {
-            const fallback = localStorage.getItem(cloudKey) || localStorage.getItem('auth_token');
+            // Never fallback to cloud token when cloud target is active.
+            const fallback = isCloudFastifyTarget()
+                ? null
+                : (localStorage.getItem(cloudKey) || localStorage.getItem('auth_token'));
             if (fallback) {
                 localStorage.setItem(localKey, fallback);
                 tokenMemory.set(localKey, fallback);
@@ -457,7 +469,10 @@ export function getToken(key) {
         }
 
         if (key === cloudKey) {
-            const fallback = localStorage.getItem(localKey) || localStorage.getItem('auth_token');
+            // Never fallback to local token when cloud target is active.
+            const fallback = isCloudFastifyTarget()
+                ? null
+                : (localStorage.getItem(localKey) || localStorage.getItem('auth_token'));
             if (fallback) {
                 localStorage.setItem(cloudKey, fallback);
                 tokenMemory.set(cloudKey, fallback);
@@ -468,9 +483,11 @@ export function getToken(key) {
         if (key === CONFIG.FASTIFY_TOKEN_KEY || key === 'cloud_auth_token') {
             const legacy = localStorage.getItem('auth_token');
             if (legacy) {
-                localStorage.setItem(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
-                tokenMemory.set(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
-                return legacy;
+                if (!isCloudFastifyTarget()) {
+                    localStorage.setItem(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
+                    tokenMemory.set(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
+                    return legacy;
+                }
             }
         }
 
