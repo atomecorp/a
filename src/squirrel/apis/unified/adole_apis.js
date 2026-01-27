@@ -43,6 +43,27 @@ function normalize_phone_input(phone) {
     return cleaned.replace(/\+/g, '');
 }
 
+const ANONYMOUS_USERNAME = 'anonymous';
+const ANONYMOUS_PASSWORD = 'anonymous';
+const ANONYMOUS_VISIBILITY = 'private';
+const ANONYMOUS_OPTIONAL = { anonymous: true, local_only: true };
+
+const ANONYMOUS_PHONE_TAURI = '0000000000';
+const ANONYMOUS_PHONE_FASTIFY = '0000000001';
+
+const resolve_anonymous_phone = () => {
+    // IMPORTANT: Keep anonymous identities isolated per runtime.
+    // Tauri local: 0000000000 (local-only).
+    // Browser/Fastify: 0000000001 (server-only).
+    return is_tauri_runtime() ? ANONYMOUS_PHONE_TAURI : ANONYMOUS_PHONE_FASTIFY;
+};
+
+const is_any_anonymous_phone = (phone) => {
+    if (!phone) return false;
+    const clean = String(phone).trim();
+    return clean === ANONYMOUS_PHONE_TAURI || clean === ANONYMOUS_PHONE_FASTIFY;
+};
+
 const FLOW_LOG_TOKEN = '[AdoleFlow]';
 
 function now_ms() {
@@ -67,11 +88,62 @@ function create_flow(scope) {
 
 function log_flow() { }
 
+function sleep_ms(durationMs) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, durationMs);
+    });
+}
+
+function get_anonymous_identity() {
+    return {
+        phone: resolve_anonymous_phone(),
+        username: ANONYMOUS_USERNAME,
+        password: ANONYMOUS_PASSWORD,
+        visibility: ANONYMOUS_VISIBILITY,
+        optional: {
+            ...ANONYMOUS_OPTIONAL,
+            scope: is_tauri_runtime() ? 'tauri' : 'fastify'
+        }
+    };
+}
+
+function is_anonymous_identity({ userId = null, phone = null, username = null } = {}) {
+    const normalizedPhone = phone ? String(phone).trim() : null;
+    const normalizedName = username ? String(username).trim().toLowerCase() : null;
+    const normalizedId = userId ? String(userId).trim() : null;
+
+    const anonymousPhone = resolve_anonymous_phone();
+    if (normalizedPhone && normalizedPhone === anonymousPhone) return true;
+    if (normalizedName && normalizedName === ANONYMOUS_USERNAME) return true;
+    if (normalizedId && _anonymousUserId && normalizedId === String(_anonymousUserId)) return true;
+    if (normalizedId && normalizedId === 'anonymous') return true;
+    return false;
+}
+
+function is_anonymous_mode() {
+    return is_anonymous_identity({
+        userId: _currentUserId,
+        phone: _currentUserPhone,
+        username: _currentUserName
+    });
+}
+
+function resolve_anonymous_backend_plan() {
+    const source = is_tauri_runtime() ? 'tauri' : 'fastify';
+    const primary = source === 'tauri' ? TauriAdapter : FastifyAdapter;
+    const secondary = source === 'tauri' ? FastifyAdapter : TauriAdapter;
+    const secondaryName = source === 'tauri' ? 'fastify' : 'tauri';
+    return { source, primary, secondary, secondaryName, anonymous: true };
+}
+
 function resolve_backend_plan(kind) {
     const key = String(kind || '').toLowerCase();
-    const source = key === 'auth'
+    const baseSource = key === 'auth'
         ? resolveAuthSource()
         : (key === 'profile' ? resolveProfileSource() : resolveDataSource());
+    const source = (key !== 'auth' && is_anonymous_mode())
+        ? (is_tauri_runtime() ? 'tauri' : 'fastify')
+        : baseSource;
     const primary = source === 'fastify' ? FastifyAdapter : TauriAdapter;
     const secondary = source === 'fastify' ? TauriAdapter : FastifyAdapter;
     const secondaryName = source === 'fastify' ? 'tauri' : 'fastify';
@@ -79,6 +151,9 @@ function resolve_backend_plan(kind) {
 }
 
 function resolve_sync_policy() {
+    if (is_anonymous_mode()) {
+        return { from: null, to: null, anonymous: true };
+    }
     const direction = resolveSyncDirection();
     if (direction === 'tauri_to_fastify') {
         return { from: 'tauri', to: 'fastify' };
@@ -326,6 +401,12 @@ async function grant_share_permission(atomeId, principalId, sharePermissions, op
         fastify: { success: false, data: null, error: null }
     };
 
+    if (is_anonymous_mode()) {
+        results.fastify = { success: false, data: null, error: 'Sharing is disabled in anonymous mode' };
+        if (typeof callback === 'function') callback(results);
+        return results;
+    }
+
     try {
         const authCheck = await ensure_fastify_ws_auth();
         if (!authCheck.ok) {
@@ -400,6 +481,8 @@ let _currentProjectOwnerId = null;
 let _currentUserId = null;
 let _currentUserName = null;
 let _currentUserPhone = null;
+let _anonymousUserId = null;
+let _anonymousEnsurePromise = null;
 
 // Global current machine state
 let _currentMachineId = null;
@@ -429,6 +512,12 @@ if (typeof window !== 'undefined') {
  */
 function signal_auth_check_complete(authenticated, userId = null) {
     if (typeof window === 'undefined') return;
+    try {
+        console.log('[AuthGate] signal_auth_check_complete', {
+            authenticated,
+            userId
+        });
+    } catch { }
     window.__authCheckComplete = true;
     window.__authCheckResult = { authenticated, userId };
     window.dispatchEvent(new CustomEvent('squirrel:auth-checked', {
@@ -620,13 +709,202 @@ function create_unauthenticated_result(errorMessage) {
     };
 }
 
+async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } = {}) {
+    if (_currentUserId && !is_anonymous_mode()) {
+        return { ok: false, reason: 'authenticated_user_present', user: get_authenticated_user() };
+    }
+    if (_currentUserId && is_any_anonymous_phone(_currentUserPhone) && _currentUserPhone !== resolve_anonymous_phone()) {
+        try {
+            console.warn('[Auth] Anonymous scope mismatch; resetting session', {
+                currentPhone: _currentUserPhone,
+                expected: resolve_anonymous_phone()
+            });
+        } catch { }
+        try { clear_user_session(); } catch { }
+        try { TauriAdapter.clearToken?.(); } catch { }
+        try { FastifyAdapter.clearToken?.(); } catch { }
+        _currentUserId = null;
+        _currentUserName = null;
+        _currentUserPhone = null;
+    }
+    if (_anonymousEnsurePromise) {
+        return _anonymousEnsurePromise;
+    }
+
+    _anonymousEnsurePromise = (async () => {
+        const identity = get_anonymous_identity();
+        const plan = resolve_anonymous_backend_plan();
+        const adapter = plan.primary;
+
+        const tryLogin = async () => {
+            if (!adapter?.auth?.login) return null;
+            try {
+                return await adapter.auth.login({ phone: identity.phone, password: identity.password });
+            } catch (e) {
+                return { ok: false, success: false, error: e?.message || String(e) };
+            }
+        };
+
+        const tryRegister = async () => {
+            if (!adapter?.auth?.register) return null;
+            try {
+                return await adapter.auth.register({
+                    phone: identity.phone,
+                    password: identity.password,
+                    username: identity.username,
+                    visibility: identity.visibility,
+                    optional: identity.optional
+                });
+            } catch (e) {
+                return { ok: false, success: false, error: e?.message || String(e) };
+            }
+        };
+
+        let loginResult = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            loginResult = await tryLogin();
+            if (loginResult?.ok || loginResult?.success) {
+                break;
+            }
+
+            const registerResult = await tryRegister();
+            if (registerResult?.ok || registerResult?.success || is_already_exists_error(registerResult)) {
+                loginResult = await tryLogin();
+                if (loginResult?.ok || loginResult?.success) {
+                    break;
+                }
+            }
+
+            if (!is_tauri_runtime() && plan.source === 'fastify') {
+                const httpRegister = await fastify_http_register(identity.phone, identity.password, identity.username);
+                if (httpRegister?.success || httpRegister?.alreadyExists) {
+                    const httpLogin = await fastify_http_login(identity.phone, identity.password);
+                    if (httpLogin?.success) {
+                        loginResult = httpLogin;
+                        break;
+                    }
+                }
+            }
+
+            if (attempt < maxAttempts) {
+                await sleep_ms(250);
+            }
+        }
+
+        let user = loginResult?.user || loginResult?.data?.user || null;
+        if (!user && adapter?.auth?.me) {
+            try {
+                const meResult = await adapter.auth.me();
+                if (meResult?.ok || meResult?.success) {
+                    user = meResult.user || null;
+                }
+            } catch { }
+        }
+
+        const userId = user?.user_id || user?.atome_id || user?.id || null;
+        if (userId) {
+            await set_current_user_state(userId, identity.username, identity.phone, false);
+        }
+
+        if (typeof window !== 'undefined') {
+            window.__anonymousUser = {
+                id: userId,
+                phone: identity.phone,
+                name: identity.username,
+                scope: is_tauri_runtime() ? 'tauri' : 'fastify'
+            };
+        }
+
+        return {
+            ok: !!userId,
+            user: userId ? { user_id: userId, username: identity.username, phone: identity.phone } : null,
+            source: plan.source,
+            reason
+        };
+    })();
+
+    try {
+        return await _anonymousEnsurePromise;
+    } finally {
+        _anonymousEnsurePromise = null;
+    }
+}
+
+async function ensure_user_for_operation(operation, { allowAnonymous = true } = {}) {
+    const existing = get_authenticated_user();
+    if (existing) {
+        return { ok: true, user: existing, anonymous: is_anonymous_mode() };
+    }
+    if (!allowAnonymous) {
+        return { ok: false, user: null, error: `Authentication required for ${operation}. Please log in first.` };
+    }
+
+    const anon = await ensure_anonymous_user({ reason: operation });
+    if (anon?.ok && anon.user) {
+        return {
+            ok: true,
+            user: {
+                id: anon.user.user_id || anon.user.id || anon.user.atome_id,
+                name: anon.user.username || ANONYMOUS_USERNAME,
+                phone: anon.user.phone || resolve_anonymous_phone()
+            },
+            anonymous: true
+        };
+    }
+    return { ok: false, user: null, error: `Authentication required for ${operation}. Please log in first.` };
+}
+
+async function ensure_secondary_user_match(secondaryName, currentUserId) {
+    if (!secondaryName || !currentUserId) return false;
+    const expected = String(currentUserId);
+
+    const getUserIdFromMe = (me) => {
+        return me?.user?.user_id || me?.user?.id || me?.user?.atome_id || null;
+    };
+
+    if (secondaryName === 'fastify') {
+        const token = FastifyAdapter.getToken?.();
+        if (!token || !FastifyAdapter?.auth?.me) return false;
+        try {
+            const me = await FastifyAdapter.auth.me();
+            const id = getUserIdFromMe(me);
+            if (!id || String(id) !== expected) {
+                try { FastifyAdapter.clearToken?.(); } catch { }
+                return false;
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    if (secondaryName === 'tauri') {
+        const token = TauriAdapter.getToken?.();
+        if (!token || !TauriAdapter?.auth?.me) return false;
+        try {
+            const me = await TauriAdapter.auth.me();
+            const id = getUserIdFromMe(me);
+            if (!id || String(id) !== expected) {
+                try { TauriAdapter.clearToken?.(); } catch { }
+                return false;
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 /**
  * Clear the UI by dispatching an event that removes all atomes from view.
  * Called on logout to prevent displaying previous user's data.
  */
-function clear_ui_on_logout() {
+function clear_ui_on_logout(options = {}) {
     if (typeof window === 'undefined') return;
 
+    const preserveLocalData = options.preserveLocalData === true;
 
     _currentUserId = null;
     _currentUserName = null;
@@ -662,22 +940,26 @@ function clear_ui_on_logout() {
     if (typeof document !== 'undefined') {
         const matrixRoot = document.getElementById('eve_project_matrix');
         if (matrixRoot) {
-            matrixRoot.classList.remove('is-active');
-            matrixRoot.style.display = 'none';
-            matrixRoot.style.opacity = '';
-            matrixRoot.style.transform = '';
-            matrixRoot.style.transformOrigin = '';
+            if (!preserveLocalData) {
+                matrixRoot.classList.remove('is-active');
+                matrixRoot.style.display = 'none';
+                matrixRoot.style.opacity = '';
+                matrixRoot.style.transform = '';
+                matrixRoot.style.transformOrigin = '';
+            }
             // Clear children but keep the container for re-use
             const scroll = matrixRoot.querySelector('#eve_project_matrix_scroll');
             if (scroll) {
                 scroll.innerHTML = '';
             }
         }
-        const matrixTool = document.getElementById('_intuition_matrix');
-        if (matrixTool) {
-            delete matrixTool.dataset.simpleActive;
-            delete matrixTool.dataset.activeTag;
-            matrixTool.style.removeProperty('background');
+        if (!preserveLocalData) {
+            const matrixTool = document.getElementById('_intuition_matrix');
+            if (matrixTool) {
+                delete matrixTool.dataset.simpleActive;
+                delete matrixTool.dataset.activeTag;
+                matrixTool.style.removeProperty('background');
+            }
         }
     }
 
@@ -700,7 +982,9 @@ function clear_ui_on_logout() {
     }));
 
     // Clear all local/session storage to avoid cross-user residue.
-    clear_all_storage();
+    if (!preserveLocalData) {
+        clear_all_storage();
+    }
 }
 
 /**
@@ -1089,6 +1373,9 @@ async function sync_current_user_to_fastify() {
     if (!is_tauri_runtime()) {
         return { synced: false, reason: 'not_tauri_runtime' };
     }
+    if (is_anonymous_mode()) {
+        return { synced: false, reason: 'anonymous_mode' };
+    }
     const syncPolicy = resolve_sync_policy();
     if (syncPolicy.from !== 'tauri' || syncPolicy.to !== 'fastify') {
         return { synced: false, reason: 'sync_direction_not_tauri_to_fastify' };
@@ -1160,7 +1447,23 @@ async function ensure_fastify_token() {
         || syncPolicy.to === 'fastify';
 
     if (!needsFastify) return { ok: false, reason: 'fastify_not_required' };
-    if (!is_tauri_runtime()) return { ok: !!FastifyAdapter.getToken?.(), reason: 'not_tauri' };
+    if (!is_tauri_runtime()) {
+        const existing = FastifyAdapter.getToken?.();
+        if (existing) return { ok: true, reason: 'token_present' };
+        const cached = load_fastify_login_cache();
+        if (cached?.phone && cached?.password) {
+            try {
+                const httpLogin = await fastify_http_login(cached.phone, cached.password);
+                if (httpLogin.success && httpLogin.token) {
+                    return { ok: true, reason: 'token_http_login' };
+                }
+                return { ok: false, reason: 'http_login_failed', error: httpLogin.error || null };
+            } catch (e) {
+                return { ok: false, reason: 'http_login_failed', error: e?.message || String(e) };
+            }
+        }
+        return { ok: false, reason: 'not_tauri' };
+    }
 
     const existing = FastifyAdapter.getToken?.();
     if (existing) return { ok: true, reason: 'token_present' };
@@ -1453,6 +1756,9 @@ async function sync_public_user_directory_delta({ limit = 500 } = {}) {
 }
 
 async function maybe_sync_atomes(reason = 'auto') {
+    if (is_anonymous_mode()) {
+        return { skipped: true, reason: 'anonymous_mode' };
+    }
 
     if (_syncAtomesInProgress) {
         return { skipped: true, reason: 'in_progress' };
@@ -2253,6 +2559,17 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
     const switchingUser = previousUserId && userId && String(previousUserId) !== String(userId);
     // Always clear UI when logging in a user (even if no previous user), to prevent stale data leakage
     const isNewLogin = userId && !previousUserId;
+    try {
+        console.log('[AuthState] set_current_user_state', {
+            previousUserId,
+            userId,
+            userName,
+            userPhone,
+            switchingUser,
+            isNewLogin,
+            persistMachine
+        });
+    } catch { }
     if (switchingUser) {
         clear_ui_for_user_switch(previousUserId, userId);
     } else if (isNewLogin) {
@@ -2272,13 +2589,17 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
     _currentUserName = userName;
     _currentUserPhone = userPhone;
 
+    if (userId && is_anonymous_identity({ userId, phone: userPhone, username: userName })) {
+        _anonymousUserId = userId;
+    }
+
 
     // PERSIST SESSION: Save to localStorage so session survives page refresh
     if (userId) {
         save_user_session(userId, userName, userPhone);
         try { signal_auth_check_complete(true, userId); } catch { }
-        // Dispatch user-logged-in event so UI components can reload for the new user
-        if (typeof window !== 'undefined') {
+        // Dispatch user-logged-in event only when switching or first login
+        if ((switchingUser || isNewLogin) && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('squirrel:user-logged-in', {
                 detail: {
                     userId,
@@ -2290,6 +2611,14 @@ async function set_current_user_state(userId, userName = null, userPhone = null,
                     isFirstLogin: isNewLogin
                 }
             }));
+        } else {
+            try {
+                console.log('[AuthState] user-logged-in suppressed (no change)', {
+                    userId,
+                    switchingUser,
+                    isNewLogin
+                });
+            } catch { }
         }
     }
 
@@ -2453,17 +2782,25 @@ async function set_current_project(projectId, projectName = null, ownerId = null
             current_project_name: projectName || null
         };
 
-        // Try to update via both adapters
-        try {
-            await TauriAdapter.atome.alter(userId, particleData);
-        } catch (e) {
-            console.warn('[AdoleAPI] Tauri persist current project failed:', e.message);
+        const anonymous = is_anonymous_mode();
+        const allowTauri = !anonymous || is_tauri_runtime();
+        const allowFastify = !anonymous || !is_tauri_runtime();
+
+        // Try to update via both adapters (respect anonymous local-only mode)
+        if (allowTauri) {
+            try {
+                await TauriAdapter.atome.alter(userId, particleData);
+            } catch (e) {
+                console.warn('[AdoleAPI] Tauri persist current project failed:', e.message);
+            }
         }
 
-        try {
-            await FastifyAdapter.atome.alter(userId, particleData);
-        } catch (e) {
-            console.warn('[AdoleAPI] Fastify persist current project failed:', e.message);
+        if (allowFastify) {
+            try {
+                await FastifyAdapter.atome.alter(userId, particleData);
+            } catch (e) {
+                console.warn('[AdoleAPI] Fastify persist current project failed:', e.message);
+            }
         }
 
         return true;
@@ -2612,13 +2949,44 @@ async function create_user(phone, password, username, options = {}, callback) {
     };
 
     const primaryStart = now_ms();
-    const primaryResult = await registerWith(authPlan.primary, normalizedPhone);
+    let primaryResult = await registerWith(authPlan.primary, normalizedPhone);
     log_flow(flow, 'primary_register', {
         source: authPlan.source,
         ok: !!primaryResult?.success,
         ms: Math.round(now_ms() - primaryStart),
         error: primaryResult?.error || null
     });
+
+    // Fallback to HTTP register in browser/Fastify if WS registration fails.
+    if (!primaryResult.success && authPlan.source === 'fastify') {
+        try {
+            const httpReg = await fastify_http_register(normalizedPhone, password, resolvedUsername);
+            log_flow(flow, 'fastify_http_register_fallback', {
+                ok: !!httpReg?.success,
+                alreadyExists: !!httpReg?.alreadyExists,
+                error: httpReg?.error || null
+            });
+            if (httpReg.success || httpReg.alreadyExists) {
+                primaryResult = {
+                    success: true,
+                    data: httpReg.data,
+                    error: null,
+                    alreadyExists: !!httpReg.alreadyExists
+                };
+            } else {
+                primaryResult = {
+                    success: false,
+                    data: null,
+                    error: httpReg?.error || primaryResult?.error || 'register_failed'
+                };
+            }
+        } catch (e) {
+            log_flow(flow, 'fastify_http_register_fallback', {
+                ok: false,
+                error: e?.message || String(e)
+            });
+        }
+    }
 
     results[authPlan.source] = primaryResult;
     results[authPlan.secondaryName] = {
@@ -2651,7 +3019,24 @@ async function create_user(phone, password, username, options = {}, callback) {
         }
     }
     const loginSuccess = results?.login?.tauri?.success || results?.login?.fastify?.success;
-    if (!loginSuccess && is_tauri_runtime()) {
+    if (!loginSuccess && authPlan.source === 'fastify') {
+        try {
+            const httpLogin = await fastify_http_login(normalizedPhone, password);
+            if (httpLogin.success) {
+                results.login = results.login || {};
+                results.login.fastify = { success: true, data: httpLogin.data, error: null };
+            } else {
+                results.login = results.login || {};
+                results.login.fastify = { success: false, data: null, error: httpLogin.error || 'Login failed' };
+            }
+        } catch (e) {
+            results.login = results.login || {};
+            results.login.fastify = { success: false, data: null, error: e?.message || String(e) };
+        }
+    }
+
+    const loginSuccessFinal = results?.login?.tauri?.success || results?.login?.fastify?.success;
+    if (!loginSuccessFinal && is_tauri_runtime()) {
         const registeredUser = results[authPlan.source]?.data?.user || null;
         const registeredId = registeredUser?.user_id || registeredUser?.id || registeredUser?.atome_id || null;
         if (registeredId) {
@@ -2673,7 +3058,7 @@ async function create_user(phone, password, username, options = {}, callback) {
 
     log_flow(flow, 'done', {
         ok: !!primaryResult.success,
-        login: !!loginSuccess
+        login: !!loginSuccessFinal
     });
     return results;
 }
@@ -2838,6 +3223,43 @@ async function log_user(phone, password, username, callback) {
         }
     }
 
+    // If login succeeded, ensure Fastify token exists when Fastify is the auth source.
+    // Without a token, all Fastify data operations will fail.
+    if (primaryResult.success && authPlan.source === 'fastify') {
+        let fastifyToken = FastifyAdapter.getToken?.();
+        if (!fastifyToken) {
+            const tokenFromResult = primaryResult?.data?.token
+                || primaryResult?.data?.data?.token
+                || primaryResult?.data?.result?.token
+                || null;
+            if (tokenFromResult) {
+                try { FastifyAdapter.setToken?.(tokenFromResult); } catch { }
+                fastifyToken = tokenFromResult;
+            }
+        }
+
+        if (!fastifyToken) {
+            try {
+                const httpLogin = await fastify_http_login(normalizedPhone, password);
+                if (httpLogin.success && httpLogin.token) {
+                    results.fastify = { success: true, data: httpLogin.data, error: null };
+                    fastifyToken = httpLogin.token;
+                    log_flow(flow, 'fastify_http_login_fallback', { ok: true });
+                } else {
+                    log_flow(flow, 'fastify_http_login_fallback', { ok: false, error: httpLogin.error || null });
+                }
+            } catch (e) {
+                log_flow(flow, 'fastify_http_login_fallback', { ok: false, error: e?.message || String(e) });
+            }
+        }
+
+        if (!fastifyToken) {
+            primaryResult.success = false;
+            primaryResult.error = primaryResult.error || 'Auth token is missing';
+            results[authPlan.source] = primaryResult;
+        }
+    }
+
     // If login succeeded, update current user state and machine association
     if (primaryResult.success) {
         if (authPlan.source === 'fastify' || syncPolicy.to === 'fastify') {
@@ -2976,8 +3398,8 @@ async function current_user(callback) {
         log_flow(flow, 'error', { source: authPlan.source, error: e?.message || String(e) });
     }
 
-    // No user logged in
-    if (_currentUserId && authPlan.source === 'tauri' && is_tauri_runtime()) {
+    // No user logged in on backend; fall back to memory or anonymous mode.
+    if (_currentUserId) {
         result.logged = true;
         result.user = {
             user_id: _currentUserId,
@@ -2985,6 +3407,15 @@ async function current_user(callback) {
             phone: _currentUserPhone || null
         };
         result.source = 'memory';
+    } else {
+        try {
+            const anon = await ensure_anonymous_user({ reason: 'current_user' });
+            if (anon?.ok && anon.user) {
+                result.logged = true;
+                result.user = anon.user;
+                result.source = 'anonymous';
+            }
+        } catch { }
     }
 
     if (typeof callback === 'function') {
@@ -3042,7 +3473,7 @@ async function unlog_user(callback = null) {
     clear_user_session();
 
     // Clear UI - remove all atomes from view to prevent showing previous user's data
-    clear_ui_on_logout();
+    clear_ui_on_logout({ preserveLocalData: true });
 
     // Clear any pending user sync
     clear_user_sync_pending();
@@ -3054,6 +3485,11 @@ async function unlog_user(callback = null) {
             await clear_stored_fastify_token_in_axum();
         }
     } catch (e) { }
+
+    // Switch to anonymous workspace after logout
+    try {
+        await ensure_anonymous_user({ reason: 'logout' });
+    } catch { }
 
     // Execute callback if provided
     if (callback && typeof callback === 'function') {
@@ -3415,11 +3851,14 @@ try {
         // CRITICAL: This MUST complete and signal before any project loading happens.
         if (is_tauri_runtime()) {
             // Use squirrel:ready event which fires reliably after DOM is ready
-            window.addEventListener('squirrel:ready', function onSquirrelReadyAuthCheck() {
+            window.addEventListener('squirrel:ready', async function onSquirrelReadyAuthCheck() {
                 window.removeEventListener('squirrel:ready', onSquirrelReadyAuthCheck);
 
                 const savedSession = load_user_session();
-                const token = TauriAdapter.getToken?.();
+                const authSource = resolveAuthSource();
+                const token = authSource === 'fastify'
+                    ? FastifyAdapter.getToken?.()
+                    : TauriAdapter.getToken?.();
                 const hasFastifyToken = !!FastifyAdapter.getToken?.();
 
                 // === DETAILED STARTUP STATE LOG ===
@@ -3428,14 +3867,29 @@ try {
 
                 // Check if local_auth_token actually exists in localStorage (not fallback)
                 const realLocalToken = localStorage.getItem('local_auth_token');
-                const isTokenFromFallback = token && !realLocalToken;
+                const isTokenFromFallback = authSource === 'tauri' && token && !realLocalToken;
                 if (isTokenFromFallback) {
                     console.warn('[Auth] ⚠️ Token is from fallback (cloud_auth_token), not local_auth_token!');
                     console.warn('[Auth] → This may cause auth issues with local Fastify. Re-login recommended.');
                 }
 
+                const fallbackToAnonymous = async () => {
+                    clear_user_session();
+                    clear_ui_on_logout({ preserveLocalData: true });
+                    const anon = await ensure_anonymous_user({ reason: 'startup' });
+                    if (anon?.ok && anon.user) {
+                        const anonId = anon.user.user_id || anon.user.id || null;
+                        signal_auth_check_complete(true, anonId);
+                    } else {
+                        signal_auth_check_complete(false, null);
+                    }
+                };
 
-                if (!savedSession || !savedSession.userId || !token) {
+                const savedSessionPhone = savedSession?.userPhone || null;
+                const isSavedAnon = is_any_anonymous_phone(savedSessionPhone);
+                const anonScopeMismatch = isSavedAnon && savedSessionPhone !== resolve_anonymous_phone();
+
+                if (!savedSession || !savedSession.userId || !token || anonScopeMismatch) {
                     // Check if we have a token but no session (legacy login before session persistence was added)
                     if (token && (!savedSession || !savedSession.userId)) {
                         current_user().then(function (currentResult) {
@@ -3452,22 +3906,16 @@ try {
                                     }
                                 }
                             } else {
-                                clear_user_session();
-                                clear_ui_on_logout();
-                                signal_auth_check_complete(false, null);
+                                fallbackToAnonymous();
                             }
                         }).catch(function (e) {
                             console.warn('[Auth] Startup: Token validation failed:', e?.message || e);
-                            clear_user_session();
-                            clear_ui_on_logout();
-                            signal_auth_check_complete(false, null);
+                            fallbackToAnonymous();
                         });
                         return;
                     }
 
-                    clear_user_session();
-                    clear_ui_on_logout();
-                    signal_auth_check_complete(false, null);
+                    await fallbackToAnonymous();
                     return;
                 }
 
@@ -3492,16 +3940,35 @@ try {
                     const currentResult = await current_user();
 
                     const resolvedUserId = currentResult?.user?.user_id || currentResult?.user?.atome_id || currentResult?.user?.id || null;
-                    if (!currentResult?.logged || !resolvedUserId) {
-                        clear_ui_on_logout();
-                        signal_auth_check_complete(false, null);
+                    const currentPhone = currentResult?.user?.phone || null;
+                    const isAnon = is_any_anonymous_phone(currentPhone);
+                    const anonScopeMismatch = isAnon && currentPhone !== resolve_anonymous_phone();
+                    if (!currentResult?.logged || !resolvedUserId || anonScopeMismatch) {
+                        clear_ui_on_logout({ preserveLocalData: true });
+                        const anon = await ensure_anonymous_user({ reason: 'startup' });
+                        if (anon?.ok && anon.user) {
+                            const anonId = anon.user.user_id || anon.user.id || null;
+                            signal_auth_check_complete(true, anonId);
+                        } else {
+                            signal_auth_check_complete(false, null);
+                        }
                     } else {
                         signal_auth_check_complete(true, resolvedUserId);
                     }
                 } catch (e) {
                     console.warn('[Auth] Browser startup security check failed:', e?.message || e);
-                    clear_ui_on_logout();
-                    signal_auth_check_complete(false, null);
+                    clear_ui_on_logout({ preserveLocalData: true });
+                    try {
+                        const anon = await ensure_anonymous_user({ reason: 'startup' });
+                        if (anon?.ok && anon.user) {
+                            const anonId = anon.user.user_id || anon.user.id || null;
+                            signal_auth_check_complete(true, anonId);
+                        } else {
+                            signal_auth_check_complete(false, null);
+                        }
+                    } catch {
+                        signal_auth_check_complete(false, null);
+                    }
                 }
             }, 500);
         }
@@ -3589,12 +4056,27 @@ async function list_unsynced_atomes(callback) {
         error: null
     };
 
+    if (is_anonymous_mode()) {
+        result.error = 'sync_disabled_anonymous';
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
+
     let ownerId = null;
     try {
         const currentUserResult = await current_user();
         ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
     } catch {
         ownerId = null;
+    }
+
+    if (ownerId && FastifyAdapter.getToken?.()) {
+        const fastifyMatch = await ensure_secondary_user_match('fastify', ownerId);
+        if (!fastifyMatch) {
+            result.error = 'fastify_user_mismatch';
+            if (typeof callback === 'function') callback(result);
+            return result;
+        }
     }
 
     // Known atome types to query (server requires a type when no owner specified)
@@ -3889,6 +4371,15 @@ async function sync_atomes(callback) {
         direction: { from: syncPolicy.from, to: syncPolicy.to }
     };
     const flow = create_flow('sync:atomes');
+
+    if (is_anonymous_mode()) {
+        result.skipped = true;
+        result.reason = 'anonymous_mode';
+        result.error = 'sync_disabled_anonymous';
+        log_flow(flow, 'skipped', { reason: result.reason });
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
 
     if (!syncPolicy.from || !syncPolicy.to) {
         result.skipped = true;
@@ -4969,12 +5460,12 @@ async function create_project(projectName, callback) {
     };
     const dataPlan = resolve_backend_plan('data');
 
-    // Get current user to set as owner
-    const currentUserResult = await current_user();
-    const ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+    // Get current user to set as owner (anonymous allowed)
+    const authCheck = await ensure_user_for_operation('create_project', { allowAnonymous: true });
+    const ownerId = authCheck.user?.id || null;
 
-    if (!ownerId) {
-        const error = 'No user logged in. Please log in first.';
+    if (!authCheck.ok || !ownerId) {
+        const error = authCheck.error || 'No user logged in. Please log in first.';
         results.tauri.error = error;
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
@@ -5010,8 +5501,11 @@ async function create_project(projectName, callback) {
             const backends = await checkBackends(true);
             const secondaryAvailable = dataPlan.secondaryName === 'fastify' ? backends.fastify : backends.tauri;
 
-            if (secondaryAvailable) {
-                if (dataPlan.secondaryName === 'fastify') {
+            if (secondaryAvailable && !is_anonymous_mode()) {
+                const secondaryUserMatch = await ensure_secondary_user_match(dataPlan.secondaryName, ownerId);
+                if (!secondaryUserMatch) {
+                    results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_user_mismatch', skipped: true };
+                } else if (dataPlan.secondaryName === 'fastify') {
                     try { await ensure_fastify_token(); } catch { }
                     const hasFastifyToken = !!FastifyAdapter.getToken?.();
                     if (!hasFastifyToken) {
@@ -5043,7 +5537,7 @@ async function create_project(projectName, callback) {
         }
     }
 
-    if (is_tauri_runtime() && resolve_sync_policy().from === dataPlan.source) {
+    if (is_tauri_runtime() && resolve_sync_policy().from === dataPlan.source && !is_anonymous_mode()) {
         try { await request_sync('create_project'); } catch { }
     }
 
@@ -5064,25 +5558,24 @@ async function list_projects(callback) {
     const dataPlan = resolve_backend_plan('data');
     const syncPolicy = resolve_sync_policy();
 
-    const currentUserResult = await current_user();
-    const currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
-
-    if (!currentUserId || currentUserId === 'anonymous') {
-        const error = 'No user logged in. Cannot list projects.';
+    const authCheck = await ensure_user_for_operation('list_projects', { allowAnonymous: true });
+    const currentUserId = authCheck.user?.id || null;
+    if (!authCheck.ok || !currentUserId) {
+        const error = authCheck.error || 'No user logged in. Cannot list projects.';
         results.tauri.error = error;
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
         return results;
     }
 
-    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
+    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source && !is_anonymous_mode()) {
         try { await request_sync('list_projects'); } catch { }
     }
 
     // SECURITY: never list projects owned by other users unless explicit share support exists.
     const listResult = await list_atomes({
         type: 'project',
-        includeShared: true,
+        includeShared: !is_anonymous_mode(),
         ownerId: currentUserId
     });
     results.tauri.projects = Array.isArray(listResult.tauri.atomes) ? listResult.tauri.atomes : [];
@@ -5142,8 +5635,15 @@ async function delete_project(projectId, callback) {
 
     let ownerId = null;
     try {
-        const currentUserResult = await current_user();
-        ownerId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
+        const authCheck = await ensure_user_for_operation('delete_project', { allowAnonymous: true });
+        ownerId = authCheck.user?.id || null;
+        if (!authCheck.ok) {
+            const error = authCheck.error || 'No user logged in. Please log in first.';
+            results.tauri.error = error;
+            results.fastify.error = error;
+            if (typeof callback === 'function') callback(results);
+            return results;
+        }
     } catch { }
 
     // Soft delete on primary backend only.
@@ -5160,11 +5660,11 @@ async function delete_project(projectId, callback) {
 
     results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
 
-    if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId) {
+    if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId && !is_anonymous_mode()) {
         queue_pending_delete({ atomeId: projectId, ownerId, type: 'project' });
     }
 
-    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source) {
+    if (is_tauri_runtime() && syncPolicy.from === dataPlan.source && !is_anonymous_mode()) {
         try { await process_pending_deletes(); } catch { }
         try { await request_sync('delete_project'); } catch { }
     }
@@ -5199,16 +5699,11 @@ async function create_atome(options, callback) {
         fastify: { success: false, data: null, error: null }
     };
 
-    // Get current user (prefer in-memory state to avoid slow WS roundtrip in browser)
-    const cachedUser = get_current_user_info();
-    let currentUserId = cachedUser?.id || null;
-    if (!currentUserId) {
-        const currentUserResult = await current_user();
-        currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
-    }
-
-    if (!currentUserId) {
-        const error = 'No user logged in. Please log in first.';
+    // Get current user (anonymous allowed)
+    const authCheck = await ensure_user_for_operation('create_atome', { allowAnonymous: true });
+    const currentUserId = authCheck.user?.id || null;
+    if (!authCheck.ok || !currentUserId) {
+        const error = authCheck.error || 'No user logged in. Please log in first.';
         results.tauri.error = error;
         results.fastify.error = error;
         if (typeof callback === 'function') callback(results);
@@ -5227,12 +5722,21 @@ async function create_atome(options, callback) {
         created_at: new Date().toISOString(),
         ...resolveAtomePropertiesInput(options)
     };
+    if (projectId) {
+        properties.projectId = projectId;
+        properties.project_id = projectId;
+    }
+    if (parentId) {
+        properties.parentId = parentId;
+        properties.parent_id = parentId;
+    }
 
     const atomeData = {
         id: desiredId, // Always use a UUID so both backends match
         type: atomeType,
         ownerId: ownerId,
         parentId: parentId, // Link to project by default, or to explicit parent
+        projectId: projectId,
         properties,
         sync: syncMode  // Pass sync flag to bypass ACL checks when needed
     };
@@ -5251,11 +5755,17 @@ async function create_atome(options, callback) {
 
     // Real-time sync: also create on secondary backend if available.
     // This ensures immediate sync instead of waiting for batch sync.
-    if (results[dataPlan.source]?.success) {
+    if (results[dataPlan.source]?.success && is_anonymous_mode()) {
+        results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
+    } else if (results[dataPlan.source]?.success) {
         try {
             const secondaryAvailable = await dataPlan.secondary.isAvailable?.();
             const secondaryToken = dataPlan.secondary.getToken?.();
             if (secondaryAvailable && secondaryToken) {
+                const secondaryUserMatch = await ensure_secondary_user_match(dataPlan.secondaryName, currentUserId);
+                if (!secondaryUserMatch) {
+                    results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_user_mismatch', skipped: true };
+                } else {
                 const secondaryResult = await dataPlan.secondary.atome.create(atomeData);
                 if (secondaryResult.ok || secondaryResult.success) {
                     results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null };
@@ -5267,6 +5777,7 @@ async function create_atome(options, callback) {
                     } else {
                         results[dataPlan.secondaryName] = { success: false, data: null, error: secondaryResult.error, skipped: false };
                     }
+                }
                 }
             } else {
                 results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_unavailable', skipped: true };
@@ -5297,21 +5808,23 @@ async function list_atomes(options = {}, callback) {
     // Security guard: require authenticated user for listing atomes
     // Exception: allow listing 'user' type without authentication (for directory lookup)
     const atomeType = options.type || null;
+    let authenticatedUser = null;
     if (atomeType !== 'user') {
-        const authCheck = require_authenticated_user('list_atomes');
-        if (!authCheck.authenticated) {
+        const authCheck = await ensure_user_for_operation('list_atomes', { allowAnonymous: true });
+        if (!authCheck.ok) {
             const blockedResult = create_unauthenticated_result(authCheck.error);
             blockedResult.tauri = { atomes: [], error: authCheck.error };
             blockedResult.fastify = { atomes: [], error: authCheck.error };
             if (typeof callback === 'function') callback(blockedResult);
             return blockedResult;
         }
+        authenticatedUser = authCheck.user || null;
     }
 
     const projectId = options.projectId || options.project_id || null;
     let ownerId = options.ownerId || null;
-    let currentUserId = null;
-    const includeShared = !!options.includeShared;
+    let currentUserId = authenticatedUser?.id || null;
+    const includeShared = !!options.includeShared && !is_anonymous_mode();
     const dataPlan = resolve_backend_plan('data');
     const shouldMergeSources = is_tauri_runtime() && includeShared;
 
@@ -5325,7 +5838,7 @@ async function list_atomes(options = {}, callback) {
     // Fastify WS list requires ownerId/userId or atomeType; otherwise it returns [].
     // Exception: when listing global users, do not force owner filtering.
     const skipOwnerFilter = !!options.skipOwner;
-    if (atomeType !== 'user') {
+    if (atomeType !== 'user' && !currentUserId) {
         try {
             const currentUserResult = await current_user();
             currentUserId = currentUserResult.user?.user_id || currentUserResult.user?.atome_id || currentUserResult.user?.id || null;
@@ -5557,9 +6070,9 @@ async function delete_atome(atomeId, callback) {
         atomeId = null;
     }
 
-    // Security guard: require authenticated user for deleting atomes
-    const authCheck = require_authenticated_user('delete_atome');
-    if (!authCheck.authenticated) {
+    // Security guard: require authenticated user for deleting atomes (anonymous allowed)
+    const authCheck = await ensure_user_for_operation('delete_atome', { allowAnonymous: true });
+    if (!authCheck.ok) {
         const blockedResult = create_unauthenticated_result(authCheck.error);
         if (typeof callback === 'function') callback(blockedResult);
         return blockedResult;
@@ -5602,26 +6115,33 @@ async function delete_atome(atomeId, callback) {
     }
 
     // Real-time sync: also delete on secondary backend if available.
-    if (results[dataPlan.source]?.success) {
+    if (results[dataPlan.source]?.success && is_anonymous_mode()) {
+        results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
+    } else if (results[dataPlan.source]?.success) {
         try {
             const secondaryAvailable = await dataPlan.secondary.isAvailable?.();
             const secondaryToken = dataPlan.secondary.getToken?.();
             if (secondaryAvailable && secondaryToken) {
-                const secondaryResult = await dataPlan.secondary.atome.softDelete(atomeId);
-                if (secondaryResult.ok || secondaryResult.success) {
-                    results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null };
+                const secondaryUserMatch = await ensure_secondary_user_match(dataPlan.secondaryName, ownerId);
+                if (!secondaryUserMatch) {
+                    results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_user_mismatch', skipped: true };
                 } else {
-                    // 404 is acceptable - atome may not exist on secondary
-                    const errMsg = String(secondaryResult.error || '').toLowerCase();
-                    if (errMsg.includes('not found') || secondaryResult.status === 404) {
-                        results[dataPlan.secondaryName] = { success: true, data: null, error: null, alreadyDeleted: true };
+                    const secondaryResult = await dataPlan.secondary.atome.softDelete(atomeId);
+                    if (secondaryResult.ok || secondaryResult.success) {
+                        results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null };
                     } else {
-                        results[dataPlan.secondaryName] = { success: false, data: null, error: secondaryResult.error, skipped: false };
+                        // 404 is acceptable - atome may not exist on secondary
+                        const errMsg = String(secondaryResult.error || '').toLowerCase();
+                        if (errMsg.includes('not found') || secondaryResult.status === 404) {
+                            results[dataPlan.secondaryName] = { success: true, data: null, error: null, alreadyDeleted: true };
+                        } else {
+                            results[dataPlan.secondaryName] = { success: false, data: null, error: secondaryResult.error, skipped: false };
+                        }
                     }
                 }
             } else {
                 // Queue for later sync if secondary unavailable
-                if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId) {
+                if (syncPolicy.to === 'fastify' && dataPlan.source === 'tauri' && ownerId && !is_anonymous_mode()) {
                     queue_pending_delete({ atomeId, ownerId, type: null });
                 }
                 results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_unavailable', skipped: true };
@@ -5652,9 +6172,9 @@ async function alter_atome(atomeId, newProperties, callback) {
         newProperties = null;
     }
 
-    // Security guard: require authenticated user for altering atomes
-    const authCheck = require_authenticated_user('alter_atome');
-    if (!authCheck.authenticated) {
+    // Security guard: require authenticated user for altering atomes (anonymous allowed)
+    const authCheck = await ensure_user_for_operation('alter_atome', { allowAnonymous: true });
+    if (!authCheck.ok) {
         const blockedResult = create_unauthenticated_result(authCheck.error);
         if (typeof callback === 'function') callback(blockedResult);
         return blockedResult;
@@ -5693,11 +6213,17 @@ async function alter_atome(atomeId, newProperties, callback) {
     }
 
     // Real-time sync: also update on secondary backend if available.
-    if (results[dataPlan.source]?.success) {
+    if (results[dataPlan.source]?.success && is_anonymous_mode()) {
+        results[dataPlan.secondaryName] = { success: false, data: null, error: 'skipped', skipped: true };
+    } else if (results[dataPlan.source]?.success) {
         try {
             const secondaryAvailable = await dataPlan.secondary.isAvailable?.();
             const secondaryToken = dataPlan.secondary.getToken?.();
             if (secondaryAvailable && secondaryToken) {
+                const secondaryUserMatch = await ensure_secondary_user_match(dataPlan.secondaryName, authCheck.user?.id || null);
+                if (!secondaryUserMatch) {
+                    results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_user_mismatch', skipped: true };
+                } else {
                 const secondaryResult = await dataPlan.secondary.atome.update(atomeId, payload);
                 if (secondaryResult.ok || secondaryResult.success) {
                     results[dataPlan.secondaryName] = { success: true, data: secondaryResult, error: null };
@@ -5709,6 +6235,7 @@ async function alter_atome(atomeId, newProperties, callback) {
                     } else {
                         results[dataPlan.secondaryName] = { success: false, data: null, error: secondaryResult.error, skipped: false };
                     }
+                }
                 }
             } else {
                 results[dataPlan.secondaryName] = { success: false, data: null, error: 'secondary_unavailable', skipped: true };
@@ -5809,9 +6336,9 @@ async function get_atome(atomeId, callback) {
         atomeId = null;
     }
 
-    // Security guard: require authenticated user for getting atomes
-    const authCheck = require_authenticated_user('get_atome');
-    if (!authCheck.authenticated) {
+    // Security guard: require authenticated user for getting atomes (anonymous allowed)
+    const authCheck = await ensure_user_for_operation('get_atome', { allowAnonymous: true });
+    if (!authCheck.ok) {
         const blockedResult = create_unauthenticated_result(authCheck.error);
         blockedResult.atome = null;
         if (typeof callback === 'function') callback(blockedResult);
@@ -5883,6 +6410,11 @@ async function get_atome(atomeId, callback) {
 
 async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode, propertyOverrides = {}, currentProjectId = null, callback) {
     // Security guard: require authenticated user for sharing
+    if (is_anonymous_mode()) {
+        const blockedResult = create_unauthenticated_result('Sharing is disabled in anonymous mode');
+        if (typeof callback === 'function') callback(blockedResult);
+        return blockedResult;
+    }
     const authCheck = require_authenticated_user('share_atome');
     if (!authCheck.authenticated) {
         const blockedResult = create_unauthenticated_result(authCheck.error);
@@ -6004,6 +6536,11 @@ async function share_atome(phoneNumber, atomeIds, sharePermissions, sharingMode,
 }
 
 async function share_request(payload, callback) {
+    if (is_anonymous_mode()) {
+        const result = { ok: false, success: false, error: 'Sharing is disabled in anonymous mode' };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     let result = null;
     try {
         const authCheck = await ensure_fastify_ws_auth();
@@ -6020,6 +6557,11 @@ async function share_request(payload, callback) {
 }
 
 async function share_respond(payload, callback) {
+    if (is_anonymous_mode()) {
+        const result = { ok: false, success: false, error: 'Sharing is disabled in anonymous mode' };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     let result = null;
     try {
         const authCheck = await ensure_fastify_ws_auth();
@@ -6036,6 +6578,11 @@ async function share_respond(payload, callback) {
 }
 
 async function share_publish(payload, callback) {
+    if (is_anonymous_mode()) {
+        const result = { ok: false, success: false, error: 'Sharing is disabled in anonymous mode' };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     let result = null;
     try {
         const authCheck = await ensure_fastify_ws_auth();
@@ -6052,6 +6599,11 @@ async function share_publish(payload, callback) {
 }
 
 async function share_policy(payload, callback) {
+    if (is_anonymous_mode()) {
+        const result = { ok: false, success: false, error: 'Sharing is disabled in anonymous mode' };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     let result = null;
     try {
         const authCheck = await ensure_fastify_ws_auth();
@@ -6138,6 +6690,10 @@ export const AdoleAPI = {
         isAuthenticated: () => !!get_authenticated_user(),
         getAuthenticatedUser: get_authenticated_user,
         requireAuth: require_authenticated_user,
+        isAnonymous: () => is_anonymous_mode(),
+        getAnonymousIdentity: () => ({ phone: resolve_anonymous_phone(), username: ANONYMOUS_USERNAME }),
+        getAnonymousUserId: () => _anonymousUserId,
+        ensureAnonymousUser: ensure_anonymous_user,
         // Auth gate functions for startup coordination
         signalAuthComplete: signal_auth_check_complete,
         waitForAuthCheck: wait_for_auth_check

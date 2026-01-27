@@ -10,6 +10,9 @@ function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) 
 
 
         if (!svgEl || !parentEl) return;
+        svgEl.dataset.iconSize = cfg.icon_size || currentTheme.icon_size || '';
+        svgEl.dataset.iconTop = icon_Top || '';
+        svgEl.dataset.iconLeft = icon_Left || '';
         // Responsif via CSS (pas d'attributs width/height)
         svgEl.removeAttribute('width');
         svgEl.removeAttribute('height');
@@ -62,6 +65,24 @@ function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) 
     });
 }
 
+function rescale_all_icons() {
+    if (typeof document === 'undefined') return;
+    const icons = document.querySelectorAll('[id$="__icon"]');
+    icons.forEach((svgEl) => {
+        if (!svgEl || !(svgEl instanceof SVGElement)) return;
+        const svgId = svgEl.id;
+        const parentId = svgId.replace(/__icon$/, '');
+        const parentEl = document.getElementById(parentId);
+        if (!parentEl) return;
+
+        const iconSizeRaw = svgEl.dataset?.iconSize || currentTheme.icon_size || '16%';
+        const iconTop = svgEl.dataset?.iconTop || currentTheme.icon_top || '50%';
+        const iconLeft = svgEl.dataset?.iconLeft || currentTheme.icon_left || '50%';
+
+        const fakeCfg = { icon_size: iconSizeRaw };
+        apply_svg_settings_and_anim(fakeCfg, iconLeft, iconTop, svgId, parentId);
+    });
+}
 
 function create_svg(cfg) {
     const parentId = cfg.id;
@@ -5034,6 +5055,8 @@ function apply_layout() {
     if (menuVisibilityState.hidden) {
         setMenuElementsHidden(true);
     }
+    // Recompute SVG icon sizes once layout is applied (important on first Tauri paint).
+    rescale_all_icons();
 }
 
 
@@ -5380,6 +5403,7 @@ window.refreshMenu = function (partialTheme = {}) {
             });
         }
     } catch (e) { /* ignore */ }
+    rescale_all_icons();
 };
 const bootstrapIntuition = () => {
     const intuitionRoot = document.getElementById('intuition');

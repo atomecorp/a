@@ -29,6 +29,11 @@ const SALT_ROUNDS = 10;
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const JWT_EXPIRY = '7d'; // 7 days
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days in seconds
+const ANONYMOUS_PHONE = '0000000000';
+const ANONYMOUS_USERNAME = 'anonymous';
+const ANONYMOUS_PASSWORD = 'anonymous';
+const ANONYMOUS_VISIBILITY = 'private';
+const ANONYMOUS_OPTIONAL = { anonymous: true, local_only: true };
 
 // Namespace UUID for deterministic user ID generation
 // This MUST be the same in Fastify and Axum to generate identical user IDs
@@ -494,6 +499,52 @@ async function findUserByPhone(dataSource, phone) {
     return parsed;
 }
 
+async function ensureAnonymousUser(dataSource) {
+    if (!dataSource) return { ok: false, error: 'no_datasource' };
+    const phone = normalizePhone(ANONYMOUS_PHONE);
+    if (!phone) return { ok: false, error: 'invalid_phone' };
+
+    const deterministicId = generateDeterministicUserId(phone);
+
+    try {
+        const existingByPhone = await findUserByPhone(dataSource, phone);
+        if (existingByPhone?.user_id) {
+            return { ok: true, userId: existingByPhone.user_id, exists: true };
+        }
+
+        const existingById = await dataSource.query(
+            'SELECT atome_id, deleted_at FROM atomes WHERE atome_id = ?',
+            [deterministicId]
+        );
+        if (existingById.length > 0) {
+            if (existingById[0]?.deleted_at) {
+                await dataSource.query(
+                    `UPDATE atomes SET deleted_at = NULL, updated_at = ?, sync_status = 'local' WHERE atome_id = ?`,
+                    [new Date().toISOString(), deterministicId]
+                );
+            }
+            return { ok: true, userId: deterministicId, exists: true };
+        }
+
+        const passwordHash = await hashPassword(ANONYMOUS_PASSWORD);
+        await createUserAtome(
+            dataSource,
+            deterministicId,
+            ANONYMOUS_USERNAME,
+            phone,
+            passwordHash,
+            ANONYMOUS_VISIBILITY,
+            ANONYMOUS_OPTIONAL
+        );
+
+        console.log(`[Auth] Anonymous user ensured: ${ANONYMOUS_USERNAME} (${phone}) [${deterministicId}]`);
+        return { ok: true, userId: deterministicId, created: true };
+    } catch (error) {
+        console.warn('[Auth] Failed to ensure anonymous user:', error?.message || error);
+        return { ok: false, error: error?.message || String(error) };
+    }
+}
+
 /**
  * Find a user by user_id (query atomes+particles)
  * @param {Object} dataSource - Database connection
@@ -716,6 +767,13 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         secret: cookieSecret,
         hook: 'onRequest'
     });
+
+    // Ensure anonymous user exists at startup (local-only)
+    try {
+        await ensureAnonymousUser(dataSource);
+    } catch (error) {
+        console.warn('[Auth] Anonymous user init failed:', error?.message || error);
+    }
 
     // =========================================================================
     // AUTH ROUTES
