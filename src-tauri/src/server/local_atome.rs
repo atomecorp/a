@@ -17,6 +17,9 @@ use std::{
 };
 use uuid::Uuid;
 
+const ANONYMOUS_USERNAME: &str = "anonymous";
+const ANONYMOUS_PHONE_TAURI: &str = "0000000000";
+
 // =============================================================================
 // STATE & TYPES
 // =============================================================================
@@ -161,6 +164,24 @@ fn sync_debug(message: &str) {
     if sync_debug_enabled() {
         println!("[SyncDebug] {}", message);
     }
+}
+
+fn is_anonymous_user(db: &Connection, user_id: &str) -> bool {
+    let phone_json = format!("\"{}\"", ANONYMOUS_PHONE_TAURI);
+    let username_json = format!("\"{}\"", ANONYMOUS_USERNAME);
+    db.query_row(
+        "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'phone' AND particle_value = ?2 LIMIT 1",
+        rusqlite::params![user_id, phone_json],
+        |_| Ok(()),
+    )
+    .is_ok()
+        || db
+            .query_row(
+                "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'username' AND particle_value = ?2 LIMIT 1",
+                rusqlite::params![user_id, username_json],
+                |_| Ok(()),
+            )
+            .is_ok()
 }
 
 fn should_dedupe_request_id(state: &LocalAtomeState, request_id: &Option<String>) -> bool {
@@ -597,6 +618,7 @@ pub async fn handle_atome_message(
         "update" => handle_update(message, user_id, state, request_id).await,
         "delete" | "soft-delete" => handle_delete(message, user_id, state, request_id).await,
         "alter" => handle_alter(message, user_id, state, request_id).await,
+        "transfer-owner" => handle_transfer_owner(message, user_id, state, request_id).await,
         _ => WsResponse {
             msg_type: "atome-response".into(),
             request_id,
@@ -606,6 +628,161 @@ pub async fn handle_atome_message(
             atomes: None,
             count: None,
         },
+    }
+}
+
+async fn handle_transfer_owner(
+    message: serde_json::Value,
+    user_id: &str,
+    state: &LocalAtomeState,
+    request_id: Option<String>,
+) -> WsResponse {
+    let from_owner_id = message
+        .get("fromOwnerId")
+        .or_else(|| message.get("from_owner_id"))
+        .or_else(|| message.get("fromOwner"))
+        .and_then(|v| v.as_str());
+    let to_owner_id = message
+        .get("toOwnerId")
+        .or_else(|| message.get("to_owner_id"))
+        .or_else(|| message.get("toOwner"))
+        .and_then(|v| v.as_str());
+    let include_creator = message
+        .get("includeCreator")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let from_owner_id = match from_owner_id {
+        Some(id) if !id.is_empty() => id,
+        _ => return error_response(request_id, "Missing from_owner_id"),
+    };
+    let to_owner_id = match to_owner_id {
+        Some(id) if !id.is_empty() => id,
+        _ => return error_response(request_id, "Missing to_owner_id"),
+    };
+
+    if to_owner_id != user_id {
+        return error_response(request_id, "Access denied - target owner must be current user");
+    }
+
+    let db = match state.db.lock() {
+        Ok(d) => d,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
+
+    if from_owner_id != user_id && !is_anonymous_user(&db, from_owner_id) {
+        return error_response(request_id, "Access denied - source owner must be anonymous");
+    }
+
+    let pending_owner =
+        serde_json::to_string(from_owner_id).unwrap_or_else(|_| format!("\"{}\"", from_owner_id));
+
+    let mut query = String::from(
+        "SELECT DISTINCT a.atome_id
+         FROM atomes a
+         LEFT JOIN particles p
+           ON p.atome_id = a.atome_id
+          AND p.particle_key = '_pending_owner_id'
+         WHERE a.atome_type != 'user'
+           AND (a.owner_id = ?1",
+    );
+    if include_creator {
+        query.push_str(" OR a.creator_id = ?1");
+    }
+    query.push_str(" OR (a.owner_id IS NULL AND p.particle_value = ?2))");
+
+    let mut ids: Vec<String> = Vec::new();
+    if let Ok(mut stmt) = db.prepare(&query) {
+        let rows = stmt.query_map(rusqlite::params![from_owner_id, pending_owner], |row| {
+            row.get::<_, String>(0)
+        });
+        if let Ok(rows) = rows {
+            for row in rows.flatten() {
+                ids.push(row);
+            }
+        }
+    }
+
+    if ids.is_empty() {
+        return WsResponse {
+            msg_type: "atome-response".into(),
+            request_id,
+            success: true,
+            error: None,
+            data: Some(json!({ "updated": 0 })),
+            atomes: None,
+            count: Some(0),
+        };
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let placeholders = vec!["?"; ids.len()].join(", ");
+
+    let result = with_transaction(&db, |tx| {
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(2 + ids.len());
+        params.push(Box::new(to_owner_id.to_string()));
+        params.push(Box::new(now.clone()));
+        for id in &ids {
+            params.push(Box::new(id.clone()));
+        }
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        tx.execute(
+            &format!(
+                "UPDATE atomes SET owner_id = ?, updated_at = ?, sync_status = 'pending' WHERE atome_id IN ({})",
+                placeholders
+            ),
+            params_refs.as_slice(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        let mut params_state: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(2 + ids.len());
+        params_state.push(Box::new(to_owner_id.to_string()));
+        params_state.push(Box::new(now.clone()));
+        for id in &ids {
+            params_state.push(Box::new(id.clone()));
+        }
+        let params_state_refs: Vec<&dyn rusqlite::ToSql> =
+            params_state.iter().map(|p| p.as_ref()).collect();
+        tx.execute(
+            &format!(
+                "UPDATE state_current SET owner_id = ?, updated_at = ? WHERE atome_id IN ({})",
+                placeholders
+            ),
+            params_state_refs.as_slice(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        let mut params_particles: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(ids.len());
+        for id in &ids {
+            params_particles.push(Box::new(id.clone()));
+        }
+        let params_particles_refs: Vec<&dyn rusqlite::ToSql> = params_particles
+            .iter()
+            .map(|p| p.as_ref())
+            .collect();
+        tx.execute(
+            &format!(
+                "DELETE FROM particles WHERE particle_key = '_pending_owner_id' AND atome_id IN ({})",
+                placeholders
+            ),
+            params_particles_refs.as_slice(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        Ok(())
+    });
+
+    match result {
+        Ok(_) => WsResponse {
+            msg_type: "atome-response".into(),
+            request_id,
+            success: true,
+            error: None,
+            data: Some(json!({ "updated": ids.len() })),
+            atomes: None,
+            count: Some(ids.len() as i64),
+        },
+        Err(err) => error_response(request_id, &err),
     }
 }
 
@@ -1070,7 +1247,7 @@ async fn handle_list(
                   AND perm.principal_id = ?1
                   AND perm.can_read = 1
                   AND (perm.expires_at IS NULL OR perm.expires_at > datetime('now'))
-                 WHERE (a.owner_id = ?2 OR perm.permission_id IS NOT NULL
+                 WHERE (a.owner_id = ?2 OR a.creator_id = ?1 OR perm.permission_id IS NOT NULL
                    OR EXISTS (
                      SELECT 1 FROM particles p2
                      WHERE p2.atome_id = a.atome_id
@@ -2965,6 +3142,16 @@ fn get_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
     }
 }
 
+fn get_creator_id(db: &Connection, atome_id: &str) -> Option<String> {
+    db.query_row(
+        "SELECT creator_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
+        rusqlite::params![atome_id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .ok()
+    .flatten()
+}
+
 fn upsert_permission(
     db: &Connection,
     atome_id: &str,
@@ -3205,6 +3392,11 @@ fn can_read(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
             return true;
         }
     }
+    if let Some(creator_id) = get_creator_id(db, atome_id) {
+        if creator_id == principal_id {
+            return true;
+        }
+    }
 
     let perm = match fetch_permission(db, atome_id, principal_id) {
         Some(row) => row,
@@ -3220,6 +3412,11 @@ fn can_read(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
 fn can_write(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
     if let Some(owner_id) = get_owner_id(db, atome_id) {
         if owner_id == principal_id {
+            return true;
+        }
+    }
+    if let Some(creator_id) = get_creator_id(db, atome_id) {
+        if creator_id == principal_id {
             return true;
         }
     }
@@ -3241,6 +3438,11 @@ fn can_delete(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
             return true;
         }
     }
+    if let Some(creator_id) = get_creator_id(db, atome_id) {
+        if creator_id == principal_id {
+            return true;
+        }
+    }
 
     let perm = match fetch_permission(db, atome_id, principal_id) {
         Some(row) => row,
@@ -3256,6 +3458,11 @@ fn can_delete(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
 fn can_create(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
     if let Some(owner_id) = get_owner_id(db, atome_id) {
         if owner_id == principal_id {
+            return true;
+        }
+    }
+    if let Some(creator_id) = get_creator_id(db, atome_id) {
+        if creator_id == principal_id {
             return true;
         }
     }

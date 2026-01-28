@@ -1444,17 +1444,28 @@ export async function getStateCurrent(atomeId) {
 export async function listStateCurrent(projectId, options = {}) {
     const limit = Number(options.limit) || 1000;
     const offset = Number(options.offset) || 0;
+    const ownerId = options.ownerId || options.owner_id || null;
 
     const params = [];
-    let where = '';
+    const conditions = [];
+
     if (projectId) {
-        where = 'WHERE project_id = ?';
+        conditions.push('sc.project_id = ?');
         params.push(projectId);
     }
 
+    if (ownerId) {
+        // Match Tauri behavior: allow owner_id match or NULL (shared/legacy).
+        conditions.push('(a.owner_id = ? OR a.owner_id IS NULL)');
+        params.push(ownerId);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const join = 'LEFT JOIN atomes a ON a.atome_id = sc.atome_id';
+
     const rows = await query(
         'all',
-        `SELECT * FROM state_current ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+        `SELECT sc.*, a.owner_id AS owner_id FROM state_current sc ${join} ${where} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
         [...params, limit, offset]
     );
 

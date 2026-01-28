@@ -1375,6 +1375,17 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     particles: properties
                 });
             },
+            async transferOwner(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'atome',
+                    action: 'transfer-owner',
+                    token,
+                    fromOwnerId: data.fromOwnerId || data.from_owner_id || data.fromOwner || null,
+                    toOwnerId: data.toOwnerId || data.to_owner_id || data.toOwner || null,
+                    includeCreator: data.includeCreator !== false
+                });
+            },
 
             // Broadcast-only realtime patch (no DB write)
             async realtime(atomeId, particles) {

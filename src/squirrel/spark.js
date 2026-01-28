@@ -130,7 +130,7 @@ import Tooltip from './components/tooltip_builder.js';
 import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
 import Slice, { createSlice } from './components/slice_builder.js';
-import Intuition from './components/intuition_builder.js';
+import Intuition from './components/intuition_builder/index.js';
 
 
 // === default behavior ===

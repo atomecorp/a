@@ -944,7 +944,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         try {
             const states = await db.listStateCurrent(projectId || project_id || null, {
                 limit: limit !== undefined ? Number(limit) : undefined,
-                offset: offset !== undefined ? Number(offset) : undefined
+                offset: offset !== undefined ? Number(offset) : undefined,
+                ownerId: user.id
             });
 
             return reply.send({ success: true, states });

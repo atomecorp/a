@@ -1,167 +1,49 @@
-
-
-/// svg utils
-
-
-function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) {
-    requestAnimationFrame(() => {
-        const svgEl = document.getElementById(svgId);
-        const parentEl = document.getElementById(parentId);
-
-
-        if (!svgEl || !parentEl) return;
-        svgEl.dataset.iconSize = cfg.icon_size || currentTheme.icon_size || '';
-        svgEl.dataset.iconTop = icon_Top || '';
-        svgEl.dataset.iconLeft = icon_Left || '';
-        // Responsif via CSS (pas d'attributs width/height)
-        svgEl.removeAttribute('width');
-        svgEl.removeAttribute('height');
-        svgEl.style.position = 'absolute';
-        svgEl.style.left = icon_Left;
-        svgEl.style.top = icon_Top;
-        svgEl.style.transform = 'translate(-50%, -50%)';
-        svgEl.style.display = 'block';
-        svgEl.style.pointerEvents = 'none';
-        const baseSize = Math.max(1,
-            Math.min(parentEl.clientWidth || 0, parentEl.clientHeight || 0) ||
-            (parseFloat(currentTheme.item_size) || 54)
-        );
-
-        const cs = window.getComputedStyle(parentEl);
-        if (!cs.position || cs.position === 'static') {
-            parentEl.style.position = 'relative';
-        }
-
-        // const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
-        const szDefRaw = (cfg.icon_size || currentTheme.icon_size || '16%').trim();
-
-        let iconSize = NaN;
-        if (szDefRaw.endsWith('%')) {
-            const pct = parseFloat(szDefRaw);
-            if (!isNaN(pct)) iconSize = Math.round((pct / 100) * baseSize);
-        } else if (szDefRaw.endsWith('px')) {
-            const px = parseFloat(szDefRaw);
-            if (!isNaN(px)) iconSize = Math.round(px);
-        } else {
-            const num = parseFloat(szDefRaw);
-            if (!isNaN(num)) {
-                // num < 1 => ratio, sinon px
-                iconSize = num <= 1 ? Math.round(num * baseSize) : Math.round(num);
-            }
-        }
-        if (!isFinite(iconSize) || isNaN(iconSize)) {
-            iconSize = Math.round(0.16 * baseSize); // fallback 16%
-        }
-        iconSize = Math.max(8, iconSize);
-        svgEl.style.width = iconSize + 'px';
-        svgEl.style.height = iconSize + 'px';
-
-        if (!svgEl.getAttribute('viewBox')) {
-            svgEl.setAttribute('viewBox', `0 0 ${iconSize} ${iconSize}`);
-        }
-        if (!svgEl.getAttribute('preserveAspectRatio')) {
-            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        }
-    });
-}
-
-function rescale_all_icons() {
-    if (typeof document === 'undefined') return;
-    const icons = document.querySelectorAll('[id$="__icon"]');
-    icons.forEach((svgEl) => {
-        if (!svgEl || !(svgEl instanceof SVGElement)) return;
-        const svgId = svgEl.id;
-        const parentId = svgId.replace(/__icon$/, '');
-        const parentEl = document.getElementById(parentId);
-        if (!parentEl) return;
-
-        const iconSizeRaw = svgEl.dataset?.iconSize || currentTheme.icon_size || '16%';
-        const iconTop = svgEl.dataset?.iconTop || currentTheme.icon_top || '50%';
-        const iconLeft = svgEl.dataset?.iconLeft || currentTheme.icon_left || '50%';
-
-        const fakeCfg = { icon_size: iconSizeRaw };
-        apply_svg_settings_and_anim(fakeCfg, iconLeft, iconTop, svgId, parentId);
-    });
-}
-
-function create_svg(cfg) {
-    const parentId = cfg.id;
-    const svgId = `${parentId}__icon`;
-    const prev = document.getElementById(svgId);
-    if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
-    const icon = cfg.icon;
-    if (icon === null || icon === false || (typeof icon === 'string' && icon.trim() === '')) {
-        return;
-    }
-    let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
-    let icon_Left = (cfg.icon_left || currentTheme.icon_left || '10%').trim();
-    let icon_Top = (cfg.icon_top || currentTheme.icon_top || '50%').trim();
-    // check if icon is base64 encoded svg
-    if (typeof icon === 'string' && icon.startsWith('data:image/svg+xml;base64,')) {
-
-        const base64Data = icon.replace('data:image/svg+xml;base64,', '');
-        const svgData = atob(base64Data);
-
-        render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
-        apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
-    }
-    else {
-        dataFetcher(`assets/images/icons/${icon}.svg`)
-            .then(svgData => {
-                // Injecte le SVG dans le parent
-                render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
-                // Normalisation et centrage + taille basée sur currentTheme.icon_size
-                apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
-            })
-            .catch(err => { console.error(`Erreur (create_svg):${icon}, ${err}`); });
-    }
-
-}
-window.create_svg = create_svg;
-
-let calculatedCSS = {};
-// const shadowLeft = 0,
-//     shadowTop = 0,
-//     shadowBlur = 12;
-// const items_spacing = 3;
-// const item_border_radius = 6;
-// const item_size = 54;
-const DIRECTIONS = [
-    "top_left_horizontal",
-    "top_right_horizontal",
-    "bottom_left_horizontal",
-    "bottom_right_horizontal",
-    "top_left_vertical",
-    "bottom_left_vertical",
-    "top_right_vertical",
-    "bottom_right_vertical"
-];
-let menuOpen = 'false';
-let menuStack = [];
-const menuVisibilityState = {
-    hidden: false,
-    wasOpen: false,
-    parent: null
-};
-const unitDropdownRegistry = new Map();
-const floatingRegistry = new Map();
-const floatingPersistence = new Map();
-const orientationSelectionMap = new Map();
-let floatingCounter = 0;
-let floatingHierarchyCounter = 0;
-let intuition_drag_active = false;
-const editModeState = {
-    active: false,
-    pulseTimer: null,
-    dragContext: null,
-    suppressToolboxClick: false
-};
-const EDIT_DRAG_THRESHOLD = 16;
-const FLOATING_DRAG_ACTIVATION_THRESHOLD = 2;
-let activeContentHandlerContext = null;
-let pendingParticleUpdateHost = null;
-
-const POINTER_TOUCH_ID_OFFSET = 1000;
+import {
+    calculatedCSS,
+    menuOpen,
+    menuStack,
+    menuVisibilityState,
+    unitDropdownRegistry,
+    floatingRegistry,
+    floatingPersistence,
+    orientationSelectionMap,
+    floatingCounter,
+    intuitionDragActive as intuition_drag_active,
+    editModeState,
+    EDIT_DRAG_THRESHOLD,
+    FLOATING_DRAG_ACTIVATION_THRESHOLD,
+    activeContentHandlerContext,
+    pendingParticleUpdateHost,
+    setMenuOpen,
+    setFloatingCounter,
+    nextFloatingCounter,
+    nextFloatingHierarchyCounter,
+    setIntuitionDragActive,
+    setActiveContentHandlerContext,
+    setPendingParticleUpdateHost
+} from './state.js';
+import { rescale_all_icons, create_svg } from './svg.js';
+import {
+    resolvePointerDetails,
+    ensurePointerMatchesContext,
+    attachRobustGlobalDragListeners,
+    detachRobustGlobalDragListeners
+} from './pointer.js';
+import {
+    resolveItemSizePx,
+    resolveOrientationValue,
+    normalizeOffsetToNumber,
+    normalizePositionValue,
+    resolveToolFontSizeCss,
+    computeDropdownHeight,
+    resolveItemSizeCss,
+    resolveThemeItemSizeCss,
+    resolveFloatingEntryBackground,
+    resolveFloatingBodyPadding,
+    resolveFloatingHostBackground,
+    resolveFloatingHostBlur,
+    resolveFloatingGripBlur
+} from './theme_utils.js';
 
 function save_intuition_menu(...args) {
     if (typeof window.saveMenuHook === 'function') {
@@ -171,150 +53,6 @@ function save_intuition_menu(...args) {
 }
 
 window.save_intuition_menu = (...args) => save_intuition_menu(...args);
-function resolvePointerDetails(event) {
-    if (!event) return null;
-    if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
-        const inferredType = event.pointerType
-            || (typeof event.type === 'string' && event.type.indexOf('mouse') !== -1 ? 'mouse' : undefined);
-        return {
-            clientX: event.clientX,
-            clientY: event.clientY,
-            pointerId: event.pointerId,
-            pointerType: inferredType,
-            originalEvent: event
-        };
-    }
-    const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0]) || null;
-    if (!touch) return null;
-    return {
-        clientX: touch.clientX,
-        clientY: touch.clientY,
-        pointerId: touch.identifier != null ? touch.identifier + POINTER_TOUCH_ID_OFFSET : 'touch',
-        pointerType: 'touch',
-        originalEvent: event
-    };
-}
-
-function ensurePointerMatchesContext(ctx, pointerMeta, event) {
-    if (!ctx) return true;
-    const nextPointerId = pointerMeta && pointerMeta.pointerId != null
-        ? pointerMeta.pointerId
-        : (event && event.pointerId != null ? event.pointerId : null);
-    if (ctx.pointerId == null) {
-        ctx.pointerId = nextPointerId != null ? nextPointerId : ctx.pointerId;
-        const pType = (pointerMeta && pointerMeta.pointerType) || (event && event.pointerType);
-        if (pType && !ctx.pointerType) ctx.pointerType = pType;
-        return true;
-    }
-    if (nextPointerId == null) return true;
-    if (ctx.pointerId === nextPointerId) return true;
-    const metaType = (pointerMeta && pointerMeta.pointerType) || (event && event.pointerType);
-    if (!ctx.pointerType && metaType) {
-        ctx.pointerType = metaType;
-    }
-    const sameType = ctx.pointerType && metaType && ctx.pointerType === metaType;
-    if (sameType || !ctx.pointerType || !ctx.dragActivated) {
-        ctx.pointerId = nextPointerId;
-        if (ctx.kind === 'floating-move' && ctx.capturePointerId != null) {
-            ctx.capturePointerId = nextPointerId;
-        }
-        return true;
-    }
-    return false;
-}
-
-function attachRobustGlobalDragListeners(ctx) {
-    if (!ctx || typeof document === 'undefined') return;
-    const doc = document;
-    doc.addEventListener('pointermove', ctx.moveHandler, true);
-    doc.addEventListener('pointerup', ctx.upHandler, true);
-    doc.addEventListener('pointercancel', ctx.upHandler, true);
-    const fallbackMove = (ev) => ctx.moveHandler(ev);
-    const fallbackUp = (ev) => ctx.upHandler(ev);
-    doc.addEventListener('mousemove', fallbackMove, true);
-    doc.addEventListener('mouseup', fallbackUp, true);
-    doc.addEventListener('touchmove', fallbackMove, { passive: false, capture: true });
-    doc.addEventListener('touchend', fallbackUp, true);
-    doc.addEventListener('touchcancel', fallbackUp, true);
-    const onVisibilityChange = () => {
-        if (!document || document.visibilityState !== 'hidden') return;
-        const cancelEvent = {
-            type: 'pointercancel',
-            pointerId: ctx.pointerId,
-            clientX: ctx.lastClientX,
-            clientY: ctx.lastClientY,
-            preventDefault: () => { },
-            stopPropagation: () => { }
-        };
-        ctx.upHandler(cancelEvent);
-    };
-    doc.addEventListener('visibilitychange', onVisibilityChange, true);
-    const onWindowBlur = () => {
-        const cancelEvent = {
-            type: 'pointercancel',
-            pointerId: ctx.pointerId,
-            clientX: ctx.lastClientX,
-            clientY: ctx.lastClientY,
-            preventDefault: () => { },
-            stopPropagation: () => { }
-        };
-        ctx.upHandler(cancelEvent);
-    };
-    if (typeof window !== 'undefined') {
-        window.addEventListener('blur', onWindowBlur, true);
-    }
-    ctx.fallbackMoveHandler = fallbackMove;
-    ctx.fallbackUpHandler = fallbackUp;
-    ctx.visibilityChangeHandler = onVisibilityChange;
-    ctx.windowBlurHandler = onWindowBlur;
-    if (ctx.originEl && typeof ctx.originEl.addEventListener === 'function' && ctx.capturePointerId != null) {
-        const onLostCapture = () => {
-            if (ctx.dragFinished) return;
-            if (editModeState.dragContext !== ctx) return;
-            requestAnimationFrame(() => {
-                if (ctx.dragFinished) return;
-                if (editModeState.dragContext !== ctx) return;
-                try { ctx.originEl.setPointerCapture(ctx.capturePointerId); } catch (_) { }
-            });
-        };
-        ctx.lostPointerCaptureHandler = onLostCapture;
-        ctx.originEl.addEventListener('lostpointercapture', onLostCapture);
-    }
-}
-
-function detachRobustGlobalDragListeners(ctx) {
-    if (!ctx || typeof document === 'undefined') return;
-    const doc = document;
-    if (ctx.moveHandler) {
-        doc.removeEventListener('pointermove', ctx.moveHandler, true);
-        doc.removeEventListener('pointerup', ctx.upHandler, true);
-        doc.removeEventListener('pointercancel', ctx.upHandler, true);
-    }
-    if (ctx.fallbackMoveHandler) {
-        doc.removeEventListener('mousemove', ctx.fallbackMoveHandler, true);
-        doc.removeEventListener('touchmove', ctx.fallbackMoveHandler, true);
-    }
-    if (ctx.fallbackUpHandler) {
-        doc.removeEventListener('mouseup', ctx.fallbackUpHandler, true);
-        doc.removeEventListener('touchend', ctx.fallbackUpHandler, true);
-        doc.removeEventListener('touchcancel', ctx.fallbackUpHandler, true);
-    }
-    if (ctx.visibilityChangeHandler) {
-        doc.removeEventListener('visibilitychange', ctx.visibilityChangeHandler, true);
-        ctx.visibilityChangeHandler = null;
-    }
-    if (typeof window !== 'undefined' && ctx.windowBlurHandler) {
-        window.removeEventListener('blur', ctx.windowBlurHandler, true);
-        ctx.windowBlurHandler = null;
-    }
-    if (ctx.originEl && ctx.lostPointerCaptureHandler) {
-        try { ctx.originEl.removeEventListener('lostpointercapture', ctx.lostPointerCaptureHandler); } catch (_) { }
-        ctx.lostPointerCaptureHandler = null;
-    }
-    ctx.fallbackMoveHandler = null;
-    ctx.fallbackUpHandler = null;
-}
-
 function ensureFloatingPersistenceBucket(info) {
     if (!info || !info.id) return null;
     let bucket = floatingPersistence.get(info.id);
@@ -359,15 +97,6 @@ function ensureFloatingPersistenceStore(info) {
     }
     info.persistedExtracted = bucket.satellites;
     return bucket.satellites;
-}
-
-function normalizePositionValue(value) {
-    if (value == null) return null;
-    if (typeof value === 'number') {
-        return Number.isFinite(value) ? value : null;
-    }
-    const parsed = parseFloat(String(value));
-    return Number.isFinite(parsed) ? parsed : null;
 }
 
 function deriveFloatingHostPosition(info, metadata = {}) {
@@ -479,23 +208,6 @@ function recordFloatingStateChange(info, reason) {
         state: info.collapsed ? 'close' : 'open'
     });
     save_intuition_menu();
-}
-
-function resolveOrientationValue(theme) {
-    const dir = theme && typeof theme.direction === 'string' ? theme.direction.trim() : '';
-    if (dir) {
-        return dir.toLowerCase();
-    }
-    return 'top_left_horizontal';
-}
-
-function normalizeOffsetToNumber(raw) {
-    if (raw == null) return 0;
-    if (typeof raw === 'number') {
-        return Number.isFinite(raw) ? raw : 0;
-    }
-    const parsed = parseFloat(String(raw));
-    return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function persistFloatingSatelliteRecord(info, nameKey, theme, metadata = {}) {
@@ -794,14 +506,6 @@ function ensureFloatingLayer() {
         }
     });
     return layer;
-}
-
-function resolveItemSizePx() {
-    const size = currentTheme && currentTheme.item_size;
-    if (size == null) return 54;
-    if (typeof size === 'number') return size;
-    const parsed = parseFloat(size);
-    return Number.isFinite(parsed) ? parsed : 54;
 }
 
 function resolveFloatingGripIconInfo(opts = {}) {
@@ -1200,7 +904,7 @@ function attachFloatingGripInteractions(info) {
                 } else {
                     enterEditMode();
                 }
-                intuition_drag_active = false;
+                setIntuitionDragActive(false);
                 releasePointerCapture();
             }, longPressDelay);
             if (pointerId != null && typeof grip.setPointerCapture === 'function') {
@@ -1282,7 +986,7 @@ function createFloatingHost(opts = {}) {
         if (numericMatch) {
             const parsed = parseInt(numericMatch[1], 10);
             if (Number.isFinite(parsed)) {
-                floatingCounter = Math.max(floatingCounter, parsed);
+                setFloatingCounter(Math.max(floatingCounter, parsed));
             }
         }
         if (floatingRegistry.has(id)) {
@@ -1293,7 +997,7 @@ function createFloatingHost(opts = {}) {
             try { existingNode.parentElement.removeChild(existingNode); } catch (_) { }
         }
     } else {
-        id = `intuition-floating-${++floatingCounter}`;
+        id = `intuition-floating-${nextFloatingCounter()}`;
     }
     const left = Math.max(0, (opts.x != null ? opts.x : 0) - itemSize / 2);
     const top = Math.max(0, (opts.y != null ? opts.y : 0) - itemSize / 2);
@@ -1483,7 +1187,7 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
     const def = opts.definition || intuition_content[nameKey];
     if (!def || typeof def.type !== 'function') return null;
     if (!host.id) {
-        host.id = `${info.id}__host_${++floatingHierarchyCounter}`;
+        host.id = `${info.id}__host_${nextFloatingHierarchyCounter()}`;
     }
     const typeName = inferDefinitionType(def);
     const datasetNameKey = opts.datasetNameKey || nameKey;
@@ -2106,7 +1810,7 @@ function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
 function ensureFloatingElementId(el, info) {
     if (!el) return null;
     if (!el.id || !el.id.length) {
-        el.id = `${info.id}__auto_${++floatingHierarchyCounter}`;
+        el.id = `${info.id}__auto_${nextFloatingHierarchyCounter()}`;
     }
     return el.id;
 }
@@ -2138,7 +1842,7 @@ function populateFloatingHierarchy(info, nameKey, parentEl, depth = 0, options =
     }
     const children = Array.isArray(def.children) ? def.children : [];
     if (!children.length) return entry;
-    const childWrapId = `${entry.id}__children_${++floatingHierarchyCounter}`;
+    const childWrapId = `${entry.id}__children_${nextFloatingHierarchyCounter()}`;
     const nextDepth = depth + 1;
     const childIndentDepth = Math.min(nextDepth, maxIndentDepth);
     const childIndentPx = `${childIndentDepth * indentStep}px`;
@@ -2263,7 +1967,7 @@ function cleanupDragContext(ctx) {
     }
     clearFloatingDropPreview(ctx);
     disposeFloatingDragGhost(ctx);
-    intuition_drag_active = false;
+    setIntuitionDragActive(false);
     editModeState.dragContext = null;
     ctx.dragFinished = true;
 }
@@ -2334,7 +2038,7 @@ function handleMenuItemDragMove(e, ctx) {
         const dist = Math.hypot(x - ctx.startX, y - ctx.startY);
         if (dist < EDIT_DRAG_THRESHOLD) return;
         ctx.dragActivated = true;
-        intuition_drag_active = true;
+        setIntuitionDragActive(true);
         if (!ctx.ghostEl) {
             ctx.ghostEl = createFloatingDragGhost({
                 label: ctx.label,
@@ -2453,7 +2157,7 @@ function handleFloatingMove(e, ctx) {
             pointer.clientY - (ctx.initialClientY || 0)
         );
         if (dist >= FLOATING_DRAG_ACTIVATION_THRESHOLD) {
-            intuition_drag_active = true;
+            setIntuitionDragActive(true);
             ctx.dragActivated = true;
             if (!ctx.loggedDrag) {
                 updateCurrentMenuStatus({ reason: 'floating-drag' });
@@ -2500,7 +2204,7 @@ function finishFloatingMove(e, ctx) {
     if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
     ctx.dragFinished = true;
     setTimeout(() => {
-        intuition_drag_active = false;
+        setIntuitionDragActive(false);
         cleanupDragContext(ctx);
     }, 0);
 }
@@ -2684,7 +2388,7 @@ function calculate_positions() {
     return { toolbox_support: support, toolbox: trigger };
 }
 
-calculatedCSS = calculate_positions();
+Object.assign(calculatedCSS, calculate_positions());
 const width = calculatedCSS.toolbox_support.width;
 const height = calculatedCSS.toolbox_support.height;
 const posCss = calculatedCSS.toolbox_support;
@@ -2760,8 +2464,10 @@ function openMenu(parent) {
         if (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active) {
             restorePalette(handlePaletteClick.active);
         }
-        menuStack = [{ parent, children: methods.slice() }];
+        menuStack.length = 0;
+        menuStack.push({ parent, children: methods.slice() });
         const created = [];
+        const iconPromises = [];
         methods.forEach(name => {
             const def = intuition_content[name] || {};
             const label = resolveIntuitionLabel(def, name);
@@ -2776,6 +2482,7 @@ function openMenu(parent) {
                     icon,
                     nameKey: name,
                     parent: '#toolbox_support',
+                    _iconPromises: iconPromises,
                     ...(intuitionAddOn[name] || {})
                 };
                 fct_exec(optionalParams);
@@ -2794,11 +2501,14 @@ function openMenu(parent) {
         // Add a green overflow-forcing item when opening the menu
         addOverflowForcer();
         ensureOverflowForcerAtEnd();
-        requestAnimationFrame(() => {
-            alignSupportToToolboxEdge();
-            slideInItems(created);
+        waitForMenuIcons(iconPromises, 300).then(() => {
+            requestAnimationFrame(() => {
+                alignSupportToToolboxEdge();
+                rescale_all_icons();
+                slideInItems(created);
+            });
         });
-        menuOpen = parent;
+        setMenuOpen(parent);
     } else {
         // Full close: close any submenu and restore state
         closeMenu();
@@ -2976,7 +2686,10 @@ function createPalette(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     var el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    create_svg(finalCfg);
+    const iconPromise = create_svg(finalCfg);
+    if (iconPromise && typeof iconPromise.then === 'function' && cfg && Array.isArray(cfg._iconPromises)) {
+        cfg._iconPromises.push(iconPromise);
+    }
     el.addEventListener('click', (e) => {
         if (suppressInteractionDuringEdit(e)) return;
         // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
@@ -3011,7 +2724,10 @@ function createTool(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     const el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    create_svg(finalCfg);
+    const iconPromise = create_svg(finalCfg);
+    if (iconPromise && typeof iconPromise.then === 'function' && cfg && Array.isArray(cfg._iconPromises)) {
+        cfg._iconPromises.push(iconPromise);
+    }
     const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
 
@@ -3055,7 +2771,10 @@ function createOption(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     const el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    create_svg(finalCfg);
+    const iconPromise = create_svg(finalCfg);
+    if (iconPromise && typeof iconPromise.then === 'function' && cfg && Array.isArray(cfg._iconPromises)) {
+        cfg._iconPromises.push(iconPromise);
+    }
     const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
     // Click behaves like semantic 'touch'
@@ -3074,7 +2793,10 @@ function createZonespecial(cfg) {
     const finalCfg = { ...cfg, css: finalCss };
     const el = intuitionCommon(finalCfg);
     createLabel(finalCfg);
-    create_svg(finalCfg);
+    const iconPromise = create_svg(finalCfg);
+    if (iconPromise && typeof iconPromise.then === 'function' && cfg && Array.isArray(cfg._iconPromises)) {
+        cfg._iconPromises.push(iconPromise);
+    }
     const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
     el.addEventListener('click', (e) => {
@@ -3346,7 +3068,7 @@ function runContentHandler(def, handlerName, payload = {}) {
         value: payload.value
     };
     const prevHandlerContext = activeContentHandlerContext;
-    activeContentHandlerContext = { el, event, kind, nameKey, handler: handlerName, payload };
+    setActiveContentHandlerContext({ el, event, kind, nameKey, handler: handlerName, payload });
     try {
         if (typeof code === 'function') {
             code(context);
@@ -3358,7 +3080,7 @@ function runContentHandler(def, handlerName, payload = {}) {
         console.error(`Error in content handler '${handlerName}' code '${code}':`, err);
 
     } finally {
-        activeContentHandlerContext = prevHandlerContext;
+        setActiveContentHandlerContext(prevHandlerContext);
     }
 }
 
@@ -3495,7 +3217,7 @@ function renderParticleValueFromTheme(cfg) {
     const hostInfo = particleEl ? resolveFloatingInfoFromElement(particleEl) : null;
     const particleUpdateHost = particleEl || (hostInfo && hostInfo.container) || null;
     const dispatchParticleUpdate = (nextValue, nextUnit, nextExt) => {
-        pendingParticleUpdateHost = particleUpdateHost;
+        setPendingParticleUpdateHost(particleUpdateHost);
         window.updateParticleValue(key, nextValue, nextUnit, nextExt);
     };
     const orientationContextKey = hostInfo ? hostInfo.id : 'toolbox';
@@ -3929,7 +3651,7 @@ function renderHelperForItem(cfg) {
     const hostInfo = host ? resolveFloatingInfoFromElement(host) : null;
     const helperUpdateHost = host || (hostInfo && hostInfo.container) || null;
     const dispatchParticleUpdate = (nextValue, nextUnit, nextExt) => {
-        pendingParticleUpdateHost = helperUpdateHost;
+        setPendingParticleUpdateHost(helperUpdateHost);
         window.updateParticleValue(key, nextValue, nextUnit, nextExt);
     };
 
@@ -4347,128 +4069,6 @@ function removeAllUnitDropdowns() {
     Array.from(unitDropdownRegistry.keys()).forEach(removeUnitDropdown);
 }
 
-function resolveThemeItemSizeCss(theme) {
-    if (!theme) return `${item_size}px`;
-    const raw = theme.item_size;
-    if (raw == null) {
-        return `${item_size}px`;
-    }
-    if (typeof raw === 'number') {
-        return `${raw}px`;
-    }
-    const str = String(raw).trim();
-    if (!str) {
-        return `${item_size}px`;
-    }
-    if (/^[0-9.]+$/.test(str)) {
-        return `${str}px`;
-    }
-    return str;
-}
-
-function resolveFloatingEntryBackground(theme, typeName) {
-    const fallback = (theme && theme.tool_bg != null) ? theme.tool_bg : 'transparent';
-    if (!theme) return fallback;
-    switch (typeName) {
-        case 'palette':
-            return theme.palette_bg != null ? theme.palette_bg : fallback;
-        case 'particle':
-            return theme.particle_bg != null ? theme.particle_bg : fallback;
-        case 'option':
-            return theme.option_bg != null ? theme.option_bg : fallback;
-        case 'zonespecial':
-            return theme.zonespecial_bg != null ? theme.zonespecial_bg : fallback;
-        default:
-            return fallback;
-    }
-}
-
-function resolveFloatingBodyPadding(theme, spacingFallback = '0') {
-    const defaultPadding = '0';
-    const hasThemeValue = theme && Object.prototype.hasOwnProperty.call(theme, 'floating_body_padding');
-    if (!hasThemeValue) {
-        return defaultPadding;
-    }
-    const raw = theme.floating_body_padding;
-    if (raw == null) {
-        return defaultPadding;
-    }
-    if (typeof raw === 'number' && Number.isFinite(raw)) {
-        return `${raw}px`;
-    }
-    const str = String(raw).trim();
-    if (!str) {
-        return defaultPadding;
-    }
-    if (str === 'spacing') {
-        return spacingFallback;
-    }
-    return str;
-}
-
-function resolveFloatingHostBackground(theme, infoType) {
-    if (!theme) return 'transparent';
-    if (Object.prototype.hasOwnProperty.call(theme, 'floating_host_bg')) {
-        const raw = theme.floating_host_bg;
-        if (raw === null || raw === undefined || raw === '') {
-            return 'transparent';
-        }
-        return String(raw);
-    }
-    if (infoType === 'palette') {
-        return theme.palette_bg != null ? theme.palette_bg : 'transparent';
-    }
-    if (infoType === 'tool' || infoType === 'particle' || infoType === 'option' || infoType === 'zonespecial') {
-        return theme.tool_bg != null ? theme.tool_bg : 'transparent';
-    }
-    return 'transparent';
-}
-
-function resolveFloatingHostBlur(theme, background) {
-    if (!theme) return null;
-    if (Object.prototype.hasOwnProperty.call(theme, 'floating_host_blur')) {
-        const raw = theme.floating_host_blur;
-        if (raw === null || raw === undefined || raw === '' || raw === false) {
-            return null;
-        }
-        if (typeof raw === 'number' && Number.isFinite(raw)) {
-            return `${raw}px`;
-        }
-        const str = String(raw).trim();
-        if (!str) {
-            return null;
-        }
-        return str;
-    }
-    if (!background || background === 'transparent' || background === 'none') {
-        return null;
-    }
-    return theme.tool_backDrop_effect || null;
-}
-
-function resolveFloatingGripBlur(theme, background) {
-    if (!theme) return null;
-    if (Object.prototype.hasOwnProperty.call(theme, 'floating_grip_blur')) {
-        const raw = theme.floating_grip_blur;
-        if (raw === null || raw === undefined || raw === '' || raw === false) {
-            return null;
-        }
-        if (typeof raw === 'number' && Number.isFinite(raw)) {
-            return `${raw}px`;
-        }
-        const str = String(raw).trim();
-        if (!str) {
-            return null;
-        }
-        return str;
-    }
-    const hostBlur = resolveFloatingHostBlur(theme, background);
-    if (hostBlur) {
-        return hostBlur;
-    }
-    return theme.tool_backDrop_effect || null;
-}
-
 function applyThemeToFloatingHost(info, theme) {
     if (!info) return;
     const themeRef = theme || currentTheme;
@@ -4611,40 +4211,6 @@ function dismissActiveSatellites(info) {
         resetFloatingNavigationToRoot(info);
     }
     return dismissed;
-}
-
-function resolveToolFontSizeCss() {
-    if (currentTheme && currentTheme.tool_font) {
-        return String(currentTheme.tool_font);
-    }
-    if (currentTheme && currentTheme.tool_font_px != null) {
-        return `${currentTheme.tool_font_px}px`;
-    }
-    return '12px';
-}
-
-function computeDropdownHeight(fontSizeCss) {
-    if (!fontSizeCss) return '32px';
-    const match = String(fontSizeCss).trim().match(/^([0-9]*\.?[0-9]+)(px|rem|em|vw|vh|vmin|vmax|%)$/i);
-    if (match) {
-        const value = parseFloat(match[1]) || 0;
-        const unit = match[2].toLowerCase();
-        if (unit === 'px') {
-            return Math.max(18, Math.round(value * 2.2)) + 'px';
-        }
-        return `calc(${match[0]} * 2.2)`;
-    }
-    if (currentTheme && currentTheme.tool_font_px) {
-        return Math.max(18, Math.round(currentTheme.tool_font_px * 2.2)) + 'px';
-    }
-    return '32px';
-}
-
-function resolveItemSizeCss() {
-    if (currentTheme && currentTheme.item_size) {
-        return String(currentTheme.item_size);
-    }
-    return '54px';
 }
 
 function createFloatingDragGhost(opts = {}) {
@@ -4876,7 +4442,7 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
             runContentHandler(def, active ? 'active' : 'inactive', { el: host, nameKey, kind: active ? 'active' : 'inactive', value: currentVal });
         }
     } finally {
-        pendingParticleUpdateHost = null;
+        setPendingParticleUpdateHost(null);
     }
 };
 // Toggle an inline expansion of a tool's children right after the clicked tool
@@ -4993,7 +4559,7 @@ function createToolbox() {
             const iconSize = currentTheme.toolbox_icon_size || '30%';
             const iconTop = currentTheme.toolbox_icon_top || '50%';
             const iconLeft = currentTheme.toolbox_icon_left || '50%';
-            create_svg({
+            const iconPromise = create_svg({
                 id: 'toolbox',
                 icon: iconName,
                 icon_color: currentTheme.toolbox_icon_color || currentTheme.icon_color,
@@ -5001,6 +4567,9 @@ function createToolbox() {
                 icon_top: iconTop,
                 icon_left: iconLeft
             });
+            if (iconPromise && typeof iconPromise.then === 'function') {
+                iconPromise.then(() => rescale_all_icons());
+            }
         }
     }
 
@@ -5009,7 +4578,7 @@ function createToolbox() {
 }
 
 function apply_layout() {
-    calculatedCSS = calculate_positions();
+    Object.assign(calculatedCSS, calculate_positions());
 
     const supportEl = grab('toolbox_support');
     const triggerEl = grab('toolbox');
@@ -5113,6 +4682,13 @@ function setPaletteVisualState(el, isOutside) {
         if (labelEl) labelEl.style.display = '';
         if (iconEl) iconEl.style.display = '';
     }
+}
+
+function waitForMenuIcons(promises, timeoutMs = 250) {
+    const list = Array.isArray(promises) ? promises.filter(p => p && typeof p.then === 'function') : [];
+    if (!list.length) return Promise.resolve();
+    const timeout = new Promise(resolve => setTimeout(resolve, Math.max(0, timeoutMs)));
+    return Promise.race([Promise.allSettled(list), timeout]).then(() => { });
 }
 
 // ===== Animation helpers (menu open) =====
@@ -6343,8 +5919,8 @@ function closeMenu() {
     // Remove overflow forcer explicitly
     removeOverflowForcer();
     // Reset state
-    menuOpen = 'false';
-    menuStack = [];
+    setMenuOpen('false');
+    menuStack.length = 0;
 }
 
 function setMenuElementsHidden(hidden) {
