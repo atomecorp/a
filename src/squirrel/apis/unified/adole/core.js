@@ -162,11 +162,10 @@ function is_anonymous_identity({ userId = null, phone = null, username = null } 
     const normalizedName = username ? String(username).trim().toLowerCase() : null;
     const normalizedId = userId ? String(userId).trim() : null;
 
-    const anonymousPhone = resolve_anonymous_phone();
-    if (normalizedPhone && normalizedPhone === anonymousPhone) return true;
-    if (normalizedName && normalizedName === ANONYMOUS_USERNAME) return true;
+    if (normalizedPhone && is_any_anonymous_phone(normalizedPhone)) return true;
     if (normalizedId && _anonymousUserId && normalizedId === String(_anonymousUserId)) return true;
     if (normalizedId && normalizedId === 'anonymous') return true;
+    if (!normalizedPhone && normalizedName && normalizedName === ANONYMOUS_USERNAME) return true;
     return false;
 }
 
@@ -650,7 +649,11 @@ async function validate_saved_session({ userId, userName, userPhone } = {}) {
             return;
         }
 
-        const invalid = err.includes('invalid') || err.includes('expired') || err.includes('user not found');
+        const invalid = err.includes('invalid')
+            || err.includes('expired')
+            || err.includes('user not found')
+            || err.includes('no token')
+            || err.includes('unauthenticated');
         if (invalid) {
             clear_user_session();
             clear_ui_on_logout({ preserveLocalData: true });
@@ -752,28 +755,6 @@ function create_unauthenticated_result(errorMessage) {
 }
 
 async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } = {}) {
-    const savedSession = load_user_session();
-    if (savedSession?.userId) {
-        const savedPhone = savedSession.userPhone || null;
-        const savedIsAnon = is_any_anonymous_phone(savedPhone);
-        const savedMismatch = savedIsAnon && savedPhone !== resolve_anonymous_phone();
-        if (!savedIsAnon && !savedMismatch) {
-            try {
-                await set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone, false);
-            } catch { }
-            return {
-                ok: true,
-                user: {
-                    user_id: savedSession.userId,
-                    username: savedSession.userName || ANONYMOUS_USERNAME,
-                    phone: savedSession.userPhone || null
-                },
-                source: 'session',
-                reason: 'saved_session'
-            };
-        }
-    }
-
     if (_currentUserId && !is_anonymous_mode()) {
         return { ok: false, reason: 'authenticated_user_present', user: get_authenticated_user() };
     }
@@ -1160,12 +1141,12 @@ const read_cached_current_project = () => {
 };
 
 const write_cached_current_project = (projectId, projectName, userId = null) => {
-    if (typeof localStorage === 'undefined' || !projectId) return;
+    if (typeof localStorage === 'undefined' || !projectId || !userId) return;
     try {
         const payload = {
             id: String(projectId),
             name: projectName ? String(projectName) : null,
-            userId: userId ? String(userId) : null,
+            userId: String(userId),
             ts: new Date().toISOString()
         };
         localStorage.setItem(CURRENT_PROJECT_CACHE_KEY, JSON.stringify(payload));
@@ -1184,10 +1165,9 @@ const clear_cached_current_project = () => {
 };
 
 const cachedProjectBootstrap = read_cached_current_project();
-if (cachedProjectBootstrap?.id) {
-    // Only apply cached project automatically when the cached entry is NOT user-scoped.
-    // Avoid loading another user's saved project into an anonymous session.
-    if (!cachedProjectBootstrap.userId) {
+const cachedProjectSession = load_user_session();
+if (cachedProjectBootstrap?.id && cachedProjectBootstrap.userId && cachedProjectSession?.userId) {
+    if (String(cachedProjectBootstrap.userId) === String(cachedProjectSession.userId)) {
         _currentProjectId = cachedProjectBootstrap.id;
         _currentProjectName = cachedProjectBootstrap.name || null;
     }
@@ -1203,9 +1183,12 @@ function is_tauri_runtime() {
 
 function save_fastify_login_cache({ phone, password }) {
     if (!phone || !password || typeof localStorage === 'undefined') return;
+    const normalizedPhone = normalize_phone_input(phone) || String(phone).trim();
+    const normalizedPassword = String(password).trim().toLowerCase();
+    if (is_any_anonymous_phone(normalizedPhone) || normalizedPassword === 'anonymous') return;
     try {
         localStorage.setItem(FASTIFY_LOGIN_CACHE_KEY, JSON.stringify({
-            phone: String(phone),
+            phone: normalizedPhone || String(phone),
             password: String(password),
             savedAt: new Date().toISOString()
         }));
@@ -1251,7 +1234,7 @@ function load_pending_register_credentials() {
 }
 
 function clear_fastify_login_cache() {
-    if (!is_tauri_runtime() || typeof localStorage === 'undefined') return;
+    if (typeof localStorage === 'undefined') return;
     try {
         localStorage.removeItem(FASTIFY_LOGIN_CACHE_KEY);
     } catch {
@@ -1559,6 +1542,9 @@ async function ensure_fastify_token() {
         const existing = FastifyAdapter.getToken?.();
         if (existing) return { ok: true, reason: 'token_present' };
         const cached = load_fastify_login_cache();
+        if (cached?.phone && is_any_anonymous_phone(cached.phone)) {
+            return { ok: false, reason: 'cached_anonymous' };
+        }
         if (cached?.phone && cached?.password) {
             try {
                 const httpLogin = await fastify_http_login(cached.phone, cached.password);
@@ -1631,6 +1617,9 @@ async function ensure_fastify_token() {
 
     // Step 2: Fallback to localStorage credentials
     const cached = load_fastify_login_cache();
+    if (cached?.phone && is_any_anonymous_phone(cached.phone)) {
+        return { ok: false, reason: 'cached_anonymous' };
+    }
 
     const attemptLogin = async (phone, password, reasonLabel) => {
         const normalizedPhone = normalize_phone_input(phone);
@@ -2981,7 +2970,7 @@ async function set_current_project(projectId, projectName = null, ownerId = null
 async function load_saved_current_project() {
     const cached = read_cached_current_project();
     // Accept cached only if it's not user-scoped OR it matches the currently logged user.
-    const cacheMatchesUser = cached?.id && (!cached.userId || (_currentUserId && cached.userId === _currentUserId));
+    const cacheMatchesUser = cached?.id && cached.userId && _currentUserId && cached.userId === _currentUserId;
     if (cacheMatchesUser) {
         _currentProjectId = cached.id;
         _currentProjectName = cached.name || null;
@@ -4021,7 +4010,7 @@ try {
 
                 const savedSession = load_user_session();
                 const authSource = resolveAuthSource();
-                const token = authSource === 'fastify'
+                let token = authSource === 'fastify'
                     ? FastifyAdapter.getToken?.()
                     : TauriAdapter.getToken?.();
                 const hasFastifyToken = !!FastifyAdapter.getToken?.();
@@ -4055,6 +4044,58 @@ try {
                 const anonScopeMismatch = isSavedAnon && savedSessionPhone !== resolve_anonymous_phone();
 
                 if (savedSession?.userId && !isSavedAnon && !anonScopeMismatch) {
+                    // If we're in Tauri mode but missing a local token, try to re-login using cached credentials.
+                    if (authSource === 'tauri' && !token) {
+                        try {
+                            const cached = load_fastify_login_cache();
+                            const savedPhone = normalize_phone_input(savedSession.userPhone) || savedSession.userPhone || null;
+                            const cachedPhone = normalize_phone_input(cached?.phone) || cached?.phone || null;
+                            const cacheMatches = !savedPhone || !cachedPhone || String(savedPhone) === String(cachedPhone);
+                            const cacheUsable = cached?.phone && cached?.password && cacheMatches && !is_any_anonymous_phone(cachedPhone);
+                            if (cacheUsable) {
+                                const relogin = await TauriAdapter.auth.login({ phone: cachedPhone || savedPhone, password: cached.password });
+                                if (relogin?.ok || relogin?.success) {
+                                    token = TauriAdapter.getToken?.();
+                                }
+                            }
+                        } catch { }
+                    }
+
+                    if (authSource === 'tauri' && !token) {
+                        // If a Fastify token exists and matches the saved session, prefer restoring via Fastify
+                        // rather than falling back to anonymous.
+                        try {
+                            const cloudToken = FastifyAdapter.getToken?.() || (typeof localStorage !== 'undefined' ? localStorage.getItem('cloud_auth_token') : null);
+                            if (cloudToken) {
+                                FastifyAdapter.setToken?.(cloudToken);
+                                const meResult = await FastifyAdapter.auth.me?.();
+                                const meUser = meResult?.user || null;
+                                const meUserId = meUser?.user_id || meUser?.id || meUser?.atome_id || null;
+                                const mePhone = meUser?.phone || null;
+                                const savedPhone = normalize_phone_input(savedSession.userPhone) || savedSession.userPhone || null;
+                                const mePhoneNorm = normalize_phone_input(mePhone) || mePhone || null;
+                                const sameUser = (savedSession.userId && meUserId && String(savedSession.userId) === String(meUserId))
+                                    || (savedPhone && mePhoneNorm && String(savedPhone) === String(mePhoneNorm));
+                                if (meResult?.ok || meResult?.success) {
+                                    if (sameUser) {
+                                        if (typeof window !== 'undefined') {
+                                            window.__SQUIRREL_AUTH_SOURCE__ = 'fastify';
+                                            window.__SQUIRREL_DATA_SOURCE__ = 'fastify';
+                                            window.__SQUIRREL_PROFILE_SOURCE__ = 'fastify';
+                                        }
+                                        token = cloudToken;
+                                    } else {
+                                        try { FastifyAdapter.clearToken?.(); } catch { }
+                                    }
+                                }
+                            }
+                        } catch { }
+                    }
+
+                    if (authSource === 'tauri' && !token) {
+                        await fallbackToAnonymous();
+                        return;
+                    }
                     set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
                     signal_auth_check_complete(true, savedSession.userId);
 
@@ -4062,6 +4103,19 @@ try {
                         const syncPolicy = resolve_sync_policy();
                         if (syncPolicy.to === 'fastify') {
                             mark_user_sync_pending();
+                        }
+                    }
+
+                    if (!hasFastifyToken && !is_tauri_runtime()) {
+                        try {
+                            const tokenResult = await ensure_fastify_token();
+                            if (!tokenResult?.ok) {
+                                await fallbackToAnonymous();
+                                return;
+                            }
+                        } catch {
+                            await fallbackToAnonymous();
+                            return;
                         }
                     }
 
@@ -4135,11 +4189,57 @@ try {
                     const savedIsAnon = is_any_anonymous_phone(savedPhone);
                     const savedMismatch = savedIsAnon && savedPhone !== resolve_anonymous_phone();
                     if (savedSession?.userId && !savedIsAnon && !savedMismatch) {
+                        try {
+                            const cachedCreds = load_fastify_login_cache();
+                            const savedPhoneNormalized = normalize_phone_input(savedPhone) || savedPhone || null;
+                            if (cachedCreds?.phone) {
+                                const cachedPhoneNormalized = normalize_phone_input(cachedCreds.phone) || cachedCreds.phone || null;
+                                if (is_any_anonymous_phone(cachedPhoneNormalized)) {
+                                    try { localStorage.removeItem(FASTIFY_LOGIN_CACHE_KEY); } catch { }
+                                } else if (savedPhoneNormalized && cachedPhoneNormalized && savedPhoneNormalized !== cachedPhoneNormalized) {
+                                    try { localStorage.removeItem(FASTIFY_LOGIN_CACHE_KEY); } catch { }
+                                }
+                            }
+                        } catch { }
+                        try {
+                            const tokenResult = await ensure_fastify_token();
+                            if (!tokenResult?.ok) {
+                                clear_user_session();
+                                clear_ui_on_logout({ preserveLocalData: true });
+                                signal_auth_check_complete(false, null);
+                                return;
+                            }
+                        } catch {
+                            clear_user_session();
+                            clear_ui_on_logout({ preserveLocalData: true });
+                            signal_auth_check_complete(false, null);
+                            return;
+                        }
+                        try {
+                            const meResult = await FastifyAdapter.auth.me?.();
+                            const meUser = meResult?.user || null;
+                            const meUserId = meUser?.user_id || meUser?.atome_id || meUser?.id || null;
+                            const mePhone = meUser?.phone || null;
+                            const savedPhoneNormalized = normalize_phone_input(savedPhone) || savedPhone || null;
+                            const mePhoneNormalized = normalize_phone_input(mePhone) || mePhone || null;
+                            const sameUserId = savedSession?.userId && meUserId && String(meUserId) === String(savedSession.userId);
+                            const samePhone = savedPhoneNormalized && mePhoneNormalized
+                                ? String(savedPhoneNormalized) === String(mePhoneNormalized)
+                                : true;
+                            if (!(meResult?.ok || meResult?.success) || !meUserId || !sameUserId || !samePhone) {
+                                clear_user_session();
+                                clear_ui_on_logout({ preserveLocalData: true });
+                                signal_auth_check_complete(false, null);
+                                return;
+                            }
+                        } catch {
+                            clear_user_session();
+                            clear_ui_on_logout({ preserveLocalData: true });
+                            signal_auth_check_complete(false, null);
+                            return;
+                        }
                         await set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone, false);
                         signal_auth_check_complete(true, savedSession.userId);
-                        try {
-                            await ensure_fastify_token();
-                        } catch { }
                         validate_saved_session({
                             userId: savedSession.userId,
                             userName: savedSession.userName,

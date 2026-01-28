@@ -1,0 +1,86 @@
+[
+  {
+    "id": "eve_comm_dialog__compose_section__columns__right__recipients_input",
+    "name": "",
+    "type": "text",
+    "placeholder": "Nouveau destinataire",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__controls__subject",
+    "name": "",
+    "type": "text",
+    "placeholder": "Sujet du message",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_start__inline__date",
+    "name": "",
+    "type": "text",
+    "placeholder": "Date/Heure",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_start__inline__duration__h",
+    "name": "",
+    "type": "text",
+    "placeholder": "hh",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_start__inline__duration__m",
+    "name": "",
+    "type": "text",
+    "placeholder": "mm",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_start__inline__duration__s",
+    "name": "",
+    "type": "text",
+    "placeholder": "ss",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_end__inline__date",
+    "name": "",
+    "type": "text",
+    "placeholder": "Date/Heure",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_end__inline__duration__h",
+    "name": "",
+    "type": "text",
+    "placeholder": "hh",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_end__inline__duration__m",
+    "name": "",
+    "type": "text",
+    "placeholder": "mm",
+    "value": ""
+  },
+  {
+    "id": "eve_comm_dialog__compose_section__advanced__grid__section_end__inline__duration__s",
+    "name": "",
+    "type": "text",
+    "placeholder": "ss",
+    "value": ""
+  },
+  {
+    "id": "eve_finder_dialog__search__input",
+    "name": "",
+    "type": "text",
+    "placeholder": "Search",
+    "value": ""
+  },
+  {
+    "id": "eve_finder_filters__name__input",
+    "name": "",
+    "type": "text",
+    "placeholder": "name",
+    "value": ""
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "authCheck": {
+    "complete": true,
+    "result": {
+      "authenticated": true,
+      "userId": "c2ad737b-0617-5f90-a2dd-87ebf819edef"
+    }
+  },
+  "currentInfo": {
+    "id": "c2ad737b-0617-5f90-a2dd-87ebf819edef",
+    "name": "anonymous",
+    "phone": "9226849061"
+  },
+  "currentUser": null,
+  "projectList": null,
+  "tokens": {
+    "cloud_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjMmFkNzM3Yi0wNjE3LTVmOTAtYTJkZC04N2ViZjgxOWVkZWYiLCJwaG9uZSI6IjkyMjY4NDkwNjEiLCJpYXQiOjE3Njk2MjA4MTcsImV4cCI6MTc3MDIyNTYxN30.96W05Zpbxf4yxgxYjqed7_mnQU_p6maDbZwPl_8HnCk",
+    "local_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjMmFkNzM3Yi0wNjE3LTVmOTAtYTJkZC04N2ViZjgxOWVkZWYiLCJwaG9uZSI6IjkyMjY4NDkwNjEiLCJpYXQiOjE3Njk2MjA4MTcsImV4cCI6MTc3MDIyNTYxN30.96W05Zpbxf4yxgxYjqed7_mnQU_p6maDbZwPl_8HnCk",
+    "auth_token": null,
+    "fastify_login_cache_v1": null,
+    "tauri_user_session_v1": "{\"userId\":\"c2ad737b-0617-5f90-a2dd-87ebf819edef\",\"userName\":\"anonymous\",\"userPhone\":\"9226849061\",\"loggedAt\":\"2026-01-28T17:20:17.791Z\"}"
+  },
+  "anon": true,
+  "currentUserWindow": {
+    "id": "c2ad737b-0617-5f90-a2dd-87ebf819edef",
+    "name": "anonymous",
+    "phone": "9226849061"
+  }
+}

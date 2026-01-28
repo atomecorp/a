@@ -43,6 +43,24 @@ const _connectionState = {
     fastify: { online: null, lastCheck: 0, failCount: 0 }
 };
 
+function isAnonymousLogin(phone, username, password) {
+    if (typeof window === 'undefined') return false;
+    const cleanPhone = phone ? String(phone).trim() : '';
+    if (!cleanPhone && !username) return false;
+    if (cleanPhone === '0000000000' || cleanPhone === '0000000001') return true;
+    try {
+        const stored = localStorage.getItem('anonymous_phone_fastify_v1');
+        if (stored && cleanPhone && String(stored).trim() === cleanPhone) {
+            return true;
+        }
+    } catch { }
+    const cleanUsername = username ? String(username).trim().toLowerCase() : '';
+    if (cleanUsername === 'anonymous') return true;
+    const cleanPassword = password ? String(password).trim().toLowerCase() : '';
+    if (cleanPassword === 'anonymous' && (!cleanUsername || cleanUsername === 'anonymous')) return true;
+    return false;
+}
+
 // Real-time dedupe is handled by realtime_dedupe.js
 
 /**
@@ -457,6 +475,11 @@ export function getToken(key) {
         const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
         const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
         if (key === localKey) {
+            // In Tauri runtime, never fall back to cloud token for local_auth_token.
+            // Tauri and Fastify often use different JWT secrets, which causes invalid token errors.
+            if (isInTauri()) {
+                return null;
+            }
             // Never fallback to cloud token when cloud target is active.
             const fallback = isCloudFastifyTarget()
                 ? null
@@ -1153,11 +1176,17 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     visibility: data.visibility || 'public', // 'public' (default) or 'private'
                     optional: data.optional || undefined
                 });
-                if (result.token) {
-                    setToken(tokenKey, result.token);
+                const token = result?.token
+                    || result?.data?.token
+                    || result?.data?.data?.token
+                    || result?.result?.token
+                    || result?.data?.result?.token
+                    || null;
+                if (token) {
+                    setToken(tokenKey, token);
                     // Save credentials for Fastify login (needed for real-time sync)
                     try {
-                        if (typeof localStorage !== 'undefined' && data.phone && data.password) {
+                        if (typeof localStorage !== 'undefined' && data.phone && data.password && !isAnonymousLogin(data.phone, data.username, data.password)) {
                             localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
                                 phone: String(data.phone),
                                 password: String(data.password),
@@ -1186,11 +1215,17 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     visibility: data.visibility || 'public',
                     optional: data.optional || undefined
                 });
-                if (result.token) {
-                    setToken(tokenKey, result.token);
+                const token = result?.token
+                    || result?.data?.token
+                    || result?.data?.data?.token
+                    || result?.result?.token
+                    || result?.data?.result?.token
+                    || null;
+                if (token) {
+                    setToken(tokenKey, token);
                     // Save credentials for Fastify login (needed for real-time sync)
                     try {
-                        if (typeof localStorage !== 'undefined' && data.phone && data.password) {
+                        if (typeof localStorage !== 'undefined' && data.phone && data.password && !isAnonymousLogin(data.phone, data.username, data.password)) {
                             localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
                                 phone: String(data.phone),
                                 password: String(data.password),
@@ -1216,11 +1251,17 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     phone: data.phone,
                     password: data.password
                 });
-                if (result.token) {
-                    setToken(tokenKey, result.token);
+                const token = result?.token
+                    || result?.data?.token
+                    || result?.data?.data?.token
+                    || result?.result?.token
+                    || result?.data?.result?.token
+                    || null;
+                if (token) {
+                    setToken(tokenKey, token);
                     // Save credentials for Fastify login (needed for real-time sync)
                     try {
-                        if (typeof localStorage !== 'undefined' && data.phone && data.password) {
+                        if (typeof localStorage !== 'undefined' && data.phone && data.password && !isAnonymousLogin(data.phone, data.username, data.password)) {
                             localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
                                 phone: String(data.phone),
                                 password: String(data.password),
