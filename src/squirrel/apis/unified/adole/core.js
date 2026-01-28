@@ -628,6 +628,47 @@ function clear_user_session() {
     }
 }
 
+async function validate_saved_session({ userId, userName, userPhone } = {}) {
+    if (!userId) return;
+    const authPlan = resolve_backend_plan('auth');
+    try {
+        const meResult = await with_timeout(authPlan.primary.auth.me(), 4000, 'startup_me');
+        if (meResult?.ok || meResult?.success) {
+            const user = meResult.user || meResult.data?.user || null;
+            if (user) {
+                const resolvedId = user.user_id || user.atome_id || user.id || userId;
+                const resolvedName = user.username || user.name || userName || null;
+                const resolvedPhone = user.phone || userPhone || null;
+                await set_current_user_state(resolvedId, resolvedName, resolvedPhone, false);
+            }
+            return;
+        }
+
+        const err = String(meResult?.error || '').toLowerCase();
+        const offline = meResult?.offline === true || err.includes('unreachable') || err.includes('timeout');
+        if (offline || !err) {
+            return;
+        }
+
+        const invalid = err.includes('invalid') || err.includes('expired') || err.includes('user not found');
+        if (invalid) {
+            clear_user_session();
+            clear_ui_on_logout({ preserveLocalData: true });
+            try {
+                const anon = await ensure_anonymous_user({ reason: 'startup' });
+                if (anon?.ok && anon.user) {
+                    const anonId = anon.user.user_id || anon.user.id || null;
+                    signal_auth_check_complete(true, anonId);
+                } else {
+                    signal_auth_check_complete(false, null);
+                }
+            } catch {
+                signal_auth_check_complete(false, null);
+            }
+        }
+    } catch { }
+}
+
 function clear_all_storage() {
     try {
         if (typeof localStorage !== 'undefined') {
@@ -711,6 +752,28 @@ function create_unauthenticated_result(errorMessage) {
 }
 
 async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } = {}) {
+    const savedSession = load_user_session();
+    if (savedSession?.userId) {
+        const savedPhone = savedSession.userPhone || null;
+        const savedIsAnon = is_any_anonymous_phone(savedPhone);
+        const savedMismatch = savedIsAnon && savedPhone !== resolve_anonymous_phone();
+        if (!savedIsAnon && !savedMismatch) {
+            try {
+                await set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone, false);
+            } catch { }
+            return {
+                ok: true,
+                user: {
+                    user_id: savedSession.userId,
+                    username: savedSession.userName || ANONYMOUS_USERNAME,
+                    phone: savedSession.userPhone || null
+                },
+                source: 'session',
+                reason: 'saved_session'
+            };
+        }
+    }
+
     if (_currentUserId && !is_anonymous_mode()) {
         return { ok: false, reason: 'authenticated_user_present', user: get_authenticated_user() };
     }
@@ -736,6 +799,15 @@ async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } =
         let identity = get_anonymous_identity();
         const plan = resolve_anonymous_backend_plan();
         const adapter = plan.primary;
+        let lastError = null;
+
+        const noteError = (stage, result) => {
+            if (!result) return;
+            const error = result.error || result.message || result.reason || null;
+            if (error) {
+                lastError = { stage, error };
+            }
+        };
 
         const tryLogin = async () => {
             if (!adapter?.auth?.login) return null;
@@ -764,24 +836,32 @@ async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } =
         let loginResult = null;
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             loginResult = await tryLogin();
+            noteError('login_ws', loginResult);
             if (loginResult?.ok || loginResult?.success) {
+                lastError = null;
                 break;
             }
 
             const registerResult = await tryRegister();
+            noteError('register_ws', registerResult);
             if (registerResult?.ok || registerResult?.success || is_already_exists_error(registerResult)) {
                 loginResult = await tryLogin();
+                noteError('login_ws', loginResult);
                 if (loginResult?.ok || loginResult?.success) {
+                    lastError = null;
                     break;
                 }
             }
 
             if (!is_tauri_runtime() && plan.source === 'fastify') {
                 const httpRegister = await fastify_http_register(identity.phone, identity.password, identity.username);
+                noteError('register_http', httpRegister);
                 if (httpRegister?.success || httpRegister?.alreadyExists) {
                     const httpLogin = await fastify_http_login(identity.phone, identity.password);
+                    noteError('login_http', httpLogin);
                     if (httpLogin?.success) {
                         loginResult = httpLogin;
+                        lastError = null;
                         break;
                     }
                     const loginErr = String(httpLogin?.error || '').toLowerCase();
@@ -800,8 +880,10 @@ async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } =
         if (!user && adapter?.auth?.me) {
             try {
                 const meResult = await with_timeout(adapter.auth.me(), 2000, 'anonymous_me');
+                noteError('me', meResult);
                 if (meResult?.ok || meResult?.success) {
                     user = meResult.user || null;
+                    lastError = null;
                 }
             } catch { }
         }
@@ -824,7 +906,8 @@ async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } =
             ok: !!userId,
             user: userId ? { user_id: userId, username: identity.username, phone: identity.phone } : null,
             source: plan.source,
-            reason
+            reason,
+            error: lastError
         };
     })();
 
@@ -1049,7 +1132,6 @@ function clear_ui_for_user_switch(prevUserId, nextUserId) {
 
     // Clear all local/session storage to avoid cross-user residue.
     clear_cached_current_project();
-    clear_all_storage();
 
     window.dispatchEvent(new CustomEvent('squirrel:clear-view', {
         detail: {
@@ -1120,7 +1202,7 @@ function is_tauri_runtime() {
 }
 
 function save_fastify_login_cache({ phone, password }) {
-    if (!is_tauri_runtime() || !phone || !password || typeof localStorage === 'undefined') return;
+    if (!phone || !password || typeof localStorage === 'undefined') return;
     try {
         localStorage.setItem(FASTIFY_LOGIN_CACHE_KEY, JSON.stringify({
             phone: String(phone),
@@ -1133,7 +1215,7 @@ function save_fastify_login_cache({ phone, password }) {
 }
 
 function load_fastify_login_cache() {
-    if (!is_tauri_runtime() || typeof localStorage === 'undefined') return null;
+    if (typeof localStorage === 'undefined') return null;
     try {
         const raw = localStorage.getItem(FASTIFY_LOGIN_CACHE_KEY);
         if (!raw) return null;
@@ -1269,6 +1351,29 @@ async function clear_stored_fastify_token_in_axum() {
     return true;
 }
 
+function resolve_fastify_http_base() {
+    let baseUrl = '';
+
+    if (!is_tauri_runtime() && typeof window !== 'undefined') {
+        const origin = typeof window.location?.origin === 'string' ? window.location.origin : '';
+        if (origin && origin !== 'null' && !origin.startsWith('file:')) {
+            baseUrl = origin.replace(/\/$/, '');
+        }
+    }
+
+    if (!baseUrl && typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
+        baseUrl = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
+    }
+
+    if (!baseUrl) {
+        const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
+        const port = config?.fastify?.port || 3001;
+        baseUrl = `http://127.0.0.1:${port}`;
+    }
+
+    return baseUrl;
+}
+
 /**
  * Attempt direct HTTP login to Fastify (bypasses WebSocket).
  * Useful when the WebSocket is not yet connected but HTTP is reachable.
@@ -1283,16 +1388,7 @@ async function fastify_http_login(phone, password) {
     }
     let timeoutId = null;
     try {
-        // Determine Fastify base URL
-        let baseUrl = '';
-        if (typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
-            baseUrl = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
-        }
-        if (!baseUrl) {
-            const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
-            const port = config?.fastify?.port || 3001;
-            baseUrl = `http://127.0.0.1:${port}`;
-        }
+        const baseUrl = resolve_fastify_http_base();
         const url = `${baseUrl}/api/auth/login`;
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         timeoutId = controller ? setTimeout(() => controller.abort(), 3000) : null;
@@ -1338,16 +1434,7 @@ async function fastify_http_register(phone, password, username) {
     }
     let timeoutId = null;
     try {
-        // Determine Fastify base URL
-        let baseUrl = '';
-        if (typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
-            baseUrl = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
-        }
-        if (!baseUrl) {
-            const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
-            const port = config?.fastify?.port || 3001;
-            baseUrl = `http://127.0.0.1:${port}`;
-        }
+        const baseUrl = resolve_fastify_http_base();
         const url = `${baseUrl}/api/auth/register`;
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         timeoutId = controller ? setTimeout(() => controller.abort(), 3000) : null;
@@ -1366,7 +1453,11 @@ async function fastify_http_register(phone, password, username) {
         if (timeoutId) clearTimeout(timeoutId);
         const data = await res.json().catch(() => null);
         // Check for "already exists" which is fine for sync
-        if (res.status === 409 || (data?.error && String(data.error).toLowerCase().includes('already'))) {
+        if (
+            res.status === 409
+            || data?.alreadyExists === true
+            || (data?.error && String(data.error).toLowerCase().includes('already'))
+        ) {
             return { success: true, data, error: null, alreadyExists: true };
         }
         if (!res.ok) {
@@ -3963,6 +4054,34 @@ try {
                 const isSavedAnon = is_any_anonymous_phone(savedSessionPhone);
                 const anonScopeMismatch = isSavedAnon && savedSessionPhone !== resolve_anonymous_phone();
 
+                if (savedSession?.userId && !isSavedAnon && !anonScopeMismatch) {
+                    set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
+                    signal_auth_check_complete(true, savedSession.userId);
+
+                    if (!hasFastifyToken) {
+                        const syncPolicy = resolve_sync_policy();
+                        if (syncPolicy.to === 'fastify') {
+                            mark_user_sync_pending();
+                        }
+                    }
+
+                    validate_saved_session({
+                        userId: savedSession.userId,
+                        userName: savedSession.userName,
+                        userPhone: savedSession.userPhone
+                    }).catch(() => { });
+                    return;
+                }
+
+                // If we have a persisted anonymous session but no token yet,
+                // restore it immediately to keep local workspace stable.
+                if (savedSession?.userId && isSavedAnon && !anonScopeMismatch && !token) {
+                    set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
+                    signal_auth_check_complete(true, savedSession.userId);
+                    try { await ensure_anonymous_user({ reason: 'startup' }); } catch { }
+                    return;
+                }
+
                 if (!savedSession || !savedSession.userId || !token || anonScopeMismatch) {
                     // Check if we have a token but no session (legacy login before session persistence was added)
                     if (token && (!savedSession || !savedSession.userId)) {
@@ -4011,6 +4130,30 @@ try {
             // Browser/Fastify mode - also check auth state on startup
             setTimeout(async function browserStartupAuthCheck() {
                 try {
+                    const savedSession = load_user_session();
+                    const savedPhone = savedSession?.userPhone || null;
+                    const savedIsAnon = is_any_anonymous_phone(savedPhone);
+                    const savedMismatch = savedIsAnon && savedPhone !== resolve_anonymous_phone();
+                    if (savedSession?.userId && !savedIsAnon && !savedMismatch) {
+                        await set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone, false);
+                        signal_auth_check_complete(true, savedSession.userId);
+                        try {
+                            await ensure_fastify_token();
+                        } catch { }
+                        validate_saved_session({
+                            userId: savedSession.userId,
+                            userName: savedSession.userName,
+                            userPhone: savedSession.userPhone
+                        }).catch(() => { });
+                        return;
+                    }
+                    if (savedSession?.userId && savedIsAnon && !savedMismatch) {
+                        await set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone, false);
+                        signal_auth_check_complete(true, savedSession.userId);
+                        try { await ensure_anonymous_user({ reason: 'startup' }); } catch { }
+                        return;
+                    }
+
                     const currentResult = await current_user();
 
                     const resolvedUserId = currentResult?.user?.user_id || currentResult?.user?.atome_id || currentResult?.user?.id || null;
