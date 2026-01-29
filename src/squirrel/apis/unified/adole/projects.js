@@ -1,4 +1,4 @@
-import { TauriAdapter, FastifyAdapter, checkBackends } from '../adole.js';
+import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../adole.js';
 import {
   resolve_backend_plan,
   resolve_sync_policy,
@@ -52,7 +52,10 @@ async function create_project(projectName, callback) {
         name: projectName,
         created_at: new Date().toISOString()
     };
+    const projectId = generateUUID();
     const projectData = {
+        id: projectId,
+        atomeId: projectId,
         type: 'project',
         ownerId: ownerId,
         properties: projectProperties

@@ -3332,6 +3332,73 @@ async function startServer() {
                   success: true,
                   message: 'Atome altered'
                 });
+              } else if (action === 'transfer-owner') {
+                const fromOwnerId = data.fromOwnerId || data.from_owner_id || data.fromOwner || null;
+                const toOwnerId = data.toOwnerId || data.to_owner_id || data.toOwner || null;
+                const includeCreator = data.includeCreator !== false;
+
+                if (!requesterId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: 'Unauthenticated (token required)'
+                  });
+                  return;
+                }
+
+                if (!fromOwnerId || !toOwnerId) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing fromOwnerId or toOwnerId'
+                  });
+                  return;
+                }
+
+                if (String(toOwnerId) !== String(requesterId)) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Access denied - target owner must be current user'
+                  });
+                  return;
+                }
+
+                let allowTransfer = String(fromOwnerId) === String(requesterId);
+                if (!allowTransfer) {
+                  try {
+                    allowTransfer = await db.isAnonymousUser(fromOwnerId);
+                  } catch (_) {
+                    allowTransfer = false;
+                  }
+                }
+
+                if (!allowTransfer) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'Access denied - source owner must be anonymous'
+                  });
+                  return;
+                }
+
+                const result = await db.transferOwner({
+                  fromOwnerId,
+                  toOwnerId,
+                  includeCreator
+                });
+
+                safeSend({
+                  type: 'atome-response',
+                  requestId,
+                  success: true,
+                  data: result
+                });
               } else if (action === 'delete' || action === 'soft-delete') {
                 // Support both: { id } and { atomeId }
                 // Note: This is a SOFT delete (sets deleted_at)

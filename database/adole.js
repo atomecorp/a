@@ -72,6 +72,12 @@ export async function initDatabase(config = {}) {
         console.log('[ADOLE v3.0] Event migration skipped:', e.message);
     }
 
+    try {
+        await ensureStateCurrentColumns();
+    } catch (e) {
+        console.log('[ADOLE v3.0] State_current migration skipped:', e.message);
+    }
+
     return db;
 }
 
@@ -131,6 +137,21 @@ async function ensureEventColumns() {
     }
     if (!names.has('gesture_id')) {
         await query('run', "ALTER TABLE events ADD COLUMN gesture_id TEXT");
+    }
+}
+
+async function ensureStateCurrentColumns() {
+    const columns = await query('all', "PRAGMA table_info(state_current)");
+    const names = new Set((columns || []).map((col) => col.name));
+
+    if (!names.has('owner_id')) {
+        await query('run', "ALTER TABLE state_current ADD COLUMN owner_id TEXT");
+        try {
+            await query(
+                'run',
+                "UPDATE state_current SET owner_id = (SELECT owner_id FROM atomes WHERE atomes.atome_id = state_current.atome_id) WHERE owner_id IS NULL"
+            );
+        } catch (_) { }
     }
 }
 
@@ -578,6 +599,61 @@ export async function resolvePendingOwners() {
     return { resolved, failed, total: pending.length };
 }
 
+export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = true } = {}) {
+    if (!fromOwnerId || !toOwnerId) {
+        throw new Error('Missing fromOwnerId or toOwnerId');
+    }
+    if (String(fromOwnerId) === String(toOwnerId)) {
+        return { updated: 0 };
+    }
+
+    const pendingOwner = JSON.stringify(fromOwnerId);
+    const creatorClause = includeCreator ? ' OR a.creator_id = ?' : '';
+    const params = includeCreator
+        ? [fromOwnerId, fromOwnerId, pendingOwner]
+        : [fromOwnerId, pendingOwner];
+
+    const rows = await query('all', `
+        SELECT DISTINCT a.atome_id
+        FROM atomes a
+        LEFT JOIN particles p
+          ON p.atome_id = a.atome_id
+         AND p.particle_key = '_pending_owner_id'
+        WHERE a.atome_type != 'user'
+          AND (a.owner_id = ?${creatorClause} OR (a.owner_id IS NULL AND p.particle_value = ?))
+    `, params);
+
+    const ids = (rows || []).map((row) => row.atome_id).filter(Boolean);
+    if (!ids.length) {
+        return { updated: 0 };
+    }
+
+    const now = new Date().toISOString();
+    const placeholders = ids.map(() => '?').join(', ');
+
+    await withTransaction(async () => {
+        await query(
+            'run',
+            `UPDATE atomes SET owner_id = ?, updated_at = ?, sync_status = 'pending' WHERE atome_id IN (${placeholders})`,
+            [toOwnerId, now, ...ids]
+        );
+
+        await query(
+            'run',
+            `UPDATE state_current SET owner_id = ?, updated_at = ? WHERE atome_id IN (${placeholders})`,
+            [toOwnerId, now, ...ids]
+        );
+
+        await query(
+            'run',
+            `DELETE FROM particles WHERE particle_key = '_pending_owner_id' AND atome_id IN (${placeholders})`,
+            ids
+        );
+    });
+
+    return { updated: ids.length };
+}
+
 /**
  * Get atome by ID (metadata only, no particles)
  */
@@ -665,6 +741,22 @@ export async function getAtome(id) {
         owner: atome.owner_id,
         properties: data
     };
+}
+
+export async function isAnonymousUser(userId) {
+    if (!userId) return false;
+    try {
+        const atome = await getAtome(userId);
+        const data = atome?.data || {};
+        if (data.anonymous === true || data.is_anonymous === true) return true;
+        const username = String(data.username || data.name || '').trim().toLowerCase();
+        if (username === 'anonymous' || username === 'guest') return true;
+        const phone = String(data.phone || '').trim();
+        if (phone.startsWith('999') || phone.startsWith('000000')) return true;
+    } catch (_) {
+        return false;
+    }
+    return false;
 }
 
 /**
@@ -1208,16 +1300,19 @@ async function applyEventToStateCurrent(event) {
     if (!patch) return null;
 
     const actorId = resolveActorId(event.actor);
+    const patchOwnerId = patch.owner_id || patch.ownerId || patch.owner || null;
+    const eventOwnerId = event.owner_id || event.ownerId || event.owner || null;
     const patchType = resolveEventType(patch);
     const patchParent = resolveEventParentId(patch);
     const deleted = patch.__deleted === true;
     const particlePatch = stripEventMetaPatch(patch);
 
+    const ownerFromEvent = eventOwnerId || patchOwnerId || actorId || null;
     await upsertAtomeFromEvent({
         atomeId,
         atomeType: patchType,
         parentId: patchParent,
-        ownerId: actorId,
+        ownerId: ownerFromEvent,
         ts,
         deleted,
         properties: particlePatch
@@ -1239,9 +1334,17 @@ async function applyEventToStateCurrent(event) {
 
     const existing = await query(
         'get',
-        'SELECT properties, version, project_id FROM state_current WHERE atome_id = ?',
+        'SELECT properties, version, project_id, owner_id FROM state_current WHERE atome_id = ?',
         [atomeId]
     );
+
+    let resolvedOwnerId = eventOwnerId || patchOwnerId || actorId || existing?.owner_id || null;
+    try {
+        const ownerRow = await query('get', 'SELECT owner_id FROM atomes WHERE atome_id = ?', [atomeId]);
+        if (ownerRow?.owner_id) {
+            resolvedOwnerId = ownerRow.owner_id;
+        }
+    } catch (_) { }
 
     const parsed = safeParseJson(existing?.properties);
     const currentProps = parsed && typeof parsed === 'object' ? parsed : {};
@@ -1252,19 +1355,20 @@ async function applyEventToStateCurrent(event) {
     if (existing) {
         await query(
             'run',
-            'UPDATE state_current SET properties = ?, updated_at = ?, version = ?, project_id = COALESCE(?, project_id) WHERE atome_id = ?',
-            [JSON.stringify(nextProps), ts, nextVersion, projectId, atomeId]
+            'UPDATE state_current SET properties = ?, updated_at = ?, version = ?, project_id = COALESCE(?, project_id), owner_id = COALESCE(?, owner_id) WHERE atome_id = ?',
+            [JSON.stringify(nextProps), ts, nextVersion, projectId, resolvedOwnerId, atomeId]
         );
     } else {
         await query(
             'run',
-            'INSERT INTO state_current (atome_id, project_id, properties, updated_at, version) VALUES (?, ?, ?, ?, ?)',
-            [atomeId, projectId, JSON.stringify(nextProps), ts, nextVersion]
+            'INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES (?, ?, ?, ?, ?, ?)',
+            [atomeId, resolvedOwnerId, projectId, JSON.stringify(nextProps), ts, nextVersion]
         );
     }
 
     return {
         atome_id: atomeId,
+        owner_id: resolvedOwnerId,
         project_id: projectId,
         properties: nextProps,
         updated_at: ts,
@@ -1456,7 +1560,7 @@ export async function listStateCurrent(projectId, options = {}) {
 
     if (ownerId) {
         // Match Tauri behavior: allow owner_id match or NULL (shared/legacy).
-        conditions.push('(a.owner_id = ? OR a.owner_id IS NULL)');
+        conditions.push('(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)');
         params.push(ownerId);
     }
 
@@ -1465,7 +1569,7 @@ export async function listStateCurrent(projectId, options = {}) {
 
     const rows = await query(
         'all',
-        `SELECT sc.*, a.owner_id AS owner_id FROM state_current sc ${join} ${where} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
+        `SELECT sc.*, COALESCE(sc.owner_id, a.owner_id) AS owner_id FROM state_current sc ${join} ${where} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
         [...params, limit, offset]
     );
 
@@ -2038,6 +2142,8 @@ export default {
     getPendingForSync,
     markAsSynced,
     resolvePendingOwners,
+    transferOwner,
+    isAnonymousUser,
 
     // Legacy compatibility
     createObject,

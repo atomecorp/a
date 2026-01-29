@@ -1,45 +1,14 @@
+import auth from './v2/auth.js';
 import {
-  ANONYMOUS_USERNAME,
-  resolve_anonymous_phone,
-  is_anonymous_mode,
-  ensure_anonymous_user,
-  get_authenticated_user,
-  require_authenticated_user,
-  get_current_user_info,
-  set_current_user_state,
-  try_auto_login,
-  ensure_fastify_token,
-  wait_for_auth_check,
-  signal_auth_check_complete,
-  get_current_project,
+  create_project,
+  list_projects,
+  delete_project,
   get_current_project_id,
+  get_current_project,
   set_current_project,
-  load_saved_current_project,
-  current_user,
-  create_user,
-  log_user,
-  unlog_user,
-  delete_user,
-  change_password,
-  delete_account,
-  refresh_token,
-  set_user_visibility,
-  user_list,
-  lookup_user_by_phone,
-  get_atome,
-  sync_atomes,
-  list_unsynced_atomes,
-  maybe_sync_atomes,
-  clear_ui_on_logout,
-  get_current_machine,
-  register_machine,
-  get_machine_last_user,
-  get_anonymous_user_id,
-  migrate_anonymous_workspace
-} from './adole/core.js';
-
-import { create_project, list_projects, delete_project } from './adole/projects.js';
-import { create_atome, list_atomes, delete_atome, alter_atome, realtime_patch } from './adole/atomes.js';
+  load_saved_current_project
+} from './v2/projects.js';
+import { create_atome, list_atomes, delete_atome, alter_atome, realtime_patch, get_atome } from './v2/atomes.js';
 import {
   share_atome,
   share_request,
@@ -47,39 +16,45 @@ import {
   share_publish,
   share_policy,
   grant_share_permission
-} from './adole/sharing.js';
+} from './v2/sharing.js';
 import { list_tables } from './adole/debug.js';
+import { getSessionState, waitForAuthCheck } from './v2/session.js';
+
+// Kick off auth bootstrap immediately so UI waits on a single source of truth.
+try { auth.tryAutoLogin(); } catch (_) { }
+
+const isAnonymousMode = () => getSessionState().mode === 'anonymous';
+const getAnonymousIdentity = () => {
+  const state = getSessionState();
+  if (state.mode !== 'anonymous') return { phone: null, username: null };
+  return { phone: state.user?.phone || null, username: state.user?.name || 'anonymous' };
+};
 
 export const AdoleAPI = {
   auth: {
-    create: create_user,
-    login: log_user,
-    logout: unlog_user,
-    current: current_user,
-    delete: delete_user,
-    changePassword: change_password,
-    deleteAccount: delete_account,
-    refreshToken: refresh_token,
-    list: user_list,
-    lookupPhone: lookup_user_by_phone,
-    // Current user state management
-    getCurrentInfo: get_current_user_info,
-    setCurrentState: set_current_user_state,
-    tryAutoLogin: try_auto_login,
-    // Visibility management
-    setVisibility: set_user_visibility,
-    // Fastify token management
-    ensureFastifyToken: ensure_fastify_token,
-    // Security helpers
-    isAuthenticated: () => !!get_authenticated_user(),
-    getAuthenticatedUser: get_authenticated_user,
-    requireAuth: require_authenticated_user
+    create: auth.register,
+    login: auth.login,
+    logout: auth.logout,
+    current: auth.current,
+    delete: auth.delete,
+    changePassword: auth.changePassword,
+    deleteAccount: auth.deleteAccount,
+    refreshToken: auth.refreshToken,
+    list: auth.list,
+    lookupPhone: auth.lookupPhone,
+    getCurrentInfo: auth.getCurrentInfo,
+    setCurrentState: auth.setCurrentState,
+    tryAutoLogin: auth.tryAutoLogin,
+    setVisibility: auth.setVisibility,
+    ensureFastifyToken: auth.ensureFastifyToken,
+    isAuthenticated: () => getSessionState().mode === 'authenticated',
+    getAuthenticatedUser: () => (getSessionState().mode === 'authenticated' ? getSessionState().user : null),
+    requireAuth: auth.requireAuth
   },
   projects: {
     create: create_project,
     list: list_projects,
     delete: delete_project,
-    // Current project management
     getCurrent: get_current_project,
     getCurrentId: get_current_project_id,
     setCurrent: set_current_project,
@@ -102,28 +77,27 @@ export const AdoleAPI = {
     grantPermission: grant_share_permission
   },
   sync: {
-    sync: sync_atomes,
-    listUnsynced: list_unsynced_atomes,
-    maybeSync: maybe_sync_atomes
+    sync: auth.sync,
+    listUnsynced: auth.listUnsynced,
+    maybeSync: auth.maybeSync
   },
   machine: {
-    getCurrent: get_current_machine,
-    register: register_machine,
-    getLastUser: get_machine_last_user
+    getCurrent: auth.getCurrentMachine,
+    register: auth.registerMachine,
+    getLastUser: auth.getMachineLastUser
   },
   security: {
-    clearView: clear_ui_on_logout,
-    isAuthenticated: () => !!get_authenticated_user(),
-    getAuthenticatedUser: get_authenticated_user,
-    requireAuth: require_authenticated_user,
-    isAnonymous: () => is_anonymous_mode(),
-    getAnonymousIdentity: () => ({ phone: resolve_anonymous_phone(), username: ANONYMOUS_USERNAME }),
-    getAnonymousUserId: get_anonymous_user_id,
-    ensureAnonymousUser: ensure_anonymous_user,
-    migrateAnonymousWorkspace: migrate_anonymous_workspace,
-    // Auth gate functions for startup coordination
-    signalAuthComplete: signal_auth_check_complete,
-    waitForAuthCheck: wait_for_auth_check
+    clearView: auth.clearView,
+    isAuthenticated: () => getSessionState().mode === 'authenticated',
+    getAuthenticatedUser: () => (getSessionState().mode === 'authenticated' ? getSessionState().user : null),
+    requireAuth: auth.requireAuth,
+    isAnonymous: () => isAnonymousMode(),
+    getAnonymousIdentity: () => getAnonymousIdentity(),
+    getAnonymousUserId: () => (getSessionState().mode === 'anonymous' ? getSessionState().user?.id || null : null),
+    ensureAnonymousUser: auth.ensureAnonymousUser,
+    migrateAnonymousWorkspace: auth.migrateAnonymousWorkspace,
+    signalAuthComplete: auth.signalAuthComplete,
+    waitForAuthCheck: waitForAuthCheck
   },
   debug: {
     listTables: list_tables

@@ -150,6 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_events_tx ON events(tx_id);
 
 CREATE TABLE IF NOT EXISTS state_current (
     atome_id TEXT PRIMARY KEY,
+    owner_id TEXT,
     project_id TEXT,
     properties TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -157,6 +158,7 @@ CREATE TABLE IF NOT EXISTS state_current (
 );
 
 CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id);
+CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id);
 
 -- ============================================================================
 -- 7. TABLE permissions

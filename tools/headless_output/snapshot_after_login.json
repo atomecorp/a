@@ -14,11 +14,11 @@
   "currentUser": null,
   "projectList": null,
   "tokens": {
-    "cloud_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI5YjdhNDgxZC1mZTViLTVjYzgtODU1ZC05ZGUxYTJmOGM0NWIiLCJwaG9uZSI6IjU1NTU1NTU1IiwiaWF0IjoxNzY5NjIwODE4LCJleHAiOjE3NzAyMjU2MTh9.IiNzTLpWDRqELZh4w8HBsjRXfW6_4ZAbL2ro9Yu3W_w",
-    "local_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjMmFkNzM3Yi0wNjE3LTVmOTAtYTJkZC04N2ViZjgxOWVkZWYiLCJwaG9uZSI6IjkyMjY4NDkwNjEiLCJpYXQiOjE3Njk2MjA4MTcsImV4cCI6MTc3MDIyNTYxN30.96W05Zpbxf4yxgxYjqed7_mnQU_p6maDbZwPl_8HnCk",
+    "cloud_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI5YjdhNDgxZC1mZTViLTVjYzgtODU1ZC05ZGUxYTJmOGM0NWIiLCJwaG9uZSI6IjU1NTU1NTU1IiwiaWF0IjoxNzY5NjIzMzQ5LCJleHAiOjE3NzAyMjgxNDl9.kutFOGx0a3RW_P9aOSLqVQAvUqguPk29cwBNr4qPyfY",
+    "local_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkMjk3NDQ4Ni1hOWFiLTVkMTktYTI4Ni04YmU2YjM2OTYzYWMiLCJwaG9uZSI6Ijk4MzEzMTc1MjkiLCJpYXQiOjE3Njk2MjMzNDcsImV4cCI6MTc3MDIyODE0N30.67rYM6lpfVEvGgNcd27oQc0FQy7xrtUy0CU1FsoE_3Y",
     "auth_token": null,
-    "fastify_login_cache_v1": "{\"phone\":\"55555555\",\"password\":\"55555555\",\"savedAt\":\"2026-01-28T17:20:18.960Z\"}",
-    "tauri_user_session_v1": "{\"userId\":\"9b7a481d-fe5b-5cc8-855d-9de1a2f8c45b\",\"userName\":\"5\",\"userPhone\":\"55555555\",\"loggedAt\":\"2026-01-28T17:20:18.961Z\"}"
+    "fastify_login_cache_v1": "{\"phone\":\"55555555\",\"password\":\"55555555\",\"savedAt\":\"2026-01-28T18:02:29.012Z\"}",
+    "tauri_user_session_v1": "{\"userId\":\"9b7a481d-fe5b-5cc8-855d-9de1a2f8c45b\",\"userName\":\"5\",\"userPhone\":\"55555555\",\"loggedAt\":\"2026-01-28T18:02:29.013Z\"}"
   },
   "anon": false,
   "currentUserWindow": {

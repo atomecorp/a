@@ -3,27 +3,27 @@
     "complete": true,
     "result": {
       "authenticated": true,
-      "userId": "c2ad737b-0617-5f90-a2dd-87ebf819edef"
+      "userId": "d2974486-a9ab-5d19-a286-8be6b36963ac"
     }
   },
   "currentInfo": {
-    "id": "c2ad737b-0617-5f90-a2dd-87ebf819edef",
+    "id": "d2974486-a9ab-5d19-a286-8be6b36963ac",
     "name": "anonymous",
-    "phone": "9226849061"
+    "phone": "9831317529"
   },
   "currentUser": null,
   "projectList": null,
   "tokens": {
-    "cloud_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjMmFkNzM3Yi0wNjE3LTVmOTAtYTJkZC04N2ViZjgxOWVkZWYiLCJwaG9uZSI6IjkyMjY4NDkwNjEiLCJpYXQiOjE3Njk2MjA4MTcsImV4cCI6MTc3MDIyNTYxN30.96W05Zpbxf4yxgxYjqed7_mnQU_p6maDbZwPl_8HnCk",
-    "local_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjMmFkNzM3Yi0wNjE3LTVmOTAtYTJkZC04N2ViZjgxOWVkZWYiLCJwaG9uZSI6IjkyMjY4NDkwNjEiLCJpYXQiOjE3Njk2MjA4MTcsImV4cCI6MTc3MDIyNTYxN30.96W05Zpbxf4yxgxYjqed7_mnQU_p6maDbZwPl_8HnCk",
+    "cloud_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkMjk3NDQ4Ni1hOWFiLTVkMTktYTI4Ni04YmU2YjM2OTYzYWMiLCJwaG9uZSI6Ijk4MzEzMTc1MjkiLCJpYXQiOjE3Njk2MjMzNDcsImV4cCI6MTc3MDIyODE0N30.67rYM6lpfVEvGgNcd27oQc0FQy7xrtUy0CU1FsoE_3Y",
+    "local_auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkMjk3NDQ4Ni1hOWFiLTVkMTktYTI4Ni04YmU2YjM2OTYzYWMiLCJwaG9uZSI6Ijk4MzEzMTc1MjkiLCJpYXQiOjE3Njk2MjMzNDcsImV4cCI6MTc3MDIyODE0N30.67rYM6lpfVEvGgNcd27oQc0FQy7xrtUy0CU1FsoE_3Y",
     "auth_token": null,
     "fastify_login_cache_v1": null,
-    "tauri_user_session_v1": "{\"userId\":\"c2ad737b-0617-5f90-a2dd-87ebf819edef\",\"userName\":\"anonymous\",\"userPhone\":\"9226849061\",\"loggedAt\":\"2026-01-28T17:20:17.791Z\"}"
+    "tauri_user_session_v1": "{\"userId\":\"d2974486-a9ab-5d19-a286-8be6b36963ac\",\"userName\":\"anonymous\",\"userPhone\":\"9831317529\",\"loggedAt\":\"2026-01-28T18:02:27.850Z\"}"
   },
   "anon": true,
   "currentUserWindow": {
-    "id": "c2ad737b-0617-5f90-a2dd-87ebf819edef",
+    "id": "d2974486-a9ab-5d19-a286-8be6b36963ac",
     "name": "anonymous",
-    "phone": "9226849061"
+    "phone": "9831317529"
   }
 }

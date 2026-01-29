@@ -1,70 +1,13 @@
 {
   "tauri": {
-    "success": true,
-    "data": {
-      "ok": true,
-      "success": true,
-      "status": 200,
-      "data": {
-        "atome_id": "9a6f24e1-1ba6-4906-84e3-d397a9a17c99",
-        "atome_type": "note",
-        "created_at": "2026-01-28T17:20:23.799117+00:00",
-        "created_source": "tauri",
-        "creator_id": "anonymous",
-        "data": {
-          "color": "blue",
-          "created_at": "2026-01-28T17:20:23.798Z",
-          "name": "headless_test",
-          "text": "debug"
-        },
-        "owner_id": "9b7a481d-fe5b-5cc8-855d-9de1a2f8c45b",
-        "sync_status": "pending",
-        "updated_at": "2026-01-28T17:20:23.799117+00:00"
-      }
-    },
-    "error": null
+    "success": false,
+    "data": null,
+    "error": "Tauri backend is not available in this runtime"
   },
   "fastify": {
-    "success": true,
-    "data": {
-      "ok": true,
-      "success": true,
-      "status": 200,
-      "atome": {
-        "atome_id": "9a6f24e1-1ba6-4906-84e3-d397a9a17c99",
-        "atome_type": "note",
-        "parent_id": null,
-        "owner_id": "9b7a481d-fe5b-5cc8-855d-9de1a2f8c45b",
-        "creator_id": "9b7a481d-fe5b-5cc8-855d-9de1a2f8c45b",
-        "data": {
-          "color": "blue",
-          "created_at": "2026-01-28T17:20:23.798Z",
-          "name": "headless_test",
-          "text": "debug"
-        },
-        "sync_status": "local",
-        "created_source": "fastify",
-        "created_at": "2026-01-28T17:20:23.803Z",
-        "updated_at": "2026-01-28T17:20:23.803Z"
-      },
-      "data": {
-        "atome_id": "9a6f24e1-1ba6-4906-84e3-d397a9a17c99",
-        "atome_type": "note",
-        "parent_id": null,
-        "owner_id": "9b7a481d-fe5b-5cc8-855d-9de1a2f8c45b",
-        "creator_id": "9b7a481d-fe5b-5cc8-855d-9de1a2f8c45b",
-        "data": {
-          "color": "blue",
-          "created_at": "2026-01-28T17:20:23.798Z",
-          "name": "headless_test",
-          "text": "debug"
-        },
-        "sync_status": "local",
-        "created_source": "fastify",
-        "created_at": "2026-01-28T17:20:23.803Z",
-        "updated_at": "2026-01-28T17:20:23.803Z"
-      }
-    },
-    "error": null
+    "success": false,
+    "data": null,
+    "error": "primary_failed",
+    "skipped": true
   }
 }

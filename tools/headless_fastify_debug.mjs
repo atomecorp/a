@@ -9,6 +9,7 @@ const forceTauri = process.env.ADOLE_FORCE_TAURI === '1';
 const clearStorage = process.env.ADOLE_CLEAR_STORAGE === '1';
 const lightSnapshot = process.env.ADOLE_LIGHT_SNAPSHOT !== '0';
 const switchToTauriOnRefresh = process.env.ADOLE_SWITCH_TAURI_ON_REFRESH === '1';
+const forceDataTauri = process.env.ADOLE_FORCE_DATA_TAURI === '1';
 const outDir = path.resolve('tools/headless_output');
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -176,14 +177,12 @@ const run = async () => {
   fs.writeFileSync(logFile, '');
   log('start', { url });
 
-  const home = process.env.HOME || '';
-  const candidates = [
-    process.env.PLAYWRIGHT_CHROMIUM_PATH,
-    path.join(home, 'Library/Caches/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-mac-arm64/chrome-headless-shell'),
-    path.join(home, 'Library/Caches/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-mac-x64/chrome-headless-shell')
-  ].filter(Boolean);
-  const executablePath = candidates.find(p => fs.existsSync(p));
-  const browser = await chromium.launch({ headless: true, executablePath });
+  const explicitPath = process.env.PLAYWRIGHT_CHROMIUM_PATH || null;
+  const executablePath = explicitPath && fs.existsSync(explicitPath) ? explicitPath : undefined;
+  const browser = await chromium.launch({
+    headless: true,
+    ...(executablePath ? { executablePath } : {})
+  });
   const context = await browser.newContext();
   if (forceTauri) {
     await context.addInitScript(() => {
@@ -191,6 +190,11 @@ const run = async () => {
       window.__TAURI_INTERNALS__ = window.__TAURI_INTERNALS__ || {};
       window.__SQUIRREL_FORCE_TAURI__ = true;
       window.__SQUIRREL_AUTH_SOURCE__ = 'tauri';
+    });
+  }
+  if (forceDataTauri) {
+    await context.addInitScript(() => {
+      window.__SQUIRREL_DATA_SOURCE__ = 'tauri';
     });
   }
   const page = await context.newPage();

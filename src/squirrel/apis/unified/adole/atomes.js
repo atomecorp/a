@@ -268,7 +268,75 @@ async function list_atomes(options = {}, callback) {
         });
     };
 
-    const normalize_list = (raw) => (Array.isArray(raw) ? raw.map(normalizeAtomeRecord) : []);
+    const normalize_list = (raw, source = null) => (Array.isArray(raw)
+        ? raw.map((item) => {
+            const normalized = normalizeAtomeRecord(item);
+            if (source && normalized && typeof normalized === 'object') {
+                normalized.__source = source;
+            }
+            return normalized;
+        })
+        : []);
+
+    const getAtomeTimestamp = (item) => {
+        if (!item || typeof item !== 'object') return null;
+        const props = item.properties || item.particles || item.data || {};
+        return item.updated_at
+            || item.updatedAt
+            || props.updated_at
+            || props.updatedAt
+            || item.created_at
+            || item.createdAt
+            || props.created_at
+            || props.createdAt
+            || null;
+    };
+
+    const parseTimestamp = (value) => {
+        if (!value) return null;
+        const parsed = Date.parse(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const resolvePreferredBase = (existing, incoming, preferSource = null) => {
+        if (preferSource) {
+            const existingSource = existing?.__source || null;
+            const incomingSource = incoming?.__source || null;
+            if (existingSource === preferSource && incomingSource !== preferSource) return existing;
+            if (incomingSource === preferSource && existingSource !== preferSource) return incoming;
+        }
+
+        const existingTime = parseTimestamp(getAtomeTimestamp(existing));
+        const incomingTime = parseTimestamp(getAtomeTimestamp(incoming));
+        if (existingTime && incomingTime) {
+            return incomingTime > existingTime ? incoming : existing;
+        }
+        if (!existingTime && incomingTime) return incoming;
+        if (existingTime && !incomingTime) return existing;
+
+        const existingSource = existing?.__source || null;
+        const incomingSource = incoming?.__source || null;
+        if (existingSource === 'tauri' && incomingSource === 'fastify') return existing;
+        if (existingSource === 'fastify' && incomingSource === 'tauri') return incoming;
+
+        return existing;
+    };
+
+    const mergeRecords = (existing, incoming, preferSource = null) => {
+        if (!existing) return incoming;
+        if (!incoming) return existing;
+        const base = resolvePreferredBase(existing, incoming, preferSource);
+        const other = base === existing ? incoming : existing;
+        const baseProps = base.properties || base.particles || base.data || {};
+        const otherProps = other.properties || other.particles || other.data || {};
+        const mergedProps = { ...otherProps, ...baseProps };
+        return {
+            ...other,
+            ...base,
+            properties: mergedProps,
+            __source: base.__source || other.__source || null
+        };
+    };
 
     const filter_project = (list = []) => {
         if (!projectId) return list;
@@ -286,7 +354,7 @@ async function list_atomes(options = {}, callback) {
             const tauriResult = await TauriAdapter.atome.list(tauriQueryOptions);
             if (tauriResult.ok || tauriResult.success) {
                 const rawAtomes = tauriResult.atomes || tauriResult.data || [];
-                let normalized = normalize_list(rawAtomes);
+                let normalized = normalize_list(rawAtomes, 'tauri');
                 normalized = filterOwnerIfNeeded(normalized);
                 return { ok: true, list: normalized };
             }
@@ -310,7 +378,7 @@ async function list_atomes(options = {}, callback) {
 
             if (fastifyResult && (fastifyResult.ok || fastifyResult.success)) {
                 const rawAtomes = fastifyResult.atomes || fastifyResult.data || [];
-                let normalized = normalize_list(rawAtomes);
+                let normalized = normalize_list(rawAtomes, 'fastify');
                 normalized = filterOwnerIfNeeded(normalized);
                 normalized = filter_project(normalized);
                 return { ok: true, list: normalized };
@@ -324,8 +392,11 @@ async function list_atomes(options = {}, callback) {
     const mergeAtomeLists = (primary = [], secondary = []) => {
         const byId = new Map();
         const addItem = (item, source) => {
-            const normalized = normalizeAtomeRecord(item);
+            const normalized = item && typeof item === 'object' ? item : null;
             if (!normalized) return;
+            if (source && typeof normalized === 'object') {
+                normalized.__source = normalized.__source || source;
+            }
             const id = normalized.id || normalized.atome_id || normalized.atomeId || null;
             if (!id) return;
             const existing = byId.get(id);
@@ -333,21 +404,54 @@ async function list_atomes(options = {}, callback) {
                 byId.set(id, normalized);
                 return;
             }
-            const existingProps = existing.properties || existing.particles || existing.data || {};
-            const nextProps = normalized.properties || normalized.particles || normalized.data || {};
-            const mergedProps = source === 'tauri'
-                ? { ...nextProps, ...existingProps }
-                : { ...existingProps, ...nextProps };
-            byId.set(id, {
-                ...existing,
-                ...normalized,
-                properties: mergedProps
-            });
+            byId.set(id, mergeRecords(existing, normalized));
         };
 
         primary.forEach((item) => addItem(item, 'tauri'));
         secondary.forEach((item) => addItem(item, 'fastify'));
         return filterOwnerIfNeeded(Array.from(byId.values()));
+    };
+
+    const dedupeProjectsBySignature = (list = []) => {
+        if (!Array.isArray(list) || list.length < 2) return list;
+        const output = [];
+        const signatureMap = new Map();
+
+        for (const item of list) {
+            if (!item || typeof item !== 'object') {
+                output.push(item);
+                continue;
+            }
+
+            const owner = item.owner_id || item.ownerId || null;
+            const props = item.properties || item.particles || item.data || {};
+            const createdAt = props.created_at || item.created_at || null;
+            if (!owner || !createdAt) {
+                output.push(item);
+                continue;
+            }
+
+            const signature = `${owner}|${createdAt}`;
+            const existingEntry = signatureMap.get(signature);
+            if (!existingEntry) {
+                signatureMap.set(signature, { index: output.length, item });
+                output.push(item);
+                continue;
+            }
+
+            const existingSource = existingEntry.item?.__source || null;
+            const incomingSource = item?.__source || null;
+            if (existingSource && incomingSource && existingSource === incomingSource) {
+                output.push(item);
+                continue;
+            }
+
+            const merged = mergeRecords(existingEntry.item, item, 'tauri');
+            output[existingEntry.index] = merged;
+            signatureMap.set(signature, { index: existingEntry.index, item: merged });
+        }
+
+        return output;
     };
 
     if (shouldMergeSources) {
@@ -375,6 +479,9 @@ async function list_atomes(options = {}, callback) {
 
         results.fastify.atomes = fastifyList;
         results.tauri.atomes = mergeAtomeLists(tauriList, fastifyList);
+        if (atomeType === 'project') {
+            results.tauri.atomes = dedupeProjectsBySignature(results.tauri.atomes);
+        }
         results.meta.merged = true;
     } else if (dataPlan.source === 'tauri') {
         const tauriRes = await list_tauri();
@@ -384,6 +491,31 @@ async function list_atomes(options = {}, callback) {
             results.tauri.error = tauriRes.error;
         }
         results.fastify = { atomes: [], error: 'skipped', skipped: true };
+
+        // Fallback: if Tauri has no data (or auth error) but Fastify does, prefer Fastify.
+        const tauriEmpty = !results.tauri.atomes || results.tauri.atomes.length === 0;
+        const tauriFailed = !!results.tauri.error;
+        if ((tauriEmpty || tauriFailed) && currentUserId) {
+            let allowFastify = true;
+            try {
+                allowFastify = await ensure_secondary_user_match('fastify', currentUserId);
+            } catch {
+                allowFastify = false;
+            }
+            if (allowFastify) {
+                const fastRes = await list_fastify();
+                if (fastRes.ok) {
+                    results.fastify = { atomes: fastRes.list, error: null };
+                    if (fastRes.list.length > 0) {
+                        results.meta.preferFastify = true;
+                    }
+                } else if (!results.fastify.error) {
+                    results.fastify.error = fastRes.error;
+                }
+            } else {
+                results.fastify.error = results.fastify.error || 'fastify_user_mismatch';
+            }
+        }
     } else {
         const allowFastify = await canUseFastifyForShared();
         if (!allowFastify) {

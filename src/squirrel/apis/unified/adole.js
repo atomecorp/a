@@ -471,54 +471,16 @@ export function getToken(key) {
             tokenMemory.set(key, token);
             return token;
         }
-
         const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
         const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
-        if (key === localKey) {
-            // In Tauri runtime, never fall back to cloud token for local_auth_token.
-            // Tauri and Fastify often use different JWT secrets, which causes invalid token errors.
-            if (isInTauri()) {
-                return null;
-            }
-            // Never fallback to cloud token when cloud target is active.
-            const fallback = isCloudFastifyTarget()
-                ? null
-                : (localStorage.getItem(cloudKey) || localStorage.getItem('auth_token'));
-            if (fallback) {
-                localStorage.setItem(localKey, fallback);
-                tokenMemory.set(localKey, fallback);
-                return fallback;
-            }
-        }
-
         if (key === cloudKey) {
-            // Never fallback to local token when cloud target is active.
-            const fallback = isCloudFastifyTarget()
-                ? null
-                : (localStorage.getItem(localKey) || localStorage.getItem('auth_token'));
-            if (fallback) {
-                localStorage.setItem(cloudKey, fallback);
-                tokenMemory.set(cloudKey, fallback);
-                return fallback;
-            }
-        }
-
-        if (key === CONFIG.FASTIFY_TOKEN_KEY || key === 'cloud_auth_token') {
+            // Legacy migration: use auth_token as cloud token only.
             const legacy = localStorage.getItem('auth_token');
             if (legacy) {
-                if (!isCloudFastifyTarget()) {
-                    localStorage.setItem(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
-                    tokenMemory.set(CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token', legacy);
-                    return legacy;
-                }
+                localStorage.setItem(cloudKey, legacy);
+                tokenMemory.set(cloudKey, legacy);
+                return legacy;
             }
-        }
-
-        if (key !== localKey && key !== cloudKey) {
-            const fallback = localStorage.getItem(localKey)
-                || localStorage.getItem(cloudKey)
-                || localStorage.getItem('auth_token');
-            if (fallback) return fallback;
         }
     }
     if (typeof sessionStorage !== 'undefined') {
@@ -1184,24 +1146,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     || null;
                 if (token) {
                     setToken(tokenKey, token);
-                    // Save credentials for Fastify login (needed for real-time sync)
-                    try {
-                        if (typeof localStorage !== 'undefined' && data.phone && data.password && !isAnonymousLogin(data.phone, data.username, data.password)) {
-                            localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
-                                phone: String(data.phone),
-                                password: String(data.password),
-                                savedAt: new Date().toISOString()
-                            }));
-                            // Immediately attempt to get Fastify token for real-time sync
-                            if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
-                                window.AdoleAPI.auth.ensureFastifyToken().then(r => {
-                                    if (!r?.ok) console.warn('[Auth] Fastify token not obtained:', r?.reason);
-                                }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('[Auth] Failed to save credentials for Fastify sync:', e);
-                    }
                 }
                 return result;
             },
@@ -1223,24 +1167,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     || null;
                 if (token) {
                     setToken(tokenKey, token);
-                    // Save credentials for Fastify login (needed for real-time sync)
-                    try {
-                        if (typeof localStorage !== 'undefined' && data.phone && data.password && !isAnonymousLogin(data.phone, data.username, data.password)) {
-                            localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
-                                phone: String(data.phone),
-                                password: String(data.password),
-                                savedAt: new Date().toISOString()
-                            }));
-                            // Immediately attempt to get Fastify token for real-time sync
-                            if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
-                                window.AdoleAPI.auth.ensureFastifyToken().then(r => {
-                                    if (!r?.ok) console.warn('[Auth] Fastify token not obtained:', r?.reason);
-                                }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('[Auth] Failed to save credentials for Fastify sync:', e);
-                    }
                 }
                 return result;
             },
@@ -1259,24 +1185,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     || null;
                 if (token) {
                     setToken(tokenKey, token);
-                    // Save credentials for Fastify login (needed for real-time sync)
-                    try {
-                        if (typeof localStorage !== 'undefined' && data.phone && data.password && !isAnonymousLogin(data.phone, data.username, data.password)) {
-                            localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
-                                phone: String(data.phone),
-                                password: String(data.password),
-                                savedAt: new Date().toISOString()
-                            }));
-                            // Immediately attempt to get Fastify token for real-time sync
-                            if (typeof window !== 'undefined' && window.AdoleAPI?.auth?.ensureFastifyToken) {
-                                window.AdoleAPI.auth.ensureFastifyToken().then(r => {
-                                    if (!r?.ok) console.warn('[Auth] Fastify token not obtained:', r?.reason);
-                                }).catch(e => console.warn('[Auth] ensureFastifyToken error:', e.message));
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('[Auth] Failed to save credentials for Fastify sync:', e);
-                    }
                 }
                 return result;
             },

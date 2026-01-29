@@ -383,7 +383,7 @@ function normalizeAtomeRecord(raw) {
     mergeProperties(stripPending(propertiesFromSnapshotField));
 
     for (const key of Object.keys(raw)) {
-        if (coreKeys.has(key)) continue;
+        if (coreKeys.has(key) || key.startsWith('__')) continue;
         const val = raw[key];
         if (val === undefined) continue;
         if (properties[key] === undefined) {
