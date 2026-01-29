@@ -1,8 +1,8 @@
 // =============================================================================
-// LOCAL ATOME MODULE - ADOLE v3.0 WebSocket-based storage for Tauri
+// LOCAL ATOME MODULE - ADOLE v3.0 storage for Tauri
 // =============================================================================
-// All operations via WebSocket messages, no HTTP routes
-// Schema: atomes + particles (unified with Fastify)
+// WebSocket-first operations with HTTP parity handlers.
+// Schema: atomes + particles (unified with Fastify, source: database/schema.sql)
 // =============================================================================
 
 use crate::server::broadcast_sync_event;
@@ -10,6 +10,9 @@ use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
+use sha2::{Digest, Sha256};
+use reqwest::Client;
+use tokio::time::{sleep, Duration};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     path::PathBuf,
@@ -19,6 +22,19 @@ use uuid::Uuid;
 
 const ANONYMOUS_USERNAME: &str = "anonymous";
 const ANONYMOUS_PHONE_TAURI: &str = "0000000000";
+const ADOLE_SCHEMA_SQL: &str = include_str!("../../../database/schema.sql");
+const ADOLE_SCHEMA_TABLES: &str =
+    "atomes, particles, particles_versions, snapshots, events, state_current, permissions, sync_queue, sync_state";
+
+pub fn schema_hash() -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(ADOLE_SCHEMA_SQL.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+pub fn schema_tables() -> &'static str {
+    ADOLE_SCHEMA_TABLES
+}
 
 // =============================================================================
 // STATE & TYPES
@@ -218,7 +234,7 @@ fn create_fingerprint(
 
 // =============================================================================
 // DATABASE INITIALIZATION - ADOLE v3.0 Schema
-// UNIFIED with Fastify (database/schema.sql) - Same 7 tables
+// UNIFIED with Fastify (database/schema.sql) - Same 9 tables + views
 // =============================================================================
 
 pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> {
@@ -232,271 +248,17 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     conn.execute("PRAGMA foreign_keys = ON", [])?;
     let _ = conn.execute_batch("PRAGMA journal_mode = WAL;");
 
-    // =========================================================================
-    // Table 1: atomes - Represents EVERYTHING (users, documents, folders, etc.)
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS atomes (
-            atome_id TEXT PRIMARY KEY,
-            atome_type TEXT NOT NULL,
-            parent_id TEXT,
-            owner_id TEXT,
-            creator_id TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            deleted_at TEXT,
-            last_sync TEXT,
-            created_source TEXT DEFAULT 'unknown',
-            sync_status TEXT DEFAULT 'local',
-            FOREIGN KEY(parent_id) REFERENCES atomes(atome_id) ON DELETE SET NULL,
-            FOREIGN KEY(owner_id) REFERENCES atomes(atome_id) ON DELETE SET NULL
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_atomes_sync_status ON atomes(sync_status)",
-        [],
-    )?;
-
-    // =========================================================================
-    // Table 2: particles - Properties of atomes (dynamic key-value system)
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS particles (
-            particle_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            atome_id TEXT NOT NULL,
-            particle_key TEXT NOT NULL,
-            particle_value TEXT,
-            value_type TEXT DEFAULT 'string',
-            version INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
-            UNIQUE(atome_id, particle_key)
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_particles_atome ON particles(atome_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_particles_key ON particles(particle_key)",
-        [],
-    )?;
-
-    // =========================================================================
-    // Table 3: particles_versions - Full history of all particle modifications
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS particles_versions (
-            version_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            particle_id INTEGER NOT NULL,
-            atome_id TEXT NOT NULL,
-            particle_key TEXT NOT NULL,
-            version INTEGER NOT NULL,
-            old_value TEXT,
-            new_value TEXT,
-            changed_by TEXT,
-            changed_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY(particle_id) REFERENCES particles(particle_id) ON DELETE CASCADE,
-            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_particles_versions_particle ON particles_versions(particle_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_particles_versions_atome ON particles_versions(atome_id)",
-        [],
-    )?;
-
-    // =========================================================================
-    // Table 4: snapshots - Complete snapshots of an atome at a point in time
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS snapshots (
-            snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            atome_id TEXT NOT NULL,
-            project_id TEXT,
-            snapshot_data TEXT NOT NULL,
-            state_blob TEXT,
-            label TEXT,
-            snapshot_type TEXT DEFAULT 'manual',
-            actor TEXT,
-            created_by TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_snapshots_atome ON snapshots(atome_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_snapshots_project ON snapshots(project_id)",
-        [],
-    )?;
-
-    // =========================================================================
-    // Table 5: events - Append-only event log
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS events (
-            id TEXT PRIMARY KEY,
-            ts TEXT NOT NULL DEFAULT (datetime('now')),
-            atome_id TEXT,
-            project_id TEXT,
-            kind TEXT NOT NULL,
-            payload TEXT,
-            actor TEXT,
-            tx_id TEXT,
-            gesture_id TEXT
-        )",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_events_project_ts ON events(project_id, ts)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_events_atome_ts ON events(atome_id, ts)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_events_tx ON events(tx_id)",
-        [],
-    )?;
-
-    // =========================================================================
-    // Table 6: state_current - Materialized projection cache
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS state_current (
-            atome_id TEXT PRIMARY KEY,
-            owner_id TEXT,
-            project_id TEXT,
-            properties TEXT,
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            version INTEGER NOT NULL DEFAULT 0
-        )",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id)",
-        [],
-    )?;
-
-    // =========================================================================
-    // Table 7: permissions - Granular access control (per atome or particle)
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS permissions (
-            permission_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            atome_id TEXT NOT NULL,
-            particle_key TEXT,
-            principal_id TEXT NOT NULL,
-            can_read INTEGER NOT NULL DEFAULT 1,
-            can_write INTEGER NOT NULL DEFAULT 0,
-            can_delete INTEGER NOT NULL DEFAULT 0,
-            can_share INTEGER NOT NULL DEFAULT 0,
-            can_create INTEGER NOT NULL DEFAULT 0,
-            share_mode TEXT DEFAULT 'real-time',
-            conditions TEXT,
-            granted_by TEXT,
-            granted_at TEXT NOT NULL DEFAULT (datetime('now')),
-            expires_at TEXT,
-            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
-            FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_permissions_atome ON permissions(atome_id)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_permissions_principal ON permissions(principal_id)",
-        [],
-    )?;
+    conn.execute_batch(ADOLE_SCHEMA_SQL)?;
 
     ensure_permissions_columns(&conn)?;
     ensure_snapshot_columns(&conn)?;
     ensure_state_current_columns(&conn)?;
 
-    // =========================================================================
-    // Table 8: sync_queue - Persistent synchronization queue
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS sync_queue (
-            queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            atome_id TEXT NOT NULL,
-            operation TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            target_server TEXT NOT NULL DEFAULT 'fastify',
-            status TEXT NOT NULL DEFAULT 'pending',
-            attempts INTEGER NOT NULL DEFAULT 0,
-            max_attempts INTEGER NOT NULL DEFAULT 5,
-            last_attempt_at TEXT,
-            next_retry_at TEXT,
-            error_message TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at)",
-        [],
-    )?;
-
-    // =========================================================================
-    // Table 9: sync_state - Synchronization state per atome (with hash)
-    // =========================================================================
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS sync_state (
-            atome_id TEXT PRIMARY KEY,
-            local_hash TEXT,
-            remote_hash TEXT,
-            local_version INTEGER DEFAULT 0,
-            remote_version INTEGER DEFAULT 0,
-            last_sync_at TEXT,
-            sync_status TEXT DEFAULT 'unknown',
-            FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
-        )",
-        [],
-    )?;
-
-    println!("ADOLE v3.0 database initialized (9 tables): {:?}", db_path);
+    println!(
+        "ADOLE v3.0 database initialized (schema hash={}): {:?}",
+        schema_hash(),
+        db_path
+    );
 
     Ok(conn)
 }
@@ -1715,6 +1477,14 @@ struct EventRecord {
     gesture_id: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+struct SyncQueueItem {
+    queue_id: i64,
+    payload: String,
+    attempts: i64,
+    max_attempts: i64,
+}
+
 fn sync_event_type(kind: &str) -> &'static str {
     if kind.eq_ignore_ascii_case("delete") {
         "atome:deleted"
@@ -1773,6 +1543,8 @@ async fn handle_event_commit(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
+    let sync_target = resolve_sync_target(&message);
+    let sync_source = resolve_sync_source(&message);
     let event = match message.get("event") {
         Some(v) => v,
         None => return error_response(request_id, "Missing event payload"),
@@ -1793,6 +1565,11 @@ async fn handle_event_commit(
         if inserted {
             let _ = apply_event_to_state_current(conn, &normalized)?;
             apply_event_to_atomes(conn, &normalized, user_id)?;
+            if should_enqueue_sync(&sync_target, &sync_source) {
+                if let Some(target) = sync_target.as_ref() {
+                    let _ = enqueue_sync_event(conn, &normalized, target);
+                }
+            }
         }
         Ok(())
     });
@@ -1821,6 +1598,8 @@ async fn handle_event_commit_batch(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
+    let sync_target = resolve_sync_target(&message);
+    let sync_source = resolve_sync_source(&message);
     let body = message
         .get("events")
         .or_else(|| message.get("event"))
@@ -1856,6 +1635,11 @@ async fn handle_event_commit_batch(
             if inserted {
                 let _ = apply_event_to_state_current(conn, evt)?;
                 apply_event_to_atomes(conn, evt, user_id)?;
+                if should_enqueue_sync(&sync_target, &sync_source) {
+                    if let Some(target) = sync_target.as_ref() {
+                        let _ = enqueue_sync_event(conn, evt, target);
+                    }
+                }
             }
         }
         Ok(())
@@ -2257,6 +2041,128 @@ fn resolve_event_payload(event: &JsonValue) -> Option<JsonValue> {
         .or_else(|| event.get("patch"))
         .or_else(|| event.get("delta"));
     props.map(|value| json!({ "props": value.clone() }))
+}
+
+fn resolve_sync_target(message: &JsonValue) -> Option<String> {
+    let explicit = message
+        .get("sync_target")
+        .or_else(|| message.get("syncTarget"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_lowercase());
+    if explicit.is_some() {
+        return explicit;
+    }
+
+    if let Ok(url) = std::env::var("SQUIRREL_FASTIFY_URL") {
+        if !url.trim().is_empty() {
+            return Some("fastify".to_string());
+        }
+    }
+    if let Ok(url) = std::env::var("FASTIFY_URL") {
+        if !url.trim().is_empty() {
+            return Some("fastify".to_string());
+        }
+    }
+    None
+}
+
+fn resolve_sync_source(message: &JsonValue) -> Option<String> {
+    message
+        .get("sync_source")
+        .or_else(|| message.get("syncSource"))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_lowercase())
+}
+
+fn should_enqueue_sync(sync_target: &Option<String>, sync_source: &Option<String>) -> bool {
+    match (sync_target, sync_source) {
+        (Some(target), Some(source)) => target != source,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+fn enqueue_sync_event(
+    db: &Connection,
+    event: &EventRecord,
+    target_server: &str,
+) -> Result<(), String> {
+    let payload_json = serde_json::to_string(&event_with_actor(event.clone()))
+        .map_err(|e| e.to_string())?;
+    db.execute(
+        "INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at)
+         VALUES (?1, ?2, ?3, ?4, 'pending', 0, 5, datetime('now'))",
+        rusqlite::params![event.atome_id, "events:commit", payload_json, target_server],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn list_sync_queue(
+    db: &Connection,
+    target_server: &str,
+    limit: i64,
+) -> Result<Vec<SyncQueueItem>, String> {
+    let mut stmt = db
+        .prepare(
+            "SELECT queue_id, payload, attempts, max_attempts
+             FROM sync_queue
+             WHERE target_server = ?1
+               AND status IN ('pending', 'error')
+               AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))
+             ORDER BY created_at ASC
+             LIMIT ?2",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(rusqlite::params![target_server, limit], |row| {
+            Ok(SyncQueueItem {
+                queue_id: row.get(0)?,
+                payload: row.get(1)?,
+                attempts: row.get::<_, i64>(2)?,
+                max_attempts: row.get::<_, i64>(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+fn mark_sync_queue_syncing(
+    db: &Connection,
+    queue_id: i64,
+    attempts: i64,
+) -> Result<(), String> {
+    db.execute(
+        "UPDATE sync_queue SET status = 'syncing', attempts = ?1, last_attempt_at = datetime('now') WHERE queue_id = ?2",
+        rusqlite::params![attempts, queue_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn mark_sync_queue_error(
+    db: &Connection,
+    queue_id: i64,
+    attempts: i64,
+    error_message: &str,
+    next_retry_at: Option<String>,
+    final_fail: bool,
+) -> Result<(), String> {
+    let status = if final_fail { "failed" } else { "error" };
+    db.execute(
+        "UPDATE sync_queue SET status = ?1, attempts = ?2, error_message = ?3, next_retry_at = ?4 WHERE queue_id = ?5",
+        rusqlite::params![status, attempts, error_message, next_retry_at, queue_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn mark_sync_queue_done(db: &Connection, queue_id: i64) -> Result<(), String> {
+    db.execute("DELETE FROM sync_queue WHERE queue_id = ?1", rusqlite::params![queue_id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn extract_event_patch(
@@ -3500,5 +3406,157 @@ pub fn create_state(data_dir: PathBuf) -> LocalAtomeState {
         db: Arc::new(Mutex::new(conn)),
         recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(2000))),
         recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(5000, 750))),
+    }
+}
+
+fn compute_backoff_ms(attempts: i64) -> i64 {
+    let base_ms = std::env::var("SQUIRREL_SYNC_BACKOFF_MS")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(1000);
+    let max_ms = std::env::var("SQUIRREL_SYNC_BACKOFF_MAX_MS")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(60000);
+    if attempts <= 1 {
+        return base_ms;
+    }
+    let next = base_ms.saturating_mul(2_i64.pow((attempts - 1) as u32));
+    next.min(max_ms)
+}
+
+pub async fn run_sync_worker(state: LocalAtomeState, remote_url: String) {
+    if remote_url.trim().is_empty() {
+        return;
+    }
+
+    let client = Client::new();
+    let target = "fastify";
+    let sync_token = std::env::var("SQUIRREL_SYNC_TOKEN").ok();
+
+    loop {
+        let items = match state.db.lock() {
+            Ok(db) => list_sync_queue(&db, target, 50).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+
+        if items.is_empty() {
+            sleep(Duration::from_millis(2000)).await;
+            continue;
+        }
+
+        for item in items {
+            let attempts = item.attempts + 1;
+            if let Ok(db) = state.db.lock() {
+                let _ = mark_sync_queue_syncing(&db, item.queue_id, attempts);
+            }
+
+            let payload: JsonValue = match serde_json::from_str(&item.payload) {
+                Ok(v) => v,
+                Err(_) => {
+                    if let Ok(db) = state.db.lock() {
+                        let _ = mark_sync_queue_error(
+                            &db,
+                            item.queue_id,
+                            attempts,
+                            "Invalid payload",
+                            None,
+                            true,
+                        );
+                    }
+                    continue;
+                }
+            };
+
+            if !payload.is_object() {
+                if let Ok(db) = state.db.lock() {
+                    let _ = mark_sync_queue_error(
+                        &db,
+                        item.queue_id,
+                        attempts,
+                        "Invalid payload",
+                        None,
+                        true,
+                    );
+                }
+                continue;
+            }
+
+            let actor_id = payload
+                .get("actor")
+                .and_then(|v| v.get("id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("sync");
+
+            let mut req = client
+                .post(format!("{}/api/events/commit", remote_url))
+                .header("content-type", "application/json")
+                .header("x-sync-source", "axum")
+                .header("x-user-id", actor_id)
+                .json(&payload);
+
+            if let Some(token) = sync_token.as_ref() {
+                if !token.trim().is_empty() {
+                    req = req.header("x-sync-token", token);
+                }
+            }
+
+            match req.send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(db) = state.db.lock() {
+                        let _ = mark_sync_queue_done(&db, item.queue_id);
+                    }
+                }
+                Ok(resp) => {
+                    let msg = resp.text().await.unwrap_or_default();
+                    let final_fail = attempts >= item.max_attempts;
+                    let retry_at = if final_fail {
+                        None
+                    } else {
+                        Some(
+                            chrono::Utc::now()
+                                .checked_add_signed(chrono::Duration::milliseconds(compute_backoff_ms(attempts)))
+                                .unwrap_or_else(chrono::Utc::now)
+                                .to_rfc3339(),
+                        )
+                    };
+                    if let Ok(db) = state.db.lock() {
+                        let _ = mark_sync_queue_error(
+                            &db,
+                            item.queue_id,
+                            attempts,
+                            if msg.is_empty() { "Sync failed" } else { &msg },
+                            retry_at,
+                            final_fail,
+                        );
+                    }
+                }
+                Err(err) => {
+                    let final_fail = attempts >= item.max_attempts;
+                    let retry_at = if final_fail {
+                        None
+                    } else {
+                        Some(
+                            chrono::Utc::now()
+                                .checked_add_signed(chrono::Duration::milliseconds(compute_backoff_ms(attempts)))
+                                .unwrap_or_else(chrono::Utc::now)
+                                .to_rfc3339(),
+                        )
+                    };
+                    if let Ok(db) = state.db.lock() {
+                        let _ = mark_sync_queue_error(
+                            &db,
+                            item.queue_id,
+                            attempts,
+                            &err.to_string(),
+                            retry_at,
+                            final_fail,
+                        );
+                    }
+                }
+            }
+        }
+
+        sleep(Duration::from_millis(2000)).await;
     }
 }

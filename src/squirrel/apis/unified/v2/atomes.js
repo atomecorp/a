@@ -39,6 +39,7 @@ const getCurrentUserId = () => {
 };
 
 const isAnonymous = () => getSessionState().mode === 'anonymous';
+const isLoggedOut = () => getSessionState().mode === 'logged_out';
 
 const filterByOwner = (records, userId, { allowCreator = false } = {}) => {
     if (!Array.isArray(records) || !userId) return [];
@@ -54,6 +55,107 @@ const filterByOwner = (records, userId, { allowCreator = false } = {}) => {
         if (pendingOwner && String(pendingOwner) === resolved) return true;
         return false;
     });
+};
+
+const resolveAtomeType = (record) => String(record?.atome_type || record?.type || record?.kind || '').toLowerCase();
+
+const resolveAtomeId = (record) => record?.atome_id || record?.id || null;
+
+const resolveAtomeParentId = (record) => (
+    record?.parent_id
+    || record?.parentId
+    || record?.parent
+    || record?.properties?.parent_id
+    || record?.properties?.parentId
+    || record?.particles?.parent_id
+    || record?.particles?.parentId
+    || null
+);
+
+const resolveAtomeProjectId = (record) => (
+    record?.project_id
+    || record?.projectId
+    || record?.properties?.project_id
+    || record?.properties?.projectId
+    || record?.particles?.project_id
+    || record?.particles?.projectId
+    || null
+);
+
+const sanitizeProperties = (properties = {}) => {
+    const cleaned = { ...(properties || {}) };
+    delete cleaned.id;
+    delete cleaned.atome_id;
+    delete cleaned.atomeId;
+    delete cleaned.owner_id;
+    delete cleaned.ownerId;
+    delete cleaned.parent_id;
+    delete cleaned.parentId;
+    delete cleaned.project_id;
+    delete cleaned.projectId;
+    delete cleaned.created_at;
+    delete cleaned.updated_at;
+    delete cleaned.deleted_at;
+    delete cleaned.last_sync;
+    return cleaned;
+};
+
+const buildUpsertPayload = (record, ownerIdFallback) => {
+    const id = resolveAtomeId(record);
+    if (!id) return null;
+    const type = record?.atome_type || record?.type || record?.kind || 'atome';
+    const ownerId = record?.owner_id || record?.ownerId || record?.owner || ownerIdFallback || null;
+    const parentId = resolveAtomeParentId(record);
+    const properties = sanitizeProperties(record?.properties || record?.particles || record?.data || {});
+    return {
+        id,
+        atomeId: id,
+        atome_id: id,
+        type,
+        atomeType: type,
+        ownerId,
+        parentId,
+        parent_id: parentId,
+        properties
+    };
+};
+
+const isAlreadyExistsError = (payload) => {
+    const msg = String(payload?.error || payload?.message || '').toLowerCase();
+    return msg.includes('already') || msg.includes('exists');
+};
+
+const topologicalSortByParent = (items = []) => {
+    const byId = new Map();
+    items.forEach((item) => {
+        const id = resolveAtomeId(item);
+        if (id) byId.set(id, item);
+    });
+    const visited = new Set();
+    const sorted = [];
+
+    const visit = (item, stack = new Set()) => {
+        const id = resolveAtomeId(item);
+        if (!id || visited.has(id)) return;
+        if (stack.has(id)) {
+            sorted.push(item);
+            visited.add(id);
+            return;
+        }
+        stack.add(id);
+        const parentId = resolveAtomeParentId(item);
+        if (parentId && byId.has(parentId)) {
+            visit(byId.get(parentId), stack);
+        }
+        stack.delete(id);
+        if (!visited.has(id)) {
+            sorted.push(item);
+            visited.add(id);
+        }
+    };
+
+    items.forEach((item) => visit(item));
+    return sorted;
 };
 
 const listOnBackend = async (backend, options, currentUserId, skipOwner) => {
@@ -206,6 +308,138 @@ export async function create_atome(options = {}, callback) {
     return results;
 }
 
+export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId || isLoggedOut()) {
+        return { ok: false, reason: 'no_user' };
+    }
+    if (!isTauriRuntime()) {
+        return { ok: false, reason: 'not_tauri' };
+    }
+    if (isAnonymous()) {
+        return { ok: false, reason: 'anonymous' };
+    }
+    if (!FastifyAdapter?.getToken?.()) {
+        return { ok: false, reason: 'missing_fastify_token' };
+    }
+
+    const availability = await checkBackends(true);
+    if (!availability.fastify) {
+        return { ok: false, reason: 'fastify_unavailable' };
+    }
+    if (!availability.tauri) {
+        return { ok: false, reason: 'tauri_unavailable' };
+    }
+
+    let tauriProjects = [];
+    let fastifyProjects = [];
+    try {
+        const localRes = await adapters.tauri.atome.list({
+            type: 'project',
+            ownerId: currentUserId,
+            includeDeleted: true,
+            limit: 2000
+        });
+        tauriProjects = Array.isArray(localRes?.atomes) ? localRes.atomes.map(normalizeAtomeRecord) : [];
+    } catch (_) { }
+
+    try {
+        const remoteRes = await adapters.fastify.atome.list({
+            type: 'project',
+            ownerId: currentUserId,
+            includeDeleted: true,
+            limit: 2000
+        });
+        fastifyProjects = Array.isArray(remoteRes?.atomes) ? remoteRes.atomes.map(normalizeAtomeRecord) : [];
+    } catch (_) { }
+
+    const fastifyProjectIds = new Set(
+        fastifyProjects.map(resolveAtomeId).filter(Boolean).map(String)
+    );
+    const missingProjects = tauriProjects.filter((proj) => {
+        const id = resolveAtomeId(proj);
+        if (!id) return false;
+        const deleted = proj?.deleted_at || proj?.deletedAt;
+        if (deleted) return false;
+        return !fastifyProjectIds.has(String(id));
+    });
+
+    if (!missingProjects.length) {
+        return { ok: true, reason: 'no_missing_projects' };
+    }
+
+    const localAtomesRes = await adapters.tauri.atome.list({
+        ownerId: currentUserId,
+        includeDeleted: true,
+        limit: 5000
+    });
+    const localAtomes = Array.isArray(localAtomesRes?.atomes)
+        ? localAtomesRes.atomes.map(normalizeAtomeRecord)
+        : [];
+
+    const missingProjectIds = new Set(missingProjects.map((p) => String(resolveAtomeId(p))));
+    const childrenToSync = localAtomes.filter((record) => {
+        const id = resolveAtomeId(record);
+        if (!id) return false;
+        const type = resolveAtomeType(record);
+        if (type === 'project') return false;
+        if (record?.deleted_at || record?.deletedAt) return false;
+        const projectId = resolveAtomeProjectId(record);
+        const parentId = resolveAtomeParentId(record);
+        if (projectId && missingProjectIds.has(String(projectId))) return true;
+        if (parentId && missingProjectIds.has(String(parentId))) return true;
+        return false;
+    });
+
+    const orderedProjects = topologicalSortByParent(missingProjects);
+    const orderedChildren = topologicalSortByParent(childrenToSync);
+
+    const result = {
+        ok: true,
+        reason,
+        projects: { created: 0, failed: 0, errors: [] },
+        atomes: { created: 0, failed: 0, errors: [] }
+    };
+
+    for (const project of orderedProjects) {
+        const payload = buildUpsertPayload(project, currentUserId);
+        if (!payload) continue;
+        try {
+            const res = await FastifyAdapter.atome.create(payload);
+            const ok = !!(res?.ok || res?.success) || isAlreadyExistsError(res);
+            if (ok) {
+                result.projects.created += 1;
+            } else {
+                result.projects.failed += 1;
+                result.projects.errors.push({ id: payload.id, error: res?.error || 'create_failed' });
+            }
+        } catch (e) {
+            result.projects.failed += 1;
+            result.projects.errors.push({ id: payload.id, error: e?.message || 'create_failed' });
+        }
+    }
+
+    for (const record of orderedChildren) {
+        const payload = buildUpsertPayload(record, currentUserId);
+        if (!payload) continue;
+        try {
+            const res = await FastifyAdapter.atome.create(payload);
+            const ok = !!(res?.ok || res?.success) || isAlreadyExistsError(res);
+            if (ok) {
+                result.atomes.created += 1;
+            } else {
+                result.atomes.failed += 1;
+                result.atomes.errors.push({ id: payload.id, error: res?.error || 'create_failed' });
+            }
+        } catch (e) {
+            result.atomes.failed += 1;
+            result.atomes.errors.push({ id: payload.id, error: e?.message || 'create_failed' });
+        }
+    }
+
+    return result;
+}
+
 export async function alter_atome(atomeId, properties = {}, callback) {
     const currentUserId = getCurrentUserId();
     if (!currentUserId || !atomeId) {
@@ -319,5 +553,6 @@ export default {
     alter_atome,
     delete_atome,
     realtime_patch,
-    get_atome
+    get_atome,
+    syncLocalProjectsToFastify
 };

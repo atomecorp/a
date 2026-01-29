@@ -133,6 +133,92 @@ const UPLOADS_TMP_DIR = path.join(projectRoot, 'data', 'uploads_tmp');
 const BROWSER_LOG_FILE = path.join(LOG_DIR, 'browser.log');
 const SNAPSHOT_DIR = path.join(LOG_DIR, 'snapshots');
 const UI_TESTS_DIR = path.join(LOG_DIR, 'ui-tests');
+const SCHEMA_PATH = path.join(projectRoot, 'database', 'schema.sql');
+const SCHEMA_TABLES = 'atomes, particles, particles_versions, snapshots, events, state_current, permissions, sync_queue, sync_state';
+let cachedSchemaHash = null;
+const TAURI_SYNC_URL = process.env.SQUIRREL_TAURI_URL || process.env.TAURI_URL || 'http://127.0.0.1:3000';
+const SYNC_REMOTE_ENABLED = process.env.SQUIRREL_SYNC_REMOTE !== '0';
+const SYNC_TARGET_SERVER = 'tauri';
+const SYNC_BACKOFF_BASE_MS = Number(process.env.SQUIRREL_SYNC_BACKOFF_MS || 1000);
+const SYNC_BACKOFF_MAX_MS = Number(process.env.SQUIRREL_SYNC_BACKOFF_MAX_MS || 60000);
+const SYNC_QUEUE_LIMIT = Number(process.env.SQUIRREL_SYNC_BATCH || 50);
+
+function getSchemaHash() {
+  if (cachedSchemaHash) return cachedSchemaHash;
+  try {
+    const schema = readFileSync(SCHEMA_PATH, 'utf8');
+    cachedSchemaHash = crypto.createHash('sha256').update(schema).digest('hex');
+  } catch (error) {
+    cachedSchemaHash = null;
+  }
+  return cachedSchemaHash;
+}
+
+const safeJsonParse = (value) => {
+  if (!value) return null;
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value;
+  } catch (_) {
+    return null;
+  }
+};
+
+const computeBackoffMs = (attempts) => {
+  if (!attempts || attempts <= 1) return SYNC_BACKOFF_BASE_MS;
+  const next = SYNC_BACKOFF_BASE_MS * Math.pow(2, attempts - 1);
+  return Math.min(next, SYNC_BACKOFF_MAX_MS);
+};
+
+async function processSyncQueue() {
+  if (!SYNC_REMOTE_ENABLED) return;
+  const items = await db.listSyncQueue({ target_server: SYNC_TARGET_SERVER, limit: SYNC_QUEUE_LIMIT });
+  if (!items || !items.length) return;
+
+  for (const item of items) {
+    const attempts = (item.attempts || 0) + 1;
+    await db.markSyncQueueSyncing(item.queue_id, attempts);
+
+    const payload = safeJsonParse(item.payload);
+    if (!payload || typeof payload !== 'object') {
+      await db.markSyncQueueError(item.queue_id, attempts, 'Invalid payload', null, true);
+      continue;
+    }
+
+    const actorId = payload?.actor?.id || payload?.actor?.user_id || payload?.actor?.userId || 'sync';
+    const headers = {
+      'content-type': 'application/json',
+      'x-sync-source': 'fastify',
+      'x-user-id': actorId
+    };
+    if (process.env.SQUIRREL_SYNC_TOKEN) {
+      headers['x-sync-token'] = process.env.SQUIRREL_SYNC_TOKEN;
+    }
+
+    try {
+      const res = await fetch(`${TAURI_SYNC_URL}/api/events/commit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        await db.markSyncQueueDone(item.queue_id);
+        continue;
+      }
+
+      const errorText = await res.text().catch(() => '');
+      const maxAttempts = item.max_attempts || 5;
+      const final = attempts >= maxAttempts;
+      const retryAt = final ? null : new Date(Date.now() + computeBackoffMs(attempts)).toISOString();
+      await db.markSyncQueueError(item.queue_id, attempts, errorText || `HTTP ${res.status}`, retryAt, final);
+    } catch (error) {
+      const maxAttempts = item.max_attempts || 5;
+      const final = attempts >= maxAttempts;
+      const retryAt = final ? null : new Date(Date.now() + computeBackoffMs(attempts)).toISOString();
+      await db.markSyncQueueError(item.queue_id, attempts, error?.message || 'Sync error', retryAt, final);
+    }
+  }
+}
 
 try {
   mkdirSync(LOG_DIR, { recursive: true });
@@ -958,6 +1044,19 @@ async function startServer() {
     // Helper function to validate token (for sharing routes)
     // SECURITY: always verify JWT signatures (never trust base64-decoded payload).
     const validateToken = async (request) => {
+      const syncToken = process.env.SQUIRREL_SYNC_TOKEN;
+      const headerSyncToken = request.headers['x-sync-token'];
+      if (syncToken && headerSyncToken && headerSyncToken === syncToken) {
+        const headerUserId = request.headers['x-user-id'] || request.headers['x-userid'];
+        return {
+          sub: headerUserId || 'sync',
+          id: headerUserId || 'sync',
+          userId: headerUserId || 'sync',
+          username: 'sync',
+          phone: null
+        };
+      }
+
       const verifyJwt = async (token, options = {}) => {
         if (!token) return null;
 
@@ -1556,7 +1655,13 @@ async function startServer() {
         );
         const tables = rows.map(r => r.name);
         console.log(`[Debug] Listed ${tables.length} tables from LibSQL`);
-        return { success: true, database: 'Fastify/LibSQL', tables };
+        return {
+          success: true,
+          database: 'Fastify/LibSQL',
+          tables,
+          schema: SCHEMA_TABLES,
+          schema_hash: getSchemaHash()
+        };
       } catch (error) {
         request.log.error({ err: error }, 'List tables failed');
         return reply.code(500).send({ success: false, error: error.message });
@@ -1633,7 +1738,9 @@ async function startServer() {
           status: 'connected',
           database: 'SQLite/LibSQL (ADOLE v3.0)',
           tables: tableRows.map((row) => row.name),
-          schema: 'atomes, particles, particles_versions, snapshots, permissions, sync_queue, sync_state',
+          schema: SCHEMA_TABLES,
+          schema_hash: getSchemaHash(),
+          schema_source: 'database/schema.sql',
           timestamp: new Date().toISOString()
         };
       } catch (error) {
@@ -1810,7 +1917,15 @@ async function startServer() {
                     return;
                   }
                   const actor = event.actor || { type: 'user', id: attachedSenderUserId };
-                  const created = await db.appendEvent({ ...event, actor });
+                  const syncSource = String(event.sync_source || event.syncSource || data.sync_source || data.syncSource || '').toLowerCase();
+                  const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
+                  const created = await db.appendEvent(
+                    { ...event, actor },
+                    {
+                      syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
+                      skipQueue: !shouldEnqueue
+                    }
+                  );
 
                   // Emit websocket sync for created event (if applicable)
                   if (created?.atome_id && created?.kind !== 'snapshot') {
@@ -1851,7 +1966,13 @@ async function startServer() {
 
                   const fallbackActor = body.actor || { type: 'user', id: attachedSenderUserId };
                   const normalized = events.map((evt) => ({ ...evt, actor: evt?.actor || fallbackActor }));
-                  const created = await db.appendEvents(normalized, { txId: body.tx_id || body.txId || null });
+                  const syncSource = String(body.sync_source || body.syncSource || '').toLowerCase();
+                  const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
+                  const created = await db.appendEvents(normalized, {
+                    txId: body.tx_id || body.txId || null,
+                    syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
+                    skipQueue: !shouldEnqueue
+                  });
 
                   // Determine latest event per atome and emit websocket syncs
                   const latestByAtome = new Map();
@@ -3843,6 +3964,8 @@ async function startServer() {
           server: 'fastify',
           version: version.version,
           protectedPaths: version.protectedPaths || [],
+          schema: SCHEMA_TABLES,
+          schema_hash: getSchemaHash(),
           timestamp: new Date().toISOString(),
           watcherEnabled: Boolean(fileSyncWatcherHandle),
           watcherConfig: fileSyncWatcherHandle?.config ?? null,
@@ -3960,6 +4083,18 @@ async function startServer() {
     console.log(`✅ Fastify server v${server.version} (app ${SERVER_VERSION}) started on http://localhost:${PORT}`);
     console.log(`🔄 Sync WebSocket at ws://localhost:${PORT}/ws/sync`);
     console.log(`🌐 Frontend served from: http://localhost:${PORT}/`);
+
+    if (SYNC_REMOTE_ENABLED) {
+      console.log(`🔁 Sync queue enabled → ${TAURI_SYNC_URL}`);
+      setTimeout(() => processSyncQueue().catch((err) => {
+        console.warn('⚠️  Sync queue processing failed:', err?.message || err);
+      }), 500);
+      setInterval(() => {
+        processSyncQueue().catch((err) => {
+          console.warn('⚠️  Sync queue processing failed:', err?.message || err);
+        });
+      }, 2000);
+    }
 
   } catch (error) {
     console.error('❌ Error starting server:', error);

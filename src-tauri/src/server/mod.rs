@@ -14,7 +14,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use rusqlite::params;
 use serde::Deserialize;
-use serde_json::{json, Value as JsonValue};
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::{
     borrow::Cow,
     fs as stdfs,
@@ -52,6 +52,33 @@ struct AppState {
 #[derive(Deserialize)]
 struct LocalFileQuery {
     path: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct EventsQuery {
+    project_id: Option<String>,
+    projectId: Option<String>,
+    atome_id: Option<String>,
+    atomeId: Option<String>,
+    tx_id: Option<String>,
+    txId: Option<String>,
+    gesture_id: Option<String>,
+    gestureId: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    order: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct StateCurrentQuery {
+    project_id: Option<String>,
+    projectId: Option<String>,
+    owner_id: Option<String>,
+    ownerId: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
 }
 
 const SERVER_TYPE: &str = "Tauri frontend process";
@@ -196,6 +223,71 @@ fn resolve_authenticated_user(
         return Some(token_user_id);
     }
     extract_user_id_from_headers(headers)
+}
+
+fn json_error(status: StatusCode, message: &str) -> (StatusCode, Json<JsonValue>) {
+    (status, Json(json!({ "success": false, "error": message })))
+}
+
+fn require_auth_user(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<String, (StatusCode, Json<JsonValue>)> {
+    let auth_state = state
+        .auth_state
+        .as_ref()
+        .ok_or_else(|| json_error(StatusCode::INTERNAL_SERVER_ERROR, "Auth state not initialized"))?;
+
+    resolve_authenticated_user(headers, auth_state)
+        .ok_or_else(|| json_error(StatusCode::UNAUTHORIZED, "Unauthorized"))
+}
+
+fn require_atome_state(
+    state: &AppState,
+) -> Result<&local_atome::LocalAtomeState, (StatusCode, Json<JsonValue>)> {
+    state
+        .atome_state
+        .as_ref()
+        .ok_or_else(|| json_error(StatusCode::INTERNAL_SERVER_ERROR, "Atome state not initialized"))
+}
+
+fn ws_events_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValue>) {
+    if !resp.success {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            resp.error.as_deref().unwrap_or("Unknown error"),
+        );
+    }
+
+    let data = resp.data.unwrap_or_else(|| json!({}));
+    if let Some(event) = data.get("event") {
+        return (StatusCode::OK, Json(json!({ "success": true, "event": event })));
+    }
+    if let Some(events) = data.get("events") {
+        return (StatusCode::OK, Json(json!({ "success": true, "events": events })));
+    }
+
+    (StatusCode::OK, Json(json!({ "success": true, "data": data })))
+}
+
+fn ws_state_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValue>) {
+    if !resp.success {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            resp.error.as_deref().unwrap_or("Unknown error"),
+        );
+    }
+    let data = resp.data.unwrap_or_else(|| json!({}));
+    if let Some(state) = data.get("state") {
+        if state.is_null() {
+            return json_error(StatusCode::NOT_FOUND, "State not found");
+        }
+        return (StatusCode::OK, Json(json!({ "success": true, "state": state })));
+    }
+    if let Some(states) = data.get("states") {
+        return (StatusCode::OK, Json(json!({ "success": true, "states": states })));
+    }
+    (StatusCode::OK, Json(json!({ "success": true, "data": data })))
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -577,6 +669,299 @@ async fn debug_log_handler(Json(payload): Json<serde_json::Value>) -> impl IntoR
     println!("{} [FRONTEND +{}ms] {} {:?}", icon, elapsed, message, data);
 
     Json(json!({ "success": true }))
+}
+
+async fn adole_debug_tables_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let atome_state = match require_atome_state(&state) {
+        Ok(s) => s,
+        Err(resp) => return resp.into_response(),
+    };
+
+    let db = match atome_state.db.lock() {
+        Ok(d) => d,
+        Err(err) => {
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
+        }
+    };
+
+    let mut stmt = match db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    ) {
+        Ok(s) => s,
+        Err(err) => {
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
+        }
+    };
+
+    let rows = match stmt.query_map([], |row| row.get::<_, String>(0)) {
+        Ok(r) => r,
+        Err(err) => {
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
+        }
+    };
+
+    let mut tables = Vec::new();
+    for row in rows {
+        if let Ok(name) = row {
+            tables.push(name);
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "database": "Tauri/SQLite",
+            "tables": tables,
+            "schema_hash": local_atome::schema_hash(),
+            "schema": local_atome::schema_tables()
+        })),
+    )
+        .into_response()
+}
+
+async fn db_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let atome_state = match require_atome_state(&state) {
+        Ok(s) => s,
+        Err(resp) => return resp.into_response(),
+    };
+
+    let db = match atome_state.db.lock() {
+        Ok(d) => d,
+        Err(err) => {
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
+        }
+    };
+
+    let mut stmt = match db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    ) {
+        Ok(s) => s,
+        Err(err) => {
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
+        }
+    };
+
+    let rows = match stmt.query_map([], |row| row.get::<_, String>(0)) {
+        Ok(r) => r,
+        Err(err) => {
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
+        }
+    };
+
+    let mut tables = Vec::new();
+    for row in rows {
+        if let Ok(name) = row {
+            tables.push(name);
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "status": "connected",
+            "database": "SQLite (ADOLE v3.0)",
+            "tables": tables,
+            "schema": local_atome::schema_tables(),
+            "schema_hash": local_atome::schema_hash(),
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        })),
+    )
+        .into_response()
+}
+
+async fn events_commit_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<JsonValue>,
+) -> impl IntoResponse {
+    let user_id = match require_auth_user(&headers, &state) {
+        Ok(id) => id,
+        Err(resp) => return resp.into_response(),
+    };
+    let atome_state = match require_atome_state(&state) {
+        Ok(s) => s,
+        Err(resp) => return resp.into_response(),
+    };
+
+    let sync_source = headers
+        .get("x-sync-source")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let mut message = json!({
+        "action": "commit",
+        "event": body
+    });
+    if let Some(source) = sync_source {
+        if let Some(obj) = message.as_object_mut() {
+            obj.insert("sync_source".to_string(), json!(source));
+        }
+    }
+    let response = local_atome::handle_events_message(message, &user_id, atome_state).await;
+    ws_events_to_http(response).into_response()
+}
+
+async fn events_commit_batch_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<JsonValue>,
+) -> impl IntoResponse {
+    let user_id = match require_auth_user(&headers, &state) {
+        Ok(id) => id,
+        Err(resp) => return resp.into_response(),
+    };
+    let atome_state = match require_atome_state(&state) {
+        Ok(s) => s,
+        Err(resp) => return resp.into_response(),
+    };
+
+    let mut payload = JsonMap::new();
+    payload.insert("action".to_string(), json!("commit-batch"));
+    if let Some(source) = headers
+        .get("x-sync-source")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        payload.insert("sync_source".to_string(), json!(source));
+    }
+    match body {
+        JsonValue::Array(_) => {
+            payload.insert("events".to_string(), body);
+        }
+        JsonValue::Object(mut map) => {
+            for key in ["events", "event", "tx_id", "txId", "actor"] {
+                if let Some(value) = map.remove(key) {
+                    payload.insert(key.to_string(), value);
+                }
+            }
+        }
+        _ => {}
+    }
+
+    let response =
+        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state)
+            .await;
+    ws_events_to_http(response).into_response()
+}
+
+async fn events_list_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<EventsQuery>,
+) -> impl IntoResponse {
+    let user_id = match require_auth_user(&headers, &state) {
+        Ok(id) => id,
+        Err(resp) => return resp.into_response(),
+    };
+    let atome_state = match require_atome_state(&state) {
+        Ok(s) => s,
+        Err(resp) => return resp.into_response(),
+    };
+
+    let mut payload = JsonMap::new();
+    payload.insert("action".to_string(), json!("list"));
+    let project_id = query.project_id.or(query.projectId);
+    let atome_id = query.atome_id.or(query.atomeId);
+    let tx_id = query.tx_id.or(query.txId);
+    let gesture_id = query.gesture_id.or(query.gestureId);
+    if let Some(value) = project_id {
+        payload.insert("project_id".to_string(), json!(value));
+    }
+    if let Some(value) = atome_id {
+        payload.insert("atome_id".to_string(), json!(value));
+    }
+    if let Some(value) = tx_id {
+        payload.insert("tx_id".to_string(), json!(value));
+    }
+    if let Some(value) = gesture_id {
+        payload.insert("gesture_id".to_string(), json!(value));
+    }
+    if let Some(value) = query.since {
+        payload.insert("since".to_string(), json!(value));
+    }
+    if let Some(value) = query.until {
+        payload.insert("until".to_string(), json!(value));
+    }
+    if let Some(value) = query.limit {
+        payload.insert("limit".to_string(), json!(value));
+    }
+    if let Some(value) = query.offset {
+        payload.insert("offset".to_string(), json!(value));
+    }
+    if let Some(value) = query.order {
+        payload.insert("order".to_string(), json!(value));
+    }
+
+    let response =
+        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state)
+            .await;
+    ws_events_to_http(response).into_response()
+}
+
+async fn state_current_get_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    AxumPath(id): AxumPath<String>,
+) -> impl IntoResponse {
+    let user_id = match require_auth_user(&headers, &state) {
+        Ok(id) => id,
+        Err(resp) => return resp.into_response(),
+    };
+    let atome_state = match require_atome_state(&state) {
+        Ok(s) => s,
+        Err(resp) => return resp.into_response(),
+    };
+
+    if id.trim().is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "Missing atome id").into_response();
+    }
+
+    let message = json!({
+        "action": "get",
+        "atome_id": id,
+        "owner_id": user_id
+    });
+    let response =
+        local_atome::handle_state_current_message(message, &user_id, atome_state).await;
+    ws_state_to_http(response).into_response()
+}
+
+async fn state_current_list_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<StateCurrentQuery>,
+) -> impl IntoResponse {
+    let user_id = match require_auth_user(&headers, &state) {
+        Ok(id) => id,
+        Err(resp) => return resp.into_response(),
+    };
+    let atome_state = match require_atome_state(&state) {
+        Ok(s) => s,
+        Err(resp) => return resp.into_response(),
+    };
+
+    let mut payload = JsonMap::new();
+    payload.insert("action".to_string(), json!("list"));
+    let project_id = query.project_id.or(query.projectId);
+    let owner_id = query.owner_id.or(query.ownerId).unwrap_or(user_id.clone());
+    payload.insert("owner_id".to_string(), json!(owner_id));
+    if let Some(value) = project_id {
+        payload.insert("project_id".to_string(), json!(value));
+    }
+    if let Some(value) = query.limit {
+        payload.insert("limit".to_string(), json!(value));
+    }
+    if let Some(value) = query.offset {
+        payload.insert("offset".to_string(), json!(value));
+    }
+
+    let response =
+        local_atome::handle_state_current_message(JsonValue::Object(payload), &user_id, atome_state)
+            .await;
+    ws_state_to_http(response).into_response()
 }
 
 async fn upload_handler(
@@ -2363,21 +2748,30 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
 }
 
 /// WebSocket handler for sync (compatible with sync_engine.js)
-async fn ws_sync_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(handle_ws_sync)
+async fn ws_sync_handler(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_ws_sync(state.clone(), socket))
 }
 
 /// Handle WebSocket sync connection
-async fn handle_ws_sync(mut socket: WebSocket) {
+async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
     println!("🔗 New WebSocket sync connection");
 
     let now_iso = || chrono::Utc::now().to_rfc3339();
+    let server_version = state.version.as_str().to_string();
     let build_welcome = |client_id: Option<String>| {
         json!({
             "type": "welcome",
             "clientId": client_id.unwrap_or_else(|| "unknown".to_string()),
             "server": "axum",
-            "version": "1.0.0",
+            "version": server_version,
+            "schema": local_atome::schema_tables(),
+            "schema_hash": local_atome::schema_hash(),
+            "protectedPaths": [],
+            "watcherEnabled": false,
+            "watcherConfig": null,
             "capabilities": ["events", "sync_request", "file-events", "atome-events", "account-events"],
             "timestamp": now_iso()
         })
@@ -2599,6 +2993,21 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         auth_state: Some(auth_state),
     };
 
+    let sync_remote_enabled = std::env::var("SQUIRREL_SYNC_REMOTE")
+        .map(|v| v != "0")
+        .unwrap_or(true);
+    if sync_remote_enabled {
+        let remote_url = std::env::var("SQUIRREL_FASTIFY_URL")
+            .or_else(|_| std::env::var("FASTIFY_URL"))
+            .unwrap_or_else(|_| "http://127.0.0.1:3001".to_string());
+        if let Some(atome_state) = state.atome_state.clone() {
+            if !remote_url.trim().is_empty() {
+                println!("🔁 Sync queue enabled → {}", remote_url);
+                tokio::spawn(local_atome::run_sync_worker(atome_state, remote_url));
+            }
+        }
+    }
+
     // CORS configuration that allows credentials (required for cookie-based auth)
     // Must specify exact origins when credentials are used (not wildcard *)
     let cors = CorsLayer::new()
@@ -2644,6 +3053,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/fastify-status", get(fastify_status_handler))
         .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
+        .route("/api/adole/debug/tables", get(adole_debug_tables_handler))
+        .route("/api/db/status", get(db_status_handler))
+        .route("/api/events/commit", post(events_commit_handler))
+        .route("/api/events/commit-batch", post(events_commit_batch_handler))
+        .route("/api/events", get(events_list_handler))
+        .route("/api/state_current/:id", get(state_current_get_handler))
+        .route("/api/state_current", get(state_current_list_handler))
         .route(
             "/api/local-files",
             get(local_file_read_handler).post(local_file_write_handler),

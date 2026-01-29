@@ -165,18 +165,21 @@ export const clearAnonymousCredentials = () => {
     removeStorage(ANON_KEY);
 };
 
-export const getCurrentProjectCache = () => readJson(CURRENT_PROJECT_KEY);
+let currentProjectCache = null;
+
+export const getCurrentProjectCache = () => currentProjectCache;
 
 export const setCurrentProjectCache = (payload) => {
     if (!payload) {
-        removeStorage(CURRENT_PROJECT_KEY);
+        currentProjectCache = null;
         return;
     }
-    writeJson(CURRENT_PROJECT_KEY, payload);
+    currentProjectCache = payload;
 };
 
 export const clearCurrentProjectCache = () => {
-    removeStorage(CURRENT_PROJECT_KEY);
+    currentProjectCache = null;
+    try { removeStorage(CURRENT_PROJECT_KEY); } catch (_) { }
 };
 
 export const updateWindowProject = (project) => {

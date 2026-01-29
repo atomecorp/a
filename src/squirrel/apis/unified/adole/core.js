@@ -1124,35 +1124,13 @@ function clear_ui_for_user_switch(prevUserId, nextUserId) {
 }
 
 const read_cached_current_project = () => {
-    if (typeof localStorage === 'undefined') return null;
-    try {
-        const raw = localStorage.getItem(CURRENT_PROJECT_CACHE_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (!parsed || !parsed.id) return null;
-        return {
-            id: String(parsed.id),
-            name: parsed.name ? String(parsed.name) : null,
-            userId: parsed.userId ? String(parsed.userId) : null
-        };
-    } catch {
-        return null;
-    }
+    return null;
 };
 
 const write_cached_current_project = (projectId, projectName, userId = null) => {
-    if (typeof localStorage === 'undefined' || !projectId || !userId) return;
-    try {
-        const payload = {
-            id: String(projectId),
-            name: projectName ? String(projectName) : null,
-            userId: String(userId),
-            ts: new Date().toISOString()
-        };
-        localStorage.setItem(CURRENT_PROJECT_CACHE_KEY, JSON.stringify(payload));
-    } catch {
-        // Ignore cache failures.
-    }
+    void projectId;
+    void projectName;
+    void userId;
 };
 
 const clear_cached_current_project = () => {

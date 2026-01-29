@@ -1,355 +1,202 @@
-# Complete Atome / ADOLE Architecture (SQLite + libSQL)
+# ADOLE v3.0 — Architecture unifiee (Axum / Fastify / AiS)
 
-Below is the full database schema rewritten **in English**, with a clear explanation of the **role of every field**.
-
----
-
-# 1. TABLE `objects`
-
-Represents the identity, category, and ownership of an Atome object. No properties are stored here.
-
-```sql
-CREATE TABLE objects (
-  id TEXT PRIMARY KEY,
-  type TEXT NOT NULL,
-  kind TEXT,
-  parent TEXT,
-  owner TEXT NOT NULL,
-  creator TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_objects_parent ON objects(parent);
-CREATE INDEX idx_objects_owner ON objects(owner);
-```
-
-### Field roles
-
-* **id**: Unique identifier (UUID) of the object.
-* **type**: Technical category (shape, text, sound, image…). Determines rendering + engine behavior.
-* **kind**: Semantic role (button, logo, layer…). Does not affect rendering; helps logic & filtering.
-* **parent**: Parent object ID for hierarchy (null for root objects/projects).
-* **owner**: User who currently owns the object.
-* **creator**: User who originally created the object.
-* **created_at**: Timestamp of object creation.
-* **updated_at**: Timestamp of last structural update.
+Cette documentation est la **reference fonctionnelle** de l'architecture ADOLE v3.0.
+Elle corrige les divergences historiques et s'aligne sur **le schema actuel en base**.
 
 ---
 
-# 2. TABLE `properties`
+# 0. Source de verite
 
-Stores the **current live state** of every property of an object.
-One row = one property.
+- **Schema canonique** : `database/schema.sql` (ADOLE v3.0, modele Atome/Particle)
+- **Protocoles de sync + conflits** : sections 6 a 8 de ce document (contrat a respecter)
+- **Isomorphisme runtimes** : Axum, Fastify et AiS doivent implementer **les memes endpoints et payloads**
 
-```sql
-CREATE TABLE properties (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  object_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  value TEXT,
-  version INTEGER NOT NULL DEFAULT 1,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-  FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_properties_object ON properties(object_id);
-CREATE INDEX idx_properties_name ON properties(name);
-```
-
-### Field roles
-
-* **id**: Internal DB ID for the property.
-* **object_id**: The object to which the property belongs.
-* **name**: Property name (x, y, width, color, opacity, text, src…).
-* **value**: Current value (TEXT or JSON-encoded).
-* **version**: Current version number of this property.
-* **updated_at**: Timestamp of last property change.
+**Important** : les schemas historiques de type `objects/properties` ou les tables dediees `users/projects/atomes` sont **des specs legacy** et ne font plus foi.
 
 ---
 
-# 3. TABLE `property_versions`
+# 1. Principes
 
-Full historical record of every property change.
-Used for: undo/redo, branching timelines, retro-editing, diff-based sync.
-
-```sql
-CREATE TABLE property_versions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  property_id INTEGER NOT NULL,
-  object_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  version INTEGER NOT NULL,
-  value TEXT,
-  author TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-  FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE,
-  FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_prop_versions_property ON property_versions(property_id);
-CREATE INDEX idx_prop_versions_object ON property_versions(object_id);
-```
-
-### Field roles
-
-* **id**: Internal ID of the version entry.
-* **property_id**: Link to the `properties` table entry.
-* **object_id**: Redundant link for fast lookup.
-* **name**: Name of the property at the time of the version.
-* **version**: Version number captured (incremented on each change).
-* **value**: The exact value at this version.
-* **author**: User who performed the change.
-* **created_at**: Exact timestamp of the property modification.
+- **Tout est un atome** : users, projects, documents, medias, etc.
+- **Les proprietes sont des particles** (cle/valeur, schema flexible).
+- **Versioning fin** : chaque modification cree une nouvelle entree dans `particles_versions`.
+- **ACL granulaire** : permissions par atome ou par particle.
+- **UI-agnostique** : la DB ne connait pas le renderer. Si besoin, stocker `renderer` ou `kind` dans les particles.
 
 ---
 
-# 4. TABLE `permissions`
+# 2. Schema canonique (ADOLE v3.0)
 
-Used for **fine-grained property-level sharing**.
-Allows controlling read/write access per object or per specific property.
+Le schema complet est **dans `database/schema.sql`**. Ci-dessous les tables et roles.
 
-```sql
-CREATE TABLE permissions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  object_id TEXT NOT NULL,
-  property_name TEXT,
-  user_id TEXT NOT NULL,
-  can_read INTEGER NOT NULL DEFAULT 1,
-  can_write INTEGER NOT NULL DEFAULT 0
-);
+## 2.1 TABLE `atomes`
+Identite de tous les objets (y compris users et projects).
 
-CREATE INDEX idx_permissions_object ON permissions(object_id);
-CREATE INDEX idx_permissions_user ON permissions(user_id);
-```
+- `atome_id` (PK) : UUID de l'objet
+- `atome_type` : type canonique (`user`, `project`, `shape`, ...)
+- `parent_id` : hierarchie
+- `owner_id` / `creator_id`
+- `created_at`, `updated_at`, `deleted_at` (soft delete)
+- **sync** : `last_sync`, `created_source`, `sync_status`
 
-### Field roles
+## 2.2 TABLE `particles`
+Proprietes courantes d'un atome (cle/valeur).
 
-* **id**: Internal permission rule ID.
-* **object_id**: Object this permission applies to.
-* **property_name**: If NULL → rule applies to whole object.
-  If set → applies only to this property.
-* **user_id**: User impacted by this permission.
-* **can_read**: 1 = allowed, 0 = denied.
-* **can_write**: 1 = allowed, 0 = denied.
+- `particle_id` (PK)
+- `atome_id` (FK)
+- `particle_key` (ex: `x`, `y`, `color`, `username`, `password_hash`)
+- `particle_value` (TEXT / JSON)
+- `value_type`
+- `version`, `created_at`, `updated_at`
+- `UNIQUE(atome_id, particle_key)`
 
----
+## 2.3 TABLE `particles_versions`
+Historique complet de chaque modification de particle.
 
-# 5. TABLE `snapshots`
+- `version_id` (PK)
+- `particle_id` (FK)
+- `atome_id` (FK)
+- `particle_key`
+- `version`
+- `old_value`, `new_value`
+- `changed_by`, `changed_at`
 
-Stores stable snapshots of an object for full-restore operations, exports, backups.
+## 2.4 TABLE `snapshots`
+Backups complets d'un atome ou projet.
 
-```sql
-CREATE TABLE snapshots (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  object_id TEXT NOT NULL,
-  snapshot TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+- `snapshot_id` (PK)
+- `atome_id`, `project_id`
+- `snapshot_data`, `state_blob`
+- `label`, `snapshot_type`, `actor`, `created_by`, `created_at`
 
-CREATE INDEX idx_snapshots_object ON snapshots(object_id);
-```
+## 2.5 TABLE `events` (append-only)
+Journal d'evenements (source de verite).
 
-### Field roles
+- `id` (UUID)
+- `ts`, `atome_id`, `project_id`
+- `kind`, `payload`, `actor`
+- `tx_id`, `gesture_id`
 
-* **id**: Snapshot ID.
-* **object_id**: Target object.
-* **snapshot**: Serialized JSON of the full state at snapshot time.
-* **created_at**: Timestamp when snapshot was taken.
+## 2.6 TABLE `state_current`
+Projection materialisee (cache) pour lecture rapide.
 
----
+- `atome_id` (PK)
+- `owner_id`, `project_id`
+- `properties` (JSON)
+- `updated_at`, `version`
 
-# Summary
+## 2.7 TABLE `permissions`
+ACL granulaire par atome ou par particle.
 
-This schema enables:
+- `permission_id` (PK)
+- `atome_id`
+- `particle_key` (NULL = tout l'atome)
+- `principal_id` (user)
+- `can_read`, `can_write`, `can_delete`, `can_share`, `can_create`
+- `share_mode`, `conditions`, `granted_by`, `granted_at`, `expires_at`
 
-* Full property-level versioning
-* Fine-grained permissions
-* Delta-based real-time sync
-* Time travel (restore any property version)
-* Branching timelines
-* Offline sync resolution
-* SQLite + libSQL compatibility
-* Zero ORM → fast, predictable, minimal code
+## 2.8 TABLE `sync_queue`
+File persistante de sync (offline-first).
 
----
+- `queue_id` (PK)
+- `atome_id`, `operation`, `payload`
+- `target_server`, `status`, `attempts`, `max_attempts`
+- `last_attempt_at`, `next_retry_at`, `error_message`, `created_at`
 
-# 6. AiS — Apple iOS Server (AUV3 Platform)
+## 2.9 TABLE `sync_state`
+Etat de sync par atome.
 
-## Overview
+- `atome_id` (PK)
+- `local_hash`, `remote_hash`
+- `local_version`, `remote_version`
+- `last_sync_at`, `sync_status`
 
-**AiS (Apple iOS Server)** is the native HTTP server embedded in the AUV3 (Audio Unit V3) plugin for iOS. Unlike the standard Fastify (Node.js) or Axum (Rust/Tauri) servers used on other platforms, AiS is a **lightweight Swift-based HTTP 1.1 server** that runs in-process within the iOS Audio Unit extension sandbox.
-
-### Why AiS exists
-
-* **iOS extensions cannot run Node.js or Rust runtimes** (security + sandboxing restrictions)
-* **Audio Units require ultra-low latency** and minimal memory footprint
-* **WebView needs local HTTP access** for serving assets and media files
-* **Custom URL schemes (file://) have limitations** in WKWebView for audio playback
-
-AiS bridges the gap by providing a minimal HTTP endpoint that emulates essential Fastify routes, allowing the Squirrel frontend to work seamlessly across all platforms.
-
----
-
-## Location in Codebase
-
-```
-/src-Auv3/Common/LocalHTTPServer.swift
-```
-
-This file contains the complete implementation of AiS.
-
-**Key components:**
-
-* **NWListener (Network framework)**: Handles TCP connections on `127.0.0.1`
-* **Dynamic port allocation**: Auto-selects available port (usually 8080 or fallback)
-* **Range request support**: Enables audio streaming with seek
-* **FastStart optimization**: Reorganizes M4A/MP4 atoms for progressive playback
-* **Extension-only context**: Only runs in AUv3 plugin, not in main app
+## 2.10 Vue `users_view`
+Compatibilite pour lister les users (atomes avec `atome_type='user'`).
 
 ---
 
-## Database Architecture
+# 3. Runtime regroupe et isomorphe
 
-### Primary Storage: **WKWebView LocalStorage + App Group Shared Container**
+**Objectif** : un seul contrat, plusieurs runtimes.
 
-AiS **does not use SQLite directly**. Instead:
-
-1. **WebView LocalStorage** (persistent via `WKWebsiteDataStore.default()`)
-   - Used in **main app** only (companion app outside AUv3)
-   - Stores UI state, user preferences, temporary data
-
-2. **WKWebsiteDataStore.nonPersistent()** in AUv3 extension
-   - LocalStorage is **not persistent** across AUv3 reloads
-   - This is an iOS limitation for extension sandboxing
-
-3. **App Group Shared Container** (`FileManager.containerURL`)
-   - Shared folder between main app and AUv3 extension
-   - Used for:
-     - Audio files (M4A, MP3, WAV)
-     - Project data (JSON serialization)
-     - User-created media assets
-
-4. **iCloud Drive** (optional, user-configurable)
-   - Via `iCloudFileManager.swift`
-   - Enables cross-device sync for projects
-
-### Data Persistence Strategy
-
-```
-┌─────────────────────────────────────────────┐
-│  AUV3 Extension (AiS Environment)           │
-├─────────────────────────────────────────────┤
-│  WebView (nonPersistent storage)            │
-│  ↓ writes to ↓                              │
-│  App Group Shared Container                 │
-│    - /audio/                                │
-│    - /projects/                             │
-│    - /cache/                                │
-│  ↓ optionally syncs to ↓                    │
-│  iCloud Drive (user choice)                 │
-└─────────────────────────────────────────────┘
-```
-
-**No SQLite in AiS** because:
-- Audio Unit extensions prioritize **real-time performance**
-- File-based storage is simpler and faster for media-heavy workflows
-- Synchronization happens at the **App Group level** (shared folder)
+- **Axum (Tauri)**, **Fastify**, **AiS** exposent **les memes routes**, **les memes enveloppes**, **les memes erreurs**.
+- Les differences ne doivent concerner que **le transport** (HTTP/WS) et **le stockage local**.
+- Toute divergence doit etre detectee par tests contractuels (section 8).
 
 ---
 
-## API Endpoints
+# 4. Renderer / Kind / Type
 
-AiS emulates these essential routes for frontend compatibility:
-
-### 1. `/api/server-info`
-Returns server metadata (version, platform, allowed paths)
-
-### 2. `/audio/*`
-Serves audio files with HTTP Range support for streaming
-
-### 3. `/api/file/*`
-Reads/writes files in App Group Shared Container
-
-### 4. `/api/projects/*` (if implemented)
-CRUD operations for project data (JSON serialization)
+- **`atome_type` est canonique** (logique/semantique, pas UI).
+- **Pas de colonne `renderer` en DB** : la DB reste UI-agnostique.
+- Si besoin : `renderer` et `kind` sont stockes comme **particles** (ex: `particle_key='renderer'`, `particle_key='kind'`).
 
 ---
 
-## Key Features
+# 5. Granularite et ACL (a conserver)
 
-* **In-memory request handling** (no disk I/O for HTTP protocol)
-* **Range request support** (`Content-Range`, `Accept-Ranges`)
-* **FastStart optimization** for M4A files (moov atom reordering)
-* **Minimal attack surface** (only serves whitelisted audio extensions)
-* **Automatic cleanup** on extension lifecycle events
+- **Property-level** : une particle = une propriete.
+- **Versioning complet** via `particles_versions`.
+- **ACL granulaire** via `permissions` (par atome ou particle).
 
 ---
 
-## Comparison with Other Servers
+# 6. Sync offline/online — contrat unifie (reecrit)
 
-| Feature | Fastify (Node.js) | Axum (Rust/Tauri) | AiS (Swift/iOS) |
-|---------|-------------------|-------------------|-----------------|
-| Platform | Web, Server | Desktop (Tauri) | iOS AUv3 only |
-| Database | PostgreSQL (Eden) | SQLite (libSQL) | App Group Files |
-| Runtime | Node.js | Rust | Native Swift |
-| Port | 8080 | 3000 | Dynamic (8080+) |
-| Persistence | Full SQL | Full SQL | File-based |
-| Use case | Production server | Desktop offline | Audio plugin |
+## 6.1 Idempotence
+- Chaque mutation cree un **event unique** (`events.id` UUID). Idempotence = dedupe par `events.id`.
+- Les writes sont append-only (events + particles_versions), jamais de mutation destructive du passe.
 
----
+## 6.2 Journal d'operations (source de verite)
+- `events` est le **log canonique**.
+- `state_current` est une **projection** calculable a partir de `events` + `snapshots`.
 
-## Integration with Squirrel Framework
+## 6.3 Double ecriture local + remote
+- Chaque mutation locale :
+  1. Ecrit `particles` + `particles_versions`
+  2. Ajoute un `event`
+  3. Met a jour `state_current`
+  4. Enfile dans `sync_queue`
+- La sync pousse les operations vers l'autre backend via `sync_queue` (retry/backoff).
 
-The frontend detects AiS via platform detection:
+## 6.4 Gestion des erreurs partielles
+- Une ecriture qui echoue en remote **reste en queue** avec `status='error'` et `attempts`.
+- Rejouer jusqu'a `max_attempts`, puis marquer en echec durable.
 
-```javascript
-// In kickstart.js or spark.js
-const platform = current_platform();
-if (platform.toLowerCase().includes('auv3')) {
-  window.__SQUIRREL_SERVER__ = 'AiS';
-  window.__SQUIRREL_FASTIFY_URL__ = `http://127.0.0.1:${AiS_PORT}`;
-}
-```
+## 6.5 Detection de conflits
+- Conflit si :
+  - `sync_state` indique **modifications concurrentes** (hash local != remote)
+  - ET les versions/timestamps montrent des changements des deux cotes.
 
-All API calls (`fetch`, `XMLHttpRequest`) transparently use AiS when running in AUV3 context.
-
-### Real-time Sync Alignment (AiS ↔ Fastify)
-
-- AiS should implement the same `/ws/sync` protocol as Axum (see `documentations/sync_protocol.md`).
-- Fastify remains the **authoritative sync hub**; AiS should relay or mirror realtime events with Fastify when network is available.
-- When offline, AiS remains the local authority for read/write, and replays to Fastify once reconnected.
+## 6.6 Resolution des conflits
+- Par defaut : **merge par particle** (plus recent gagne).
+- En cas d'ambiguite (timestamps egaux mais valeurs differentes), statut `conflict`.
+- La resolution **cree une nouvelle version** (jamais overwrite).
 
 ---
 
-## Performance Characteristics
+# 7. Strategie de compaction
 
-* **Startup time**: < 50ms (native Swift, no runtime initialization)
-* **Memory footprint**: ~2-5 MB (depends on active connections)
-* **Latency**: < 1ms for local requests (loopback interface)
-* **Audio streaming**: Supports gapless playback with Range requests
-
----
-
-## Limitations
-
-* **No WebSocket support** (use `window.webkit.messageHandlers` for bidirectional communication)
-* **Extension lifecycle**: Server stops when host app terminates AUv3
-* **Sandboxed I/O**: Can only access App Group Shared Container + scoped bookmarks
-* **No external network**: Bound to `127.0.0.1` only (security requirement)
+- **Snapshots periodiques** (par taille ou par temps).
+- **Retention** des `particles_versions` (ex: garder N versions ou fenetre temporelle).
+- **Archive des `events`** anciens dans un stockage froid.
+- **Rebuild** de `state_current` depuis le dernier snapshot + events restants.
 
 ---
 
-## Developer Notes
+# 8. Tests contractuels Axum / Fastify / AiS
 
-When developing features that involve AUV3:
+A mettre en place pour garantir l'isomorphisme :
 
-1. **Always test persistence** (extension reload = data loss in LocalStorage)
-2. **Use App Group Shared Container** for critical data
-3. **Avoid SQLite unless absolutely necessary** (file-based storage is preferred)
-4. **Check `current_platform()` before making API assumptions**
-5. **Use `iCloudFileManager` for cross-device sync** (optional feature)
+- **Schema parity** : meme tables, memes colonnes, memes index.
+- **API parity** : endpoints identiques + reponses identiques.
+- **WS sync parity** : meme protocoles, memes enveloppes d'events.
+- **Fixtures** : scenarios de sync offline -> online + conflits.
 
-AiS is intentionally minimal. For complex database operations, use the main app or defer to cloud sync (Fastify/Eden) when network is available.
+---
+
+# 9. AiS (AUv3) — compatibilite
+
+AiS doit exposer **les memes API et protocoles** que Axum/Fastify.
+Le stockage peut etre file-based (App Group) mais **le modele logique reste Atome/Particle**.

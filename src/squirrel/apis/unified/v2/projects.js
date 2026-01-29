@@ -1,6 +1,6 @@
 import { generateUUID } from '../adole.js';
 import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, clearCurrentProjectCache, updateWindowProject } from './session.js';
-import { list_atomes, create_atome, delete_atome, get_atome } from './atomes.js';
+import { list_atomes, create_atome, delete_atome, get_atome, syncLocalProjectsToFastify } from './atomes.js';
 
 const with_callback = (result, callback) => {
     if (typeof callback === 'function') callback(result);
@@ -97,6 +97,22 @@ export async function list_projects(callback) {
         meta: listResult?.meta || null
     };
 
+    if (Array.isArray(tauriProjects) && tauriProjects.length > 0
+        && Array.isArray(fastifyProjects)) {
+        const fastifyIds = new Set(
+            fastifyProjects.map((p) => p?.id || p?.atome_id).filter(Boolean).map(String)
+        );
+        const hasMissing = tauriProjects.some((p) => {
+            const id = p?.id || p?.atome_id;
+            return id && !fastifyIds.has(String(id));
+        });
+        if (hasMissing) {
+            try {
+                syncLocalProjectsToFastify({ reason: 'list_projects' }).catch(() => { });
+            } catch (_) { }
+        }
+    }
+
     return with_callback(result, callback);
 }
 
@@ -117,12 +133,6 @@ export function get_current_project_id() {
     if (typeof window !== 'undefined' && window.__currentProject?.id) {
         return window.__currentProject.id;
     }
-    const cache = getCurrentProjectCache();
-    if (cache?.id) return cache.id;
-    try {
-        const fallback = localStorage.getItem('eve_current_project_id');
-        if (fallback) return fallback;
-    } catch (_) { }
     return null;
 }
 
@@ -130,9 +140,7 @@ export function get_current_project() {
     if (typeof window !== 'undefined' && window.__currentProject) {
         return window.__currentProject;
     }
-    const cache = getCurrentProjectCache();
-    if (!cache?.id) return null;
-    return { id: cache.id, name: cache.name || null, userId: cache.userId || null };
+    return null;
 }
 
 export async function set_current_project(projectId, projectName = null, ownerId = null, persist = true) {
@@ -152,10 +160,6 @@ export async function set_current_project(projectId, projectName = null, ownerId
 
     if (persist) {
         setCurrentProjectCache(payload);
-        try { localStorage.setItem('eve_current_project_id', String(projectId)); } catch (_) { }
-        if (projectName) {
-            try { localStorage.setItem('eve_current_project_name', String(projectName)); } catch (_) { }
-        }
     }
 
     updateWindowProject(payload);
@@ -170,16 +174,6 @@ export async function load_saved_current_project() {
     if (cached?.id && (!cached.userId || String(cached.userId) === String(currentUserId))) {
         return { id: cached.id, name: cached.name || null };
     }
-
-    try {
-        const fallbackId = localStorage.getItem('eve_current_project_id');
-        const fallbackName = localStorage.getItem('eve_current_project_name');
-        if (fallbackId) {
-            const payload = { id: String(fallbackId), name: fallbackName || null, userId: currentUserId };
-            setCurrentProjectCache(payload);
-            return { id: payload.id, name: payload.name };
-        }
-    } catch (_) { }
 
     // Fallback: try reading user atome for current_project_id if available
     try {

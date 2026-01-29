@@ -22,6 +22,9 @@ import {
 const SYNC_DEBUG =
     process.env.SQUIRREL_SYNC_DEBUG !== '0'
     && process.env.SQUIRREL_SYNC_DEBUG !== 'false';
+const TAURI_SYNC_URL = process.env.SQUIRREL_TAURI_URL || process.env.TAURI_URL || 'http://127.0.0.1:3000';
+const SYNC_REMOTE_ENABLED = process.env.SQUIRREL_SYNC_REMOTE !== '0';
+const SYNC_TARGET_SERVER = 'tauri';
 
 function syncDebugLog(message, data = null) {
     if (!SYNC_DEBUG) return;
@@ -148,6 +151,18 @@ async function updateUserSyncHash(userId) {
  * Validate authentication token and return user info
  */
 async function validateToken(request) {
+    const syncToken = process.env.SQUIRREL_SYNC_TOKEN;
+    const headerSyncToken = request.headers['x-sync-token'];
+    if (syncToken && headerSyncToken && headerSyncToken === syncToken) {
+        const headerUserId = request.headers['x-user-id'] || request.headers['x-userid'];
+        return {
+            id: headerUserId || 'sync',
+            userId: headerUserId || 'sync',
+            username: 'sync',
+            phone: null
+        };
+    }
+
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return null;
@@ -762,6 +777,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
     server.post('/api/events/commit', async (request, reply) => {
         console.log('[Fastify] /api/events/commit received');
+        const syncSource = String(request.headers['x-sync-source'] || '').toLowerCase();
         const user = await validateToken(request);
         if (!user) {
             console.log('[Fastify] /api/events/commit UNAUTHORIZED - no valid token');
@@ -787,7 +803,14 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         });
 
         try {
-            const created = await db.appendEvent({ ...event, actor });
+            const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
+            const created = await db.appendEvent(
+                { ...event, actor },
+                {
+                    syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
+                    skipQueue: !shouldEnqueue
+                }
+            );
             syncDebugLog('commit stored', {
                 atome_id: created?.atome_id || created?.atomeId || null,
                 kind: created?.kind || null,
@@ -811,6 +834,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
     server.post('/api/events/commit-batch', async (request, reply) => {
         console.log('[Fastify] /api/events/commit-batch received');
+        const syncSource = String(request.headers['x-sync-source'] || '').toLowerCase();
         const user = await validateToken(request);
         if (!user) {
             console.log('[Fastify] /api/events/commit-batch UNAUTHORIZED');
@@ -840,7 +864,12 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         });
 
         try {
-            const created = await db.appendEvents(normalizedEvents, { txId });
+            const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
+            const created = await db.appendEvents(normalizedEvents, {
+                txId,
+                syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
+                skipQueue: !shouldEnqueue
+            });
             syncDebugLog('commit-batch stored', {
                 count: Array.isArray(created) ? created.length : 0,
                 tx_id: txId

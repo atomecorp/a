@@ -1380,6 +1380,9 @@ export async function appendEvent(event, options = {}) {
     const normalized = normalizeEventInput(event, options);
     const payloadJson = serializeJson(normalized.payload);
     const actorJson = serializeJson(normalized.actor);
+    const syncTarget = options.syncTarget || options.target_server || null;
+    const skipQueue = options.skipQueue === true;
+    let inserted = false;
 
     await withTransaction(async () => {
         const existing = await query(
@@ -1404,12 +1407,22 @@ export async function appendEvent(event, options = {}) {
                 normalized.gesture_id
             ]
         );
+        inserted = true;
 
         await applyEventToStateCurrent({
             ...normalized,
             payload: normalized.payload
         });
     });
+
+    if (inserted && syncTarget && !skipQueue) {
+        await enqueueSyncOperation({
+            atome_id: normalized.atome_id,
+            operation: 'events:commit',
+            payload: normalized,
+            target_server: syncTarget
+        });
+    }
 
     return normalized;
 }
@@ -1420,7 +1433,10 @@ export async function appendEvents(events, options = {}) {
     }
 
     const results = [];
+    const created = [];
     const txId = options.tx_id || options.txId || null;
+    const syncTarget = options.syncTarget || options.target_server || null;
+    const skipQueue = options.skipQueue === true;
 
     await withTransaction(async () => {
         for (const evt of events) {
@@ -1451,18 +1467,28 @@ export async function appendEvents(events, options = {}) {
                     payloadJson,
                     actorJson,
                     normalized.tx_id,
-                    normalized.gesture_id
-                ]
-            );
+                normalized.gesture_id
+            ]
+        );
 
             await applyEventToStateCurrent({
                 ...normalized,
                 payload: normalized.payload
             });
 
+            created.push(normalized);
             results.push(normalized);
         }
     });
+
+    if (created.length && syncTarget && !skipQueue) {
+        await Promise.all(created.map((normalized) => enqueueSyncOperation({
+            atome_id: normalized.atome_id,
+            operation: 'events:commit',
+            payload: normalized,
+            target_server: syncTarget
+        })));
+    }
 
     return results;
 }
@@ -1938,6 +1964,63 @@ export async function updateSyncState(atomeId, localHash = null, remoteHash = nu
 	`, [atomeId, localHash, remoteHash, now, syncStatus, localHash, remoteHash, now, syncStatus]);
 }
 
+// ============================================================================
+// SYNC QUEUE (durable)
+// ============================================================================
+
+export async function enqueueSyncOperation({ atome_id, operation, payload, target_server }) {
+    if (!target_server) return null;
+    const now = new Date().toISOString();
+    const payloadJson = serializeJson(payload);
+    const result = await query(
+        'run',
+        `INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at)
+         VALUES (?, ?, ?, ?, 'pending', 0, 5, ?)`,
+        [atome_id || null, operation || 'events:commit', payloadJson, target_server, now]
+    );
+    return result;
+}
+
+export async function listSyncQueue({ target_server, limit = 50 } = {}) {
+    const now = new Date().toISOString();
+    return await query(
+        'all',
+        `SELECT * FROM sync_queue
+         WHERE status IN ('pending', 'error')
+           AND (next_retry_at IS NULL OR next_retry_at <= ?)
+           AND (? IS NULL OR target_server = ?)
+         ORDER BY created_at ASC
+         LIMIT ?`,
+        [now, target_server || null, target_server || null, limit]
+    );
+}
+
+export async function markSyncQueueSyncing(queueId, attempts) {
+    const now = new Date().toISOString();
+    await query(
+        'run',
+        `UPDATE sync_queue
+         SET status = 'syncing', attempts = ?, last_attempt_at = ?
+         WHERE queue_id = ?`,
+        [attempts, now, queueId]
+    );
+}
+
+export async function markSyncQueueError(queueId, attempts, errorMessage, nextRetryAt, final = false) {
+    const status = final ? 'failed' : 'error';
+    await query(
+        'run',
+        `UPDATE sync_queue
+         SET status = ?, attempts = ?, error_message = ?, next_retry_at = ?
+         WHERE queue_id = ?`,
+        [status, attempts, errorMessage || null, nextRetryAt || null, queueId]
+    );
+}
+
+export async function markSyncQueueDone(queueId) {
+    await query('run', 'DELETE FROM sync_queue WHERE queue_id = ?', [queueId]);
+}
+
 /**
  * Get pending atomes for sync
  */
@@ -2139,6 +2222,11 @@ export default {
     // Sync
     getSyncState,
     updateSyncState,
+    enqueueSyncOperation,
+    listSyncQueue,
+    markSyncQueueSyncing,
+    markSyncQueueError,
+    markSyncQueueDone,
     getPendingForSync,
     markAsSynced,
     resolvePendingOwners,

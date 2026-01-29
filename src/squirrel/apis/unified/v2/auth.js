@@ -1,5 +1,6 @@
 import { TauriAdapter, FastifyAdapter, checkBackends } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
+import { syncLocalProjectsToFastify } from './atomes.js';
 import {
     getSessionState,
     setSessionState,
@@ -127,6 +128,11 @@ const migrateAnonymousWorkspace = async (fromUserId, toUserId) => {
             includeCreator: true
         });
         const ok = !!(res?.ok || res?.success);
+        if (ok) {
+            try {
+                syncLocalProjectsToFastify({ reason: 'anonymous-migration' }).catch(() => { });
+            } catch (_) { }
+        }
         return { ok, raw: res };
     } catch (e) {
         return { ok: false, reason: 'transfer_failed', error: e?.message || String(e) };
@@ -225,6 +231,10 @@ export const auth = {
             if (prevAnonymousId && String(prevAnonymousId) !== String(primaryResult.user.id)) {
                 try { await migrateAnonymousWorkspace(prevAnonymousId, primaryResult.user.id); } catch (_) { }
             }
+
+            try {
+                syncLocalProjectsToFastify({ reason: 'register' }).catch(() => { });
+            } catch (_) { }
         }
 
         return response;
@@ -287,6 +297,10 @@ export const auth = {
             if (prevAnonymousId && String(prevAnonymousId) !== String(loggedUser.id)) {
                 try { await migrateAnonymousWorkspace(prevAnonymousId, loggedUser.id); } catch (_) { }
             }
+
+            try {
+                syncLocalProjectsToFastify({ reason: 'login' }).catch(() => { });
+            } catch (_) { }
         }
 
         return response;
