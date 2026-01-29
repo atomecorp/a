@@ -599,7 +599,10 @@ async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
 
     if (shareType !== 'linked') {
         console.log('[Share] Creating shared copies (non-linked)...');
-        const receiverProjectId = particles?.receiverProjectId || particles?.receiver_project_id || null;
+        let receiverProjectId = particles?.receiverProjectId || particles?.receiver_project_id || null;
+        if (!receiverProjectId) {
+            receiverProjectId = await resolveReceiverProjectIdFromState(targetUserId);
+        }
         console.log('[Share] receiverProjectId for copies:', receiverProjectId);
         const copied = await createSharedCopies({
             sharerId,
@@ -840,6 +843,17 @@ function normalizeShareMode(rawMode) {
     const mode = String(rawMode || '').toLowerCase();
     if (mode === 'validation-based' || mode === 'manual' || mode === 'non-real-time') return 'manual';
     return 'real-time';
+}
+
+async function resolveReceiverProjectIdFromState(userId) {
+    if (!userId) return null;
+    try {
+        const state = await db.getStateCurrent(userId);
+        const props = state?.properties || {};
+        return props.current_project_id || props.currentProjectId || null;
+    } catch (_) {
+        return null;
+    }
 }
 
 async function lookupUserByPhone(phone) {
