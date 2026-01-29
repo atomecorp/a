@@ -189,7 +189,7 @@ export const auth = {
         const prevSession = getSessionState();
         const prevAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
 
-        const primaryResult = await registerBackend(primary, {
+        let primaryResult = await registerBackend(primary, {
             phone: cleanPhone,
             password,
             username: cleanName,
@@ -200,6 +200,20 @@ export const auth = {
             tauri: { success: false, data: null, error: null },
             fastify: { success: false, data: null, error: null }
         };
+        // If register succeeded but did not return a token, try immediate login
+        if (primaryResult.ok && !primaryResult.token) {
+            try {
+                const loginResult = await loginBackend(primary, { phone: cleanPhone, password });
+                if (loginResult.ok) {
+                    primaryResult = {
+                        ...primaryResult,
+                        user: loginResult.user || primaryResult.user,
+                        token: loginResult.token || primaryResult.token
+                    };
+                }
+            } catch (_) { }
+        }
+
         response[primary] = {
             success: primaryResult.ok,
             data: primaryResult.raw,

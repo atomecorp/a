@@ -921,6 +921,22 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             console.log(`✅ User registered (ADOLE atome): ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
+            // Issue JWT immediately so first post-register commit has a token.
+            const token = server.jwt.sign({
+                id: principalId,
+                tenantId: 'local-tenant',
+                phone: cleanPhone,
+                username: cleanUsername
+            });
+
+            reply.setCookie('access_token', token, {
+                path: '/',
+                httpOnly: true,
+                secure: isProduction,
+                sameSite: 'strict',
+                maxAge: COOKIE_MAX_AGE
+            });
+
             // Sync to Tauri server (async, don't block response)
             let syncResult = { success: false };
             try {
@@ -954,7 +970,15 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 success: true,
                 message: 'Account created successfully',
                 principalId,
-                synced: syncResult.success
+                synced: syncResult.success,
+                token,
+                user: {
+                    id: principalId,
+                    user_id: principalId,
+                    username: cleanUsername,
+                    phone: cleanPhone,
+                    optional: safeOptional
+                }
             };
 
         } catch (error) {

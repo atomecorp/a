@@ -2691,14 +2691,42 @@ async function startServer() {
                   }
                 } catch (_) { }
 
+                // Issue JWT immediately so first post-register commit has a token.
+                const jwt = await import('jsonwebtoken');
+                const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                const token = jwt.default.sign(
+                  { userId, phone: cleanPhone },
+                  jwtSecret,
+                  { expiresIn: '7d' }
+                );
+
                 safeSend({
                   type: 'auth-response',
                   requestId,
                   success: true,
                   alreadyExists: false,
                   userId,
+                  token,
+                  user: {
+                    id: userId,
+                    user_id: userId,
+                    username,
+                    phone: cleanPhone
+                  },
                   message: 'User created successfully'
                 });
+
+                attachWsApiClientToUser(connection, userId);
+                try {
+                  const decoded = jwt.default.verify(token, jwtSecret);
+                  if (decoded && typeof decoded.exp === 'number') {
+                    connection._wsApiAuthExpMs = decoded.exp * 1000;
+                  } else {
+                    connection._wsApiAuthExpMs = null;
+                  }
+                } catch (_) {
+                  connection._wsApiAuthExpMs = null;
+                }
               } else if (action === 'lookup-phone') {
                 const rawPhone = data.phone;
                 if (!rawPhone || typeof rawPhone !== 'string') {
