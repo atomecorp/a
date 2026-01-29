@@ -1083,6 +1083,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return { success: false, error: 'Invalid credentials' };
             }
 
+            const normalizedUserPhone = normalizePhone(user.phone);
+            if (!normalizedUserPhone || normalizedUserPhone !== cleanPhone) {
+                console.warn(`[Auth] 🚨 Phone mismatch on login: expected ${cleanPhone.slice(0, 4)}*** got ${String(user.phone || '').slice(0, 4)}*** (userId=${user.user_id})`);
+                return { success: false, error: 'Invalid credentials' };
+            }
+
             // Verify password
             const passwordValid = await verifyPassword(password, user.password_hash);
             if (!passwordValid) {

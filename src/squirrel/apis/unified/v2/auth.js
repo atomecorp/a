@@ -17,8 +17,28 @@ const adapters = {
     fastify: FastifyAdapter
 };
 
-const normalizePhone = (phone) => String(phone || '').trim();
+const normalizePhone = (phone) => {
+    if (phone === null || phone === undefined) return '';
+    const trimmed = String(phone).trim();
+    if (!trimmed) return '';
+    const cleaned = trimmed.replace(/[^\d+]/g, '');
+    if (!cleaned) return '';
+    if (cleaned.startsWith('+')) {
+        return `+${cleaned.slice(1).replace(/\+/g, '')}`;
+    }
+    return cleaned.replace(/\+/g, '');
+};
 const normalizeUsername = (name) => String(name || '').trim();
+
+const normalizePhoneForCompare = (phone) => normalizePhone(phone || '').toLowerCase();
+
+const isPhoneMatch = (user, expectedPhone) => {
+    const expected = normalizePhoneForCompare(expectedPhone);
+    if (!expected) return false;
+    const actual = normalizePhoneForCompare(user?.phone || '');
+    if (!actual) return false;
+    return actual === expected;
+};
 
 const extractUser = (result) => {
     return result?.user
@@ -56,13 +76,22 @@ const loginBackend = async (backend, { phone, password }) => {
     const adapter = adapters[backend];
     if (!adapter?.auth?.login) return { ok: false, error: 'auth_unavailable' };
     const result = await adapter.auth.login({ phone, password });
-    const ok = !!(result?.ok || result?.success);
+    let ok = !!(result?.ok || result?.success);
+    let user = normalizeUser(extractUser(result));
+    let error = ok ? null : (result?.error || 'login_failed');
+    if (ok && !isPhoneMatch(user, phone)) {
+        ok = false;
+        user = null;
+        try { adapter?.clearToken?.(); } catch (_) { }
+        console.warn(`[Auth] Login phone mismatch on ${backend}: expected ${String(phone || '').slice(0, 4)}***`);
+        error = 'phone_mismatch';
+    }
     return {
         ok,
-        user: normalizeUser(extractUser(result)),
+        user,
         token: extractToken(result),
         raw: result,
-        error: ok ? null : (result?.error || 'login_failed')
+        error: ok ? null : error
     };
 };
 
@@ -269,6 +298,11 @@ export const auth = {
 
         const prevSession = getSessionState();
         const prevAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
+
+        // Security: clear any stale auth state before attempting a new login
+        try { TauriAdapter?.clearToken?.(); } catch (_) { }
+        try { FastifyAdapter?.clearToken?.(); } catch (_) { }
+        clearSessionState();
 
         const primaryResult = await loginBackend(primary, {
             phone: cleanPhone,

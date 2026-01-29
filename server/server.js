@@ -2897,6 +2897,18 @@ async function startServer() {
                   });
                   return;
                 }
+                const normalizedInput = normalizePhone(phone);
+                const normalizedUserPhone = normalizePhone(user.phone);
+                if (!normalizedUserPhone || normalizedUserPhone !== normalizedInput) {
+                  console.warn(`[ws/api] 🚨 Phone mismatch on login: expected ${String(normalizedInput || '').slice(0, 4)}*** got ${String(user.phone || '').slice(0, 4)}*** (userId=${user.user_id})`);
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Invalid credentials'
+                  });
+                  return;
+                }
 
                 // Verify password
                 const { verifyPassword } = await import('./auth.js');

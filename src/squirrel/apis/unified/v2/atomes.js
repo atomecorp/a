@@ -176,6 +176,70 @@ const listOnBackend = async (backend, options, currentUserId, skipOwner) => {
     return { ok, list: list.map(normalizeAtomeRecord).filter(Boolean), raw: result, error: ok ? null : (result?.error || 'list_failed') };
 };
 
+const mapStateCurrentToAtome = (state) => {
+    if (!state || typeof state !== 'object') return null;
+    const properties = state.properties || {};
+    const atomeType = properties.type || properties.kind || state.atome_type || null;
+    const parentId = properties.parent_id || properties.parentId || state.parent_id || null;
+    const projectId = state.project_id || properties.project_id || properties.projectId || null;
+    const record = {
+        atome_id: state.atome_id || state.id || null,
+        id: state.atome_id || state.id || null,
+        atome_type: atomeType,
+        type: atomeType,
+        parent_id: parentId,
+        owner_id: state.owner_id || state.ownerId || null,
+        project_id: projectId,
+        properties,
+        particles: properties,
+        data: properties
+    };
+    return normalizeAtomeRecord(record);
+};
+
+const resolveHttpBaseUrl = (backend, adapter) => {
+    let base = adapter?.baseUrl || '';
+    if (base.startsWith('ws://')) base = `http://${base.slice(5)}`;
+    if (base.startsWith('wss://')) base = `https://${base.slice(6)}`;
+    base = base.replace(/\/ws\/api\/?$/, '').replace(/\/$/, '');
+    if (base) return base;
+    if (typeof window === 'undefined') return '';
+    if (backend === 'fastify') {
+        return (window.__SQUIRREL_FASTIFY_URL__ || 'http://127.0.0.1:3001').replace(/\/$/, '');
+    }
+    const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || 3000;
+    return `http://127.0.0.1:${port}`;
+};
+
+const listStateCurrentOnBackend = async (backend, options) => {
+    const adapter = adapters[backend];
+    const baseUrl = resolveHttpBaseUrl(backend, adapter);
+    const token = adapter?.getToken?.();
+    if (!baseUrl || !token) return { ok: false, list: [], error: 'state_current_unavailable' };
+    const params = new URLSearchParams();
+    const projectId = options.projectId || options.project_id || options.parentId || options.parent_id || null;
+    if (projectId) params.set('projectId', projectId);
+    if (options.limit != null) params.set('limit', String(options.limit));
+    if (options.offset != null) params.set('offset', String(options.offset));
+    const url = `${baseUrl}/api/state_current${params.toString() ? `?${params.toString()}` : ''}`;
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            return { ok: false, list: [], error: `state_current_http_${response.status}` };
+        }
+        const payload = await response.json().catch(() => null);
+        const listRaw = Array.isArray(payload?.states) ? payload.states : Array.isArray(payload?.state_current) ? payload.state_current : [];
+        const list = listRaw.map(mapStateCurrentToAtome).filter(Boolean);
+        return { ok: true, list, raw: payload };
+    } catch (e) {
+        return { ok: false, list: [], error: e?.message || 'state_current_failed' };
+    }
+};
+
 const canUseFastify = async (currentUserId) => {
     if (!FastifyAdapter?.getToken?.()) return false;
     try {
@@ -216,13 +280,18 @@ export async function list_atomes(options = {}, callback) {
         meta: { source: primary }
     };
 
-    const primaryResult = await listOnBackend(primary, options, currentUserId, allowCrossOwner);
+    const shouldUseStateCurrent = !!(options.projectId || options.project_id || options.parentId || options.parent_id);
+    const primaryResult = shouldUseStateCurrent
+        ? await listStateCurrentOnBackend(primary, options)
+        : await listOnBackend(primary, options, currentUserId, allowCrossOwner);
     results[primary] = { atomes: primaryResult.list, error: primaryResult.error };
 
     if (runtimeTauri && !isAnonymous() && (options.includeShared || primaryResult.list.length === 0)) {
         const allowFastify = await canUseFastify(currentUserId);
         if (allowFastify) {
-            const secondaryResult = await listOnBackend(secondary, options, currentUserId, allowCrossOwner);
+            const secondaryResult = shouldUseStateCurrent
+                ? await listStateCurrentOnBackend(secondary, options)
+                : await listOnBackend(secondary, options, currentUserId, allowCrossOwner);
             results[secondary] = { atomes: secondaryResult.list, error: secondaryResult.error };
             if (primaryResult.list.length === 0 && secondaryResult.list.length > 0) {
                 results.meta.preferFastify = true;
@@ -240,7 +309,7 @@ export async function list_atomes(options = {}, callback) {
         }
     }
 
-    if (!allowCrossOwner) {
+    if (!allowCrossOwner && !shouldUseStateCurrent) {
         const filteredPrimary = filterByOwner(results[primary].atomes, currentUserId, { allowCreator: allowCreatorMatch });
         results[primary].atomes = filteredPrimary;
         if (results[secondary]?.atomes?.length) {
