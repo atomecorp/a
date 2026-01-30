@@ -16,6 +16,7 @@ import db from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { wsSendJsonToUser } from './wsApiState.js';
 import { broadcastAtomeCreate } from './atomeRealtime.js';
+import { isPublicAccess } from '../src/shared/recipient_access.js';
 
 /**
  * Permission levels (bitmask compatible)
@@ -911,6 +912,112 @@ function normalizeParticles(particles) {
     return particles && typeof particles === 'object' ? particles : {};
 }
 
+async function listShareRequestsForUser(userId, options = {}) {
+    if (!userId) return [];
+    const box = String(options.box || 'inbox');
+    const statusesRaw = Array.isArray(options.statuses || options.status)
+        ? (options.statuses || options.status)
+        : (options.status ? [options.status] : []);
+    const statuses = statusesRaw.length
+        ? statusesRaw.map((value) => String(value).toLowerCase()).filter(Boolean)
+        : ['pending', 'active'];
+
+    const boxJson = JSON.stringify(box);
+    const statusJson = statuses.map((s) => JSON.stringify(s));
+
+    const rows = await db.query('all', `
+        SELECT a.atome_id,
+               MAX(CASE WHEN p.particle_key = 'timestamp' THEN p.particle_value END) as timestamp
+        FROM atomes a
+        LEFT JOIN particles p ON a.atome_id = p.atome_id
+        WHERE a.atome_type = 'share_request'
+          AND a.owner_id = ?
+          AND EXISTS (
+            SELECT 1 FROM particles pb
+            WHERE pb.atome_id = a.atome_id
+              AND pb.particle_key = 'box'
+              AND (pb.particle_value = ? OR pb.particle_value = ?)
+          )
+          AND EXISTS (
+            SELECT 1 FROM particles ps
+            WHERE ps.atome_id = a.atome_id
+              AND ps.particle_key = 'status'
+              AND (
+                ${statuses.map(() => 'ps.particle_value = ? OR ps.particle_value = ?').join(' OR ')}
+              )
+          )
+        GROUP BY a.atome_id
+        ORDER BY timestamp DESC
+    `, [String(userId), boxJson, box, ...statuses.flatMap((s, idx) => [statusJson[idx], s])]);
+
+    const results = [];
+    for (const row of rows || []) {
+        const atome = await db.getAtome(row.atome_id);
+        if (atome) results.push(atome);
+    }
+    return results;
+}
+
+async function resolveUserAccessInfo(userId) {
+    if (!userId) return { access: 'private', visibility: 'private' };
+    let access = null;
+    let visibility = null;
+    try {
+        access = await db.getParticle(String(userId), 'access');
+    } catch (_) { }
+    try {
+        visibility = await db.getParticle(String(userId), 'visibility');
+    } catch (_) { }
+    return { access: access || '', visibility: visibility || '' };
+}
+
+async function hasAcceptedRelationship(targetUserId, sharerId) {
+    if (!targetUserId || !sharerId) return false;
+    const policyEntry = await findSharePolicy(targetUserId, sharerId);
+    const policyValue = String(policyEntry?.particles?.policy || '').toLowerCase();
+    if (policyValue === 'block' || policyValue === 'never') return false;
+    if (policyValue === 'always') return true;
+
+    const sharerRaw = String(sharerId);
+    const sharerJson = JSON.stringify(sharerRaw);
+    const statusAccepted = JSON.stringify('accepted');
+    const statusActive = JSON.stringify('active');
+    const rows = await db.query('all', `
+        SELECT a.atome_id
+        FROM atomes a
+        JOIN particles ps ON a.atome_id = ps.atome_id
+        JOIN particles pst ON a.atome_id = pst.atome_id
+        WHERE a.atome_type = 'share_request'
+          AND a.owner_id = ?
+          AND ps.particle_key = 'sharer_id'
+          AND (ps.particle_value = ? OR ps.particle_value = ?)
+          AND pst.particle_key = 'status'
+          AND (pst.particle_value = ? OR pst.particle_value = ? OR pst.particle_value = ? OR pst.particle_value = ?)
+        LIMIT 1
+    `, [String(targetUserId), sharerJson, sharerRaw, statusAccepted, 'accepted', statusActive, 'active']);
+    return Array.isArray(rows) && rows.length > 0;
+}
+
+async function enforceRecipientVisibility({ sharerId, targetUserId, context = 'share' }) {
+    const accessInfo = await resolveUserAccessInfo(targetUserId);
+    const isPublic = isPublicAccess(accessInfo);
+    if (isPublic) {
+        return { ok: true, accessInfo, accepted: true };
+    }
+    const accepted = await hasAcceptedRelationship(targetUserId, sharerId);
+    if (!accepted) {
+        console.warn('[Share] Recipient rejected (private, no accepted relationship):', {
+            context,
+            sharerId,
+            targetUserId,
+            access: accessInfo.access,
+            visibility: accessInfo.visibility
+        });
+        return { ok: false, accessInfo, accepted: false, error: 'Recipient is private' };
+    }
+    return { ok: true, accessInfo, accepted: true };
+}
+
 async function broadcastShareCommand({ recipients, senderUserId, command, params }) {
     if (!recipients || recipients.length === 0) return;
     const nowIso = new Date().toISOString();
@@ -1011,6 +1118,15 @@ export async function handleShareMessage(message, userId) {
                 const resolvedTargetUserId = await resolveTargetUserId({ targetUserId: target_user_id, targetPhone: target_phone });
                 if (!resolvedTargetUserId) {
                     return { requestId, success: false, error: 'Target user not found' };
+                }
+
+                const visibilityCheck = await enforceRecipientVisibility({
+                    sharerId: userId,
+                    targetUserId: resolvedTargetUserId,
+                    context: 'share-request'
+                });
+                if (!visibilityCheck.ok) {
+                    return { requestId, success: false, error: visibilityCheck.error || 'Recipient is private' };
                 }
 
                 const idsInput = Array.isArray(atome_ids) ? atome_ids.map(String).filter(Boolean) : (atome_ids ? [String(atome_ids)] : []);
@@ -1236,6 +1352,14 @@ export async function handleShareMessage(message, userId) {
                 if (!atome_id || !principal_id) {
                     return { requestId, success: false, error: 'Missing atome_id or principal_id' };
                 }
+                const visibilityCheck = await enforceRecipientVisibility({
+                    sharerId: userId,
+                    targetUserId: principal_id,
+                    context: 'share-create'
+                });
+                if (!visibilityCheck.ok) {
+                    return { requestId, success: false, error: visibilityCheck.error || 'Recipient is private' };
+                }
                 const permLevel = typeof permission === 'string' ? parsePermission(permission) : (permission || PERMISSION.READ);
                 const result = await createShare(userId, atome_id, principal_id, permLevel, {
                     particleKey: particle_key,
@@ -1274,6 +1398,13 @@ export async function handleShareMessage(message, userId) {
             case 'shared-with-me': {
                 const shares = await getSharesForUser(userId);
                 return { requestId, success: true, data: shares };
+            }
+
+            case 'inbox': {
+                const box = message?.box || 'inbox';
+                const status = message?.status || message?.statuses || null;
+                const requests = await listShareRequestsForUser(userId, { box, status });
+                return { requestId, success: true, data: requests };
             }
 
             case 'accessible': {

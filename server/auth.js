@@ -86,7 +86,8 @@ const RESERVED_USER_PARTICLE_KEYS = new Set([
     'password_hash',
     'phone',
     'username',
-    'visibility'
+    'visibility',
+    'access'
 ]);
 
 function normalizeUserOptional(optional) {
@@ -99,6 +100,10 @@ function normalizeUserOptional(optional) {
         cleaned[key] = value;
     }
     return cleaned;
+}
+
+function normalizeAccessValue(value) {
+    return String(value || '').toLowerCase() === 'public' ? 'public' : 'private';
 }
 
 async function getUserOptionalParticles(dataSource, userId) {
@@ -148,7 +153,8 @@ async function upsertUserStateCurrent(dataSource, userId, username, phone, visib
         name: username,
         username,
         phone,
-        visibility
+        visibility,
+        access: visibility
     };
     const optionalPatch = normalizeUserOptional(optional);
 
@@ -290,7 +296,7 @@ export async function sendSMS(phone, message) {
 async function createUserAtome(dataSource, userId, username, phone, passwordHash, visibility = 'public', optional = {}) {
     const now = new Date().toISOString();
     // Normalize visibility value
-    const normalizedVisibility = (visibility === 'private') ? 'private' : 'public';
+    const normalizedVisibility = normalizeAccessValue(visibility);
     const optionalParticles = normalizeUserOptional(optional);
 
     // Check if user exists (including soft-deleted)
@@ -326,6 +332,14 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
                 `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'password_hash'`,
                 [JSON.stringify(passwordHash), now, userId]
             );
+            await dataSource.query(
+                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'visibility'`,
+                [JSON.stringify(normalizedVisibility), now, userId]
+            );
+            await dataSource.query(
+                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'access'`,
+                [JSON.stringify(normalizedVisibility), now, userId]
+            );
 
             for (const [key, value] of Object.entries(optionalParticles)) {
                 await updateUserParticle(dataSource, userId, key, value);
@@ -353,7 +367,8 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
                 { key: 'phone', value: JSON.stringify(phone) },
                 { key: 'username', value: JSON.stringify(username) },
                 { key: 'password_hash', value: JSON.stringify(passwordHash) },
-                { key: 'visibility', value: JSON.stringify(normalizedVisibility) }
+                { key: 'visibility', value: JSON.stringify(normalizedVisibility) },
+                { key: 'access', value: JSON.stringify(normalizedVisibility) }
             ];
 
             for (const p of particles) {
@@ -399,7 +414,8 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
         { key: 'phone', value: JSON.stringify(phone) },
         { key: 'username', value: JSON.stringify(username) },
         { key: 'password_hash', value: JSON.stringify(passwordHash) },
-        { key: 'visibility', value: JSON.stringify(normalizedVisibility) }
+        { key: 'visibility', value: JSON.stringify(normalizedVisibility) },
+        { key: 'access', value: JSON.stringify(normalizedVisibility) }
     ];
 
     for (const p of particles) {
@@ -416,7 +432,16 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
 
     await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now, optionalParticles);
 
-    console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}]`);
+    try {
+        const accessRows = await dataSource.query(
+            'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
+            [userId, 'access']
+        );
+        const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
+        console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}] access=${storedAccess}`);
+    } catch (_) {
+        console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}] access=${normalizedVisibility}`);
+    }
 
     return {
         user_id: userId,
@@ -707,11 +732,12 @@ async function deleteUserAtome(dataSource, userId) {
  * @param {string} userId - User's atome_id
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-async function syncUserToTauri(username, phone, passwordHash, userId = null, optional = {}) {
+async function syncUserToTauri(username, phone, passwordHash, userId = null, optional = {}, visibility = 'public') {
     try {
         const eventBus = getABoxEventBus();
         if (eventBus) {
             const safeOptional = normalizeUserOptional(optional);
+            const normalizedVisibility = normalizeAccessValue(visibility);
             eventBus.emit('event', {
                 type: 'sync:account-created',
                 timestamp: new Date().toISOString(),
@@ -722,7 +748,9 @@ async function syncUserToTauri(username, phone, passwordHash, userId = null, opt
                     phone,
                     passwordHash,
                     source: 'fastify',
-                    optional: safeOptional
+                    optional: safeOptional,
+                    visibility: normalizedVisibility,
+                    access: normalizedVisibility
                 }
             });
             console.log(`🔄 [WebSocket] User sync event emitted: ${username} (${phone})`);
@@ -878,7 +906,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      * ADOLE v3.0: Users are atomes with atome_type='user', properties in particles
      */
     server.post('/api/auth/register', async (request, reply) => {
-        const { username, phone, password, visibility = 'public', optional = {} } = request.body || {};
+        const body = request.body || {};
+        const { username, phone, password, optional = {} } = body;
+        const incomingAccess = body.access ?? body.visibility;
+        const visibility = normalizeAccessValue(incomingAccess || 'public');
+        console.log(`[Auth] Register request access=${incomingAccess ?? 'n/a'} resolvedVisibility=${visibility}`);
 
         // Validation
         if (!username || typeof username !== 'string' || username.trim().length < 2) {
@@ -919,6 +951,17 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // visibility: 'public' = visible in user_list, 'private' = hidden (default)
             await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash, visibility, safeOptional);
 
+            try {
+                const accessRows = await dataSource.query(
+                    'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
+                    [principalId, 'access']
+                );
+                const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
+                console.log(`[Auth] Register stored access=${storedAccess ?? 'unknown'} userId=${principalId}`);
+            } catch (_) {
+                console.log(`[Auth] Register stored access=unknown userId=${principalId}`);
+            }
+
             console.log(`✅ User registered (ADOLE atome): ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
             // Issue JWT immediately so first post-register commit has a token.
@@ -940,7 +983,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Sync to Tauri server (async, don't block response)
             let syncResult = { success: false };
             try {
-                syncResult = await syncUserToTauri(cleanUsername, cleanPhone, passwordHash, principalId, safeOptional);
+                syncResult = await syncUserToTauri(cleanUsername, cleanPhone, passwordHash, principalId, safeOptional, visibility);
             } catch (e) {
                 console.warn('[auth] Tauri sync error:', e.message);
             }
@@ -999,6 +1042,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         const username = body.username;
         const phone = body.phone;
         const passwordHash = body.passwordHash || body.password_hash;
+        const incomingAccess = body.access ?? body.visibility;
+        const visibility = normalizeAccessValue(incomingAccess || 'public');
         const syncSecret = body.syncSecret || body.sync_secret;
         const sourceServer = body.source || body.source_server;
 
@@ -1041,7 +1086,20 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Create user atome with pre-hashed password (ADOLE v3.0)
             const principalId = generateDeterministicUserId(cleanPhone);
 
-            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash, 'public', body.optional || {});
+            console.log(`[Auth] Sync-register request access=${incomingAccess ?? 'n/a'} resolvedVisibility=${visibility}`);
+
+            await createUserAtome(dataSource, principalId, cleanUsername, cleanPhone, passwordHash, visibility, body.optional || {});
+
+            try {
+                const accessRows = await dataSource.query(
+                    'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
+                    [principalId, 'access']
+                );
+                const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
+                console.log(`[Auth] Sync-register stored access=${storedAccess ?? 'unknown'} userId=${principalId}`);
+            } catch (_) {
+                console.log(`[Auth] Sync-register stored access=unknown userId=${principalId}`);
+            }
 
             // Update last_sync particle
             await updateUserParticle(dataSource, principalId, 'last_sync', new Date().toISOString());

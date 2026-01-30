@@ -30,6 +30,7 @@ Elle corrige les divergences historiques et s'aligne sur **le schema actuel en b
 Le schema complet est **dans `database/schema.sql`**. Ci-dessous les tables et roles.
 
 ## 2.1 TABLE `atomes`
+
 Identite de tous les objets (y compris users et projects).
 
 - `atome_id` (PK) : UUID de l'objet
@@ -40,6 +41,7 @@ Identite de tous les objets (y compris users et projects).
 - **sync** : `last_sync`, `created_source`, `sync_status`
 
 ## 2.2 TABLE `particles`
+
 Proprietes courantes d'un atome (cle/valeur).
 
 - `particle_id` (PK)
@@ -51,6 +53,7 @@ Proprietes courantes d'un atome (cle/valeur).
 - `UNIQUE(atome_id, particle_key)`
 
 ## 2.3 TABLE `particles_versions`
+
 Historique complet de chaque modification de particle.
 
 - `version_id` (PK)
@@ -62,6 +65,7 @@ Historique complet de chaque modification de particle.
 - `changed_by`, `changed_at`
 
 ## 2.4 TABLE `snapshots`
+
 Backups complets d'un atome ou projet.
 
 - `snapshot_id` (PK)
@@ -70,6 +74,7 @@ Backups complets d'un atome ou projet.
 - `label`, `snapshot_type`, `actor`, `created_by`, `created_at`
 
 ## 2.5 TABLE `events` (append-only)
+
 Journal d'evenements (source de verite).
 
 - `id` (UUID)
@@ -78,6 +83,7 @@ Journal d'evenements (source de verite).
 - `tx_id`, `gesture_id`
 
 ## 2.6 TABLE `state_current`
+
 Projection materialisee (cache) pour lecture rapide.
 
 - `atome_id` (PK)
@@ -86,6 +92,7 @@ Projection materialisee (cache) pour lecture rapide.
 - `updated_at`, `version`
 
 ## 2.7 TABLE `permissions`
+
 ACL granulaire par atome ou par particle.
 
 - `permission_id` (PK)
@@ -96,6 +103,7 @@ ACL granulaire par atome ou par particle.
 - `share_mode`, `conditions`, `granted_by`, `granted_at`, `expires_at`
 
 ## 2.8 TABLE `sync_queue`
+
 File persistante de sync (offline-first).
 
 - `queue_id` (PK)
@@ -104,6 +112,7 @@ File persistante de sync (offline-first).
 - `last_attempt_at`, `next_retry_at`, `error_message`, `created_at`
 
 ## 2.9 TABLE `sync_state`
+
 Etat de sync par atome.
 
 - `atome_id` (PK)
@@ -112,6 +121,7 @@ Etat de sync par atome.
 - `last_sync_at`, `sync_status`
 
 ## 2.10 Vue `users_view`
+
 Compatibilite pour lister les users (atomes avec `atome_type='user'`).
 
 ---
@@ -145,14 +155,17 @@ Compatibilite pour lister les users (atomes avec `atome_type='user'`).
 # 6. Sync offline/online — contrat unifie (reecrit)
 
 ## 6.1 Idempotence
+
 - Chaque mutation cree un **event unique** (`events.id` UUID). Idempotence = dedupe par `events.id`.
 - Les writes sont append-only (events + particles_versions), jamais de mutation destructive du passe.
 
 ## 6.2 Journal d'operations (source de verite)
+
 - `events` est le **log canonique**.
 - `state_current` est une **projection** calculable a partir de `events` + `snapshots`.
 
 ## 6.3 Double ecriture local + remote
+
 - Chaque mutation locale :
   1. Ecrit `particles` + `particles_versions`
   2. Ajoute un `event`
@@ -161,15 +174,18 @@ Compatibilite pour lister les users (atomes avec `atome_type='user'`).
 - La sync pousse les operations vers l'autre backend via `sync_queue` (retry/backoff).
 
 ## 6.4 Gestion des erreurs partielles
+
 - Une ecriture qui echoue en remote **reste en queue** avec `status='error'` et `attempts`.
 - Rejouer jusqu'a `max_attempts`, puis marquer en echec durable.
 
 ## 6.5 Detection de conflits
+
 - Conflit si :
   - `sync_state` indique **modifications concurrentes** (hash local != remote)
   - ET les versions/timestamps montrent des changements des deux cotes.
 
 ## 6.6 Resolution des conflits
+
 - Par defaut : **merge par particle** (plus recent gagne).
 - En cas d'ambiguite (timestamps egaux mais valeurs differentes), statut `conflict`.
 - La resolution **cree une nouvelle version** (jamais overwrite).

@@ -266,7 +266,7 @@ function attachAccountSyncHandler() {
         }
 
         const data = payload.payload || {};
-        const { userId, username, phone, passwordHash, source, optional } = data;
+        const { userId, username, phone, passwordHash, source, optional, visibility, access } = data;
 
         if (!userId || !phone) {
             console.warn('[aBoxServer] sync:account-created missing userId or phone');
@@ -299,7 +299,8 @@ function attachAccountSyncHandler() {
                     phone,
                     passwordHash,
                     source: 'tauri',
-                    optional: optional || {}
+                    optional: optional || {},
+                    visibility: visibility || access
                 })
             });
 

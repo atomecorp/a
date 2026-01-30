@@ -2585,7 +2585,11 @@ async function startServer() {
 
             try {
               if (action === 'register' || action === 'create-user') {
-                const { username, phone, password, visibility } = data;
+                const { username, phone, password } = data;
+                const normalizeAccessValue = (value) => (String(value || '').toLowerCase() === 'public' ? 'public' : 'private');
+                const incomingAccess = data.access ?? data.visibility;
+                const visibility = normalizeAccessValue(incomingAccess || 'public');
+                console.log(`[ws/api] Register request access=${incomingAccess ?? 'n/a'} resolvedVisibility=${visibility}`);
                 if (!username || !phone || !password) {
                   safeSend({
                     type: 'auth-response',
@@ -2640,7 +2644,18 @@ async function startServer() {
                 const passwordHash = await hashPassword(password);
                 const userId = generateDeterministicUserId(cleanPhone);
                 try {
-                  await createUserAtome(dataSource, userId, username, cleanPhone, passwordHash, visibility || 'public', data.optional || {});
+                  await createUserAtome(dataSource, userId, username, cleanPhone, passwordHash, visibility, data.optional || {});
+
+                  try {
+                    const accessRows = await dataSource.query(
+                      'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
+                      [userId, 'access']
+                    );
+                    const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
+                    console.log(`[ws/api] Register stored access=${storedAccess ?? 'unknown'} userId=${userId}`);
+                  } catch (_) {
+                    console.log(`[ws/api] Register stored access=unknown userId=${userId}`);
+                  }
                 } catch (err) {
                   const message = err?.message || String(err);
                   if (message.includes('User already exists')) {
@@ -2675,7 +2690,9 @@ async function startServer() {
                         userId,
                         username,
                         phone,
-                        optional: data.optional || {}
+                        optional: data.optional || {},
+                        visibility,
+                        access: visibility
                       }
                     });
                   }
