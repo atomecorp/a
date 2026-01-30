@@ -351,7 +351,7 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
     }
 }
 
-async function withTransaction(work) {
+export async function withTransaction(work) {
     if (!db) await initDatabase();
     try {
         await db.beginTransaction();
@@ -2257,5 +2257,8 @@ export default {
     query,
 
     // Compatibility
-    getDataSourceAdapter
+    getDataSourceAdapter,
+
+    // Transactions
+    withTransaction
 };

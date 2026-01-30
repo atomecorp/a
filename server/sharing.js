@@ -12,7 +12,8 @@
  * - WebSocket sync for real-time permission updates
  */
 
-import db from '../database/adole.js';
+import db, { withTransaction } from '../database/adole.js';
+import { pushNotificationToUserStack } from './notificationStack.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { wsSendJsonToUser } from './wsApiState.js';
 import { broadcastAtomeCreate } from './atomeRealtime.js';
@@ -97,6 +98,55 @@ function emitPermissionChange(action, permission) {
         }
     } catch (e) {
         console.warn('Failed to emit permission change:', e.message);
+    }
+}
+
+async function isProjectContainer(atomeId) {
+    if (!atomeId) return false;
+    const atome = await db.getAtome(atomeId);
+    const type = String(atome?.atome_type || atome?.type || '').toLowerCase();
+    return type === 'project';
+}
+
+async function ensureProjectContainer({ projectId, ownerId }) {
+    if (!projectId || !ownerId) return { ok: false, reason: 'missing' };
+    if (await isProjectContainer(projectId)) return { ok: true, existed: true };
+
+    const currentProjectId = await resolveUserCurrentProjectId(ownerId) || await resolveReceiverProjectIdFromState(ownerId);
+    if (!currentProjectId || String(currentProjectId) !== String(projectId)) {
+        return { ok: false, reason: 'mismatch' };
+    }
+
+    try {
+        await db.createAtome({
+            id: projectId,
+            type: 'project',
+            kind: 'project',
+            parent: null,
+            owner: ownerId,
+            creator: ownerId,
+            properties: {
+                name: 'Project',
+                label: 'Project'
+            }
+        });
+    } catch (error) {
+        console.warn('[Share] Failed to create project container stub:', error?.message || error);
+    }
+
+    return (await isProjectContainer(projectId))
+        ? { ok: true, created: true }
+        : { ok: false, reason: 'create_failed' };
+}
+
+async function resolveUserCurrentProjectId(userId) {
+    if (!userId) return null;
+    try {
+        const user = await db.getAtome(userId);
+        const data = user?.data || user?.particles || user?.properties || {};
+        return data.current_project_id || data.currentProjectId || null;
+    } catch (_) {
+        return null;
     }
 }
 
@@ -669,6 +719,18 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
         ? (mode === 'real-time' ? 'active' : 'accepted')
         : (policyValue === 'never' ? 'rejected' : 'pending');
 
+    let projectId = null;
+    try {
+        if (Array.isArray(atomeIds) && atomeIds.length) {
+            const first = await db.getAtome(atomeIds[0]);
+            const data = first?.data || first?.particles || {};
+            const candidate = data.project_id || data.projectId || first?.parent_id || null;
+            if (candidate) projectId = candidate;
+        }
+    } catch (_) {
+        projectId = null;
+    }
+
     const baseParticles = {
         request_id: requestId,
         target_phone: targetPhone || null,
@@ -679,6 +741,7 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
         mode: mode || 'real-time',
         share_type: shareType || 'linked',
         property_overrides: propertyOverrides || {},
+        project_id: projectId,
         timestamp: new Date().toISOString()
     };
 
@@ -711,9 +774,50 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
         }
     } catch (_) { }
 
+    try {
+        const stackRes = await pushNotificationToUserStack({
+            userId: targetUserId,
+            authorId: sharerId,
+            notification: {
+                id: inboxId || requestId,
+                message_id: inboxId || requestId,
+                kind: 'share-request',
+                subject: 'Demande de partage',
+                message: '',
+                share_id: requestId,
+                project_id: projectId,
+                atome_ids: Array.isArray(atomeIds) ? atomeIds : [],
+                request_atome_id: inboxId || null,
+                from_id: sharerId,
+                to_user_id: targetUserId,
+                timestamp: new Date().toISOString(),
+                unread: true,
+                status
+            }
+        });
+        console.log('[Share] notification stack push:', {
+            targetUserId,
+            requestId,
+            inboxId: inboxId || null,
+            stackSize: stackRes?.count || null
+        });
+    } catch (err) {
+        console.warn('[Share] failed to push notification stack:', err?.message || err);
+    }
+
     if (policyValue === 'always') {
         await applyShareAcceptance({ sharerId, targetUserId, particles: baseParticles });
     }
+
+    console.log('[Share] Share request created:', {
+        requestId,
+        status,
+        inboxId,
+        outboxId,
+        sharerId,
+        targetUserId,
+        atomeCount: Array.isArray(atomeIds) ? atomeIds.length : 0
+    });
 
     return {
         ok: true,
@@ -1222,21 +1326,23 @@ export async function handleShareMessage(message, userId) {
                 }
 
                 let acceptanceResult = { ok: true };
+                let resolvedProjectId = receiverProjectId || particles.receiver_project_id || null;
                 if (newStatus === 'active' || newStatus === 'accepted') {
-                    console.log('[Share] Processing accept - receiverProjectId from message:', receiverProjectId);
-                    console.log('[Share] Processing accept - particles.receiver_project_id:', particles.receiver_project_id);
-                    const acceptanceParticles = {
-                        ...particles,
-                        receiver_project_id: receiverProjectId || particles.receiver_project_id || null
-                    };
-                    console.log('[Share] acceptanceParticles.receiverProjectId:', acceptanceParticles.receiver_project_id);
-                    acceptanceResult = await applyShareAcceptance({
-                        sharerId,
-                        targetUserId: userId,
-                        particles: acceptanceParticles
+                    if (!resolvedProjectId) {
+                        resolvedProjectId = await resolveUserCurrentProjectId(userId);
+                    }
+                    const ensureResult = await ensureProjectContainer({
+                        projectId: resolvedProjectId,
+                        ownerId: userId
                     });
-                    if (!acceptanceResult?.ok) {
-                        return { requestId, success: false, error: acceptanceResult.error || 'Acceptance failed' };
+                    if (!resolvedProjectId || !ensureResult.ok) {
+                        console.warn('[Share] Reject accept: invalid receiver_project_id', {
+                            requestAtomeId,
+                            receiverProjectId: resolvedProjectId,
+                            userId,
+                            reason: ensureResult.reason
+                        });
+                        return { requestId, success: false, error: 'Invalid receiver_project_id' };
                     }
                 }
 
@@ -1245,36 +1351,55 @@ export async function handleShareMessage(message, userId) {
                     statusUpdatedAt: new Date().toISOString(),
                     acceptedAt: newStatus === 'accepted' || newStatus === 'active' ? new Date().toISOString() : undefined,
                     rejectedAt: newStatus === 'rejected' ? new Date().toISOString() : undefined,
-                    receiver_project_id: receiverProjectId || particles.receiver_project_id || null
+                    receiver_project_id: resolvedProjectId || null
                 };
-
-                if (acceptanceResult?.copies?.length) {
-                    updates.importedAtomeIds = acceptanceResult.copies.map(c => c.sharedAtomeId);
-                    updates.importedAtomesCount = acceptanceResult.copies.length;
-                    updates.linkMappings = acceptanceResult.mapping || {};
-                }
 
                 const inboxId = particles.inboxId || requestRecord.atome_id || requestRecord.id;
                 const outboxId = particles.outboxId || null;
 
-                if (inboxId) await db.updateAtome(inboxId, updates);
-                if (outboxId) await db.updateAtome(outboxId, updates);
-
-                if (!outboxId && requestIdResolved) {
-                    const related = await loadShareRequestsByRequestId(requestIdResolved);
-                    for (const item of related) {
-                        if (String(item.owner_id || '') !== String(sharerId)) continue;
-                        const id = item.atome_id || item.id;
-                        if (!id) continue;
-                        await db.updateAtome(id, updates);
+                const finalResult = await withTransaction(async () => {
+                    if (newStatus === 'active' || newStatus === 'accepted') {
+                        console.log('[Share] Processing accept - receiver_project_id:', resolvedProjectId);
+                        const acceptanceParticles = {
+                            ...particles,
+                            receiver_project_id: resolvedProjectId
+                        };
+                        acceptanceResult = await applyShareAcceptance({
+                            sharerId,
+                            targetUserId: userId,
+                            particles: acceptanceParticles
+                        });
+                        if (!acceptanceResult?.ok) {
+                            throw new Error(acceptanceResult.error || 'Acceptance failed');
+                        }
+                        if (acceptanceResult?.copies?.length) {
+                            updates.importedAtomeIds = acceptanceResult.copies.map(c => c.sharedAtomeId);
+                            updates.importedAtomesCount = acceptanceResult.copies.length;
+                            updates.linkMappings = acceptanceResult.mapping || {};
+                        }
                     }
-                }
+
+                    if (inboxId) await db.updateAtome(inboxId, updates);
+                    if (outboxId) await db.updateAtome(outboxId, updates);
+
+                    if (!outboxId && requestIdResolved) {
+                        const related = await loadShareRequestsByRequestId(requestIdResolved);
+                        for (const item of related) {
+                            if (String(item.owner_id || '') !== String(sharerId)) continue;
+                            const id = item.atome_id || item.id;
+                            if (!id) continue;
+                            await db.updateAtome(id, updates);
+                        }
+                    }
+
+                    return acceptanceResult;
+                });
 
                 return {
                     requestId,
                     success: true,
                     status: newStatus,
-                    data: acceptanceResult || null
+                    data: finalResult || null
                 };
             }
 
@@ -1404,6 +1529,12 @@ export async function handleShareMessage(message, userId) {
                 const box = message?.box || 'inbox';
                 const status = message?.status || message?.statuses || null;
                 const requests = await listShareRequestsForUser(userId, { box, status });
+                console.log('[Share] Inbox fetch:', {
+                    userId,
+                    box,
+                    status,
+                    count: Array.isArray(requests) ? requests.length : 0
+                });
                 return { requestId, success: true, data: requests };
             }
 

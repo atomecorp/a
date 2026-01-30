@@ -105,6 +105,7 @@ import {
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
 import { createVisioService } from './visio.js';
+import { pushNotificationToUserStack } from './notificationStack.js';
 import {
   ensureUserDownloadsDir,
   resolveUserUploadPath,
@@ -2108,6 +2109,25 @@ async function startServer() {
                 }
               }
 
+              if (!targetUser && targetUserId) {
+                try {
+                  const shadowUsername = normalizedToPhone || `user_${String(targetUserId).slice(0, 8)}`;
+                  const randomHash = await hashPassword(`shadow_${Date.now()}_${Math.random()}`);
+                  await createUserAtome(
+                    dataSource,
+                    targetUserId,
+                    shadowUsername,
+                    normalizedToPhone || '',
+                    randomHash,
+                    'private',
+                    {}
+                  );
+                  targetUser = await findUserById(dataSource, targetUserId);
+                } catch (err) {
+                  console.warn('[direct-message] failed to create shadow user:', err?.message || err);
+                }
+              }
+
               if (!targetUserId) {
                 safeSend({
                   type: 'direct-message-response',
@@ -2133,6 +2153,69 @@ async function startServer() {
                 to: { userId: targetUserId, phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null) },
                 timestamp: new Date().toISOString()
               };
+
+              // Persist notification as a message atome (offline/refresh safe)
+              try {
+                const nowIso = payload.timestamp;
+                let parsed = null;
+                try {
+                  parsed = JSON.parse(String(msgText));
+                } catch (_) {
+                  parsed = null;
+                }
+                const params = parsed?.params && typeof parsed.params === 'object' ? parsed.params : {};
+                const messageId = params.id || params.messageId || `msg_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+                const messageProps = {
+                  message_id: messageId,
+                  command: parsed?.command || null,
+                  kind: params.kind || parsed?.command || 'message',
+                  subject: params.subject || null,
+                  message: params.message || params.text || (typeof msgText === 'string' ? msgText : null),
+                  atome_ids: Array.isArray(params.atomeIds) ? params.atomeIds : [],
+                  request_atome_id: params.requestAtomeId || null,
+                  from_id: senderUserId,
+                  from_name: senderUsername,
+                  from_phone: senderPhone,
+                  to_user_id: targetUserId,
+                  to_phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null),
+                  timestamp: nowIso,
+                  unread: true,
+                  box: 'inbox'
+                };
+                const created = await db.createAtome({
+                  id: null,
+                  type: 'message',
+                  parent: null,
+                  owner: targetUserId,
+                  creator: senderUserId,
+                  properties: messageProps
+                });
+                if (created?.atome_id && SERVER_INFO_ENABLED) {
+                  console.log('[direct-message] persisted message atome:', created.atome_id);
+                }
+                // Persist in user notification stack (single source of truth)
+                try {
+                  const stackRes = await pushNotificationToUserStack({
+                    userId: targetUserId,
+                    authorId: senderUserId,
+                    notification: {
+                      ...messageProps,
+                      id: messageId,
+                      message_id: messageId
+                    }
+                  });
+                  if (SERVER_INFO_ENABLED && stackRes?.ok) {
+                    console.log('[direct-message] notification stack updated:', {
+                      userId: targetUserId,
+                      count: stackRes.count
+                    });
+                  }
+                } catch (err) {
+                  console.warn('[direct-message] failed to update notification stack:', err?.message || err);
+                }
+              } catch (err) {
+                console.warn('[direct-message] failed to persist message atome:', err?.message || err);
+              }
 
               // DEBUG: log routing info
               const registrySize = wsApiClientsByUserId.get(targetUserId)?.size || 0;
@@ -3077,6 +3160,9 @@ async function startServer() {
                 }
               } else if (action === 'logout') {
                 // Logout is client-side token clearing, just acknowledge
+                try {
+                  detachWsApiClient(connection);
+                } catch (_) { }
                 safeSend({
                   type: 'auth-response',
                   requestId,
