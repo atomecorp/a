@@ -56,13 +56,9 @@ struct LocalFileQuery {
 
 #[derive(Deserialize)]
 struct EventsQuery {
-    #[serde(alias = "projectId")]
     project_id: Option<String>,
-    #[serde(alias = "atomeId")]
     atome_id: Option<String>,
-    #[serde(alias = "txId")]
     tx_id: Option<String>,
-    #[serde(alias = "gestureId")]
     gesture_id: Option<String>,
     since: Option<String>,
     until: Option<String>,
@@ -73,9 +69,7 @@ struct EventsQuery {
 
 #[derive(Deserialize)]
 struct StateCurrentQuery {
-    #[serde(alias = "projectId")]
     project_id: Option<String>,
-    #[serde(alias = "ownerId")]
     owner_id: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,

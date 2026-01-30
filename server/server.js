@@ -1280,16 +1280,16 @@ async function startServer() {
             : request.headers['x-original-name'];
 
           await registerFileUpload(fileName, userId, {
-            atomeId: atomeIdHeader || null,
-            atomeType: atomeTypeHeader || null,
-            originalName: originalNameHeader || decodedName || fileName,
-            mimeType: mimeHeader || null,
-            size: bodyBuffer.length,
-            filePath: relativePath || null
+            atome_id: atomeIdHeader || null,
+            atome_type: atomeTypeHeader || null,
+            original_name: originalNameHeader || decodedName || fileName,
+            mime_type: mimeHeader || null,
+            size_bytes: bodyBuffer.length,
+            file_path: relativePath || null
           });
         }
 
-        return { success: true, file: fileName, owner: userId, path: relativePath || null };
+        return { success: true, file_name: fileName, owner_id: userId, file_path: relativePath || null };
       } catch (error) {
         request.log.error({ err: error }, 'File upload failed');
         reply.code(500);
@@ -1475,14 +1475,14 @@ async function startServer() {
           const mimeType = mimeHeader || null;
           const stats = await fs.stat(filePath).catch(() => null);
           await registerFileUpload(fileName, userId, {
-            originalName: decodedName,
-            mimeType: mimeType || null,
-            size: stats ? stats.size : null,
-            filePath: relativePath || null
+            original_name: decodedName,
+            mime_type: mimeType || null,
+            size_bytes: stats ? stats.size : null,
+            file_path: relativePath || null
           });
         }
 
-        return { success: true, file: fileName, owner: userId, path: relativePath || null };
+        return { success: true, file_name: fileName, owner_id: userId, file_path: relativePath || null };
       } catch (error) {
         request.log.error({ err: error }, 'Chunked upload finalize failed');
         reply.code(500);
@@ -1527,15 +1527,15 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const { fileId, atomeId, fileName, targetUserId, permission } = request.body || {};
-      const fileIdentifier = fileId || atomeId || fileName;
+      const { file_id, atome_id, file_name, target_user_id, permission } = request.body || {};
+      const fileIdentifier = file_id || atome_id || file_name;
 
-      if (!fileIdentifier || !targetUserId) {
-        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or targetUserId' });
+      if (!fileIdentifier || !target_user_id) {
+        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or target_user_id' });
       }
 
       const userId = resolveUserId(user);
-      const result = await shareFile(fileIdentifier, userId, targetUserId, permission || 'read');
+      const result = await shareFile(fileIdentifier, userId, target_user_id, permission || 'read');
 
       if (!result.success) {
         return replyJson(reply, 403, result);
@@ -1544,8 +1544,8 @@ async function startServer() {
       if (result.file?.file_name) {
         const link = await ensureSharedFileLink({
           projectRoot,
-          ownerId: result.file.owner_id,
-          targetUserId,
+          owner_id: result.file.owner_id,
+          targetUserId: target_user_id,
           fileName: result.file.file_name
         });
         if (!link.ok) {
@@ -1565,15 +1565,15 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const { fileId, atomeId, fileName, targetUserId } = request.body || {};
-      const fileIdentifier = fileId || atomeId || fileName;
+      const { file_id, atome_id, file_name, target_user_id } = request.body || {};
+      const fileIdentifier = file_id || atome_id || file_name;
 
-      if (!fileIdentifier || !targetUserId) {
-        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or targetUserId' });
+      if (!fileIdentifier || !target_user_id) {
+        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or target_user_id' });
       }
 
       const userId = resolveUserId(user);
-      const result = await unshareFile(fileIdentifier, userId, targetUserId);
+      const result = await unshareFile(fileIdentifier, userId, target_user_id);
 
       if (!result.success) {
         return replyJson(reply, 403, result);
@@ -1582,8 +1582,8 @@ async function startServer() {
       if (result.file?.file_name) {
         const link = await removeSharedFileLink({
           projectRoot,
-          ownerId: result.file.owner_id,
-          targetUserId,
+          owner_id: result.file.owner_id,
+          targetUserId: target_user_id,
           fileName: result.file.file_name
         });
         if (!link.ok) {
@@ -1603,20 +1603,20 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      const { fileId, atomeId, fileName, isPublic } = request.body || {};
-      const fileIdentifier = fileId || atomeId || fileName;
+      const { file_id, atome_id, file_name, is_public } = request.body || {};
+      const fileIdentifier = file_id || atome_id || file_name;
 
-      if (!fileIdentifier || typeof isPublic !== 'boolean') {
-        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or isPublic' });
+      if (!fileIdentifier || typeof is_public !== 'boolean') {
+        return replyJson(reply, 400, { success: false, error: 'Missing file identifier or is_public' });
       }
 
       const userId = resolveUserId(user);
-      const meta = await getFileMetadata(fileIdentifier, { ownerId: userId });
+      const meta = await getFileMetadata(fileIdentifier, { owner_id: userId });
       if (!meta) {
         return replyJson(reply, 404, { success: false, error: 'File not found' });
       }
 
-      const result = await setFilePublic(meta.atome_id, userId, isPublic);
+      const result = await setFilePublic(meta.atome_id, userId, is_public);
 
       if (!result.success) {
         return replyJson(reply, 403, result);
@@ -1917,7 +1917,7 @@ async function startServer() {
                     return;
                   }
                   const actor = event.actor || { type: 'user', id: attachedSenderUserId };
-                  const syncSource = String(event.sync_source || event.syncSource || data.sync_source || data.syncSource || '').toLowerCase();
+                  const syncSource = String(event.sync_source || data.sync_source || '').toLowerCase();
                   const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
                   const created = await db.appendEvent(
                     { ...event, actor },
@@ -1942,12 +1942,7 @@ async function startServer() {
                       owner_id: (atome && atome.owner_id) || properties.owner_id || null,
                       created_at: atome?.created_at || null,
                       updated_at: (state && state.updated_at) || atome?.updated_at || null,
-                      particles: properties,
-                      id: atomeId,
-                      type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
-                      parentId: (atome && atome.parent_id) || properties.parent_id || null,
-                      ownerId: (atome && atome.owner_id) || properties.owner_id || null,
-                      properties
+                      particles: properties
                     };
                     syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(created.kind));
                   }
@@ -1966,10 +1961,10 @@ async function startServer() {
 
                   const fallbackActor = body.actor || { type: 'user', id: attachedSenderUserId };
                   const normalized = events.map((evt) => ({ ...evt, actor: evt?.actor || fallbackActor }));
-                  const syncSource = String(body.sync_source || body.syncSource || '').toLowerCase();
+                  const syncSource = String(body.sync_source || '').toLowerCase();
                   const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
                   const created = await db.appendEvents(normalized, {
-                    txId: body.tx_id || body.txId || null,
+                    txId: body.tx_id || null,
                     syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
                     skipQueue: !shouldEnqueue
                   });
@@ -1977,7 +1972,7 @@ async function startServer() {
                   // Determine latest event per atome and emit websocket syncs
                   const latestByAtome = new Map();
                   for (const evt of created || []) {
-                    const atomeId = evt?.atome_id || evt?.atomeId;
+                    const atomeId = evt?.atome_id;
                     if (!atomeId || evt?.kind === 'snapshot') continue;
                     latestByAtome.set(atomeId, evt);
                   }
@@ -1997,12 +1992,7 @@ async function startServer() {
                           owner_id: (atome && atome.owner_id) || properties.owner_id || null,
                           created_at: atome?.created_at || null,
                           updated_at: (state && state.updated_at) || atome?.updated_at || null,
-                          particles: properties,
-                          id: atomeId,
-                          type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
-                          parentId: (atome && atome.parent_id) || properties.parent_id || null,
-                          ownerId: (atome && atome.owner_id) || properties.owner_id || null,
-                          properties
+                          particles: properties
                         };
                         syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(evt.kind));
                       } catch (_) { }
@@ -2273,13 +2263,13 @@ async function startServer() {
               }
 
               if (!requesterId) {
-                requesterId = data.userId || data.ownerId || data.owner_id || null;
+                requesterId = data.user_id || data.owner_id || null;
               }
               return requesterId || 'anonymous';
             };
 
             const userId = await resolveRequesterId();
-            const identifier = data.atomeId || data.atome_id || data.id || data.fileId || data.identifier || data.file;
+            const identifier = data.atome_id || data.id || data.file_id || data.identifier || data.file;
 
             const sendFileResponse = (payload) => {
               safeSend({
@@ -2319,21 +2309,21 @@ async function startServer() {
                 }
                 const stats = await fs.stat(target.filePath);
                 const sizeBytes = stats?.size ?? 0;
-                const chunkSize = coerceWsChunkSize(data.chunkSize || data.chunk_size);
+                const chunkSize = coerceWsChunkSize(data.chunk_size || data.chunkSize);
                 const chunkCount = sizeBytes ? Math.ceil(sizeBytes / chunkSize) : 0;
                 const meta = target.meta || null;
 
                 sendFileResponse({
                   success: true,
                   action,
-                  atomeId: meta?.atome_id || identifier,
-                  fileName: meta?.file_name || target.downloadName || String(identifier),
-                  originalName: meta?.original_name || target.downloadName || String(identifier),
-                  filePath: meta?.file_path || null,
-                  mimeType: meta?.mime_type || null,
-                  sizeBytes,
-                  chunkSize,
-                  chunkCount,
+                  atome_id: meta?.atome_id || identifier,
+                  file_name: meta?.file_name || target.downloadName || String(identifier),
+                  original_name: meta?.original_name || target.downloadName || String(identifier),
+                  file_path: meta?.file_path || null,
+                  mime_type: meta?.mime_type || null,
+                  size_bytes: sizeBytes,
+                  chunk_size: chunkSize,
+                  chunk_count: chunkCount,
                   downloadsSnapshot
                 });
               } catch (error) {
@@ -2348,13 +2338,13 @@ async function startServer() {
                 return;
               }
 
-              const chunkIndex = Number(data.chunkIndex ?? data.chunk_index ?? -1);
+              const chunkIndex = Number(data.chunk_index ?? data.chunkIndex ?? -1);
               if (!Number.isFinite(chunkIndex) || chunkIndex < 0) {
                 sendFileResponse({ success: false, error: 'Invalid chunk index' });
                 return;
               }
 
-              const chunkSize = coerceWsChunkSize(data.chunkSize || data.chunk_size);
+              const chunkSize = coerceWsChunkSize(data.chunk_size || data.chunkSize);
 
               let handle;
               try {
@@ -2380,11 +2370,11 @@ async function startServer() {
                 sendFileResponse({
                   success: true,
                   action,
-                  atomeId: identifier,
-                  chunkIndex,
-                  chunkSize,
-                  sizeBytes,
-                  chunkBase64,
+                  atome_id: identifier,
+                  chunk_index: chunkIndex,
+                  chunk_size: chunkSize,
+                  size_bytes: sizeBytes,
+                  chunk_base64: chunkBase64,
                   done: offset + readLength >= sizeBytes
                 });
               } catch (error) {
@@ -2398,10 +2388,10 @@ async function startServer() {
             }
 
             if (action === 'upload-chunk') {
-              const uploadId = sanitizeUploadId(data.uploadId || data.upload_id);
-              const chunkIndex = Number(data.chunkIndex ?? data.chunk_index ?? -1);
-              const chunkCount = Number(data.chunkCount ?? data.chunk_count ?? 0);
-              const chunkBase64 = data.chunkBase64 || data.chunk_base64 || data.chunk;
+              const uploadId = sanitizeUploadId(data.upload_id);
+              const chunkIndex = Number(data.chunk_index ?? -1);
+              const chunkCount = Number(data.chunk_count ?? 0);
+              const chunkBase64 = data.chunk_base64 || data.chunk;
 
               if (!uploadId) {
                 sendFileResponse({ success: false, error: 'Missing or invalid uploadId' });
@@ -2427,10 +2417,10 @@ async function startServer() {
                 sendFileResponse({
                   success: true,
                   action,
-                  uploadId,
-                  chunkIndex,
-                  chunkCount,
-                  sizeBytes: bytes.length
+                  upload_id: uploadId,
+                  chunk_index: chunkIndex,
+                  chunk_count: chunkCount,
+                  size_bytes: bytes.length
                 });
               } catch (error) {
                 sendFileResponse({ success: false, error: error.message || 'upload_chunk_failed' });
@@ -2439,14 +2429,14 @@ async function startServer() {
             }
 
             if (action === 'upload-complete') {
-              const uploadId = sanitizeUploadId(data.uploadId || data.upload_id);
-              const chunkCount = Number(data.chunkCount ?? data.chunk_count ?? 0);
-              const rawFileName = data.fileName || data.file_name || data.name || '';
-              const rawFilePath = data.filePath || data.file_path || data.path || '';
-              const atomeId = data.atomeId || data.atome_id || null;
-              const atomeType = data.atomeType || data.atome_type || null;
-              const originalName = data.originalName || data.original_name || rawFileName || null;
-              const mimeType = data.mimeType || data.mime_type || null;
+              const uploadId = sanitizeUploadId(data.upload_id);
+              const chunkCount = Number(data.chunk_count ?? 0);
+              const rawFileName = data.file_name || data.name || '';
+              const rawFilePath = data.file_path || data.path || '';
+              const atomeId = data.atome_id || null;
+              const atomeType = data.atome_type || null;
+              const originalName = data.original_name || rawFileName || null;
+              const mimeType = data.mime_type || null;
 
               if (!uploadId) {
                 sendFileResponse({ success: false, error: 'Missing or invalid uploadId' });
@@ -2518,12 +2508,12 @@ async function startServer() {
                 if (DATABASE_ENABLED) {
                   const stats = await fs.stat(filePath).catch(() => null);
                   await registerFileUpload(fileName, userId, {
-                    atomeId: atomeId || null,
-                    atomeType: atomeType || null,
-                    originalName: originalName || fileName,
-                    mimeType: mimeType || null,
-                    size: stats ? stats.size : null,
-                    filePath: relativePath || null
+                    atome_id: atomeId || null,
+                    atome_type: atomeType || null,
+                    original_name: originalName || fileName,
+                    mime_type: mimeType || null,
+                    size_bytes: stats ? stats.size : null,
+                    file_path: relativePath || null
                   });
                 }
 
@@ -2535,9 +2525,9 @@ async function startServer() {
                 sendFileResponse({
                   success: true,
                   action,
-                  file: fileName,
-                  owner: userId,
-                  path: relativePath || null,
+                  file_name: fileName,
+                  owner_id: userId,
+                  file_path: relativePath || null,
                   downloadsSnapshot
                 });
               } catch (error) {
@@ -3149,13 +3139,12 @@ async function startServer() {
 
             // Last-resort fallback (legacy callers). Prefer not to rely on this.
             if (!requesterId) {
-              requesterId = data.userId || data.ownerId || data.owner_id || null;
+              requesterId = data.user_id || data.owner_id || null;
             }
 
             try {
               if (action === 'create') {
-                // Support multiple field names for ADOLE v3.0 compatibility
-                const atomeId = data.id || data.atomeId || data.atome_id || uuidv4();
+                const atomeId = data.atome_id || data.id || uuidv4();
                 if (isDuplicateAtomeCreate(atomeId)) {
                   safeSend({
                     type: 'atome-response',
@@ -3166,9 +3155,9 @@ async function startServer() {
                   });
                   return;
                 }
-                const atomeType = data.atomeType || data.atome_type || data.type || 'generic';
-                const parentId = data.parentId || data.parent_id || data.parent;
-                let ownerId = data.userId || data.ownerId || data.owner_id || data.owner;
+                const atomeType = data.atome_type || data.type || 'generic';
+                const parentId = data.parent_id || data.parent;
+                let ownerId = data.owner_id || data.user_id || data.owner;
                 if (!ownerId || ownerId === 'anonymous') {
                   ownerId = requesterId || null;
                 }
@@ -3254,8 +3243,7 @@ async function startServer() {
                   atome: result
                 });
               } else if (action === 'get') {
-                // Support both: { id } and { atomeId }
-                const atomeId = data.atomeId || data.id;
+                const atomeId = data.atome_id || data.id;
 
                 if (requesterId && atomeId) {
                   const allowed = await db.canRead(atomeId, requesterId);
@@ -3284,7 +3272,7 @@ async function startServer() {
               } else if (action === 'realtime') {
                 // ADOLE v3.0: broadcast-only realtime patch (no DB write)
                 // Used for continuous drag so other collaborators see movement immediately.
-                const atomeId = data.atomeId || data.id;
+                const atomeId = data.atome_id || data.id;
                 const particles = data.particles || data.properties;
 
                 if (!atomeId) {
@@ -3354,8 +3342,8 @@ async function startServer() {
               } else if (action === 'update') {
                 // Support both formats: 
                 // - Legacy: { id, properties, author }
-                // - ADOLE v3.0: { atomeId, particles, token }
-                const atomeId = data.atomeId || data.id;
+                // - ADOLE v3.0: { atome_id, particles, token }
+                const atomeId = data.atome_id || data.id;
                 const particles = data.particles || data.properties;
                 const author = data.author;
 
@@ -3418,9 +3406,9 @@ async function startServer() {
                 try {
                   syncAtomeViaWebSocket({
                     atome_id: atomeId,
-                    atome_type: data.atomeType || data.atome_type || data.type || 'atome',
-                    parent_id: data.parentId || data.parent_id || null,
-                    owner_id: data.ownerId || data.owner_id || requesterId || null,
+                    atome_type: data.atome_type || data.type || 'atome',
+                    parent_id: data.parent_id || null,
+                    owner_id: data.owner_id || requesterId || null,
                     particles
                   }, 'update');
                 } catch (_) { }
@@ -3433,7 +3421,7 @@ async function startServer() {
                 });
               } else if (action === 'alter') {
                 // ADOLE v3.0: partial update of specific particles
-                const atomeId = data.atomeId || data.id;
+                const atomeId = data.atome_id || data.id;
                 const particles = data.particles || {};
 
                 if (!atomeId) {
@@ -3480,9 +3468,9 @@ async function startServer() {
                 try {
                   syncAtomeViaWebSocket({
                     atome_id: atomeId,
-                    atome_type: data.atomeType || data.atome_type || data.type || 'atome',
-                    parent_id: data.parentId || data.parent_id || null,
-                    owner_id: data.ownerId || data.owner_id || requesterId || null,
+                    atome_type: data.atome_type || data.type || 'atome',
+                    parent_id: data.parent_id || null,
+                    owner_id: data.owner_id || requesterId || null,
                     particles
                   }, 'update');
                 } catch (_) { }
@@ -3494,9 +3482,9 @@ async function startServer() {
                   message: 'Atome altered'
                 });
               } else if (action === 'transfer-owner') {
-                const fromOwnerId = data.fromOwnerId || data.from_owner_id || data.fromOwner || null;
-                const toOwnerId = data.toOwnerId || data.to_owner_id || data.toOwner || null;
-                const includeCreator = data.includeCreator !== false;
+                const fromOwnerId = data.from_owner_id || null;
+                const toOwnerId = data.to_owner_id || null;
+                const includeCreator = data.include_creator !== false;
 
                 if (!requesterId) {
                   safeSend({
@@ -3514,7 +3502,7 @@ async function startServer() {
                     type: 'atome-response',
                     requestId,
                     success: false,
-                    error: 'Missing fromOwnerId or toOwnerId'
+                    error: 'Missing from_owner_id or to_owner_id'
                   });
                   return;
                 }
@@ -3561,9 +3549,9 @@ async function startServer() {
                   data: result
                 });
               } else if (action === 'delete' || action === 'soft-delete') {
-                // Support both: { id } and { atomeId }
+                // Support both: { id } and { atome_id }
                 // Note: This is a SOFT delete (sets deleted_at)
-                const atomeId = data.atomeId || data.id;
+                const atomeId = data.atome_id || data.id;
 
                 if (!requesterId) {
                   safeSend({
@@ -3611,9 +3599,9 @@ async function startServer() {
                   message: 'Atome deleted'
                 });
               } else if (action === 'list') {
-                const { ownerId, userId, atomeType, limit, offset, includeDeleted, since } = data;
-                const effectiveType = atomeType;
-                const requestedOwner = (ownerId === '*' || ownerId === 'all') ? null : (ownerId || userId);
+                const { owner_id, user_id, atome_type, limit, offset, include_deleted, since } = data;
+                const effectiveType = atome_type;
+                const requestedOwner = (owner_id === '*' || owner_id === 'all') ? null : (owner_id || user_id);
                 const effectiveOwner = requesterId || requestedOwner;
 
                 // Special-case: public user directory listing
@@ -3635,12 +3623,12 @@ async function startServer() {
                 }
 
                 if (process.env.ATOME_LIST_DEBUG === '1') {
-                  console.log(`[Atome List Debug] ownerId=${ownerId}, userId=${userId}, atomeType=${atomeType}, includeDeleted=${includeDeleted}`);
+                  console.log(`[Atome List Debug] owner_id=${owner_id}, user_id=${user_id}, atome_type=${atome_type}, include_deleted=${include_deleted}`);
                   console.log(`[Atome List Debug] effectiveOwner=${effectiveOwner || 'none'}, effectiveType=${effectiveType || 'none'}`);
                 }
 
                 // Build WHERE clause for deleted_at
-                const deletedClause = includeDeleted ? '' : 'AND a.deleted_at IS NULL';
+                const deletedClause = include_deleted ? '' : 'AND a.deleted_at IS NULL';
 
                 let atomes;
                 if (isUserDirectoryRequest) {
@@ -3824,8 +3812,8 @@ async function startServer() {
                   atomes
                 });
               } else if (action === 'set-particle') {
-                const { atomeId, key, value, author } = data;
-                await db.setParticle(atomeId, key, value, author);
+                const { atome_id, key, value, author } = data;
+                await db.setParticle(atome_id, key, value, author);
 
                 safeSend({
                   type: 'atome-response',
@@ -3834,8 +3822,8 @@ async function startServer() {
                   message: 'Particle set'
                 });
               } else if (action === 'get-particle') {
-                const { atomeId, key } = data;
-                const value = await db.getParticle(atomeId, key);
+                const { atome_id, key } = data;
+                const value = await db.getParticle(atome_id, key);
 
                 safeSend({
                   type: 'atome-response',
@@ -3844,8 +3832,8 @@ async function startServer() {
                   value
                 });
               } else if (action === 'get-particles') {
-                const { atomeId } = data;
-                const particles = await db.getParticles(atomeId);
+                const { atome_id } = data;
+                const particles = await db.getParticles(atome_id);
 
                 safeSend({
                   type: 'atome-response',
@@ -3854,8 +3842,8 @@ async function startServer() {
                   particles
                 });
               } else if (action === 'delete-particle') {
-                const { atomeId, key } = data;
-                await db.deleteParticle(atomeId, key);
+                const { atome_id, key } = data;
+                await db.deleteParticle(atome_id, key);
 
                 safeSend({
                   type: 'atome-response',
@@ -3885,8 +3873,8 @@ async function startServer() {
 
           // Handle share requests (permissions) over ws/api
           if (data.type === 'share') {
-            const requestId = data.requestId;
-            const userId = connection?._wsApiUserId || data.userId || null;
+            const requestId = data.requestId || data.request_id;
+            const userId = connection?._wsApiUserId || data.user_id || null;
 
             try {
               const response = await handleShareMessage(data, userId);
@@ -4056,13 +4044,13 @@ async function startServer() {
                 ? 'atome:deleted'
                 : 'atome:updated';
             const atome = payload.atome || null;
-            const atomeId = atome?.id || atome?.atome_id || payload.atomeId || null;
+            const atomeId = atome?.atome_id || payload.atome_id || null;
             safeSendEvent(mapType, payload, payload.timestamp);
             if (allowLegacySyncPayload) {
               safeSend({
                 type: mapType,
                 atome,
-                atomeId,
+                atome_id: atomeId,
                 timestamp: payload.timestamp || new Date().toISOString()
               });
             }

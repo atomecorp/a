@@ -64,8 +64,8 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             return;
         }
         const atomeType = atome?.atome_type || atome?.type || 'atome';
-        const parentId = atome?.parent_id || atome?.parent || atome?.parentId || null;
-        const ownerId = atome?.owner_id || atome?.owner || atome?.ownerId || null;
+        const parentId = atome?.parent_id || atome?.parent || null;
+        const ownerId = atome?.owner_id || atome?.owner || null;
         const particles = atome?.particles || atome?.data || atome?.properties || {};
 
         // Emit sync event - clients MUST validate owner_id before local mirroring
@@ -84,8 +84,6 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
                 deleted: operation === 'delete',
                 id: atomeId,
                 type: atomeType,
-                parentId,
-                ownerId,  // SECURITY: Duplicate for compatibility - clients filter on this field
                 properties: particles,
                 data: particles
             },
@@ -220,7 +218,7 @@ function resolveSyncOperation(kind) {
 }
 
 async function resolveAtomeForSync(event) {
-    const atomeId = event?.atome_id || event?.atomeId || null;
+    const atomeId = event?.atome_id || null;
     if (!atomeId) return null;
 
     const [state, atome] = await Promise.all([
@@ -236,11 +234,9 @@ async function resolveAtomeForSync(event) {
         || 'atome';
     const parentId = atome?.parent_id
         || properties.parent_id
-        || properties.parentId
         || null;
     const ownerId = atome?.owner_id
         || properties.owner_id
-        || properties.ownerId
         || null;
 
     return {
@@ -253,8 +249,6 @@ async function resolveAtomeForSync(event) {
         particles: properties,
         id: atomeId,
         type: atomeType,
-        parentId,
-        ownerId,
         properties
     };
 }
@@ -275,10 +269,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { id, type, kind, parentId, parent, data, ownerId, owner_id } = request.body;
+        const { id, type, kind, parent_id, parent, data, owner_id } = request.body;
         const objectId = id || uuidv4();
-        const parentValue = parentId || parent || null;
-        const resolvedOwnerId = ownerId || owner_id || user.id;
+        const parentValue = parent_id || parent || null;
+        const resolvedOwnerId = owner_id || user.id;
 
         try {
             if (parentValue) {
@@ -368,8 +362,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { type, kind, parentId, parent, limit = 100, offset = 0 } = request.query;
-        const parentValue = parentId || parent;
+        const { type, kind, parent_id, parent, limit = 100, offset = 0 } = request.query;
+        const parentValue = parent_id || parent;
 
         try {
             const options = {
@@ -465,7 +459,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const { id } = request.params;
-        const { data, type, kind, parentId } = request.body;
+        const { data, type, kind, parent_id } = request.body;
         const patch = (data && typeof data === 'object') ? data : null;
 
         try {
@@ -487,11 +481,11 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             }
 
             // Update object metadata if provided
-            if (type || kind || parentId !== undefined) {
+            if (type || kind || parent_id !== undefined) {
                 await db.updateObject(id, {
                     type: type || undefined,
                     kind: kind || undefined,
-                    parent: parentId !== undefined ? parentId : undefined
+                    parent: parent_id !== undefined ? parent_id : undefined
                 });
             }
 
@@ -658,7 +652,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             // Broadcast
             broadcastMessage({
                 type: 'atome-deleted',
-                atomeId: id
+                atome_id: id
             });
 
             return reply.send({
@@ -792,14 +786,14 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         const actor = event.actor || { type: 'user', id: user.id };
         console.log('[Fastify] /api/events/commit processing', {
             user_id: user.id,
-            atome_id: event.atome_id || event.atomeId || null,
+            atome_id: event.atome_id || null,
             kind: event.kind || null
         });
         syncDebugLog('commit received', {
             user_id: user.id,
-            atome_id: event.atome_id || event.atomeId || null,
+            atome_id: event.atome_id || null,
             kind: event.kind || null,
-            project_id: event.project_id || event.projectId || null
+            project_id: event.project_id || null
         });
 
         try {
@@ -812,7 +806,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                 }
             );
             syncDebugLog('commit stored', {
-                atome_id: created?.atome_id || created?.atomeId || null,
+                atome_id: created?.atome_id || null,
                 kind: created?.kind || null,
                 event_id: created?.id || created?.event_id || null
             });
@@ -847,7 +841,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(400).send({ success: false, error: 'Missing events array' });
         }
 
-        const txId = body.tx_id || body.txId || null;
+        const txId = body.tx_id || null;
         const fallbackActor = body.actor || { type: 'user', id: user.id };
         const normalizedEvents = events.map((evt) => ({
             ...evt,
@@ -876,7 +870,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             });
             const latestByAtome = new Map();
             for (const evt of created || []) {
-                const atomeId = evt?.atome_id || evt?.atomeId;
+                const atomeId = evt?.atome_id;
                 if (!atomeId || evt?.kind === 'snapshot') continue;
                 latestByAtome.set(atomeId, evt);
             }
@@ -904,13 +898,9 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const {
-            projectId,
             project_id,
-            atomeId,
             atome_id,
-            txId,
             tx_id,
-            gestureId,
             gesture_id,
             since,
             until,
@@ -921,10 +911,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
         try {
             const events = await db.listEvents({
-                projectId: projectId || project_id || null,
-                atomeId: atomeId || atome_id || null,
-                txId: txId || tx_id || null,
-                gestureId: gestureId || gesture_id || null,
+                projectId: project_id || null,
+                atomeId: atome_id || null,
+                txId: tx_id || null,
+                gestureId: gesture_id || null,
                 since: since || null,
                 until: until || null,
                 limit: limit !== undefined ? Number(limit) : undefined,
@@ -968,10 +958,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { projectId, project_id, limit, offset } = request.query || {};
+        const { project_id, limit, offset } = request.query || {};
 
         try {
-            const states = await db.listStateCurrent(projectId || project_id || null, {
+            const states = await db.listStateCurrent(project_id || null, {
                 limit: limit !== undefined ? Number(limit) : undefined,
                 offset: offset !== undefined ? Number(offset) : undefined,
                 ownerId: user.id
@@ -991,15 +981,15 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const body = request.body || {};
-        const projectId = body.projectId || body.project_id || null;
-        const atomeId = body.atomeId || body.atome_id || null;
+        const projectId = body.project_id || null;
+        const atomeId = body.atome_id || null;
         const label = body.label || null;
         const actor = body.actor || { type: 'user', id: user.id };
-        const state = body.state || body.state_blob || body.stateBlob || null;
-        const snapshotType = body.snapshot_type || body.snapshotType || 'manual';
+        const state = body.state || body.state_blob || null;
+        const snapshotType = body.snapshot_type || 'manual';
 
         if (!projectId && !atomeId) {
-            return reply.code(400).send({ success: false, error: 'Missing projectId or atomeId' });
+            return reply.code(400).send({ success: false, error: 'Missing project_id or atome_id' });
         }
 
         try {
@@ -1037,10 +1027,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { projectId, project_id, limit, offset } = request.query || {};
-        const targetProject = projectId || project_id || null;
+        const { project_id, limit, offset } = request.query || {};
+        const targetProject = project_id || null;
         if (!targetProject) {
-            return reply.code(400).send({ success: false, error: 'Missing projectId' });
+            return reply.code(400).send({ success: false, error: 'Missing project_id' });
         }
 
         try {

@@ -47,9 +47,10 @@ export async function create_project(projectName, callback) {
 
     const payload = {
         id: projectId,
-        atomeId: projectId,
+        atome_id: projectId,
         type: 'project',
-        ownerId: currentUserId,
+        atome_type: 'project',
+        owner_id: currentUserId,
         properties
     };
 

@@ -53,11 +53,13 @@ function inferFileAtomeType(fileName, mimeType) {
 }
 
 function resolveFileAtomeType(fileName, options = {}) {
-    const explicit = normalizeFileAtomeType(options.atomeType || options.atome_type);
+    const explicit = normalizeFileAtomeType(options.atome_type || options.atomeType);
     if (explicit) return explicit;
-    const sourceName = typeof options.originalName === 'string' && options.originalName.trim()
-        ? options.originalName
-        : fileName;
+    const sourceName = typeof options.original_name === 'string' && options.original_name.trim()
+        ? options.original_name
+        : (typeof options.originalName === 'string' && options.originalName.trim()
+            ? options.originalName
+            : fileName);
     const inferred = inferFileAtomeType(sourceName, options.mimeType || options.mime_type || options.mime);
     return normalizeFileAtomeType(inferred) || 'raw';
 }
@@ -68,7 +70,7 @@ function fileTypeWhere(alias = 'a') {
 
 export async function registerFileUpload(fileName, userId, options = {}) {
     const now = new Date().toISOString();
-    const atomeId = options.atomeId || options.atome_id || `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const atomeId = options.atome_id || options.atomeId || `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const atomeType = resolveFileAtomeType(fileName, options);
 
     try {
@@ -85,10 +87,10 @@ export async function registerFileUpload(fileName, userId, options = {}) {
         // Store file metadata as particles
         const particles = {
             file_name: fileName,
-            original_name: options.originalName || fileName,
-            mime_type: options.mimeType || null,
-            file_path: options.filePath || null,
-            size: options.size || 0,
+            original_name: options.original_name || options.originalName || fileName,
+            mime_type: options.mime_type || options.mimeType || null,
+            file_path: options.file_path || options.filePath || null,
+            size: options.size_bytes || options.size || 0,
             is_public: false
         };
 
@@ -126,7 +128,8 @@ export async function registerFileUpload(fileName, userId, options = {}) {
  */
 export async function getFileMetadata(identifier, options = {}) {
     try {
-        const { ownerId = null, userId = null } = options;
+        const ownerId = options.owner_id || options.ownerId || null;
+        const userId = options.user_id || options.userId || null;
         // Try by atome_id first
         let atome = await db.query('get', `
             SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at

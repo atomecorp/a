@@ -488,22 +488,22 @@ async function upsertSharePolicy(ownerId, peerUserId, policy, permissions) {
 }
 
 function extractShareType(particles) {
-    const direct = particles?.shareType || particles?.share_type || null;
-    const override = particles?.propertyOverrides?.__shareType || particles?.propertyOverrides?.shareType || null;
+    const direct = particles?.share_type || null;
+    const override = particles?.property_overrides?.__share_type || particles?.property_overrides?.share_type || null;
     return String(direct || override || 'linked');
 }
 
 function extractShareMeta(particles) {
-    const override = particles?.propertyOverrides?.__shareMeta || particles?.shareMeta || null;
+    const override = particles?.property_overrides?.__share_meta || particles?.share_meta || null;
     return override && typeof override === 'object' ? override : {};
 }
 
 function extractAtomeIdsFromRequest(particles) {
-    const ids = Array.isArray(particles?.atomeIds) ? particles.atomeIds : [];
+    const ids = Array.isArray(particles?.atome_ids) ? particles.atome_ids : [];
     if (ids.length) return ids.map(String);
-    const shared = Array.isArray(particles?.sharedAtomes) ? particles.sharedAtomes : [];
+    const shared = Array.isArray(particles?.shared_atomes) ? particles.shared_atomes : [];
     return shared
-        .map((item) => item?.originalId || item?.original_atome_id || item?.originalAtomeId || item?.sharedAtomeId || item?.shared_atome_id || null)
+        .map((item) => item?.original_atome_id || item?.shared_atome_id || null)
         .filter(Boolean)
         .map(String);
 }
@@ -595,11 +595,11 @@ async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
     console.log('[Share] shareType:', shareType, 'shareMode:', shareMode);
 
     console.log('[Share] shareType check:', { shareType, isLinked: shareType === 'linked' });
-    console.log('[Share] receiverProjectId:', particles?.receiverProjectId || particles?.receiver_project_id || 'NONE');
+    console.log('[Share] receiverProjectId:', particles?.receiver_project_id || 'NONE');
 
     if (shareType !== 'linked') {
         console.log('[Share] Creating shared copies (non-linked)...');
-        let receiverProjectId = particles?.receiverProjectId || particles?.receiver_project_id || null;
+        let receiverProjectId = particles?.receiver_project_id || null;
         if (!receiverProjectId) {
             receiverProjectId = await resolveReceiverProjectIdFromState(targetUserId);
         }
@@ -669,15 +669,15 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
         : (policyValue === 'never' ? 'rejected' : 'pending');
 
     const baseParticles = {
-        requestId,
-        targetPhone: targetPhone || null,
-        targetUserId,
-        sharerId,
-        atomeIds: Array.isArray(atomeIds) ? atomeIds : [],
+        request_id: requestId,
+        target_phone: targetPhone || null,
+        target_user_id: targetUserId,
+        sharer_id: sharerId,
+        atome_ids: Array.isArray(atomeIds) ? atomeIds : [],
         permissions: permissions || {},
         mode: mode || 'real-time',
-        shareType: shareType || 'linked',
-        propertyOverrides: propertyOverrides || {},
+        share_type: shareType || 'linked',
+        property_overrides: propertyOverrides || {},
         timestamp: new Date().toISOString()
     };
 
@@ -704,7 +704,7 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
 
     try {
         if (inboxId || outboxId) {
-            const linkPayload = { inboxId, outboxId };
+            const linkPayload = { inbox_id: inboxId, outbox_id: outboxId };
             if (inboxId) await db.updateAtome(inboxId, linkPayload);
             if (outboxId) await db.updateAtome(outboxId, linkPayload);
         }
@@ -768,11 +768,11 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
                 if (key in properties) delete properties[key];
             }
 
-            properties.sharedFrom = sharerId;
-            properties.sharedAt = new Date().toISOString();
-            properties.originalAtomeId = id;
-            properties.shareType = 'copy';
-            if (original.creator_id) properties.originalCreatorId = original.creator_id;
+            properties.shared_from = sharerId;
+            properties.shared_at = new Date().toISOString();
+            properties.original_atome_id = id;
+            properties.share_type = 'copy';
+            if (original.creator_id) properties.original_creator_id = original.creator_id;
 
             console.log('[Share] Creating copy with parent:', resolvedParent, 'for owner:', targetUserId);
             const created = await db.createAtome({
@@ -789,7 +789,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
             const newId = created?.atome_id || created?.id;
             if (newId) {
                 mapping.set(id, newId);
-                copies.push({ originalId: id, sharedAtomeId: newId });
+                copies.push({ original_atome_id: id, shared_atome_id: newId });
             }
 
             pending.delete(id);
@@ -811,11 +811,11 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
         for (const key of reservedKeys) {
             if (key in properties) delete properties[key];
         }
-        properties.sharedFrom = sharerId;
-        properties.sharedAt = new Date().toISOString();
-        properties.originalAtomeId = id;
-        properties.shareType = 'copy';
-        if (original.creator_id) properties.originalCreatorId = original.creator_id;
+        properties.shared_from = sharerId;
+        properties.shared_at = new Date().toISOString();
+        properties.original_atome_id = id;
+        properties.share_type = 'copy';
+        if (original.creator_id) properties.original_creator_id = original.creator_id;
 
         const created = await db.createAtome({
             id: null,
@@ -830,7 +830,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
         const newId = created?.atome_id || created?.id;
         if (newId) {
             mapping.set(id, newId);
-            copies.push({ originalId: id, sharedAtomeId: newId });
+            copies.push({ original_atome_id: id, shared_atome_id: newId });
         }
 
         pending.delete(id);
@@ -895,7 +895,7 @@ async function loadShareRequestsByRequestId(requestId) {
         FROM atomes a
         JOIN particles p ON a.atome_id = p.atome_id
         WHERE a.atome_type = 'share_request'
-          AND p.particle_key = 'requestId'
+          AND p.particle_key = 'request_id'
           AND (p.particle_value = ? OR p.particle_value = ?)
     `, [jsonValue, raw]);
 
@@ -999,21 +999,21 @@ export async function handleShareMessage(message, userId) {
         switch (action) {
             case 'request': {
                 const {
-                    targetUserId,
-                    targetPhone,
-                    atomeIds,
+                    target_user_id,
+                    target_phone,
+                    atome_ids,
                     permissions,
                     mode,
-                    shareType,
-                    propertyOverrides
+                    share_type,
+                    property_overrides
                 } = message || {};
 
-                const resolvedTargetUserId = await resolveTargetUserId({ targetUserId, targetPhone });
+                const resolvedTargetUserId = await resolveTargetUserId({ targetUserId: target_user_id, targetPhone: target_phone });
                 if (!resolvedTargetUserId) {
                     return { requestId, success: false, error: 'Target user not found' };
                 }
 
-                const idsInput = Array.isArray(atomeIds) ? atomeIds.map(String).filter(Boolean) : (atomeIds ? [String(atomeIds)] : []);
+                const idsInput = Array.isArray(atome_ids) ? atome_ids.map(String).filter(Boolean) : (atome_ids ? [String(atome_ids)] : []);
                 const resolvedIds = await resolveShareAtomeIds(idsInput);
                 if (resolvedIds.error) {
                     return { requestId, success: false, error: resolvedIds.error };
@@ -1028,7 +1028,7 @@ export async function handleShareMessage(message, userId) {
                     console.log('[Share] checkCanShare result:', { userId, atomeId, allowed });
                     if (!allowed) {
                         console.warn('[Share] Share request failed:', {
-                            targetPhone,
+                            targetPhone: target_phone,
                             atomeIds: ids,
                             mode,
                             error: 'Access denied (share)',
@@ -1039,16 +1039,16 @@ export async function handleShareMessage(message, userId) {
                     }
                 }
 
-                const resolvedShareType = extractShareType({ shareType, propertyOverrides });
+                const resolvedShareType = extractShareType({ share_type, property_overrides });
                 const res = await createShareRequest({
                     sharerId: userId,
                     targetUserId: resolvedTargetUserId,
-                    targetPhone: targetPhone || null,
+                    targetPhone: target_phone || null,
                     atomeIds: ids,
                     permissions: permissions || {},
                     mode: mode || 'real-time',
                     shareType: resolvedShareType,
-                    propertyOverrides: propertyOverrides || {}
+                    propertyOverrides: property_overrides || {}
                 });
 
                 return { requestId, success: res.ok, data: res, error: res.error || null };
@@ -1056,9 +1056,9 @@ export async function handleShareMessage(message, userId) {
 
             case 'respond': {
                 const statusRaw = String(message?.status || message?.decision || '').toLowerCase();
-                const requestAtomeId = message?.requestAtomeId || message?.request_atome_id || message?.atome_id || null;
-                const requestIdValue = message?.requestId || message?.request_id || null;
-                const receiverProjectId = message?.receiverProjectId || message?.receiver_project_id || null;
+                const requestAtomeId = message?.request_atome_id || message?.atome_id || null;
+                const requestIdValue = message?.request_id || null;
+                const receiverProjectId = message?.receiver_project_id || null;
                 const policy = message?.policy || null;
 
                 if (!requestAtomeId && !requestIdValue) {
@@ -1084,8 +1084,8 @@ export async function handleShareMessage(message, userId) {
                     return { requestId, success: false, error: 'Not an inbox request' };
                 }
 
-                const sharerId = particles.sharerId || particles.sharer_id || null;
-                const requestIdResolved = particles.requestId || requestIdValue;
+                const sharerId = particles.sharer_id || particles.sharerId || null;
+                const requestIdResolved = particles.request_id || particles.requestId || requestIdValue;
                 const modeValue = normalizeShareMode(particles.mode || 'real-time');
                 const shareType = extractShareType(particles);
 
@@ -1108,13 +1108,12 @@ export async function handleShareMessage(message, userId) {
                 let acceptanceResult = { ok: true };
                 if (newStatus === 'active' || newStatus === 'accepted') {
                     console.log('[Share] Processing accept - receiverProjectId from message:', receiverProjectId);
-                    console.log('[Share] Processing accept - particles.receiverProjectId:', particles.receiverProjectId);
                     console.log('[Share] Processing accept - particles.receiver_project_id:', particles.receiver_project_id);
                     const acceptanceParticles = {
                         ...particles,
-                        receiverProjectId: receiverProjectId || particles.receiverProjectId || particles.receiver_project_id || null
+                        receiver_project_id: receiverProjectId || particles.receiver_project_id || null
                     };
-                    console.log('[Share] acceptanceParticles.receiverProjectId:', acceptanceParticles.receiverProjectId);
+                    console.log('[Share] acceptanceParticles.receiverProjectId:', acceptanceParticles.receiver_project_id);
                     acceptanceResult = await applyShareAcceptance({
                         sharerId,
                         targetUserId: userId,
@@ -1130,7 +1129,6 @@ export async function handleShareMessage(message, userId) {
                     statusUpdatedAt: new Date().toISOString(),
                     acceptedAt: newStatus === 'accepted' || newStatus === 'active' ? new Date().toISOString() : undefined,
                     rejectedAt: newStatus === 'rejected' ? new Date().toISOString() : undefined,
-                    receiverProjectId: receiverProjectId || particles.receiverProjectId || null,
                     receiver_project_id: receiverProjectId || particles.receiver_project_id || null
                 };
 
@@ -1165,8 +1163,8 @@ export async function handleShareMessage(message, userId) {
             }
 
             case 'publish': {
-                const requestAtomeId = message?.requestAtomeId || message?.request_atome_id || message?.atome_id || null;
-                const requestIdValue = message?.requestId || message?.request_id || null;
+                const requestAtomeId = message?.request_atome_id || message?.atome_id || null;
+                const requestIdValue = message?.request_id || null;
 
                 const sourceRequest = requestAtomeId
                     ? await loadShareRequestById(requestAtomeId)
@@ -1183,9 +1181,9 @@ export async function handleShareMessage(message, userId) {
                 }
 
                 const particles = normalizeParticles(requestRecord.data || requestRecord.particles || {});
-                const targetUserId = particles.targetUserId || particles.target_user_id || null;
+                const targetUserId = particles.target_user_id || particles.targetUserId || null;
                 const shareMode = normalizeShareMode(particles.mode || 'real-time');
-                const atomeIds = Array.isArray(particles.atomeIds) ? particles.atomeIds : [];
+                const atomeIds = Array.isArray(particles.atome_ids) ? particles.atome_ids : [];
 
                 if (!targetUserId || !atomeIds.length) {
                     return { requestId, success: false, error: 'Invalid share request payload' };
@@ -1200,9 +1198,9 @@ export async function handleShareMessage(message, userId) {
                     const atome = await db.getAtome(String(id));
                     if (!atome) continue;
                     items.push({
-                        atomeId: String(id),
-                        parentId: atome.parent_id || null,
-                        atomeType: atome.atome_type || atome.type || null
+                        atome_id: String(id),
+                        parent_id: atome.parent_id || null,
+                        atome_type: atome.atome_type || atome.type || null
                     });
                 }
 
@@ -1211,23 +1209,23 @@ export async function handleShareMessage(message, userId) {
                     senderUserId: userId,
                     command: 'share-publish',
                     params: {
-                        requestId: particles.requestId || requestIdValue || null,
+                        request_id: particles.request_id || particles.requestId || requestIdValue || null,
                         items,
                         at: new Date().toISOString()
                     }
                 });
 
-                await db.updateAtome(requestRecord.atome_id || requestRecord.id, { publishedAt: new Date().toISOString() });
+                await db.updateAtome(requestRecord.atome_id || requestRecord.id, { published_at: new Date().toISOString() });
 
                 return { requestId, success: true };
             }
 
             case 'policy': {
-                const peerUserId = message?.peerUserId || message?.peer_user_id || null;
+                const peerUserId = message?.peer_user_id || null;
                 const policy = message?.policy || null;
                 const permissions = message?.permissions || null;
                 if (!peerUserId || !policy) {
-                    return { requestId, success: false, error: 'Missing peerUserId or policy' };
+                    return { requestId, success: false, error: 'Missing peer_user_id or policy' };
                 }
                 const policyId = await upsertSharePolicy(userId, peerUserId, policy, permissions);
                 return { requestId, success: true, policyId };

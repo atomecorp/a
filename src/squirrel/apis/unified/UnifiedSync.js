@@ -736,9 +736,11 @@ const connectRealtime = async (options = {}) => {
                 if (tauriTokenPresent) {
                     TauriAdapter.atome.create({
                         id: atomeId,
+                        atome_id: atomeId,
                         type: atomeType,
-                        parentId,
-                        ownerId,
+                        atome_type: atomeType,
+                        parent_id: parentId,
+                        owner_id: ownerId,
                         properties: particles || {},
                         sync: true
                     }).then((res) => {

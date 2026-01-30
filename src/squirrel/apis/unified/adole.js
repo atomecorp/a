@@ -1232,28 +1232,25 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         atome: {
             async create(data) {
                 const token = getToken(tokenKey);
-                const ownerId = data.ownerId || data.owner_id || data.owner || null;
+                const ownerId = data.owner_id || data.user_id || data.ownerId || data.owner || null;
                 const properties = data?.properties || data?.particles || data;
-                const resolvedId = data.id || data.atomeId || data.atome_id || null;
-                const resolvedType = data.type || data.kind || data.atomeType || data.atome_type || null;
+                const resolvedId = data.atome_id || data.id || data.atomeId || null;
+                const resolvedType = data.atome_type || data.type || data.kind || data.atomeType || null;
+                const parentId = data.parent_id || data.parent || data.parentId || null;
                 const payload = {
                     type: 'atome',
                     action: 'create',
                     token,
                     id: resolvedId,  // Allow specifying ID for sync operations
-                    atomeId: resolvedId,  // Also send as atomeId for compatibility
-                    atomeType: resolvedType,
                     atome_type: resolvedType,
-                    parentId: data.parentId || data.parent,
-                    parent_id: data.parentId || data.parent,
+                    atome_id: resolvedId,
+                    parent_id: parentId,
                     particles: properties
                 };
                 if (data && Object.prototype.hasOwnProperty.call(data, 'sync')) {
                     payload.sync = data.sync;
                 }
                 if (ownerId) {
-                    payload.userId = ownerId;
-                    payload.ownerId = ownerId;
                     payload.owner_id = ownerId;
                 }
                 return getWs().send(payload);
@@ -1264,27 +1261,23 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'get',
                     token,
-                    atomeId: id
+                    atome_id: id
                 });
             },
             async list(params = {}) {
                 const token = getToken(tokenKey);
-                const ownerId = params.owner_id || params.ownerId;
-                const parentId = params.parentId || params.parent;
-                const atomeType = params.type || params.kind;
-                const includeDeleted = params.includeDeleted || false;
+                const ownerId = params.owner_id || params.user_id || params.ownerId;
+                const parentId = params.parent_id || params.parent;
+                const atomeType = params.atome_type || params.type || params.kind;
+                const includeDeleted = params.include_deleted || params.includeDeleted || false;
                 return getWs().send({
                     type: 'atome',
                     action: 'list',
                     token,
-                    atomeType,
                     atome_type: atomeType,
-                    parentId,
                     parent_id: parentId,
-                    ownerId,
                     owner_id: ownerId,
-                    since: params.since || params.updatedSince || params.updated_since || null,
-                    includeDeleted,
+                    since: params.since || params.updated_since || params.updatedSince || null,
                     include_deleted: includeDeleted,
                     limit: params.limit,
                     offset: params.offset || ((params.page || 0) * (params.limit || 50))
@@ -1296,7 +1289,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'soft-delete',
                     token,
-                    atomeId: id,
                     atome_id: id
                 });
             },
@@ -1307,7 +1299,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'alter',
                     token,
-                    atomeId: id,
                     atome_id: id,
                     particles: properties
                 });
@@ -1319,7 +1310,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'update',
                     token,
-                    atomeId: id,
                     atome_id: id,
                     particles: properties
                 });
@@ -1330,9 +1320,9 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'transfer-owner',
                     token,
-                    fromOwnerId: data.fromOwnerId || data.from_owner_id || data.fromOwner || null,
-                    toOwnerId: data.toOwnerId || data.to_owner_id || data.toOwner || null,
-                    includeCreator: data.includeCreator !== false
+                    from_owner_id: data.from_owner_id || data.fromOwnerId || data.fromOwner || null,
+                    to_owner_id: data.to_owner_id || data.toOwnerId || data.toOwner || null,
+                    include_creator: data.includeCreator !== false
                 });
             },
 
@@ -1345,7 +1335,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'realtime',
                     token,
-                    atomeId,
+                    atome_id: atomeId,
                     particles: properties,
                     noReply: true
                 };
@@ -1361,7 +1351,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'atome',
                     action: 'delete',
                     token,
-                    atomeId: id
+                    atome_id: id
                 });
             },
             async history(id) {
@@ -1379,13 +1369,13 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 return getWs().send({
                     type: 'share',
                     action: 'request',
-                    targetUserId: data.targetUserId || data.target_user_id || null,
-                    targetPhone: data.targetPhone || data.target_phone || null,
-                    atomeIds: data.atomeIds || data.atome_ids || [],
+                    target_user_id: data.target_user_id || data.targetUserId || null,
+                    target_phone: data.target_phone || data.targetPhone || null,
+                    atome_ids: data.atome_ids || data.atomeIds || [],
                     permissions: data.permissions || {},
                     mode: data.mode || 'real-time',
-                    shareType: data.shareType || data.share_type || null,
-                    propertyOverrides: data.propertyOverrides || data.property_overrides || {}
+                    share_type: data.share_type || data.shareType || null,
+                    property_overrides: data.property_overrides || data.propertyOverrides || {}
                 });
             },
             async respond(data) {
@@ -1393,25 +1383,25 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'share',
                     action: 'respond',
                     status: data.status || data.decision || null,
-                    requestAtomeId: data.requestAtomeId || data.request_atome_id || data.atome_id || null,
-                    requestId: data.requestId || data.request_id || null,
+                    request_atome_id: data.request_atome_id || data.requestAtomeId || data.atome_id || null,
+                    request_id: data.request_id || data.requestId || null,
                     policy: data.policy || null,
-                    receiverProjectId: data.receiverProjectId || data.receiver_project_id || null
+                    receiver_project_id: data.receiver_project_id || data.receiverProjectId || null
                 });
             },
             async publish(data) {
                 return getWs().send({
                     type: 'share',
                     action: 'publish',
-                    requestAtomeId: data.requestAtomeId || data.request_atome_id || data.atome_id || null,
-                    requestId: data.requestId || data.request_id || null
+                    request_atome_id: data.request_atome_id || data.requestAtomeId || data.atome_id || null,
+                    request_id: data.request_id || data.requestId || null
                 });
             },
             async policy(data) {
                 return getWs().send({
                     type: 'share',
                     action: 'policy',
-                    peerUserId: data.peerUserId || data.peer_user_id || null,
+                    peer_user_id: data.peer_user_id || data.peerUserId || null,
                     policy: data.policy || null,
                     permissions: data.permissions || null
                 });
@@ -1421,28 +1411,28 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 return getWs().send({
                     type: 'share',
                     action: 'create',
-                    userId: data.userId || data.user_id,
-                    atome_id: data.atomeId || data.atome_id,
-                    principal_id: data.principalId || data.principal_id,
+                    user_id: data.user_id || data.userId,
+                    atome_id: data.atome_id || data.atomeId,
+                    principal_id: data.principal_id || data.principalId,
                     permission: data.permission,
-                    particle_key: data.particleKey || data.particle_key || null,
-                    expires_at: data.expiresAt || data.expires_at || null
+                    particle_key: data.particle_key || data.particleKey || null,
+                    expires_at: data.expires_at || data.expiresAt || null
                 });
             },
             async revoke(data) {
                 return getWs().send({
                     type: 'share',
                     action: 'revoke',
-                    userId: data.userId || data.user_id,
-                    permission_id: data.permissionId || data.permission_id
+                    user_id: data.user_id || data.userId,
+                    permission_id: data.permission_id || data.permissionId
                 });
             },
             async accessible(data = {}) {
                 return getWs().send({
                     type: 'share',
                     action: 'accessible',
-                    userId: data.userId || data.user_id,
-                    atome_type: data.atomeType || data.atome_type || null
+                    user_id: data.user_id || data.userId,
+                    atome_type: data.atome_type || data.atomeType || null
                 });
             },
             async sharedWithMe() {
@@ -1455,8 +1445,8 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 return getWs().send({
                     type: 'share',
                     action: 'check',
-                    userId: data.userId || data.user_id,
-                    atome_id: data.atomeId || data.atome_id,
+                    user_id: data.user_id || data.userId,
+                    atome_id: data.atome_id || data.atomeId,
                     permission: data.permission || 'read'
                 });
             }
@@ -1470,9 +1460,9 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     action: 'download-info',
                     token,
                     debug: data.debug === true,
-                    atomeId: data.atomeId || data.atome_id || data.id || null,
-                    identifier: data.identifier || data.fileId || null,
-                    chunkSize: data.chunkSize || data.chunk_size || null
+                    atome_id: data.atome_id || data.atomeId || data.id || null,
+                    identifier: data.identifier || data.file_id || data.fileId || null,
+                    chunk_size: data.chunk_size || data.chunkSize || null
                 });
             },
             async downloadChunk(data = {}) {
@@ -1481,10 +1471,10 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'file',
                     action: 'download-chunk',
                     token,
-                    atomeId: data.atomeId || data.atome_id || data.id || null,
-                    identifier: data.identifier || data.fileId || null,
-                    chunkIndex: data.chunkIndex ?? data.chunk_index ?? null,
-                    chunkSize: data.chunkSize || data.chunk_size || null
+                    atome_id: data.atome_id || data.atomeId || data.id || null,
+                    identifier: data.identifier || data.file_id || data.fileId || null,
+                    chunk_index: data.chunk_index ?? data.chunkIndex ?? null,
+                    chunk_size: data.chunk_size || data.chunkSize || null
                 });
             },
             async uploadChunk(data = {}) {
@@ -1493,10 +1483,10 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     type: 'file',
                     action: 'upload-chunk',
                     token,
-                    uploadId: data.uploadId || data.upload_id || null,
-                    chunkIndex: data.chunkIndex ?? data.chunk_index ?? null,
-                    chunkCount: data.chunkCount ?? data.chunk_count ?? null,
-                    chunkBase64: data.chunkBase64 || data.chunk_base64 || null
+                    upload_id: data.upload_id || data.uploadId || null,
+                    chunk_index: data.chunk_index ?? data.chunkIndex ?? null,
+                    chunk_count: data.chunk_count ?? data.chunkCount ?? null,
+                    chunk_base64: data.chunk_base64 || data.chunkBase64 || null
                 });
             },
             async uploadComplete(data = {}) {
@@ -1506,14 +1496,14 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     action: 'upload-complete',
                     token,
                     debug: data.debug === true,
-                    uploadId: data.uploadId || data.upload_id || null,
-                    chunkCount: data.chunkCount ?? data.chunk_count ?? null,
-                    fileName: data.fileName || data.file_name || null,
-                    filePath: data.filePath || data.file_path || null,
-                    atomeId: data.atomeId || data.atome_id || null,
-                    atomeType: data.atomeType || data.atome_type || null,
-                    originalName: data.originalName || data.original_name || null,
-                    mimeType: data.mimeType || data.mime_type || null
+                    upload_id: data.upload_id || data.uploadId || null,
+                    chunk_count: data.chunk_count ?? data.chunkCount ?? null,
+                    file_name: data.file_name || data.fileName || null,
+                    file_path: data.file_path || data.filePath || null,
+                    atome_id: data.atome_id || data.atomeId || null,
+                    atome_type: data.atome_type || data.atomeType || null,
+                    original_name: data.original_name || data.originalName || null,
+                    mime_type: data.mime_type || data.mimeType || null
                 });
             }
         },

@@ -633,34 +633,29 @@ async fn handle_create(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    // Support multiple field names for ID: id, atomeId, atome_id
+    // Accept canonical ADOLE v3.0 field names (snake_case)
     let atome_id = message
         .get("id")
-        .or_else(|| message.get("atomeId"))
         .or_else(|| message.get("atome_id"))
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    // Support multiple field names for type: atomeType, atome_type
+    // Canonical atome type field
     let atome_type = message
-        .get("atomeType")
-        .or_else(|| message.get("atome_type"))
+        .get("atome_type")
         .and_then(|v| v.as_str())
         .unwrap_or("generic");
 
-    // Support multiple field names for parent: parentId, parent_id
+    // Canonical parent field
     let parent_id = message
-        .get("parentId")
-        .or_else(|| message.get("parent_id"))
+        .get("parent_id")
         .and_then(|v| v.as_str());
 
-    // Support multiple field names for owner: userId, ownerId, owner_id
-    // This allows sync operations to preserve the original owner
+    // Canonical owner field (sync operations may override)
     let owner_id = message
-        .get("userId")
-        .or_else(|| message.get("ownerId"))
-        .or_else(|| message.get("owner_id"))
+        .get("owner_id")
+        .or_else(|| message.get("user_id"))
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty() && *s != "anonymous")
         .unwrap_or(user_id);
@@ -915,10 +910,9 @@ async fn handle_get(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    // Support both camelCase (atomeId) and snake_case (atome_id)
     let atome_id = match message
-        .get("atomeId")
-        .or_else(|| message.get("atome_id"))
+        .get("atome_id")
+        .or_else(|| message.get("id"))
         .and_then(|v| v.as_str())
     {
         Some(id) => id,
@@ -954,19 +948,21 @@ async fn handle_list(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    // Support both camelCase (atomeType) and snake_case (atome_type)
+    // Canonical atome type field
     let atome_type = message
-        .get("atomeType")
-        .or_else(|| message.get("atome_type"))
+        .get("atome_type")
+        .or_else(|| message.get("type"))
         .and_then(|v| v.as_str());
-    let owner_id = message.get("ownerId").and_then(|v| v.as_str());
+    let owner_id = message
+        .get("owner_id")
+        .or_else(|| message.get("user_id"))
+        .and_then(|v| v.as_str());
     let parent_id = message
-        .get("parentId")
-        .or_else(|| message.get("parent_id"))
+        .get("parent_id")
         .or_else(|| message.get("parent"))
         .and_then(|v| v.as_str());
     let include_deleted = message
-        .get("includeDeleted")
+        .get("include_deleted")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(100);
@@ -984,15 +980,15 @@ async fn handle_list(
 
     // Determine effective owner - if anonymous or not specified, query by type only
     // SPECIAL CASE: For atome_type = 'user', always query all users regardless of owner
-    // SPECIAL CASE: If ownerId = "*" or "all", query all atomes regardless of owner (for sync)
+    // SPECIAL CASE: If owner_id = "*" or "all", query all atomes regardless of owner (for sync)
     let effective_owner = match (owner_id, atome_type) {
         // Sync mode: "*" or "all" means list all atomes
         (Some("*"), _) | (Some("all"), _) => None,
         // For user listing, ignore owner filtering to get all users
         (_, Some("user")) => None,
-        // If ownerId is explicitly provided (not "*" or "all"), use it
+        // If owner_id is explicitly provided (not "*" or "all"), use it
         (Some(id), _) if !id.is_empty() && id != "anonymous" => Some(id),
-        // No ownerId provided - default to logged-in user
+        // No owner_id provided - default to logged-in user
         (None, _) => Some(user_id),
         _ => None,
     };
@@ -1136,10 +1132,9 @@ async fn handle_update(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    // Support both camelCase (atomeId) and snake_case (atome_id)
     let atome_id = match message
-        .get("atomeId")
-        .or_else(|| message.get("atome_id"))
+        .get("atome_id")
+        .or_else(|| message.get("id"))
         .and_then(|v| v.as_str())
     {
         Some(id) => id,
@@ -1241,10 +1236,9 @@ async fn handle_delete(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    // Support both camelCase and snake_case
     let atome_id = match message
-        .get("atomeId")
-        .or_else(|| message.get("atome_id"))
+        .get("atome_id")
+        .or_else(|| message.get("id"))
         .and_then(|v| v.as_str())
     {
         Some(id) => id,
@@ -1316,10 +1310,9 @@ async fn handle_alter(
     request_id: Option<String>,
 ) -> WsResponse {
     // ADOLE alter = update specific particles without replacing the whole data
-    // Support both camelCase and snake_case
     let atome_id = match message
-        .get("atomeId")
-        .or_else(|| message.get("atome_id"))
+        .get("atome_id")
+        .or_else(|| message.get("id"))
         .and_then(|v| v.as_str())
     {
         Some(id) => id,
@@ -1523,7 +1516,7 @@ fn emit_atome_sync_from_event(db: &Connection, event: &EventRecord) {
             if include_deleted {
                 broadcast_sync_event(json!({
                     "type": "atome:deleted",
-                    "atomeId": atome_id
+                    "atome_id": atome_id
                 }));
             }
             return;
@@ -1533,7 +1526,7 @@ fn emit_atome_sync_from_event(db: &Connection, event: &EventRecord) {
     broadcast_sync_event(json!({
         "type": sync_event_type(&event.kind),
         "atome": payload,
-        "atomeId": atome_id
+        "atome_id": atome_id
     }));
 }
 
@@ -1611,7 +1604,6 @@ async fn handle_event_commit_batch(
 
     let tx_id = message
         .get("tx_id")
-        .or_else(|| message.get("txId"))
         .and_then(|v| v.as_str())
         .map(String::from);
 
@@ -1683,22 +1675,18 @@ async fn handle_event_list(
 ) -> WsResponse {
     let project_id = message
         .get("project_id")
-        .or_else(|| message.get("projectId"))
         .and_then(|v| v.as_str())
         .map(String::from);
     let atome_id = message
         .get("atome_id")
-        .or_else(|| message.get("atomeId"))
         .and_then(|v| v.as_str())
         .map(String::from);
     let tx_id = message
         .get("tx_id")
-        .or_else(|| message.get("txId"))
         .and_then(|v| v.as_str())
         .map(String::from);
     let gesture_id = message
         .get("gesture_id")
-        .or_else(|| message.get("gestureId"))
         .and_then(|v| v.as_str())
         .map(String::from);
     let since = message
@@ -1823,7 +1811,7 @@ async fn handle_state_current_get(
 ) -> WsResponse {
     let atome_id = match message
         .get("atome_id")
-        .or_else(|| message.get("atomeId"))
+        .or_else(|| message.get("id"))
         .and_then(|v| v.as_str())
     {
         Some(id) => id,
@@ -1877,7 +1865,6 @@ async fn handle_state_current_list(
 ) -> WsResponse {
     let project_id = message
         .get("project_id")
-        .or_else(|| message.get("projectId"))
         .and_then(|v| v.as_str());
     let limit = message
         .get("limit")
@@ -1888,7 +1875,6 @@ async fn handle_state_current_list(
     // SECURITY: Get owner_id filter from message or use current user_id
     let owner_filter = message
         .get("owner_id")
-        .or_else(|| message.get("ownerId"))
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap_or_else(|| user_id.to_string());
@@ -1988,13 +1974,11 @@ fn normalize_event_input(
 
     let atome_id = event
         .get("atome_id")
-        .or_else(|| event.get("atomeId"))
         .and_then(|v| v.as_str())
         .map(String::from);
 
     let project_id = event
         .get("project_id")
-        .or_else(|| event.get("projectId"))
         .and_then(|v| v.as_str())
         .map(String::from);
 
@@ -2007,14 +1991,12 @@ fn normalize_event_input(
 
     let tx_id = event
         .get("tx_id")
-        .or_else(|| event.get("txId"))
         .and_then(|v| v.as_str())
         .map(String::from)
         .or(default_tx_id);
 
     let gesture_id = event
         .get("gesture_id")
-        .or_else(|| event.get("gestureId"))
         .and_then(|v| v.as_str())
         .map(String::from);
 
@@ -2208,7 +2190,6 @@ fn resolve_state_project_id(
 ) -> Option<String> {
     let project_id = patch
         .get("project_id")
-        .or_else(|| patch.get("projectId"))
         .and_then(|v| v.as_str())
         .map(|v| v.to_string());
     if project_id.is_some() {
@@ -2236,7 +2217,7 @@ fn ensure_state_patch_fields(
         );
     }
     if let Some(parent) = parent_id {
-        if !patch.contains_key("parent_id") && !patch.contains_key("parentId") {
+        if !patch.contains_key("parent_id") {
             patch.insert(
                 "parent_id".to_string(),
                 JsonValue::String(parent.to_string()),
@@ -2244,7 +2225,7 @@ fn ensure_state_patch_fields(
         }
     }
     if let Some(project) = project_id {
-        if !patch.contains_key("project_id") && !patch.contains_key("projectId") {
+        if !patch.contains_key("project_id") {
             patch.insert(
                 "project_id".to_string(),
                 JsonValue::String(project.to_string()),
@@ -2314,7 +2295,7 @@ fn apply_event_to_state_current(
                 patch.insert("type".to_string(), JsonValue::String(meta_type));
             }
             if let Some(meta_parent) = meta_parent {
-                if !patch.contains_key("parent_id") && !patch.contains_key("parentId") {
+                if !patch.contains_key("parent_id") {
                     patch.insert("parent_id".to_string(), JsonValue::String(meta_parent));
                 }
             }
@@ -2332,8 +2313,6 @@ fn apply_event_to_state_current(
 
     let owner_id_from_patch = patch
         .get("owner_id")
-        .or_else(|| patch.get("ownerId"))
-        .or_else(|| patch.get("owner"))
         .and_then(|v| v.as_str())
         .map(String::from);
 
@@ -2436,7 +2415,6 @@ fn apply_event_to_atomes(
 
     let parent_id = patch
         .get("parent_id")
-        .or_else(|| patch.get("parentId"))
         .and_then(|v| v.as_str())
         .map(|v| v.to_string());
 

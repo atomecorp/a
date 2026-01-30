@@ -5141,8 +5141,8 @@ async function sync_atomes(callback) {
 
         try {
             const infoResult = await FastifyAdapter.file.downloadInfo({
-                atomeId,
-                chunkSize: WS_FILE_CHUNK_SIZE,
+                atome_id: atomeId,
+                chunk_size: WS_FILE_CHUNK_SIZE,
                 debug: true
             });
 
@@ -5154,9 +5154,9 @@ async function sync_atomes(callback) {
             const info = infoResult?.data || {};
             if (info?.downloadsSnapshot) {
             }
-            const totalSize = Number(info.sizeBytes ?? info.size ?? sizeBytes ?? 0);
-            const chunkSize = Number(info.chunkSize) || WS_FILE_CHUNK_SIZE;
-            let chunkCount = Number(info.chunkCount);
+            const totalSize = Number(info.size_bytes ?? info.sizeBytes ?? info.size ?? sizeBytes ?? 0);
+            const chunkSize = Number(info.chunk_size ?? info.chunkSize) || WS_FILE_CHUNK_SIZE;
+            let chunkCount = Number(info.chunk_count ?? info.chunkCount);
             if (!Number.isFinite(chunkCount) || chunkCount < 0) {
                 chunkCount = totalSize ? Math.ceil(totalSize / chunkSize) : 0;
             } else if (chunkCount === 0 && totalSize) {
@@ -5169,9 +5169,9 @@ async function sync_atomes(callback) {
 
             for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
                 const chunkResult = await FastifyAdapter.file.downloadChunk({
-                    atomeId,
-                    chunkIndex,
-                    chunkSize
+                    atome_id: atomeId,
+                    chunk_index: chunkIndex,
+                    chunk_size: chunkSize
                 });
 
                 if (!(chunkResult?.ok || chunkResult?.success)) {
@@ -5355,10 +5355,10 @@ async function sync_atomes(callback) {
                 const chunkBytes = bytes.subarray(start, end);
                 const chunkBase64 = bytesToBase64(chunkBytes);
                 const chunkResult = await FastifyAdapter.file.uploadChunk({
-                    uploadId,
-                    chunkIndex,
-                    chunkCount,
-                    chunkBase64
+                    upload_id: uploadId,
+                    chunk_index: chunkIndex,
+                    chunk_count: chunkCount,
+                    chunk_base64: chunkBase64
                 });
                 if (!(chunkResult?.ok || chunkResult?.success)) {
                     const msg = chunkResult?.error || 'upload_chunk_failed';
@@ -5367,14 +5367,14 @@ async function sync_atomes(callback) {
             }
 
             const completeResult = await FastifyAdapter.file.uploadComplete({
-                uploadId,
-                chunkCount,
-                fileName: safeFileName,
-                filePath: relativePath,
-                atomeId,
-                atomeType: type || '',
-                originalName: originalName || safeFileName,
-                mimeType: mimeType || '',
+                upload_id: uploadId,
+                chunk_count: chunkCount,
+                file_name: safeFileName,
+                file_path: relativePath,
+                atome_id: atomeId,
+                atome_type: type || '',
+                original_name: originalName || safeFileName,
+                mime_type: mimeType || '',
                 debug: true
             });
 

@@ -109,12 +109,10 @@ const buildUpsertPayload = (record, ownerIdFallback) => {
     const properties = sanitizeProperties(record?.properties || record?.particles || record?.data || {});
     return {
         id,
-        atomeId: id,
         atome_id: id,
         type,
-        atomeType: type,
-        ownerId,
-        parentId,
+        atome_type: type,
+        owner_id: ownerId,
         parent_id: parentId,
         properties
     };
@@ -163,12 +161,12 @@ const listOnBackend = async (backend, options, currentUserId, skipOwner) => {
     if (!adapter?.atome?.list) return { ok: false, list: [], error: 'backend_unavailable' };
     const explicitOwner = options.ownerId || options.owner_id || null;
     const query = {
-        atomeType: options.type || options.atomeType || options.atome_type || null,
-        ownerId: skipOwner ? (explicitOwner || null) : (explicitOwner || currentUserId || null),
-        parentId: options.projectId || options.project_id || options.parentId || options.parent_id || null,
+        atome_type: options.atome_type || options.type || options.atomeType || null,
+        owner_id: skipOwner ? (explicitOwner || null) : (explicitOwner || currentUserId || null),
+        parent_id: options.project_id || options.projectId || options.parent_id || options.parentId || null,
         limit: options.limit,
         offset: options.offset,
-        includeDeleted: options.includeDeleted
+        include_deleted: options.include_deleted ?? options.includeDeleted
     };
     const result = await adapter.atome.list(query);
     const ok = !!(result?.ok || result?.success);
@@ -217,8 +215,8 @@ const listStateCurrentOnBackend = async (backend, options) => {
     const token = adapter?.getToken?.();
     if (!baseUrl || !token) return { ok: false, list: [], error: 'state_current_unavailable' };
     const params = new URLSearchParams();
-    const projectId = options.projectId || options.project_id || options.parentId || options.parent_id || null;
-    if (projectId) params.set('projectId', projectId);
+    const projectId = options.project_id || options.projectId || options.parent_id || options.parentId || null;
+    if (projectId) params.set('project_id', projectId);
     if (options.limit != null) params.set('limit', String(options.limit));
     if (options.offset != null) params.set('offset', String(options.offset));
     const url = `${baseUrl}/api/state_current${params.toString() ? `?${params.toString()}` : ''}`;
@@ -345,13 +343,11 @@ export async function create_atome(options = {}, callback) {
 
     const payload = {
         id: atomeId,
-        atomeId,
         atome_id: atomeId,
         type: atomeType,
-        atomeType: atomeType,
-        parentId,
+        atome_type: atomeType,
         parent_id: parentId,
-        ownerId: options.ownerId || options.owner_id || currentUserId,
+        owner_id: options.owner_id || options.ownerId || currentUserId,
         properties
     };
 
@@ -405,8 +401,8 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
     try {
         const localRes = await adapters.tauri.atome.list({
             type: 'project',
-            ownerId: currentUserId,
-            includeDeleted: true,
+            owner_id: currentUserId,
+            include_deleted: true,
             limit: 2000
         });
         tauriProjects = Array.isArray(localRes?.atomes) ? localRes.atomes.map(normalizeAtomeRecord) : [];
@@ -415,8 +411,8 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
     try {
         const remoteRes = await adapters.fastify.atome.list({
             type: 'project',
-            ownerId: currentUserId,
-            includeDeleted: true,
+            owner_id: currentUserId,
+            include_deleted: true,
             limit: 2000
         });
         fastifyProjects = Array.isArray(remoteRes?.atomes) ? remoteRes.atomes.map(normalizeAtomeRecord) : [];
@@ -438,8 +434,8 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
     }
 
     const localAtomesRes = await adapters.tauri.atome.list({
-        ownerId: currentUserId,
-        includeDeleted: true,
+        owner_id: currentUserId,
+        include_deleted: true,
         limit: 5000
     });
     const localAtomes = Array.isArray(localAtomesRes?.atomes)

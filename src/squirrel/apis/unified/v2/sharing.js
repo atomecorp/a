@@ -59,9 +59,11 @@ const ensureFastifyAtomeExists = async (atomeId) => {
         if (!normalized?.id) return { ok: false, error: 'local_atome_missing' };
         const payload = {
             id: normalized.id,
+            atome_id: normalized.id,
             type: normalized.type || 'atome',
-            ownerId: normalized.ownerId,
-            parentId: normalized.parentId,
+            atome_type: normalized.type || 'atome',
+            owner_id: normalized.ownerId,
+            parent_id: normalized.parentId,
             properties: normalized.properties || {}
         };
         const createRes = await FastifyAdapter.atome.create(payload);
@@ -104,12 +106,12 @@ export async function grant_share_permission(atomeId, principalId, sharePermissi
     };
 
     const res = await FastifyAdapter.share.create({
-        userId: authCheck.userId,
-        atomeId: String(atomeId),
-        principalId: String(principalId),
+        user_id: authCheck.userId,
+        atome_id: String(atomeId),
+        principal_id: String(principalId),
         permission: permissionPayload,
-        particleKey: options?.particleKey || options?.particle_key || null,
-        expiresAt: options?.expiresAt || options?.expires_at || null
+        particle_key: options?.particle_key || options?.particleKey || null,
+        expires_at: options?.expires_at || options?.expiresAt || null
     });
 
     const ok = !!(res?.ok || res?.success);
@@ -144,13 +146,13 @@ export async function share_atome(phoneNumber, atomeIds, sharePermissions, shari
     if (!overrides.__shareType) overrides.__shareType = shareType;
 
     const payload = {
-        targetPhone: phoneNumber,
-        atomeIds: ids,
+        target_phone: phoneNumber,
+        atome_ids: ids,
         permissions,
         mode: sharingMode || 'real-time',
-        shareType,
-        propertyOverrides: overrides,
-        currentProjectId: currentProjectId || null
+        share_type: shareType,
+        property_overrides: overrides,
+        current_project_id: currentProjectId || null
     };
 
     const fastifyRes = await FastifyAdapter.share.request(payload);

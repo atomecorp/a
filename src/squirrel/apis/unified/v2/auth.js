@@ -640,7 +640,7 @@ export const auth = {
         };
 
         try {
-            const tauriRes = await TauriAdapter.atome.list({ type: 'user', limit: 500, offset: 0, skipOwner: true, ownerId: '*' });
+            const tauriRes = await TauriAdapter.atome.list({ type: 'user', limit: 500, offset: 0, skipOwner: true, owner_id: '*' });
             if (tauriRes?.ok || tauriRes?.success) {
                 results.tauri.users = tauriRes.atomes || tauriRes.data || [];
             } else {
@@ -651,7 +651,7 @@ export const auth = {
         }
 
         try {
-            const fastifyRes = await FastifyAdapter.atome.list({ type: 'user', limit: 500, offset: 0, skipOwner: true, ownerId: '*' });
+            const fastifyRes = await FastifyAdapter.atome.list({ type: 'user', limit: 500, offset: 0, skipOwner: true, owner_id: '*' });
             if (fastifyRes?.ok || fastifyRes?.success) {
                 results.fastify.users = fastifyRes.atomes || fastifyRes.data || [];
             } else {

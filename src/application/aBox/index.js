@@ -1239,17 +1239,17 @@ async function sendFileToServer(entry) {
         throw new Error(text || `statut HTTP ${response.status}`);
     }
 
-    const payload = await response.json().catch(() => ({ success: true, file: fileName }));
+    const payload = await response.json().catch(() => ({ success: true, file_name: fileName }));
     if (!payload || payload.success !== true) {
         throw new Error(payload && payload.error ? payload.error : 'réponse serveur invalide');
     }
 
-    puts(`[upload] ${payload.file} envoyé au serveur`);
+    puts(`[upload] ${payload.file_name || payload.file} envoyé au serveur`);
     lastSuccessfulApiBase = base;
     await createUploadAtome({
-        fileName: payload.file || fileName,
+        fileName: payload.file_name || payload.file || fileName,
         originalName: fileName,
-        relPath: payload.path || null,
+        relPath: payload.file_path || payload.path || null,
         mimeType: detectedMime || blob.type || null,
         sizeBytes: blob.size || 0,
         atomeId
