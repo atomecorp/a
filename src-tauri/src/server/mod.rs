@@ -56,14 +56,14 @@ struct LocalFileQuery {
 
 #[derive(Deserialize)]
 struct EventsQuery {
+    #[serde(alias = "projectId")]
     project_id: Option<String>,
-    projectId: Option<String>,
+    #[serde(alias = "atomeId")]
     atome_id: Option<String>,
-    atomeId: Option<String>,
+    #[serde(alias = "txId")]
     tx_id: Option<String>,
-    txId: Option<String>,
+    #[serde(alias = "gestureId")]
     gesture_id: Option<String>,
-    gestureId: Option<String>,
     since: Option<String>,
     until: Option<String>,
     limit: Option<i64>,
@@ -73,10 +73,10 @@ struct EventsQuery {
 
 #[derive(Deserialize)]
 struct StateCurrentQuery {
+    #[serde(alias = "projectId")]
     project_id: Option<String>,
-    projectId: Option<String>,
+    #[serde(alias = "ownerId")]
     owner_id: Option<String>,
-    ownerId: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
 }
@@ -863,10 +863,10 @@ async fn events_list_handler(
 
     let mut payload = JsonMap::new();
     payload.insert("action".to_string(), json!("list"));
-    let project_id = query.project_id.or(query.projectId);
-    let atome_id = query.atome_id.or(query.atomeId);
-    let tx_id = query.tx_id.or(query.txId);
-    let gesture_id = query.gesture_id.or(query.gestureId);
+    let project_id = query.project_id;
+    let atome_id = query.atome_id;
+    let tx_id = query.tx_id;
+    let gesture_id = query.gesture_id;
     if let Some(value) = project_id {
         payload.insert("project_id".to_string(), json!(value));
     }
@@ -945,8 +945,8 @@ async fn state_current_list_handler(
 
     let mut payload = JsonMap::new();
     payload.insert("action".to_string(), json!("list"));
-    let project_id = query.project_id.or(query.projectId);
-    let owner_id = query.owner_id.or(query.ownerId).unwrap_or(user_id.clone());
+    let project_id = query.project_id;
+    let owner_id = query.owner_id.unwrap_or(user_id.clone());
     payload.insert("owner_id".to_string(), json!(owner_id));
     if let Some(value) = project_id {
         payload.insert("project_id".to_string(), json!(value));
