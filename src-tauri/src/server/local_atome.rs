@@ -653,9 +653,8 @@ async fn handle_create(
         .and_then(|v| v.as_str());
 
     // Canonical owner field (sync operations may override)
-    let owner_id = message
-        .get("owner_id")
-        .or_else(|| message.get("user_id"))
+    let owner_value = message.get("owner_id").or_else(|| message.get("user_id"));
+    let owner_id = owner_value
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty() && *s != "anonymous")
         .unwrap_or(user_id);

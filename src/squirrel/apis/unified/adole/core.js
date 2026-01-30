@@ -344,6 +344,7 @@ function normalizeAtomeRecord(raw) {
 
     const coreKeys = new Set([
         'atome_id', 'atome_type', 'atomeId', 'atomeType', 'parent_id', 'owner_id', 'creator_id',
+        'project_id', 'projectId', 'project',
         'created_at', 'updated_at', 'deleted_at',
         'createdAt', 'updatedAt', 'deletedAt', 'lastSync', 'last_sync',
         // common aliases
@@ -407,6 +408,14 @@ function normalizeAtomeRecord(raw) {
         pendingOwnerId
     );
     const resolvedParentId = normalize_ref_id(raw.parent_id || raw.parentId || raw.parent || pendingParentId);
+    const resolvedProjectId = normalize_ref_id(
+        raw.project_id ||
+        raw.projectId ||
+        raw.project ||
+        properties.project_id ||
+        properties.projectId ||
+        properties.project
+    );
 
     return {
         ...raw,
@@ -416,6 +425,8 @@ function normalizeAtomeRecord(raw) {
         atome_type: atomeType,
         parentId: resolvedParentId,
         parent_id: resolvedParentId,
+        projectId: resolvedProjectId,
+        project_id: resolvedProjectId,
         ownerId: resolvedOwnerId,
         owner_id: resolvedOwnerId,
         pending_owner_id: pendingOwnerId || null,
@@ -3898,6 +3909,13 @@ try {
             try { await request_sync('sync-connected'); } catch { }
         });
 
+        const resolve_dom_project_id = (atomeId) => {
+            if (!atomeId || typeof document === 'undefined') return null;
+            const el = document.querySelector(`[data-atome-id="${atomeId}"]`);
+            if (!el || !el.dataset) return null;
+            return el.dataset.projectId || el.dataset.project_id || null;
+        };
+
         const build_remote_atome_payload = (detail = {}) => {
             const normalized = normalizeAtomeRecord(detail);
             const fromAtome = detail && typeof detail === 'object' ? detail.atome : null;
@@ -3911,6 +3929,12 @@ try {
             if ((!properties || Object.keys(properties).length === 0) && detail?.newName) {
                 properties = { name: detail.newName };
             }
+            const projectId = normalized.projectId || normalized.project_id
+                || normalizedFromAtome?.projectId || normalizedFromAtome?.project_id
+                || properties.project_id || properties.projectId
+                || detail.project_id || detail.projectId
+                || resolve_dom_project_id(id)
+                || get_current_project_id?.();
             return {
                 id,
                 type: normalized.type || normalized.atome_type || normalized.kind
@@ -3919,6 +3943,7 @@ try {
                 parentId: normalized.parentId || normalized.parent_id
                     || normalizedFromAtome?.parentId || normalizedFromAtome?.parent_id
                     || properties.parent_id || properties.parentId || null,
+                projectId: projectId || null,
                 ownerId: normalized.ownerId || normalized.owner_id
                     || normalizedFromAtome?.ownerId || normalizedFromAtome?.owner_id
                     || properties.owner_id || properties.ownerId || null,
