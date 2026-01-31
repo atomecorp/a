@@ -787,6 +787,8 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
                 share_id: requestId,
                 project_id: projectId,
                 atome_ids: Array.isArray(atomeIds) ? atomeIds : [],
+                mode: baseParticles.mode || null,
+                share_type: baseParticles.share_type || null,
                 request_atome_id: inboxId || null,
                 from_id: sharerId,
                 to_user_id: targetUserId,

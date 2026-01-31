@@ -34,7 +34,11 @@ function applyDebugConfig(config) {
 
 function isInTauriRuntime() {
     if (typeof window === 'undefined') return false;
-    return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+    const protocol = window.location?.protocol || '';
+    if (protocol === 'tauri:' || protocol === 'asset:') return true;
+    if (window.__ATOME_LOCAL_HTTP_PORT__ || window.__ATOME_PROJECT_ROOT__) return true;
+    return false;
 }
 
 function isTauriProdWebview() {
@@ -192,12 +196,26 @@ function buildFastifyWsUrl(httpBase, path) {
     return `${wsBase}${p}`;
 }
 
+function buildDefaultServerConfig() {
+    return {
+        fastify: {
+            host: '127.0.0.1',
+            port: 3001,
+            serverInfoPath: '/api/server-info',
+            syncWsPath: '/ws/sync',
+            apiWsPath: '/ws/api'
+        },
+        generated: true
+    };
+}
+
 export async function loadServerConfigOnce() {
     if (typeof window === 'undefined') return null;
     if (_loadPromise) return _loadPromise;
 
     _loadPromise = (async () => {
         const isTauriRuntime = isInTauriRuntime();
+        const forceFetch = window.__SQUIRREL_FORCE_SERVER_CONFIG_FETCH__ === true;
         let tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';
         const applyFallbackBase = () => {
             if (typeof window === 'undefined') return;
@@ -217,6 +235,22 @@ export async function loadServerConfigOnce() {
                 applyFastifyGlobalsFromHttpBase(origin, window.__SQUIRREL_SERVER_CONFIG__ || null);
             }
         };
+
+        if (isTauriRuntime && !forceFetch) {
+            const config = buildDefaultServerConfig();
+            window.__SQUIRREL_SERVER_CONFIG__ = config;
+            applyDebugConfig(config);
+            if (tauriOverride) {
+                window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;
+                applyFastifyGlobalsFromHttpBase(tauriOverride, config);
+            } else {
+                const httpBase = buildFastifyHttpBase(config);
+                if (httpBase) {
+                    applyFastifyGlobalsFromHttpBase(httpBase, config);
+                }
+            }
+            return config;
+        }
 
         if (tauriOverride) {
             window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;

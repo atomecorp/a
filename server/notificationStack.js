@@ -42,6 +42,8 @@ const normalizeNotification = (input = {}) => {
         subject: input.subject || '',
         message: input.message || input.text || '',
         atome_ids: Array.isArray(input.atome_ids || input.atomeIds) ? (input.atome_ids || input.atomeIds) : [],
+        mode: input.mode || input.share_mode || input.shareMode || null,
+        share_type: input.share_type || input.shareType || null,
         request_atome_id: input.request_atome_id || input.requestAtomeId || null,
         from_id: input.from_id || input.fromId || null,
         from_name: input.from_name || input.fromName || null,

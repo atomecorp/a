@@ -536,7 +536,18 @@ async fn dev_state_handler(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
-async fn locate_server_config(static_dir: &Path) -> Option<PathBuf> {
+async fn locate_server_config(static_dir: &Path, project_root: &Path) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    candidates.push(static_dir.join("server_config.json"));
+    candidates.push(project_root.join("server_config.json"));
+    candidates.push(project_root.join("src").join("server_config.json"));
+
+    for candidate in candidates {
+        if fs::metadata(&candidate).await.is_ok() {
+            return Some(candidate);
+        }
+    }
+
     let mut dir = static_dir.to_path_buf();
     for _ in 0..12u8 {
         let candidate = dir.join("server_config.json");
@@ -550,15 +561,38 @@ async fn locate_server_config(static_dir: &Path) -> Option<PathBuf> {
     None
 }
 
+fn default_server_config() -> serde_json::Value {
+    let host = std::env::var("SQUIRREL_FASTIFY_HOST")
+        .or_else(|_| std::env::var("FASTIFY_HOST"))
+        .unwrap_or_else(|_| "127.0.0.1".to_string());
+    let port = std::env::var("SQUIRREL_FASTIFY_PORT")
+        .or_else(|_| std::env::var("FASTIFY_PORT"))
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .unwrap_or(3001);
+
+    json!({
+        "fastify": {
+            "host": host,
+            "port": port,
+            "serverInfoPath": "/api/server-info",
+            "syncWsPath": "/ws/sync",
+            "apiWsPath": "/ws/api"
+        },
+        "generated": true
+    })
+}
+
 async fn server_config_handler(State(state): State<AppState>) -> impl IntoResponse {
     let static_dir = state.static_dir.as_ref();
-    let config_path = locate_server_config(static_dir).await;
+    let project_root = state.project_root.as_ref();
+    let config_path = locate_server_config(static_dir, project_root).await;
     let Some(config_path) = config_path else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "success": false, "error": "server_config.json not found" })),
-        )
-            .into_response();
+        let mut response = Json(default_server_config()).into_response();
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        return response;
     };
 
     match fs::read_to_string(&config_path).await {
@@ -586,7 +620,8 @@ async fn server_config_handler(State(state): State<AppState>) -> impl IntoRespon
 
 async fn fastify_status_handler(State(state): State<AppState>) -> impl IntoResponse {
     let static_dir = state.static_dir.as_ref();
-    let config_path = locate_server_config(static_dir).await;
+    let project_root = state.project_root.as_ref();
+    let config_path = locate_server_config(static_dir, project_root).await;
     let Some(config_path) = config_path else {
         return Json(json!({ "success": true, "available": false, "configured": false }))
             .into_response();

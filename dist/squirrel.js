@@ -5,9 +5,100 @@
 })(this, (function (exports) { 'use strict';
 
   /**
-   * 🌐 APIS - EXTENSIONS FOR JAVASCRIPT
-   * Adding Ruby-like functionalities to JavaScript + MINIMAL REQUIRE SYSTEM FOR SQUIRREL
+   * essentials
+   *
+   * Role:
+   * - Global theme + convenience helpers exposed to the runtime.
+   * - Legacy compatibility helpers for UI workflows.
    */
+  const shadowLeft = 0,
+    shadowTop = 0,
+    shadowBlur = 12;
+  const items_spacing = 3;
+  const item_border_radius = 6;
+  const item_size = 54;
+
+  window.currentTheme = {
+    basic: {
+      button_color: 'rgba(204, 35, 35, 0.85)',
+      button_active_color: "rgba(72,71,71,0.15) 100%)",
+      palette_bg: 'rgba(72,71,71,0)',
+      tool_bg: 'rgba(72,71,71,0)',
+      particle_bg: 'rgba(72,71,71)',
+      option_bg: 'rgba(72,71,71,0)',
+      zonespecial_bg: 'rgba(72,71,71,0)',
+      slider_length: '70%',
+      slider_zoom_length: '100%',
+      slider_length_vertical: '30%',
+      slider_zoom_length_vertical: '69%',
+      slider_track_color: 'rgba(241, 139, 49, 1)',
+      slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
+      handle_color: 'rgba(248, 184, 128, 1)',
+      slider_handle_size: '16%', // relative handle size (%, px, or ratio)
+      slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
+      item_zoom: '330%',            // width target when pressing a slider item
+      item_zoom_transition: '220ms',// animation duration
+      drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
+      drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
+      button_size: '33%',
+      satellite_offset: '0px',
+      satellite_bg: 'rgba(72,71,71,0)',
+      items_spacing: items_spacing + 'px',
+      item_size: item_size + 'px',
+      support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
+      // Translucent gradient for a glassy look
+      tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
+      tool_bg_active: "#7a7c73ff",
+      tool_backDrop_effect: '0px',
+      tool_text: "#cacacaff",
+      tool_font: "0.9vw",
+      tool_font_px: 10,
+      text_char_max: 9,
+      tool_active_bg: "#a06e0aff",
+      tool_lock_bg: '#9f1f1fff', // couleur lock
+
+      tool_lock_pulse_duration: '1400ms', // durée animation clignotement doux
+      tool_lock_toggle_mode: 'long', // 'long' (par défaut) ou 'click' pour permettre le clic simple de sortir
+
+      toolbox_icon: 'data:image/svg+xml;base64,' + "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4iICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPjxzdmcgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiAgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgaWQ9Im1lbnVDYW52YXMiPgk8ZyBpZD0ibWVudUNhbnZhcy1ncm91cCI+CQk8ZyBpZD0ibWVudUNhbnZhcy1ncm91cDIiPgkJCTxnIGlkPSJtZW51Q2FudmFzLWdyb3VwMyI+CQkJPHBhdGggaWQ9Im1lbnVDYW52YXMtYmV6aWVyMyIgc3Ryb2tlPSJyZ2IoMjM4LCAyMzgsIDIzOCkiIHN0cm9rZS13aWR0aD0iMzMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZmlsbD0ibm9uZSIgZD0iTSAxNy42NywxMTAuNjcgTCAxMTEuMzMsMTEwLjY3IiAvPgkJCQk8cGF0aCBpZD0ibWVudUNhbnZhcy1iZXppZXIxIiBzdHJva2U9InJnYigyMzgsIDIzOCwgMjM4KSIgc3Ryb2tlLXdpZHRoPSIzMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIiBkPSJNIDE3LjY3LDE4LjMzIEwgMTExLjMzLDE4LjMzIiAvPgkJCQk8cGF0aCBpZD0ibWVudUNhbnZhcy1iZXppZXIyIiBzdHJva2U9InJnYigyMzgsIDIzOCwgMjM4KSIgc3Ryb2tlLXdpZHRoPSIzMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIiBkPSJNIDE3LjY3LDY0LjUgTCAxMTEuMzMsNjQuNSIgLz4JCQk8L2c+CQk8L2c+CTwvZz48L3N2Zz4=",
+      toolbox_icon_color: '#cacacaff',
+      toolbox_icon_size: '39%',      // px, %, ou ratio (0..1)
+      toolbox_icon_top: '50%',       // position verticale
+      toolbox_icon_left: '50%',
+      toolboxOffsetMain: "7px",
+      toolboxOffsetEdge: "7px",
+      items_offset_main: item_border_radius + items_spacing + 'px',
+      icon_color: "#cacacaff",
+      icon_size: "39%",
+      icon_top: '63%',       // position verticale
+      icon_left: '50%',
+      // Toggle label/icon visibility when a palette is popped out
+      palette_icon: false,
+      palette_label: true,
+      dropdown_text_color: '#ffff00',
+      dropdown_background_color: 'yellow',
+      floating_host_bg: 'transparent',
+      floating_host_shadow: 'none',
+      // Particle value/unit display (theme-driven)
+      particle_value_unit: '%',
+      particle_value_value: 30,
+      particle_value_decimals: 0,
+      particle_value_font_px: 11,
+      particle_value_bottom: '6%',
+      particle_value_color: '#cacacaff',
+      particle_unit_color: '#9e9e9eff',
+      item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
+      item_border_radius: item_border_radius + 'px',
+      // Animation settings for menu open
+      anim_duration_ms: 333,
+      anim_stagger_ms: 33,
+      anim_bounce_overshoot: 0.09,
+      // Elasticity controls extra rebounds (0 = back easing, 1 = strong elastic)
+      anim_elasticity: 6,
+      direction: "top_left_horizontal",
+      edit_mode_color: '#ff6f61'
+    }
+  };
 
   // Add the puts method to display in the console
   window.puts = function puts(val) {
@@ -298,9 +389,16 @@
     }
   }
 
+  /**
+   * utils
+   *
+   * Role:
+   * - Environment detection helpers.
+   */
+
   function current_platform() {
     try {
-      if (typeof window === 'undefined') return 'serveur';
+      if (typeof window === 'undefined') return 'server';
       const ua = navigator.userAgent || '';
       const vendor = navigator.vendor || '';
       const lowerUA = ua.toLowerCase();
@@ -315,7 +413,7 @@
       const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
       if (isTauri) {
         if (/Macintosh|Mac OS X/.test(ua)) return 'Tauri Mac';
-        if (/Windows/.test(ua)) return 'Taur Windows';
+        if (/Windows/.test(ua)) return 'Tauri Windows';
         if (/Linux/.test(ua)) return 'Tauri Unix';
         return 'Tauri';
       }
@@ -353,29 +451,31 @@
 
       return 'web';
     } catch (_) {
-      return 'inconnu';
+      return 'unknown';
     }
   }
 
   // expose globally
   if (typeof window !== 'undefined') { window.current_platform = current_platform; }
 
-  // Minimal keyboard shortcut utility
-  // Usage:
-  //   const myFct = function atest(key){ console.log('you press: ' + key); };
-  //   shortcut('cmd-a', myFct);
+  /**
+   * shortcut
+   *
+   * Role:
+   * - Minimal keyboard shortcut utility.
+   */
 
-  (function(){
-  	const ORDER = ['ctrl','alt','shift','meta'];
+  (function () {
+  	const ORDER = ['ctrl', 'alt', 'shift', 'meta'];
   	const MOD_SYNONYMS = new Map([
-  		['cmd','meta'], ['command','meta'], ['win','meta'], ['super','meta'],
-  		['ctl','ctrl'], ['control','ctrl'],
-  		['opt','alt'], ['option','alt']
+  		['cmd', 'meta'], ['command', 'meta'], ['win', 'meta'], ['super', 'meta'],
+  		['ctl', 'ctrl'], ['control', 'ctrl'],
+  		['opt', 'alt'], ['option', 'alt']
   	]);
 
   	const registry = new Map(); // combo -> Set<callback>
 
-  	function normToken(tok){
+  	function normToken(tok) {
   		if (!tok) return '';
   		tok = String(tok).trim().toLowerCase();
   		if (MOD_SYNONYMS.has(tok)) tok = MOD_SYNONYMS.get(tok);
@@ -388,7 +488,7 @@
   		return tok;
   	}
 
-  	function normalizeCombo(input){
+  	function normalizeCombo(input) {
   		if (!input) return '';
   		const rawParts = String(input).split(/[-+]/).map(s => String(s).trim()).filter(Boolean);
   		const mods = new Set();
@@ -413,7 +513,7 @@
   		return [...sortedMods, key].filter(Boolean).join('+');
   	}
 
-  	function eventToCombo(e){
+  	function eventToCombo(e) {
   		// Build mods in canonical ORDER to match normalizeCombo
   		const mods = [];
   		if (e.ctrlKey) mods.push('ctrl');
@@ -437,7 +537,7 @@
   		return [...mods, k].filter(Boolean).join('+');
   	}
 
-  	function addHandler(){
+  	function addHandler() {
   		if (addHandler._installed) return;
   		window.addEventListener('keydown', (e) => {
   			const combo = eventToCombo(e);
@@ -445,21 +545,21 @@
   			if (!cbs || cbs.size === 0) return;
   			// Call all callbacks with the normalized combo and the event
   			for (const cb of cbs) {
-  				try { cb(combo, e); } catch(_) {}
+  				try { cb(combo, e); } catch (_) { }
   			}
   		}, true);
   		addHandler._installed = true;
   	}
 
-  	function shortcut(key_cmb, fctToCall){
+  	function shortcut(key_cmb, fctToCall) {
   		const combo = normalizeCombo(key_cmb);
-  		if (!combo || typeof fctToCall !== 'function') return () => {};
+  		if (!combo || typeof fctToCall !== 'function') return () => { };
   		addHandler();
   		let set = registry.get(combo);
   		if (!set) { set = new Set(); registry.set(combo, set); }
   		set.add(fctToCall);
   		// return an unsubscribe function
-  		return function unsubscribe(){
+  		return function unsubscribe() {
   			const s = registry.get(combo);
   			if (!s) return;
   			s.delete(fctToCall);
@@ -470,6 +570,120 @@
   	// expose globally
   	window.shortcut = shortcut;
   })();
+
+  // SVG utilities extracted from loader.js for clarity
+
+  // Lightweight sanitizer kept as identity to avoid ReferenceErrors.
+  function sanitizeSVG(raw) { return raw; }
+
+  // render_svg: inserts an SVG string.
+  // Extended signature: sizeMode (last param) can be:
+  //   null / undefined  => fixed size (px)
+  //   'responsive' or '%' => width/height 100%, follows parent
+  function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left = '0px', width = '100px', height = '100px', color = null, path_color = null, sizeMode = null) {
+    const parent = document.getElementById(parent_id);
+    if (!parent || !svgcontent) return null;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(svgcontent).trim();
+    const svgEl = tmp.querySelector('svg');
+    if (!svgEl) return null;
+    const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
+    try { svgEl.id = finalId; } catch (_) { }
+    svgEl.style.position = 'absolute';
+    svgEl.style.top = top; svgEl.style.left = left;
+
+    const widthStr = (width != null) ? String(width).trim() : '';
+    const heightStr = (height != null) ? String(height).trim() : '';
+    const widthIsPercent = /%$/.test(widthStr);
+    const heightIsPercent = /%$/.test(heightStr);
+    const responsive = (sizeMode === 'responsive' || sizeMode === '%' || widthIsPercent || heightIsPercent);
+
+    const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
+    const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
+
+    try {
+      const existingViewBox = svgEl.getAttribute('viewBox');
+      const attrW = parseFloat(svgEl.getAttribute('width')) || null;
+      const attrH = parseFloat(svgEl.getAttribute('height')) || null;
+      if (!existingViewBox) {
+        const vbW = (attrW && attrW > 0) ? attrW : targetW;
+        const vbH = (attrH && attrH > 0) ? attrH : targetH;
+        svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+      }
+      if (!svgEl.getAttribute('preserveAspectRatio')) {
+        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      }
+      if (responsive) {
+        // Responsive mode: width/height 100%, parent controls sizing
+        if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
+        if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
+        svgEl.style.width = widthIsPercent ? widthStr : '100%';
+        svgEl.style.height = heightIsPercent ? heightStr : '100%';
+        try { svgEl.dataset.intuitionResponsive = '1'; } catch (_) { }
+      } else {
+        // Fixed mode: also set attributes for backward compatibility
+        try { svgEl.setAttribute('width', String(targetW)); } catch (_) { }
+        try { svgEl.setAttribute('height', String(targetH)); } catch (_) { }
+        svgEl.style.width = targetW + 'px';
+        svgEl.style.height = targetH + 'px';
+      }
+      svgEl.style.overflow = 'visible';
+      svgEl.style.display = 'block';
+    } catch (_) { }
+    if (color || path_color) {
+      const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
+      shapes.forEach(node => {
+        if (path_color) {
+          try { if (node.style) node.style.stroke = path_color; } catch (_) { }
+          node.setAttribute('stroke', path_color);
+        }
+        if (color) {
+          // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
+          try { if (node.style) node.style.fill = color; } catch (_) { }
+          const f = node.getAttribute('fill');
+          if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
+          // Remove gradient/URL fill if we want solid override
+          if (/^url\(/i.test(f || '')) node.removeAttribute('fill');
+        }
+      });
+      if (color) {
+        try { if (svgEl.style) svgEl.style.fill = color; } catch (_) { }
+        if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
+      }
+      if (path_color) {
+        try { if (svgEl.style) svgEl.style.stroke = path_color; } catch (_) { }
+        if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+      }
+    }
+    parent.appendChild(svgEl);
+    return svgEl.id;
+  }
+
+  // fetch_and_render_svg: convenience wrapper specialized for SVG paths.
+  // Param order kept for existing calls: (path, id, parent_id, left, top, width, height, fill, stroke)
+  // Note: render_svg expects (top, left) order, so we swap when forwarding.
+  function fetch_and_render_svg(path, id, parent_id = 'view', left = '0px', top = '0px', width = '100px', height = '100px', fill = null, stroke = null, sizeMode = null, fetcher = null) {
+    const resolveFetcher = fetcher || (typeof dataFetcher === 'function' ? dataFetcher : null);
+    if (!resolveFetcher) {
+      return Promise.reject(new Error('dataFetcher unavailable'));
+    }
+    return resolveFetcher(path, { mode: 'text' })
+      .then(svgData => {
+        // Remove prior element with same id to avoid duplicates
+        const prev = document.getElementById(id);
+        if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+        return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
+      })
+      .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
+  }
+
+  /**
+   * loader
+   *
+   * Role:
+   * - Asset loading utilities with cache and Tauri-aware paths.
+   * - Provides SVG rendering helpers for UI.
+   */
 
   // --- Port persistence (survive refresh) -------------------------------------------------
   (function persistLocalPort() {
@@ -492,13 +706,15 @@
     window.span = { textContent: '' };
   }
 
+  // (Removed __waitLocalServerReady waiting logic: SVG/data fetch is now immediate on all platforms)
+
   const __inflightData = {};
-  function dataFetcher(path, opts = {}) {
+  function dataFetcher$1(path, opts = {}) {
     const mode = (opts.mode || 'auto').toLowerCase();
     const key = path + '::' + mode + '::' + (opts.preview || '');
     if (__dataCache[key]) return Promise.resolve(__dataCache[key]);
     if (__inflightData[key]) return __inflightData[key];
-    if (typeof fetch !== 'function') return Promise.reject(new Error('fetch indisponible'));
+    if (typeof fetch !== 'function') return Promise.reject(new Error('fetch unavailable'));
 
     const p = (async () => {
       // Normalize path: remove leading './' or '/', but keep first segment intact
@@ -508,7 +724,7 @@
       // Then strip remaining leading slashes
       cleanPath = cleanPath.replace(/^\/+/, '');
       // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
-      if (!cleanPath) throw new Error('Chemin vide');
+      if (!cleanPath) throw new Error('Empty path');
       const filename = cleanPath.split('/').pop();
       const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
       const looksSvg = ext === 'svg';
@@ -627,118 +843,17 @@
             const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
           }
           return done(u);
-        } catch (e) {
-          errro.log('err found:', e);
-
-        }
+        } catch (_) { }
       }
 
       delete __inflightData[key];
-      throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+      throw new Error('Not found (candidates: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
     })();
     __inflightData[key] = p;
     return p;
   }
 
-  // --- SVG Sanitizer ---------------------------------------------------------
-  // Lightweight whitelisting sanitizer (no external deps) to clean incoming SVG code
-  // before insertion. Removes dangerous elements/attributes and optionally normalizes
-  // width/height so our internal scaling logic can operate consistently.
-  // Sanitizer removed for performance: kept as identity to avoid ReferenceErrors.
-  function sanitizeSVG(raw) { return raw; }
 
-
-  //svg creator
-  // render_svg: inserts an SVG string.
-  // Signature étendue: sizeMode (dernier param) peut valoir:
-  //   null / undefined  => comportement fixe (taille px)
-  //   'responsive' ou '%' => width/height 100%, suit le parent
-  function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left = '0px', width = '100px', height = '100px', color = null, path_color = null, sizeMode = null) {
-    const parent = document.getElementById(parent_id);
-    if (!parent || !svgcontent) return null;
-    const tmp = document.createElement('div');
-    tmp.innerHTML = String(svgcontent).trim();
-    const svgEl = tmp.querySelector('svg');
-    if (!svgEl) return null;
-    const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
-    try { svgEl.id = finalId; } catch (_) { }
-    svgEl.style.position = 'absolute';
-    svgEl.style.top = top; svgEl.style.left = left;
-    const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
-    const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
-    const responsive = (sizeMode === 'responsive' || sizeMode === '%');
-    try {
-      const existingViewBox = svgEl.getAttribute('viewBox');
-      const attrW = parseFloat(svgEl.getAttribute('width')) || null;
-      const attrH = parseFloat(svgEl.getAttribute('height')) || null;
-      if (!existingViewBox) {
-        const vbW = (attrW && attrW > 0) ? attrW : targetW;
-        const vbH = (attrH && attrH > 0) ? attrH : targetH;
-        svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
-      }
-      if (!svgEl.getAttribute('preserveAspectRatio')) {
-        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      }
-      if (responsive) {
-        // Mode responsive: largeur/hauteur 100%, parent contrôle la taille
-        if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
-        if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
-        svgEl.style.width = '100%';
-        svgEl.style.height = '100%';
-        try { svgEl.dataset.intuitionResponsive = '1'; } catch (_) { }
-      } else {
-        // Mode fixe: on applique aussi en attribut pour compat rétro + calculs getAttribute
-        try { svgEl.setAttribute('width', String(targetW)); } catch (_) { }
-        try { svgEl.setAttribute('height', String(targetH)); } catch (_) { }
-        svgEl.style.width = targetW + 'px';
-        svgEl.style.height = targetH + 'px';
-      }
-      svgEl.style.overflow = 'visible';
-      svgEl.style.display = 'block';
-    } catch (_) { }
-    if (color || path_color) {
-      const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
-      shapes.forEach(node => {
-        if (path_color) {
-          try { if (node.style) node.style.stroke = path_color; } catch (_) { }
-          node.setAttribute('stroke', path_color);
-        }
-        if (color) {
-          // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
-          try { if (node.style) node.style.fill = color; } catch (_) { }
-          const f = node.getAttribute('fill');
-          if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
-          // Remove gradient/URL fill if we want solid override
-          if (/^url\(/i.test(f || '')) node.removeAttribute('fill');
-        }
-      });
-      if (color) {
-        try { if (svgEl.style) svgEl.style.fill = color; } catch (_) { }
-        if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
-      }
-      if (path_color) {
-        try { if (svgEl.style) svgEl.style.stroke = path_color; } catch (_) { }
-        if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
-      }
-    }
-    parent.appendChild(svgEl);
-    return svgEl.id;
-  }
-
-
-  // fetch_and_render_svg: convenience wrapper specialized for SVG paths.
-  // Param order kept for existing calls: (path, id, parent_id, left, top, width, height, fill, stroke)
-  // Note: render_svg expects (top, left) order, so we swap when forwarding.
-  function fetch_and_render_svg(path, id, parent_id = 'view', left = '0px', top = '0px', width = '100px', height = '100px', fill = null, stroke = null, sizeMode = null) {
-    return dataFetcher(path, { mode: 'text' })
-      .then(svgData => {
-        // Remove prior element with same id to avoid duplicates
-        const prev = document.getElementById(id);
-        if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
-        return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
-      })
-      .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
-  }
 
 
 
@@ -883,7 +998,7 @@
     return true;
   }
 
-  window.dataFetcher = dataFetcher;
+  window.dataFetcher = dataFetcher$1;
   window.render_svg = render_svg;
   window.fetch_and_render_svg = fetch_and_render_svg;
   window.resize = resize;
@@ -893,7 +1008,7 @@
   const Apis = {
       wait,
       current_platform,
-      dataFetcher,
+      dataFetcher: dataFetcher$1,
       render_svg,
       fetch_and_render_svg,
       resize,
@@ -905,7 +1020,7 @@
   var Apis$1 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     current_platform: current_platform,
-    dataFetcher: dataFetcher,
+    dataFetcher: dataFetcher$1,
     default: Apis,
     fetch_and_render_svg: fetch_and_render_svg,
     fillColor: fillColor,
@@ -7030,14 +7145,14 @@
       this.nextUnitId = 1;
       this.nextConnectorId = 1;
       this.nextConnectionId = 1;
-      
+
       // État pour le drag de connecteurs
       this.connectorDragState = {
         isDragging: false,
         sourceConnector: null,
         dragLine: null
       };
-      
+
       this.setupGlobalListeners();
     }
 
@@ -7116,7 +7231,7 @@
         toUnit: toUnitId,
         toConnector: toConnectorId
       };
-      
+
       this.connections.set(connectionId, connection);
       this.renderConnection(connection);
       return connectionId;
@@ -7136,20 +7251,20 @@
     renderConnection(connection) {
       const fromUnit = this.units.get(connection.fromUnit);
       const toUnit = this.units.get(connection.toUnit);
-      
+
       if (!fromUnit || !toUnit) return;
 
       const fromConnector = fromUnit.element.querySelector(`[data-connector-id="${connection.fromConnector}"]`);
       const toConnector = toUnit.element.querySelector(`[data-connector-id="${connection.toConnector}"]`);
-      
+
       if (!fromConnector || !toConnector) return;
 
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('data-connection-id', connection.id);
       line.classList.add('unit-connection-line');
-      
+
       this.updateConnectionPosition(line, fromConnector, toConnector);
-      
+
       // Ajouter la ligne au SVG container (créé s'il n'existe pas)
       let svg = document.querySelector('.unit-connections-svg');
       if (!svg) {
@@ -7166,19 +7281,19 @@
       `;
         document.body.appendChild(svg);
       }
-      
+
       svg.appendChild(line);
     }
 
     updateConnectionPosition(line, fromConnector, toConnector) {
       const fromRect = fromConnector.getBoundingClientRect();
       const toRect = toConnector.getBoundingClientRect();
-      
+
       const fromX = fromRect.left + fromRect.width / 2;
       const fromY = fromRect.top + fromRect.height / 2;
       const toX = toRect.left + toRect.width / 2;
       const toY = toRect.top + toRect.height / 2;
-      
+
       line.setAttribute('x1', fromX);
       line.setAttribute('y1', fromY);
       line.setAttribute('x2', toX);
@@ -7193,11 +7308,11 @@
         if (line) {
           const fromUnit = this.units.get(connection.fromUnit);
           const toUnit = this.units.get(connection.toUnit);
-          
+
           if (fromUnit && toUnit) {
             const fromConnector = fromUnit.element.querySelector(`[data-connector-id="${connection.fromConnector}"]`);
             const toConnector = toUnit.element.querySelector(`[data-connector-id="${connection.toConnector}"]`);
-            
+
             if (fromConnector && toConnector) {
               this.updateConnectionPosition(line, fromConnector, toConnector);
             }
@@ -7218,13 +7333,13 @@
       } else {
         // Deuxième connecteur sélectionné
         const { unitId: firstUnitId, connectorId: firstConnectorId, connectorType: firstType } = this.firstConnector;
-        
+
         // Vérifier que ce ne sont pas les mêmes connecteurs
         if (firstUnitId !== unitId || firstConnectorId !== connectorId) {
           // Vérifier qu'un est input et l'autre output
-          if ((firstType === 'input' && connectorType === 'output') || 
-              (firstType === 'output' && connectorType === 'input')) {
-            
+          if ((firstType === 'input' && connectorType === 'output') ||
+            (firstType === 'output' && connectorType === 'input')) {
+
             // Déterminer fromUnit/fromConnector et toUnit/toConnector
             let fromUnitId, fromConnectorId, toUnitId, toConnectorId;
             if (firstType === 'output') {
@@ -7238,15 +7353,15 @@
               toUnitId = firstUnitId;
               toConnectorId = firstConnectorId;
             }
-            
+
             // Vérifier s'il existe déjà une connexion entre ces connecteurs
             const existingConnection = Array.from(this.connections.values()).find(conn =>
-              conn.fromUnit === fromUnitId && 
+              conn.fromUnit === fromUnitId &&
               conn.fromConnector === fromConnectorId &&
-              conn.toUnit === toUnitId && 
+              conn.toUnit === toUnitId &&
               conn.toConnector === toConnectorId
             );
-            
+
             if (existingConnection) {
               // Déconnecter
               this.removeConnection(existingConnection.id);
@@ -7256,7 +7371,7 @@
             }
           }
         }
-        
+
         // Reset de la sélection
         this.highlightConnector(firstUnitId, firstConnectorId, false);
         this.firstConnector = null;
@@ -7282,13 +7397,13 @@
     startConnectorDrag(unitId, connectorId, connectorType, event) {
       event.preventDefault();
       event.stopPropagation();
-      
+
       this.connectorDragState.isDragging = true;
       this.connectorDragState.sourceConnector = { unitId, connectorId, connectorType };
-      
+
       // Créer une ligne temporaire pour visualiser la connexion
       this.createDragLine(event);
-      
+
       // Ajouter les listeners globaux
       document.addEventListener('mousemove', this.handleConnectorDragMove.bind(this));
       document.addEventListener('mouseup', this.handleConnectorDragEnd.bind(this));
@@ -7311,7 +7426,7 @@
       `;
         document.body.appendChild(svg);
       }
-      
+
       // Créer la ligne temporaire
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.classList.add('unit-drag-line');
@@ -7319,49 +7434,49 @@
       line.setAttribute('stroke-width', '2');
       line.setAttribute('stroke-dasharray', '5,5');
       line.setAttribute('opacity', '0.8');
-      
+
       const sourceConnector = this.getConnectorElement(
-        this.connectorDragState.sourceConnector.unitId, 
+        this.connectorDragState.sourceConnector.unitId,
         this.connectorDragState.sourceConnector.connectorId
       );
-      
+
       if (sourceConnector) {
         const rect = sourceConnector.getBoundingClientRect();
         const startX = rect.left + rect.width / 2;
         const startY = rect.top + rect.height / 2;
-        
+
         line.setAttribute('x1', startX);
         line.setAttribute('y1', startY);
         line.setAttribute('x2', event.clientX);
         line.setAttribute('y2', event.clientY);
       }
-      
+
       svg.appendChild(line);
       this.connectorDragState.dragLine = line;
     }
 
     handleConnectorDragMove(event) {
       if (!this.connectorDragState.isDragging || !this.connectorDragState.dragLine) return;
-      
+
       // Mettre à jour la position de fin de la ligne
       this.connectorDragState.dragLine.setAttribute('x2', event.clientX);
       this.connectorDragState.dragLine.setAttribute('y2', event.clientY);
-      
+
       // Highlight du connecteur cible potentiel
       const targetElement = document.elementFromPoint(event.clientX, event.clientY);
       if (targetElement && targetElement.classList.contains('unit-connector')) {
         targetElement.getAttribute('data-connector-id');
         const targetConnectorType = targetElement.getAttribute('data-connector-type');
         targetElement.closest('.unit-container').getAttribute('data-unit-id');
-        
+
         // Vérifier si c'est un connecteur valide pour la connexion
         const sourceType = this.connectorDragState.sourceConnector.connectorType;
         if ((sourceType === 'output' && targetConnectorType === 'input') ||
-            (sourceType === 'input' && targetConnectorType === 'output')) {
+          (sourceType === 'input' && targetConnectorType === 'output')) {
           targetElement.classList.add('connector-drag-hover');
         }
       }
-      
+
       // Supprimer les anciens highlights
       document.querySelectorAll('.connector-drag-hover').forEach(el => {
         if (!el.contains(targetElement)) {
@@ -7372,25 +7487,25 @@
 
     handleConnectorDragEnd(event) {
       if (!this.connectorDragState.isDragging) return;
-      
+
       // Supprimer la ligne temporaire
       if (this.connectorDragState.dragLine) {
         this.connectorDragState.dragLine.remove();
       }
-      
+
       // Trouver le connecteur cible
       const targetElement = document.elementFromPoint(event.clientX, event.clientY);
       if (targetElement && targetElement.classList.contains('unit-connector')) {
         const targetConnectorId = targetElement.getAttribute('data-connector-id');
         const targetConnectorType = targetElement.getAttribute('data-connector-type');
         const targetUnitId = targetElement.closest('.unit-container').getAttribute('data-unit-id');
-        
+
         const source = this.connectorDragState.sourceConnector;
-        
+
         // Vérifier si c'est une connexion valide
         if ((source.connectorType === 'output' && targetConnectorType === 'input') ||
-            (source.connectorType === 'input' && targetConnectorType === 'output')) {
-          
+          (source.connectorType === 'input' && targetConnectorType === 'output')) {
+
           // Déterminer fromUnit/fromConnector et toUnit/toConnector
           let fromUnitId, fromConnectorId, toUnitId, toConnectorId;
           if (source.connectorType === 'output') {
@@ -7404,15 +7519,15 @@
             toUnitId = source.unitId;
             toConnectorId = source.connectorId;
           }
-          
+
           // Vérifier s'il existe déjà une connexion
           const existingConnection = Array.from(this.connections.values()).find(conn =>
-            conn.fromUnit === fromUnitId && 
+            conn.fromUnit === fromUnitId &&
             conn.fromConnector === fromConnectorId &&
-            conn.toUnit === toUnitId && 
+            conn.toUnit === toUnitId &&
             conn.toConnector === toConnectorId
           );
-          
+
           if (existingConnection) {
             // Déconnecter
             this.removeConnection(existingConnection.id);
@@ -7422,15 +7537,15 @@
           }
         }
       }
-      
+
       // Nettoyer
       document.querySelectorAll('.connector-drag-hover').forEach(el => {
         el.classList.remove('connector-drag-hover');
       });
-      
+
       document.removeEventListener('mousemove', this.handleConnectorDragMove.bind(this));
       document.removeEventListener('mouseup', this.handleConnectorDragEnd.bind(this));
-      
+
       this.connectorDragState.isDragging = false;
       this.connectorDragState.sourceConnector = null;
       this.connectorDragState.dragLine = null;
@@ -7654,26 +7769,26 @@
       this.setupSelection();
       this.setupNameEditing();
       this.setPosition(position.x, position.y);
-      
+
       // Appliquer la couleur de fond si fournie
       if (backgroundColor) {
         this.setBackgroundColor(backgroundColor);
       }
-      
+
       // Ajouter au DOM d'abord
       unitManager.registerUnit(this);
-      
+
       // Utiliser le parent spécifié ou document.body par défaut
       const parentElement = this.getParentElement();
       parentElement.appendChild(this.element);
-      
+
       // Puis ajouter les connecteurs
       inputs.forEach(input => this.addInput(input));
       outputs.forEach(output => this.addOutput(output));
-      
+
       // Ajuster la hauteur initiale du module
       this.adjustModuleHeight();
-      
+
       // Ajouter l'icône si fournie
       if (icon || iconSrc) {
         this.setIcon(icon || iconSrc);
@@ -7698,7 +7813,7 @@
       if (!this.parent) {
         return document.body;
       }
-      
+
       // Si parent est une string, traiter comme ID ou sélecteur
       if (typeof this.parent === 'string') {
         if (this.parent.startsWith('#')) {
@@ -7707,12 +7822,12 @@
           return document.getElementById(this.parent) || document.body;
         }
       }
-      
+
       // Si parent est un élément DOM
       if (this.parent && this.parent.nodeType === Node.ELEMENT_NODE) {
         return this.parent;
       }
-      
+
       // Fallback
       return document.body;
     }
@@ -7722,13 +7837,13 @@
 
       const handleMouseDown = (e) => {
         if (this.isEditingName) return;
-        
+
         this.isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
         startPosX = this.position.x;
         startPosY = this.position.y;
-        
+
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
         e.preventDefault();
@@ -7736,10 +7851,10 @@
 
       const handleMouseMove = (e) => {
         if (!this.isDragging) return;
-        
+
         const deltaX = e.clientX - startX;
         const deltaY = e.clientY - startY;
-        
+
         this.setPosition(startPosX + deltaX, startPosY + deltaY);
         unitManager.updateAllConnections();
       };
@@ -7756,7 +7871,7 @@
     setupSelection() {
       this.element.addEventListener('click', (e) => {
         e.stopPropagation();
-        
+
         if (e.ctrlKey || e.metaKey) {
           // Multi-sélection
           if (unitManager.selectedUnits.has(this.id)) {
@@ -7783,7 +7898,7 @@
       this.isEditingName = true;
       this.nameElement.contentEditable = true;
       this.nameElement.focus();
-      
+
       // Sélectionner tout le texte
       const range = document.createRange();
       range.selectNodeContents(this.nameElement);
@@ -7831,17 +7946,10 @@
       if (!iconData) return;
 
       const icon = $('unit-icon');
-      
+
       // Désactiver le drag par défaut sur l'image
       icon.draggable = false;
-      
-      if (iconData.startsWith('data:')) {
-        // Base64
-        icon.src = iconData;
-      } else {
-        // URL/Path
-        icon.src = iconData;
-      }
+
 
       this.body.appendChild(icon);
       this.iconElement = icon;
@@ -7864,7 +7972,7 @@
       } = options;
 
       const connector = $('unit-connector-input', {
-        attrs: { 
+        attrs: {
           'data-connector-id': id,
           'data-connector-type': 'input',
           'title': name
@@ -7898,10 +8006,10 @@
 
       this.element.appendChild(connector);
       this.inputs.push({ id, name, color, element: connector });
-      
+
       // Ajuster la hauteur du module après ajout
       this.adjustModuleHeight();
-      
+
       return id;
     }
 
@@ -7913,7 +8021,7 @@
       } = options;
 
       const connector = $('unit-connector-output', {
-        attrs: { 
+        attrs: {
           'data-connector-id': id,
           'data-connector-type': 'output',
           'title': name
@@ -7947,10 +8055,10 @@
 
       this.element.appendChild(connector);
       this.outputs.push({ id, name, color, element: connector });
-      
+
       // Ajuster la hauteur du module après ajout
       this.adjustModuleHeight();
-      
+
       return id;
     }
 
@@ -7960,7 +8068,7 @@
         const input = this.inputs[inputIndex];
         input.element.remove();
         this.inputs.splice(inputIndex, 1);
-        
+
         // Repositionner les connecteurs restants
         this.repositionInputs();
       }
@@ -7972,7 +8080,7 @@
         const output = this.outputs[outputIndex];
         output.element.remove();
         this.outputs.splice(outputIndex, 1);
-        
+
         // Repositionner les connecteurs restants
         this.repositionOutputs();
       }
@@ -7987,7 +8095,7 @@
       this.inputs.forEach((input, index) => {
         input.element.style.top = `${startY + index * spacing}px`;
       });
-      
+
       // Ajuster la hauteur du module après repositionnement
       this.adjustModuleHeight();
     }
@@ -8001,7 +8109,7 @@
       this.outputs.forEach((output, index) => {
         output.element.style.top = `${startY + index * spacing}px`;
       });
-      
+
       // Ajuster la hauteur du module après repositionnement
       this.adjustModuleHeight();
     }
@@ -8013,26 +8121,26 @@
       const bodyPadding = 16; // Padding réduit top + bottom du body
       const minBodyHeight = 32; // Hauteur minimale réduite du body
       const extraMargin = 8; // Marge réduite pour l'esthétique
-      
+
       // Calculer le nombre maximum de connecteurs sur un côté
       const maxConnectors = Math.max(this.inputs.length, this.outputs.length);
-      
+
       if (maxConnectors === 0) {
         // Pas de connecteurs, utiliser une hauteur minimale réduite
         this.element.style.height = 'auto';
         this.element.style.minHeight = '60px';
         return;
       }
-      
+
       // Calculer la hauteur nécessaire pour tous les connecteurs
       const connectorsHeight = Math.max(1, maxConnectors) * connectorSpacing; // Supprimer le +10 pour startY
       const requiredBodyHeight = Math.max(minBodyHeight, connectorsHeight);
       const totalHeight = headerHeight + requiredBodyHeight + bodyPadding + extraMargin;
-      
+
       // Appliquer la nouvelle hauteur
       this.element.style.height = `${totalHeight}px`;
       this.element.style.minHeight = `${totalHeight}px`;
-      
+
       // Optionnel: Log pour debug
       console.log(`📏 Unit ${this.name}: ${maxConnectors} connecteurs max → hauteur ${totalHeight}px`);
     }
