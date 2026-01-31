@@ -539,8 +539,9 @@ async function upsertSharePolicy(ownerId, peerUserId, policy, permissions) {
 }
 
 function extractShareType(particles) {
-    const direct = particles?.share_type || null;
-    const override = particles?.property_overrides?.__share_type || particles?.property_overrides?.share_type || null;
+    const direct = particles?.share_type || particles?.shareType || null;
+    const overrides = particles?.property_overrides || particles?.propertyOverrides || {};
+    const override = overrides.__shareType || overrides.__share_type || overrides.shareType || overrides.share_type || null;
     return String(direct || override || 'linked');
 }
 
@@ -639,16 +640,17 @@ async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
     const shareMode = (rawMode === 'validation-based' || rawMode === 'manual' || rawMode === 'non-real-time')
         ? 'manual'
         : 'real-time';
+    const effectiveShareType = shareMode === 'real-time' ? shareType : 'copy';
     const meta = extractShareMeta(particles);
     const expiresAt = normalizeDurationToExpiry(meta?.duration);
     const conditions = meta?.condition || null;
 
-    console.log('[Share] shareType:', shareType, 'shareMode:', shareMode);
+    console.log('[Share] shareType:', shareType, 'shareMode:', shareMode, 'effectiveShareType:', effectiveShareType);
 
     console.log('[Share] shareType check:', { shareType, isLinked: shareType === 'linked' });
     console.log('[Share] receiverProjectId:', particles?.receiver_project_id || 'NONE');
 
-    if (shareType !== 'linked') {
+    if (effectiveShareType !== 'linked') {
         console.log('[Share] Creating shared copies (non-linked)...');
         let receiverProjectId = particles?.receiver_project_id || null;
         if (!receiverProjectId) {
@@ -725,7 +727,11 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
             const first = await db.getAtome(atomeIds[0]);
             const data = first?.data || first?.particles || {};
             const candidate = data.project_id || data.projectId || first?.parent_id || null;
-            if (candidate) projectId = candidate;
+            if (candidate) {
+                projectId = candidate;
+            } else {
+                projectId = await resolveProjectIdForAtome(atomeIds[0]);
+            }
         }
     } catch (_) {
         projectId = null;
@@ -961,6 +967,26 @@ async function resolveReceiverProjectIdFromState(userId) {
     } catch (_) {
         return null;
     }
+}
+
+async function resolveProjectIdForAtome(atomeId, maxDepth = 16) {
+    if (!atomeId) return null;
+    let currentId = String(atomeId);
+    let depth = 0;
+    while (currentId && depth < maxDepth) {
+        depth += 1;
+        const atome = await db.getAtome(currentId);
+        if (!atome) return null;
+        const data = atome.data || atome.particles || {};
+        const directProject = data.project_id || data.projectId || atome.project_id || atome.projectId || null;
+        if (directProject) return String(directProject);
+        const type = String(atome.atome_type || atome.type || '').toLowerCase();
+        if (type === 'project') return String(currentId);
+        const parentId = atome.parent_id || data.parent_id || data.parentId || null;
+        if (!parentId || String(parentId) === String(currentId)) return null;
+        currentId = String(parentId);
+    }
+    return null;
 }
 
 async function lookupUserByPhone(phone) {

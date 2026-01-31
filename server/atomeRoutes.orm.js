@@ -958,13 +958,15 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { project_id, limit, offset } = request.query || {};
+        const { project_id, limit, offset, include_shared, includeShared } = request.query || {};
+        const includeSharedFlag = include_shared === '1' || include_shared === 'true' || includeShared === '1' || includeShared === 'true';
 
         try {
             const states = await db.listStateCurrent(project_id || null, {
                 limit: limit !== undefined ? Number(limit) : undefined,
                 offset: offset !== undefined ? Number(offset) : undefined,
-                ownerId: user.id
+                ownerId: user.id,
+                includeShared: includeSharedFlag
             });
 
             return reply.send({ success: true, states });

@@ -1575,6 +1575,7 @@ export async function listStateCurrent(projectId, options = {}) {
     const limit = Number(options.limit) || 1000;
     const offset = Number(options.offset) || 0;
     const ownerId = options.ownerId || options.owner_id || null;
+    const includeShared = options.includeShared === true || options.include_shared === true;
 
     const params = [];
     const conditions = [];
@@ -1585,18 +1586,36 @@ export async function listStateCurrent(projectId, options = {}) {
     }
 
     if (ownerId) {
-        // Match Tauri behavior: allow owner_id match or NULL (shared/legacy).
-        conditions.push('(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)');
-        params.push(ownerId);
+        if (includeShared) {
+            // Include rows shared in realtime via permissions.
+            conditions.push(`(
+                COALESCE(sc.owner_id, a.owner_id) = ?
+                OR (
+                    p.principal_id = ?
+                    AND (p.share_mode IS NULL OR LOWER(p.share_mode) IN ('real-time', 'realtime'))
+                )
+            )`);
+            params.push(ownerId, ownerId);
+        } else {
+            // Match Tauri behavior: allow owner_id match or NULL (shared/legacy).
+            conditions.push('(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)');
+            params.push(ownerId);
+        }
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const join = 'LEFT JOIN atomes a ON a.atome_id = sc.atome_id';
+    const join = includeShared && ownerId
+        ? `LEFT JOIN atomes a ON a.atome_id = sc.atome_id
+           LEFT JOIN permissions p ON p.atome_id = sc.atome_id
+             AND p.principal_id = ?
+             AND p.can_read = 1
+             AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))`
+        : 'LEFT JOIN atomes a ON a.atome_id = sc.atome_id';
 
     const rows = await query(
         'all',
         `SELECT sc.*, COALESCE(sc.owner_id, a.owner_id) AS owner_id FROM state_current sc ${join} ${where} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
+        includeShared && ownerId ? [ownerId, ...params, limit, offset] : [...params, limit, offset]
     );
 
     return (rows || []).map((row) => ({
