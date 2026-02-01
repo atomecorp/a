@@ -1,5 +1,6 @@
 const REALTIME_DEDUP_WINDOW_MS = 5000;
 const SELF_PATCH_TTL_MS = 3000;
+const EDITING_IDLE_WINDOW_MS = 1200;
 const REALTIME_KEYS = [
     'left',
     'top',
@@ -32,7 +33,7 @@ const REALTIME_KEYS = [
 
 const dedupMap = new Map();
 const selfPatchMap = new Map();
-const editingAtomes = new Set();
+const editingAtomes = new Map();
 
 /**
  * Mark an atome as being actively edited locally.
@@ -40,7 +41,8 @@ const editingAtomes = new Set();
  * @param {string} atomeId - The atome ID being edited
  */
 export function markAtomeAsEditing(atomeId) {
-    if (atomeId) editingAtomes.add(String(atomeId));
+    if (!atomeId) return;
+    editingAtomes.set(String(atomeId), Date.now());
 }
 
 /**
@@ -58,7 +60,10 @@ export function unmarkAtomeAsEditing(atomeId) {
  * @returns {boolean} True if the atome is in edit mode
  */
 export function isAtomeBeingEdited(atomeId) {
-    return atomeId ? editingAtomes.has(String(atomeId)) : false;
+    if (!atomeId) return false;
+    const ts = editingAtomes.get(String(atomeId));
+    if (!ts) return false;
+    return (Date.now() - ts) <= EDITING_IDLE_WINDOW_MS;
 }
 
 const getCurrentUserId = () => {
