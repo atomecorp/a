@@ -514,6 +514,61 @@ const normalizeAtomePayload = (payload = {}) => {
     return { atome, atomeId, properties };
 };
 
+const normalizeOwnershipInfo = (payload, atome) => {
+    const ownerId = payload?.owner_id || payload?.ownerId || atome?.owner_id || atome?.ownerId || atome?.owner || null;
+    const sharedWith = payload?.shared_with || payload?.sharedWith || atome?.shared_with || atome?.sharedWith || null;
+    const isShared = payload?.isShared === true || atome?.isShared === true;
+    return { ownerId, sharedWith, isShared };
+};
+
+const canMirrorToLocal = ({ ownerId, sharedWith, isShared }, currentUserId) => {
+    if (!currentUserId) return false;
+    if (ownerId && String(ownerId) === String(currentUserId)) return true;
+    if (isShared) return true;
+    if (Array.isArray(sharedWith) && sharedWith.some((id) => String(id) === String(currentUserId))) return true;
+    if (!ownerId && !sharedWith && !isShared) return true;
+    return false;
+};
+
+const buildLocalMirrorProps = ({ properties, atomeType, parentId, ownerId }) => {
+    if (!properties || typeof properties !== 'object') return null;
+    const merged = { ...properties };
+    if (atomeType && merged.type == null && merged.atome_type == null && merged.kind == null) {
+        merged.type = atomeType;
+    }
+    if (parentId && merged.parent_id == null && merged.parentId == null) {
+        merged.parent_id = parentId;
+        merged.parentId = parentId;
+    }
+    if (ownerId && merged.owner_id == null && merged.ownerId == null) {
+        merged.owner_id = ownerId;
+        merged.ownerId = ownerId;
+    }
+    return merged;
+};
+
+const mirrorUpdateToLocal = async ({ atomeId, properties, atomeType, parentId, ownerId }) => {
+    if (!atomeId || !properties || typeof properties !== 'object') return;
+    if (!TauriAdapter?.atome?.update) return;
+    const tokenPresent = !!(TauriAdapter?.getToken && TauriAdapter.getToken());
+    if (!tokenPresent) return;
+    const payload = buildLocalMirrorProps({ properties, atomeType, parentId, ownerId });
+    if (!payload) return;
+    try {
+        await TauriAdapter.atome.update(atomeId, payload);
+    } catch (_) { }
+};
+
+const mirrorDeleteToLocal = async (atomeId) => {
+    if (!atomeId) return;
+    if (!TauriAdapter?.atome?.softDelete) return;
+    const tokenPresent = !!(TauriAdapter?.getToken && TauriAdapter.getToken());
+    if (!tokenPresent) return;
+    try {
+        await TauriAdapter.atome.softDelete(atomeId);
+    } catch (_) { }
+};
+
 const coerceStyleValue = (value) => {
     if (value == null) return '';
     if (typeof value === 'number') return `${value}px`;
@@ -756,6 +811,20 @@ const connectRealtime = async (options = {}) => {
         }
         if (payload.type === 'atome:updated' || payload.type === 'atome:altered') {
             const { atomeId, properties } = normalizeAtomePayload(payload);
+            const atome = payload.atome || payload.data?.atome || payload.data || payload.record || null;
+            const atomeType = atome?.atome_type || atome?.type || payload.atomeType || payload.atome_type || null;
+            const parentId = atome?.parent_id || atome?.parentId || payload.parent_id || payload.parentId || null;
+            const currentUserId = getCurrentUserId();
+            const ownership = normalizeOwnershipInfo(payload, atome);
+            if (runtime === 'tauri' && atomeId && properties && canMirrorToLocal(ownership, currentUserId)) {
+                mirrorUpdateToLocal({
+                    atomeId,
+                    properties,
+                    atomeType,
+                    parentId,
+                    ownerId: ownership.ownerId
+                });
+            }
             const authorId = payload.authorId || payload.author_id
                 || payload.params?.authorId || payload.params?.author_id || null;
             if (authorId && isFromCurrentUser(authorId)) {
@@ -768,6 +837,10 @@ const connectRealtime = async (options = {}) => {
             if (properties) applyAtomePatchToDom(atomeId, properties);
         }
         if (payload.type === 'atome:deleted') {
+            const { atomeId } = normalizeAtomePayload(payload);
+            if (runtime === 'tauri' && atomeId) {
+                mirrorDeleteToLocal(atomeId);
+            }
             dispatchAtomeEvent('squirrel:atome-deleted', payload);
         }
 
