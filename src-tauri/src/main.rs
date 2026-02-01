@@ -54,23 +54,75 @@ fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> 
     }
 }
 
-fn main() {
-    // Load .env file from project root (if exists)
-    // This ensures JWT_SECRET and other env vars are shared with Fastify
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let env_path = cwd.join(".env");
-    if env_path.exists() {
-        if let Err(e) = dotenvy::from_path(&env_path) {
-            eprintln!(
-                "[tauri] Warning: Failed to load .env from {:?}: {}",
-                env_path, e
-            );
-        } else {
-            println!("[tauri] Loaded environment from {:?}", env_path);
-        }
-    } else {
-        println!("[tauri] No .env file found at {:?}", env_path);
+fn load_env_file(path: &Path, override_existing: bool) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
     }
+    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(2, '=');
+        let key = parts.next().unwrap_or("").trim();
+        if key.is_empty() {
+            continue;
+        }
+        let value_raw = parts.next().unwrap_or("").trim();
+        if !override_existing && std::env::var_os(key).is_some() {
+            continue;
+        }
+        let mut value = value_raw.to_string();
+        if (value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\''))
+        {
+            value = value[1..value.len().saturating_sub(1)].to_string();
+        }
+        let value = value.replace("\\n", "\n");
+        std::env::set_var(key, value);
+    }
+    Ok(true)
+}
+
+fn load_env_from_candidates() {
+    let mut bases: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        bases.push(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            bases.push(parent.to_path_buf());
+        }
+    }
+
+    for base in bases {
+        let mut dir = base.clone();
+        for _ in 0..8 {
+            let env_path = dir.join(".env");
+            if let Ok(true) = load_env_file(&env_path, false) {
+                println!("[tauri] Loaded environment from {:?}", env_path);
+                let env_local = dir.join(".env.local");
+                match load_env_file(&env_local, true) {
+                    Ok(true) => println!("[tauri] Loaded environment from {:?}", env_local),
+                    Ok(false) => {}
+                    Err(e) => eprintln!("[tauri] Warning: Failed to load .env.local from {:?}: {}", env_local, e),
+                }
+                return;
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+
+    println!("[tauri] No .env file found in cwd/exe path hierarchy");
+}
+
+fn main() {
+    // Load .env/.env.local from a stable location (cwd or executable parent).
+    // This keeps JWT_SECRET consistent across Tauri + Fastify in dev.
+    load_env_from_candidates();
 
     let _log_guard = dev_logging::init_tracing();
 
