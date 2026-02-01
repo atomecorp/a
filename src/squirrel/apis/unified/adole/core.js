@@ -3929,11 +3929,12 @@ try {
             if ((!properties || Object.keys(properties).length === 0) && detail?.newName) {
                 properties = { name: detail.newName };
             }
-            const projectId = normalized.projectId || normalized.project_id
+            const domProjectId = resolve_dom_project_id(id);
+            const projectId = domProjectId
+                || normalized.projectId || normalized.project_id
                 || normalizedFromAtome?.projectId || normalizedFromAtome?.project_id
                 || properties.project_id || properties.projectId
                 || detail.project_id || detail.projectId
-                || resolve_dom_project_id(id)
                 || get_current_project_id?.();
             return {
                 id,
