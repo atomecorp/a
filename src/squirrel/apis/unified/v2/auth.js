@@ -1,4 +1,5 @@
 import { TauriAdapter, FastifyAdapter, checkBackends } from '../adole.js';
+import { ensure_fastify_token } from '../adole/core.js';
 import { isTauriRuntime } from './runtime.js';
 import { syncLocalProjectsToFastify } from './atomes.js';
 import {
@@ -530,7 +531,19 @@ export const auth = {
     async ensureFastifyToken() {
         const token = FastifyAdapter?.getToken?.();
         if (token) return { ok: true, reason: 'token_present' };
-        return { ok: false, reason: 'missing_token' };
+        try {
+            const result = await ensure_fastify_token();
+            if (result?.ok || result?.synced) {
+                return { ok: true, reason: result?.reason || 'token_obtained' };
+            }
+            return {
+                ok: false,
+                reason: result?.reason || 'missing_token',
+                error: result?.error || null
+            };
+        } catch (error) {
+            return { ok: false, reason: 'ensure_failed', error: error?.message || String(error) };
+        }
     },
 
     async lookupPhone(phone) {
