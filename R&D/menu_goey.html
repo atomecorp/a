@@ -17,9 +17,13 @@
       --icon-color: #a93535;
 
       /* ====== GRADIENT (MORE COLOR) ====== */
-      --grad-start: #a9d8ff;
-      --grad-mid: #7fc3ff;
-      --grad-end: #4aa8ff;
+      --tool-gradient-a: rgba(47, 116, 255, 0.615);
+      --tool-gradient-b: rgba(70, 206, 255, 0.565);
+      --tool-gradient-a-target: rgba(47, 116, 255, 1);
+      --tool-gradient-b-target: rgba(70, 206, 255, 1);
+      --grad-start: var(--tool-gradient-a);
+      --grad-mid: var(--tool-gradient-b);
+      --grad-end: var(--tool-gradient-b);
       --grad-angle-x1: 0%;
       --grad-angle-y1: 0%;
       --grad-angle-x2: 100%;
@@ -132,7 +136,7 @@
 
     <svg id="svgLayer" width="100%" height="100%" aria-hidden="true">
       <defs>
-        <linearGradient id="gradUI">
+        <linearGradient id="gradUI" class="tool-grad">
           <stop offset="0%" stop-color="var(--grad-start)" />
           <stop offset="60%" stop-color="var(--grad-mid)" />
           <stop offset="100%" stop-color="var(--grad-end)" />
@@ -273,22 +277,77 @@
       const easing = parseEasing(v) || fallbackEasing;
       return { durationMs, easing };
     };
+    const parseColor = (v) => {
+      const s = v.trim();
+      if (!s) return null;
+      if (s[0] === '#') {
+        const hex = s.slice(1);
+        const to255 = (h) => parseInt(h, 16);
+        if (hex.length === 3 || hex.length === 4) {
+          const r = to255(hex[0] + hex[0]);
+          const g = to255(hex[1] + hex[1]);
+          const b = to255(hex[2] + hex[2]);
+          const a = hex.length === 4 ? to255(hex[3] + hex[3]) / 255 : 1;
+          return [r, g, b, a];
+        }
+        if (hex.length === 6 || hex.length === 8) {
+          const r = to255(hex.slice(0, 2));
+          const g = to255(hex.slice(2, 4));
+          const b = to255(hex.slice(4, 6));
+          const a = hex.length === 8 ? to255(hex.slice(6, 8)) / 255 : 1;
+          return [r, g, b, a];
+        }
+      }
+      const m = s.match(/rgba?\(([^)]+)\)/i);
+      if (m) {
+        const parts = m[1].split(/[\s,\/]+/).filter(Boolean);
+        const toChannel = (p) => (p.endsWith('%') ? (parseFloat(p) * 2.55) : parseFloat(p));
+        const r = toChannel(parts[0] || '0');
+        const g = toChannel(parts[1] || '0');
+        const b = toChannel(parts[2] || '0');
+        const a = parts[3] !== undefined ? parseFloat(parts[3]) : 1;
+        if ([r, g, b, a].every(Number.isFinite)) return [r, g, b, a];
+      }
+      return null;
+    };
+    const mixColor = (a, b, t) => {
+      const tt = clamp01(t);
+      return [
+        a[0] + ((b[0] - a[0]) * tt),
+        a[1] + ((b[1] - a[1]) * tt),
+        a[2] + ((b[2] - a[2]) * tt),
+        a[3] + ((b[3] - a[3]) * tt)
+      ];
+    };
+    const colorToString = (c) => {
+      const r = Math.round(c[0]);
+      const g = Math.round(c[1]);
+      const b = Math.round(c[2]);
+      const a = Math.min(1, Math.max(0, c[3]));
+      return `rgba(${r},${g},${b},${a})`;
+    };
 
     // ====== Apply SVG numeric params (SVG filter primitives don't reliably accept CSS vars in numeric fields) ======
     function applySvgParams() {
       const blur = document.getElementById('gooBlur');
       const mat = document.getElementById('gooMatrix');
-      const grad = document.getElementById('gradUI');
+      const grads = document.querySelectorAll('.tool-grad');
       const gooShadow = document.getElementById('gooShadow');
       const baseShadow = document.getElementById('baseShadowNode');
 
-      assert(blur && mat && grad && gooShadow && baseShadow, 'Missing SVG filter/gradient nodes');
+      assert(blur && mat && gooShadow && baseShadow, 'Missing SVG filter nodes');
 
       // Gradient direction
-      grad.setAttribute('x1', readStr('--grad-angle-x1', '0%'));
-      grad.setAttribute('y1', readStr('--grad-angle-y1', '0%'));
-      grad.setAttribute('x2', readStr('--grad-angle-x2', '100%'));
-      grad.setAttribute('y2', readStr('--grad-angle-y2', '100%'));
+      const gx1 = readStr('--grad-angle-x1', '0%');
+      const gy1 = readStr('--grad-angle-y1', '0%');
+      const gx2 = readStr('--grad-angle-x2', '100%');
+      const gy2 = readStr('--grad-angle-y2', '100%');
+      grads.forEach((g) => {
+        g.setAttribute('x1', gx1);
+        g.setAttribute('y1', gy1);
+        g.setAttribute('x2', gx2);
+        g.setAttribute('y2', gy2);
+      });
 
       // Gooey params
       const gooBlur = readNum('--goo-blur', 12);
@@ -331,6 +390,10 @@
     const TOOL_RADIUS_TRANSITION = parseTransition('--tool-radius-transition', 200, DEFAULT_EASE);
     const TOOL_RADIUS_TRANSITION_MS = TOOL_RADIUS_TRANSITION.durationMs;
     const TOOL_RADIUS_EASE = TOOL_RADIUS_TRANSITION.easing;
+    const TOOL_GRAD_A = parseColor(readStr('--tool-gradient-a', '#a9d8ff')) || [169, 216, 255, 1];
+    const TOOL_GRAD_B = parseColor(readStr('--tool-gradient-b', '#4aa8ff')) || [74, 168, 255, 1];
+    const TOOL_GRAD_A_T = parseColor(readStr('--tool-gradient-a-target', readStr('--tool-gradient-a', '#a9d8ff'))) || TOOL_GRAD_A;
+    const TOOL_GRAD_B_T = parseColor(readStr('--tool-gradient-b-target', readStr('--tool-gradient-b', '#4aa8ff'))) || TOOL_GRAD_B;
     const EPS = 0.05;
     const SNAP_OFFSET = readNum('--snap-offset', 0);
     const TRANSITION_DISTANCE = readNum('--transition-distance', 90);
@@ -356,17 +419,21 @@
 
     const baseGroup = document.getElementById('baseGroup');
     const svgGroup = document.getElementById('gooGroup');
+    const svgDefs = document.querySelector('#svgLayer defs');
     const ui = document.getElementById('uiLayer');
 
     // Tests (kept simple, non-invasive)
     assert(baseGroup, 'Missing #baseGroup');
     assert(svgGroup, 'Missing #gooGroup');
     assert(ui, 'Missing #uiLayer');
+    assert(svgDefs, 'Missing svg defs');
     assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
 
     let items = [];
     let drag = null;
     let dx = 0, dy = 0;
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    let gradCount = 0;
 
     // Build the tool DOM safely (no duplicate definition)
     function makeToolDom(label, iconMarkupA, iconMarkupB = null) {
@@ -376,18 +443,18 @@
       const iconWrap = document.createElement('div');
       iconWrap.className = 'icon';
 
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const svg = document.createElementNS(SVG_NS, 'svg');
       svg.setAttribute('viewBox', '0 0 24 24');
       svg.setAttribute('aria-hidden', 'true');
 
-      const iconGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      const iconGroup = document.createElementNS(SVG_NS, 'g');
 
-      const g1 = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      const g1 = document.createElementNS(SVG_NS, 'g');
       g1.innerHTML = iconMarkupA;
       iconGroup.appendChild(g1);
 
       if (iconMarkupB) {
-        const g2 = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const g2 = document.createElementNS(SVG_NS, 'g');
         g2.setAttribute('opacity', '0.95');
         g2.innerHTML = iconMarkupB;
         iconGroup.appendChild(g2);
@@ -426,20 +493,43 @@
     assert(__t instanceof HTMLElement && __t.classList.contains('tool'), 'makeToolDom must return a .tool element');
 
     function createTool(d) {
-      const baseShape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      const grad = document.createElementNS(SVG_NS, 'linearGradient');
+      const gradId = `gradUI-${gradCount++}`;
+      grad.setAttribute('id', gradId);
+      grad.setAttribute('class', 'tool-grad');
+      grad.setAttribute('x1', readStr('--grad-angle-x1', '0%'));
+      grad.setAttribute('y1', readStr('--grad-angle-y1', '0%'));
+      grad.setAttribute('x2', readStr('--grad-angle-x2', '100%'));
+      grad.setAttribute('y2', readStr('--grad-angle-y2', '100%'));
+
+      const stop0 = document.createElementNS(SVG_NS, 'stop');
+      stop0.setAttribute('offset', '0%');
+      const stop1 = document.createElementNS(SVG_NS, 'stop');
+      stop1.setAttribute('offset', '60%');
+      const stop2 = document.createElementNS(SVG_NS, 'stop');
+      stop2.setAttribute('offset', '100%');
+      stop0.setAttribute('stop-color', colorToString(TOOL_GRAD_A));
+      stop1.setAttribute('stop-color', colorToString(TOOL_GRAD_B));
+      stop2.setAttribute('stop-color', colorToString(TOOL_GRAD_B));
+      grad.appendChild(stop0);
+      grad.appendChild(stop1);
+      grad.appendChild(stop2);
+      svgDefs.appendChild(grad);
+
+      const baseShape = document.createElementNS(SVG_NS, 'rect');
       baseShape.setAttribute('width', TOOL_SIZE);
       baseShape.setAttribute('height', TOOL_SIZE);
       baseShape.setAttribute('rx', TOOL_RADIUS);
       baseShape.setAttribute('ry', TOOL_RADIUS);
-      baseShape.setAttribute('fill', 'url(#gradUI)');
+      baseShape.setAttribute('fill', `url(#${gradId})`);
       baseGroup.appendChild(baseShape);
 
-      const gooShape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      const gooShape = document.createElementNS(SVG_NS, 'rect');
       gooShape.setAttribute('width', TOOL_SIZE);
       gooShape.setAttribute('height', TOOL_SIZE);
       gooShape.setAttribute('rx', TOOL_RADIUS);
       gooShape.setAttribute('ry', TOOL_RADIUS);
-      gooShape.setAttribute('fill', 'url(#gradUI)');
+      gooShape.setAttribute('fill', `url(#${gradId})`);
       gooShape.setAttribute('opacity', '0');
       svgGroup.appendChild(gooShape);
 
@@ -453,6 +543,10 @@
         vy: 0,
         baseShape,
         gooShape,
+        grad,
+        stop0,
+        stop1,
+        stop2,
         tool,
         label: d.label,
         svgA: d.svg,
@@ -468,7 +562,13 @@
         gooFrom: 0,
         gooTo: 0,
         gooStart: 0,
-        gooDur: 0
+        gooDur: 0,
+        color: 0,
+        colorApplied: 0,
+        colorFrom: 0,
+        colorTo: 0,
+        colorStart: 0,
+        colorDur: 0
       };
       items.push(it);
       update(it);
@@ -497,6 +597,7 @@
       it.tool.remove();
       it.baseShape.remove();
       it.gooShape.remove();
+      it.grad.remove();
     }
 
     function setMergedUI(stationary, removed) {
@@ -688,6 +789,49 @@
       return true;
     }
 
+    function applyColor(it) {
+      if (Math.abs(it.color - it.colorApplied) > 0.001) {
+        const a = mixColor(TOOL_GRAD_A, TOOL_GRAD_A_T, it.color);
+        const b = mixColor(TOOL_GRAD_B, TOOL_GRAD_B_T, it.color);
+        it.stop0.setAttribute('stop-color', colorToString(a));
+        it.stop1.setAttribute('stop-color', colorToString(b));
+        it.stop2.setAttribute('stop-color', colorToString(b));
+        it.colorApplied = it.color;
+      }
+    }
+
+    function setColorTarget(it, target, now) {
+      if (it.colorTo === target) return;
+      it.colorFrom = it.color;
+      it.colorTo = target;
+      it.colorStart = now;
+      it.colorDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.colorDur === 0) {
+        it.color = target;
+        applyColor(it);
+      }
+    }
+
+    function updateColor(it, now) {
+      if (it.colorDur === 0) {
+        it.color = it.colorTo;
+        applyColor(it);
+        return false;
+      }
+      const t = (now - it.colorStart) / it.colorDur;
+      if (t >= 1) {
+        it.color = it.colorTo;
+        it.colorDur = 0;
+        applyColor(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.color = it.colorFrom + ((it.colorTo - it.colorFrom) * eased);
+      applyColor(it);
+      return true;
+    }
+
     let rafId = 0;
     function schedule() {
       if (!rafId) {
@@ -730,6 +874,11 @@
         const gooTarget = isActive ? 1 : 0;
         setGooTarget(it, gooTarget, now);
         if (updateGoo(it, now)) {
+          active = true;
+        }
+        const colorTarget = isActive ? 1 : 0;
+        setColorTarget(it, colorTarget, now);
+        if (updateColor(it, now)) {
           active = true;
         }
       }
