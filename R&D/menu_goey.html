@@ -43,6 +43,18 @@
       /* Layout */
       --label-pad-top: 6px;
       --label-pad-bottom: 10px;
+
+      /* ====== SHADOWS ====== */
+      --shadow-idle-dx: 0;
+      --shadow-idle-dy: 2;
+      --shadow-idle-blur: 4;
+      --shadow-idle-color: #000;
+      --shadow-idle-opacity: 0.18;
+      --shadow-active-dx: 0;
+      --shadow-active-dy: 6;
+      --shadow-active-blur: 10;
+      --shadow-active-color: #000;
+      --shadow-active-opacity: 0.35;
     }
 
     html,
@@ -126,7 +138,7 @@
           <stop offset="100%" stop-color="var(--grad-end)" />
         </linearGradient>
 
-        <!-- Gooey body only (no shadow). Numeric params are applied via JS for reliability. -->
+        <!-- Gooey body. Numeric params are applied via JS for reliability. -->
         <filter id="goo" x="-80%" y="-80%" width="260%" height="260%">
           <feGaussianBlur id="gooBlur" in="SourceGraphic" stdDeviation="12" result="blur" />
           <feColorMatrix id="gooMatrix" in="blur" type="matrix" result="solid" values="1 0 0 0 0
@@ -134,11 +146,13 @@
                   0 0 1 0 0
                   0 0 0 18 -8" />
           <feComposite in="solid" in2="SourceGraphic" operator="over" result="gooBody" />
-          <!-- Shadow layer -->
-          <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35" />
+          <feDropShadow id="gooShadow" dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35" />
+        </filter>
+        <filter id="baseShadow" x="-80%" y="-80%" width="260%" height="260%">
+          <feDropShadow id="baseShadowNode" dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.18" />
         </filter>
       </defs>
-      <g id="baseGroup"></g>
+      <g id="baseGroup" filter="url(#baseShadow)"></g>
       <g id="gooGroup" filter="url(#goo)"></g>
     </svg>
 
@@ -265,8 +279,10 @@
       const blur = document.getElementById('gooBlur');
       const mat = document.getElementById('gooMatrix');
       const grad = document.getElementById('gradUI');
+      const gooShadow = document.getElementById('gooShadow');
+      const baseShadow = document.getElementById('baseShadowNode');
 
-      assert(blur && mat && grad, 'Missing SVG filter/gradient nodes');
+      assert(blur && mat && grad && gooShadow && baseShadow, 'Missing SVG filter/gradient nodes');
 
       // Gradient direction
       grad.setAttribute('x1', readStr('--grad-angle-x1', '0%'));
@@ -286,6 +302,19 @@
         `0 0 1 0 0\n` +
         `0 0 0 ${mul} ${bias}`
       );
+
+      // Shadows
+      gooShadow.setAttribute('dx', String(readNum('--shadow-active-dx', 0)));
+      gooShadow.setAttribute('dy', String(readNum('--shadow-active-dy', 6)));
+      gooShadow.setAttribute('stdDeviation', String(readNum('--shadow-active-blur', 10)));
+      gooShadow.setAttribute('flood-color', readStr('--shadow-active-color', '#000'));
+      gooShadow.setAttribute('flood-opacity', String(readNum('--shadow-active-opacity', 0.35)));
+
+      baseShadow.setAttribute('dx', String(readNum('--shadow-idle-dx', 0)));
+      baseShadow.setAttribute('dy', String(readNum('--shadow-idle-dy', 2)));
+      baseShadow.setAttribute('stdDeviation', String(readNum('--shadow-idle-blur', 4)));
+      baseShadow.setAttribute('flood-color', readStr('--shadow-idle-color', '#000'));
+      baseShadow.setAttribute('flood-opacity', String(readNum('--shadow-idle-opacity', 0.18)));
     }
 
     applySvgParams();
