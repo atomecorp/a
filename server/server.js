@@ -1103,8 +1103,9 @@ async function startServer() {
     };
 
     const shouldStoreInRecordings = (fileName, atomeType) => {
-      if (looksLikeRecordingName(fileName)) return true;
-      return looksLikeRecordingType(atomeType);
+      if (looksLikeRecordingType(atomeType)) return true;
+      if (atomeType) return false;
+      return looksLikeRecordingName(fileName);
     };
 
     const resolveRecordingUploadPath = async ({ fileName, userId, user }) => {
