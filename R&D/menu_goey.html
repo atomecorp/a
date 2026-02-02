@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gooey Drag – Parametrized (Color + Gradient, No Shadow)</title>
+  <style>
+    :root {
+      /* ====== GLOBAL UI VARIABLES ====== */
+      --tool-size: 120px;
+      --tool-radius: 12px;
+      --icon-size: 28px;
+      --label-color: #fff;
+      --icon-color: #fff;
+
+      /* ====== GRADIENT (MORE COLOR) ====== */
+      --grad-start: #a9d8ff;
+      --grad-mid: #7fc3ff;
+      --grad-end: #4aa8ff;
+      --grad-angle-x1: 0%;
+      --grad-angle-y1: 0%;
+      --grad-angle-x2: 100%;
+      --grad-angle-y2: 100%;
+
+      /* ====== GOOEY ====== */
+      --goo-blur: 12;
+      /* higher = more goo */
+      --goo-alpha-mul: 18;
+      /* higher = harder edge + richer color */
+      --goo-alpha-bias: -8;
+      /* more negative = easier merge */
+
+      /* ====== PHYSICS ====== */
+      --spring: 0.15;
+      --damp: 0.75;
+      --drag-vel: 0.6;
+
+      /* Layout */
+      --label-pad-top: 6px;
+      --label-pad-bottom: 10px;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui
+    }
+
+    #scene {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=2200&auto=format&fit=crop') center/cover no-repeat;
+    }
+
+    #svgLayer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none
+    }
+
+    #uiLayer {
+      position: absolute;
+      inset: 0
+    }
+
+    .tool {
+      position: absolute;
+      width: var(--tool-size);
+      height: var(--tool-size);
+      border-radius: var(--tool-radius);
+      background: transparent;
+      color: var(--label-color);
+      display: grid;
+      grid-template-rows: 1fr auto;
+      /* icon zone + label zone */
+      font-weight: 600;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      will-change: transform;
+    }
+
+    .tool .icon {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .tool svg {
+      width: var(--icon-size);
+      height: var(--icon-size);
+      fill: var(--icon-color);
+      display: block;
+    }
+
+    .tool .label {
+      width: 100%;
+      text-align: center;
+      margin: 0;
+      padding: var(--label-pad-top) 0 var(--label-pad-bottom);
+      line-height: 1.1;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="scene">
+
+    <svg id="svgLayer" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="gradUI">
+          <stop offset="0%" stop-color="var(--grad-start)" />
+          <stop offset="60%" stop-color="var(--grad-mid)" />
+          <stop offset="100%" stop-color="var(--grad-end)" />
+        </linearGradient>
+
+        <!-- Gooey body only (no shadow). Numeric params are applied via JS for reliability. -->
+        <filter id="goo" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur id="gooBlur" in="SourceGraphic" stdDeviation="12" result="blur" />
+          <feColorMatrix id="gooMatrix" in="blur" type="matrix" result="solid" values="1 0 0 0 0
+                  0 1 0 0 0
+                  0 0 1 0 0
+                  0 0 0 18 -8" />
+          <feComposite in="solid" in2="SourceGraphic" operator="over" result="gooBody" />
+          <!-- Shadow layer -->
+          <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35" />
+        </filter>
+      </defs>
+      <g id="gooGroup" filter="url(#goo)"></g>
+    </svg>
+
+    <div id="uiLayer"></div>
+  </div>
+
+  <script>
+    const ROOT = document.documentElement;
+    const CSS = getComputedStyle(ROOT);
+
+    // ====== Read CSS vars safely ======
+    const readNum = (name, fallback) => {
+      const v = parseFloat(CSS.getPropertyValue(name));
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const readStr = (name, fallback) => {
+      const v = CSS.getPropertyValue(name).trim();
+      return v || fallback;
+    };
+
+    // ====== Apply SVG numeric params (SVG filter primitives don't reliably accept CSS vars in numeric fields) ======
+    function applySvgParams() {
+      const blur = document.getElementById('gooBlur');
+      const mat = document.getElementById('gooMatrix');
+      const grad = document.getElementById('gradUI');
+
+      console.assert(blur && mat && grad, 'Missing SVG filter/gradient nodes');
+
+      // Gradient direction
+      grad.setAttribute('x1', readStr('--grad-angle-x1', '0%'));
+      grad.setAttribute('y1', readStr('--grad-angle-y1', '0%'));
+      grad.setAttribute('x2', readStr('--grad-angle-x2', '100%'));
+      grad.setAttribute('y2', readStr('--grad-angle-y2', '100%'));
+
+      // Gooey params
+      const gooBlur = readNum('--goo-blur', 12);
+      const mul = readNum('--goo-alpha-mul', 18);
+      const bias = readNum('--goo-alpha-bias', -8);
+
+      blur.setAttribute('stdDeviation', String(gooBlur));
+      mat.setAttribute('values',
+        `1 0 0 0 0\n` +
+        `0 1 0 0 0\n` +
+        `0 0 1 0 0\n` +
+        `0 0 0 ${mul} ${bias}`
+      );
+    }
+
+    applySvgParams();
+
+    // ====== PHYSICS ======
+    const SPRING = readNum('--spring', 0.15);
+    const DAMP = readNum('--damp', 0.75);
+    const DRAG_VEL = readNum('--drag-vel', 0.6);
+    const TOOL_SIZE = readNum('--tool-size', 120);
+
+    const SNAP_IN = 140;
+    const MERGE_IN = 80;
+    const SNAP_GAP = TOOL_SIZE + 10;
+
+    const data = [
+      { x: 200, y: 200, label: 'A', svg: '<circle cx="12" cy="12" r="10"/>' },
+      { x: 450, y: 260, label: 'B', svg: '<rect x="4" y="4" width="16" height="16" rx="4"/>' },
+      { x: 700, y: 340, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' }
+    ];
+
+    const svgGroup = document.getElementById('gooGroup');
+    const ui = document.getElementById('uiLayer');
+
+    // Tests (kept simple, non-invasive)
+    console.assert(svgGroup, 'Missing #gooGroup');
+    console.assert(ui, 'Missing #uiLayer');
+    console.assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
+
+    let items = [];
+    let drag = null;
+    let dx = 0, dy = 0;
+
+    // Build the tool DOM safely (no duplicate definition)
+    function makeToolDom(label, iconMarkupA, iconMarkupB = null) {
+      const tool = document.createElement('div');
+      tool.className = 'tool';
+
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'icon';
+
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('aria-hidden', 'true');
+
+      const g1 = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g1.innerHTML = iconMarkupA;
+      svg.appendChild(g1);
+
+      if (iconMarkupB) {
+        const g2 = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g2.setAttribute('opacity', '0.95');
+        g2.innerHTML = iconMarkupB;
+        svg.appendChild(g2);
+      }
+
+      iconWrap.appendChild(svg);
+
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'label';
+      labelDiv.textContent = label;
+
+      tool.appendChild(iconWrap);
+      tool.appendChild(labelDiv);
+
+      // Optional visual centering tweak (runs after DOM insertion)
+      requestAnimationFrame(() => {
+        try {
+          if (!document.body.contains(svg)) return;
+          const bb = svg.getBBox();
+          const toolSize = parseFloat(getComputedStyle(tool).width);
+          const iconCenterOffset = (toolSize / 2) - (bb.height / 2);
+          iconWrap.style.marginTop = iconCenterOffset + 'px';
+        } catch (_) {
+          // ignore getBBox issues on some engines while not painted
+        }
+      });
+
+      return tool;
+    }
+
+    // Extra tests: makeToolDom should be a function and return a tool
+    console.assert(typeof makeToolDom === 'function', 'makeToolDom must be defined once');
+    const __t = makeToolDom('T', '<circle cx="12" cy="12" r="10"/>');
+    console.assert(__t instanceof HTMLElement && __t.classList.contains('tool'), 'makeToolDom must return a .tool element');
+
+    function createTool(d) {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('r', TOOL_SIZE / 2);
+      circle.setAttribute('fill', 'url(#gradUI)');
+      svgGroup.appendChild(circle);
+
+      const tool = makeToolDom(d.label, d.svg);
+      ui.appendChild(tool);
+
+      const it = { x: d.x, y: d.y, vx: 0, vy: 0, circle, tool, label: d.label, svgA: d.svg, svgB: null };
+      items.push(it);
+      update(it);
+
+      tool.addEventListener('pointerdown', (e) => {
+        drag = it;
+        dx = e.clientX - it.x;
+        dy = e.clientY - it.y;
+        tool.setPointerCapture(e.pointerId);
+      });
+
+      tool.addEventListener('pointerup', () => { drag = null; });
+      tool.addEventListener('pointercancel', () => { drag = null; });
+    }
+
+    function update(it) {
+      it.circle.setAttribute('cx', it.x + TOOL_SIZE / 2);
+      it.circle.setAttribute('cy', it.y + TOOL_SIZE / 2);
+      it.tool.style.transform = `translate(${it.x}px,${it.y}px)`;
+    }
+
+    function distance(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function removeItemDom(it) {
+      it.tool.remove();
+      it.circle.remove();
+    }
+
+    function setMergedUI(stationary, removed) {
+      stationary.label = stationary.label + removed.label;
+      stationary.svgB = removed.svgA;
+
+      const newTool = makeToolDom(stationary.label, stationary.svgA, stationary.svgB);
+      stationary.tool.replaceWith(newTool);
+      stationary.tool = newTool;
+
+      // Rebind pointer handlers
+      newTool.addEventListener('pointerdown', (e) => {
+        drag = stationary;
+        dx = e.clientX - stationary.x;
+        dy = e.clientY - stationary.y;
+        newTool.setPointerCapture(e.pointerId);
+      });
+      newTool.addEventListener('pointerup', () => { drag = null; });
+      newTool.addEventListener('pointercancel', () => { drag = null; });
+    }
+
+    // Merge rule: keep the tool underneath (not dragged) fixed.
+    function mergePair(a, b, indexToRemove) {
+      const stationary = (drag === a) ? b : a;
+      const removed = (stationary === a) ? b : a;
+
+      stationary.vx = 0;
+      stationary.vy = 0;
+
+      setMergedUI(stationary, removed);
+      removeItemDom(removed);
+      items.splice(indexToRemove, 1);
+
+      update(stationary);
+    }
+
+    function applySnap(a, b) {
+      const dir = Math.sign(b.x - a.x) || 1;
+      const tx = a.x + dir * SNAP_GAP;
+      const ty = a.y;
+
+      b.vx *= 0.5;
+      b.vy *= 0.5;
+      b.vx += (tx - b.x) * SPRING;
+      b.vy += (ty - b.y) * SPRING;
+    }
+
+    function checkSnap() {
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i];
+          const b = items[j];
+          const d = distance(a, b);
+
+          if (d < SNAP_IN && d > MERGE_IN) {
+            applySnap(a, b);
+          }
+
+          if (d <= MERGE_IN) {
+            // If you drag one onto another: keep the one underneath (not dragged)
+            if (drag === a) {
+              mergePair(a, b, i);
+              i = Math.max(-1, i - 1);
+              break;
+            } else {
+              mergePair(a, b, j);
+              j--;
+            }
+          }
+        }
+      }
+    }
+
+    function physics() {
+      for (const it of items) {
+        if (it !== drag) {
+          it.vx *= DAMP;
+          it.vy *= DAMP;
+          it.x += it.vx;
+          it.y += it.vy;
+          update(it);
+        }
+      }
+      checkSnap();
+      requestAnimationFrame(physics);
+    }
+
+    data.forEach(createTool);
+    console.assert(items.length === 3, 'Expected 3 created items');
+
+    // Additional test: circles exist
+    console.assert(svgGroup.querySelectorAll('circle').length === 3, 'Expected 3 SVG circles');
+
+    physics();
+
+    document.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const nx = e.clientX - dx;
+      const ny = e.clientY - dy;
+
+      drag.vx = (nx - drag.x) * DRAG_VEL;
+      drag.vy = (ny - drag.y) * DRAG_VEL;
+
+      drag.x = nx;
+      drag.y = ny;
+      update(drag);
+
+      checkSnap();
+    });
+
+    document.addEventListener('pointerup', () => { drag = null; });
+
+    // Optional: if you tweak CSS vars live, call applySvgParams() again.
+    window.applySvgParams = applySvgParams;
+  </script>
+</body>
+
+</html>
