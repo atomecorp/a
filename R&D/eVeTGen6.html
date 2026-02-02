@@ -1,0 +1,1778 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Visual Engine MVP • Modular Param API • Dynamic Routing/Learn • JSON Presets • Extra FX/Generators</title>
+  <style>
+	html, body { margin: 0; height: 100%; background: #0b0b0f; overflow: hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+	#app { position: fixed; inset: 0; }
+	canvas { display: block; width: 100%; height: 100%; }
+
+	#ui {
+	  position: fixed; top: 12px; left: 12px;
+	  width: 520px; max-height: calc(100vh - 24px); overflow: auto;
+	  background: rgba(15, 15, 22, 0.84);
+	  border: 1px solid rgba(255,255,255,0.08);
+	  border-radius: 14px;
+	  padding: 12px;
+	  color: rgba(255,255,255,0.92);
+	  backdrop-filter: blur(10px);
+	  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+	}
+
+	#ui h1 { font-size: 13px; margin: 0 0 10px 0; font-weight: 650; letter-spacing: 0.2px; }
+	#ui h2 { font-size: 12px; margin: 12px 0 6px; font-weight: 650; opacity: 0.92; }
+	#ui .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+	#ui label { font-size: 12px; opacity: 0.9; width: 210px; flex: 0 0 auto; }
+	#ui select, #ui input[type="number"], #ui textarea {
+	  flex: 1;
+	  background: rgba(255,255,255,0.06);
+	  color: rgba(255,255,255,0.92);
+	  border: 1px solid rgba(255,255,255,0.12);
+	  border-radius: 10px;
+	  padding: 6px 8px;
+	}
+	#ui textarea { min-height: 110px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size: 11px; }
+	#ui input[type="range"] { flex: 1; }
+	#ui input[type="file"] { width: 100%; }
+	#ui button {
+	  appearance: none;
+	  border: 1px solid rgba(255,255,255,0.12);
+	  background: rgba(255,255,255,0.06);
+	  color: rgba(255,255,255,0.92);
+	  padding: 8px 10px;
+	  border-radius: 12px;
+	  cursor: pointer;
+	  font-size: 12px;
+	  white-space: nowrap;
+	}
+	#ui button:hover { background: rgba(255,255,255,0.10); }
+	#ui .hint { font-size: 11px; opacity: 0.72; line-height: 1.35; margin-top: 8px; }
+	#ui .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size: 11px; padding: 1px 6px; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; background: rgba(255,255,255,0.06); }
+	.hr { height: 1px; background: rgba(255,255,255,0.08); margin: 10px 0; }
+
+	.routeList { display:flex; flex-direction:column; gap:8px; }
+	.routeItem {
+	  display:grid;
+	  grid-template-columns: 1.2fr 1.6fr 0.8fr 0.8fr auto;
+	  gap:8px;
+	  align-items:center;
+	  padding:8px;
+	  border:1px solid rgba(255,255,255,0.10);
+	  border-radius:12px;
+	  background: rgba(255,255,255,0.04);
+	}
+	.routeItem input, .routeItem select { width:100%; }
+	.routeItem .mini { font-size:11px; opacity:0.8; }
+
+	#status {
+	  position: fixed;
+	  right: 12px;
+	  top: 12px;
+	  max-width: 48vw;
+	  color: rgba(255,255,255,0.82);
+	  font-size: 12px;
+	  background: rgba(15, 15, 22, 0.65);
+	  border: 1px solid rgba(255,255,255,0.08);
+	  border-radius: 14px;
+	  padding: 10px 12px;
+	  backdrop-filter: blur(10px);
+	}
+	#status b { color: rgba(255,255,255,0.95); }
+	#status .small { opacity: 0.75; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="ui">
+	<h1>Visual Engine MVP • Routing/Learn • Presets JSON • Displacement/Light • Camera • Artifacts/FX</h1>
+
+	<h2>Procedural</h2>
+	<div class="row">
+	  <label>proc.presetId</label>
+	  <select id="procPreset">
+		<option value="plasma">plasma</option>
+		<option value="stripes">stripes</option>
+		<option value="checker">checker</option>
+		<option value="marble">marble</option>
+		<option value="fbm">fbm</option>
+		<option value="voronoi">voronoi</option>
+	  </select>
+	</div>
+	<div class="row" style="justify-content: space-between; gap:10px;">
+	  <button id="bakeSource">Bake → source image</button>
+	  <button id="bakeDisp">Bake → disp image</button>
+	  <button id="bakeLight">Bake → light image</button>
+	</div>
+
+	<div class="hr"></div>
+
+	<h2>Source</h2>
+	<div class="row">
+	  <label>source.type</label>
+	  <select id="sourceType">
+		<option value="procedural">procedural</option>
+		<option value="image">image</option>
+		<option value="video">video</option>
+		<option value="camera">camera</option>
+	  </select>
+	</div>
+
+	<div class="row"><label>Load image</label><input id="imgFile" type="file" accept="image/*" /></div>
+	<div class="row"><label>Load video</label><input id="vidFile" type="file" accept="video/*" /></div>
+
+	<div class="row" style="justify-content: space-between; gap:10px;">
+	  <button id="camBtnSource">Use camera → source</button>
+	  <button id="camBtnAll">Use camera → all maps</button>
+	</div>
+
+	<h2>Video Source In/Out</h2>
+	<div class="row"><label>video.src.in</label><input id="videoInSrc" type="range" min="0" max="0.98" step="0.001" value="0"></div>
+	<div class="row"><label>video.src.out</label><input id="videoOutSrc" type="range" min="0.02" max="1" step="0.001" value="1"></div>
+
+	<div class="row"><label>video.rate</label><input id="videoRate" type="range" min="0" max="2" step="0.001" value="1"></div>
+	<div class="row"><label>video.loop</label><select id="videoLoop"><option value="1">true</option><option value="0">false</option></select></div>
+
+	<div class="hr"></div>
+
+	<h2>Crop</h2>
+	<div class="row"><label>media.crop.centerX</label><input id="cropX" type="range" min="0" max="1" step="0.001" value="0.5" /></div>
+	<div class="row"><label>media.crop.centerY</label><input id="cropY" type="range" min="0" max="1" step="0.001" value="0.5" /></div>
+	<div class="row"><label>media.crop.zoom</label><input id="cropZoom" type="range" min="1" max="8" step="0.001" value="1" /></div>
+
+	<div class="hr"></div>
+
+	<h2>Displacement</h2>
+	<div class="row"><label>disp.enabled</label><select id="dispEnabled"><option value="1">true</option><option value="0">false</option></select></div>
+	<div class="row"><label>disp.sourceType</label>
+	  <select id="dispSourceType"><option value="procedural">procedural</option><option value="image">image</option><option value="video">video</option><option value="camera">camera</option></select>
+	</div>
+	<div class="row"><label>disp.amount</label><input id="dispAmount" type="range" min="0" max="1" step="0.001" value="0.35"></div>
+	<div class="row"><label>disp.scale</label><input id="dispScale" type="range" min="0.1" max="12" step="0.001" value="3"></div>
+	<div class="row"><label>disp.axis</label><select id="dispAxis"><option value="xy">xy</option><option value="radial">radial</option></select></div>
+	<div class="row"><label>Load disp image</label><input id="dispFile" type="file" accept="image/*" /></div>
+	<div class="row"><label>Load disp video</label><input id="dispVidFile" type="file" accept="video/*" /></div>
+	<div class="row"><button id="camBtnDisp">Use camera → disp</button></div>
+
+	<h2>Video Disp In/Out</h2>
+	<div class="row"><label>video.disp.in</label><input id="videoInDisp" type="range" min="0" max="0.98" step="0.001" value="0"></div>
+	<div class="row"><label>video.disp.out</label><input id="videoOutDisp" type="range" min="0.02" max="1" step="0.001" value="1"></div>
+
+	<div class="hr"></div>
+
+	<h2>Light Map</h2>
+	<div class="row"><label>light.enabled</label><select id="lightEnabled"><option value="1">true</option><option value="0">false</option></select></div>
+	<div class="row"><label>light.sourceType</label>
+	  <select id="lightSourceType"><option value="procedural">procedural</option><option value="image">image</option><option value="video">video</option><option value="camera">camera</option></select>
+	</div>
+	<div class="row"><label>light.intensity</label><input id="lightIntensity" type="range" min="0" max="1" step="0.001" value="0.55"></div>
+	<div class="row"><label>light.blendMode</label><select id="lightBlend"><option value="multiply">multiply</option><option value="add">add</option><option value="overlay">overlay-lite</option></select></div>
+	<div class="row"><label>Load light image</label><input id="lightFile" type="file" accept="image/*" /></div>
+	<div class="row"><label>Load light video</label><input id="lightVidFile" type="file" accept="video/*" /></div>
+	<div class="row"><button id="camBtnLight">Use camera → light</button></div>
+
+	<h2>Video Light In/Out</h2>
+	<div class="row"><label>video.light.in</label><input id="videoInLight" type="range" min="0" max="0.98" step="0.001" value="0"></div>
+	<div class="row"><label>video.light.out</label><input id="videoOutLight" type="range" min="0.02" max="1" step="0.001" value="1"></div>
+
+	<div class="hr"></div>
+
+	<h2>Filters</h2>
+	<div class="row"><label>filter.brightness</label><input id="brightness" type="range" min="0" max="1" step="0.001" value="0.55"></div>
+	<div class="row"><label>filter.contrast</label><input id="contrast" type="range" min="0" max="2" step="0.001" value="1.15"></div>
+	<div class="row"><label>filter.saturation</label><input id="saturation" type="range" min="0" max="2" step="0.001" value="1.25"></div>
+	<div class="row"><label>filter.blur</label><input id="blur" type="range" min="0" max="1" step="0.001" value="0"></div>
+
+	<div class="hr"></div>
+
+	<h2>Artifacts / FX</h2>
+	<div class="row"><label>artifact.scanlines</label><input id="scanlines" type="range" min="0" max="1" step="0.001" value="0"></div>
+	<div class="row"><label>artifact.noise</label><input id="noise" type="range" min="0" max="1" step="0.001" value="0.15"></div>
+	<div class="row"><label>fx.chromAb</label><input id="chromAb" type="range" min="0" max="1" step="0.001" value="0"></div>
+	<div class="row"><label>fx.glitch</label><input id="glitch" type="range" min="0" max="1" step="0.001" value="0"></div>
+	<div class="row"><label>fx.vhs</label><input id="vhs" type="range" min="0" max="1" step="0.001" value="0"></div>
+	<div class="row"><label>fx.feedback</label><input id="feedback" type="range" min="0" max="1" step="0.001" value="0"></div>
+
+	<div class="hr"></div>
+
+	<h2>Routing dynamique (Learn + routes)</h2>
+	<div class="row">
+	  <label>Source</label>
+	  <select id="routeSource">
+		<option value="lfo0">lfo0</option>
+		<option value="audio0">audio0</option>
+		<option value="midi.learn">midi (learn)</option>
+	  </select>
+	</div>
+	<div class="row">
+	  <label>Target paramId</label>
+	  <select id="routeTarget"></select>
+	</div>
+	<div class="row"><label>depth</label><input id="routeDepth" type="range" min="0" max="1" step="0.001" value="0.35"></div>
+	<div class="row"><label>offset</label><input id="routeOffset" type="range" min="-1" max="1" step="0.001" value="0"></div>
+	<div class="row" style="justify-content: space-between; gap:10px;">
+	  <button id="routeAdd">Add route</button>
+	  <button id="routeLearn">MIDI Learn</button>
+	  <button id="routeClear">Clear routes</button>
+	</div>
+	<div class="hint">
+	  MIDI Learn : clique <span class="kbd">MIDI Learn</span> puis bouge un CC sur ton contrôleur.
+	  Une route <span class="kbd">ccXX → param</span> est créée.
+	</div>
+	<div class="routeList" id="routeList"></div>
+
+	<div class="hr"></div>
+
+	<h2>Modulation (LFO rapide)</h2>
+	<div class="row"><label>lfo[0].enabled</label><select id="lfoEnabled"><option value="1">true</option><option value="0">false</option></select></div>
+	<div class="row"><label>lfo[0].shape</label><select id="lfoShape"><option value="sine">sine</option><option value="square">square</option><option value="saw">saw</option><option value="random">random</option></select></div>
+	<div class="row"><label>lfo[0].rateHz</label><input id="lfoRate" type="range" min="0" max="12" step="0.001" value="0.6"></div>
+
+	<h2>Modulation (Audio)</h2>
+	<div class="row">
+	  <label>audio[0].enabled</label>
+	  <select id="audioEnabled"><option value="0">off</option><option value="1">on</option></select>
+	</div>
+	<div class="row" style="justify-content: space-between; gap:10px;">
+	  <button id="audioBtn">Enable Audio Input</button>
+	  <div style="flex:1; display:flex; align-items:center; gap:8px;">
+		<div style="width:100%; height:10px; border-radius:999px; background:rgba(255,255,255,0.10); overflow:hidden; border:1px solid rgba(255,255,255,0.12);">
+		  <div id="audioMeter" style="height:100%; width:0%; background:rgba(255,255,255,0.65);"></div>
+		</div>
+		<span id="audioMeterTxt" style="width:48px; text-align:right; font-size:11px; opacity:0.8;">0.00</span>
+	  </div>
+	</div>
+
+	<div class="hr"></div>
+
+	<h2>Presets JSON (save/load)</h2>
+	<div class="row" style="justify-content: space-between; gap:10px;">
+	  <button id="presetSave">Save JSON</button>
+	  <button id="presetLoadBtn">Load JSON</button>
+	  <input id="presetLoad" type="file" accept="application/json" style="display:none" />
+	  <button id="resetBtn">Reset</button>
+	  <button id="randomBtn">Random</button>
+	</div>
+	<div class="row"><label>Preset JSON</label><textarea id="presetText" spellcheck="false"></textarea></div>
+
+	<div class="hr"></div>
+
+	<div class="row" style="justify-content: space-between; gap:10px;">
+	  <button id="midiBtn">Activer MIDI</button>
+	</div>
+
+	<div class="hint">
+	  Web MIDI CC (défaut) :
+	  <span class="kbd">CC21</span> brightness,
+	  <span class="kbd">CC22</span> contrast,
+	  <span class="kbd">CC23</span> saturation,
+	  <span class="kbd">CC24</span> disp.amount,
+	  <span class="kbd">CC25</span> disp.scale,
+	  <span class="kbd">CC26</span> light.intensity,
+	  <span class="kbd">CC28</span> lfo.rateHz.
+	</div>
+  </div>
+
+  <div id="status">
+	<div><b>Status</b> <span id="statusText">init</span></div>
+	<div class="small" id="statusSub">—</div>
+  </div>
+
+  <script type="module">
+	import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
+
+	/*********************************************************************
+	 * HELPERS
+	 *********************************************************************/
+	const clamp = (x,a,b)=>Math.max(a, Math.min(b,x));
+	const mapEnum = (v, map, def=0) => (v in map ? map[v] : def);
+
+	const statusText = document.querySelector('#statusText');
+	const statusSub = document.querySelector('#statusSub');
+	const setStatus = (main, sub='') => { statusText.textContent = main; statusSub.textContent = sub; };
+
+	const el = (id)=>document.getElementById(id);
+
+	function enforceInOut(videoEl, vin, vout, loop) {
+	  if (!videoEl || !isFinite(videoEl.duration) || videoEl.duration <= 0) return;
+	  const a = clamp(Math.min(vin, vout - 0.001), 0, 0.999);
+	  const b = clamp(Math.max(vout, vin + 0.001), 0.001, 1);
+	  const t01 = videoEl.currentTime / videoEl.duration;
+	  if (t01 < a || t01 > b) { videoEl.currentTime = a * videoEl.duration; return; }
+	  if (t01 >= b - 0.0005) {
+		if (loop) videoEl.currentTime = a * videoEl.duration;
+		else videoEl.pause();
+	  }
+	}
+
+	/*********************************************************************
+	 * PARAM BUS
+	 *********************************************************************/
+	class ParamBus {
+	  constructor(schema) {
+		this.schema = schema;
+		this.base = new Map();
+		for (const [id, info] of Object.entries(schema)) this.base.set(id, info.def);
+	  }
+	  getInfo(id) { return this.schema[id]; }
+	  has(id) { return id in this.schema; }
+	  getBase(id) { return this.base.get(id); }
+	  setBase(id, value) {
+		if (!this.has(id)) return;
+		const info = this.schema[id];
+		if (info.type === 'number') this.base.set(id, clamp(value, info.min, info.max));
+		else if (info.type === 'bool') this.base.set(id, !!value);
+		else this.base.set(id, value);
+	  }
+	  reset() { for (const [id, info] of Object.entries(this.schema)) this.base.set(id, info.def); }
+	  snapshot() { const obj={}; for (const id of Object.keys(this.schema)) obj[id]=this.base.get(id); return obj; }
+	  applySnapshot(obj) { for (const [id,v] of Object.entries(obj||{})) this.setBase(id,v); }
+	  listNumericParams() {
+		return Object.entries(this.schema)
+		  .filter(([_,info])=>info.type==='number')
+		  .map(([id])=>id)
+		  .sort();
+	  }
+	}
+
+	/*********************************************************************
+	 * MOD ROUTER (dynamic routes)
+	 *********************************************************************/
+	class ModRouter {
+	  constructor(paramBus) {
+		this.paramBus = paramBus;
+		this.sources = new Map();
+		this.routes = []; // { id, sourceName, targetId, depth, offset }
+		this._nextId = 1;
+	  }
+	  addSource(name, source) { this.sources.set(name, source); }
+	  tick(dt) { for (const src of this.sources.values()) if (typeof src.tick === 'function') src.tick(dt); }
+	  addRoute({ sourceName, targetId, depth=0, offset=0 }) {
+		const id = this._nextId++;
+		this.routes.push({ id, sourceName, targetId, depth, offset });
+		return id;
+	  }
+	  updateRoute(id, patch) {
+		const r = this.routes.find(x=>x.id===id);
+		if (!r) return;
+		Object.assign(r, patch);
+	  }
+	  removeRoute(id) { this.routes = this.routes.filter(x=>x.id!==id); }
+	  clearRoutes() { this.routes = []; }
+
+	  computeFinal(id) {
+		const info = this.paramBus.getInfo(id);
+		const base = this.paramBus.getBase(id);
+		if (!info) return base;
+		if (info.type !== 'number') return base;
+
+		let v = base;
+		for (const r of this.routes) {
+		  if (r.targetId !== id) continue;
+		  const src = this.sources.get(r.sourceName);
+		  if (!src) continue;
+		  const out = typeof src.value === 'function' ? src.value() : 0; // expected -1..+1
+		  v += (out * (r.depth ?? 0)) + (r.offset ?? 0);
+		}
+		return clamp(v, info.min, info.max);
+	  }
+	  computeAll() {
+		const out={};
+		for (const id of Object.keys(this.paramBus.schema)) out[id]=this.computeFinal(id);
+		return out;
+	  }
+	  snapshot() { return this.routes.map(r=>({ ...r })); }
+	  applySnapshot(routes) {
+		this.routes = [];
+		this._nextId = 1;
+		for (const r of (routes||[])) {
+		  const id = this.addRoute(r);
+		  // preserve ids when possible
+		  if (r.id != null) this.updateRoute(id, { id: r.id });
+		}
+		// re-normalize ids
+		const maxId = this.routes.reduce((m,r)=>Math.max(m, r.id), 0);
+		this._nextId = maxId + 1;
+	  }
+	}
+
+	/*********************************************************************
+	 * SOURCES
+	 *********************************************************************/
+	class LFO {
+	  constructor() {
+		this.enabled = true;
+		this.shape = 'sine';
+		this.rateHz = 0.6;
+		this._phase = 0;
+		this._val = 0;
+		this._randHold = Math.random() * 2 - 1;
+		this._randTimer = 0;
+	  }
+	  tick(dt) {
+		if (!this.enabled) { this._val = 0; return; }
+		const hz = Math.max(0, this.rateHz || 0);
+		this._phase += dt * hz;
+		if (this._phase > 1) this._phase -= 1;
+		const p = this._phase;
+		if (this.shape === 'sine') this._val = Math.sin(p * Math.PI * 2);
+		else if (this.shape === 'square') this._val = p < 0.5 ? 1 : -1;
+		else if (this.shape === 'saw') this._val = p * 2 - 1;
+		else if (this.shape === 'random') {
+		  this._randTimer += dt;
+		  const hold = 1 / Math.max(hz, 0.001);
+		  if (this._randTimer >= hold) { this._randTimer = 0; this._randHold = Math.random() * 2 - 1; }
+		  this._val = this._randHold;
+		} else this._val = 0;
+	  }
+	  value() { return this._val; } // -1..+1
+	  snapshot(){ return { enabled:this.enabled, shape:this.shape, rateHz:this.rateHz }; }
+	  applySnapshot(o){ if(!o) return; this.enabled=!!o.enabled; this.shape=o.shape||'sine'; this.rateHz=+o.rateHz||0; }
+	}
+
+	class MidiCCSource {
+	  constructor() { this._val = 0; }
+	  setFrom01(v01) { this._val = (clamp(v01,0,1) * 2) - 1; }
+	  value() { return this._val; }
+	}
+
+	class AudioRmsSource {
+	  constructor() {
+		this.enabled = false;
+		this._val = 0;      // -1..+1
+		this._rms01 = 0;    // 0..1 (meter)
+		this._smooth = 0.80;
+	  }
+	  async enable() {
+		if (this.enabled) return;
+		if (!window.isSecureContext) throw new Error('Microphone bloqué: https (ou localhost) requis.');
+		if (!navigator.mediaDevices?.getUserMedia) throw new Error('getUserMedia indisponible.');
+
+		const Ctx = window.AudioContext || window.webkitAudioContext;
+		this.ctx = new Ctx();
+		const stream = await navigator.mediaDevices.getUserMedia({
+		  audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+		});
+		try { await this.ctx.resume(); } catch {}
+
+		this.src = this.ctx.createMediaStreamSource(stream);
+		this.analyser = this.ctx.createAnalyser();
+		this.analyser.fftSize = 1024;
+		this.analyser.smoothingTimeConstant = 0.35;
+		this.src.connect(this.analyser);
+		this.buf = new Uint8Array(this.analyser.fftSize);
+		this.enabled = true;
+	  }
+	  tick() {
+		if (!this.enabled || !this.analyser) {
+		  this._val = 0;
+		  this._rms01 = 0;
+		  return;
+		}
+
+		this.analyser.getByteTimeDomainData(this.buf);
+		let sum = 0;
+		for (let i = 0; i < this.buf.length; i++) {
+		  const v = (this.buf[i] - 128) / 128;
+		  sum += v*v;
+		}
+		const rms = Math.sqrt(sum / this.buf.length); // 0..~1
+		const rms01 = clamp(rms * 2.0, 0, 1); // boost
+		this._rms01 = (this._rms01 * this._smooth) + (rms01 * (1 - this._smooth));
+		this._val = (this._rms01 * 2) - 1; // -1..+1
+	  }
+	  value() { return this._val; }
+	  meter01() { return this._rms01; }
+	  snapshot(){ return { enabled:this.enabled }; }
+	  applySnapshot(_o){ /* permission cannot be restored programmatically */ }
+	}
+
+	/*********************************************************************
+	 * MIDI
+	 *********************************************************************/
+	class MidiController {
+	  constructor() {
+		this.enabled = false;
+		this.midiAccess = null;
+		this.inputs = [];
+		this.onCC = null;
+	  }
+	  async enable() {
+		if (!('requestMIDIAccess' in navigator)) throw new Error('Web MIDI API indisponible.');
+		this.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+		this.enabled = true;
+		this._bindInputs();
+		this.midiAccess.onstatechange = () => this._bindInputs();
+	  }
+	  disable() {
+		this.enabled = false;
+		for (const input of this.inputs) input.onmidimessage = null;
+		this.inputs = [];
+	  }
+	  setHandlers({ onCC }) { this.onCC = onCC || null; }
+	  _bindInputs() {
+		this.inputs = [];
+		for (const input of this.midiAccess.inputs.values()) {
+		  input.onmidimessage = (e) => this._handle(e.data);
+		  this.inputs.push(input);
+		}
+	  }
+	  _handle(data) {
+		const status = data[0] & 0xF0;
+		const d1 = data[1];
+		const d2 = data[2];
+		if (status !== 0xB0) return;
+		if (this.onCC) this.onCC({ cc: d1, value01: d2 / 127 });
+	  }
+	}
+
+	/*********************************************************************
+	 * VISUAL ENGINE (adds feedback pipeline)
+	 *********************************************************************/
+	class VisualEngine {
+	  constructor({ mountEl }) {
+		this.mountEl = mountEl;
+		this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+		this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+		this.renderer.setSize(innerWidth, innerHeight);
+		this.renderer.setClearColor(0x0b0b0f, 1);
+		this.mountEl.appendChild(this.renderer.domElement);
+
+		this.scene = new THREE.Scene();
+		this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+		this._video = { src: null, disp: null, light: null };
+		this._camera = { stream: null, videoEl: null, videoTex: null };
+
+		this.fallbackSourceTex = this._makeFallbackTexture('#ff2bd6', '#18e3ff');
+		this.fallbackMapTex = this._makeFallbackTexture('#808080', '#202020');
+
+		this.textures = {
+		  sourceImage: this.fallbackSourceTex,
+		  sourceVideo: this.fallbackSourceTex,
+		  sourceCamera: this.fallbackSourceTex,
+		  dispImage: this.fallbackMapTex,
+		  dispVideo: this.fallbackMapTex,
+		  dispCamera: this.fallbackMapTex,
+		  lightImage: this.fallbackMapTex,
+		  lightVideo: this.fallbackMapTex,
+		  lightCamera: this.fallbackMapTex,
+		};
+
+		this.uniforms = {
+		  uTime: { value: 0 },
+		  uResolution: { value: new THREE.Vector2(innerWidth, innerHeight) },
+
+		  uSourceImageTex: { value: this.textures.sourceImage },
+		  uSourceVideoTex: { value: this.textures.sourceVideo },
+		  uSourceCameraTex: { value: this.textures.sourceCamera },
+
+		  uDispImageTex: { value: this.textures.dispImage },
+		  uDispVideoTex: { value: this.textures.dispVideo },
+		  uDispCameraTex: { value: this.textures.dispCamera },
+
+		  uLightImageTex: { value: this.textures.lightImage },
+		  uLightVideoTex: { value: this.textures.lightVideo },
+		  uLightCameraTex: { value: this.textures.lightCamera },
+
+		  uPrevFrameTex: { value: this.fallbackSourceTex },
+
+		  uSourceType: { value: 0 },
+		  uDispSourceType: { value: 0 },
+		  uLightSourceType: { value: 0 },
+		  uDispAxis: { value: 0 },
+		  uLightBlend: { value: 0 },
+
+		  uCropCenter: { value: new THREE.Vector2(0.5, 0.5) },
+		  uCropZoom: { value: 1.0 },
+
+		  uDispEnabled: { value: 1 },
+		  uDispAmount: { value: 0.35 },
+		  uDispScale: { value: 3.0 },
+
+		  uLightEnabled: { value: 1 },
+		  uLightIntensity: { value: 0.55 },
+
+		  uBrightness: { value: 0.55 },
+		  uContrast: { value: 1.15 },
+		  uSaturation: { value: 1.25 },
+		  uBlur: { value: 0.0 },
+
+		  uScanlines: { value: 0.0 },
+		  uNoise: { value: 0.15 },
+
+		  uChromAb: { value: 0.0 },
+		  uGlitch: { value: 0.0 },
+		  uVhs: { value: 0.0 },
+		  uFeedback: { value: 0.0 },
+
+		  uPreset: { value: 0 },
+		};
+
+		this.material = new THREE.ShaderMaterial({
+		  uniforms: this.uniforms,
+		  vertexShader: `
+			varying vec2 vUv;
+			void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+		  `,
+		  fragmentShader: `
+			precision highp float;
+			varying vec2 vUv;
+			uniform float uTime;
+			uniform vec2 uResolution;
+
+			uniform sampler2D uSourceImageTex;
+			uniform sampler2D uSourceVideoTex;
+			uniform sampler2D uSourceCameraTex;
+
+			uniform sampler2D uDispImageTex;
+			uniform sampler2D uDispVideoTex;
+			uniform sampler2D uDispCameraTex;
+
+			uniform sampler2D uLightImageTex;
+			uniform sampler2D uLightVideoTex;
+			uniform sampler2D uLightCameraTex;
+
+			uniform sampler2D uPrevFrameTex;
+
+			uniform int uSourceType;
+			uniform int uDispSourceType;
+			uniform int uLightSourceType;
+			uniform int uDispAxis;
+			uniform int uLightBlend;
+
+			uniform vec2 uCropCenter;
+			uniform float uCropZoom;
+
+			uniform int uDispEnabled;
+			uniform float uDispAmount;
+			uniform float uDispScale;
+
+			uniform int uLightEnabled;
+			uniform float uLightIntensity;
+
+			uniform float uBrightness;
+			uniform float uContrast;
+			uniform float uSaturation;
+			uniform float uBlur;
+
+			uniform float uScanlines;
+			uniform float uNoise;
+			uniform float uChromAb;
+			uniform float uGlitch;
+			uniform float uVhs;
+			uniform float uFeedback;
+
+			uniform int uPreset;
+
+			float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+
+			float noise2(vec2 p){
+			  vec2 i = floor(p);
+			  vec2 f = fract(p);
+			  float a = hash(i);
+			  float b = hash(i + vec2(1.0, 0.0));
+			  float c = hash(i + vec2(0.0, 1.0));
+			  float d = hash(i + vec2(1.0, 1.0));
+			  vec2 u = f*f*(3.0-2.0*f);
+			  return mix(a, b, u.x) + (c - a)*u.y*(1.0-u.x) + (d - b)*u.x*u.y;
+			}
+
+			float fbm(vec2 p){
+			  float f = 0.0;
+			  float a = 0.5;
+			  for(int i=0;i<5;i++){
+				f += a * noise2(p);
+				p *= 2.02;
+				a *= 0.5;
+			  }
+			  return f;
+			}
+
+			vec2 hash2(vec2 p){
+			  float n = hash(p);
+			  return vec2(n, hash(p + n));
+			}
+
+			float voronoi(vec2 x){
+			  vec2 n = floor(x);
+			  vec2 f = fract(x);
+			  float md = 10.0;
+			  for(int j=-1;j<=1;j++){
+				for(int i=-1;i<=1;i++){
+				  vec2 g = vec2(float(i), float(j));
+				  vec2 o = hash2(n + g);
+				  vec2 r = g + o - f;
+				  float d = dot(r,r);
+				  md = min(md, d);
+				}
+			  }
+			  return sqrt(md);
+			}
+
+			vec3 preset_plasma(vec2 uv){
+			  float n = noise2(uv*3.0 + vec2(uTime*0.15, -uTime*0.12));
+			  float a = sin((uv.x+uv.y)*3.1415 + uTime*0.8 + n*2.0);
+			  float b = cos((uv.x-uv.y)*3.1415 - uTime*0.6 + n*2.5);
+			  float c = sin((uv.x)*6.2831 + uTime*0.35 + n*3.0);
+			  vec3 col = vec3(a,b,c)*0.5+0.5;
+			  col = pow(col, vec3(0.85));
+			  return col;
+			}
+
+			vec3 preset_stripes(vec2 uv){
+			  float sx = sin((uv.x*10.0) + uTime*0.7);
+			  float sy = sin((uv.y*7.0) - uTime*0.5);
+			  float m = abs(sx*sy);
+			  vec3 a = vec3(0.10, 0.92, 0.78);
+			  vec3 b = vec3(0.98, 0.20, 0.85);
+			  return mix(a,b, m);
+			}
+
+			vec3 preset_checker(vec2 uv){
+			  float cx = step(0.5, fract(uv.x*8.0));
+			  float cy = step(0.5, fract(uv.y*8.0));
+			  float v = abs(cx - cy);
+			  vec3 a = vec3(0.06,0.10,0.18);
+			  vec3 b = vec3(0.95,0.92,0.20);
+			  return mix(a,b, v);
+			}
+
+			vec3 preset_marble(vec2 uv){
+			  float n = noise2(uv*4.0 + vec2(uTime*0.10, uTime*0.08));
+			  float m = sin((uv.x + n*0.6) * 10.0);
+			  vec3 base = vec3(m*0.5+0.5);
+			  vec3 a = vec3(0.08,0.70,0.95);
+			  vec3 b = vec3(0.98,0.30,0.55);
+			  return mix(a,b, base.r);
+			}
+
+			vec3 preset_fbm(vec2 uv){
+			  float f = fbm(uv*3.0 + vec2(uTime*0.07, -uTime*0.05));
+			  vec3 a = vec3(0.05,0.10,0.18);
+			  vec3 b = vec3(0.95,0.25,0.60);
+			  vec3 c = vec3(0.15,0.85,0.80);
+			  return mix(mix(a,b,f), c, f*f);
+			}
+
+			vec3 preset_voronoi(vec2 uv){
+			  float v = voronoi(uv*6.0 + vec2(uTime*0.05, uTime*0.02));
+			  float e = smoothstep(0.0, 0.25, v);
+			  vec3 a = vec3(0.90,0.90,0.95);
+			  vec3 b = vec3(0.10,0.15,0.25);
+			  return mix(a,b,e);
+			}
+
+			vec3 procedural(vec2 uv){
+			  if(uPreset==0) return preset_plasma(uv);
+			  if(uPreset==1) return preset_stripes(uv);
+			  if(uPreset==2) return preset_checker(uv);
+			  if(uPreset==3) return preset_marble(uv);
+			  if(uPreset==4) return preset_fbm(uv);
+			  return preset_voronoi(uv);
+			}
+
+			vec3 applySaturation(vec3 c, float sat){
+			  float l = dot(c, vec3(0.2126,0.7152,0.0722));
+			  return mix(vec3(l), c, sat);
+			}
+
+			vec3 applyBCS(vec3 c, float brightness, float contrast, float saturation){
+			  c += (brightness - 0.5);
+			  c = (c - 0.5) * contrast + 0.5;
+			  c = applySaturation(c, saturation);
+			  return c;
+			}
+
+			vec2 applyCrop(vec2 uv){
+			  uv = (uv - uCropCenter) / max(uCropZoom, 0.0001) + uCropCenter;
+			  return uv;
+			}
+
+			vec3 sampleMedia(int whichType, vec2 uv,
+			  sampler2D imgTex, sampler2D vidTex, sampler2D camTex
+			){
+			  if(whichType == 0) return procedural(uv);
+			  if(whichType == 1) return texture2D(imgTex, uv).rgb;
+			  if(whichType == 2) return texture2D(vidTex, uv).rgb;
+			  return texture2D(camTex, uv).rgb;
+			}
+
+			float sampleMapAsLuma(int sourceType, vec2 uv,
+			  sampler2D imgTex, sampler2D vidTex, sampler2D camTex
+			){
+			  vec3 c = sampleMedia(sourceType, uv, imgTex, vidTex, camTex);
+			  return dot(c, vec3(0.3333));
+			}
+
+			vec3 blur5(int srcType, vec2 uv,
+			  sampler2D imgTex, sampler2D vidTex, sampler2D camTex,
+			  float amount
+			){
+			  if(amount <= 0.0001) return sampleMedia(srcType, uv, imgTex, vidTex, camTex);
+			  vec2 px = vec2(1.0) / max(uResolution, vec2(1.0));
+			  vec2 o = px * (amount * 10.0);
+			  vec3 c = sampleMedia(srcType, uv, imgTex, vidTex, camTex) * 0.40;
+			  c += sampleMedia(srcType, uv + vec2( o.x, 0.0), imgTex, vidTex, camTex) * 0.15;
+			  c += sampleMedia(srcType, uv + vec2(-o.x, 0.0), imgTex, vidTex, camTex) * 0.15;
+			  c += sampleMedia(srcType, uv + vec2(0.0,  o.y), imgTex, vidTex, camTex) * 0.15;
+			  c += sampleMedia(srcType, uv + vec2(0.0, -o.y), imgTex, vidTex, camTex) * 0.15;
+			  return c;
+			}
+
+			vec3 applyLight(vec3 base, vec2 uv){
+			  if(uLightEnabled == 0) return base;
+			  vec3 lm = sampleMedia(uLightSourceType, uv, uLightImageTex, uLightVideoTex, uLightCameraTex);
+			  vec3 l = clamp(lm * 1.4, 0.0, 2.0);
+			  if(uLightBlend == 0) return mix(base, base * l, uLightIntensity);
+			  if(uLightBlend == 1) return clamp(mix(base, base + l * 0.5, uLightIntensity), 0.0, 1.0);
+			  vec3 overlay = mix(2.0*base*l, 1.0 - 2.0*(1.0-base)*(1.0-l), step(0.5, base));
+			  return mix(base, clamp(overlay, 0.0, 1.0), uLightIntensity);
+			}
+
+			vec3 applyChromAb(vec2 uv, int srcType, sampler2D imgTex, sampler2D vidTex, sampler2D camTex){
+			  float amt = uChromAb * 0.01;
+			  vec2 px = vec2(1.0) / max(uResolution, vec2(1.0));
+			  vec2 o = px * (amt * 120.0);
+			  vec3 cR = blur5(srcType, uv + o, imgTex, vidTex, camTex, uBlur);
+			  vec3 cG = blur5(srcType, uv,     imgTex, vidTex, camTex, uBlur);
+			  vec3 cB = blur5(srcType, uv - o, imgTex, vidTex, camTex, uBlur);
+			  return vec3(cR.r, cG.g, cB.b);
+			}
+
+			vec2 applyVhsWarp(vec2 uv){
+			  float t = uTime;
+			  float wob = (noise2(vec2(uv.y*6.0, t*0.6)) - 0.5) * uVhs * 0.03;
+			  float jitter = (hash(vec2(floor(t*12.0), uv.y*80.0)) - 0.5) * uVhs * 0.006;
+			  uv.x += wob + jitter;
+			  uv.y += (noise2(vec2(uv.x*3.0, t*0.25)) - 0.5) * uVhs * 0.003;
+			  return uv;
+			}
+
+			vec2 applyGlitch(vec2 uv){
+			  float t = uTime;
+			  float band = floor(uv.y * (30.0 + uGlitch*120.0));
+			  float g = hash(vec2(band, floor(t*12.0)));
+			  float jump = step(0.92, g) * uGlitch;
+			  float offset = (hash(vec2(band, t*2.0)) - 0.5) * 0.08 * jump;
+			  uv.x += offset;
+			  // occasional vertical roll
+			  float roll = step(0.985, hash(vec2(floor(t*2.0), 123.0))) * uGlitch;
+			  uv.y = fract(uv.y + roll * 0.35);
+			  return uv;
+			}
+
+			vec3 applyFeedback(vec3 current, vec2 uv){
+			  if(uFeedback <= 0.0001) return current;
+			  // slight zoom + drift
+			  vec2 p = uv - 0.5;
+			  float z = 1.0 + uFeedback * 0.015;
+			  vec2 puv = p / z + 0.5;
+			  puv += vec2(0.001, -0.0007) * uFeedback;
+			  vec3 prev = texture2D(uPrevFrameTex, puv).rgb;
+			  // decay
+			  prev *= (0.985 - uFeedback * 0.12);
+			  return mix(current, clamp(current + prev, 0.0, 1.0), uFeedback);
+			}
+
+			void main(){
+			  vec2 uv = vUv;
+
+			  // FX warps
+			  if(uVhs > 0.0001) uv = applyVhsWarp(uv);
+			  if(uGlitch > 0.0001) uv = applyGlitch(uv);
+
+			  // Crop
+			  uv = applyCrop(uv);
+			  uv = clamp(uv, 0.001, 0.999);
+
+			  // Displacement
+			  if(uDispEnabled != 0 && uDispAmount > 0.0001){
+				float mapL = sampleMapAsLuma(uDispSourceType, uv * uDispScale, uDispImageTex, uDispVideoTex, uDispCameraTex);
+				float d = (mapL - 0.5) * 2.0;
+				if(uDispAxis == 0) uv += vec2(d, -d) * (uDispAmount * 0.08);
+				else {
+				  vec2 c = uv - 0.5;
+				  float r = length(c) + 1e-5;
+				  vec2 dir = c / r;
+				  uv += dir * d * (uDispAmount * 0.08);
+				}
+				uv = clamp(uv, 0.001, 0.999);
+			  }
+
+			  // Source sampling + blur + chromatic aberration
+			  vec3 rgb = (uChromAb > 0.0001)
+				? applyChromAb(uv, uSourceType, uSourceImageTex, uSourceVideoTex, uSourceCameraTex)
+				: blur5(uSourceType, uv, uSourceImageTex, uSourceVideoTex, uSourceCameraTex, uBlur);
+
+			  // Light
+			  rgb = applyLight(rgb, uv);
+
+			  // Artifacts: scanlines + noise
+			  if(uScanlines > 0.0001){
+				float s = sin(uv.y * uResolution.y * 3.1415926);
+				rgb *= mix(1.0, s * 0.5 + 0.5, uScanlines);
+			  }
+			  if(uNoise > 0.0001){
+				float n = hash(uv * (uTime*100.0 + 10.0));
+				rgb += (n - 0.5) * uNoise;
+			  }
+
+			  // Feedback (after artifacts so feedback can re-inject them)
+			  rgb = applyFeedback(rgb, vUv);
+
+			  // Filters
+			  rgb = applyBCS(rgb, uBrightness, uContrast, uSaturation);
+
+			  // Vignette
+			  vec2 p = vUv - 0.5;
+			  float vig = smoothstep(0.95, 0.35, dot(p,p));
+			  rgb *= vig;
+
+			  gl_FragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
+			}
+		  `,
+		});
+
+		this.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material));
+
+		// Feedback ping-pong
+		this.rtA = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { depthBuffer:false, stencilBuffer:false });
+		this.rtB = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { depthBuffer:false, stencilBuffer:false });
+		this._ping = this.rtA;
+		this._pong = this.rtB;
+		this.uniforms.uPrevFrameTex.value = this._pong.texture;
+
+		window.addEventListener('resize', () => this.resize(innerWidth, innerHeight));
+	  }
+
+	  resize(w, h) {
+		this.renderer.setSize(w, h);
+		this.uniforms.uResolution.value.set(w, h);
+		this.rtA.setSize(w, h);
+		this.rtB.setSize(w, h);
+	  }
+
+	  applyParams(p) {
+		this.uniforms.uSourceType.value = mapEnum(p['source.type'], { procedural:0, image:1, video:2, camera:3 }, 0);
+		this.uniforms.uDispSourceType.value = mapEnum(p['disp.sourceType'], { procedural:0, image:1, video:2, camera:3 }, 0);
+		this.uniforms.uLightSourceType.value = mapEnum(p['light.sourceType'], { procedural:0, image:1, video:2, camera:3 }, 0);
+		this.uniforms.uDispAxis.value = mapEnum(p['disp.axis'], { xy:0, radial:1 }, 0);
+		this.uniforms.uLightBlend.value = mapEnum(p['light.blendMode'], { multiply:0, add:1, overlay:2 }, 0);
+		this.uniforms.uPreset.value = mapEnum(p['proc.presetId'], { plasma:0, stripes:1, checker:2, marble:3, fbm:4, voronoi:5 }, 0);
+
+		this.uniforms.uCropCenter.value.set(p['media.crop.centerX'], p['media.crop.centerY']);
+		this.uniforms.uCropZoom.value = p['media.crop.zoom'];
+
+		this.uniforms.uDispEnabled.value = p['disp.enabled'] ? 1 : 0;
+		this.uniforms.uDispAmount.value = p['disp.amount'];
+		this.uniforms.uDispScale.value = p['disp.scale'];
+
+		this.uniforms.uLightEnabled.value = p['light.enabled'] ? 1 : 0;
+		this.uniforms.uLightIntensity.value = p['light.intensity'];
+
+		this.uniforms.uBrightness.value = p['filter.brightness'];
+		this.uniforms.uContrast.value = p['filter.contrast'];
+		this.uniforms.uSaturation.value = p['filter.saturation'];
+		this.uniforms.uBlur.value = p['filter.blur'];
+
+		this.uniforms.uScanlines.value = p['artifact.scanlines'];
+		this.uniforms.uNoise.value = p['artifact.noise'];
+
+		this.uniforms.uChromAb.value = p['fx.chromAb'];
+		this.uniforms.uGlitch.value = p['fx.glitch'];
+		this.uniforms.uVhs.value = p['fx.vhs'];
+		this.uniforms.uFeedback.value = p['fx.feedback'];
+	  }
+
+	  render(dt) {
+		this.uniforms.uTime.value += dt;
+
+		// render into ping
+		this.renderer.setRenderTarget(this._ping);
+		this.renderer.render(this.scene, this.camera);
+
+		// then to screen using ping as the "current" frame
+		// (simple: just blit ping by rendering same scene with prevFrameTex pointing to pong)
+		this.renderer.setRenderTarget(null);
+		// reuse: sample uses uPrevFrameTex only; current is computed live, so screen render = same
+		// but to keep feedback stable, we can just render scene once more to screen.
+		this.renderer.render(this.scene, this.camera);
+
+		// swap ping/pong and update prev texture
+		const tmp = this._pong;
+		this._pong = this._ping;
+		this._ping = tmp;
+		this.uniforms.uPrevFrameTex.value = this._pong.texture;
+	  }
+
+	  async setImageTexture(kind, file) {
+		const tex = await this._textureFromFile(file);
+		tex.colorSpace = THREE.SRGBColorSpace;
+		tex.needsUpdate = true;
+		if (kind === 'source') { this.textures.sourceImage = tex; this.uniforms.uSourceImageTex.value = tex; }
+		if (kind === 'disp')   { this.textures.dispImage = tex;   this.uniforms.uDispImageTex.value = tex; }
+		if (kind === 'light')  { this.textures.lightImage = tex;  this.uniforms.uLightImageTex.value = tex; }
+	  }
+
+	  async setVideoTexture(kind, file) {
+		const { videoEl, videoTex } = await this._videoTextureFromFile(file);
+		if (kind === 'source') { this._video.src = videoEl; this.textures.sourceVideo = videoTex; this.uniforms.uSourceVideoTex.value = videoTex; }
+		if (kind === 'disp')   { this._video.disp = videoEl; this.textures.dispVideo = videoTex; this.uniforms.uDispVideoTex.value = videoTex; }
+		if (kind === 'light')  { this._video.light = videoEl; this.textures.lightVideo = videoTex; this.uniforms.uLightVideoTex.value = videoTex; }
+	  }
+
+	  async setCameraTexture(kind) {
+		if (!this._camera.stream) {
+		  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+		  const v = document.createElement('video');
+		  v.srcObject = stream;
+		  v.muted = true;
+		  v.playsInline = true;
+		  await v.play().catch(()=>{});
+		  const tex = new THREE.VideoTexture(v);
+		  tex.colorSpace = THREE.SRGBColorSpace;
+		  tex.needsUpdate = true;
+		  this._camera = { stream, videoEl: v, videoTex: tex };
+		}
+		const t = this._camera.videoTex;
+		if (kind === 'source') { this.textures.sourceCamera = t; this.uniforms.uSourceCameraTex.value = t; }
+		if (kind === 'disp')   { this.textures.dispCamera = t;   this.uniforms.uDispCameraTex.value = t; }
+		if (kind === 'light')  { this.textures.lightCamera = t;  this.uniforms.uLightCameraTex.value = t; }
+	  }
+
+	  updateVideoPlayback(p) {
+		const rate = p['video.rate'];
+		const loop = !!p['video.loop'];
+		const pairs = [
+		  ['src', p['video.src.in'], p['video.src.out']],
+		  ['disp', p['video.disp.in'], p['video.disp.out']],
+		  ['light', p['video.light.in'], p['video.light.out']],
+		];
+		for (const [key, vin, vout] of pairs) {
+		  const el = this._video[key];
+		  if (!el) continue;
+		  try { el.playbackRate = rate; } catch {}
+		  enforceInOut(el, vin, vout, loop);
+		}
+	  }
+
+	  bakeFrameToTexture() {
+		const canvas = this.renderer.domElement;
+		const img = new Image();
+		img.src = canvas.toDataURL('image/png');
+		const tex = new THREE.Texture(img);
+		tex.colorSpace = THREE.SRGBColorSpace;
+		tex.needsUpdate = true;
+		tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+		return tex;
+	  }
+
+	  bakeProceduralTo(kind) {
+		const tex = this.bakeFrameToTexture();
+		if (kind === 'source') { this.textures.sourceImage = tex; this.uniforms.uSourceImageTex.value = tex; }
+		if (kind === 'disp')   { this.textures.dispImage = tex;   this.uniforms.uDispImageTex.value = tex; }
+		if (kind === 'light')  { this.textures.lightImage = tex;  this.uniforms.uLightImageTex.value = tex; }
+	  }
+
+	  _makeFallbackTexture(a, b) {
+		const c = document.createElement('canvas');
+		c.width = 256; c.height = 256;
+		const ctx = c.getContext('2d');
+		const g = ctx.createLinearGradient(0, 0, 256, 256);
+		g.addColorStop(0, a);
+		g.addColorStop(1, b);
+		ctx.fillStyle = g;
+		ctx.fillRect(0, 0, 256, 256);
+		const tex = new THREE.CanvasTexture(c);
+		tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+		tex.needsUpdate = true;
+		return tex;
+	  }
+
+	  async _textureFromFile(file) {
+		const url = URL.createObjectURL(file);
+		try {
+		  const img = await new Promise((resolve, reject) => {
+			const i = new Image();
+			i.crossOrigin = 'anonymous';
+			i.onload = () => resolve(i);
+			i.onerror = reject;
+			i.src = url;
+		  });
+		  const tex = new THREE.Texture(img);
+		  tex.needsUpdate = true;
+		  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+		  return tex;
+		} finally {
+		  URL.revokeObjectURL(url);
+		}
+	  }
+
+	  async _videoTextureFromFile(file) {
+		const url = URL.createObjectURL(file);
+		const v = document.createElement('video');
+		v.src = url;
+		v.muted = true;
+		v.loop = true;
+		v.playsInline = true;
+		v.autoplay = true;
+		v.crossOrigin = 'anonymous';
+		await v.play().catch(()=>{});
+		const tex = new THREE.VideoTexture(v);
+		tex.colorSpace = THREE.SRGBColorSpace;
+		tex.needsUpdate = true;
+		return { videoEl: v, videoTex: tex };
+	  }
+	}
+
+	/*********************************************************************
+	 * UI bindings for base params
+	 *********************************************************************/
+	class UIController {
+	  constructor(root, paramBus) {
+		this.root = root;
+		this.paramBus = paramBus;
+		this.el = Object.fromEntries([...root.querySelectorAll('[id]')].map(n => [n.id, n]));
+	  }
+	  bindBaseControls() {
+		const b = (id, paramId, parseFn=(x)=>x) => {
+		  const el = this.el[id];
+		  if (!el) return;
+		  const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+		  el.addEventListener(evt, () => this.paramBus.setBase(paramId, parseFn(el.value)));
+		};
+
+		b('procPreset', 'proc.presetId', (v)=>v);
+		b('sourceType', 'source.type', (v)=>v);
+
+		b('videoInSrc', 'video.src.in', (v)=>parseFloat(v));
+		b('videoOutSrc', 'video.src.out', (v)=>parseFloat(v));
+		b('videoInDisp', 'video.disp.in', (v)=>parseFloat(v));
+		b('videoOutDisp', 'video.disp.out', (v)=>parseFloat(v));
+		b('videoInLight', 'video.light.in', (v)=>parseFloat(v));
+		b('videoOutLight', 'video.light.out', (v)=>parseFloat(v));
+		b('videoRate', 'video.rate', (v)=>parseFloat(v));
+		b('videoLoop', 'video.loop', (v)=>v === '1');
+
+		b('cropX', 'media.crop.centerX', (v)=>parseFloat(v));
+		b('cropY', 'media.crop.centerY', (v)=>parseFloat(v));
+		b('cropZoom', 'media.crop.zoom', (v)=>parseFloat(v));
+
+		b('dispEnabled', 'disp.enabled', (v)=>v === '1');
+		b('dispSourceType', 'disp.sourceType', (v)=>v);
+		b('dispAmount', 'disp.amount', (v)=>parseFloat(v));
+		b('dispScale', 'disp.scale', (v)=>parseFloat(v));
+		b('dispAxis', 'disp.axis', (v)=>v);
+
+		b('lightEnabled', 'light.enabled', (v)=>v === '1');
+		b('lightSourceType', 'light.sourceType', (v)=>v);
+		b('lightIntensity', 'light.intensity', (v)=>parseFloat(v));
+		b('lightBlend', 'light.blendMode', (v)=>v);
+
+		b('brightness', 'filter.brightness', (v)=>parseFloat(v));
+		b('contrast', 'filter.contrast', (v)=>parseFloat(v));
+		b('saturation', 'filter.saturation', (v)=>parseFloat(v));
+		b('blur', 'filter.blur', (v)=>parseFloat(v));
+
+		b('scanlines', 'artifact.scanlines', (v)=>parseFloat(v));
+		b('noise', 'artifact.noise', (v)=>parseFloat(v));
+		b('chromAb', 'fx.chromAb', (v)=>parseFloat(v));
+		b('glitch', 'fx.glitch', (v)=>parseFloat(v));
+		b('vhs', 'fx.vhs', (v)=>parseFloat(v));
+		b('feedback', 'fx.feedback', (v)=>parseFloat(v));
+	  }
+
+	  syncFromBus() {
+		const set = (id, value) => { if (this.el[id]) this.el[id].value = String(value); };
+		const g = (pid) => this.paramBus.getBase(pid);
+
+		set('procPreset', g('proc.presetId'));
+		set('sourceType', g('source.type'));
+
+		set('videoInSrc', g('video.src.in'));
+		set('videoOutSrc', g('video.src.out'));
+		set('videoInDisp', g('video.disp.in'));
+		set('videoOutDisp', g('video.disp.out'));
+		set('videoInLight', g('video.light.in'));
+		set('videoOutLight', g('video.light.out'));
+		set('videoRate', g('video.rate'));
+		set('videoLoop', g('video.loop') ? '1' : '0');
+
+		set('cropX', g('media.crop.centerX'));
+		set('cropY', g('media.crop.centerY'));
+		set('cropZoom', g('media.crop.zoom'));
+
+		set('dispEnabled', g('disp.enabled') ? '1' : '0');
+		set('dispSourceType', g('disp.sourceType'));
+		set('dispAmount', g('disp.amount'));
+		set('dispScale', g('disp.scale'));
+		set('dispAxis', g('disp.axis'));
+
+		set('lightEnabled', g('light.enabled') ? '1' : '0');
+		set('lightSourceType', g('light.sourceType'));
+		set('lightIntensity', g('light.intensity'));
+		set('lightBlend', g('light.blendMode'));
+
+		set('brightness', g('filter.brightness'));
+		set('contrast', g('filter.contrast'));
+		set('saturation', g('filter.saturation'));
+		set('blur', g('filter.blur'));
+
+		set('scanlines', g('artifact.scanlines'));
+		set('noise', g('artifact.noise'));
+		set('chromAb', g('fx.chromAb'));
+		set('glitch', g('fx.glitch'));
+		set('vhs', g('fx.vhs'));
+		set('feedback', g('fx.feedback'));
+	  }
+	}
+
+	/*********************************************************************
+	 * PARAM SCHEMA
+	 *********************************************************************/
+	const schema = {
+	  'source.type': { type:'enum', def:'procedural' },
+	  'proc.presetId': { type:'enum', def:'plasma' },
+
+	  'media.crop.centerX': { type:'number', min:0, max:1, def:0.5 },
+	  'media.crop.centerY': { type:'number', min:0, max:1, def:0.5 },
+	  'media.crop.zoom': { type:'number', min:1, max:8, def:1.0 },
+
+	  'video.src.in': { type:'number', min:0, max:0.98, def:0.0 },
+	  'video.src.out': { type:'number', min:0.02, max:1, def:1.0 },
+	  'video.disp.in': { type:'number', min:0, max:0.98, def:0.0 },
+	  'video.disp.out': { type:'number', min:0.02, max:1, def:1.0 },
+	  'video.light.in': { type:'number', min:0, max:0.98, def:0.0 },
+	  'video.light.out': { type:'number', min:0.02, max:1, def:1.0 },
+	  'video.rate': { type:'number', min:0, max:2, def:1.0 },
+	  'video.loop': { type:'bool', def:true },
+
+	  'disp.enabled': { type:'bool', def:true },
+	  'disp.sourceType': { type:'enum', def:'procedural' },
+	  'disp.amount': { type:'number', min:0, max:1, def:0.35 },
+	  'disp.scale': { type:'number', min:0.1, max:12, def:3.0 },
+	  'disp.axis': { type:'enum', def:'xy' },
+
+	  'light.enabled': { type:'bool', def:true },
+	  'light.sourceType': { type:'enum', def:'procedural' },
+	  'light.intensity': { type:'number', min:0, max:1, def:0.55 },
+	  'light.blendMode': { type:'enum', def:'multiply' },
+
+	  'filter.brightness': { type:'number', min:0, max:1, def:0.55 },
+	  'filter.contrast': { type:'number', min:0, max:2, def:1.15 },
+	  'filter.saturation': { type:'number', min:0, max:2, def:1.25 },
+	  'filter.blur': { type:'number', min:0, max:1, def:0.0 },
+
+	  'artifact.scanlines': { type:'number', min:0, max:1, def:0.0 },
+	  'artifact.noise': { type:'number', min:0, max:1, def:0.15 },
+
+	  'fx.chromAb': { type:'number', min:0, max:1, def:0.0 },
+	  'fx.glitch': { type:'number', min:0, max:1, def:0.0 },
+	  'fx.vhs': { type:'number', min:0, max:1, def:0.0 },
+	  'fx.feedback': { type:'number', min:0, max:1, def:0.0 },
+	};
+
+	/*********************************************************************
+	 * APP INIT
+	 *********************************************************************/
+	const bus = new ParamBus(schema);
+	const engine = new VisualEngine({ mountEl: document.querySelector('#app') });
+	const ui = new UIController(document.querySelector('#ui'), bus);
+	ui.bindBaseControls();
+
+	const router = new ModRouter(bus);
+
+	const lfo = new LFO();
+	router.addSource('lfo0', lfo);
+
+	const audio = new AudioRmsSource();
+	router.addSource('audio0', audio);
+
+	// MIDI
+	const midi = new MidiController();
+	const midiSources = new Map();
+	const getMidiSource = (cc) => {
+	  if (!midiSources.has(cc)) midiSources.set(cc, new MidiCCSource());
+	  return midiSources.get(cc);
+	};
+
+	// Default CC mapping (can be replaced or complemented by learn)
+	const defaultCC = [
+	  { cc:21, target:'filter.brightness', depth:0.35, offset:0 },
+	  { cc:22, target:'filter.contrast',   depth:0.60, offset:0 },
+	  { cc:23, target:'filter.saturation', depth:0.60, offset:0 },
+	  { cc:24, target:'disp.amount',       depth:0.60, offset:0 },
+	  { cc:25, target:'disp.scale',        depth:3.00, offset:0 },
+	  { cc:26, target:'light.intensity',   depth:0.60, offset:0 },
+	  { cc:28, target:'__lfoRate',         depth:1.00, offset:0 },
+	];
+
+	let defaultMidiRoutesAdded = false;
+
+	// Learn state
+	let learnArmed = false;
+	let learnTargetId = null;
+	let learnDepth = 0.35;
+	let learnOffset = 0.0;
+
+	// Routing UI
+	const routeTargetEl = el('routeTarget');
+	const routeListEl = el('routeList');
+
+	function refreshTargetOptions() {
+	  const ids = bus.listNumericParams();
+	  routeTargetEl.innerHTML = '';
+	  for (const id of ids) {
+		const opt = document.createElement('option');
+		opt.value = id;
+		opt.textContent = id;
+		routeTargetEl.appendChild(opt);
+	  }
+	  // pick a sensible default
+	  routeTargetEl.value = ids.includes('disp.amount') ? 'disp.amount' : ids[0];
+	}
+
+	function renderRoutes() {
+	  routeListEl.innerHTML = '';
+	  for (const r of router.routes) {
+		const row = document.createElement('div');
+		row.className = 'routeItem';
+
+		const src = document.createElement('div');
+		src.textContent = r.sourceName;
+		src.className = 'mini';
+
+		const tgt = document.createElement('div');
+		tgt.textContent = r.targetId;
+		tgt.className = 'mini';
+
+		const depth = document.createElement('input');
+		depth.type = 'range';
+		depth.min = '0';
+		depth.max = '1';
+		depth.step = '0.001';
+		depth.value = String(r.depth ?? 0);
+		depth.addEventListener('input', () => router.updateRoute(r.id, { depth: parseFloat(depth.value) }));
+
+		const offset = document.createElement('input');
+		offset.type = 'range';
+		offset.min = '-1';
+		offset.max = '1';
+		offset.step = '0.001';
+		offset.value = String(r.offset ?? 0);
+		offset.addEventListener('input', () => router.updateRoute(r.id, { offset: parseFloat(offset.value) }));
+
+		const del = document.createElement('button');
+		del.textContent = 'Del';
+		del.addEventListener('click', () => { router.removeRoute(r.id); renderRoutes(); });
+
+		row.appendChild(src);
+		row.appendChild(tgt);
+		row.appendChild(depth);
+		row.appendChild(offset);
+		row.appendChild(del);
+
+		routeListEl.appendChild(row);
+	  }
+	}
+
+	function ensureMidiSource(cc) {
+	  const srcName = `cc${cc}`;
+	  if (!router.sources.has(srcName)) router.addSource(srcName, getMidiSource(cc));
+	  return srcName;
+	}
+
+	function addDefaultMidiRoutesOnce() {
+	  if (defaultMidiRoutesAdded) return;
+	  for (const m of defaultCC) {
+		ensureMidiSource(m.cc);
+		if (m.target.startsWith('__')) continue;
+		router.addRoute({ sourceName: `cc${m.cc}`, targetId: m.target, depth: m.depth, offset: m.offset });
+	  }
+	  defaultMidiRoutesAdded = true;
+	}
+
+	// Routing UI events
+	el('routeAdd').addEventListener('click', () => {
+	  const source = el('routeSource').value;
+	  const target = el('routeTarget').value;
+	  const depth = parseFloat(el('routeDepth').value);
+	  const offset = parseFloat(el('routeOffset').value);
+
+	  if (source === 'midi.learn') {
+		setStatus('learn armed', 'MIDI Learn: bouge un CC');
+		learnArmed = true;
+		learnTargetId = target;
+		learnDepth = depth;
+		learnOffset = offset;
+		return;
+	  }
+
+	  router.addRoute({ sourceName: source, targetId: target, depth, offset });
+	  renderRoutes();
+	  setStatus('running', `route added: ${source} → ${target}`);
+	});
+
+	el('routeLearn').addEventListener('click', () => {
+	  learnArmed = true;
+	  learnTargetId = el('routeTarget').value;
+	  learnDepth = parseFloat(el('routeDepth').value);
+	  learnOffset = parseFloat(el('routeOffset').value);
+	  setStatus('learn armed', 'MIDI Learn: bouge un CC');
+	});
+
+	el('routeClear').addEventListener('click', () => {
+	  router.clearRoutes();
+	  renderRoutes();
+	  setStatus('running', 'routes cleared');
+	});
+
+	// LFO UI
+	el('lfoEnabled').addEventListener('change', ()=>{ lfo.enabled = el('lfoEnabled').value === '1'; });
+	el('lfoShape').addEventListener('change', ()=>{ lfo.shape = el('lfoShape').value; });
+	el('lfoRate').addEventListener('input', ()=>{ lfo.rateHz = parseFloat(el('lfoRate').value); });
+
+	// Audio UI
+	let audioRouteId = null;
+	el('audioBtn').addEventListener('click', async ()=>{
+	  try {
+		setStatus('audio…', 'requesting mic');
+		await audio.enable();
+		setStatus('running', 'audio ready (mic granted)');
+	  } catch(e) {
+		setStatus('audio error', String(e?.message || e));
+		console.error(e);
+	  }
+	});
+
+	el('audioEnabled').addEventListener('change', ()=>{
+	  const on = el('audioEnabled').value === '1';
+	  if (on && audioRouteId == null) {
+		audioRouteId = router.addRoute({ sourceName: 'audio0', targetId: 'filter.blur', depth: 0.35, offset: 0 });
+		renderRoutes();
+	  }
+	  if (!on && audioRouteId != null) {
+		router.removeRoute(audioRouteId);
+		audioRouteId = null;
+		renderRoutes();
+	  }
+	});
+
+	// Preset JSON
+	function presetSnapshot() {
+	  return {
+		version: 1,
+		baseParams: bus.snapshot(),
+		routes: router.snapshot(),
+		lfo: lfo.snapshot(),
+		flags: {
+		  defaultMidiRoutesAdded,
+		}
+	  };
+	}
+
+	function applyPreset(p) {
+	  if (!p || typeof p !== 'object') return;
+	  if (p.baseParams) bus.applySnapshot(p.baseParams);
+	  if (p.routes) router.applySnapshot(p.routes);
+	  if (p.lfo) lfo.applySnapshot(p.lfo);
+	  defaultMidiRoutesAdded = !!(p.flags?.defaultMidiRoutesAdded);
+	  ui.syncFromBus();
+	  renderRoutes();
+	}
+
+	function updatePresetText() {
+	  el('presetText').value = JSON.stringify(presetSnapshot(), null, 2);
+	}
+
+	el('presetSave').addEventListener('click', ()=>{
+	  const json = JSON.stringify(presetSnapshot(), null, 2);
+	  el('presetText').value = json;
+	  const blob = new Blob([json], { type: 'application/json' });
+	  const url = URL.createObjectURL(blob);
+	  const a = document.createElement('a');
+	  a.href = url;
+	  a.download = `visual_preset_${Date.now()}.json`;
+	  a.click();
+	  URL.revokeObjectURL(url);
+	  setStatus('running', 'preset saved');
+	});
+
+	el('presetLoadBtn').addEventListener('click', ()=> el('presetLoad').click());
+	el('presetLoad').addEventListener('change', async ()=>{
+	  const f = el('presetLoad').files?.[0];
+	  if (!f) return;
+	  const txt = await f.text();
+	  try {
+		const obj = JSON.parse(txt);
+		applyPreset(obj);
+		updatePresetText();
+		setStatus('running', `preset loaded: ${f.name}`);
+	  } catch(e) {
+		setStatus('preset error', String(e?.message || e));
+	  }
+	});
+
+	// Media load
+	el('imgFile').addEventListener('change', async ()=>{
+	  const f = el('imgFile').files?.[0];
+	  if (!f) return;
+	  setStatus('loading image…', `source: ${f.name}`);
+	  await engine.setImageTexture('source', f);
+	  setStatus('running', 'image loaded (source)');
+	});
+	el('vidFile').addEventListener('change', async ()=>{
+	  const f = el('vidFile').files?.[0];
+	  if (!f) return;
+	  setStatus('loading video…', `source: ${f.name}`);
+	  await engine.setVideoTexture('source', f);
+	  setStatus('running', 'video loaded (source)');
+	});
+	el('dispFile').addEventListener('change', async ()=>{
+	  const f = el('dispFile').files?.[0];
+	  if (!f) return;
+	  setStatus('loading image…', `disp: ${f.name}`);
+	  await engine.setImageTexture('disp', f);
+	  setStatus('running', 'image loaded (disp)');
+	});
+	el('dispVidFile').addEventListener('change', async ()=>{
+	  const f = el('dispVidFile').files?.[0];
+	  if (!f) return;
+	  setStatus('loading video…', `disp: ${f.name}`);
+	  await engine.setVideoTexture('disp', f);
+	  setStatus('running', 'video loaded (disp)');
+	});
+	el('lightFile').addEventListener('change', async ()=>{
+	  const f = el('lightFile').files?.[0];
+	  if (!f) return;
+	  setStatus('loading image…', `light: ${f.name}`);
+	  await engine.setImageTexture('light', f);
+	  setStatus('running', 'image loaded (light)');
+	});
+	el('lightVidFile').addEventListener('change', async ()=>{
+	  const f = el('lightVidFile').files?.[0];
+	  if (!f) return;
+	  setStatus('loading video…', `light: ${f.name}`);
+	  await engine.setVideoTexture('light', f);
+	  setStatus('running', 'video loaded (light)');
+	});
+
+	// Camera
+	el('camBtnSource').addEventListener('click', async ()=>{
+	  try {
+		setStatus('camera…', 'requesting video');
+		await engine.setCameraTexture('source');
+		bus.setBase('source.type', 'camera');
+		ui.syncFromBus();
+		setStatus('running', 'camera → source');
+	  } catch(e) {
+		setStatus('camera error', String(e?.message || e));
+	  }
+	});
+	el('camBtnDisp').addEventListener('click', async ()=>{
+	  try {
+		setStatus('camera…', 'requesting video');
+		await engine.setCameraTexture('disp');
+		bus.setBase('disp.sourceType', 'camera');
+		ui.syncFromBus();
+		setStatus('running', 'camera → disp');
+	  } catch(e) {
+		setStatus('camera error', String(e?.message || e));
+	  }
+	});
+	el('camBtnLight').addEventListener('click', async ()=>{
+	  try {
+		setStatus('camera…', 'requesting video');
+		await engine.setCameraTexture('light');
+		bus.setBase('light.sourceType', 'camera');
+		ui.syncFromBus();
+		setStatus('running', 'camera → light');
+	  } catch(e) {
+		setStatus('camera error', String(e?.message || e));
+	  }
+	});
+	el('camBtnAll').addEventListener('click', async ()=>{
+	  try {
+		setStatus('camera…', 'requesting video');
+		await engine.setCameraTexture('source');
+		await engine.setCameraTexture('disp');
+		await engine.setCameraTexture('light');
+		bus.setBase('source.type', 'camera');
+		bus.setBase('disp.sourceType', 'camera');
+		bus.setBase('light.sourceType', 'camera');
+		ui.syncFromBus();
+		setStatus('running', 'camera → source/disp/light');
+	  } catch(e) {
+		setStatus('camera error', String(e?.message || e));
+	  }
+	});
+
+	// Bake
+	el('bakeSource').addEventListener('click', ()=>{ engine.bakeProceduralTo('source'); setStatus('running', 'baked → source image'); });
+	el('bakeDisp').addEventListener('click', ()=>{ engine.bakeProceduralTo('disp'); setStatus('running', 'baked → disp image'); });
+	el('bakeLight').addEventListener('click', ()=>{ engine.bakeProceduralTo('light'); setStatus('running', 'baked → light image'); });
+
+	// Reset/Random
+	el('resetBtn').addEventListener('click', ()=>{
+	  bus.reset();
+	  router.clearRoutes();
+	  audioRouteId = null;
+	  lfo.enabled = true; lfo.shape = 'sine'; lfo.rateHz = 0.6;
+	  defaultMidiRoutesAdded = false;
+	  ui.syncFromBus();
+	  renderRoutes();
+	  updatePresetText();
+	  setStatus('running', 'reset');
+	});
+
+	el('randomBtn').addEventListener('click', ()=>{
+	  const r = (a,b)=>a+Math.random()*(b-a);
+	  const presets = ['plasma','stripes','checker','marble','fbm','voronoi'];
+	  bus.setBase('proc.presetId', presets[(Math.random()*presets.length)|0]);
+	  bus.setBase('filter.brightness', r(0.35, 0.75));
+	  bus.setBase('filter.contrast', r(0.8, 1.7));
+	  bus.setBase('filter.saturation', r(0.6, 1.9));
+	  bus.setBase('filter.blur', r(0.0, 0.6));
+	  bus.setBase('disp.amount', r(0.0, 1.0));
+	  bus.setBase('disp.scale', r(0.2, 10.0));
+	  bus.setBase('light.intensity', r(0.0, 1.0));
+	  bus.setBase('artifact.scanlines', r(0.0, 0.8));
+	  bus.setBase('artifact.noise', r(0.0, 0.35));
+	  bus.setBase('fx.chromAb', r(0.0, 0.7));
+	  bus.setBase('fx.glitch', r(0.0, 0.6));
+	  bus.setBase('fx.vhs', r(0.0, 0.8));
+	  bus.setBase('fx.feedback', r(0.0, 0.6));
+	  ui.syncFromBus();
+	  updatePresetText();
+	  setStatus('running', 'random base');
+	});
+
+	// MIDI enable button
+	el('midiBtn').addEventListener('click', async ()=>{
+	  try {
+		if (midi.enabled) {
+		  midi.disable();
+		  el('midiBtn').textContent = 'Activer MIDI';
+		  setStatus('running', 'MIDI off');
+		  return;
+		}
+		setStatus('midi…', 'requesting access');
+		await midi.enable();
+		el('midiBtn').textContent = 'MIDI actif';
+
+		if (!defaultMidiRoutesAdded) addDefaultMidiRoutesOnce();
+		renderRoutes();
+
+		midi.setHandlers({
+		  onCC: ({ cc, value01 }) => {
+			// Update CC source
+			const srcName = ensureMidiSource(cc);
+			getMidiSource(cc).setFrom01(value01);
+
+			// Learn capture
+			if (learnArmed && learnTargetId) {
+			  const id = router.addRoute({ sourceName: srcName, targetId: learnTargetId, depth: learnDepth, offset: learnOffset });
+			  learnArmed = false;
+			  setStatus('running', `learned: ${srcName} → ${learnTargetId}`);
+			  renderRoutes();
+			  updatePresetText();
+			  return;
+			}
+
+			// Default LFO rate on CC28 (kept)
+			if (cc === 28) {
+			  lfo.rateHz = value01 * 12;
+			  el('lfoRate').value = String(lfo.rateHz);
+			}
+		  }
+		});
+
+		setStatus('running', `MIDI on • inputs: ${midi.inputs.length}`);
+	  } catch (e) {
+		setStatus('midi error', String(e?.message || e));
+	  }
+	});
+
+	// Setup route target list
+	refreshTargetOptions();
+
+	// init preset text + UI
+	ui.syncFromBus();
+	renderRoutes();
+	updatePresetText();
+
+	setStatus('running', 'Procedural default ON • FX available');
+
+	// Main loop
+	const meterEl = el('audioMeter');
+	const meterTxtEl = el('audioMeterTxt');
+
+	let last = performance.now();
+	const loop = () => {
+	  const now = performance.now();
+	  const dt = Math.min((now - last) / 1000, 0.05);
+	  last = now;
+
+	  router.tick(dt);
+
+	  // Audio meter
+	  const m = audio.meter01 ? audio.meter01() : 0;
+	  if (meterEl) meterEl.style.width = (m * 100).toFixed(1) + '%';
+	  if (meterTxtEl) meterTxtEl.textContent = m.toFixed(2);
+
+	  const finals = router.computeAll();
+	  engine.applyParams(finals);
+	  engine.updateVideoPlayback(finals);
+	  engine.render(dt);
+
+	  requestAnimationFrame(loop);
+	};
+	requestAnimationFrame(loop);
+
+	// Keep preset textarea reflecting live changes (lightweight)
+	for (const id of Object.keys(schema)) {
+	  // UI controller already updates bus; we just update json occasionally
+	}
+	let presetTick = 0;
+	setInterval(()=>{ presetTick++; if(presetTick%2===0) updatePresetText(); }, 1000);
+
+	window.addEventListener('keydown', (e) => {
+	  if (e.key === 'r') el('resetBtn').click();
+	  if (e.key === 'p') el('randomBtn').click();
+	});
+
+  </script>
+
+  <!--
+  ======================================================================
+  API (résumé minimal)
+  ======================================================================
+  ParamBus
+	- setBase(paramId, value)
+	- snapshot() / applySnapshot(obj)
+
+  ModRouter
+	- addSource(name, { tick(dt), value() -> -1..+1 })
+	- addRoute({sourceName, targetId, depth, offset})
+	- updateRoute(id, patch)
+	- removeRoute(id) / clearRoutes()
+	- computeAll() -> finals
+
+  VisualEngine
+	- applyParams(finals)
+	- render(dt)
+	- setImageTexture(kind: 'source'|'disp'|'light', file)
+	- setVideoTexture(kind: 'source'|'disp'|'light', file)
+	- setCameraTexture(kind: 'source'|'disp'|'light')
+	- updateVideoPlayback(finals)
+	- bakeProceduralTo(kind)
+
+  Preset JSON
+	- { version, baseParams, routes, lfo, flags }
+  ======================================================================
+  -->
+</body>
+</html>
