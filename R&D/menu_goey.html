@@ -394,6 +394,8 @@
     const TOOL_RADIUS_TRANSITION = parseTransition('--tool-radius-transition', 200, DEFAULT_EASE);
     const TOOL_RADIUS_TRANSITION_MS = TOOL_RADIUS_TRANSITION.durationMs;
     const TOOL_RADIUS_EASE = TOOL_RADIUS_TRANSITION.easing;
+    const TOOL_BACKDROP_BLUR = readNum('--tool-backdrop-blur', 0);
+    const TOOL_BACKDROP_BLUR_TARGET = readNum('--tool-backdrop-blur-target', TOOL_BACKDROP_BLUR);
     const TOOL_GRAD_A = parseColor(readStr('--tool-gradient-a', '#a9d8ff')) || [169, 216, 255, 1];
     const TOOL_GRAD_B = parseColor(readStr('--tool-gradient-b', '#4aa8ff')) || [74, 168, 255, 1];
     const TOOL_GRAD_A_T = parseColor(readStr('--tool-gradient-a-target', readStr('--tool-gradient-a', '#a9d8ff'))) || TOOL_GRAD_A;
@@ -562,6 +564,12 @@
         radiusTo: TOOL_RADIUS,
         radiusStart: 0,
         radiusDur: 0,
+        blur: TOOL_BACKDROP_BLUR,
+        blurApplied: TOOL_BACKDROP_BLUR,
+        blurFrom: TOOL_BACKDROP_BLUR,
+        blurTo: TOOL_BACKDROP_BLUR,
+        blurStart: 0,
+        blurDur: 0,
         goo: 0,
         gooApplied: 0,
         gooFrom: 0,
@@ -756,6 +764,47 @@
       return true;
     }
 
+    function applyBlur(it) {
+      if (Math.abs(it.blur - it.blurApplied) > 0.01) {
+        const v = `blur(${Math.max(0, it.blur)}px)`;
+        it.tool.style.backdropFilter = v;
+        it.tool.style.webkitBackdropFilter = v;
+        it.blurApplied = it.blur;
+      }
+    }
+
+    function setBlurTarget(it, target, now) {
+      if (it.blurTo === target) return;
+      it.blurFrom = it.blur;
+      it.blurTo = target;
+      it.blurStart = now;
+      it.blurDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.blurDur === 0) {
+        it.blur = target;
+        applyBlur(it);
+      }
+    }
+
+    function updateBlur(it, now) {
+      if (it.blurDur === 0) {
+        it.blur = it.blurTo;
+        applyBlur(it);
+        return false;
+      }
+      const t = (now - it.blurStart) / it.blurDur;
+      if (t >= 1) {
+        it.blur = it.blurTo;
+        it.blurDur = 0;
+        applyBlur(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.blur = it.blurFrom + ((it.blurTo - it.blurFrom) * eased);
+      applyBlur(it);
+      return true;
+    }
+
     function applyGoo(it) {
       if (Math.abs(it.goo - it.gooApplied) > 0.01) {
         it.gooShape.setAttribute('opacity', String(it.goo));
@@ -875,6 +924,11 @@
         const target = isActive ? TOOL_RADIUS_TARGET : TOOL_RADIUS;
         setRadiusTarget(it, target, now);
         if (updateRadius(it, now)) {
+          active = true;
+        }
+        const blurTarget = isActive ? TOOL_BACKDROP_BLUR_TARGET : TOOL_BACKDROP_BLUR;
+        setBlurTarget(it, blurTarget, now);
+        if (updateBlur(it, now)) {
           active = true;
         }
         const gooTarget = isActive ? 1 : 0;
