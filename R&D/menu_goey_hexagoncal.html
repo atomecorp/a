@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gooey Drag – Parametrized (Color + Gradient, No Shadow)</title>
+  <style>
+    :root {
+      /* ====== GLOBAL UI VARIABLES ====== */
+      --tool-size: 63px;
+      --tool-radius: 9px;
+      --tool-radius-target: 100px;
+      --tool-radius-transition: 900ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      --tool-backdrop-blur: 9px;
+      --tool-backdrop-blur-target: 0px;
+      --icon-size: 28px;
+      --label-color: #fff;
+      --icon-color: #a93535;
+
+      /* ====== GRADIENT (MORE COLOR) ====== */
+      --tool-gradient-a: rgba(34, 37, 44, 0.3);
+      --tool-gradient-b: rgba(70, 206, 255, 0.3);
+      --tool-gradient-a-target: rgba(47, 116, 255, 1);
+      --tool-gradient-b-target: rgba(70, 206, 255, 1);
+      --grad-start: var(--tool-gradient-a);
+      --grad-mid: var(--tool-gradient-b);
+      --grad-end: var(--tool-gradient-b);
+      --grad-angle-x1: 0%;
+      --grad-angle-y1: 0%;
+      --grad-angle-x2: 100%;
+      --grad-angle-y2: 100%;
+
+      /* ====== GOOEY ====== */
+      --goo-blur: 12;
+      /* higher = more goo */
+      --goo-alpha-mul: 18;
+      /* higher = harder edge + richer color */
+      --goo-alpha-bias: -8;
+      /* more negative = easier merge */
+
+      /* ====== PHYSICS ====== */
+      --spring: 0.15;
+      --damp: 0.75;
+      --drag-vel: 0.6;
+      --snap-offset: +3;
+      --transition-distance: 90px;
+
+      /* Layout */
+      --label-pad-top: 6px;
+      --label-pad-bottom: 10px;
+
+      /* ====== SHADOWS ====== */
+      --shadow-idle-dx: 0;
+      --shadow-idle-dy: 3;
+      --shadow-idle-blur: 6;
+      --shadow-idle-color: #000000;
+      --shadow-idle-opacity: 0.33;
+      --shadow-active-dx: 0;
+      --shadow-active-dy: 9;
+      --shadow-active-blur: 12;
+      --shadow-active-color: #000000;
+      --shadow-active-opacity: 0.69;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui
+    }
+
+    #scene {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=2200&auto=format&fit=crop') center/cover no-repeat;
+    }
+
+    #svgLayer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none
+    }
+
+    #uiLayer {
+      position: absolute;
+      inset: 0
+    }
+
+    .tool {
+      position: absolute;
+      width: var(--tool-size);
+      height: var(--tool-size);
+      border-radius: var(--tool-radius);
+      background: transparent;
+      -webkit-backdrop-filter: blur(var(--tool-backdrop-blur));
+      backdrop-filter: blur(var(--tool-backdrop-blur));
+      color: var(--label-color);
+      display: grid;
+      grid-template-rows: 1fr;
+      font-weight: 600;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      will-change: transform;
+    }
+
+    .tool .icon {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .tool svg {
+      width: var(--icon-size);
+      height: var(--icon-size);
+      fill: var(--icon-color);
+      display: block;
+    }
+
+    .tool .label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      text-align: center;
+      margin: 0;
+      padding: var(--label-pad-top) 0 var(--label-pad-bottom);
+      line-height: 1.1;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="scene">
+
+    <svg id="svgLayer" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="gradUI" class="tool-grad">
+          <stop offset="0%" stop-color="var(--grad-start)" />
+          <stop offset="60%" stop-color="var(--grad-mid)" />
+          <stop offset="100%" stop-color="var(--grad-end)" />
+        </linearGradient>
+
+        <!-- Gooey body. Numeric params are applied via JS for reliability. -->
+        <filter id="goo" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur id="gooBlur" in="SourceGraphic" stdDeviation="12" result="blur" />
+          <feColorMatrix id="gooMatrix" in="blur" type="matrix" result="solid" values="1 0 0 0 0
+                  0 1 0 0 0
+                  0 0 1 0 0
+                  0 0 0 18 -8" />
+          <feComposite in="solid" in2="SourceGraphic" operator="over" result="gooBody" />
+        </filter>
+        <filter id="shadowIdle" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur id="shadowIdleBlur" in="SourceAlpha" stdDeviation="4" result="blur" />
+          <feOffset id="shadowIdleOffset" in="blur" dx="0" dy="2" result="offset" />
+          <feFlood id="shadowIdleFlood" flood-color="#000" flood-opacity="0.18" result="flood" />
+          <feComposite in="flood" in2="offset" operator="in" result="shadow" />
+          <feComposite in="shadow" in2="SourceAlpha" operator="out" result="shadowOut" />
+        </filter>
+        <filter id="shadowActive" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur id="shadowActiveBlur" in="SourceAlpha" stdDeviation="10" result="blur" />
+          <feOffset id="shadowActiveOffset" in="blur" dx="0" dy="6" result="offset" />
+          <feFlood id="shadowActiveFlood" flood-color="#000" flood-opacity="0.35" result="flood" />
+          <feComposite in="flood" in2="offset" operator="in" result="shadow" />
+          <feComposite in="shadow" in2="SourceAlpha" operator="out" result="shadowOut" />
+        </filter>
+      </defs>
+      <g id="shadowIdleGroup" filter="url(#shadowIdle)"></g>
+      <g id="shadowActiveGroup" filter="url(#shadowActive)"></g>
+      <g id="baseGroup"></g>
+      <g id="gooGroup" filter="url(#goo)"></g>
+    </svg>
+
+    <div id="uiLayer"></div>
+  </div>
+
+  <script>
+    const ROOT = document.documentElement;
+    const CSS = getComputedStyle(ROOT);
+    const DEBUG = false;
+    const assert = DEBUG ? console.assert.bind(console) : () => { };
+
+    // ====== Read CSS vars safely ======
+    const readNum = (name, fallback) => {
+      const v = parseFloat(CSS.getPropertyValue(name));
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const readStr = (name, fallback) => {
+      const v = CSS.getPropertyValue(name).trim();
+      return v || fallback;
+    };
+    const clamp01 = (t) => (t < 0 ? 0 : (t > 1 ? 1 : t));
+    const parseDuration = (v, fallbackMs) => {
+      const m = v.match(/([\d.]+)\s*(ms|s)\b/i);
+      if (!m) return fallbackMs;
+      const n = parseFloat(m[1]);
+      if (!Number.isFinite(n)) return fallbackMs;
+      return m[2].toLowerCase() === 's' ? n * 1000 : n;
+    };
+    const makeCubicBezier = (x1, y1, x2, y2) => {
+      if (x1 === y1 && x2 === y2) return (t) => t;
+      const A = (a1, a2) => 1 - (3 * a2) + (3 * a1);
+      const B = (a1, a2) => (3 * a2) - (6 * a1);
+      const C = (a1) => 3 * a1;
+      const calcBezier = (t, a1, a2) => (((A(a1, a2) * t) + B(a1, a2)) * t + C(a1)) * t;
+      const getSlope = (t, a1, a2) => (3 * A(a1, a2) * t * t) + (2 * B(a1, a2) * t) + C(a1);
+      const binarySubdivide = (x, a, b) => {
+        let currentX, currentT, i = 0;
+        do {
+          currentT = a + (b - a) / 2;
+          currentX = calcBezier(currentT, x1, x2) - x;
+          if (currentX > 0) b = currentT;
+          else a = currentT;
+        } while (Math.abs(currentX) > 1e-7 && ++i < 10);
+        return currentT;
+      };
+      const newtonRaphsonIterate = (x, guessT) => {
+        for (let i = 0; i < 4; i++) {
+          const slope = getSlope(guessT, x1, x2);
+          if (slope === 0) return guessT;
+          const currentX = calcBezier(guessT, x1, x2) - x;
+          guessT -= currentX / slope;
+        }
+        return guessT;
+      };
+      const sampleValues = new Float32Array(11);
+      for (let i = 0; i < 11; i++) {
+        sampleValues[i] = calcBezier(i * 0.1, x1, x2);
+      }
+      const getTForX = (x) => {
+        let intervalStart = 0;
+        let currentSample = 1;
+        const lastSample = 10;
+        for (; currentSample !== lastSample && sampleValues[currentSample] <= x; ++currentSample) {
+          intervalStart += 0.1;
+        }
+        --currentSample;
+        const dist = (x - sampleValues[currentSample]) / (sampleValues[currentSample + 1] - sampleValues[currentSample]);
+        const guessT = intervalStart + dist * 0.1;
+        const slope = getSlope(guessT, x1, x2);
+        if (slope >= 0.001) return newtonRaphsonIterate(x, guessT);
+        if (slope === 0) return guessT;
+        return binarySubdivide(x, intervalStart, intervalStart + 0.1);
+      };
+      return (t) => {
+        const tt = clamp01(t);
+        if (tt === 0 || tt === 1) return tt;
+        return calcBezier(getTForX(tt), y1, y2);
+      };
+    };
+    const makeSteps = (n, pos) => {
+      const count = Math.max(1, Math.floor(n));
+      const start = pos === 'start';
+      return (t) => {
+        const tt = clamp01(t);
+        const step = start ? Math.ceil(tt * count) / count : Math.floor(tt * count) / count;
+        return step > 1 ? 1 : step;
+      };
+    };
+    const parseEasing = (v) => {
+      const cubic = v.match(/cubic-bezier\(([^)]+)\)/i);
+      if (cubic) {
+        const nums = cubic[1].split(/[\s,]+/).filter(Boolean).map(Number);
+        if (nums.length >= 4 && nums.every(Number.isFinite)) {
+          return makeCubicBezier(nums[0], nums[1], nums[2], nums[3]);
+        }
+      }
+      const steps = v.match(/steps\(([^)]+)\)/i);
+      if (steps) {
+        const parts = steps[1].split(/[\s,]+/).filter(Boolean);
+        const count = parseInt(parts[0], 10);
+        const pos = (parts[1] || 'end').toLowerCase();
+        if (Number.isFinite(count)) return makeSteps(count, pos);
+      }
+      if (/\bstep-start\b/i.test(v)) return makeSteps(1, 'start');
+      if (/\bstep-end\b/i.test(v)) return makeSteps(1, 'end');
+      if (/\bease-in-out\b/i.test(v)) return makeCubicBezier(0.42, 0, 0.58, 1);
+      if (/\bease-in\b/i.test(v)) return makeCubicBezier(0.42, 0, 1, 1);
+      if (/\bease-out\b/i.test(v)) return makeCubicBezier(0, 0, 0.58, 1);
+      if (/\bease\b/i.test(v)) return makeCubicBezier(0.25, 0.1, 0.25, 1);
+      if (/\blinear\b/i.test(v)) return (t) => t;
+      return null;
+    };
+    const parseTransition = (name, fallbackMs, fallbackEasing) => {
+      const v = CSS.getPropertyValue(name).trim();
+      if (!v) return { durationMs: fallbackMs, easing: fallbackEasing };
+      const durationMs = parseDuration(v, fallbackMs);
+      const easing = parseEasing(v) || fallbackEasing;
+      return { durationMs, easing };
+    };
+    const parseColor = (v) => {
+      const s = v.trim();
+      if (!s) return null;
+      if (s[0] === '#') {
+        const hex = s.slice(1);
+        const to255 = (h) => parseInt(h, 16);
+        if (hex.length === 3 || hex.length === 4) {
+          const r = to255(hex[0] + hex[0]);
+          const g = to255(hex[1] + hex[1]);
+          const b = to255(hex[2] + hex[2]);
+          const a = hex.length === 4 ? to255(hex[3] + hex[3]) / 255 : 1;
+          return [r, g, b, a];
+        }
+        if (hex.length === 6 || hex.length === 8) {
+          const r = to255(hex.slice(0, 2));
+          const g = to255(hex.slice(2, 4));
+          const b = to255(hex.slice(4, 6));
+          const a = hex.length === 8 ? to255(hex.slice(6, 8)) / 255 : 1;
+          return [r, g, b, a];
+        }
+      }
+      const m = s.match(/rgba?\(([^)]+)\)/i);
+      if (m) {
+        const parts = m[1].split(/[\s,\/]+/).filter(Boolean);
+        const toChannel = (p) => (p.endsWith('%') ? (parseFloat(p) * 2.55) : parseFloat(p));
+        const r = toChannel(parts[0] || '0');
+        const g = toChannel(parts[1] || '0');
+        const b = toChannel(parts[2] || '0');
+        const a = parts[3] !== undefined ? parseFloat(parts[3]) : 1;
+        if ([r, g, b, a].every(Number.isFinite)) return [r, g, b, a];
+      }
+      return null;
+    };
+    const mixColor = (a, b, t) => {
+      const tt = clamp01(t);
+      return [
+        a[0] + ((b[0] - a[0]) * tt),
+        a[1] + ((b[1] - a[1]) * tt),
+        a[2] + ((b[2] - a[2]) * tt),
+        a[3] + ((b[3] - a[3]) * tt)
+      ];
+    };
+    const colorToString = (c) => {
+      const r = Math.round(c[0]);
+      const g = Math.round(c[1]);
+      const b = Math.round(c[2]);
+      const a = Math.min(1, Math.max(0, c[3]));
+      return `rgba(${r},${g},${b},${a})`;
+    };
+
+    // ====== Apply SVG numeric params (SVG filter primitives don't reliably accept CSS vars in numeric fields) ======
+    function applySvgParams() {
+      const blur = document.getElementById('gooBlur');
+      const mat = document.getElementById('gooMatrix');
+      const grads = document.querySelectorAll('.tool-grad');
+      const shadowActiveBlur = document.getElementById('shadowActiveBlur');
+      const shadowActiveOffset = document.getElementById('shadowActiveOffset');
+      const shadowActiveFlood = document.getElementById('shadowActiveFlood');
+      const shadowIdleBlur = document.getElementById('shadowIdleBlur');
+      const shadowIdleOffset = document.getElementById('shadowIdleOffset');
+      const shadowIdleFlood = document.getElementById('shadowIdleFlood');
+
+      assert(
+        blur && mat &&
+        shadowActiveBlur && shadowActiveOffset && shadowActiveFlood &&
+        shadowIdleBlur && shadowIdleOffset && shadowIdleFlood,
+        'Missing SVG filter nodes'
+      );
+
+      // Gradient direction
+      const gx1 = readStr('--grad-angle-x1', '0%');
+      const gy1 = readStr('--grad-angle-y1', '0%');
+      const gx2 = readStr('--grad-angle-x2', '100%');
+      const gy2 = readStr('--grad-angle-y2', '100%');
+      grads.forEach((g) => {
+        g.setAttribute('x1', gx1);
+        g.setAttribute('y1', gy1);
+        g.setAttribute('x2', gx2);
+        g.setAttribute('y2', gy2);
+      });
+
+      // Gooey params
+      const gooBlur = readNum('--goo-blur', 12);
+      const mul = readNum('--goo-alpha-mul', 18);
+      const bias = readNum('--goo-alpha-bias', -8);
+
+      blur.setAttribute('stdDeviation', String(gooBlur));
+      mat.setAttribute('values',
+        `1 0 0 0 0\n` +
+        `0 1 0 0 0\n` +
+        `0 0 1 0 0\n` +
+        `0 0 0 ${mul} ${bias}`
+      );
+
+      // Shadows
+      shadowActiveOffset.setAttribute('dx', String(readNum('--shadow-active-dx', 0)));
+      shadowActiveOffset.setAttribute('dy', String(readNum('--shadow-active-dy', 6)));
+      shadowActiveBlur.setAttribute('stdDeviation', String(readNum('--shadow-active-blur', 10)));
+      shadowActiveFlood.setAttribute('flood-color', readStr('--shadow-active-color', '#000'));
+      shadowActiveFlood.setAttribute('flood-opacity', String(readNum('--shadow-active-opacity', 0.35)));
+
+      shadowIdleOffset.setAttribute('dx', String(readNum('--shadow-idle-dx', 0)));
+      shadowIdleOffset.setAttribute('dy', String(readNum('--shadow-idle-dy', 2)));
+      shadowIdleBlur.setAttribute('stdDeviation', String(readNum('--shadow-idle-blur', 4)));
+      shadowIdleFlood.setAttribute('flood-color', readStr('--shadow-idle-color', '#000'));
+      shadowIdleFlood.setAttribute('flood-opacity', String(readNum('--shadow-idle-opacity', 0.18)));
+    }
+
+    applySvgParams();
+
+    // ====== PHYSICS ======
+    const SPRING = readNum('--spring', 0.15);
+    const DAMP = readNum('--damp', 0.75);
+    const DRAG_VEL = readNum('--drag-vel', 0.6);
+    const TOOL_SIZE = readNum('--tool-size', 120);
+    const TOOL_HALF = TOOL_SIZE / 2;
+    const TOOL_RADIUS = readNum('--tool-radius', 12);
+    const TOOL_RADIUS_TARGET = readNum('--tool-radius-target', TOOL_RADIUS);
+    const DEFAULT_EASE = makeCubicBezier(0.25, 0.1, 0.25, 1);
+    const TOOL_RADIUS_TRANSITION = parseTransition('--tool-radius-transition', 200, DEFAULT_EASE);
+    const TOOL_RADIUS_TRANSITION_MS = TOOL_RADIUS_TRANSITION.durationMs;
+    const TOOL_RADIUS_EASE = TOOL_RADIUS_TRANSITION.easing;
+    const TOOL_BACKDROP_BLUR = readNum('--tool-backdrop-blur', 0);
+    const TOOL_BACKDROP_BLUR_TARGET = readNum('--tool-backdrop-blur-target', TOOL_BACKDROP_BLUR);
+    const TOOL_GRAD_A = parseColor(readStr('--tool-gradient-a', '#a9d8ff')) || [169, 216, 255, 1];
+    const TOOL_GRAD_B = parseColor(readStr('--tool-gradient-b', '#4aa8ff')) || [74, 168, 255, 1];
+    const TOOL_GRAD_A_T = parseColor(readStr('--tool-gradient-a-target', readStr('--tool-gradient-a', '#a9d8ff'))) || TOOL_GRAD_A;
+    const TOOL_GRAD_B_T = parseColor(readStr('--tool-gradient-b-target', readStr('--tool-gradient-b', '#4aa8ff'))) || TOOL_GRAD_B;
+    const EPS = 0.05;
+    const SNAP_OFFSET = readNum('--snap-offset', 0);
+    const TRANSITION_DISTANCE = readNum('--transition-distance', 90);
+    const ICON_VIEWBOX = 24;
+    const ICON_CENTER = ICON_VIEWBOX / 2;
+
+    const SNAP_IN = TOOL_SIZE * (140 / 120);
+    const MERGE_IN = TOOL_SIZE * (80 / 120);
+    const SNAP_GAP = TOOL_SIZE + SNAP_OFFSET;
+    const SNAP_IN2 = SNAP_IN * SNAP_IN;
+    const MERGE_IN2 = MERGE_IN * MERGE_IN;
+    const CONTACT_EPS = Math.max(2, TOOL_SIZE * 0.05);
+    const CONTACT_DIST = Math.max(0, SNAP_GAP) + CONTACT_EPS;
+    const CONTACT_DIST2 = CONTACT_DIST * CONTACT_DIST;
+    const PROX_DIST = TRANSITION_DISTANCE;
+    const PROX_DIST2 = PROX_DIST * PROX_DIST;
+
+    const data = [
+      { x: 200, y: 200, label: 'A', svg: '<circle cx="12" cy="12" r="10"/>' },
+      { x: 450, y: 260, label: 'B', svg: '<rect x="4" y="4" width="16" height="16" rx="4"/>' },
+      { x: 700, y: 340, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' }
+    ];
+
+    const shadowIdleGroup = document.getElementById('shadowIdleGroup');
+    const shadowActiveGroup = document.getElementById('shadowActiveGroup');
+    const baseGroup = document.getElementById('baseGroup');
+    const svgGroup = document.getElementById('gooGroup');
+    const svgDefs = document.querySelector('#svgLayer defs');
+    const ui = document.getElementById('uiLayer');
+
+    // Tests (kept simple, non-invasive)
+    assert(shadowIdleGroup, 'Missing #shadowIdleGroup');
+    assert(shadowActiveGroup, 'Missing #shadowActiveGroup');
+    assert(baseGroup, 'Missing #baseGroup');
+    assert(svgGroup, 'Missing #gooGroup');
+    assert(ui, 'Missing #uiLayer');
+    assert(svgDefs, 'Missing svg defs');
+    assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
+
+    let items = [];
+    let drag = null;
+    let dx = 0, dy = 0;
+    let lastOverlap = null;
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    let gradCount = 0;
+    const HEX_POINTS = 48;
+    const HEX_COS = new Float32Array(HEX_POINTS);
+    const HEX_SIN = new Float32Array(HEX_POINTS);
+    const HEX_RADII = new Float32Array(HEX_POINTS);
+
+    (function initHexProfile() {
+      const R = TOOL_HALF;
+      const verts = [];
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        verts.push({ x: Math.cos(a) * R, y: Math.sin(a) * R });
+      }
+      for (let i = 0; i < HEX_POINTS; i++) {
+        const a = (i / HEX_POINTS) * Math.PI * 2;
+        const cx = Math.cos(a);
+        const cy = Math.sin(a);
+        HEX_COS[i] = cx;
+        HEX_SIN[i] = cy;
+        let tMin = Infinity;
+        for (let e = 0; e < 6; e++) {
+          const v1 = verts[e];
+          const v2 = verts[(e + 1) % 6];
+          const sx = v2.x - v1.x;
+          const sy = v2.y - v1.y;
+          const denom = (cx * sy) - (cy * sx);
+          if (Math.abs(denom) < 1e-6) continue;
+          const t = ((v1.x * sy) - (v1.y * sx)) / denom;
+          const u = ((v1.x * cy) - (v1.y * cx)) / denom;
+          if (t >= 0 && u >= 0 && u <= 1) {
+            if (t < tMin) tMin = t;
+          }
+        }
+        HEX_RADII[i] = Number.isFinite(tMin) ? tMin : R;
+      }
+    })();
+
+    // Build the tool DOM safely (no duplicate definition)
+    function makeToolDom(label, iconMarkupA, iconMarkupB = null) {
+      const tool = document.createElement('div');
+      tool.className = 'tool';
+
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'icon';
+
+      const svg = document.createElementNS(SVG_NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('aria-hidden', 'true');
+
+      const iconGroup = document.createElementNS(SVG_NS, 'g');
+
+      const g1 = document.createElementNS(SVG_NS, 'g');
+      g1.innerHTML = iconMarkupA;
+      iconGroup.appendChild(g1);
+
+      if (iconMarkupB) {
+        const g2 = document.createElementNS(SVG_NS, 'g');
+        g2.setAttribute('opacity', '0.95');
+        g2.innerHTML = iconMarkupB;
+        iconGroup.appendChild(g2);
+      }
+      svg.appendChild(iconGroup);
+
+      iconWrap.appendChild(svg);
+
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'label';
+      labelDiv.textContent = label;
+
+      tool.appendChild(iconWrap);
+      tool.appendChild(labelDiv);
+
+      // Center icon geometry inside the 24x24 viewBox (runs after DOM insertion)
+      requestAnimationFrame(() => {
+        try {
+          if (!document.body.contains(svg)) return;
+          const bb = iconGroup.getBBox();
+          if (!bb.width || !bb.height) return;
+          const dx = ICON_CENTER - (bb.x + (bb.width / 2));
+          const dy = ICON_CENTER - (bb.y + (bb.height / 2));
+          iconGroup.setAttribute('transform', `translate(${dx} ${dy})`);
+        } catch (_) {
+          // ignore getBBox issues on some engines while not painted
+        }
+      });
+
+      return tool;
+    }
+
+    // Extra tests: makeToolDom should be a function and return a tool
+    assert(typeof makeToolDom === 'function', 'makeToolDom must be defined once');
+    const __t = makeToolDom('T', '<circle cx="12" cy="12" r="10"/>');
+    assert(__t instanceof HTMLElement && __t.classList.contains('tool'), 'makeToolDom must return a .tool element');
+
+    function createTool(d) {
+      const grad = document.createElementNS(SVG_NS, 'linearGradient');
+      const gradId = `gradUI-${gradCount++}`;
+      grad.setAttribute('id', gradId);
+      grad.setAttribute('class', 'tool-grad');
+      grad.setAttribute('x1', readStr('--grad-angle-x1', '0%'));
+      grad.setAttribute('y1', readStr('--grad-angle-y1', '0%'));
+      grad.setAttribute('x2', readStr('--grad-angle-x2', '100%'));
+      grad.setAttribute('y2', readStr('--grad-angle-y2', '100%'));
+
+      const stop0 = document.createElementNS(SVG_NS, 'stop');
+      stop0.setAttribute('offset', '0%');
+      const stop1 = document.createElementNS(SVG_NS, 'stop');
+      stop1.setAttribute('offset', '60%');
+      const stop2 = document.createElementNS(SVG_NS, 'stop');
+      stop2.setAttribute('offset', '100%');
+      stop0.setAttribute('stop-color', colorToString(TOOL_GRAD_A));
+      stop1.setAttribute('stop-color', colorToString(TOOL_GRAD_B));
+      stop2.setAttribute('stop-color', colorToString(TOOL_GRAD_B));
+      grad.appendChild(stop0);
+      grad.appendChild(stop1);
+      grad.appendChild(stop2);
+      svgDefs.appendChild(grad);
+
+      const shadowIdleShape = document.createElementNS(SVG_NS, 'path');
+      shadowIdleShape.setAttribute('fill', '#000');
+      shadowIdleShape.setAttribute('opacity', '1');
+      shadowIdleGroup.appendChild(shadowIdleShape);
+
+      const shadowActiveShape = document.createElementNS(SVG_NS, 'path');
+      shadowActiveShape.setAttribute('fill', '#000');
+      shadowActiveShape.setAttribute('opacity', '0');
+      shadowActiveGroup.appendChild(shadowActiveShape);
+
+      const baseShape = document.createElementNS(SVG_NS, 'path');
+      baseShape.setAttribute('fill', `url(#${gradId})`);
+      baseGroup.appendChild(baseShape);
+
+      const gooShape = document.createElementNS(SVG_NS, 'path');
+      gooShape.setAttribute('fill', `url(#${gradId})`);
+      gooShape.setAttribute('opacity', '0');
+      svgGroup.appendChild(gooShape);
+
+      const tool = makeToolDom(d.label, d.svg);
+      ui.appendChild(tool);
+
+      const it = {
+        x: d.x,
+        y: d.y,
+        vx: 0,
+        vy: 0,
+        shadowIdleShape,
+        shadowActiveShape,
+        baseShape,
+        gooShape,
+        grad,
+        stop0,
+        stop1,
+        stop2,
+        tool,
+        label: d.label,
+        svgA: d.svg,
+        svgB: null,
+        radius: TOOL_RADIUS,
+        radiusApplied: -1,
+        radiusFrom: TOOL_RADIUS,
+        radiusTo: TOOL_RADIUS,
+        radiusStart: 0,
+        radiusDur: 0,
+        blur: TOOL_BACKDROP_BLUR,
+        blurApplied: TOOL_BACKDROP_BLUR,
+        blurFrom: TOOL_BACKDROP_BLUR,
+        blurTo: TOOL_BACKDROP_BLUR,
+        blurStart: 0,
+        blurDur: 0,
+        shadow: 0,
+        shadowApplied: 0,
+        shadowFrom: 0,
+        shadowTo: 0,
+        shadowStart: 0,
+        shadowDur: 0,
+        goo: 0,
+        gooApplied: 0,
+        gooFrom: 0,
+        gooTo: 0,
+        gooStart: 0,
+        gooDur: 0,
+        color: 0,
+        colorApplied: 0,
+        colorFrom: 0,
+        colorTo: 0,
+        colorStart: 0,
+        colorDur: 0
+      };
+      items.push(it);
+      update(it);
+      applyRadius(it);
+
+      tool.addEventListener('pointerdown', (e) => {
+        drag = it;
+        dx = e.clientX - it.x;
+        dy = e.clientY - it.y;
+        tool.setPointerCapture(e.pointerId);
+        schedule();
+      }, { passive: true });
+
+      tool.addEventListener('pointerup', () => { endDrag(); }, { passive: true });
+      tool.addEventListener('pointercancel', () => { endDrag(); }, { passive: true });
+    }
+
+    function update(it) {
+      const tx = it.x + TOOL_HALF;
+      const ty = it.y + TOOL_HALF;
+      const t = `translate(${tx} ${ty})`;
+      it.shadowIdleShape.setAttribute('transform', t);
+      it.shadowActiveShape.setAttribute('transform', t);
+      it.baseShape.setAttribute('transform', t);
+      it.gooShape.setAttribute('transform', t);
+      it.tool.style.transform = `translate3d(${it.x}px,${it.y}px,0)`;
+    }
+
+    function removeItemDom(it) {
+      it.tool.remove();
+      it.shadowIdleShape.remove();
+      it.shadowActiveShape.remove();
+      it.baseShape.remove();
+      it.gooShape.remove();
+      it.grad.remove();
+    }
+
+    function setMergedUI(stationary, removed) {
+      stationary.label = stationary.label + removed.label;
+      stationary.svgB = removed.svgA;
+
+      const newTool = makeToolDom(stationary.label, stationary.svgA, stationary.svgB);
+      stationary.tool.replaceWith(newTool);
+      stationary.tool = newTool;
+
+      // Rebind pointer handlers
+      newTool.addEventListener('pointerdown', (e) => {
+        drag = stationary;
+        dx = e.clientX - stationary.x;
+        dy = e.clientY - stationary.y;
+        newTool.setPointerCapture(e.pointerId);
+        schedule();
+      }, { passive: true });
+      newTool.addEventListener('pointerup', () => { endDrag(); }, { passive: true });
+      newTool.addEventListener('pointercancel', () => { endDrag(); }, { passive: true });
+    }
+
+    // Merge rule: keep the tool underneath (not dragged) fixed.
+    function mergePair(a, b, indexToRemove) {
+      const stationary = (drag === a) ? b : a;
+      const removed = (stationary === a) ? b : a;
+
+      stationary.vx = 0;
+      stationary.vy = 0;
+
+      setMergedUI(stationary, removed);
+      removeItemDom(removed);
+      items.splice(indexToRemove, 1);
+
+      update(stationary);
+      schedule();
+    }
+
+    function applySnap(anchor, mover) {
+      const dir = Math.sign(mover.x - anchor.x) || 1;
+      const tx = anchor.x + dir * SNAP_GAP;
+      const ty = anchor.y;
+
+      mover.vx *= 0.5;
+      mover.vy *= 0.5;
+      mover.vx += (tx - mover.x) * SPRING;
+      mover.vy += (ty - mover.y) * SPRING;
+    }
+
+    function checkSnap() {
+      let snapped = false;
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i];
+          const b = items[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = (dx * dx) + (dy * dy);
+
+          if (d2 < SNAP_IN2 && d2 > MERGE_IN2) {
+            const anchor = (drag === a || drag === b) ? drag : a;
+            const mover = (anchor === a) ? b : a;
+            applySnap(anchor, mover);
+            snapped = true;
+          }
+
+          if (drag && (drag === a || drag === b) && d2 <= MERGE_IN2) {
+            const other = (drag === a) ? b : a;
+            lastOverlap = { drag, other, dir: Math.sign(drag.x - other.x) || 1 };
+            snapped = true;
+          }
+        }
+      }
+      if (drag && lastOverlap) {
+        const other = lastOverlap.other;
+        const dx = (drag.x + TOOL_HALF) - (other.x + TOOL_HALF);
+        const dy = (drag.y + TOOL_HALF) - (other.y + TOOL_HALF);
+        if ((dx * dx) + (dy * dy) > SNAP_IN2) {
+          lastOverlap = null;
+        }
+      }
+      return snapped;
+    }
+
+    function isContact(it) {
+      const ax = it.x + TOOL_HALF;
+      const ay = it.y + TOOL_HALF;
+      for (const other of items) {
+        if (other === it) continue;
+        const bx = other.x + TOOL_HALF;
+        const by = other.y + TOOL_HALF;
+        const dx = ax - bx;
+        const dy = ay - by;
+        if ((dx * dx) + (dy * dy) <= CONTACT_DIST2) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function isNear(it) {
+      if (!drag || drag === it) return false;
+      const ax = it.x + TOOL_HALF;
+      const ay = it.y + TOOL_HALF;
+      const bx = drag.x + TOOL_HALF;
+      const by = drag.y + TOOL_HALF;
+      const dx = ax - bx;
+      const dy = ay - by;
+      return ((dx * dx) + (dy * dy) <= PROX_DIST2);
+    }
+
+    function buildMorphPath(t) {
+      const tt = clamp01(t);
+      let d = '';
+      for (let i = 0; i < HEX_POINTS; i++) {
+        const r = ((1 - tt) * HEX_RADII[i]) + (tt * TOOL_HALF);
+        const x = HEX_COS[i] * r;
+        const y = HEX_SIN[i] * r;
+        d += (i === 0 ? 'M' : 'L') + x + ' ' + y;
+      }
+      return d + 'Z';
+    }
+
+    function buildMorphClip(t) {
+      const tt = clamp01(t);
+      let s = 'polygon(';
+      for (let i = 0; i < HEX_POINTS; i++) {
+        const r = ((1 - tt) * HEX_RADII[i]) + (tt * TOOL_HALF);
+        const x = 50 + ((HEX_COS[i] * r) / TOOL_HALF) * 50;
+        const y = 50 + ((HEX_SIN[i] * r) / TOOL_HALF) * 50;
+        s += x + '% ' + y + (i === HEX_POINTS - 1 ? '%)' : '%, ');
+      }
+      return s;
+    }
+
+    function applyRadius(it) {
+      if (Math.abs(it.radius - it.radiusApplied) > 0.01) {
+        const denom = Math.max(1e-6, (TOOL_RADIUS_TARGET - TOOL_RADIUS));
+        const morph = clamp01((it.radius - TOOL_RADIUS) / denom);
+        const d = buildMorphPath(morph);
+        const clip = buildMorphClip(morph);
+        it.shadowIdleShape.setAttribute('d', d);
+        it.shadowActiveShape.setAttribute('d', d);
+        it.baseShape.setAttribute('d', d);
+        it.gooShape.setAttribute('d', d);
+        it.tool.style.clipPath = clip;
+        it.tool.style.webkitClipPath = clip;
+        it.radiusApplied = it.radius;
+      }
+    }
+
+    function setRadiusTarget(it, target, now) {
+      if (it.radiusTo === target) return;
+      it.radiusFrom = it.radius;
+      it.radiusTo = target;
+      it.radiusStart = now;
+      it.radiusDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.radiusDur === 0) {
+        it.radius = target;
+        applyRadius(it);
+      }
+    }
+
+    function updateRadius(it, now) {
+      if (it.radiusDur === 0) {
+        it.radius = it.radiusTo;
+        applyRadius(it);
+        return false;
+      }
+      const t = (now - it.radiusStart) / it.radiusDur;
+      if (t >= 1) {
+        it.radius = it.radiusTo;
+        it.radiusDur = 0;
+        applyRadius(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.radius = it.radiusFrom + ((it.radiusTo - it.radiusFrom) * eased);
+      applyRadius(it);
+      return true;
+    }
+
+    function applyBlur(it) {
+      if (Math.abs(it.blur - it.blurApplied) > 0.01) {
+        const v = `blur(${Math.max(0, it.blur)}px)`;
+        it.tool.style.backdropFilter = v;
+        it.tool.style.webkitBackdropFilter = v;
+        it.blurApplied = it.blur;
+      }
+    }
+
+    function setBlurTarget(it, target, now) {
+      if (it.blurTo === target) return;
+      it.blurFrom = it.blur;
+      it.blurTo = target;
+      it.blurStart = now;
+      it.blurDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.blurDur === 0) {
+        it.blur = target;
+        applyBlur(it);
+      }
+    }
+
+    function updateBlur(it, now) {
+      if (it.blurDur === 0) {
+        it.blur = it.blurTo;
+        applyBlur(it);
+        return false;
+      }
+      const t = (now - it.blurStart) / it.blurDur;
+      if (t >= 1) {
+        it.blur = it.blurTo;
+        it.blurDur = 0;
+        applyBlur(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.blur = it.blurFrom + ((it.blurTo - it.blurFrom) * eased);
+      applyBlur(it);
+      return true;
+    }
+
+    function applyShadow(it) {
+      if (Math.abs(it.shadow - it.shadowApplied) > 0.01) {
+        const active = it.shadow;
+        const idle = 1 - active;
+        it.shadowActiveShape.setAttribute('opacity', String(active));
+        it.shadowIdleShape.setAttribute('opacity', String(idle));
+        it.shadowApplied = it.shadow;
+      }
+    }
+
+    function setShadowTarget(it, target, now) {
+      if (it.shadowTo === target) return;
+      it.shadowFrom = it.shadow;
+      it.shadowTo = target;
+      it.shadowStart = now;
+      it.shadowDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.shadowDur === 0) {
+        it.shadow = target;
+        applyShadow(it);
+      }
+    }
+
+    function updateShadow(it, now) {
+      if (it.shadowDur === 0) {
+        it.shadow = it.shadowTo;
+        applyShadow(it);
+        return false;
+      }
+      const t = (now - it.shadowStart) / it.shadowDur;
+      if (t >= 1) {
+        it.shadow = it.shadowTo;
+        it.shadowDur = 0;
+        applyShadow(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.shadow = it.shadowFrom + ((it.shadowTo - it.shadowFrom) * eased);
+      applyShadow(it);
+      return true;
+    }
+
+    function applyGoo(it) {
+      if (Math.abs(it.goo - it.gooApplied) > 0.01) {
+        it.gooShape.setAttribute('opacity', String(it.goo));
+        it.gooApplied = it.goo;
+      }
+    }
+
+    function setGooTarget(it, target, now) {
+      if (it.gooTo === target) return;
+      it.gooFrom = it.goo;
+      it.gooTo = target;
+      it.gooStart = now;
+      it.gooDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.gooDur === 0) {
+        it.goo = target;
+        applyGoo(it);
+      }
+    }
+
+    function updateGoo(it, now) {
+      if (it.gooDur === 0) {
+        it.goo = it.gooTo;
+        applyGoo(it);
+        return false;
+      }
+      const t = (now - it.gooStart) / it.gooDur;
+      if (t >= 1) {
+        it.goo = it.gooTo;
+        it.gooDur = 0;
+        applyGoo(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.goo = it.gooFrom + ((it.gooTo - it.gooFrom) * eased);
+      applyGoo(it);
+      return true;
+    }
+
+    function applyColor(it) {
+      if (Math.abs(it.color - it.colorApplied) > 0.001) {
+        const a = mixColor(TOOL_GRAD_A, TOOL_GRAD_A_T, it.color);
+        const b = mixColor(TOOL_GRAD_B, TOOL_GRAD_B_T, it.color);
+        it.stop0.setAttribute('stop-color', colorToString(a));
+        it.stop1.setAttribute('stop-color', colorToString(b));
+        it.stop2.setAttribute('stop-color', colorToString(b));
+        it.colorApplied = it.color;
+      }
+    }
+
+    function setColorTarget(it, target, now) {
+      if (it.colorTo === target) return;
+      it.colorFrom = it.color;
+      it.colorTo = target;
+      it.colorStart = now;
+      it.colorDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.colorDur === 0) {
+        it.color = target;
+        applyColor(it);
+      }
+    }
+
+    function updateColor(it, now) {
+      if (it.colorDur === 0) {
+        it.color = it.colorTo;
+        applyColor(it);
+        return false;
+      }
+      const t = (now - it.colorStart) / it.colorDur;
+      if (t >= 1) {
+        it.color = it.colorTo;
+        it.colorDur = 0;
+        applyColor(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.color = it.colorFrom + ((it.colorTo - it.colorFrom) * eased);
+      applyColor(it);
+      return true;
+    }
+
+    let rafId = 0;
+    function schedule() {
+      if (!rafId) {
+        rafId = requestAnimationFrame(tick);
+      }
+    }
+
+    function tick() {
+      rafId = 0;
+      let active = false;
+      const now = performance.now();
+
+      if (drag) active = true;
+
+      for (const it of items) {
+        if (it !== drag) {
+          it.vx *= DAMP;
+          it.vy *= DAMP;
+          it.x += it.vx;
+          it.y += it.vy;
+          update(it);
+
+          if (Math.abs(it.vx) + Math.abs(it.vy) > EPS) {
+            active = true;
+          }
+        }
+      }
+
+      if (checkSnap()) {
+        active = true;
+      }
+
+      for (const it of items) {
+        const isActive = !!drag && (it === drag || isNear(it));
+        const target = isActive ? TOOL_RADIUS_TARGET : TOOL_RADIUS;
+        setRadiusTarget(it, target, now);
+        if (updateRadius(it, now)) {
+          active = true;
+        }
+        const blurTarget = isActive ? TOOL_BACKDROP_BLUR_TARGET : TOOL_BACKDROP_BLUR;
+        setBlurTarget(it, blurTarget, now);
+        if (updateBlur(it, now)) {
+          active = true;
+        }
+        const shadowTarget = isActive ? 1 : 0;
+        setShadowTarget(it, shadowTarget, now);
+        if (updateShadow(it, now)) {
+          active = true;
+        }
+        const gooTarget = isActive ? 1 : 0;
+        setGooTarget(it, gooTarget, now);
+        if (updateGoo(it, now)) {
+          active = true;
+        }
+        const colorTarget = isActive ? 1 : 0;
+        setColorTarget(it, colorTarget, now);
+        if (updateColor(it, now)) {
+          active = true;
+        }
+      }
+
+      if (active) {
+        schedule();
+      }
+    }
+
+    data.forEach(createTool);
+    assert(items.length === 3, 'Expected 3 created items');
+
+    // Additional test: circles exist
+    assert(svgGroup.children.length === 3, 'Expected 3 SVG goo shapes');
+    assert(baseGroup.children.length === 3, 'Expected 3 SVG base shapes');
+
+    schedule();
+
+    document.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const nx = e.clientX - dx;
+      const ny = e.clientY - dy;
+
+      drag.vx = (nx - drag.x) * DRAG_VEL;
+      drag.vy = (ny - drag.y) * DRAG_VEL;
+
+      drag.x = nx;
+      drag.y = ny;
+      update(drag);
+      schedule();
+    }, { passive: true });
+
+    function endDrag() {
+      if (!drag) return;
+      const released = drag;
+      const overlap = (lastOverlap && lastOverlap.drag === released) ? lastOverlap : null;
+
+      if (overlap) {
+        const other = overlap.other;
+        const dx = (released.x + TOOL_HALF) - (other.x + TOOL_HALF);
+        const dy = (released.y + TOOL_HALF) - (other.y + TOOL_HALF);
+        const d2 = (dx * dx) + (dy * dy);
+        const ai = items.indexOf(released);
+        const bi = items.indexOf(other);
+
+        if (d2 <= MERGE_IN2 && ai !== -1 && bi !== -1) {
+          mergePair(released, other, ai);
+          drag = null;
+          lastOverlap = null;
+          schedule();
+          return;
+        }
+
+        if (d2 <= SNAP_IN2) {
+          applySnap(other, released);
+        }
+        lastOverlap = null;
+      }
+
+      drag = null;
+      schedule();
+    }
+
+    document.addEventListener('pointerup', () => { endDrag(); }, { passive: true });
+
+    // Optional: if you tweak CSS vars live, call applySvgParams() again.
+    window.applySvgParams = applySvgParams;
+  </script>
+</body>
+
+</html>
