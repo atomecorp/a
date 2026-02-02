@@ -8,11 +8,13 @@
   <style>
     :root {
       /* ====== GLOBAL UI VARIABLES ====== */
-      --tool-size: 120px;
-      --tool-radius: 12px;
+      --tool-size: 63px;
+      --tool-radius: 9px;
+      --tool-radius-target: 100px;
+      --tool-radius-transition: 3600ms cubic-bezier(0.22, 0.61, 0.36, 1);
       --icon-size: 28px;
       --label-color: #fff;
-      --icon-color: #fff;
+      --icon-color: #a93535;
 
       /* ====== GRADIENT (MORE COLOR) ====== */
       --grad-start: #a9d8ff;
@@ -35,6 +37,7 @@
       --spring: 0.15;
       --damp: 0.75;
       --drag-vel: 0.6;
+      --snap-offset: +3;
 
       /* Layout */
       --label-pad-top: 6px;
@@ -75,8 +78,7 @@
       background: transparent;
       color: var(--label-color);
       display: grid;
-      grid-template-rows: 1fr auto;
-      /* icon zone + label zone */
+      grid-template-rows: 1fr;
       font-weight: 600;
       cursor: grab;
       user-select: none;
@@ -99,6 +101,10 @@
     }
 
     .tool .label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
       width: 100%;
       text-align: center;
       margin: 0;
@@ -140,6 +146,8 @@
   <script>
     const ROOT = document.documentElement;
     const CSS = getComputedStyle(ROOT);
+    const DEBUG = false;
+    const assert = DEBUG ? console.assert.bind(console) : () => { };
 
     // ====== Read CSS vars safely ======
     const readNum = (name, fallback) => {
@@ -150,6 +158,15 @@
       const v = CSS.getPropertyValue(name).trim();
       return v || fallback;
     };
+    const readMs = (name, fallbackMs) => {
+      const v = CSS.getPropertyValue(name).trim();
+      if (!v) return fallbackMs;
+      const m = v.match(/([\d.]+)\s*(ms|s)?/i);
+      if (!m) return fallbackMs;
+      const n = parseFloat(m[1]);
+      if (!Number.isFinite(n)) return fallbackMs;
+      return m[2] && m[2].toLowerCase() === 's' ? n * 1000 : n;
+    };
 
     // ====== Apply SVG numeric params (SVG filter primitives don't reliably accept CSS vars in numeric fields) ======
     function applySvgParams() {
@@ -157,7 +174,7 @@
       const mat = document.getElementById('gooMatrix');
       const grad = document.getElementById('gradUI');
 
-      console.assert(blur && mat && grad, 'Missing SVG filter/gradient nodes');
+      assert(blur && mat && grad, 'Missing SVG filter/gradient nodes');
 
       // Gradient direction
       grad.setAttribute('x1', readStr('--grad-angle-x1', '0%'));
@@ -186,10 +203,25 @@
     const DAMP = readNum('--damp', 0.75);
     const DRAG_VEL = readNum('--drag-vel', 0.6);
     const TOOL_SIZE = readNum('--tool-size', 120);
+    const TOOL_HALF = TOOL_SIZE / 2;
+    const TOOL_RADIUS = readNum('--tool-radius', 12);
+    const TOOL_RADIUS_TARGET = readNum('--tool-radius-target', TOOL_RADIUS);
+    const TOOL_RADIUS_TRANSITION_MS = readMs('--tool-radius-transition', 200);
+    const EPS = 0.05;
+    const SNAP_OFFSET = readNum('--snap-offset', 0);
+    const ICON_VIEWBOX = 24;
+    const ICON_CENTER = ICON_VIEWBOX / 2;
 
-    const SNAP_IN = 140;
-    const MERGE_IN = 80;
-    const SNAP_GAP = TOOL_SIZE + 10;
+    const SNAP_IN = TOOL_SIZE * (140 / 120);
+    const MERGE_IN = TOOL_SIZE * (80 / 120);
+    const SNAP_GAP = TOOL_SIZE + SNAP_OFFSET;
+    const SNAP_IN2 = SNAP_IN * SNAP_IN;
+    const MERGE_IN2 = MERGE_IN * MERGE_IN;
+    const CONTACT_EPS = Math.max(2, TOOL_SIZE * 0.05);
+    const CONTACT_DIST = Math.max(0, SNAP_GAP) + CONTACT_EPS;
+    const CONTACT_DIST2 = CONTACT_DIST * CONTACT_DIST;
+    const PROX_DIST = Math.max(0, SNAP_GAP) + TOOL_SIZE;
+    const PROX_DIST2 = PROX_DIST * PROX_DIST;
 
     const data = [
       { x: 200, y: 200, label: 'A', svg: '<circle cx="12" cy="12" r="10"/>' },
@@ -201,9 +233,9 @@
     const ui = document.getElementById('uiLayer');
 
     // Tests (kept simple, non-invasive)
-    console.assert(svgGroup, 'Missing #gooGroup');
-    console.assert(ui, 'Missing #uiLayer');
-    console.assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
+    assert(svgGroup, 'Missing #gooGroup');
+    assert(ui, 'Missing #uiLayer');
+    assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
 
     let items = [];
     let drag = null;
@@ -221,16 +253,19 @@
       svg.setAttribute('viewBox', '0 0 24 24');
       svg.setAttribute('aria-hidden', 'true');
 
+      const iconGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
       const g1 = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g1.innerHTML = iconMarkupA;
-      svg.appendChild(g1);
+      iconGroup.appendChild(g1);
 
       if (iconMarkupB) {
         const g2 = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g2.setAttribute('opacity', '0.95');
         g2.innerHTML = iconMarkupB;
-        svg.appendChild(g2);
+        iconGroup.appendChild(g2);
       }
+      svg.appendChild(iconGroup);
 
       iconWrap.appendChild(svg);
 
@@ -241,14 +276,15 @@
       tool.appendChild(iconWrap);
       tool.appendChild(labelDiv);
 
-      // Optional visual centering tweak (runs after DOM insertion)
+      // Center icon geometry inside the 24x24 viewBox (runs after DOM insertion)
       requestAnimationFrame(() => {
         try {
           if (!document.body.contains(svg)) return;
-          const bb = svg.getBBox();
-          const toolSize = parseFloat(getComputedStyle(tool).width);
-          const iconCenterOffset = (toolSize / 2) - (bb.height / 2);
-          iconWrap.style.marginTop = iconCenterOffset + 'px';
+          const bb = iconGroup.getBBox();
+          if (!bb.width || !bb.height) return;
+          const dx = ICON_CENTER - (bb.x + (bb.width / 2));
+          const dy = ICON_CENTER - (bb.y + (bb.height / 2));
+          iconGroup.setAttribute('transform', `translate(${dx} ${dy})`);
         } catch (_) {
           // ignore getBBox issues on some engines while not painted
         }
@@ -258,20 +294,39 @@
     }
 
     // Extra tests: makeToolDom should be a function and return a tool
-    console.assert(typeof makeToolDom === 'function', 'makeToolDom must be defined once');
+    assert(typeof makeToolDom === 'function', 'makeToolDom must be defined once');
     const __t = makeToolDom('T', '<circle cx="12" cy="12" r="10"/>');
-    console.assert(__t instanceof HTMLElement && __t.classList.contains('tool'), 'makeToolDom must return a .tool element');
+    assert(__t instanceof HTMLElement && __t.classList.contains('tool'), 'makeToolDom must return a .tool element');
 
     function createTool(d) {
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('r', TOOL_SIZE / 2);
-      circle.setAttribute('fill', 'url(#gradUI)');
-      svgGroup.appendChild(circle);
+      const shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      shape.setAttribute('width', TOOL_SIZE);
+      shape.setAttribute('height', TOOL_SIZE);
+      shape.setAttribute('rx', TOOL_RADIUS);
+      shape.setAttribute('ry', TOOL_RADIUS);
+      shape.setAttribute('fill', 'url(#gradUI)');
+      svgGroup.appendChild(shape);
 
       const tool = makeToolDom(d.label, d.svg);
       ui.appendChild(tool);
 
-      const it = { x: d.x, y: d.y, vx: 0, vy: 0, circle, tool, label: d.label, svgA: d.svg, svgB: null };
+      const it = {
+        x: d.x,
+        y: d.y,
+        vx: 0,
+        vy: 0,
+        shape,
+        tool,
+        label: d.label,
+        svgA: d.svg,
+        svgB: null,
+        radius: TOOL_RADIUS,
+        radiusApplied: TOOL_RADIUS,
+        radiusFrom: TOOL_RADIUS,
+        radiusTo: TOOL_RADIUS,
+        radiusStart: 0,
+        radiusDur: 0
+      };
       items.push(it);
       update(it);
 
@@ -280,25 +335,22 @@
         dx = e.clientX - it.x;
         dy = e.clientY - it.y;
         tool.setPointerCapture(e.pointerId);
-      });
+        schedule();
+      }, { passive: true });
 
-      tool.addEventListener('pointerup', () => { drag = null; });
-      tool.addEventListener('pointercancel', () => { drag = null; });
+      tool.addEventListener('pointerup', () => { drag = null; schedule(); }, { passive: true });
+      tool.addEventListener('pointercancel', () => { drag = null; schedule(); }, { passive: true });
     }
 
     function update(it) {
-      it.circle.setAttribute('cx', it.x + TOOL_SIZE / 2);
-      it.circle.setAttribute('cy', it.y + TOOL_SIZE / 2);
-      it.tool.style.transform = `translate(${it.x}px,${it.y}px)`;
-    }
-
-    function distance(a, b) {
-      return Math.hypot(a.x - b.x, a.y - b.y);
+      it.shape.setAttribute('x', it.x);
+      it.shape.setAttribute('y', it.y);
+      it.tool.style.transform = `translate3d(${it.x}px,${it.y}px,0)`;
     }
 
     function removeItemDom(it) {
       it.tool.remove();
-      it.circle.remove();
+      it.shape.remove();
     }
 
     function setMergedUI(stationary, removed) {
@@ -315,9 +367,10 @@
         dx = e.clientX - stationary.x;
         dy = e.clientY - stationary.y;
         newTool.setPointerCapture(e.pointerId);
-      });
-      newTool.addEventListener('pointerup', () => { drag = null; });
-      newTool.addEventListener('pointercancel', () => { drag = null; });
+        schedule();
+      }, { passive: true });
+      newTool.addEventListener('pointerup', () => { drag = null; schedule(); }, { passive: true });
+      newTool.addEventListener('pointercancel', () => { drag = null; schedule(); }, { passive: true });
     }
 
     // Merge rule: keep the tool underneath (not dragged) fixed.
@@ -333,6 +386,7 @@
       items.splice(indexToRemove, 1);
 
       update(stationary);
+      schedule();
     }
 
     function applySnap(a, b) {
@@ -347,17 +401,21 @@
     }
 
     function checkSnap() {
+      let snapped = false;
       for (let i = 0; i < items.length; i++) {
         for (let j = i + 1; j < items.length; j++) {
           const a = items[i];
           const b = items[j];
-          const d = distance(a, b);
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = (dx * dx) + (dy * dy);
 
-          if (d < SNAP_IN && d > MERGE_IN) {
+          if (d2 < SNAP_IN2 && d2 > MERGE_IN2) {
             applySnap(a, b);
+            snapped = true;
           }
 
-          if (d <= MERGE_IN) {
+          if (d2 <= MERGE_IN2) {
             // If you drag one onto another: keep the one underneath (not dragged)
             if (drag === a) {
               mergePair(a, b, i);
@@ -367,12 +425,98 @@
               mergePair(a, b, j);
               j--;
             }
+            snapped = true;
           }
         }
       }
+      return snapped;
     }
 
-    function physics() {
+    function isContact(it) {
+      const ax = it.x + TOOL_HALF;
+      const ay = it.y + TOOL_HALF;
+      for (const other of items) {
+        if (other === it) continue;
+        const bx = other.x + TOOL_HALF;
+        const by = other.y + TOOL_HALF;
+        const dx = ax - bx;
+        const dy = ay - by;
+        if ((dx * dx) + (dy * dy) <= CONTACT_DIST2) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function isNear(it) {
+      const ax = it.x + TOOL_HALF;
+      const ay = it.y + TOOL_HALF;
+      for (const other of items) {
+        if (other === it) continue;
+        const bx = other.x + TOOL_HALF;
+        const by = other.y + TOOL_HALF;
+        const dx = ax - bx;
+        const dy = ay - by;
+        if ((dx * dx) + (dy * dy) <= PROX_DIST2) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function applyRadius(it) {
+      if (Math.abs(it.radius - it.radiusApplied) > 0.01) {
+        it.shape.setAttribute('rx', it.radius);
+        it.shape.setAttribute('ry', it.radius);
+        it.radiusApplied = it.radius;
+      }
+    }
+
+    function setRadiusTarget(it, target, now) {
+      if (it.radiusTo === target) return;
+      it.radiusFrom = it.radius;
+      it.radiusTo = target;
+      it.radiusStart = now;
+      it.radiusDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.radiusDur === 0) {
+        it.radius = target;
+        applyRadius(it);
+      }
+    }
+
+    function updateRadius(it, now) {
+      if (it.radiusDur === 0) {
+        it.radius = it.radiusTo;
+        applyRadius(it);
+        return false;
+      }
+      const t = (now - it.radiusStart) / it.radiusDur;
+      if (t >= 1) {
+        it.radius = it.radiusTo;
+        it.radiusDur = 0;
+        applyRadius(it);
+        return false;
+      }
+      const eased = t * (2 - t);
+      it.radius = it.radiusFrom + ((it.radiusTo - it.radiusFrom) * eased);
+      applyRadius(it);
+      return true;
+    }
+
+    let rafId = 0;
+    function schedule() {
+      if (!rafId) {
+        rafId = requestAnimationFrame(tick);
+      }
+    }
+
+    function tick() {
+      rafId = 0;
+      let active = false;
+      const now = performance.now();
+
+      if (drag) active = true;
+
       for (const it of items) {
         if (it !== drag) {
           it.vx *= DAMP;
@@ -380,19 +524,38 @@
           it.x += it.vx;
           it.y += it.vy;
           update(it);
+
+          if (Math.abs(it.vx) + Math.abs(it.vy) > EPS) {
+            active = true;
+          }
         }
       }
-      checkSnap();
-      requestAnimationFrame(physics);
+
+      if (checkSnap()) {
+        active = true;
+      }
+
+      for (const it of items) {
+        const contact = isContact(it);
+        const target = contact ? TOOL_RADIUS : ((it === drag || isNear(it)) ? TOOL_RADIUS_TARGET : TOOL_RADIUS);
+        setRadiusTarget(it, target, now);
+        if (updateRadius(it, now)) {
+          active = true;
+        }
+      }
+
+      if (active) {
+        schedule();
+      }
     }
 
     data.forEach(createTool);
-    console.assert(items.length === 3, 'Expected 3 created items');
+    assert(items.length === 3, 'Expected 3 created items');
 
     // Additional test: circles exist
-    console.assert(svgGroup.querySelectorAll('circle').length === 3, 'Expected 3 SVG circles');
+    assert(svgGroup.children.length === 3, 'Expected 3 SVG shapes');
 
-    physics();
+    schedule();
 
     document.addEventListener('pointermove', (e) => {
       if (!drag) return;
@@ -405,11 +568,10 @@
       drag.x = nx;
       drag.y = ny;
       update(drag);
+      schedule();
+    }, { passive: true });
 
-      checkSnap();
-    });
-
-    document.addEventListener('pointerup', () => { drag = null; });
+    document.addEventListener('pointerup', () => { drag = null; schedule(); }, { passive: true });
 
     // Optional: if you tweak CSS vars live, call applySvgParams() again.
     window.applySvgParams = applySvgParams;
