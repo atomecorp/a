@@ -1681,9 +1681,16 @@ async function startServer() {
         return { success: false, error: DB_REQUIRED_MESSAGE };
       }
 
-      const user = await validateToken(request);
+      const adminPassword = getAdminPasswordFromRequest(request);
+      let adminBypass = false;
+      let user = await validateToken(request);
       if (!user) {
-        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
+        if (isAdminPasswordValid(adminPassword)) {
+          adminBypass = true;
+          user = { id: 'admin', user_id: 'admin', sub: 'admin', username: 'admin' };
+        } else {
+          return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
+        }
       }
 
       const payload = request.body || {};
@@ -1694,7 +1701,8 @@ async function startServer() {
         requester: resolveUserId(user),
         requestedCount: requested.length,
         format: payload.format || 'zip',
-        includeFiles: payload.include_files !== false
+        includeFiles: payload.include_files !== false,
+        adminBypass
       }, '[Export] Request received');
 
       const resolveRequestedUserId = async (entry) => {
@@ -1740,8 +1748,8 @@ async function startServer() {
       const currentUserId = resolveUserId(user);
       const uniqueUserIds = Array.from(new Set(userIds));
       const requiresAdmin = uniqueUserIds.length > 1 || uniqueUserIds.some((id) => id !== currentUserId);
-      const adminPassword = getAdminPasswordFromRequest(request);
-      if (requiresAdmin && !isAdminPasswordValid(adminPassword)) {
+      const isAdmin = adminBypass || isAdminPasswordValid(adminPassword);
+      if (requiresAdmin && !isAdmin) {
         request.log.warn({
           route: '/api/admin/users/export',
           requester: currentUserId,
@@ -1810,9 +1818,16 @@ async function startServer() {
         return { success: false, error: DB_REQUIRED_MESSAGE };
       }
 
-      const user = await validateToken(request);
+      const adminPassword = getAdminPasswordFromRequest(request);
+      let adminBypass = false;
+      let user = await validateToken(request);
       if (!user) {
-        return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
+        if (isAdminPasswordValid(adminPassword)) {
+          adminBypass = true;
+          user = { id: 'admin', user_id: 'admin', sub: 'admin', username: 'admin' };
+        } else {
+          return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
+        }
       }
 
       const body = request.body;
@@ -1823,15 +1838,16 @@ async function startServer() {
       request.log.info({
         route: '/api/admin/users/import',
         requester: resolveUserId(user),
-        bytes: body.length
+        bytes: body.length,
+        adminBypass
       }, '[Import] Request received');
 
       const inspect = inspectUserExportZip(body);
       const users = Array.isArray(inspect?.users) ? inspect.users : [];
       const currentUserId = resolveUserId(user);
       const requiresAdmin = users.length !== 1 || users[0] !== currentUserId;
-      const adminPassword = getAdminPasswordFromRequest(request);
-      if (requiresAdmin && !isAdminPasswordValid(adminPassword)) {
+      const isAdmin = adminBypass || isAdminPasswordValid(adminPassword);
+      if (requiresAdmin && !isAdmin) {
         request.log.warn({
           route: '/api/admin/users/import',
           requester: currentUserId,
