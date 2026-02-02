@@ -12,13 +12,15 @@
       --tool-radius: 9px;
       --tool-radius-target: 100px;
       --tool-radius-transition: 900ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      --tool-backdrop-blur: 9px;
+      --tool-backdrop-blur-target: 0px;
       --icon-size: 28px;
       --label-color: #fff;
       --icon-color: #a93535;
 
       /* ====== GRADIENT (MORE COLOR) ====== */
-      --tool-gradient-a: rgba(47, 116, 255, 0.615);
-      --tool-gradient-b: rgba(70, 206, 255, 0.565);
+      --tool-gradient-a: rgba(47, 116, 255, 0.15);
+      --tool-gradient-b: rgba(70, 206, 255, 0.15);
       --tool-gradient-a-target: rgba(47, 116, 255, 1);
       --tool-gradient-b-target: rgba(70, 206, 255, 1);
       --grad-start: var(--tool-gradient-a);
@@ -93,6 +95,8 @@
       height: var(--tool-size);
       border-radius: var(--tool-radius);
       background: transparent;
+      -webkit-backdrop-filter: blur(var(--tool-backdrop-blur));
+      backdrop-filter: blur(var(--tool-backdrop-blur));
       color: var(--label-color);
       display: grid;
       grid-template-rows: 1fr;
