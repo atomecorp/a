@@ -11,7 +11,7 @@
       --tool-size: 63px;
       --tool-radius: 9px;
       --tool-radius-target: 100px;
-      --tool-radius-transition: 3600ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      --tool-radius-transition: 900ms cubic-bezier(0.22, 0.61, 0.36, 1);
       --icon-size: 28px;
       --label-color: #fff;
       --icon-color: #a93535;
@@ -38,6 +38,7 @@
       --damp: 0.75;
       --drag-vel: 0.6;
       --snap-offset: +3;
+      --transition-distance: 90px;
 
       /* Layout */
       --label-pad-top: 6px;
@@ -137,6 +138,7 @@
           <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35" />
         </filter>
       </defs>
+      <g id="baseGroup"></g>
       <g id="gooGroup" filter="url(#goo)"></g>
     </svg>
 
@@ -158,14 +160,104 @@
       const v = CSS.getPropertyValue(name).trim();
       return v || fallback;
     };
-    const readMs = (name, fallbackMs) => {
-      const v = CSS.getPropertyValue(name).trim();
-      if (!v) return fallbackMs;
-      const m = v.match(/([\d.]+)\s*(ms|s)?/i);
+    const clamp01 = (t) => (t < 0 ? 0 : (t > 1 ? 1 : t));
+    const parseDuration = (v, fallbackMs) => {
+      const m = v.match(/([\d.]+)\s*(ms|s)\b/i);
       if (!m) return fallbackMs;
       const n = parseFloat(m[1]);
       if (!Number.isFinite(n)) return fallbackMs;
-      return m[2] && m[2].toLowerCase() === 's' ? n * 1000 : n;
+      return m[2].toLowerCase() === 's' ? n * 1000 : n;
+    };
+    const makeCubicBezier = (x1, y1, x2, y2) => {
+      if (x1 === y1 && x2 === y2) return (t) => t;
+      const A = (a1, a2) => 1 - (3 * a2) + (3 * a1);
+      const B = (a1, a2) => (3 * a2) - (6 * a1);
+      const C = (a1) => 3 * a1;
+      const calcBezier = (t, a1, a2) => (((A(a1, a2) * t) + B(a1, a2)) * t + C(a1)) * t;
+      const getSlope = (t, a1, a2) => (3 * A(a1, a2) * t * t) + (2 * B(a1, a2) * t) + C(a1);
+      const binarySubdivide = (x, a, b) => {
+        let currentX, currentT, i = 0;
+        do {
+          currentT = a + (b - a) / 2;
+          currentX = calcBezier(currentT, x1, x2) - x;
+          if (currentX > 0) b = currentT;
+          else a = currentT;
+        } while (Math.abs(currentX) > 1e-7 && ++i < 10);
+        return currentT;
+      };
+      const newtonRaphsonIterate = (x, guessT) => {
+        for (let i = 0; i < 4; i++) {
+          const slope = getSlope(guessT, x1, x2);
+          if (slope === 0) return guessT;
+          const currentX = calcBezier(guessT, x1, x2) - x;
+          guessT -= currentX / slope;
+        }
+        return guessT;
+      };
+      const sampleValues = new Float32Array(11);
+      for (let i = 0; i < 11; i++) {
+        sampleValues[i] = calcBezier(i * 0.1, x1, x2);
+      }
+      const getTForX = (x) => {
+        let intervalStart = 0;
+        let currentSample = 1;
+        const lastSample = 10;
+        for (; currentSample !== lastSample && sampleValues[currentSample] <= x; ++currentSample) {
+          intervalStart += 0.1;
+        }
+        --currentSample;
+        const dist = (x - sampleValues[currentSample]) / (sampleValues[currentSample + 1] - sampleValues[currentSample]);
+        const guessT = intervalStart + dist * 0.1;
+        const slope = getSlope(guessT, x1, x2);
+        if (slope >= 0.001) return newtonRaphsonIterate(x, guessT);
+        if (slope === 0) return guessT;
+        return binarySubdivide(x, intervalStart, intervalStart + 0.1);
+      };
+      return (t) => {
+        const tt = clamp01(t);
+        if (tt === 0 || tt === 1) return tt;
+        return calcBezier(getTForX(tt), y1, y2);
+      };
+    };
+    const makeSteps = (n, pos) => {
+      const count = Math.max(1, Math.floor(n));
+      const start = pos === 'start';
+      return (t) => {
+        const tt = clamp01(t);
+        const step = start ? Math.ceil(tt * count) / count : Math.floor(tt * count) / count;
+        return step > 1 ? 1 : step;
+      };
+    };
+    const parseEasing = (v) => {
+      const cubic = v.match(/cubic-bezier\(([^)]+)\)/i);
+      if (cubic) {
+        const nums = cubic[1].split(/[\s,]+/).filter(Boolean).map(Number);
+        if (nums.length >= 4 && nums.every(Number.isFinite)) {
+          return makeCubicBezier(nums[0], nums[1], nums[2], nums[3]);
+        }
+      }
+      const steps = v.match(/steps\(([^)]+)\)/i);
+      if (steps) {
+        const parts = steps[1].split(/[\s,]+/).filter(Boolean);
+        const count = parseInt(parts[0], 10);
+        const pos = (parts[1] || 'end').toLowerCase();
+        if (Number.isFinite(count)) return makeSteps(count, pos);
+      }
+      if (/\bstep-start\b/i.test(v)) return makeSteps(1, 'start');
+      if (/\bstep-end\b/i.test(v)) return makeSteps(1, 'end');
+      if (/\bease-in-out\b/i.test(v)) return makeCubicBezier(0.42, 0, 0.58, 1);
+      if (/\bease-in\b/i.test(v)) return makeCubicBezier(0.42, 0, 1, 1);
+      if (/\bease-out\b/i.test(v)) return makeCubicBezier(0, 0, 0.58, 1);
+      if (/\bease\b/i.test(v)) return makeCubicBezier(0.25, 0.1, 0.25, 1);
+      if (/\blinear\b/i.test(v)) return (t) => t;
+      return null;
+    };
+    const parseTransition = (name, fallbackMs, fallbackEasing) => {
+      const v = CSS.getPropertyValue(name).trim();
+      if (!v) return { durationMs: fallbackMs, easing: fallbackEasing };
+      const durationMs = parseDuration(v, fallbackMs);
+      const easing = parseEasing(v) || fallbackEasing;
+      return { durationMs, easing };
     };
 
     // ====== Apply SVG numeric params (SVG filter primitives don't reliably accept CSS vars in numeric fields) ======
@@ -206,9 +298,13 @@
     const TOOL_HALF = TOOL_SIZE / 2;
     const TOOL_RADIUS = readNum('--tool-radius', 12);
     const TOOL_RADIUS_TARGET = readNum('--tool-radius-target', TOOL_RADIUS);
-    const TOOL_RADIUS_TRANSITION_MS = readMs('--tool-radius-transition', 200);
+    const DEFAULT_EASE = makeCubicBezier(0.25, 0.1, 0.25, 1);
+    const TOOL_RADIUS_TRANSITION = parseTransition('--tool-radius-transition', 200, DEFAULT_EASE);
+    const TOOL_RADIUS_TRANSITION_MS = TOOL_RADIUS_TRANSITION.durationMs;
+    const TOOL_RADIUS_EASE = TOOL_RADIUS_TRANSITION.easing;
     const EPS = 0.05;
     const SNAP_OFFSET = readNum('--snap-offset', 0);
+    const TRANSITION_DISTANCE = readNum('--transition-distance', 90);
     const ICON_VIEWBOX = 24;
     const ICON_CENTER = ICON_VIEWBOX / 2;
 
@@ -220,7 +316,7 @@
     const CONTACT_EPS = Math.max(2, TOOL_SIZE * 0.05);
     const CONTACT_DIST = Math.max(0, SNAP_GAP) + CONTACT_EPS;
     const CONTACT_DIST2 = CONTACT_DIST * CONTACT_DIST;
-    const PROX_DIST = Math.max(0, SNAP_GAP) + TOOL_SIZE;
+    const PROX_DIST = TRANSITION_DISTANCE;
     const PROX_DIST2 = PROX_DIST * PROX_DIST;
 
     const data = [
@@ -229,10 +325,12 @@
       { x: 700, y: 340, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' }
     ];
 
+    const baseGroup = document.getElementById('baseGroup');
     const svgGroup = document.getElementById('gooGroup');
     const ui = document.getElementById('uiLayer');
 
     // Tests (kept simple, non-invasive)
+    assert(baseGroup, 'Missing #baseGroup');
     assert(svgGroup, 'Missing #gooGroup');
     assert(ui, 'Missing #uiLayer');
     assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
@@ -299,13 +397,22 @@
     assert(__t instanceof HTMLElement && __t.classList.contains('tool'), 'makeToolDom must return a .tool element');
 
     function createTool(d) {
-      const shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      shape.setAttribute('width', TOOL_SIZE);
-      shape.setAttribute('height', TOOL_SIZE);
-      shape.setAttribute('rx', TOOL_RADIUS);
-      shape.setAttribute('ry', TOOL_RADIUS);
-      shape.setAttribute('fill', 'url(#gradUI)');
-      svgGroup.appendChild(shape);
+      const baseShape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      baseShape.setAttribute('width', TOOL_SIZE);
+      baseShape.setAttribute('height', TOOL_SIZE);
+      baseShape.setAttribute('rx', TOOL_RADIUS);
+      baseShape.setAttribute('ry', TOOL_RADIUS);
+      baseShape.setAttribute('fill', 'url(#gradUI)');
+      baseGroup.appendChild(baseShape);
+
+      const gooShape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      gooShape.setAttribute('width', TOOL_SIZE);
+      gooShape.setAttribute('height', TOOL_SIZE);
+      gooShape.setAttribute('rx', TOOL_RADIUS);
+      gooShape.setAttribute('ry', TOOL_RADIUS);
+      gooShape.setAttribute('fill', 'url(#gradUI)');
+      gooShape.setAttribute('opacity', '0');
+      svgGroup.appendChild(gooShape);
 
       const tool = makeToolDom(d.label, d.svg);
       ui.appendChild(tool);
@@ -315,7 +422,8 @@
         y: d.y,
         vx: 0,
         vy: 0,
-        shape,
+        baseShape,
+        gooShape,
         tool,
         label: d.label,
         svgA: d.svg,
@@ -325,7 +433,13 @@
         radiusFrom: TOOL_RADIUS,
         radiusTo: TOOL_RADIUS,
         radiusStart: 0,
-        radiusDur: 0
+        radiusDur: 0,
+        goo: 0,
+        gooApplied: 0,
+        gooFrom: 0,
+        gooTo: 0,
+        gooStart: 0,
+        gooDur: 0
       };
       items.push(it);
       update(it);
@@ -343,14 +457,17 @@
     }
 
     function update(it) {
-      it.shape.setAttribute('x', it.x);
-      it.shape.setAttribute('y', it.y);
+      it.baseShape.setAttribute('x', it.x);
+      it.baseShape.setAttribute('y', it.y);
+      it.gooShape.setAttribute('x', it.x);
+      it.gooShape.setAttribute('y', it.y);
       it.tool.style.transform = `translate3d(${it.x}px,${it.y}px,0)`;
     }
 
     function removeItemDom(it) {
       it.tool.remove();
-      it.shape.remove();
+      it.baseShape.remove();
+      it.gooShape.remove();
     }
 
     function setMergedUI(stationary, removed) {
@@ -389,15 +506,15 @@
       schedule();
     }
 
-    function applySnap(a, b) {
-      const dir = Math.sign(b.x - a.x) || 1;
-      const tx = a.x + dir * SNAP_GAP;
-      const ty = a.y;
+    function applySnap(anchor, mover) {
+      const dir = Math.sign(mover.x - anchor.x) || 1;
+      const tx = anchor.x + dir * SNAP_GAP;
+      const ty = anchor.y;
 
-      b.vx *= 0.5;
-      b.vy *= 0.5;
-      b.vx += (tx - b.x) * SPRING;
-      b.vy += (ty - b.y) * SPRING;
+      mover.vx *= 0.5;
+      mover.vy *= 0.5;
+      mover.vx += (tx - mover.x) * SPRING;
+      mover.vy += (ty - mover.y) * SPRING;
     }
 
     function checkSnap() {
@@ -411,7 +528,9 @@
           const d2 = (dx * dx) + (dy * dy);
 
           if (d2 < SNAP_IN2 && d2 > MERGE_IN2) {
-            applySnap(a, b);
+            const anchor = (drag === a || drag === b) ? drag : a;
+            const mover = (anchor === a) ? b : a;
+            applySnap(anchor, mover);
             snapped = true;
           }
 
@@ -449,25 +568,22 @@
     }
 
     function isNear(it) {
+      if (!drag || drag === it) return false;
       const ax = it.x + TOOL_HALF;
       const ay = it.y + TOOL_HALF;
-      for (const other of items) {
-        if (other === it) continue;
-        const bx = other.x + TOOL_HALF;
-        const by = other.y + TOOL_HALF;
-        const dx = ax - bx;
-        const dy = ay - by;
-        if ((dx * dx) + (dy * dy) <= PROX_DIST2) {
-          return true;
-        }
-      }
-      return false;
+      const bx = drag.x + TOOL_HALF;
+      const by = drag.y + TOOL_HALF;
+      const dx = ax - bx;
+      const dy = ay - by;
+      return ((dx * dx) + (dy * dy) <= PROX_DIST2);
     }
 
     function applyRadius(it) {
       if (Math.abs(it.radius - it.radiusApplied) > 0.01) {
-        it.shape.setAttribute('rx', it.radius);
-        it.shape.setAttribute('ry', it.radius);
+        it.baseShape.setAttribute('rx', it.radius);
+        it.baseShape.setAttribute('ry', it.radius);
+        it.gooShape.setAttribute('rx', it.radius);
+        it.gooShape.setAttribute('ry', it.radius);
         it.radiusApplied = it.radius;
       }
     }
@@ -497,9 +613,49 @@
         applyRadius(it);
         return false;
       }
-      const eased = t * (2 - t);
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
       it.radius = it.radiusFrom + ((it.radiusTo - it.radiusFrom) * eased);
       applyRadius(it);
+      return true;
+    }
+
+    function applyGoo(it) {
+      if (Math.abs(it.goo - it.gooApplied) > 0.01) {
+        it.gooShape.setAttribute('opacity', String(it.goo));
+        it.gooApplied = it.goo;
+      }
+    }
+
+    function setGooTarget(it, target, now) {
+      if (it.gooTo === target) return;
+      it.gooFrom = it.goo;
+      it.gooTo = target;
+      it.gooStart = now;
+      it.gooDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.gooDur === 0) {
+        it.goo = target;
+        applyGoo(it);
+      }
+    }
+
+    function updateGoo(it, now) {
+      if (it.gooDur === 0) {
+        it.goo = it.gooTo;
+        applyGoo(it);
+        return false;
+      }
+      const t = (now - it.gooStart) / it.gooDur;
+      if (t >= 1) {
+        it.goo = it.gooTo;
+        it.gooDur = 0;
+        applyGoo(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.goo = it.gooFrom + ((it.gooTo - it.gooFrom) * eased);
+      applyGoo(it);
       return true;
     }
 
@@ -536,10 +692,15 @@
       }
 
       for (const it of items) {
-        const contact = isContact(it);
-        const target = contact ? TOOL_RADIUS : ((it === drag || isNear(it)) ? TOOL_RADIUS_TARGET : TOOL_RADIUS);
+        const isActive = !!drag && (it === drag || isNear(it));
+        const target = isActive ? TOOL_RADIUS_TARGET : TOOL_RADIUS;
         setRadiusTarget(it, target, now);
         if (updateRadius(it, now)) {
+          active = true;
+        }
+        const gooTarget = isActive ? 1 : 0;
+        setGooTarget(it, gooTarget, now);
+        if (updateGoo(it, now)) {
           active = true;
         }
       }
@@ -553,7 +714,8 @@
     assert(items.length === 3, 'Expected 3 created items');
 
     // Additional test: circles exist
-    assert(svgGroup.children.length === 3, 'Expected 3 SVG shapes');
+    assert(svgGroup.children.length === 3, 'Expected 3 SVG goo shapes');
+    assert(baseGroup.children.length === 3, 'Expected 3 SVG base shapes');
 
     schedule();
 
