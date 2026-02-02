@@ -432,6 +432,7 @@
     let items = [];
     let drag = null;
     let dx = 0, dy = 0;
+    let lastOverlap = null;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     let gradCount = 0;
 
@@ -581,8 +582,8 @@
         schedule();
       }, { passive: true });
 
-      tool.addEventListener('pointerup', () => { drag = null; schedule(); }, { passive: true });
-      tool.addEventListener('pointercancel', () => { drag = null; schedule(); }, { passive: true });
+      tool.addEventListener('pointerup', () => { endDrag(); }, { passive: true });
+      tool.addEventListener('pointercancel', () => { endDrag(); }, { passive: true });
     }
 
     function update(it) {
@@ -616,8 +617,8 @@
         newTool.setPointerCapture(e.pointerId);
         schedule();
       }, { passive: true });
-      newTool.addEventListener('pointerup', () => { drag = null; schedule(); }, { passive: true });
-      newTool.addEventListener('pointercancel', () => { drag = null; schedule(); }, { passive: true });
+      newTool.addEventListener('pointerup', () => { endDrag(); }, { passive: true });
+      newTool.addEventListener('pointercancel', () => { endDrag(); }, { passive: true });
     }
 
     // Merge rule: keep the tool underneath (not dragged) fixed.
@@ -664,18 +665,19 @@
             snapped = true;
           }
 
-          if (d2 <= MERGE_IN2) {
-            // If you drag one onto another: keep the one underneath (not dragged)
-            if (drag === a) {
-              mergePair(a, b, i);
-              i = Math.max(-1, i - 1);
-              break;
-            } else {
-              mergePair(a, b, j);
-              j--;
-            }
+          if (drag && (drag === a || drag === b) && d2 <= MERGE_IN2) {
+            const other = (drag === a) ? b : a;
+            lastOverlap = { drag, other, dir: Math.sign(drag.x - other.x) || 1 };
             snapped = true;
           }
+        }
+      }
+      if (drag && lastOverlap) {
+        const other = lastOverlap.other;
+        const dx = (drag.x + TOOL_HALF) - (other.x + TOOL_HALF);
+        const dy = (drag.y + TOOL_HALF) - (other.y + TOOL_HALF);
+        if ((dx * dx) + (dy * dy) > SNAP_IN2) {
+          lastOverlap = null;
         }
       }
       return snapped;
@@ -911,7 +913,38 @@
       schedule();
     }, { passive: true });
 
-    document.addEventListener('pointerup', () => { drag = null; schedule(); }, { passive: true });
+    function endDrag() {
+      if (!drag) return;
+      const released = drag;
+      const overlap = (lastOverlap && lastOverlap.drag === released) ? lastOverlap : null;
+
+      if (overlap) {
+        const other = overlap.other;
+        const dx = (released.x + TOOL_HALF) - (other.x + TOOL_HALF);
+        const dy = (released.y + TOOL_HALF) - (other.y + TOOL_HALF);
+        const d2 = (dx * dx) + (dy * dy);
+        const ai = items.indexOf(released);
+        const bi = items.indexOf(other);
+
+        if (d2 <= MERGE_IN2 && ai !== -1 && bi !== -1) {
+          mergePair(released, other, ai);
+          drag = null;
+          lastOverlap = null;
+          schedule();
+          return;
+        }
+
+        if (d2 <= SNAP_IN2) {
+          applySnap(other, released);
+        }
+        lastOverlap = null;
+      }
+
+      drag = null;
+      schedule();
+    }
+
+    document.addEventListener('pointerup', () => { endDrag(); }, { passive: true });
 
     // Optional: if you tweak CSS vars live, call applySvgParams() again.
     window.applySvgParams = applySvgParams;
