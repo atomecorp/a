@@ -19,8 +19,8 @@
       --icon-color: #a93535;
 
       /* ====== GRADIENT (MORE COLOR) ====== */
-      --tool-gradient-a: rgba(47, 116, 255, 0.15);
-      --tool-gradient-b: rgba(70, 206, 255, 0.15);
+      --tool-gradient-a: rgba(34, 37, 44, 0.3);
+      --tool-gradient-b: rgba(70, 206, 255, 0.3);
       --tool-gradient-a-target: rgba(47, 116, 255, 1);
       --tool-gradient-b-target: rgba(70, 206, 255, 1);
       --grad-start: var(--tool-gradient-a);
@@ -52,15 +52,15 @@
 
       /* ====== SHADOWS ====== */
       --shadow-idle-dx: 0;
-      --shadow-idle-dy: 2;
-      --shadow-idle-blur: 4;
-      --shadow-idle-color: #000;
-      --shadow-idle-opacity: 0.18;
+      --shadow-idle-dy: 3;
+      --shadow-idle-blur: 6;
+      --shadow-idle-color: #000000;
+      --shadow-idle-opacity: 0.33;
       --shadow-active-dx: 0;
-      --shadow-active-dy: 6;
-      --shadow-active-blur: 10;
-      --shadow-active-color: #000;
-      --shadow-active-opacity: 0.35;
+      --shadow-active-dy: 9;
+      --shadow-active-blur: 12;
+      --shadow-active-color: #000000;
+      --shadow-active-opacity: 0.69;
     }
 
     html,
@@ -154,13 +154,25 @@
                   0 0 1 0 0
                   0 0 0 18 -8" />
           <feComposite in="solid" in2="SourceGraphic" operator="over" result="gooBody" />
-          <feDropShadow id="gooShadow" dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35" />
         </filter>
-        <filter id="baseShadow" x="-80%" y="-80%" width="260%" height="260%">
-          <feDropShadow id="baseShadowNode" dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.18" />
+        <filter id="shadowIdle" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur id="shadowIdleBlur" in="SourceAlpha" stdDeviation="4" result="blur" />
+          <feOffset id="shadowIdleOffset" in="blur" dx="0" dy="2" result="offset" />
+          <feFlood id="shadowIdleFlood" flood-color="#000" flood-opacity="0.18" result="flood" />
+          <feComposite in="flood" in2="offset" operator="in" result="shadow" />
+          <feComposite in="shadow" in2="SourceAlpha" operator="out" result="shadowOut" />
+        </filter>
+        <filter id="shadowActive" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur id="shadowActiveBlur" in="SourceAlpha" stdDeviation="10" result="blur" />
+          <feOffset id="shadowActiveOffset" in="blur" dx="0" dy="6" result="offset" />
+          <feFlood id="shadowActiveFlood" flood-color="#000" flood-opacity="0.35" result="flood" />
+          <feComposite in="flood" in2="offset" operator="in" result="shadow" />
+          <feComposite in="shadow" in2="SourceAlpha" operator="out" result="shadowOut" />
         </filter>
       </defs>
-      <g id="baseGroup" filter="url(#baseShadow)"></g>
+      <g id="shadowIdleGroup" filter="url(#shadowIdle)"></g>
+      <g id="shadowActiveGroup" filter="url(#shadowActive)"></g>
+      <g id="baseGroup"></g>
       <g id="gooGroup" filter="url(#goo)"></g>
     </svg>
 
@@ -336,10 +348,19 @@
       const blur = document.getElementById('gooBlur');
       const mat = document.getElementById('gooMatrix');
       const grads = document.querySelectorAll('.tool-grad');
-      const gooShadow = document.getElementById('gooShadow');
-      const baseShadow = document.getElementById('baseShadowNode');
+      const shadowActiveBlur = document.getElementById('shadowActiveBlur');
+      const shadowActiveOffset = document.getElementById('shadowActiveOffset');
+      const shadowActiveFlood = document.getElementById('shadowActiveFlood');
+      const shadowIdleBlur = document.getElementById('shadowIdleBlur');
+      const shadowIdleOffset = document.getElementById('shadowIdleOffset');
+      const shadowIdleFlood = document.getElementById('shadowIdleFlood');
 
-      assert(blur && mat && gooShadow && baseShadow, 'Missing SVG filter nodes');
+      assert(
+        blur && mat &&
+        shadowActiveBlur && shadowActiveOffset && shadowActiveFlood &&
+        shadowIdleBlur && shadowIdleOffset && shadowIdleFlood,
+        'Missing SVG filter nodes'
+      );
 
       // Gradient direction
       const gx1 = readStr('--grad-angle-x1', '0%');
@@ -367,17 +388,17 @@
       );
 
       // Shadows
-      gooShadow.setAttribute('dx', String(readNum('--shadow-active-dx', 0)));
-      gooShadow.setAttribute('dy', String(readNum('--shadow-active-dy', 6)));
-      gooShadow.setAttribute('stdDeviation', String(readNum('--shadow-active-blur', 10)));
-      gooShadow.setAttribute('flood-color', readStr('--shadow-active-color', '#000'));
-      gooShadow.setAttribute('flood-opacity', String(readNum('--shadow-active-opacity', 0.35)));
+      shadowActiveOffset.setAttribute('dx', String(readNum('--shadow-active-dx', 0)));
+      shadowActiveOffset.setAttribute('dy', String(readNum('--shadow-active-dy', 6)));
+      shadowActiveBlur.setAttribute('stdDeviation', String(readNum('--shadow-active-blur', 10)));
+      shadowActiveFlood.setAttribute('flood-color', readStr('--shadow-active-color', '#000'));
+      shadowActiveFlood.setAttribute('flood-opacity', String(readNum('--shadow-active-opacity', 0.35)));
 
-      baseShadow.setAttribute('dx', String(readNum('--shadow-idle-dx', 0)));
-      baseShadow.setAttribute('dy', String(readNum('--shadow-idle-dy', 2)));
-      baseShadow.setAttribute('stdDeviation', String(readNum('--shadow-idle-blur', 4)));
-      baseShadow.setAttribute('flood-color', readStr('--shadow-idle-color', '#000'));
-      baseShadow.setAttribute('flood-opacity', String(readNum('--shadow-idle-opacity', 0.18)));
+      shadowIdleOffset.setAttribute('dx', String(readNum('--shadow-idle-dx', 0)));
+      shadowIdleOffset.setAttribute('dy', String(readNum('--shadow-idle-dy', 2)));
+      shadowIdleBlur.setAttribute('stdDeviation', String(readNum('--shadow-idle-blur', 4)));
+      shadowIdleFlood.setAttribute('flood-color', readStr('--shadow-idle-color', '#000'));
+      shadowIdleFlood.setAttribute('flood-opacity', String(readNum('--shadow-idle-opacity', 0.18)));
     }
 
     applySvgParams();
@@ -423,12 +444,16 @@
       { x: 700, y: 340, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' }
     ];
 
+    const shadowIdleGroup = document.getElementById('shadowIdleGroup');
+    const shadowActiveGroup = document.getElementById('shadowActiveGroup');
     const baseGroup = document.getElementById('baseGroup');
     const svgGroup = document.getElementById('gooGroup');
     const svgDefs = document.querySelector('#svgLayer defs');
     const ui = document.getElementById('uiLayer');
 
     // Tests (kept simple, non-invasive)
+    assert(shadowIdleGroup, 'Missing #shadowIdleGroup');
+    assert(shadowActiveGroup, 'Missing #shadowActiveGroup');
     assert(baseGroup, 'Missing #baseGroup');
     assert(svgGroup, 'Missing #gooGroup');
     assert(ui, 'Missing #uiLayer');
@@ -523,6 +548,24 @@
       grad.appendChild(stop2);
       svgDefs.appendChild(grad);
 
+      const shadowIdleShape = document.createElementNS(SVG_NS, 'rect');
+      shadowIdleShape.setAttribute('width', TOOL_SIZE);
+      shadowIdleShape.setAttribute('height', TOOL_SIZE);
+      shadowIdleShape.setAttribute('rx', TOOL_RADIUS);
+      shadowIdleShape.setAttribute('ry', TOOL_RADIUS);
+      shadowIdleShape.setAttribute('fill', '#000');
+      shadowIdleShape.setAttribute('opacity', '1');
+      shadowIdleGroup.appendChild(shadowIdleShape);
+
+      const shadowActiveShape = document.createElementNS(SVG_NS, 'rect');
+      shadowActiveShape.setAttribute('width', TOOL_SIZE);
+      shadowActiveShape.setAttribute('height', TOOL_SIZE);
+      shadowActiveShape.setAttribute('rx', TOOL_RADIUS);
+      shadowActiveShape.setAttribute('ry', TOOL_RADIUS);
+      shadowActiveShape.setAttribute('fill', '#000');
+      shadowActiveShape.setAttribute('opacity', '0');
+      shadowActiveGroup.appendChild(shadowActiveShape);
+
       const baseShape = document.createElementNS(SVG_NS, 'rect');
       baseShape.setAttribute('width', TOOL_SIZE);
       baseShape.setAttribute('height', TOOL_SIZE);
@@ -548,6 +591,8 @@
         y: d.y,
         vx: 0,
         vy: 0,
+        shadowIdleShape,
+        shadowActiveShape,
         baseShape,
         gooShape,
         grad,
@@ -570,6 +615,12 @@
         blurTo: TOOL_BACKDROP_BLUR,
         blurStart: 0,
         blurDur: 0,
+        shadow: 0,
+        shadowApplied: 0,
+        shadowFrom: 0,
+        shadowTo: 0,
+        shadowStart: 0,
+        shadowDur: 0,
         goo: 0,
         gooApplied: 0,
         gooFrom: 0,
@@ -599,6 +650,10 @@
     }
 
     function update(it) {
+      it.shadowIdleShape.setAttribute('x', it.x);
+      it.shadowIdleShape.setAttribute('y', it.y);
+      it.shadowActiveShape.setAttribute('x', it.x);
+      it.shadowActiveShape.setAttribute('y', it.y);
       it.baseShape.setAttribute('x', it.x);
       it.baseShape.setAttribute('y', it.y);
       it.gooShape.setAttribute('x', it.x);
@@ -608,6 +663,8 @@
 
     function removeItemDom(it) {
       it.tool.remove();
+      it.shadowIdleShape.remove();
+      it.shadowActiveShape.remove();
       it.baseShape.remove();
       it.gooShape.remove();
       it.grad.remove();
@@ -724,6 +781,10 @@
 
     function applyRadius(it) {
       if (Math.abs(it.radius - it.radiusApplied) > 0.01) {
+        it.shadowIdleShape.setAttribute('rx', it.radius);
+        it.shadowIdleShape.setAttribute('ry', it.radius);
+        it.shadowActiveShape.setAttribute('rx', it.radius);
+        it.shadowActiveShape.setAttribute('ry', it.radius);
         it.baseShape.setAttribute('rx', it.radius);
         it.baseShape.setAttribute('ry', it.radius);
         it.gooShape.setAttribute('rx', it.radius);
@@ -802,6 +863,48 @@
       const eased = Number.isFinite(easedRaw) ? easedRaw : t;
       it.blur = it.blurFrom + ((it.blurTo - it.blurFrom) * eased);
       applyBlur(it);
+      return true;
+    }
+
+    function applyShadow(it) {
+      if (Math.abs(it.shadow - it.shadowApplied) > 0.01) {
+        const active = it.shadow;
+        const idle = 1 - active;
+        it.shadowActiveShape.setAttribute('opacity', String(active));
+        it.shadowIdleShape.setAttribute('opacity', String(idle));
+        it.shadowApplied = it.shadow;
+      }
+    }
+
+    function setShadowTarget(it, target, now) {
+      if (it.shadowTo === target) return;
+      it.shadowFrom = it.shadow;
+      it.shadowTo = target;
+      it.shadowStart = now;
+      it.shadowDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
+      if (it.shadowDur === 0) {
+        it.shadow = target;
+        applyShadow(it);
+      }
+    }
+
+    function updateShadow(it, now) {
+      if (it.shadowDur === 0) {
+        it.shadow = it.shadowTo;
+        applyShadow(it);
+        return false;
+      }
+      const t = (now - it.shadowStart) / it.shadowDur;
+      if (t >= 1) {
+        it.shadow = it.shadowTo;
+        it.shadowDur = 0;
+        applyShadow(it);
+        return false;
+      }
+      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
+      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
+      it.shadow = it.shadowFrom + ((it.shadowTo - it.shadowFrom) * eased);
+      applyShadow(it);
       return true;
     }
 
@@ -929,6 +1032,11 @@
         const blurTarget = isActive ? TOOL_BACKDROP_BLUR_TARGET : TOOL_BACKDROP_BLUR;
         setBlurTarget(it, blurTarget, now);
         if (updateBlur(it, now)) {
+          active = true;
+        }
+        const shadowTarget = isActive ? 1 : 0;
+        setShadowTarget(it, shadowTarget, now);
+        if (updateShadow(it, now)) {
           active = true;
         }
         const gooTarget = isActive ? 1 : 0;
