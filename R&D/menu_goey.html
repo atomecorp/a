@@ -608,6 +608,8 @@
         label: d.label,
         svgA: d.svg,
         svgB: null,
+        homeX: d.x,
+        homeY: d.y,
         radius: TOOL_RADIUS,
         radiusApplied: TOOL_RADIUS,
         radiusFrom: TOOL_RADIUS,
@@ -712,6 +714,11 @@
       schedule();
     }
 
+    function setHome(it, x, y) {
+      it.homeX = x;
+      it.homeY = y;
+    }
+
     function packToLeftmost(anchor) {
       if (!items.length) return;
       if (!anchor) return;
@@ -731,11 +738,9 @@
       const baseY = leftmost.y;
       for (let i = 0; i < sorted.length; i++) {
         const it = sorted[i];
-        it.x = baseX + (i * SNAP_GAP);
-        it.y = baseY;
+        setHome(it, baseX + (i * SNAP_GAP), baseY);
         it.vx = 0;
         it.vy = 0;
-        update(it);
       }
     }
 
@@ -752,11 +757,9 @@
 
     function snapToAnchor(anchor, mover) {
       const dir = Math.sign((mover.x + TOOL_HALF) - (anchor.x + TOOL_HALF)) || 1;
-      mover.x = anchor.x + dir * SNAP_GAP;
-      mover.y = anchor.y;
+      setHome(mover, anchor.x + dir * SNAP_GAP, anchor.y);
       mover.vx = 0;
       mover.vy = 0;
-      update(mover);
     }
 
     function findNearestNeighbor(mover, maxDist2) {
@@ -1176,29 +1179,24 @@
 
       for (const it of items) {
         if (it !== drag) {
-          if (drag) {
-            const target = pendingInsert && pendingInsert.targets.get(it);
-            if (target) {
-              it.x = target.x;
-              it.y = target.y;
-              it.vx = 0;
-              it.vy = 0;
-              update(it);
-              active = true;
-            } else {
-              it.vx = 0;
-              it.vy = 0;
-            }
-          } else {
-            it.vx *= DAMP;
-            it.vy *= DAMP;
-            it.x += it.vx;
-            it.y += it.vy;
-            update(it);
+          let tx = (typeof it.homeX === 'number') ? it.homeX : it.x;
+          let ty = (typeof it.homeY === 'number') ? it.homeY : it.y;
+          const target = drag && pendingInsert ? pendingInsert.targets.get(it) : null;
+          if (target) {
+            tx = target.x;
+            ty = target.y;
+          }
 
-            if (Math.abs(it.vx) + Math.abs(it.vy) > EPS) {
-              active = true;
-            }
+          it.vx += (tx - it.x) * SPRING;
+          it.vy += (ty - it.y) * SPRING;
+          it.vx *= DAMP;
+          it.vy *= DAMP;
+          it.x += it.vx;
+          it.y += it.vy;
+          update(it);
+
+          if (Math.abs(it.vx) + Math.abs(it.vy) > EPS) {
+            active = true;
           }
         }
       }
@@ -1297,18 +1295,13 @@
       }
 
       if (pendingInsert) {
-        released.x = pendingInsert.dragX;
-        released.y = pendingInsert.dragY;
+        setHome(released, pendingInsert.dragX, pendingInsert.dragY);
         released.vx = 0;
         released.vy = 0;
-        update(released);
-
         for (const [it, target] of pendingInsert.targets) {
-          it.x = target.x;
-          it.y = target.y;
+          setHome(it, target.x, target.y);
           it.vx = 0;
           it.vy = 0;
-          update(it);
         }
 
         pendingInsert = null;
@@ -1320,6 +1313,12 @@
       const nearest = findNearestNeighbor(released, PROX_DIST2);
       if (nearest) {
         snapToAnchor(nearest, released);
+      }
+
+      if (!nearest) {
+        setHome(released, released.x, released.y);
+        released.vx = 0;
+        released.vy = 0;
       }
 
       pendingInsert = null;
