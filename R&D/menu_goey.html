@@ -823,55 +823,57 @@
       const right = insertIdx < others.length ? others[insertIdx] : null;
       if (!left && !right) return false;
 
-      const rowRef = left || right;
+      const leftDx = left ? (dragCx - (left.x + TOOL_HALF)) : 0;
+      const leftDy = left ? (dragCy - (left.y + TOOL_HALF)) : 0;
+      const rightDx = right ? (dragCx - (right.x + TOOL_HALF)) : 0;
+      const rightDy = right ? (dragCy - (right.y + TOOL_HALF)) : 0;
+      const leftInScope = left ? ((leftDx * leftDx) + (leftDy * leftDy) <= PROX_DIST2) : false;
+      const rightInScope = right ? ((rightDx * rightDx) + (rightDy * rightDy) <= PROX_DIST2) : false;
+      if (!leftInScope && !rightInScope) {
+        return false;
+      }
+
+      const rowRef = leftInScope ? left : right;
       const rowDy = Math.abs((drag.y + TOOL_HALF) - (rowRef.y + TOOL_HALF));
       if (rowDy > INSERT_ROW_EPS) {
         return false;
       }
 
-      let minD2 = Infinity;
-      if (left) {
-        const dx = dragCx - (left.x + TOOL_HALF);
-        const dy = dragCy - (left.y + TOOL_HALF);
-        minD2 = Math.min(minD2, (dx * dx) + (dy * dy));
-      }
-      if (right) {
-        const dx = dragCx - (right.x + TOOL_HALF);
-        const dy = dragCy - (right.y + TOOL_HALF);
-        minD2 = Math.min(minD2, (dx * dx) + (dy * dy));
-      }
-      if (minD2 > PROX_DIST2) {
-        return false;
-      }
-
       const leftCx = left ? (left.x + TOOL_HALF) : null;
       const rightCx = right ? (right.x + TOOL_HALF) : null;
-      if (left && right) {
+      if (leftInScope && rightInScope) {
         if (dragCx <= leftCx + INSERT_SIDE) return false;
         if (dragCx >= rightCx - INSERT_SIDE) return false;
-      } else if (left) {
+      } else if (leftInScope) {
         if (dragCx <= leftCx + INSERT_SIDE) return false;
-      } else if (right) {
+      } else if (rightInScope) {
         if (dragCx >= rightCx - INSERT_SIDE) return false;
       }
 
-      const dragX = left ? (left.x + SNAP_GAP) : (right.x - SNAP_GAP);
-      const dragY = left ? left.y : right.y;
+      const dragX = leftInScope ? (left.x + SNAP_GAP) : (right.x - SNAP_GAP);
+      const dragY = leftInScope ? left.y : right.y;
       const targets = new Map();
 
-      if (right) {
+      if (rightInScope) {
         let nextX = dragX + SNAP_GAP;
-        let prev = left || right;
+        let prev = right;
         for (let i = insertIdx; i < others.length; i++) {
           const it = others[i];
-          const prevCx = prev.x + TOOL_HALF;
-          const prevCy = prev.y + TOOL_HALF;
           const itCx = it.x + TOOL_HALF;
           const itCy = it.y + TOOL_HALF;
-          const dx = itCx - prevCx;
-          const dy = itCy - prevCy;
-          if ((dx * dx) + (dy * dy) > CONTACT_DIST2) {
+          const dragDx = itCx - dragCx;
+          const dragDy = itCy - dragCy;
+          if ((dragDx * dragDx) + (dragDy * dragDy) > PROX_DIST2) {
             break;
+          }
+          if (i > insertIdx) {
+            const prevCx = prev.x + TOOL_HALF;
+            const prevCy = prev.y + TOOL_HALF;
+            const dx = itCx - prevCx;
+            const dy = itCy - prevCy;
+            if ((dx * dx) + (dy * dy) > CONTACT_DIST2) {
+              break;
+            }
           }
           targets.set(it, { x: nextX, y: dragY });
           nextX += SNAP_GAP;
