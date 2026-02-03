@@ -785,11 +785,18 @@
 
       const dragCx = drag.x + TOOL_HALF;
       const dragCy = drag.y + TOOL_HALF;
+      const rowCandidates = items.filter((it) => {
+        if (it === drag) return false;
+        return Math.abs((it.y + TOOL_HALF) - dragCy) <= INSERT_ROW_EPS;
+      });
+      if (!rowCandidates.length) {
+        lastOverlap = null;
+        return false;
+      }
+      const others = rowCandidates.sort((a, b) => a.x - b.x);
       let nearest = null;
       let nearestD2 = Infinity;
-
-      for (const other of items) {
-        if (other === drag) continue;
+      for (const other of others) {
         const bx = other.x + TOOL_HALF;
         const by = other.y + TOOL_HALF;
         const dx = dragCx - bx;
@@ -800,20 +807,6 @@
           nearest = other;
         }
       }
-
-      if (!nearest) {
-        lastOverlap = null;
-        return false;
-      }
-
-      if (nearestD2 <= MERGE_IN2) {
-        lastOverlap = { drag, other: nearest, dir: Math.sign(dragCx - (nearest.x + TOOL_HALF)) || 1 };
-        return true;
-      }
-
-      lastOverlap = null;
-
-      const others = items.filter((it) => it !== drag).sort((a, b) => a.x - b.x);
       let insertIdx = 0;
       while (insertIdx < others.length && (others[insertIdx].x + TOOL_HALF) < dragCx) {
         insertIdx++;
@@ -830,17 +823,22 @@
       const leftInScope = left ? ((leftDx * leftDx) + (leftDy * leftDy) <= PROX_DIST2) : false;
       const rightInScope = right ? ((rightDx * rightDx) + (rightDy * rightDy) <= PROX_DIST2) : false;
       if (!leftInScope && !rightInScope) {
-        return false;
-      }
-
-      const rowRef = leftInScope ? left : right;
-      const rowDy = Math.abs((drag.y + TOOL_HALF) - (rowRef.y + TOOL_HALF));
-      if (rowDy > INSERT_ROW_EPS) {
+        lastOverlap = null;
         return false;
       }
 
       const leftCx = left ? (left.x + TOOL_HALF) : null;
       const rightCx = right ? (right.x + TOOL_HALF) : null;
+      const between = leftInScope && rightInScope &&
+        dragCx > (leftCx + INSERT_SIDE) &&
+        dragCx < (rightCx - INSERT_SIDE);
+
+      if (!between && nearest && nearestD2 <= MERGE_IN2) {
+        lastOverlap = { drag, other: nearest, dir: Math.sign(dragCx - (nearest.x + TOOL_HALF)) || 1 };
+        return true;
+      }
+
+      lastOverlap = null;
       if (leftInScope && rightInScope) {
         if (dragCx <= leftCx + INSERT_SIDE) return false;
         if (dragCx >= rightCx - INSERT_SIDE) return false;
