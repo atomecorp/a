@@ -19,28 +19,28 @@
       --look-idle-icon-color: #a93535;
       --look-idle-gradient-a: rgba(34, 37, 44, 0.3);
       --look-idle-gradient-b: rgba(70, 206, 255, 0.3);
-      --look-idle-tool-shadow-inner: inset 0 1px 1.5px rgba(255, 255, 255, 0.45), inset 0 -3px 6px rgba(0, 0, 0, 0.35);
-      --look-idle-tool-shadow-outer: 0 6px 12px rgba(0, 0, 0, 0.25);
       --look-idle-shadow-dx: 0;
       --look-idle-shadow-dy: 3;
       --look-idle-shadow-blur: 6;
       --look-idle-shadow-color: #000000;
       --look-idle-shadow-opacity: 0.33;
+      --look-idle-tool-shadow-inner: inset 0 1px 1.5px rgba(255, 255, 255, 0.45), inset 0 -3px 6px rgba(0, 0, 0, 0.35);
+      --look-idle-tool-shadow-outer: 0 6px 12px rgba(0, 0, 0, 0.25);
 
-      /* ====== LOOK: ACTIVE (GOOEY) ====== */
+      /* ====== LOOK: ACTIVE ====== */
       --look-active-tool-radius: 100px;
       --look-active-backdrop-blur: 0px;
       --look-active-label-color: #fff;
       --look-active-icon-color: #ffffff;
       --look-active-gradient-a: rgba(47, 116, 255, 1);
       --look-active-gradient-b: rgba(70, 206, 255, 1);
-      --look-active-tool-shadow-inner: none;
-      --look-active-tool-shadow-outer: none;
       --look-active-shadow-dx: 0;
       --look-active-shadow-dy: 9;
       --look-active-shadow-blur: 12;
       --look-active-shadow-color: #000000;
       --look-active-shadow-opacity: 0.69;
+      --look-active-tool-shadow-inner: inset 0 1px 1.5px rgba(255, 255, 255, 0), inset 0 -4px 8px rgba(0, 0, 0, 0);
+      --look-active-tool-shadow-outer: 0 10px 20px rgba(0, 0, 0, 0);
 
       /* ====== LOOK: APPLIED / INTERPOLATED ====== */
       --tool-radius: var(--look-idle-tool-radius);
@@ -51,7 +51,6 @@
       --label-color: var(--look-idle-label-color);
       --icon-color: var(--look-idle-icon-color);
 
-      /* ====== GRADIENT (MORE COLOR) ====== */
       --tool-gradient-a: var(--look-idle-gradient-a);
       --tool-gradient-b: var(--look-idle-gradient-b);
       --tool-gradient-a-target: var(--look-active-gradient-a);
@@ -63,7 +62,6 @@
       --grad-angle-y1: 0%;
       --grad-angle-x2: 100%;
       --grad-angle-y2: 100%;
-
       --tool-shadow-inner: var(--look-idle-tool-shadow-inner);
       --tool-shadow-outer: var(--look-idle-tool-shadow-outer);
 
