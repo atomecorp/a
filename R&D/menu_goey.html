@@ -134,7 +134,7 @@
       position: absolute;
       width: var(--tool-size);
       height: var(--tool-size);
-      border-radius: var(--tool-radius);
+      border-radius: var(--tool-radius-local, var(--tool-radius));
       background: transparent;
       -webkit-backdrop-filter: blur(var(--tool-backdrop-blur));
       backdrop-filter: blur(var(--tool-backdrop-blur));
@@ -155,7 +155,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      border-radius: inherit;
+      border-radius: var(--tool-radius-local, var(--tool-radius));
       pointer-events: none;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.18));
       mix-blend-mode: soft-light;
@@ -169,7 +169,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      border-radius: inherit;
+      border-radius: var(--tool-radius-local, var(--tool-radius));
       pointer-events: none;
       box-shadow:
         var(--look-active-tool-shadow-inner),
@@ -1082,6 +1082,7 @@
         it.baseShape.setAttribute('ry', it.radius);
         it.gooShape.setAttribute('rx', it.radius);
         it.gooShape.setAttribute('ry', it.radius);
+        it.tool.style.setProperty('--tool-radius-local', `${it.radius}px`);
         it.radiusApplied = it.radius;
       }
     }
