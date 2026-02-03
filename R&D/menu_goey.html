@@ -462,7 +462,7 @@
     assert(svgGroup, 'Missing #gooGroup');
     assert(ui, 'Missing #uiLayer');
     assert(svgDefs, 'Missing svg defs');
-    assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
+    assert(Array.isArray(data) && data.length === 5, 'Expected data to have 5 tools');
 
     let items = [];
     let drag = null;
@@ -608,6 +608,7 @@
         label: d.label,
         svgA: d.svg,
         svgB: null,
+        inToolbox: false,
         homeX: d.x,
         homeY: d.y,
         radius: TOOL_RADIUS,
@@ -701,6 +702,7 @@
     function mergePair(a, b, indexToRemove) {
       const stationary = (drag === a) ? b : a;
       const removed = (stationary === a) ? b : a;
+      stationary.inToolbox = stationary.inToolbox || removed.inToolbox;
 
       stationary.vx = 0;
       stationary.vy = 0;
@@ -710,7 +712,7 @@
       items.splice(indexToRemove, 1);
 
       update(stationary);
-      packToLeftmost(stationary);
+      packToolboxRow(stationary);
       schedule();
     }
 
@@ -719,23 +721,55 @@
       it.homeY = y;
     }
 
-    function packToLeftmost(anchor) {
+    function sameRow(a, b) {
+      return Math.abs((a.y + TOOL_HALF) - (b.y + TOOL_HALF)) <= INSERT_ROW_EPS;
+    }
+
+    function dist2(a, b) {
+      const ax = a.x + TOOL_HALF;
+      const ay = a.y + TOOL_HALF;
+      const bx = b.x + TOOL_HALF;
+      const by = b.y + TOOL_HALF;
+      const dx = ax - bx;
+      const dy = ay - by;
+      return (dx * dx) + (dy * dy);
+    }
+
+    function updateToolboxFromContacts() {
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i];
+          const b = items[j];
+          if (!sameRow(a, b)) continue;
+          if (drag && !drag.inToolbox && (a === drag || b === drag)) continue;
+          if (dist2(a, b) <= CONTACT_DIST2) {
+            a.inToolbox = true;
+            b.inToolbox = true;
+          }
+        }
+      }
+    }
+
+    function isToolboxInScope(ref) {
+      for (const it of items) {
+        if (it === ref) continue;
+        if (!it.inToolbox) continue;
+        if (!sameRow(it, ref)) continue;
+        if (dist2(it, ref) <= PROX_DIST2) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function packToolboxRow(anchor) {
       if (!items.length) return;
       if (!anchor) return;
-      const ax = anchor.x + TOOL_HALF;
-      const ay = anchor.y + TOOL_HALF;
-      const affected = items.filter((it) => {
-        const bx = it.x + TOOL_HALF;
-        const by = it.y + TOOL_HALF;
-        const dx = bx - ax;
-        const dy = by - ay;
-        return (dx * dx) + (dy * dy) <= PROX_DIST2;
-      });
-      if (affected.length < 2) return;
-      const sorted = affected.slice().sort((a, b) => a.x - b.x);
-      const leftmost = sorted[0];
-      const baseX = leftmost.x;
-      const baseY = leftmost.y;
+      const rowTools = items.filter((it) => it.inToolbox && sameRow(it, anchor));
+      if (rowTools.length < 2) return;
+      const sorted = rowTools.slice().sort((a, b) => a.x - b.x);
+      const baseX = sorted[0].x;
+      const baseY = sorted[0].y;
       for (let i = 0; i < sorted.length; i++) {
         const it = sorted[i];
         setHome(it, baseX + (i * SNAP_GAP), baseY);
@@ -786,12 +820,11 @@
       pendingInsert = null;
       if (!drag) return false;
 
+      updateToolboxFromContacts();
+
       const dragCx = drag.x + TOOL_HALF;
       const dragCy = drag.y + TOOL_HALF;
-      const rowCandidates = items.filter((it) => {
-        if (it === drag) return false;
-        return Math.abs((it.y + TOOL_HALF) - dragCy) <= INSERT_ROW_EPS;
-      });
+      const rowCandidates = items.filter((it) => it !== drag && sameRow(it, drag));
       if (!rowCandidates.length) {
         lastOverlap = null;
         return false;
@@ -842,6 +875,35 @@
       }
 
       lastOverlap = null;
+      const toolboxMembers = others.filter((it) => it.inToolbox);
+      const toolboxActive = toolboxMembers.length >= 2;
+      const inToolboxScope = toolboxActive && toolboxMembers.some((it) => dist2(it, drag) <= PROX_DIST2);
+
+      if (toolboxActive && inToolboxScope && (leftInScope || rightInScope)) {
+        const toolboxSorted = toolboxMembers.slice().sort((a, b) => a.x - b.x);
+        const toolboxLeft = toolboxSorted[0];
+        const toolboxY = toolboxLeft.y;
+        let insertAt = toolboxSorted.findIndex((it) => (it.x + TOOL_HALF) > dragCx);
+        if (insertAt === -1) insertAt = toolboxSorted.length;
+
+        const dragX = toolboxLeft.x + (insertAt * SNAP_GAP);
+        const dragY = toolboxY;
+        const targets = new Map();
+
+        let x = toolboxLeft.x;
+        for (let i = 0; i < toolboxSorted.length; i++) {
+          if (i === insertAt) {
+            x += SNAP_GAP;
+          }
+          const it = toolboxSorted[i];
+          targets.set(it, { x, y: toolboxY });
+          x += SNAP_GAP;
+        }
+
+        pendingInsert = { dragX, dragY, targets, joinToolbox: true };
+        return true;
+      }
+
       if (leftInScope && rightInScope) {
         if (dragCx <= leftCx + INSERT_SIDE) return false;
         if (dragCx >= rightCx - INSERT_SIDE) return false;
@@ -857,7 +919,6 @@
 
       if (rightInScope) {
         let nextX = dragX + SNAP_GAP;
-        let prev = right;
         for (let i = insertIdx; i < others.length; i++) {
           const it = others[i];
           const itCx = it.x + TOOL_HALF;
@@ -867,18 +928,8 @@
           if ((dragDx * dragDx) + (dragDy * dragDy) > PROX_DIST2) {
             break;
           }
-          if (i > insertIdx) {
-            const prevCx = prev.x + TOOL_HALF;
-            const prevCy = prev.y + TOOL_HALF;
-            const dx = itCx - prevCx;
-            const dy = itCy - prevCy;
-            if ((dx * dx) + (dy * dy) > CONTACT_DIST2) {
-              break;
-            }
-          }
           targets.set(it, { x: nextX, y: dragY });
           nextX += SNAP_GAP;
-          prev = it;
         }
       }
 
@@ -1172,6 +1223,8 @@
       const now = performance.now();
       let insertActive = false;
 
+      updateToolboxFromContacts();
+
       if (drag) {
         active = true;
         insertActive = buildInsertTargets();
@@ -1261,6 +1314,9 @@
 
       drag.x = nx;
       drag.y = ny;
+      if (drag.inToolbox && !isToolboxInScope(drag)) {
+        drag.inToolbox = false;
+      }
       update(drag);
       schedule();
     }, { passive: true });
@@ -1298,6 +1354,9 @@
         setHome(released, pendingInsert.dragX, pendingInsert.dragY);
         released.vx = 0;
         released.vy = 0;
+        if (pendingInsert.joinToolbox) {
+          released.inToolbox = true;
+        }
         for (const [it, target] of pendingInsert.targets) {
           setHome(it, target.x, target.y);
           it.vx = 0;
