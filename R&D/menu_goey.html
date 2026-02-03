@@ -16,6 +16,8 @@
       --label-offset-x: 0px;
       --label-offset-y: 3px;
       --look-transition: 900ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      --toolbox-outline: 3px solid rgba(255, 255, 255, 0);
+      --toolbox-outline-offset: 6px;
 
       /* ====== LOOK: IDLE ====== */
       --look-idle-tool-radius: 9px;
@@ -149,6 +151,21 @@
       touch-action: none;
       will-change: transform;
       isolation: isolate;
+      z-index: 2;
+    }
+
+    #toolboxOverlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .toolbox-outline {
+      position: absolute;
+      box-sizing: border-box;
+      border: var(--toolbox-outline);
+      border-radius: var(--tool-radius);
     }
 
     .tool::before {
@@ -527,6 +544,9 @@
     const svgGroup = document.getElementById('gooGroup');
     const svgDefs = document.querySelector('#svgLayer defs');
     const ui = document.getElementById('uiLayer');
+    const toolboxOverlay = document.createElement('div');
+    toolboxOverlay.id = 'toolboxOverlay';
+    ui.appendChild(toolboxOverlay);
 
     // Tests (kept simple, non-invasive)
     assert(shadowIdleGroup, 'Missing #shadowIdleGroup');
@@ -806,6 +826,60 @@
       const dx = ax - bx;
       const dy = ay - by;
       return (dx * dx) + (dy * dy);
+    }
+
+    const toolboxOutlines = [];
+    function ensureToolboxOutline(index) {
+      if (!toolboxOutlines[index]) {
+        const el = document.createElement('div');
+        el.className = 'toolbox-outline';
+        toolboxOverlay.appendChild(el);
+        toolboxOutlines[index] = el;
+      }
+      return toolboxOutlines[index];
+    }
+
+    function updateToolboxOutlines() {
+      const outlineOffset = readNum('--toolbox-outline-offset', 0);
+      const visited = new Set();
+      let count = 0;
+      for (const it of items) {
+        if (!it.inToolbox || visited.has(it)) continue;
+        const group = [];
+        const queue = [it];
+        visited.add(it);
+        while (queue.length) {
+          const cur = queue.pop();
+          group.push(cur);
+          for (const other of items) {
+            if (visited.has(other) || !other.inToolbox) continue;
+            if (!sameRow(cur, other)) continue;
+            if (dist2(cur, other) > CONTACT_DIST2) continue;
+            visited.add(other);
+            queue.push(other);
+          }
+        }
+        if (group.length < 2) continue;
+        group.sort((a, b) => a.x - b.x);
+        const left = group[0];
+        const right = group[group.length - 1];
+        let minY = left.y;
+        for (const g of group) {
+          if (g.y < minY) minY = g.y;
+        }
+        const x = left.x - outlineOffset;
+        const y = minY - outlineOffset;
+        const width = (right.x - left.x) + TOOL_SIZE + (outlineOffset * 2);
+        const height = TOOL_SIZE + (outlineOffset * 2);
+        const el = ensureToolboxOutline(count++);
+        el.style.display = 'block';
+        el.style.transform = `translate3d(${x}px,${y}px,0)`;
+        el.style.width = `${width}px`;
+        el.style.height = `${height}px`;
+      }
+      for (let i = count; i < toolboxOutlines.length; i++) {
+        toolboxOutlines[i].style.display = 'none';
+      }
     }
 
     function updateToolboxFromContacts() {
@@ -1365,6 +1439,8 @@
           active = true;
         }
       }
+
+      updateToolboxOutlines();
 
       if (active) {
         schedule();
