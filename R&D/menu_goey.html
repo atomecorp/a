@@ -12,6 +12,7 @@
       --icon-size: 28px;
       --icon-offset-x: 0px;
       --icon-offset-y: -6px;
+      --icon-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
       --label-size: 10px;
       --label-offset-x: 0px;
       --label-offset-y: 3px;
@@ -207,6 +208,7 @@
       height: var(--icon-size);
       fill: var(--icon-color);
       display: block;
+      filter: drop-shadow(var(--icon-shadow));
     }
 
     .tool .label {
@@ -505,6 +507,7 @@
     const TOOL_RADIUS_TRANSITION = parseTransition('--tool-radius-transition', 200, DEFAULT_EASE);
     const TOOL_RADIUS_TRANSITION_MS = TOOL_RADIUS_TRANSITION.durationMs;
     const TOOL_RADIUS_EASE = TOOL_RADIUS_TRANSITION.easing;
+    const TWEEN_DURATION = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
     const TOOL_BACKDROP_BLUR = readNum('--tool-backdrop-blur', 0);
     const TOOL_BACKDROP_BLUR_TARGET = readNum('--tool-backdrop-blur-target', TOOL_BACKDROP_BLUR);
     const TOOL_GRAD_A = parseColor(readStr('--tool-gradient-a', '#a9d8ff')) || [169, 216, 255, 1];
@@ -841,6 +844,19 @@
 
     function updateToolboxOutlines() {
       const outlineOffset = readNum('--toolbox-outline-offset', 0);
+      let hasToolbox = false;
+      for (const it of items) {
+        if (it.inToolbox) {
+          hasToolbox = true;
+          break;
+        }
+      }
+      if (!hasToolbox) {
+        for (const el of toolboxOutlines) {
+          el.style.display = 'none';
+        }
+        return;
+      }
       const visited = new Set();
       let count = 0;
       for (const it of items) {
@@ -1119,22 +1135,6 @@
       return snapped;
     }
 
-    function isContact(it) {
-      const ax = it.x + TOOL_HALF;
-      const ay = it.y + TOOL_HALF;
-      for (const other of items) {
-        if (other === it) continue;
-        const bx = other.x + TOOL_HALF;
-        const by = other.y + TOOL_HALF;
-        const dx = ax - bx;
-        const dy = ay - by;
-        if ((dx * dx) + (dy * dy) <= CONTACT_DIST2) {
-          return true;
-        }
-      }
-      return false;
-    }
-
     function isNear(it) {
       if (!drag || drag === it) return false;
       const ax = it.x + TOOL_HALF;
@@ -1161,38 +1161,6 @@
       }
     }
 
-    function setRadiusTarget(it, target, now) {
-      if (it.radiusTo === target) return;
-      it.radiusFrom = it.radius;
-      it.radiusTo = target;
-      it.radiusStart = now;
-      it.radiusDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
-      if (it.radiusDur === 0) {
-        it.radius = target;
-        applyRadius(it);
-      }
-    }
-
-    function updateRadius(it, now) {
-      if (it.radiusDur === 0) {
-        it.radius = it.radiusTo;
-        applyRadius(it);
-        return false;
-      }
-      const t = (now - it.radiusStart) / it.radiusDur;
-      if (t >= 1) {
-        it.radius = it.radiusTo;
-        it.radiusDur = 0;
-        applyRadius(it);
-        return false;
-      }
-      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
-      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
-      it.radius = it.radiusFrom + ((it.radiusTo - it.radiusFrom) * eased);
-      applyRadius(it);
-      return true;
-    }
-
     function applyBlur(it) {
       if (Math.abs(it.blur - it.blurApplied) > 0.01) {
         const v = `blur(${Math.max(0, it.blur)}px)`;
@@ -1200,38 +1168,6 @@
         it.tool.style.webkitBackdropFilter = v;
         it.blurApplied = it.blur;
       }
-    }
-
-    function setBlurTarget(it, target, now) {
-      if (it.blurTo === target) return;
-      it.blurFrom = it.blur;
-      it.blurTo = target;
-      it.blurStart = now;
-      it.blurDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
-      if (it.blurDur === 0) {
-        it.blur = target;
-        applyBlur(it);
-      }
-    }
-
-    function updateBlur(it, now) {
-      if (it.blurDur === 0) {
-        it.blur = it.blurTo;
-        applyBlur(it);
-        return false;
-      }
-      const t = (now - it.blurStart) / it.blurDur;
-      if (t >= 1) {
-        it.blur = it.blurTo;
-        it.blurDur = 0;
-        applyBlur(it);
-        return false;
-      }
-      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
-      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
-      it.blur = it.blurFrom + ((it.blurTo - it.blurFrom) * eased);
-      applyBlur(it);
-      return true;
     }
 
     function applyShadow(it) {
@@ -1246,75 +1182,11 @@
       }
     }
 
-    function setShadowTarget(it, target, now) {
-      if (it.shadowTo === target) return;
-      it.shadowFrom = it.shadow;
-      it.shadowTo = target;
-      it.shadowStart = now;
-      it.shadowDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
-      if (it.shadowDur === 0) {
-        it.shadow = target;
-        applyShadow(it);
-      }
-    }
-
-    function updateShadow(it, now) {
-      if (it.shadowDur === 0) {
-        it.shadow = it.shadowTo;
-        applyShadow(it);
-        return false;
-      }
-      const t = (now - it.shadowStart) / it.shadowDur;
-      if (t >= 1) {
-        it.shadow = it.shadowTo;
-        it.shadowDur = 0;
-        applyShadow(it);
-        return false;
-      }
-      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
-      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
-      it.shadow = it.shadowFrom + ((it.shadowTo - it.shadowFrom) * eased);
-      applyShadow(it);
-      return true;
-    }
-
     function applyGoo(it) {
       if (Math.abs(it.goo - it.gooApplied) > 0.01) {
         it.gooShape.setAttribute('opacity', String(it.goo));
         it.gooApplied = it.goo;
       }
-    }
-
-    function setGooTarget(it, target, now) {
-      if (it.gooTo === target) return;
-      it.gooFrom = it.goo;
-      it.gooTo = target;
-      it.gooStart = now;
-      it.gooDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
-      if (it.gooDur === 0) {
-        it.goo = target;
-        applyGoo(it);
-      }
-    }
-
-    function updateGoo(it, now) {
-      if (it.gooDur === 0) {
-        it.goo = it.gooTo;
-        applyGoo(it);
-        return false;
-      }
-      const t = (now - it.gooStart) / it.gooDur;
-      if (t >= 1) {
-        it.goo = it.gooTo;
-        it.gooDur = 0;
-        applyGoo(it);
-        return false;
-      }
-      const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
-      const eased = Number.isFinite(easedRaw) ? easedRaw : t;
-      it.goo = it.gooFrom + ((it.gooTo - it.gooFrom) * eased);
-      applyGoo(it);
-      return true;
     }
 
     function applyColor(it) {
@@ -1328,35 +1200,37 @@
       }
     }
 
-    function setColorTarget(it, target, now) {
-      if (it.colorTo === target) return;
-      it.colorFrom = it.color;
-      it.colorTo = target;
-      it.colorStart = now;
-      it.colorDur = Math.max(0, TOOL_RADIUS_TRANSITION_MS);
-      if (it.colorDur === 0) {
-        it.color = target;
-        applyColor(it);
+    function setTweenTarget(it, key, target, now, applyFn) {
+      const toKey = `${key}To`;
+      if (it[toKey] === target) return;
+      it[`${key}From`] = it[key];
+      it[toKey] = target;
+      it[`${key}Start`] = now;
+      it[`${key}Dur`] = TWEEN_DURATION;
+      if (TWEEN_DURATION === 0) {
+        it[key] = target;
+        applyFn(it);
       }
     }
 
-    function updateColor(it, now) {
-      if (it.colorDur === 0) {
-        it.color = it.colorTo;
-        applyColor(it);
+    function updateTween(it, key, now, applyFn) {
+      const dur = it[`${key}Dur`];
+      if (dur === 0) {
+        it[key] = it[`${key}To`];
+        applyFn(it);
         return false;
       }
-      const t = (now - it.colorStart) / it.colorDur;
+      const t = (now - it[`${key}Start`]) / dur;
       if (t >= 1) {
-        it.color = it.colorTo;
-        it.colorDur = 0;
-        applyColor(it);
+        it[key] = it[`${key}To`];
+        it[`${key}Dur`] = 0;
+        applyFn(it);
         return false;
       }
       const easedRaw = TOOL_RADIUS_EASE(clamp01(t));
       const eased = Number.isFinite(easedRaw) ? easedRaw : t;
-      it.color = it.colorFrom + ((it.colorTo - it.colorFrom) * eased);
-      applyColor(it);
+      it[key] = it[`${key}From`] + ((it[`${key}To`] - it[`${key}From`]) * eased);
+      applyFn(it);
       return true;
     }
 
@@ -1414,28 +1288,28 @@
       for (const it of items) {
         const isActive = !!drag && (it === drag || isNear(it));
         const target = isActive ? TOOL_RADIUS_TARGET : TOOL_RADIUS;
-        setRadiusTarget(it, target, now);
-        if (updateRadius(it, now)) {
+        setTweenTarget(it, 'radius', target, now, applyRadius);
+        if (updateTween(it, 'radius', now, applyRadius)) {
           active = true;
         }
         const blurTarget = isActive ? TOOL_BACKDROP_BLUR_TARGET : TOOL_BACKDROP_BLUR;
-        setBlurTarget(it, blurTarget, now);
-        if (updateBlur(it, now)) {
+        setTweenTarget(it, 'blur', blurTarget, now, applyBlur);
+        if (updateTween(it, 'blur', now, applyBlur)) {
           active = true;
         }
         const shadowTarget = isActive ? 1 : 0;
-        setShadowTarget(it, shadowTarget, now);
-        if (updateShadow(it, now)) {
+        setTweenTarget(it, 'shadow', shadowTarget, now, applyShadow);
+        if (updateTween(it, 'shadow', now, applyShadow)) {
           active = true;
         }
         const gooTarget = isActive ? 1 : 0;
-        setGooTarget(it, gooTarget, now);
-        if (updateGoo(it, now)) {
+        setTweenTarget(it, 'goo', gooTarget, now, applyGoo);
+        if (updateTween(it, 'goo', now, applyGoo)) {
           active = true;
         }
         const colorTarget = isActive ? 1 : 0;
-        setColorTarget(it, colorTarget, now);
-        if (updateColor(it, now)) {
+        setTweenTarget(it, 'color', colorTarget, now, applyColor);
+        if (updateTween(it, 'color', now, applyColor)) {
           active = true;
         }
       }
