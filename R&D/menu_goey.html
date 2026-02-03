@@ -708,16 +708,27 @@
       items.splice(indexToRemove, 1);
 
       update(stationary);
-      packToLeftmost();
+      packToLeftmost(stationary);
       schedule();
     }
 
-    function packToLeftmost() {
+    function packToLeftmost(anchor) {
       if (!items.length) return;
-      const sorted = items.slice().sort((a, b) => a.x - b.x);
-      const anchor = sorted[0];
-      const baseX = anchor.x;
-      const baseY = anchor.y;
+      if (!anchor) return;
+      const ax = anchor.x + TOOL_HALF;
+      const ay = anchor.y + TOOL_HALF;
+      const affected = items.filter((it) => {
+        const bx = it.x + TOOL_HALF;
+        const by = it.y + TOOL_HALF;
+        const dx = bx - ax;
+        const dy = by - ay;
+        return (dx * dx) + (dy * dy) <= PROX_DIST2;
+      });
+      if (affected.length < 2) return;
+      const sorted = affected.slice().sort((a, b) => a.x - b.x);
+      const leftmost = sorted[0];
+      const baseX = leftmost.x;
+      const baseY = leftmost.y;
       for (let i = 0; i < sorted.length; i++) {
         const it = sorted[i];
         it.x = baseX + (i * SNAP_GAP);
@@ -850,10 +861,21 @@
 
       if (right) {
         let nextX = dragX + SNAP_GAP;
+        let prev = left || right;
         for (let i = insertIdx; i < others.length; i++) {
           const it = others[i];
+          const prevCx = prev.x + TOOL_HALF;
+          const prevCy = prev.y + TOOL_HALF;
+          const itCx = it.x + TOOL_HALF;
+          const itCy = it.y + TOOL_HALF;
+          const dx = itCx - prevCx;
+          const dy = itCy - prevCy;
+          if ((dx * dx) + (dy * dy) > CONTACT_DIST2) {
+            break;
+          }
           targets.set(it, { x: nextX, y: dragY });
           nextX += SNAP_GAP;
+          prev = it;
         }
       }
 
