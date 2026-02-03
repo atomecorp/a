@@ -45,6 +45,9 @@
       --drag-vel: 0.6;
       --snap-offset: +3;
       --transition-distance: 90px;
+      --merge-distance: 24px;
+      --merge-hold: 160ms;
+      --merge-speed: 160;
 
       /* Layout */
       --label-pad-top: 6px;
@@ -424,14 +427,20 @@
     const EPS = 0.05;
     const SNAP_OFFSET = readNum('--snap-offset', 0);
     const TRANSITION_DISTANCE = readNum('--transition-distance', 90);
+    const MERGE_HOLD_MS = parseDuration(readStr('--merge-hold', '160ms'), 160);
+    const MERGE_SPEED = readNum('--merge-speed', 160);
     const ICON_VIEWBOX = 24;
     const ICON_CENTER = ICON_VIEWBOX / 2;
 
     const SNAP_IN = TOOL_SIZE * (140 / 120);
-    const MERGE_IN = TOOL_SIZE * (80 / 120);
+    const MERGE_IN = readNum('--merge-distance', TOOL_SIZE * 0.4);
     const SNAP_GAP = TOOL_SIZE + SNAP_OFFSET;
     const SNAP_IN2 = SNAP_IN * SNAP_IN;
     const MERGE_IN2 = MERGE_IN * MERGE_IN;
+    const MERGE_IN_DEEP = MERGE_IN * 0.6;
+    const MERGE_IN_DEEP2 = MERGE_IN_DEEP * MERGE_IN_DEEP;
+    const HEX_APOTHEM = TOOL_HALF * Math.sqrt(3) / 2;
+    const SNAP_DIST = (HEX_APOTHEM * 2) + SNAP_OFFSET;
     const CONTACT_EPS = Math.max(2, TOOL_SIZE * 0.05);
     const CONTACT_DIST = Math.max(0, SNAP_GAP) + CONTACT_EPS;
     const CONTACT_DIST2 = CONTACT_DIST * CONTACT_DIST;
@@ -441,7 +450,9 @@
     const data = [
       { x: 200, y: 200, label: 'A', svg: '<circle cx="12" cy="12" r="10"/>' },
       { x: 450, y: 260, label: 'B', svg: '<rect x="4" y="4" width="16" height="16" rx="4"/>' },
-      { x: 700, y: 340, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' }
+      { x: 700, y: 340, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' },
+      { x: 320, y: 420, label: 'D', svg: '<path d="M12 3v18M3 12h18"/>' },
+      { x: 560, y: 140, label: 'E', svg: '<path d="M4 12h16M12 4v16"/>' }
     ];
 
     const shadowIdleGroup = document.getElementById('shadowIdleGroup');
@@ -458,12 +469,16 @@
     assert(svgGroup, 'Missing #gooGroup');
     assert(ui, 'Missing #uiLayer');
     assert(svgDefs, 'Missing svg defs');
-    assert(Array.isArray(data) && data.length === 3, 'Expected data to have 3 tools');
+    assert(Array.isArray(data) && data.length === 5, 'Expected data to have 5 tools');
 
     let items = [];
     let drag = null;
     let dx = 0, dy = 0;
     let lastOverlap = null;
+    let dragSpeed = 0;
+    let lastMoveTime = 0;
+    let lastMoveX = 0;
+    let lastMoveY = 0;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     let gradCount = 0;
     const HEX_POINTS = 48;
@@ -651,7 +666,8 @@
         colorFrom: 0,
         colorTo: 0,
         colorStart: 0,
-        colorDur: 0
+        colorDur: 0,
+        snapSide: 1
       };
       items.push(it);
       update(it);
@@ -661,6 +677,16 @@
         drag = it;
         dx = e.clientX - it.x;
         dy = e.clientY - it.y;
+        lastMoveTime = performance.now();
+        lastMoveX = e.clientX;
+        lastMoveY = e.clientY;
+        dragSpeed = 0;
+        for (const other of items) {
+          if (other !== it) {
+            other.vx = 0;
+            other.vy = 0;
+          }
+        }
         tool.setPointerCapture(e.pointerId);
         schedule();
       }, { passive: true });
@@ -726,9 +752,15 @@
     }
 
     function applySnap(anchor, mover) {
-      const dir = Math.sign(mover.x - anchor.x) || 1;
-      const tx = anchor.x + dir * SNAP_GAP;
-      const ty = anchor.y;
+      if (anchor.snapSide !== 1 && anchor.snapSide !== -1) {
+        anchor.snapSide = 1;
+      }
+      mover.snapSide = -anchor.snapSide;
+      const dir = mover.snapSide;
+      const ax = anchor.x + TOOL_HALF;
+      const ay = anchor.y + TOOL_HALF;
+      const tx = ax + (dir * (Math.sqrt(3) / 2) * SNAP_DIST) - TOOL_HALF;
+      const ty = ay + (0.5 * SNAP_DIST) - TOOL_HALF;
 
       mover.vx *= 0.5;
       mover.vy *= 0.5;
@@ -736,8 +768,11 @@
       mover.vy += (ty - mover.y) * SPRING;
     }
 
-    function checkSnap() {
+    function checkSnap(now) {
       let snapped = false;
+      let overlapCandidate = null;
+      let overlapCount = 0;
+      const canArmMerge = drag && dragSpeed <= MERGE_SPEED;
       for (let i = 0; i < items.length; i++) {
         for (let j = i + 1; j < items.length; j++) {
           const a = items[i];
@@ -747,27 +782,49 @@
           const d2 = (dx * dx) + (dy * dy);
 
           if (d2 < SNAP_IN2 && d2 > MERGE_IN2) {
-            const anchor = (drag === a || drag === b) ? drag : a;
-            const mover = (anchor === a) ? b : a;
+            let anchor = a;
+            let mover = b;
+            if (drag && (drag === a || drag === b)) {
+              mover = drag;
+              anchor = (drag === a) ? b : a;
+            }
             applySnap(anchor, mover);
             snapped = true;
           }
 
           if (drag && (drag === a || drag === b) && d2 <= MERGE_IN2) {
             const other = (drag === a) ? b : a;
-            lastOverlap = { drag, other, dir: Math.sign(drag.x - other.x) || 1 };
+            if (canArmMerge && d2 <= MERGE_IN_DEEP2) {
+              overlapCount++;
+              if (!overlapCandidate || d2 < overlapCandidate.d2) {
+                overlapCandidate = { drag, other, dir: Math.sign(drag.x - other.x) || 1, d2 };
+              }
+            }
             snapped = true;
           }
         }
       }
-      if (drag && lastOverlap) {
-        const other = lastOverlap.other;
-        const dx = (drag.x + TOOL_HALF) - (other.x + TOOL_HALF);
-        const dy = (drag.y + TOOL_HALF) - (other.y + TOOL_HALF);
-        if ((dx * dx) + (dy * dy) > SNAP_IN2) {
+
+      if (drag) {
+        if (overlapCount === 1 && overlapCandidate) {
+          if (lastOverlap && lastOverlap.drag === overlapCandidate.drag && lastOverlap.other === overlapCandidate.other) {
+            lastOverlap.d2 = overlapCandidate.d2;
+            lastOverlap.lastSeen = now;
+          } else {
+            lastOverlap = {
+              drag: overlapCandidate.drag,
+              other: overlapCandidate.other,
+              dir: overlapCandidate.dir,
+              d2: overlapCandidate.d2,
+              start: now,
+              lastSeen: now
+            };
+          }
+        } else {
           lastOverlap = null;
         }
       }
+
       return snapped;
     }
 
@@ -1048,9 +1105,17 @@
       const now = performance.now();
 
       if (drag) active = true;
+      if (drag && (now - lastMoveTime) > 120) {
+        dragSpeed = 0;
+      }
 
       for (const it of items) {
         if (it !== drag) {
+          if (drag) {
+            it.vx = 0;
+            it.vy = 0;
+            continue;
+          }
           it.vx *= DAMP;
           it.vy *= DAMP;
           it.x += it.vx;
@@ -1063,7 +1128,7 @@
         }
       }
 
-      if (checkSnap()) {
+      if (checkSnap(now)) {
         active = true;
       }
 
@@ -1102,16 +1167,27 @@
     }
 
     data.forEach(createTool);
-    assert(items.length === 3, 'Expected 3 created items');
+    assert(items.length === 5, 'Expected 5 created items');
 
     // Additional test: circles exist
-    assert(svgGroup.children.length === 3, 'Expected 3 SVG goo shapes');
-    assert(baseGroup.children.length === 3, 'Expected 3 SVG base shapes');
+    assert(svgGroup.children.length === 5, 'Expected 5 SVG goo shapes');
+    assert(baseGroup.children.length === 5, 'Expected 5 SVG base shapes');
 
     schedule();
 
     document.addEventListener('pointermove', (e) => {
       if (!drag) return;
+      const now = performance.now();
+      const dt = now - lastMoveTime;
+      const ddx = e.clientX - lastMoveX;
+      const ddy = e.clientY - lastMoveY;
+      if (dt > 0) {
+        const dist = Math.hypot(ddx, ddy);
+        dragSpeed = (dist / dt) * 1000;
+      }
+      lastMoveTime = now;
+      lastMoveX = e.clientX;
+      lastMoveY = e.clientY;
       const nx = e.clientX - dx;
       const ny = e.clientY - dy;
 
@@ -1130,6 +1206,11 @@
       const overlap = (lastOverlap && lastOverlap.drag === released) ? lastOverlap : null;
 
       if (overlap) {
+        const recentMove = (performance.now() - lastMoveTime) < 120;
+        if (dragSpeed > MERGE_SPEED || recentMove) {
+          lastOverlap = null;
+        } else {
+        const heldMs = performance.now() - overlap.start;
         const other = overlap.other;
         const dx = (released.x + TOOL_HALF) - (other.x + TOOL_HALF);
         const dy = (released.y + TOOL_HALF) - (other.y + TOOL_HALF);
@@ -1137,7 +1218,7 @@
         const ai = items.indexOf(released);
         const bi = items.indexOf(other);
 
-        if (d2 <= MERGE_IN2 && ai !== -1 && bi !== -1) {
+        if (heldMs >= MERGE_HOLD_MS && d2 <= MERGE_IN_DEEP2 && ai !== -1 && bi !== -1) {
           mergePair(released, other, ai);
           drag = null;
           lastOverlap = null;
@@ -1149,9 +1230,11 @@
           applySnap(other, released);
         }
         lastOverlap = null;
+        }
       }
 
       drag = null;
+      lastOverlap = null;
       schedule();
     }
 

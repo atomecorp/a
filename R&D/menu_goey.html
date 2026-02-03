@@ -437,11 +437,15 @@
     const CONTACT_DIST2 = CONTACT_DIST * CONTACT_DIST;
     const PROX_DIST = TRANSITION_DISTANCE;
     const PROX_DIST2 = PROX_DIST * PROX_DIST;
+    const INSERT_SIDE = TOOL_SIZE * 0.35;
+    const INSERT_ROW_EPS = TOOL_SIZE * 0.6;
 
     const data = [
-      { x: 200, y: 200, label: 'A', svg: '<circle cx="12" cy="12" r="10"/>' },
-      { x: 450, y: 260, label: 'B', svg: '<rect x="4" y="4" width="16" height="16" rx="4"/>' },
-      { x: 700, y: 340, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' }
+      { x: 160, y: 220, label: 'A', svg: '<circle cx="12" cy="12" r="10"/>' },
+      { x: 380, y: 220, label: 'B', svg: '<rect x="4" y="4" width="16" height="16" rx="4"/>' },
+      { x: 600, y: 220, label: 'C', svg: '<polygon points="12,2 22,22 2,22"/>' },
+      { x: 820, y: 220, label: 'D', svg: '<path d="M12 3l4 6 7 1-5 5 1 7-7-3-7 3 1-7-5-5 7-1z"/>' },
+      { x: 300, y: 360, label: 'E', svg: '<path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z"/>' }
     ];
 
     const shadowIdleGroup = document.getElementById('shadowIdleGroup');
@@ -464,6 +468,7 @@
     let drag = null;
     let dx = 0, dy = 0;
     let lastOverlap = null;
+    let pendingInsert = null;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     let gradCount = 0;
 
@@ -703,7 +708,24 @@
       items.splice(indexToRemove, 1);
 
       update(stationary);
+      packToLeftmost();
       schedule();
+    }
+
+    function packToLeftmost() {
+      if (!items.length) return;
+      const sorted = items.slice().sort((a, b) => a.x - b.x);
+      const anchor = sorted[0];
+      const baseX = anchor.x;
+      const baseY = anchor.y;
+      for (let i = 0; i < sorted.length; i++) {
+        const it = sorted[i];
+        it.x = baseX + (i * SNAP_GAP);
+        it.y = baseY;
+        it.vx = 0;
+        it.vy = 0;
+        update(it);
+      }
     }
 
     function applySnap(anchor, mover) {
@@ -715,6 +737,128 @@
       mover.vy *= 0.5;
       mover.vx += (tx - mover.x) * SPRING;
       mover.vy += (ty - mover.y) * SPRING;
+    }
+
+    function snapToAnchor(anchor, mover) {
+      const dir = Math.sign((mover.x + TOOL_HALF) - (anchor.x + TOOL_HALF)) || 1;
+      mover.x = anchor.x + dir * SNAP_GAP;
+      mover.y = anchor.y;
+      mover.vx = 0;
+      mover.vy = 0;
+      update(mover);
+    }
+
+    function findNearestNeighbor(mover, maxDist2) {
+      let nearest = null;
+      let nearestD2 = Infinity;
+      const ax = mover.x + TOOL_HALF;
+      const ay = mover.y + TOOL_HALF;
+      for (const other of items) {
+        if (other === mover) continue;
+        const bx = other.x + TOOL_HALF;
+        const by = other.y + TOOL_HALF;
+        const dx = ax - bx;
+        const dy = ay - by;
+        const d2 = (dx * dx) + (dy * dy);
+        if (d2 <= maxDist2 && d2 < nearestD2) {
+          nearestD2 = d2;
+          nearest = other;
+        }
+      }
+      return nearest;
+    }
+
+    function buildInsertTargets() {
+      pendingInsert = null;
+      if (!drag) return false;
+
+      const dragCx = drag.x + TOOL_HALF;
+      const dragCy = drag.y + TOOL_HALF;
+      let nearest = null;
+      let nearestD2 = Infinity;
+
+      for (const other of items) {
+        if (other === drag) continue;
+        const bx = other.x + TOOL_HALF;
+        const by = other.y + TOOL_HALF;
+        const dx = dragCx - bx;
+        const dy = dragCy - by;
+        const d2 = (dx * dx) + (dy * dy);
+        if (d2 < nearestD2) {
+          nearestD2 = d2;
+          nearest = other;
+        }
+      }
+
+      if (!nearest) {
+        lastOverlap = null;
+        return false;
+      }
+
+      if (nearestD2 <= MERGE_IN2) {
+        lastOverlap = { drag, other: nearest, dir: Math.sign(dragCx - (nearest.x + TOOL_HALF)) || 1 };
+        return true;
+      }
+
+      lastOverlap = null;
+
+      const others = items.filter((it) => it !== drag).sort((a, b) => a.x - b.x);
+      let insertIdx = 0;
+      while (insertIdx < others.length && (others[insertIdx].x + TOOL_HALF) < dragCx) {
+        insertIdx++;
+      }
+
+      const left = insertIdx > 0 ? others[insertIdx - 1] : null;
+      const right = insertIdx < others.length ? others[insertIdx] : null;
+      if (!left && !right) return false;
+
+      const rowRef = left || right;
+      const rowDy = Math.abs((drag.y + TOOL_HALF) - (rowRef.y + TOOL_HALF));
+      if (rowDy > INSERT_ROW_EPS) {
+        return false;
+      }
+
+      let minD2 = Infinity;
+      if (left) {
+        const dx = dragCx - (left.x + TOOL_HALF);
+        const dy = dragCy - (left.y + TOOL_HALF);
+        minD2 = Math.min(minD2, (dx * dx) + (dy * dy));
+      }
+      if (right) {
+        const dx = dragCx - (right.x + TOOL_HALF);
+        const dy = dragCy - (right.y + TOOL_HALF);
+        minD2 = Math.min(minD2, (dx * dx) + (dy * dy));
+      }
+      if (minD2 > PROX_DIST2) {
+        return false;
+      }
+
+      const leftCx = left ? (left.x + TOOL_HALF) : null;
+      const rightCx = right ? (right.x + TOOL_HALF) : null;
+      if (left && right) {
+        if (dragCx <= leftCx + INSERT_SIDE) return false;
+        if (dragCx >= rightCx - INSERT_SIDE) return false;
+      } else if (left) {
+        if (dragCx <= leftCx + INSERT_SIDE) return false;
+      } else if (right) {
+        if (dragCx >= rightCx - INSERT_SIDE) return false;
+      }
+
+      const dragX = left ? (left.x + SNAP_GAP) : (right.x - SNAP_GAP);
+      const dragY = left ? left.y : right.y;
+      const targets = new Map();
+
+      if (right) {
+        let nextX = dragX + SNAP_GAP;
+        for (let i = insertIdx; i < others.length; i++) {
+          const it = others[i];
+          targets.set(it, { x: nextX, y: dragY });
+          nextX += SNAP_GAP;
+        }
+      }
+
+      pendingInsert = { dragX, dragY, targets };
+      return true;
     }
 
     function checkSnap() {
@@ -1001,24 +1145,46 @@
       rafId = 0;
       let active = false;
       const now = performance.now();
+      let insertActive = false;
 
-      if (drag) active = true;
+      if (drag) {
+        active = true;
+        insertActive = buildInsertTargets();
+      }
 
       for (const it of items) {
         if (it !== drag) {
-          it.vx *= DAMP;
-          it.vy *= DAMP;
-          it.x += it.vx;
-          it.y += it.vy;
-          update(it);
+          if (drag) {
+            const target = pendingInsert && pendingInsert.targets.get(it);
+            if (target) {
+              it.x = target.x;
+              it.y = target.y;
+              it.vx = 0;
+              it.vy = 0;
+              update(it);
+              active = true;
+            } else {
+              it.vx = 0;
+              it.vy = 0;
+            }
+          } else {
+            it.vx *= DAMP;
+            it.vy *= DAMP;
+            it.x += it.vx;
+            it.y += it.vy;
+            update(it);
 
-          if (Math.abs(it.vx) + Math.abs(it.vy) > EPS) {
-            active = true;
+            if (Math.abs(it.vx) + Math.abs(it.vy) > EPS) {
+              active = true;
+            }
           }
         }
       }
 
-      if (checkSnap()) {
+      if (!drag && checkSnap()) {
+        active = true;
+      }
+      if (insertActive) {
         active = true;
       }
 
@@ -1057,11 +1223,11 @@
     }
 
     data.forEach(createTool);
-    assert(items.length === 3, 'Expected 3 created items');
+    assert(items.length === 5, 'Expected 5 created items');
 
     // Additional test: circles exist
-    assert(svgGroup.children.length === 3, 'Expected 3 SVG goo shapes');
-    assert(baseGroup.children.length === 3, 'Expected 3 SVG base shapes');
+    assert(svgGroup.children.length === 5, 'Expected 5 SVG goo shapes');
+    assert(baseGroup.children.length === 5, 'Expected 5 SVG base shapes');
 
     schedule();
 
@@ -1081,6 +1247,7 @@
 
     function endDrag() {
       if (!drag) return;
+      buildInsertTargets();
       const released = drag;
       const overlap = (lastOverlap && lastOverlap.drag === released) ? lastOverlap : null;
 
@@ -1096,6 +1263,7 @@
           mergePair(released, other, ai);
           drag = null;
           lastOverlap = null;
+          pendingInsert = null;
           schedule();
           return;
         }
@@ -1106,6 +1274,33 @@
         lastOverlap = null;
       }
 
+      if (pendingInsert) {
+        released.x = pendingInsert.dragX;
+        released.y = pendingInsert.dragY;
+        released.vx = 0;
+        released.vy = 0;
+        update(released);
+
+        for (const [it, target] of pendingInsert.targets) {
+          it.x = target.x;
+          it.y = target.y;
+          it.vx = 0;
+          it.vy = 0;
+          update(it);
+        }
+
+        pendingInsert = null;
+        drag = null;
+        schedule();
+        return;
+      }
+
+      const nearest = findNearestNeighbor(released, PROX_DIST2);
+      if (nearest) {
+        snapToAnchor(nearest, released);
+      }
+
+      pendingInsert = null;
       drag = null;
       schedule();
     }
