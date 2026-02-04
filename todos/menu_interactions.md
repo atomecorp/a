@@ -51,3 +51,71 @@ Constraints
 Deliverables
 - Implement the interaction logic described above.
 - Keep the current gooey visual style, but respect the new behaviors.
+
+Copilot Prompt — Menu Navigation & Submenu Behavior
+
+Goal
+- Define and implement a hierarchical menu navigation system with animated submenu transitions and clear grip-based controls.
+
+Core Principles
+- Not all menu items trigger actions.
+- Some menu items are navigation items that open a submenu instead of executing a command.
+- Submenus visually replace the current menu using a gooey-style transition (icons appear to emerge from the clicked icon).
+
+Submenu Transition
+- When a navigation item is clicked:
+  - The current menu is replaced by a new submenu.
+  - All submenu icons visually emerge from the clicked icon (gooey effect).
+  - The transition must be smooth, readable, and intuitive.
+
+Grips and Navigation Logic
+
+Left Grip (Toolbox Grip)
+- Located on the left side of the toolbox.
+- Used to:
+  - Move the toolbox.
+  - Collapse or expand the toolbox.
+- This grip is global to the toolbox and is NOT part of hierarchical navigation.
+
+Right Grip (Navigation Grip)
+- Located on the right side of the toolbox.
+- Used only for hierarchical navigation.
+- Behavior:
+  - When clicked, it navigates back one level in the menu hierarchy.
+  - It does NOT:
+    - Close the menu completely.
+    - Jump directly to the root menu.
+  - It always steps back one level at a time.
+
+Menu End Behavior
+- At the end of each submenu:
+  - A navigation grip is visible.
+  - This grip allows returning to the previous menu level.
+
+Collapse / Expand Behavior
+- When a submenu opens:
+  - The left grip can visually reduce in size.
+  - The right side of the menu retracts to align with visible icons.
+- When clicking the left grip:
+  - The menu expands again.
+  - A minimal grip remains visible at the edge.
+
+Constraints
+- Navigation grip (right side) must only affect hierarchy.
+- Toolbox grip (left side) must only affect toolbox position and visibility.
+- These two grips must never share behavior.
+
+Implementation Requirements
+- Support unlimited submenu depth.
+- Maintain clear hierarchy state.
+- Preserve smooth gooey transitions.
+- Ensure visual consistency between all levels.
+
+Summary
+- Implement a hierarchical menu where:
+  - Some items open submenus.
+  - Submenus replace the current menu using a gooey transition.
+  - Right grip = step back one level in hierarchy.
+  - Left grip = move / collapse toolbox only.
+  - No direct jump to root unless explicitly implemented elsewhere.
+- This logic must be strict and unambiguous.
