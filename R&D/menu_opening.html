@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Menu split prototype</title>
+    <style>
+        :root {
+            --panel: rgba(220, 220, 220, .65);
+            --stroke: rgba(255, 255, 255, .35);
+            --text: rgba(255, 255, 255, .9);
+            --r: 18px;
+            --h: 90px;
+            --w: 90px;
+            --open: 420px;
+            --t: 360ms;
+            --ease: cubic-bezier(.2, .9, .1, 1);
+        }
+
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            background: url("https://picsum.photos/1920/1080") center/cover no-repeat fixed;
+            color: var(--text);
+            font: 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+            overflow: hidden;
+        }
+
+        .dock {
+            position: absolute;
+            left: 60px;
+            top: 60px;
+            user-select: none;
+        }
+
+        .menu {
+            position: relative;
+            height: var(--h);
+            width: var(--w);
+            border-radius: var(--r);
+            transition: width var(--t) var(--ease);
+        }
+
+        .shell {
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            overflow: visible;
+            pointer-events: none;
+        }
+
+        .half {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: calc(var(--w) / 2);
+            background: var(--panel);
+            pointer-events: auto;
+            transition: transform var(--t) var(--ease),
+                box-shadow var(--t) var(--ease);
+            z-index: 2;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+
+
+        */
+
+        /* État fermé: un seul bloc unifié */
+        .menu[data-open="false"] {
+            box-shadow: none;
+        }
+
+        .menu[data-open="false"] .shell {
+            filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.3)) drop-shadow(0 4px 16px rgba(0, 0, 0, 0.2));
+        }
+
+        .menu[data-open="false"] .half {
+            box-shadow: none;
+        }
+
+        /* État ouvert: les moitiés ont leur propre ombre */
+        .menu[data-open="true"] .half {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+                0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+        .menu[data-open="true"] .shell {
+            filter: none;
+        }
+
+        .left {
+            left: 0;
+            border-top-left-radius: var(--r);
+            border-bottom-left-radius: var(--r);
+        }
+
+        .right {
+            left: calc(var(--w) / 2);
+            border-top-right-radius: var(--r);
+            border-bottom-right-radius: var(--r);
+        }
+
+        .rail {
+            position: absolute;
+            left: calc(var(--w) / 2);
+            top: 0;
+            height: 100%;
+            width: 0;
+            background: rgba(255, 255, 255, .00);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            opacity: 0;
+            pointer-events: auto;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+                0 4px 16px rgba(0, 0, 0, 0.2);
+            transition: opacity var(--t) var(--ease);
+            z-index: 1;
+            /* En dessous des half */
+        }
+
+        .tools {
+            height: 100%;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 0 10px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
+        }
+
+        .tools::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tool {
+            flex: 0 0 auto;
+            height: 38px;
+            min-width: 38px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid rgba(255, 255, 255, .12);
+            display: grid;
+            place-items: center;
+            color: rgba(255, 255, 255, .85);
+        }
+
+        /* Open state - direction droite */
+        .menu[data-open="true"] {
+            width: calc(var(--w) + var(--open));
+        }
+
+        .menu[data-open="true"] .right {
+            transform: translateX(var(--open));
+        }
+
+        .menu[data-open="true"] .rail {
+            width: var(--open);
+            opacity: 1;
+        }
+
+        /* Ouverture vers la gauche */
+        .menu[data-dir="left"] .rail {
+            left: auto;
+            right: calc(var(--w) / 2);
+        }
+
+        .menu[data-dir="left"][data-open="true"] .right {
+            transform: translateX(calc(-1 * var(--open)));
+        }
+
+        .menu:active .left,
+        .menu:active .right {
+            filter: brightness(0.95);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dock">
+        <div class="menu" id="menu" data-open="false" data-dir="right" aria-label="Menu">
+            <div class="shell">
+                <div class="rail">
+                    <div class="tools" id="tools">
+                        <div class="tool">A</div>
+                        <div class="tool">B</div>
+                        <div class="tool">C</div>
+                        <div class="tool">D</div>
+                        <div class="tool">E</div>
+                        <div class="tool">F</div>
+                        <div class="tool">G</div>
+                        <div class="tool">H</div>
+                        <div class="tool">I</div>
+                        <div class="tool">J</div>
+                    </div>
+                </div>
+                <div class="half left"></div>
+                <div class="half right"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const menu = document.getElementById('menu');
+        const tools = document.getElementById('tools');
+        const rail = document.querySelector('.rail');
+        const rightHalf = document.querySelector('.half.right');
+
+        const root = document.documentElement;
+        const duration = 360;
+        const ease = 'cubic-bezier(.2,.9,.1,1)';
+
+        function computeDir() {
+            const rect = menu.getBoundingClientRect();
+            const open = parseFloat(getComputedStyle(root).getPropertyValue('--open'));
+            const w = parseFloat(getComputedStyle(root).getPropertyValue('--w'));
+            const spaceRight = window.innerWidth - rect.left - w;
+            menu.dataset.dir = (spaceRight < open + 24) ? 'left' : 'right';
+        }
+
+        function toggle() {
+            const next = menu.dataset.open !== 'true';
+            menu.dataset.open = next ? 'true' : 'false';
+
+            if (next) {
+                tools.scrollLeft = 0;
+                const dir = menu.dataset.dir;
+                if (dir === 'right') {
+                    rail.style.width = '0px';
+                    rightHalf.style.transform = 'translateX(0)';
+                    requestAnimationFrame(() => {
+                        rail.style.transition = `width ${duration}ms ${ease}, opacity ${duration}ms ${ease}`;
+                        rightHalf.style.transition = `transform ${duration}ms ${ease}`;
+                        requestAnimationFrame(() => {
+                            rail.style.width = getComputedStyle(root).getPropertyValue('--open');
+                            rightHalf.style.transform = `translateX(${getComputedStyle(root).getPropertyValue('--open')})`;
+                        });
+                    });
+                } else {
+                    rail.style.width = '0px';
+                    rightHalf.style.transform = 'translateX(0)';
+                    requestAnimationFrame(() => {
+                        rail.style.transition = `width ${duration}ms ${ease}, opacity ${duration}ms ${ease}`;
+                        rightHalf.style.transition = `transform ${duration}ms ${ease}`;
+                        requestAnimationFrame(() => {
+                            const openWidth = getComputedStyle(root).getPropertyValue('--open');
+                            rail.style.width = openWidth;
+                            rightHalf.style.transform = `translateX(-${openWidth})`;
+                        });
+                    });
+                }
+            } else {
+                rail.style.transition = `width ${duration}ms ${ease}, opacity ${duration}ms ${ease}`;
+                rightHalf.style.transition = `transform ${duration}ms ${ease}`;
+                rail.style.width = '0px';
+                rightHalf.style.transform = 'translateX(0)';
+            }
+
+            computeDir();
+        }
+
+        document.querySelector('.half.left').addEventListener('click', toggle);
+        rightHalf.addEventListener('click', toggle);
+        window.addEventListener('resize', computeDir);
+
+        computeDir();
+    </script>
+</body>
+
+</html>
