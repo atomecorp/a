@@ -529,8 +529,6 @@ if (typeof requestAnimationFrame === 'function') {
 }
 ensureMenuObserver();
 
-
-
 const riffAudio = '../assets/audios/riff.m4a';
 const demoVideo = '../assets/videos/superman.mp4';
 
