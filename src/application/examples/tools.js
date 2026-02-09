@@ -1,26 +1,5 @@
 import Intuition from '../../squirrel/components/intuition_builder/index.js';
 
-// const vieLogo = $('img', {
-//   id: 'img_test',
-//   parent: "#view",
-//   attrs: {
-//     src: './assets/images/2.png',
-//     alt: 'ballanim'
-//   },
-//   css: {
-//     marginLeft: '0',
-//     color: 'white',
-//     left: '0px',
-//     top: '0px',
-//     position: 'relative',
-//     height: "100%",
-//     width: "100%",
-//     textAlign: 'center',
-//     display: 'block'
-//   }
-// });
-
-
 
 puts('important to save the intuition menu state juste redefine the window.save_intuition_menu function, this method is call on any change of the menu. example below ');
 window.saveMenuHook = () => {
