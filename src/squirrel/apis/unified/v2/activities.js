@@ -513,7 +513,24 @@ const resolveProjectStateId = (userId, projectId) => {
     return `project_toolbox_state_${safeUser}_${safeProject}`;
 };
 
-export async function save_project_toolbox_state(options = {}, callback) {
+const normalizeScopeState = (value) => {
+    const scope = String(value || '').trim().toLowerCase();
+    if (scope === 'global' || scope === 'activity' || scope === 'project') return scope;
+    return '';
+};
+
+const resolveScopedToolboxStateId = (userId, scope, activityId = null, projectId = null) => {
+    if (scope === 'project') {
+        return resolveProjectStateId(userId, projectId);
+    }
+    const safeUser = sanitizeLayerIdPart(userId, 'user');
+    const safeScope = sanitizeLayerIdPart(scope, 'scope');
+    const safeActivity = sanitizeLayerIdPart(activityId, 'all');
+    const safeProject = sanitizeLayerIdPart(projectId, 'all');
+    return `toolbox_scope_state_${safeScope}_${safeUser}_${safeActivity}_${safeProject}`;
+};
+
+const saveScopedToolboxState = async (scope, options = {}, callback) => {
     const currentUserId = getCurrentUserId();
     if (!currentUserId || isLoggedOut()) {
         const error = 'No user logged in. Please log in first.';
@@ -523,9 +540,26 @@ export async function save_project_toolbox_state(options = {}, callback) {
         }, callback);
     }
 
+    const normalizedScope = normalizeScopeState(scope || options.scope);
+    if (!normalizedScope) {
+        const error = 'Invalid scope for toolbox state.';
+        return with_callback({
+            tauri: { success: false, error },
+            fastify: { success: false, error }
+        }, callback);
+    }
+
     const projectId = resolveProjectId(options);
-    if (!projectId) {
+    const activityId = options.activity_id || options.activityId || null;
+    if (normalizedScope === 'project' && !projectId) {
         const error = 'Missing project id for project toolbox state.';
+        return with_callback({
+            tauri: { success: false, error },
+            fastify: { success: false, error }
+        }, callback);
+    }
+    if (normalizedScope === 'activity' && !activityId) {
+        const error = 'Missing activity id for activity toolbox state.';
         return with_callback({
             tauri: { success: false, error },
             fastify: { success: false, error }
@@ -533,8 +567,11 @@ export async function save_project_toolbox_state(options = {}, callback) {
     }
 
     const desktopState = sanitizeProjectState(options.desktop_state || options.desktopState);
-    const atomeId = resolveProjectStateId(currentUserId, projectId);
+    const atomeId = resolveScopedToolboxStateId(currentUserId, normalizedScope, activityId, projectId);
     const props = {
+        scope: normalizedScope,
+        activity_id: activityId || null,
+        activityId: activityId || null,
         project_id: projectId,
         projectId,
         desktop_state: desktopState,
@@ -552,36 +589,55 @@ export async function save_project_toolbox_state(options = {}, callback) {
     const payload = {
         id: atomeId,
         atome_id: atomeId,
-        type: 'project_toolbox_state',
-        atome_type: 'project_toolbox_state',
+        type: normalizedScope === 'project' ? 'project_toolbox_state' : 'toolbox_scope_state',
+        atome_type: normalizedScope === 'project' ? 'project_toolbox_state' : 'toolbox_scope_state',
         owner_id: currentUserId,
-        parent_id: projectId,
+        parent_id: projectId || activityId || null,
         project_id: projectId,
         properties: props
     };
     const result = await create_atome(payload);
     return with_callback(result, callback);
-}
+};
 
-export async function get_project_toolbox_state(projectId, callback) {
+const getScopedToolboxState = async (scope, options = {}, callback) => {
     const currentUserId = getCurrentUserId();
     if (!currentUserId || isLoggedOut()) {
         const error = 'No user logged in. Cannot read project toolbox state.';
-        return with_callback({ ok: false, error, project_id: projectId || null, desktop_state: null }, callback);
+        return with_callback({ ok: false, error, desktop_state: null }, callback);
     }
-    const resolvedProjectId = projectId || resolveProjectId({});
-    if (!resolvedProjectId) {
+
+    const normalizedScope = normalizeScopeState(scope || options.scope);
+    if (!normalizedScope) {
+        const error = 'Invalid scope for toolbox state.';
+        return with_callback({ ok: false, error, desktop_state: null }, callback);
+    }
+
+    const resolvedProjectId = options.project_id || options.projectId || resolveProjectId(options);
+    const resolvedActivityId = options.activity_id || options.activityId || null;
+    if (normalizedScope === 'project' && !resolvedProjectId) {
         const error = 'Missing project id.';
         return with_callback({ ok: false, error, project_id: null, desktop_state: null }, callback);
     }
+    if (normalizedScope === 'activity' && !resolvedActivityId) {
+        const error = 'Missing activity id.';
+        return with_callback({ ok: false, error, activity_id: null, desktop_state: null }, callback);
+    }
 
-    const atomeId = resolveProjectStateId(currentUserId, resolvedProjectId);
+    const atomeId = resolveScopedToolboxStateId(
+        currentUserId,
+        normalizedScope,
+        resolvedActivityId,
+        resolvedProjectId
+    );
     const result = await get_atome(atomeId).catch(() => null);
     const raw = result?.atome || result?.data || null;
     if (!raw || typeof raw !== 'object') {
         return with_callback({
             ok: true,
             exists: false,
+            scope: normalizedScope,
+            activity_id: resolvedActivityId || null,
             project_id: resolvedProjectId,
             desktop_state: null
         }, callback);
@@ -591,9 +647,35 @@ export async function get_project_toolbox_state(projectId, callback) {
     return with_callback({
         ok: true,
         exists: true,
+        scope: normalizedScope,
+        activity_id: resolvedActivityId || props.activity_id || props.activityId || null,
         project_id: resolvedProjectId,
         desktop_state: desktopState
     }, callback);
+};
+
+export async function save_project_toolbox_state(options = {}, callback) {
+    return saveScopedToolboxState('project', options, callback);
+}
+
+export async function get_project_toolbox_state(projectId, callback) {
+    return getScopedToolboxState('project', { project_id: projectId }, callback);
+}
+
+export async function save_global_toolbox_state(options = {}, callback) {
+    return saveScopedToolboxState('global', options, callback);
+}
+
+export async function get_global_toolbox_state(callback) {
+    return getScopedToolboxState('global', {}, callback);
+}
+
+export async function save_activity_toolbox_state(options = {}, callback) {
+    return saveScopedToolboxState('activity', options, callback);
+}
+
+export async function get_activity_toolbox_state(activityId, callback) {
+    return getScopedToolboxState('activity', { activity_id: activityId }, callback);
 }
 
 export default {
@@ -607,5 +689,9 @@ export default {
     list_tool_layers,
     resolve_tool_context,
     save_project_toolbox_state,
-    get_project_toolbox_state
+    get_project_toolbox_state,
+    save_global_toolbox_state,
+    get_global_toolbox_state,
+    save_activity_toolbox_state,
+    get_activity_toolbox_state
 };

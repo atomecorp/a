@@ -20,7 +20,11 @@ import {
   list_tool_layers,
   resolve_tool_context,
   save_project_toolbox_state,
-  get_project_toolbox_state
+  get_project_toolbox_state,
+  save_global_toolbox_state,
+  get_global_toolbox_state,
+  save_activity_toolbox_state,
+  get_activity_toolbox_state
 } from './v2/activities.js';
 import {
   share_atome,
@@ -84,7 +88,11 @@ export const AdoleAPI = {
     listToolLayers: list_tool_layers,
     resolveToolContext: resolve_tool_context,
     saveProjectToolboxState: save_project_toolbox_state,
-    getProjectToolboxState: get_project_toolbox_state
+    getProjectToolboxState: get_project_toolbox_state,
+    saveGlobalToolboxState: save_global_toolbox_state,
+    getGlobalToolboxState: get_global_toolbox_state,
+    saveActivityToolboxState: save_activity_toolbox_state,
+    getActivityToolboxState: get_activity_toolbox_state
   },
   atomes: {
     create: create_atome,
