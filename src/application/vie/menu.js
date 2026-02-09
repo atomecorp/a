@@ -1,4 +1,6 @@
 
+import Intuition from '../../squirrel/components/intuition_builder/index.js';
+
 
 const shadowLeft = 0,
   shadowTop = 0,
@@ -245,7 +247,6 @@ Intuition({
     units: { left: 'px', top: 'px' }
   }
 });
-
 
 
 

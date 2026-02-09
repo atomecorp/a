@@ -1,4 +1,5 @@
 import createModularBlocks, { DEFAULT_THEME } from './index.js';
+import Intuition from '../../squirrel/components/intuition_builder/index.js';
 
 function ensureI18nHelpers() {
   const fallbackSource = (typeof window !== 'undefined' && window.ModularBlocks) || createModularBlocks;

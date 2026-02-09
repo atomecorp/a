@@ -1,4 +1,5 @@
 import { isDebugEnabled } from '../../shared/debug.js';
+import Intuition from '../../squirrel/components/intuition_builder/index.js';
 
 const CHECK_DEBUG = isDebugEnabled();
 function checkDebugPuts(message) {

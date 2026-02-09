@@ -1,3 +1,5 @@
+import Intuition from '../../squirrel/components/intuition_builder/index.js';
+
 // const vieLogo = $('img', {
 //   id: 'img_test',
 //   parent: "#view",
@@ -491,4 +493,3 @@ $('div', {
     console.log('Menu state restored from stored snapshot:', refreshedStatus);
   },
 });
-
