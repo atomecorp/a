@@ -496,6 +496,106 @@ export async function resolve_tool_context(options = {}, callback) {
     return with_callback(result, callback);
 }
 
+const sanitizeProjectState = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const tools = Array.isArray(value.tools) ? value.tools : [];
+    return {
+        version: Number.isFinite(value.version) ? value.version : 1,
+        tools: tools
+            .map((tool) => (tool && typeof tool === 'object' ? { ...tool } : null))
+            .filter(Boolean)
+    };
+};
+
+const resolveProjectStateId = (userId, projectId) => {
+    const safeUser = sanitizeLayerIdPart(userId, 'user');
+    const safeProject = sanitizeLayerIdPart(projectId, 'project');
+    return `project_toolbox_state_${safeUser}_${safeProject}`;
+};
+
+export async function save_project_toolbox_state(options = {}, callback) {
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId || isLoggedOut()) {
+        const error = 'No user logged in. Please log in first.';
+        return with_callback({
+            tauri: { success: false, error },
+            fastify: { success: false, error }
+        }, callback);
+    }
+
+    const projectId = resolveProjectId(options);
+    if (!projectId) {
+        const error = 'Missing project id for project toolbox state.';
+        return with_callback({
+            tauri: { success: false, error },
+            fastify: { success: false, error }
+        }, callback);
+    }
+
+    const desktopState = sanitizeProjectState(options.desktop_state || options.desktopState);
+    const atomeId = resolveProjectStateId(currentUserId, projectId);
+    const props = {
+        project_id: projectId,
+        projectId,
+        desktop_state: desktopState,
+        desktopState: desktopState,
+        updated_at: new Date().toISOString()
+    };
+
+    const existing = await get_atome(atomeId).catch(() => null);
+    const existingAtome = existing?.atome || existing?.data || null;
+    if (existingAtome && typeof existingAtome === 'object') {
+        const result = await alter_atome(atomeId, props);
+        return with_callback(result, callback);
+    }
+
+    const payload = {
+        id: atomeId,
+        atome_id: atomeId,
+        type: 'project_toolbox_state',
+        atome_type: 'project_toolbox_state',
+        owner_id: currentUserId,
+        parent_id: projectId,
+        project_id: projectId,
+        properties: props
+    };
+    const result = await create_atome(payload);
+    return with_callback(result, callback);
+}
+
+export async function get_project_toolbox_state(projectId, callback) {
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId || isLoggedOut()) {
+        const error = 'No user logged in. Cannot read project toolbox state.';
+        return with_callback({ ok: false, error, project_id: projectId || null, desktop_state: null }, callback);
+    }
+    const resolvedProjectId = projectId || resolveProjectId({});
+    if (!resolvedProjectId) {
+        const error = 'Missing project id.';
+        return with_callback({ ok: false, error, project_id: null, desktop_state: null }, callback);
+    }
+
+    const atomeId = resolveProjectStateId(currentUserId, resolvedProjectId);
+    const result = await get_atome(atomeId).catch(() => null);
+    const raw = result?.atome || result?.data || null;
+    if (!raw || typeof raw !== 'object') {
+        return with_callback({
+            ok: true,
+            exists: false,
+            project_id: resolvedProjectId,
+            desktop_state: null
+        }, callback);
+    }
+    const props = raw.properties || raw.particles || raw.data || {};
+    const desktopState = sanitizeProjectState(props.desktop_state || props.desktopState);
+    return with_callback({
+        ok: true,
+        exists: true,
+        project_id: resolvedProjectId,
+        desktop_state: desktopState
+    }, callback);
+}
+
 export default {
     create_activity,
     list_activities,
@@ -505,5 +605,7 @@ export default {
     load_saved_current_activity,
     save_tool_layer,
     list_tool_layers,
-    resolve_tool_context
+    resolve_tool_context,
+    save_project_toolbox_state,
+    get_project_toolbox_state
 };
