@@ -10,6 +10,17 @@ import {
 } from './v2/projects.js';
 import { create_atome, list_atomes, delete_atome, alter_atome, realtime_patch, get_atome } from './v2/atomes.js';
 import {
+  create_activity,
+  list_activities,
+  get_current_activity_id,
+  get_current_activity,
+  set_current_activity,
+  load_saved_current_activity,
+  save_tool_layer,
+  list_tool_layers,
+  resolve_tool_context
+} from './v2/activities.js';
+import {
   share_atome,
   share_request,
   share_respond,
@@ -59,6 +70,17 @@ export const AdoleAPI = {
     getCurrentId: get_current_project_id,
     setCurrent: set_current_project,
     loadSaved: load_saved_current_project
+  },
+  activities: {
+    create: create_activity,
+    list: list_activities,
+    getCurrent: get_current_activity,
+    getCurrentId: get_current_activity_id,
+    setCurrent: set_current_activity,
+    loadSaved: load_saved_current_activity,
+    saveToolLayer: save_tool_layer,
+    listToolLayers: list_tool_layers,
+    resolveToolContext: resolve_tool_context
   },
   atomes: {
     create: create_atome,

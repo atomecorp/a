@@ -7,6 +7,13 @@ const with_callback = (result, callback) => {
     return result;
 };
 
+const dispatchProjectChanged = (detail = {}) => {
+    if (typeof window === 'undefined') return;
+    try {
+        window.dispatchEvent(new CustomEvent('squirrel:project-changed', { detail }));
+    } catch (_) { }
+};
+
 const getCurrentUserId = () => {
     const state = getSessionState();
     return state?.user?.id || null;
@@ -164,6 +171,7 @@ export async function set_current_project(projectId, projectName = null, ownerId
     }
 
     updateWindowProject(payload);
+    dispatchProjectChanged(payload);
     return true;
 }
 
