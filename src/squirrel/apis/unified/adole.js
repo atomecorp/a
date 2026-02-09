@@ -103,7 +103,10 @@ async function silentPing(baseUrl) {
  * Check if we're in Tauri environment
  */
 function isInTauri() {
-    return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (typeof window === 'undefined') return false;
+    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+    const protocol = window.location?.protocol || '';
+    return protocol === 'tauri:' || protocol === 'asset:';
 }
 
 const BACKEND_SOURCES = new Set(['tauri', 'fastify', 'auto']);
@@ -206,6 +209,12 @@ function getFastifyHttpBaseUrl() {
     const loc = window.location;
     if (loc && loc.hostname && loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
         return loc.origin;
+    }
+
+    const protocol = window.location?.protocol || '';
+    const isEmbeddedIos = protocol === 'atome:' || window.__AUV3_MODE__ === true;
+    if (isEmbeddedIos) {
+        return 'https://atome.one';
     }
 
     return null;
@@ -1068,8 +1077,10 @@ function getTauriWs() {
         return _noTauriWs;
     }
 
-    if (!_tauriWs) {
-        _tauriWs = new TauriWebSocket(getTauriWsUrl(), 'tauri');
+    const wsUrl = getTauriWsUrl();
+    if (!_tauriWs || _tauriWs.url !== wsUrl) {
+        try { _tauriWs?.socket?.close?.(); } catch (_) { }
+        _tauriWs = new TauriWebSocket(wsUrl, 'tauri');
     }
     return _tauriWs;
 }
@@ -1080,7 +1091,8 @@ function getFastifyWs() {
         return _noFastifyWs;
     }
 
-    if (!_fastifyWs) {
+    if (!_fastifyWs || _fastifyWs.url !== wsUrl) {
+        try { _fastifyWs?.socket?.close?.(); } catch (_) { }
         _fastifyWs = new TauriWebSocket(wsUrl, 'fastify');
     }
 

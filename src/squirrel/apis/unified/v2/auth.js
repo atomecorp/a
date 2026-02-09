@@ -79,7 +79,17 @@ const loginBackend = async (backend, { phone, password }) => {
     const result = await adapter.auth.login({ phone, password });
     let ok = !!(result?.ok || result?.success);
     let user = normalizeUser(extractUser(result));
+    if (ok && !user) {
+        try {
+            const me = await meBackend(backend);
+            if (me.ok && me.user) user = me.user;
+        } catch (_) { }
+    }
     let error = ok ? null : (result?.error || 'login_failed');
+    if (ok && !user) {
+        ok = false;
+        error = 'missing_user';
+    }
     if (ok && !isPhoneMatch(user, phone)) {
         ok = false;
         user = null;
@@ -101,9 +111,16 @@ const registerBackend = async (backend, { phone, password, username, visibility 
     if (!adapter?.auth?.register) return { ok: false, error: 'auth_unavailable' };
     const result = await adapter.auth.register({ phone, password, username, visibility });
     const ok = !!(result?.ok || result?.success);
+    let user = normalizeUser(extractUser(result));
+    if (ok && !user) {
+        try {
+            const me = await meBackend(backend);
+            if (me.ok && me.user) user = me.user;
+        } catch (_) { }
+    }
     return {
         ok,
-        user: normalizeUser(extractUser(result)),
+        user,
         token: extractToken(result),
         raw: result,
         error: ok ? null : (result?.error || 'register_failed')
@@ -225,6 +242,8 @@ export const auth = {
             username: cleanName,
             visibility
         });
+        let fallbackResult = null;
+        let activeBackend = primary;
 
         const response = {
             tauri: { success: false, data: null, error: null },
@@ -244,13 +263,30 @@ export const auth = {
             } catch (_) { }
         }
 
+        if (!primaryResult.ok && availability[secondary]) {
+            fallbackResult = await registerBackend(secondary, {
+                phone: cleanPhone,
+                password,
+                username: cleanName,
+                visibility
+            });
+            response[secondary] = {
+                success: fallbackResult.ok,
+                data: fallbackResult.raw,
+                error: fallbackResult.ok ? null : fallbackResult.error
+            };
+            if (fallbackResult.ok) activeBackend = secondary;
+        }
+
+        const activeResult = activeBackend === primary ? primaryResult : fallbackResult;
+
         response[primary] = {
             success: primaryResult.ok,
             data: primaryResult.raw,
             error: primaryResult.ok ? null : primaryResult.error
         };
 
-        if (primaryResult.ok && availability[secondary]) {
+        if (activeBackend === primary && primaryResult.ok && availability[secondary] && !fallbackResult) {
             const secondaryResult = await registerBackend(secondary, {
                 phone: cleanPhone,
                 password,
@@ -264,16 +300,16 @@ export const auth = {
             };
         }
 
-        if (primaryResult.ok && primaryResult.user) {
+        if (activeResult?.ok && activeResult.user) {
             setSessionState({
                 mode: 'authenticated',
-                user: primaryResult.user,
-                backend: primary
+                user: activeResult.user,
+                backend: activeBackend
             });
             clearCurrentProjectCache();
 
-            if (prevAnonymousId && String(prevAnonymousId) !== String(primaryResult.user.id)) {
-                try { await migrateAnonymousWorkspace(prevAnonymousId, primaryResult.user.id); } catch (_) { }
+            if (prevAnonymousId && String(prevAnonymousId) !== String(activeResult.user.id)) {
+                try { await migrateAnonymousWorkspace(prevAnonymousId, activeResult.user.id); } catch (_) { }
             }
 
             try {
@@ -309,6 +345,8 @@ export const auth = {
             phone: cleanPhone,
             password
         });
+        let activeBackend = primary;
+        let activeResult = primaryResult;
 
         const response = {
             tauri: { success: false, data: null, error: null },
@@ -320,10 +358,11 @@ export const auth = {
             error: primaryResult.ok ? null : primaryResult.error
         };
 
+        let secondaryResult = null;
         let loggedUser = primaryResult.user;
 
         if (primaryResult.ok && availability[secondary]) {
-            const secondaryResult = await loginBackend(secondary, {
+            secondaryResult = await loginBackend(secondary, {
                 phone: cleanPhone,
                 password
             });
@@ -333,13 +372,28 @@ export const auth = {
                 error: secondaryResult.ok ? null : secondaryResult.error
             };
             if (!loggedUser && secondaryResult.user) loggedUser = secondaryResult.user;
+        } else if (!primaryResult.ok && availability[secondary]) {
+            secondaryResult = await loginBackend(secondary, {
+                phone: cleanPhone,
+                password
+            });
+            response[secondary] = {
+                success: secondaryResult.ok,
+                data: secondaryResult.raw,
+                error: secondaryResult.ok ? null : secondaryResult.error
+            };
+            if (secondaryResult.ok) {
+                activeBackend = secondary;
+                activeResult = secondaryResult;
+                loggedUser = secondaryResult.user || loggedUser;
+            }
         }
 
-        if (primaryResult.ok && loggedUser?.id) {
+        if (activeResult.ok && loggedUser?.id) {
             setSessionState({
                 mode: 'authenticated',
                 user: loggedUser,
-                backend: primary
+                backend: activeBackend
             });
             clearCurrentProjectCache();
 

@@ -89,7 +89,9 @@ final class LocalHTTPServer {
                 self.clearConnectionState(connection)
                 self.receive(on: connection)
             case .failed(let error):
-                print("❌ Conn failed: \(error)")
+                if self.shouldLogConnectionFailure(error) {
+                    print("❌ Conn failed: \(error)")
+                }
                 self.clearConnectionState(connection)
             case .cancelled:
                 self.clearConnectionState(connection)
@@ -110,7 +112,15 @@ final class LocalHTTPServer {
                     self.processRequest(data, on: connection)
                 }
             }
-            if isComplete || error != nil { self.requestCancel(connection); return }
+            if error != nil {
+                // Peer already closed/reset the socket: avoid extra cancel() noise.
+                self.clearConnectionState(connection)
+                return
+            }
+            if isComplete {
+                self.requestCancel(connection)
+                return
+            }
             self.receive(on: connection) // keep reading pipelined data (simple)
         }
     }
@@ -829,7 +839,7 @@ final class LocalHTTPServer {
         let id = ObjectIdentifier(connection)
         if cancelledConnections.contains(id) { return }
         cancelledConnections.insert(id)
-        requestCancel(connection)
+        connection.cancel()
     }
 
     private func clearConnectionState(_ connection: NWConnection) {
@@ -841,6 +851,16 @@ final class LocalHTTPServer {
         cancelledConnections.remove(id)
         wsConnections.removeValue(forKey: id)
         wsStates.removeValue(forKey: id)
+    }
+
+    private func shouldLogConnectionFailure(_ error: NWError) -> Bool {
+        switch error {
+        case .posix(let code):
+            // Common/expected socket teardown paths; avoid log spam.
+            return code != .ECONNRESET && code != .ENOTCONN && code != .ECANCELED && code != .EPIPE
+        default:
+            return true
+        }
     }
 
     // MARK: - Text file serving

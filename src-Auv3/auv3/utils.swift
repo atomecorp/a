@@ -610,8 +610,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         }
 #endif
 
-        let outputFormat = _outputBusArray?.first?.format
-        let inputFormat = _inputBusArray?.first?.format
+        let outputFormat = ((_outputBusArray?.count ?? 0) > 0) ? _outputBusArray?[0].format : nil
+        let inputFormat = ((_inputBusArray?.count ?? 0) > 0) ? _inputBusArray?[0].format : nil
         if normalizedSource == "mic" && inputFormat == nil {
             emitRecordingEvent(type: "record_error", payload: [
                 "session_id": sessionId,
@@ -848,7 +848,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         for c in 0..<ch {
             let buf = bufferList.buffer(at: c)
             guard let mData = buf.mData else { return }
-            recordingChannelPointers[c] = mData.assumingMemoryBound(to: Float.self)
+            let mutablePtr = mData.assumingMemoryBound(to: Float.self)
+            recordingChannelPointers[c] = UnsafePointer(mutablePtr)
         }
         recordingChannelPointers.withUnsafeBufferPointer { ptr in
             if let base = ptr.baseAddress {

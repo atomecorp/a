@@ -874,8 +874,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                            priority: IPCPriority = .normal,
                            targetWebView: WKWebView? = nil,
                            completion: ((Any?, Error?) -> Void)? = nil) {
-        weak var explicitWebView = targetWebView
-        performIPC(label: label, priority: priority) {
+        performIPC(label: label, priority: priority) { [weak explicitWebView = targetWebView] in
             guard let webView = explicitWebView ?? self.webView else {
                 if runningInExtension {
                     shared.log.error("evaluateJS missing webView for label=\(label, privacy: .public)")

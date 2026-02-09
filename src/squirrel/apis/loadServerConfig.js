@@ -37,8 +37,13 @@ function isInTauriRuntime() {
     if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
     const protocol = window.location?.protocol || '';
     if (protocol === 'tauri:' || protocol === 'asset:') return true;
-    if (window.__ATOME_LOCAL_HTTP_PORT__ || window.__ATOME_PROJECT_ROOT__) return true;
     return false;
+}
+
+function isEmbeddedIOSRuntime() {
+    if (typeof window === 'undefined') return false;
+    const protocol = window.location?.protocol || '';
+    return protocol === 'atome:' || window.__AUV3_MODE__ === true;
 }
 
 function isTauriProdWebview() {
@@ -147,6 +152,10 @@ function resolveProtocolBase() {
 }
 
 function buildFastifyHttpBase(config) {
+    if (isEmbeddedIOSRuntime()) {
+        return resolveTauriProdFastifyHttpBase();
+    }
+
     // In browser mode (behind nginx), Fastify is reached via same-origin.
     // Never force :3001 in production web deployments, otherwise HTTPS pages will
     // attempt to talk TLS directly to the Fastify HTTP port and fail.
@@ -223,6 +232,13 @@ export async function loadServerConfigOnce() {
                 ? window.__SQUIRREL_FASTIFY_URL__.trim()
                 : '';
             if (existing) return;
+            if (isEmbeddedIOSRuntime()) {
+                const fallback = resolveTauriProdFastifyHttpBase();
+                if (fallback) {
+                    applyFastifyGlobalsFromHttpBase(fallback, window.__SQUIRREL_SERVER_CONFIG__ || null);
+                }
+                return;
+            }
             if (isTauriRuntime) {
                 const fallback = resolveTauriProdFastifyHttpBase();
                 if (fallback) {
