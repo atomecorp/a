@@ -148,7 +148,7 @@ All object changes must be expressed with a small set of canonical actions.
   "idempotency_key": "hash",
   "dry_run": false,
 
-  "action": "CREATE|PATCH|DELETE|SOFT_DELETE|HARD_DELETE|UPDATE_ACL|BATCH",
+  "action": "CREATE|PATCH|DELETE|SOFT_DELETE|UPDATE_ACL|BATCH",
   "target": { "id": "..." } ,
   "patch": { "properties": { ... }, "meta": { ... } },
   "preconditions": { "etag": "..." }

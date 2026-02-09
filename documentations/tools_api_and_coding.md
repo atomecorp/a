@@ -90,7 +90,7 @@ Creation completeness rule:
 
 ### atome.delete
 ```jsonc
-{ "id": "uuid", "mode": "soft|hard" }
+{ "id": "uuid", "mode": "soft" }
 ```
 
 ### atome.share
