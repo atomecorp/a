@@ -296,9 +296,44 @@ export async function canAccessFile(fileIdentifier, userId, requiredAccess = 're
         return true;
     }
 
-    // Check permissions table
+    // Check permissions table on the file atome itself
     const permLevel = requiredAccess === 'write' ? PERMISSION.WRITE : PERMISSION.READ;
-    return await checkPermission(userId, meta.atome_id, permLevel);
+    const directAccess = await checkPermission(userId, meta.atome_id, permLevel);
+    if (directAccess) return true;
+
+    // Fallback: If the file atome_id differs from the identifier, also check the identifier
+    // (handles pre-fix data where the recording atome_id != file atome_id)
+    if (meta.atome_id !== fileIdentifier && fileIdentifier) {
+        const fallbackAccess = await checkPermission(userId, fileIdentifier, permLevel);
+        if (fallbackAccess) return true;
+    }
+
+    // Fallback: Check if any atome that references this file (by file_name) grants access.
+    // This covers shared recordings where permission was granted on the recording atome
+    // but the file was registered under a different atome_id.
+    const fileName = meta.file_name || meta.original_name || null;
+    if (fileName) {
+        try {
+            const referencing = await db.query('all', `
+                SELECT DISTINCT p2.atome_id
+                FROM particles p2
+                WHERE p2.particle_key IN ('file_name', 'src')
+                AND p2.particle_value = ?
+                AND p2.atome_id != ?
+                LIMIT 5
+            `, [JSON.stringify(fileName), meta.atome_id]);
+            for (const ref of (referencing || [])) {
+                if (ref.atome_id) {
+                    const refAccess = await checkPermission(userId, ref.atome_id, permLevel);
+                    if (refAccess) return true;
+                }
+            }
+        } catch (_) {
+            // Fallback query failed - continue with denial
+        }
+    }
+
+    return false;
 }
 
 /**

@@ -1509,8 +1509,11 @@ async function startServer() {
 
         if (DATABASE_ENABLED) {
           const mimeType = mimeHeader || null;
+          const atomeIdHeader = getHeaderValue(request, 'x-atome-id');
           const stats = await fs.stat(filePath).catch(() => null);
           await registerFileUpload(fileName, userId, {
+            atome_id: atomeIdHeader || null,
+            atome_type: atomeTypeHeader || null,
             original_name: decodedName,
             mime_type: mimeType || null,
             size_bytes: stats ? stats.size : null,
