@@ -10,7 +10,8 @@ import {
     getAnonymousCredentials,
     setAnonymousCredentials,
     clearCurrentProjectCache,
-    waitForAuthCheck
+    waitForAuthCheck,
+    resetWorkspaceForNextUser
 } from './session.js';
 
 const adapters = {
@@ -416,6 +417,7 @@ export const auth = {
         try { FastifyAdapter?.clearToken?.(); } catch (_) { }
         clearSessionState();
         clearCurrentProjectCache();
+        resetWorkspaceForNextUser({ clearStorage: true, reason: 'logout' });
         return {
             tauri: { success: true },
             fastify: { success: true }
