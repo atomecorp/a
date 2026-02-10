@@ -149,7 +149,7 @@ window.observeMutations = observeMutations;
 window.body = document.body;
 window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
-// === ATOME UI LAYER (between #intuition and #view) ===
+// === ATOME UI LAYER (above #intuition and #view) ===
 let atomeUiLayerScheduled = false;
 let atomeUiObserver = null;
 
@@ -161,12 +161,10 @@ function resolveLayerZIndex(intuitionEl, viewEl) {
     return Number.isFinite(parsed) ? parsed : NaN;
   };
   const intuitionZ = parseZ(intuitionEl);
-  if (Number.isFinite(intuitionZ)) {
-    return Math.max(0, intuitionZ - 1);
-  }
   const viewZ = parseZ(viewEl);
-  if (Number.isFinite(viewZ)) {
-    return viewZ + 1;
+  const finiteLevels = [intuitionZ, viewZ].filter((level) => Number.isFinite(level));
+  if (finiteLevels.length > 0) {
+    return Math.max(0, ...finiteLevels) + 1;
   }
   return 1;
 }
