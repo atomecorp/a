@@ -23,6 +23,7 @@ tests
 
 # Test files
 src/assets/uploads/
+tools/headless_output/
 
 
 # Logs
