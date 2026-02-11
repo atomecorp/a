@@ -1,0 +1,8 @@
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="rgb(255, 255, 255)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 44h40" stroke-width="12"/>
+    <path d="M68 84h40" stroke-width="12"/>
+    <path d="M64 18v92" stroke-width="12"/>
+    <path d="M54 54l10 10 10-10" stroke-width="8"/>
+  </g>
+</svg>
