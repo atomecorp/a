@@ -167,6 +167,77 @@ const registerDefaultTools = () => {
     });
 
     Agent.registerTool({
+        name: 'eve.mtrack.clip.move',
+        description: 'Move one or more MTrack clips (time and/or track) through the mtrack tool action pipeline.',
+        capabilities: ['timeline.write', 'ui.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            properties: {
+                clip_ids: { type: 'array' },
+                clip_id: { type: 'string' },
+                atome_ids: { type: 'array' },
+                atome_id: { type: 'string' },
+                start_seconds: { type: 'number' },
+                delta_seconds: { type: 'number' },
+                track_id: { type: 'number' },
+                track_key: { type: 'string' },
+                track_delta: { type: 'number' },
+                snap: { type: 'boolean' },
+                scope: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const runToolFn = globalThis.runTool;
+            if (typeof runToolFn !== 'function') {
+                throw new Error('runTool is not available');
+            }
+            const input = (params && typeof params === 'object') ? params : {};
+            return runToolFn({
+                tool_id: 'ui.mtrack.clip.move',
+                event: 'on_apply',
+                input,
+                source: { type: 'mcp', tool: 'eve.mtrack.clip.move' }
+            });
+        },
+        summary: () => 'Move MTrack clip(s)'
+    });
+
+    Agent.registerTool({
+        name: 'eve.mtrack.clip.crop',
+        description: 'Crop one or more MTrack clips (trim in/out) through the mtrack tool action pipeline.',
+        capabilities: ['timeline.write', 'ui.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            properties: {
+                clip_ids: { type: 'array' },
+                clip_id: { type: 'string' },
+                atome_ids: { type: 'array' },
+                atome_id: { type: 'string' },
+                in_seconds: { type: 'number' },
+                in_delta_seconds: { type: 'number' },
+                out_seconds: { type: 'number' },
+                out_delta_seconds: { type: 'number' },
+                snap: { type: 'boolean' },
+                scope: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const runToolFn = globalThis.runTool;
+            if (typeof runToolFn !== 'function') {
+                throw new Error('runTool is not available');
+            }
+            const input = (params && typeof params === 'object') ? params : {};
+            return runToolFn({
+                tool_id: 'ui.mtrack.clip.crop',
+                event: 'on_apply',
+                input,
+                source: { type: 'mcp', tool: 'eve.mtrack.clip.crop' }
+            });
+        },
+        summary: () => 'Crop MTrack clip(s)'
+    });
+
+    Agent.registerTool({
         name: 'calendar.list_events',
         description: 'List calendar events.',
         capabilities: ['calendar.read'],
