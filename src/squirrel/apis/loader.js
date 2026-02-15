@@ -32,6 +32,8 @@ import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
     if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
     const protocol = String(window.location?.protocol || '').toLowerCase();
     if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    const hasInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
+    if (hasInvoke) return true;
     const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
     if (!hasTauriObjects) return false;
     const ua = (typeof navigator !== 'undefined') ? String(navigator.userAgent || '') : '';
@@ -47,13 +49,25 @@ import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
   // - Browser runtime must not keep local private ports.
   // - Embedded iOS runtime may keep a persisted dynamic local port.
   if (isTauriRuntime()) {
+    const runtimePort = Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window[k] || null);
+    if (Number.isFinite(runtimePort) && runtimePort > 0) {
+      window[k] = runtimePort;
+      writeStoredPort(runtimePort);
+      return;
+    }
     const explicitCustomPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
     const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
-    const normalized = (allowCustomPort && Number.isFinite(explicitCustomPort) && explicitCustomPort > 0)
-      ? explicitCustomPort
-      : 3000;
-    window[k] = normalized;
-    writeStoredPort(normalized);
+    if (allowCustomPort && Number.isFinite(explicitCustomPort) && explicitCustomPort > 0) {
+      window[k] = explicitCustomPort;
+      writeStoredPort(explicitCustomPort);
+      return;
+    }
+    const stored = readStoredPort();
+    if (stored) {
+      window[k] = stored;
+      return;
+    }
+    try { delete window[k]; } catch (_) { window[k] = undefined; }
     return;
   }
 
@@ -105,7 +119,7 @@ function dataFetcher(path, opts = {}) {
     const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
     const looksSvg = ext === 'svg';
     const hasSpace = cleanPath.includes(' ');
-    const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+    const port = (typeof window !== 'undefined') ? (window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__) : null;
 
     const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
     const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;

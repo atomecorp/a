@@ -1,5 +1,4 @@
 import { TauriAdapter, FastifyAdapter, checkBackends } from '../adole.js';
-import { ensure_fastify_token } from '../adole/core.js';
 import { isTauriRuntime } from './runtime.js';
 import { syncLocalProjectsToFastify } from './atomes.js';
 import {
@@ -158,6 +157,58 @@ const ensureBackendAvailability = async () => {
     } catch (_) {
         return { tauri: false, fastify: false };
     }
+};
+
+const loadFastifyLoginCache = () => {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem('fastify_login_cache_v1');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        const phone = normalizePhone(parsed.phone || '');
+        const password = String(parsed.password || '');
+        if (!phone || !password) return null;
+        if (password.trim().toLowerCase() === 'anonymous') return null;
+        return { phone, password };
+    } catch (_) {
+        return null;
+    }
+};
+
+const ensureFastifyTokenLocal = async () => {
+    const existing = FastifyAdapter?.getToken?.();
+    if (existing) return { ok: true, reason: 'token_present' };
+
+    const state = getSessionState();
+    if (state?.mode !== 'authenticated') {
+        return { ok: false, reason: 'not_authenticated' };
+    }
+
+    const cached = loadFastifyLoginCache();
+    if (!cached?.phone || !cached?.password) {
+        return { ok: false, reason: 'missing_login_cache' };
+    }
+
+    if (state?.user?.phone) {
+        const statePhone = normalizePhone(state.user.phone);
+        if (statePhone && statePhone !== cached.phone) {
+            return { ok: false, reason: 'cache_phone_mismatch' };
+        }
+    }
+
+    const loginResult = await loginBackend('fastify', {
+        phone: cached.phone,
+        password: cached.password
+    });
+    if (!loginResult.ok) {
+        return {
+            ok: false,
+            reason: 'cache_login_failed',
+            error: loginResult.error || null
+        };
+    }
+    return { ok: true, reason: 'cache_login_success' };
 };
 
 const migrateAnonymousWorkspace = async (fromUserId, toUserId) => {
@@ -588,8 +639,8 @@ export const auth = {
         const token = FastifyAdapter?.getToken?.();
         if (token) return { ok: true, reason: 'token_present' };
         try {
-            const result = await ensure_fastify_token();
-            if (result?.ok || result?.synced) {
+            const result = await ensureFastifyTokenLocal();
+            if (result?.ok) {
                 return { ok: true, reason: result?.reason || 'token_obtained' };
             }
             return {

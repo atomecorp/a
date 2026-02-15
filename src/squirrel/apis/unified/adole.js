@@ -75,8 +75,16 @@ async function silentPing(baseUrl) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), CONFIG.PING_TIMEOUT);
 
-        // Choose endpoint based on server (Tauri uses /local/, Fastify doesn't)
-        const isTauriServer = baseUrl.includes(':3000');
+        // Choose endpoint based on server role (Tauri local Axum vs Fastify).
+        let isTauriServer = false;
+        try {
+            const parsed = new URL(String(baseUrl || '').trim());
+            const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+            const localPort = readLocalTauriHttpPort();
+            isTauriServer = !!(localPort && isLoopbackHostname(parsed.hostname) && port === localPort);
+        } catch (_) {
+            isTauriServer = false;
+        }
         const pingEndpoint = isTauriServer ? '/api/auth/local/me' : '/api/auth/me';
 
         const response = await fetch(`${baseUrl}${pingEndpoint}`, {
@@ -110,8 +118,10 @@ function isInTauri() {
     const host = window.location?.hostname || '';
     if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
     if (host === 'tauri.localhost') return true;
+    const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
+    if (hasTauriInvoke) return true;
     const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-    if (hasTauriObjects) return true;
+    if (!hasTauriObjects) return false;
     const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
     return /tauri/i.test(userAgent);
 }
@@ -123,11 +133,10 @@ function readLocalTauriHttpPort() {
     if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
         return forcedPort;
     }
-    if (isInTauri()) return 3000;
-    const raw = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || null;
+    const raw = window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null;
     const value = Number(raw);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    return value;
+    if (Number.isFinite(value) && value > 0) return value;
+    return isInTauri() ? 3000 : null;
 }
 
 function isLoopbackHostname(hostname) {

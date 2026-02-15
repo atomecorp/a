@@ -75,8 +75,10 @@ const isInTauriRuntime = () => {
     const host = window.location?.hostname || '';
     if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
     if (host === 'tauri.localhost') return true;
+    const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
+    if (hasTauriInvoke) return true;
     const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-    if (hasTauriObjects) return true;
+    if (!hasTauriObjects) return false;
     const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
     return /tauri/i.test(userAgent);
 };
@@ -97,11 +99,10 @@ const readLocalTauriHttpPort = () => {
     if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
         return forcedPort;
     }
-    if (isInTauriRuntime()) return 3000;
-    const raw = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || null;
+    const raw = window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null;
     const value = Number(raw);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    return value;
+    if (Number.isFinite(value) && value > 0) return value;
+    return isInTauriRuntime() ? 3000 : null;
 };
 
 const clearFastifyOverrideStorage = () => {
