@@ -104,9 +104,90 @@ async function silentPing(baseUrl) {
  */
 function isInTauri() {
     if (typeof window === 'undefined') return false;
-    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
     const protocol = window.location?.protocol || '';
-    return protocol === 'tauri:' || protocol === 'asset:';
+    const host = window.location?.hostname || '';
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    if (host === 'tauri.localhost') return true;
+    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (hasTauriObjects) return true;
+    const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
+    return /tauri/i.test(userAgent);
+}
+
+function readLocalTauriHttpPort() {
+    if (typeof window === 'undefined') return null;
+    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+    const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+    if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
+        return forcedPort;
+    }
+    if (isInTauri()) return 3000;
+    const raw = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || null;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value;
+}
+
+function isLoopbackHostname(hostname) {
+    const host = String(hostname || '').trim().toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
+}
+
+function clearFastifyOverrideStorage() {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.removeItem('squirrel_tauri_fastify_url_override');
+    } catch (_) { }
+}
+
+function readExpectedFastifyLoopbackPort() {
+    const raw = window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port ?? 3001;
+    let expected = Number(raw);
+    if (!Number.isFinite(expected) || expected <= 0) expected = 3001;
+    const localPort = readLocalTauriHttpPort();
+    if (localPort && expected === localPort) expected = 3001;
+    return expected;
+}
+
+function isDisallowedFastifyLoopbackPort(baseUrl) {
+    if (typeof baseUrl !== 'string' || !baseUrl.trim()) return false;
+    if (!isInTauri()) return false;
+    if (window.__SQUIRREL_ALLOW_CUSTOM_FASTIFY_LOOPBACK_PORT__ === true) return false;
+    try {
+        const parsed = new URL(baseUrl.trim());
+        if (!isLoopbackHostname(parsed.hostname)) return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        if (!Number.isFinite(candidatePort) || candidatePort <= 0) return false;
+        return candidatePort !== readExpectedFastifyLoopbackPort();
+    } catch (_) {
+        return false;
+    }
+}
+
+function isInvalidFastifyHttpBase(baseUrl) {
+    if (typeof baseUrl !== 'string' || !baseUrl.trim()) return false;
+    if (!isInTauri()) return false;
+    if (isDisallowedFastifyLoopbackPort(baseUrl)) return true;
+    const localPort = readLocalTauriHttpPort();
+    if (!localPort) return false;
+    try {
+        const parsed = new URL(baseUrl.trim());
+        if (!isLoopbackHostname(parsed.hostname)) return false;
+        const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        return Number.isFinite(port) && port === localPort;
+    } catch (_) {
+        return false;
+    }
+}
+
+function isInvalidFastifyWsUrl(wsUrl) {
+    if (typeof wsUrl !== 'string' || !wsUrl.trim()) return false;
+    const normalized = wsUrl.trim()
+        .replace(/^wss:/, 'https:')
+        .replace(/^ws:/, 'http:');
+    return isInvalidFastifyHttpBase(normalized);
 }
 
 const BACKEND_SOURCES = new Set(['tauri', 'fastify', 'auto']);
@@ -180,7 +261,7 @@ export function resolveSyncDirection() {
 function getTauriHttpBaseUrl() {
     if (typeof window === 'undefined') return CONFIG.TAURI_BASE_URL;
 
-    const port = window.__ATOME_LOCAL_HTTP_PORT__;
+    const port = readLocalTauriHttpPort();
     if (port) return `http://127.0.0.1:${port}`;
 
     return CONFIG.TAURI_BASE_URL;
@@ -196,13 +277,26 @@ function getFastifyHttpBaseUrl() {
 
     const custom = window.__SQUIRREL_FASTIFY_URL__;
     if (typeof custom === 'string' && custom.trim()) {
-        return custom.trim().replace(/\/$/, '');
+        const normalized = custom.trim().replace(/\/$/, '');
+        if (isInvalidFastifyHttpBase(normalized)) {
+            clearFastifyOverrideStorage();
+        } else {
+            return normalized;
+        }
     }
 
     // In Tauri mode, default to local Fastify on port 3001
     if (isInTauri()) {
         const config = window.__SQUIRREL_SERVER_CONFIG__;
-        const port = config?.fastify?.port || 3001;
+        const host = config?.fastify?.host || '127.0.0.1';
+        let port = Number(config?.fastify?.port || 3001);
+        if (!Number.isFinite(port) || port <= 0) {
+            port = 3001;
+        }
+        const localPort = readLocalTauriHttpPort();
+        if (localPort && port === localPort && isLoopbackHostname(host)) {
+            port = 3001;
+        }
         return `http://127.0.0.1:${port}`;
     }
 
@@ -225,12 +319,21 @@ function getFastifyWsApiUrl() {
 
     const explicit = window.__SQUIRREL_FASTIFY_WS_API_URL__;
     if (typeof explicit === 'string' && explicit.trim()) {
-        return explicit.trim();
+        const normalized = explicit.trim();
+        if (isInvalidFastifyWsUrl(normalized)) {
+            clearFastifyOverrideStorage();
+        } else {
+            return normalized;
+        }
     }
 
     const httpBase = getFastifyHttpBaseUrl();
     if (!httpBase) return null;
-    return httpBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/api';
+    const wsUrl = httpBase.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:') + '/ws/api';
+    if (isInvalidFastifyWsUrl(wsUrl)) {
+        return null;
+    }
+    return wsUrl;
 }
 
 /**

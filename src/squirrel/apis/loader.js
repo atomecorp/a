@@ -11,14 +11,68 @@ import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
 (function persistLocalPort() {
   if (typeof window === 'undefined') return;
   const k = '__ATOME_LOCAL_HTTP_PORT__';
-  // Restore if lost after refresh
-  if (!window[k]) {
-    try { const saved = localStorage.getItem(k); if (saved) window[k] = parseInt(saved, 10); } catch (_) { }
+  const readStoredPort = () => {
+    try {
+      const raw = localStorage.getItem(k);
+      const value = Number(raw);
+      return Number.isFinite(value) && value > 0 ? value : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  const writeStoredPort = (port) => {
+    if (!Number.isFinite(port) || port <= 0) return;
+    try { localStorage.setItem(k, String(port)); } catch (_) { }
+  };
+  const clearStoredPort = () => {
+    try { localStorage.removeItem(k); } catch (_) { }
+  };
+  const isTauriRuntime = () => {
+    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
+    const protocol = String(window.location?.protocol || '').toLowerCase();
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (!hasTauriObjects) return false;
+    const ua = (typeof navigator !== 'undefined') ? String(navigator.userAgent || '') : '';
+    return /tauri/i.test(ua);
+  };
+  const isEmbeddedIosRuntime = () => {
+    const protocol = String(window.location?.protocol || '').toLowerCase();
+    return protocol === 'atome:' || window.__AUV3_MODE__ === true;
+  };
+
+  // Contract:
+  // - Desktop Tauri uses Axum local server and must never consume stale browser/localStorage ports.
+  // - Browser runtime must not keep local private ports.
+  // - Embedded iOS runtime may keep a persisted dynamic local port.
+  if (isTauriRuntime()) {
+    const explicitCustomPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+    const normalized = (allowCustomPort && Number.isFinite(explicitCustomPort) && explicitCustomPort > 0)
+      ? explicitCustomPort
+      : 3000;
+    window[k] = normalized;
+    writeStoredPort(normalized);
+    return;
   }
-  // Save if present
-  if (window[k]) {
-    try { localStorage.setItem(k, String(window[k])); } catch (_) { }
+
+  if (isEmbeddedIosRuntime()) {
+    const runtimePort = Number(window[k]);
+    if (Number.isFinite(runtimePort) && runtimePort > 0) {
+      writeStoredPort(runtimePort);
+      return;
+    }
+    const stored = readStoredPort();
+    if (stored) {
+      window[k] = stored;
+    }
+    return;
   }
+
+  // Pure browser/web runtime: never keep private local server port.
+  clearStoredPort();
+  try { delete window[k]; } catch (_) { window[k] = undefined; }
 })();
 
 const __dataCache = {};

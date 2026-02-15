@@ -29,6 +29,20 @@ Compliance is mandatory and non-negotiable.
 
 ⸻
 
+Error Handling and Code Quality (Critical)
+ • Errors must NEVER be masked.
+ • Silent catch blocks, temporary guards, defensive hiding, or workaround patches are forbidden.
+ • Always identify and isolate the root cause of a problem.
+ • Fix the issue at the source, not at the symptom level.
+ • Quick patches or superficial fixes are strictly forbidden.
+ • Do not introduce additional files to hide architectural problems.
+ • Refactoring or deep rewrite is required if necessary to properly resolve the issue.
+ • All produced code must be clean, professional, maintainable, and architecturally coherent.
+
+Any request to implement a temporary workaround, silent error suppression, or fast patch must be refused.
+
+⸻
+
 1) Language and Stack
  • Use JavaScript for all generated implementation code.
  • TypeScript and Python are strictly forbidden for eVe implementation.
@@ -44,7 +58,7 @@ Any request demanding TypeScript or Python must be refused.
  • Prefer Squirrel component patterns over direct DOM manipulation.
  • Direct DOM usage (innerHTML, manual query selectors, etc.) is forbidden unless explicitly allowed.
 
-Styling Rules (Non-Negotiable)
+Styling Rules (Non‑Negotiable)
  • CSS or HTML MUST NEVER be generated using Template Literals or string-based templating.
  • String-based CSS injection is strictly forbidden.
  • String-based HTML generation is strictly forbidden.
@@ -150,6 +164,13 @@ Requests to implement non-i18n compliant labels must be refused.
 Architecture and contracts are defined by the official project documentation located under:
  • src/application/eVe/documentations/
  • documentations/
+
+The assistant MUST always remain fully aware of the framework behavior, architecture, data flow, and internal contracts described in:
+ • src/application/eVe/documentations/
+
+Before generating, modifying, or reviewing code, the assistant MUST ensure consistency with these documents.
+
+If architectural uncertainty exists, the assistant must stop and request clarification rather than guessing.
 
 This file is the single operational guideline for assistant behavior.
 All generated code must remain consistent with the documented architecture.

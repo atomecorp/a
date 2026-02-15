@@ -67,21 +67,109 @@ const getClientId = () => {
     }
 };
 
+const isInTauriRuntime = () => {
+    if (typeof window === 'undefined') return false;
+    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
+    const protocol = window.location?.protocol || '';
+    const host = window.location?.hostname || '';
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    if (host === 'tauri.localhost') return true;
+    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (hasTauriObjects) return true;
+    const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
+    return /tauri/i.test(userAgent);
+};
+
 const detectRuntime = () => {
     if (typeof window === 'undefined') return 'unknown';
-    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return 'tauri';
+    if (isInTauriRuntime()) return 'tauri';
     if (typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '')) return 'electron';
     return 'browser';
 };
 
 const isLocalHostname = (hostname) => hostname === '127.0.0.1' || hostname === 'localhost';
 
+const readLocalTauriHttpPort = () => {
+    if (typeof window === 'undefined') return null;
+    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+    const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+    if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
+        return forcedPort;
+    }
+    if (isInTauriRuntime()) return 3000;
+    const raw = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || null;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value;
+};
+
+const clearFastifyOverrideStorage = () => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.removeItem('squirrel_tauri_fastify_url_override');
+    } catch (_) { }
+};
+
+const readExpectedFastifyLoopbackPort = () => {
+    const raw = window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port ?? 3001;
+    let expected = Number(raw);
+    if (!Number.isFinite(expected) || expected <= 0) expected = 3001;
+    const localPort = readLocalTauriHttpPort();
+    if (localPort && expected === localPort) expected = 3001;
+    return expected;
+};
+
+const isDisallowedFastifyLoopbackPort = (base) => {
+    if (typeof base !== 'string' || !base.trim()) return false;
+    if (!isInTauriRuntime()) return false;
+    if (window.__SQUIRREL_ALLOW_CUSTOM_FASTIFY_LOOPBACK_PORT__ === true) return false;
+    try {
+        const parsed = new URL(base.trim());
+        if (!isLocalHostname(parsed.hostname) && parsed.hostname !== '0.0.0.0') return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        if (!Number.isFinite(candidatePort) || candidatePort <= 0) return false;
+        return candidatePort !== readExpectedFastifyLoopbackPort();
+    } catch (_) {
+        return false;
+    }
+};
+
+const isInvalidFastifyHttpBase = (base) => {
+    if (typeof base !== 'string' || !base.trim()) return false;
+    if (!isInTauriRuntime()) return false;
+    if (isDisallowedFastifyLoopbackPort(base)) return true;
+    const localPort = readLocalTauriHttpPort();
+    if (!localPort) return false;
+    try {
+        const parsed = new URL(base.trim());
+        if (!isLocalHostname(parsed.hostname) && parsed.hostname !== '0.0.0.0') return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        return Number.isFinite(candidatePort) && candidatePort === localPort;
+    } catch (_) {
+        return false;
+    }
+};
+
+const isInvalidFastifyWsUrl = (url) => {
+    if (typeof url !== 'string' || !url.trim()) return false;
+    const normalized = url.trim()
+        .replace(/^wss:/, 'https:')
+        .replace(/^ws:/, 'http:');
+    return isInvalidFastifyHttpBase(normalized);
+};
+
 const resolveFastifyHttpBase = () => {
     if (typeof window === 'undefined') return '';
     const explicit = typeof window.__SQUIRREL_FASTIFY_URL__ === 'string'
         ? window.__SQUIRREL_FASTIFY_URL__.trim()
         : '';
-    return explicit ? explicit.replace(/\/$/, '') : '';
+    if (!explicit) return '';
+    if (isInvalidFastifyHttpBase(explicit)) {
+        clearFastifyOverrideStorage();
+        return '';
+    }
+    return explicit.replace(/\/$/, '');
 };
 
 const resolveFastifyWsSyncUrl = () => {
@@ -90,15 +178,23 @@ const resolveFastifyWsSyncUrl = () => {
     const explicit = typeof window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ === 'string'
         ? window.__SQUIRREL_FASTIFY_WS_SYNC_URL__.trim()
         : '';
-    if (explicit) return explicit;
+    if (explicit) {
+        if (isInvalidFastifyWsUrl(explicit)) {
+            clearFastifyOverrideStorage();
+            return '';
+        }
+        return explicit;
+    }
 
     const base = resolveFastifyHttpBase();
     if (!base) return '';
 
-    return base
+    const resolved = base
         .replace(/^https:/, 'wss:')
         .replace(/^http:/, 'ws:')
         .replace(/\/$/, '') + '/ws/sync';
+    if (isInvalidFastifyWsUrl(resolved)) return '';
+    return resolved;
 };
 
 const resolveFastifyWsApiUrl = () => {
@@ -107,22 +203,29 @@ const resolveFastifyWsApiUrl = () => {
     const explicit = typeof window.__SQUIRREL_FASTIFY_WS_API_URL__ === 'string'
         ? window.__SQUIRREL_FASTIFY_WS_API_URL__.trim()
         : '';
-    if (explicit) return explicit;
+    if (explicit) {
+        if (isInvalidFastifyWsUrl(explicit)) {
+            clearFastifyOverrideStorage();
+            return '';
+        }
+        return explicit;
+    }
 
     const base = resolveFastifyHttpBase();
     if (!base) return '';
 
-    return base
+    const resolved = base
         .replace(/^https:/, 'wss:')
         .replace(/^http:/, 'ws:')
         .replace(/\/$/, '') + '/ws/api';
+    if (isInvalidFastifyWsUrl(resolved)) return '';
+    return resolved;
 };
 
 const resolveTauriWsApiUrl = () => {
     if (typeof window === 'undefined') return '';
-    if (!(window.__TAURI__ || window.__TAURI_INTERNALS__)) return '';
-
-    const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT;
+    if (!isInTauriRuntime()) return '';
+    const port = readLocalTauriHttpPort();
     if (!port) return '';
     return `ws://127.0.0.1:${port}/ws/api`;
 };

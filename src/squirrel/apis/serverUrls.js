@@ -16,11 +16,14 @@
  */
 export function isTauri() {
     if (typeof window === 'undefined') return false;
-    return !!(
-        window.__TAURI__ ||
-        window.__TAURI_INTERNALS__ ||
-        (typeof navigator !== 'undefined' && /tauri/i.test(navigator.userAgent || ''))
-    );
+    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
+    const protocol = String(window.location?.protocol || '').toLowerCase();
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (!hasTauriObjects) return false;
+    const userAgent = (typeof navigator !== 'undefined') ? String(navigator.userAgent || '') : '';
+    return /tauri/i.test(userAgent);
 }
 
 /**
@@ -45,16 +48,19 @@ export function isLocalServerLikely() {
  */
 export function getLocalServerUrl() {
     if (typeof window === 'undefined') return null;
-
-    // Custom port set by Tauri
-    const customPort = window.__ATOME_LOCAL_HTTP_PORT__;
-    if (customPort) {
-        return `http://127.0.0.1:${customPort}`;
+    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+    const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+    if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
+        return `http://127.0.0.1:${forcedPort}`;
     }
-
-    // Check if Tauri is available
     if (isTauri()) {
         return 'http://127.0.0.1:3000';
+    }
+
+    // Custom port set by Tauri
+    const customPort = Number(window.__ATOME_LOCAL_HTTP_PORT__);
+    if (Number.isFinite(customPort) && customPort > 0) {
+        return `http://127.0.0.1:${customPort}`;
     }
 
     // Local server not available (pure browser/Fastify mode)

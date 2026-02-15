@@ -34,10 +34,16 @@ function applyDebugConfig(config) {
 
 function isInTauriRuntime() {
     if (typeof window === 'undefined') return false;
-    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
     const protocol = window.location?.protocol || '';
-    if (protocol === 'tauri:' || protocol === 'asset:') return true;
-    return false;
+    const host = window.location?.hostname || '';
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    if (host === 'tauri.localhost') return true;
+    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (hasTauriObjects) return true;
+    const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
+    return /tauri/i.test(userAgent);
 }
 
 function isEmbeddedIOSRuntime() {
@@ -76,6 +82,78 @@ function normalizeNoTrailingSlash(url) {
     return url.trim().replace(/\/$/, '');
 }
 
+function readLocalTauriHttpPort() {
+    if (typeof window === 'undefined') return null;
+    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+    const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+    if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
+        return forcedPort;
+    }
+    const raw = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || null;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+        return isInTauriRuntime() ? 3000 : null;
+    }
+    return value;
+}
+
+function isLoopbackHost(hostname) {
+    const host = String(hostname || '').trim().toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
+}
+
+function readExpectedFastifyLoopbackPort(config = null) {
+    const raw = config?.fastify?.port
+        ?? window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port
+        ?? 3001;
+    let expected = Number(raw);
+    if (!Number.isFinite(expected) || expected <= 0) expected = 3001;
+    const localPort = readLocalTauriHttpPort();
+    if (localPort && expected === localPort) {
+        expected = 3001;
+    }
+    return expected;
+}
+
+function isDisallowedFastifyLoopbackPort(base, config = null) {
+    if (typeof base !== 'string' || !base.trim()) return false;
+    if (!isInTauriRuntime()) return false;
+    if (window.__SQUIRREL_ALLOW_CUSTOM_FASTIFY_LOOPBACK_PORT__ === true) return false;
+    try {
+        const parsed = new URL(base.trim());
+        if (!isLoopbackHost(parsed.hostname)) return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        if (!Number.isFinite(candidatePort) || candidatePort <= 0) return false;
+        const expectedPort = readExpectedFastifyLoopbackPort(config);
+        return candidatePort !== expectedPort;
+    } catch (_) {
+        return false;
+    }
+}
+
+function isInvalidFastifyLoopbackBase(base) {
+    if (typeof base !== 'string' || !base.trim()) return false;
+    if (!isInTauriRuntime()) return false;
+    const localPort = readLocalTauriHttpPort();
+    if (isDisallowedFastifyLoopbackPort(base)) return true;
+    if (!localPort) return false;
+    try {
+        const parsed = new URL(base.trim());
+        if (!isLoopbackHost(parsed.hostname)) return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        return Number.isFinite(candidatePort) && candidatePort === localPort;
+    } catch (_) {
+        return false;
+    }
+}
+
+function clearFastifyOverrideStorage() {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.removeItem('squirrel_tauri_fastify_url_override');
+    } catch (_) { }
+}
+
 function isLocalFastifyBase(base) {
     if (typeof base !== 'string' || !base.trim()) return false;
     try {
@@ -91,7 +169,13 @@ function readTauriFastifyOverride() {
     if (typeof window === 'undefined') return '';
     try {
         const stored = localStorage.getItem('squirrel_tauri_fastify_url_override');
-        return normalizeNoTrailingSlash(stored);
+        const normalized = normalizeNoTrailingSlash(stored);
+        if (!normalized) return '';
+        if (isInvalidFastifyLoopbackBase(normalized)) {
+            clearFastifyOverrideStorage();
+            return '';
+        }
+        return normalized;
     } catch (_) {
         return '';
     }
@@ -106,6 +190,10 @@ function toWsBase(httpBase) {
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
     const base = normalizeNoTrailingSlash(httpBase);
     if (!base) return;
+    if (isInvalidFastifyLoopbackBase(base) || isDisallowedFastifyLoopbackPort(base, config)) {
+        clearFastifyOverrideStorage();
+        return;
+    }
 
     window.__SQUIRREL_FASTIFY_URL__ = base;
 
@@ -119,7 +207,7 @@ function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
 function resolveConfigUrl() {
     const isTauri = isInTauriRuntime();
     if (isTauri) {
-        const localPort = window.__ATOME_LOCAL_HTTP_PORT__ || 3000;
+        const localPort = readLocalTauriHttpPort() || 3000;
         return `http://127.0.0.1:${localPort}/server_config.json`;
     }
     // Use absolute path so it works when the app is served from a sub-route.
@@ -143,7 +231,19 @@ function resolveFastifyHostFromConfig(config) {
 }
 
 function resolveFastifyPortFromConfig(config) {
-    return config?.fastify?.port;
+    const rawPort = config?.fastify?.port;
+    const parsedPort = Number(rawPort);
+    if (!Number.isFinite(parsedPort) || parsedPort <= 0) return rawPort;
+
+    if (isInTauriRuntime()) {
+        const localPort = readLocalTauriHttpPort();
+        const host = resolveFastifyHostFromConfig(config);
+        if (localPort && parsedPort === localPort && isLoopbackHost(host)) {
+            return 3001;
+        }
+    }
+
+    return parsedPort;
 }
 
 function resolveProtocolBase() {

@@ -4907,8 +4907,13 @@ async function sync_atomes(callback) {
     };
 
     const resolveLocalAxumBase = () => {
-        if (typeof window !== 'undefined' && window.__ATOME_LOCAL_HTTP_PORT__) {
-            return `http://127.0.0.1:${window.__ATOME_LOCAL_HTTP_PORT__}`;
+        if (typeof window !== 'undefined') {
+            const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+            const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+            if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
+                return `http://127.0.0.1:${forcedPort}`;
+            }
+            return 'http://127.0.0.1:3000';
         }
         const base = CONFIG?.TAURI_BASE_URL || 'http://127.0.0.1:3000';
         return base.replace(/\/$/, '');
