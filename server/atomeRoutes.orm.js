@@ -769,6 +769,18 @@ export async function registerAtomeRoutes(server, dataSource = null) {
     // EVENT LOG + STATE CURRENT (new pipeline)
     // ========================================================================
 
+    const normalizeCommitActor = (candidate, authenticatedUserId) => {
+        const fallback = { type: 'user', id: authenticatedUserId };
+        if (!candidate || typeof candidate !== 'object') return fallback;
+        const actorId = candidate.id || candidate.user_id || candidate.userId || null;
+        if (!actorId) return fallback;
+        if (String(actorId) !== String(authenticatedUserId)) return fallback;
+        return {
+            ...candidate,
+            id: actorId
+        };
+    };
+
     server.post('/api/events/commit', async (request, reply) => {
         console.log('[Fastify] /api/events/commit received');
         const syncSource = String(request.headers['x-sync-source'] || '').toLowerCase();
@@ -783,7 +795,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(400).send({ success: false, error: 'Invalid event payload' });
         }
 
-        const actor = event.actor || { type: 'user', id: user.id };
+        const actor = normalizeCommitActor(event.actor, user.id);
         console.log('[Fastify] /api/events/commit processing', {
             user_id: user.id,
             atome_id: event.atome_id || null,
@@ -842,10 +854,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const txId = body.tx_id || null;
-        const fallbackActor = body.actor || { type: 'user', id: user.id };
+        const fallbackActor = normalizeCommitActor(body.actor, user.id);
         const normalizedEvents = events.map((evt) => ({
             ...evt,
-            actor: evt?.actor || fallbackActor
+            actor: normalizeCommitActor(evt?.actor, user.id) || fallbackActor
         }));
         console.log('[Fastify] /api/events/commit-batch processing', {
             user_id: user.id,

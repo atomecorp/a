@@ -313,6 +313,10 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
     } else {
         const updates = [];
         const values = [];
+        let pendingOwnerId = null;
+        let pendingParentId = null;
+        let assignedOwnerId = null;
+        let assignedParentId = null;
         const existingType = existing.atome_type || '';
         const shouldUpgradeType = !!(
             atomeType
@@ -326,13 +330,31 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
             updates.push('atome_type = ?');
             values.push(atomeType);
         }
-        if (!existing.parent_id && parentId) {
-            updates.push('parent_id = ?');
-            values.push(parentId);
+        if (!existing.parent_id && parentId && parentId !== atomeId) {
+            const parentExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [parentId]);
+            if (parentExists) {
+                updates.push('parent_id = ?');
+                values.push(parentId);
+                assignedParentId = parentId;
+            } else {
+                pendingParentId = parentId;
+            }
         }
         if (!existing.owner_id && ownerId) {
-            updates.push('owner_id = ?');
-            values.push(ownerId);
+            if (ownerId === atomeId) {
+                updates.push('owner_id = ?');
+                values.push(ownerId);
+                assignedOwnerId = ownerId;
+            } else {
+                const ownerExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [ownerId]);
+                if (ownerExists) {
+                    updates.push('owner_id = ?');
+                    values.push(ownerId);
+                    assignedOwnerId = ownerId;
+                } else {
+                    pendingOwnerId = ownerId;
+                }
+            }
         }
         if (deleted) {
             updates.push('deleted_at = ?');
@@ -343,6 +365,24 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
             values.push(now);
             values.push(atomeId);
             await query('run', `UPDATE atomes SET ${updates.join(', ')} WHERE atome_id = ?`, values);
+        }
+        if (pendingOwnerId) {
+            await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null);
+        } else if (assignedOwnerId || existing.owner_id) {
+            await query(
+                'run',
+                "DELETE FROM particles WHERE atome_id = ? AND particle_key = '_pending_owner_id'",
+                [atomeId]
+            );
+        }
+        if (pendingParentId) {
+            await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null);
+        } else if (assignedParentId || existing.parent_id) {
+            await query(
+                'run',
+                "DELETE FROM particles WHERE atome_id = ? AND particle_key = '_pending_parent_id'",
+                [atomeId]
+            );
         }
     }
 
