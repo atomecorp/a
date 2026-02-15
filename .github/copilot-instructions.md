@@ -73,7 +73,7 @@ Source: src/application/eVe/documentations/tools.md
 - **Fastify never connects to Tauri**; clients always initiate connections.
 - **Single realtime entry point**: all realtime sync and direct-message commands are centralized in [src/squirrel/apis/unified/UnifiedSync.js](src/squirrel/apis/unified/UnifiedSync.js) and exposed as `window.Squirrel.Sync` and `window.Squirrel.SyncEngine`.
 
-Sources: documentations/realtime_sync_architecture.md, documentations/Adole Offline Online explanations.md
+Sources: src/application/eVe/documentations/realtime_sync_architecture.md, src/application/eVe/documentations/Offline Online explanations.md
 
 ### 2) Atome Creation — Canonical Contract
 
@@ -171,7 +171,7 @@ Source: documentations/Eden atome Database.md
 - **Property‑level permissions apply** (e.g., share read‑only for `width` so recipients cannot edit it).
 - **Public visibility** is supported: some documents can be **public read** or **public write** for all eVe users.
 
-Source: documentations/Adole_Security_and_sharing.md
+Source: src/application/eVe/documentations/Security_and_sharing.md
 
 ### 11) Tools API & Automation
 
