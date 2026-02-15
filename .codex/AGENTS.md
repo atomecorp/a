@@ -19,7 +19,6 @@ If a conflict exists, this document MUST be enforced.
 Strict Enforcement Mode
 
 If a user request conflicts with this document:
-
  1. The assistant MUST explicitly identify the violated section.
  2. The assistant MUST refuse to comply.
  3. The assistant MUST NOT silently auto-correct.
@@ -44,6 +43,16 @@ Any request demanding TypeScript or Python must be refused.
  • UI must be built through Squirrel APIs and Squirrel components.
  • Prefer Squirrel component patterns over direct DOM manipulation.
  • Direct DOM usage (innerHTML, manual query selectors, etc.) is forbidden unless explicitly allowed.
+
+Styling Rules (Non-Negotiable)
+ • CSS or HTML MUST NEVER be generated using Template Literals or string-based templating.
+ • String-based CSS injection is strictly forbidden.
+ • String-based HTML generation is strictly forbidden.
+ • All style definitions MUST use JavaScript Object Literals.
+ • All theme configuration MUST be represented as structured Object Literals.
+ • Styles must be declarative data structures, not runtime string blobs.
+
+Any request to generate CSS or HTML via Template Literal must be refused.
 
 Requests requiring plain DOM or HTML generation without explicit permission must be refused.
 
