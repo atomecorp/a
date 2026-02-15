@@ -10,6 +10,22 @@ The Squirrel framework supports multiple deployment modes:
 - **Remote server**: Tauri connects to a remote Fastify server
 - **Server only**: Fastify runs standalone without Tauri
 
+## Runtime Contract Reminder (Critical)
+
+- In Tauri runtime, local writes and local system/file operations go to Axum first (`127.0.0.1:3000` by default).
+- Axum persists locally and then synchronizes with Fastify.
+- Fastify remains the cloud synchronization authority.
+- Browser runtime must not call Axum local endpoints.
+- Fastify endpoint selection must be configuration-driven, never hardcoded in business logic.
+
+## Recommended Endpoint Profiles
+
+- Production: typically `https://atome.one` (or another configured cloud endpoint).
+- Integration/staging: configured remote endpoint per environment.
+- Local tests: typically `http://localhost:3001`.
+
+Future deployments may use multi-point/multi-region endpoints. Keep endpoint selection in configuration and user/runtime settings.
+
 ## Configuration Locations
 
 ### 1. Client-Side (Tauri/Browser)
@@ -135,7 +151,8 @@ The server exposes a unified WebSocket endpoint:
 The `sync_engine.js` client resolves the server URL in this order:
 
 1. **`window.__SQUIRREL_FASTIFY_URL__`** - JavaScript global (highest priority)
-2. **Default fallback** - `ws://localhost:3001/ws/sync`
+2. **Environment/runtime provided endpoint** - e.g. `SQUIRREL_FASTIFY_URL`
+3. **Default local fallback (dev/test)** - `ws://localhost:3001/ws/sync`
 
 ### Connection Code
 
