@@ -19,7 +19,6 @@ If a conflict exists, this document MUST be enforced.
 Strict Enforcement Mode
 
 If a user request conflicts with this document:
-
  1. The assistant MUST explicitly identify the violated section.
  2. The assistant MUST refuse to comply.
  3. The assistant MUST NOT silently auto-correct.
@@ -30,17 +29,30 @@ Compliance is mandatory and non-negotiable.
 
 ⸻
 
-Error Handling and Code Quality (Critical)
- • Errors must NEVER be masked.
- • Silent catch blocks, temporary guards, defensive hiding, or workaround patches are forbidden.
- • Always identify and isolate the root cause of a problem.
- • Fix the issue at the source, not at the symptom level.
- • Quick patches or superficial fixes are strictly forbidden.
- • Do not introduce additional files to hide architectural problems.
- • Refactoring or deep rewrite is required if necessary to properly resolve the issue.
- • All produced code must be clean, professional, maintainable, and architecturally coherent.
+Error Handling and Code Quality (Critical – Absolute Prohibition of Patching)
 
-Any request to implement a temporary workaround, silent error suppression, or fast patch must be refused.
+Patching is categorically prohibited.
+Architectural integrity always takes precedence over delivery speed.
+Temporary fixes are forbidden under all circumstances.
+ • Errors must NEVER be masked.
+ • Silent catch blocks are strictly forbidden.
+ • Defensive guards used to hide underlying issues are forbidden.
+ • Workaround patches are forbidden.
+ • Quick fixes are forbidden.
+ • Symptom-level fixes are forbidden.
+ • Adding intermediate adapters or compatibility layers to avoid fixing the root cause is forbidden.
+ • Introducing additional files to bypass architectural correction is forbidden.
+
+Mandatory behavior:
+ • Always identify and isolate the root cause.
+ • Always fix the issue at the architectural source.
+ • If required, perform a controlled deep refactor.
+ • If required, perform a structural rewrite rather than apply a patch.
+ • If the problem cannot be fixed cleanly, the assistant must stop and request clarification.
+
+Under no condition may the assistant implement a temporary solution while “planning to fix later”.
+
+Any request that implies patching, temporary workaround, masking, bypassing, or postponing proper correction MUST be explicitly refused.
 
 ⸻
 
