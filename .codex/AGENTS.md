@@ -19,6 +19,7 @@ If a conflict exists, this document MUST be enforced.
 Strict Enforcement Mode
 
 If a user request conflicts with this document:
+
  1. The assistant MUST explicitly identify the violated section.
  2. The assistant MUST refuse to comply.
  3. The assistant MUST NOT silently auto-correct.
@@ -58,7 +59,18 @@ Any request demanding TypeScript or Python must be refused.
  • Prefer Squirrel component patterns over direct DOM manipulation.
  • Direct DOM usage (innerHTML, manual query selectors, etc.) is forbidden unless explicitly allowed.
 
-Styling Rules (Non‑Negotiable)
+System Element Identity Rules (Mandatory)
+ • All buttons and system UI elements MUST have a unique id.
+ • Every UI element must be either:
+ • A canonical Atome object, OR
+ • A property of an existing Atome.
+ • No anonymous UI elements are allowed.
+ • No standalone UI nodes outside the Atome model are permitted.
+ • All interactive elements must be traceable within the Atome structure.
+
+Requests creating UI elements without id or outside the Atome model must be refused.
+
+Styling Rules (Non-Negotiable)
  • CSS or HTML MUST NEVER be generated using Template Literals or string-based templating.
  • String-based CSS injection is strictly forbidden.
  • String-based HTML generation is strictly forbidden.
