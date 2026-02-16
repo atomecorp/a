@@ -292,6 +292,29 @@ function extract_created_atome_id(res) {
     }
 }
 
+const INVALID_ATOME_TYPE_VALUES = new Set(['', 'atome']);
+const TRANSPORT_ONLY_TYPES = new Set([
+    'auth',
+    'share',
+    'events',
+    'state-current',
+    'api-request',
+    'sync',
+    'realtime'
+]);
+
+const resolve_domain_atome_type = (...candidates) => {
+    for (const candidate of candidates) {
+        const value = String(candidate == null ? '' : candidate).trim();
+        if (!value) continue;
+        const normalized = value.toLowerCase();
+        if (INVALID_ATOME_TYPE_VALUES.has(normalized)) continue;
+        if (TRANSPORT_ONLY_TYPES.has(normalized)) continue;
+        return value;
+    }
+    return null;
+};
+
 function normalizeAtomeRecord(raw) {
     if (!raw || typeof raw !== 'object') return raw;
 
@@ -398,7 +421,16 @@ function normalizeAtomeRecord(raw) {
     const lastSync = raw.last_sync ?? raw.lastSync;
 
     const atomeId = raw.atome_id || raw.atomeId || raw.id;
-    const atomeType = raw.atome_type || raw.atomeType || raw.type;
+    const transportEnvelopeType = (
+        String(raw?.type || '').toLowerCase() === 'atome'
+        && (raw?.action != null || raw?.requestId != null || raw?.request_id != null || raw?.token != null)
+    );
+    const atomeType = resolve_domain_atome_type(
+        raw.atome_type,
+        raw.atomeType,
+        raw.kind,
+        transportEnvelopeType ? null : raw.type
+    );
     const resolvedOwnerId = normalize_ref_id(
         raw.owner_id ||
         raw.ownerId ||
@@ -3948,11 +3980,23 @@ try {
                 || properties.project_id || properties.projectId
                 || detail.project_id || detail.projectId
                 || get_current_project_id?.();
+            const type = resolve_domain_atome_type(
+                normalized.atome_type,
+                normalized.type,
+                normalized.kind,
+                normalizedFromAtome?.atome_type,
+                normalizedFromAtome?.type,
+                normalizedFromAtome?.kind,
+                detail?.atome_type,
+                detail?.atomeType,
+                detail?.kind,
+                properties.atome_type,
+                properties.type,
+                properties.kind
+            );
             return {
                 id,
-                type: normalized.type || normalized.atome_type || normalized.kind
-                    || normalizedFromAtome?.type || normalizedFromAtome?.atome_type
-                    || properties.type || properties.kind || 'atome',
+                type,
                 parentId: normalized.parentId || normalized.parent_id
                     || normalizedFromAtome?.parentId || normalizedFromAtome?.parent_id
                     || properties.parent_id || properties.parentId || null,
@@ -3964,18 +4008,76 @@ try {
             };
         };
 
-        const apply_remote_atome_upsert = async (detail) => {
+        const is_missing_atome_error = (payloadOrError) => {
+            const message = String(
+                payloadOrError?.error
+                || payloadOrError?.message
+                || payloadOrError
+                || ''
+            ).toLowerCase();
+            return message.includes('not found')
+                || message.includes('missing atome')
+                || message.includes('unknown atome');
+        };
+
+        const apply_remote_atome_upsert = async (detail, sourceEvent = '') => {
             if (!is_tauri_runtime()) return;
             if (is_anonymous_mode()) return;
             const payload = build_remote_atome_payload(detail);
             if (!payload) return;
-            try {
-                const res = await TauriAdapter.atome.create({ ...payload, sync: true });
-                if (!(res?.ok || res?.success)) {
-                    console.warn('[AdoleAPI] Failed to apply remote upsert locally:', res?.error || 'unknown');
+            const strictType = resolve_domain_atome_type(payload.type);
+            const isCreateEvent = String(sourceEvent || '').toLowerCase() === 'squirrel:atome-created';
+            const properties = (payload.properties && typeof payload.properties === 'object') ? payload.properties : {};
+
+            const createLocally = async () => {
+                if (!strictType) {
+                    console.warn('[AdoleAPI] Ignoring remote create without valid atome type:', payload.id);
+                    return { ok: false, error: 'missing_atome_type' };
                 }
-            } catch (e) {
-                console.warn('[AdoleAPI] Failed to apply remote upsert locally:', e?.message || 'unknown');
+                return TauriAdapter.atome.create({
+                    ...payload,
+                    type: strictType,
+                    atome_type: strictType,
+                    properties,
+                    sync: true
+                });
+            };
+
+            const updateLocally = async () => {
+                return TauriAdapter.atome.update(payload.id, properties);
+            };
+
+            try {
+                if (isCreateEvent) {
+                    const createRes = await createLocally();
+                    if (createRes?.ok || createRes?.success || is_already_exists_error(createRes)) return;
+                    console.warn('[AdoleAPI] Failed to apply remote create locally:', createRes?.error || 'unknown');
+                    return;
+                }
+
+                const updateRes = await updateLocally();
+                if (updateRes?.ok || updateRes?.success) return;
+                if (!is_missing_atome_error(updateRes)) {
+                    console.warn('[AdoleAPI] Failed to apply remote update locally:', updateRes?.error || 'unknown');
+                    return;
+                }
+                const createRes = await createLocally();
+                if (!(createRes?.ok || createRes?.success || is_already_exists_error(createRes))) {
+                    console.warn('[AdoleAPI] Failed to upsert missing remote atome locally:', createRes?.error || 'unknown');
+                }
+            } catch (error) {
+                if (!is_missing_atome_error(error)) {
+                    console.warn('[AdoleAPI] Failed to apply remote upsert locally:', error?.message || 'unknown');
+                    return;
+                }
+                try {
+                    const createRes = await createLocally();
+                    if (!(createRes?.ok || createRes?.success || is_already_exists_error(createRes))) {
+                        console.warn('[AdoleAPI] Failed to recover missing local atome:', createRes?.error || 'unknown');
+                    }
+                } catch (createError) {
+                    console.warn('[AdoleAPI] Failed to recover missing local atome:', createError?.message || 'unknown');
+                }
             }
         };
 
@@ -4005,7 +4107,7 @@ try {
             'squirrel:atome-restored'
         ].forEach((evt) => {
             window.addEventListener(evt, (event) => {
-                apply_remote_atome_upsert(event?.detail || {});
+                apply_remote_atome_upsert(event?.detail || {}, evt);
             });
         });
 

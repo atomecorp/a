@@ -165,6 +165,15 @@ const safeJsonParse = (value) => {
   }
 };
 
+const resolveSyncAtomeType = (...candidates) => {
+  for (const candidate of candidates) {
+    const value = String(candidate == null ? '' : candidate).trim().toLowerCase();
+    if (!value || value === 'atome') continue;
+    return value;
+  }
+  return null;
+};
+
 const computeBackoffMs = (attempts) => {
   if (!attempts || attempts <= 1) return SYNC_BACKOFF_BASE_MS;
   const next = SYNC_BACKOFF_BASE_MS * Math.pow(2, attempts - 1);
@@ -2190,7 +2199,12 @@ async function startServer() {
                     const properties = (state && state.properties) || (atome && (atome.particles || atome.properties || atome.data)) || {};
                     const atomePayload = {
                       atome_id: atomeId,
-                      atome_type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
+                      atome_type: resolveSyncAtomeType(
+                        atome && (atome.atome_type || atome.type || atome.kind),
+                        properties.atome_type,
+                        properties.type,
+                        properties.kind
+                      ),
                       parent_id: (atome && atome.parent_id) || properties.parent_id || null,
                       owner_id: (atome && atome.owner_id) || properties.owner_id || null,
                       created_at: atome?.created_at || null,
@@ -2240,7 +2254,12 @@ async function startServer() {
                         const properties = (state && state.properties) || (atome && (atome.particles || atome.properties || atome.data)) || {};
                         const atomePayload = {
                           atome_id: atomeId,
-                          atome_type: (atome && (atome.atome_type || atome.type)) || properties.type || 'atome',
+                          atome_type: resolveSyncAtomeType(
+                            atome && (atome.atome_type || atome.type || atome.kind),
+                            properties.atome_type,
+                            properties.type,
+                            properties.kind
+                          ),
                           parent_id: (atome && atome.parent_id) || properties.parent_id || null,
                           owner_id: (atome && atome.owner_id) || properties.owner_id || null,
                           created_at: atome?.created_at || null,
@@ -3752,6 +3771,7 @@ async function startServer() {
                 }
 
                 await db.updateAtome(atomeId, particles, author);
+                const currentAtome = await db.getAtome(atomeId).catch(() => null);
 
                 // Realtime collaboration: broadcast patch to share recipients
                 try {
@@ -3761,9 +3781,18 @@ async function startServer() {
                 try {
                   syncAtomeViaWebSocket({
                     atome_id: atomeId,
-                    atome_type: data.atome_type || data.type || 'atome',
-                    parent_id: data.parent_id || null,
-                    owner_id: data.owner_id || requesterId || null,
+                    atome_type: resolveSyncAtomeType(
+                      currentAtome?.atome_type,
+                      currentAtome?.type,
+                      data.atome_type,
+                      data.type,
+                      data.kind,
+                      particles?.atome_type,
+                      particles?.type,
+                      particles?.kind
+                    ),
+                    parent_id: currentAtome?.parent_id || data.parent_id || null,
+                    owner_id: currentAtome?.owner_id || data.owner_id || requesterId || null,
                     particles
                   }, 'update');
                 } catch (_) { }
@@ -3814,6 +3843,7 @@ async function startServer() {
 
                 // Alter uses updateAtome with partial particles
                 await db.updateAtome(atomeId, particles);
+                const currentAtome = await db.getAtome(atomeId).catch(() => null);
 
                 // Realtime collaboration: broadcast patch to share recipients
                 try {
@@ -3823,9 +3853,18 @@ async function startServer() {
                 try {
                   syncAtomeViaWebSocket({
                     atome_id: atomeId,
-                    atome_type: data.atome_type || data.type || 'atome',
-                    parent_id: data.parent_id || null,
-                    owner_id: data.owner_id || requesterId || null,
+                    atome_type: resolveSyncAtomeType(
+                      currentAtome?.atome_type,
+                      currentAtome?.type,
+                      data.atome_type,
+                      data.type,
+                      data.kind,
+                      particles?.atome_type,
+                      particles?.type,
+                      particles?.kind
+                    ),
+                    parent_id: currentAtome?.parent_id || data.parent_id || null,
+                    owner_id: currentAtome?.owner_id || data.owner_id || requesterId || null,
                     particles
                   }, 'update');
                 } catch (_) { }

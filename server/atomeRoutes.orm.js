@@ -50,6 +50,15 @@ function syncDebugLog(message, data = null) {
  * For atome CRUD operations, the owner_id is always included so clients
  * can filter events that don't belong to them.
  */
+const resolveSyncAtomeType = (...candidates) => {
+    for (const candidate of candidates) {
+        const value = String(candidate == null ? '' : candidate).trim().toLowerCase();
+        if (!value || value === 'atome') continue;
+        return value;
+    }
+    return null;
+};
+
 function syncAtomeViaWebSocket(atome, operation = 'create') {
     try {
         const eventBus = getABoxEventBus();
@@ -63,7 +72,11 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             syncDebugLog('Missing atome id for sync payload');
             return;
         }
-        const atomeType = atome?.atome_type || atome?.type || 'atome';
+        const atomeType = resolveSyncAtomeType(atome?.atome_type, atome?.type);
+        if (operation === 'create' && !atomeType) {
+            syncDebugLog('Skipping create sync payload without valid atome type');
+            return;
+        }
         const parentId = atome?.parent_id || atome?.parent || null;
         const ownerId = atome?.owner_id || atome?.owner || null;
         const particles = atome?.particles || atome?.data || atome?.properties || {};
@@ -75,7 +88,7 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             operation,
             atome: {
                 atome_id: atomeId,
-                atome_type: atomeType,
+                atome_type: atomeType || null,
                 parent_id: parentId,
                 owner_id: ownerId,  // SECURITY: Clients filter on this field
                 created_at: atome.created_at,
@@ -83,7 +96,7 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
                 particles,
                 deleted: operation === 'delete',
                 id: atomeId,
-                type: atomeType,
+                type: atomeType || null,
                 properties: particles,
                 data: particles
             },
@@ -227,11 +240,13 @@ async function resolveAtomeForSync(event) {
     ]);
 
     const properties = state?.properties || atome?.data || atome?.properties || {};
-    const atomeType = atome?.atome_type
-        || properties.type
-        || properties.kind
-        || properties.atome_type
-        || 'atome';
+    const atomeType = resolveSyncAtomeType(
+        atome?.atome_type,
+        atome?.type,
+        properties.atome_type,
+        properties.type,
+        properties.kind
+    );
     const parentId = atome?.parent_id
         || properties.parent_id
         || null;
@@ -241,14 +256,14 @@ async function resolveAtomeForSync(event) {
 
     return {
         atome_id: atomeId,
-        atome_type: atomeType,
+        atome_type: atomeType || null,
         parent_id: parentId,
         owner_id: ownerId,
         created_at: atome?.created_at || state?.updated_at || null,
         updated_at: state?.updated_at || atome?.updated_at || null,
         particles: properties,
         id: atomeId,
-        type: atomeType,
+        type: atomeType || null,
         properties
     };
 }

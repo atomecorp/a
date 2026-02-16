@@ -886,9 +886,18 @@ const connectRealtime = async (options = {}) => {
                     return;
                 }
 
-                const atomeType = atome?.atome_type || atome?.type || payload.atomeType || payload.atome_type || 'atome';
+                const atomeType = String(
+                    atome?.atome_type
+                    || atome?.type
+                    || payload.atomeType
+                    || payload.atome_type
+                    || ''
+                ).trim().toLowerCase();
                 const parentId = atome?.parent_id || atome?.parentId || null;
                 const particles = properties || atome?.particles || atome?.properties || atome?.data || null;
+                if (!atomeType || atomeType === 'atome') {
+                    return;
+                }
 
                 rememberMirrorCreate(atomeId);
                 const tauriTokenPresent = !!(TauriAdapter?.getToken && TauriAdapter.getToken());

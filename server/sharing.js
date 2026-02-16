@@ -691,9 +691,11 @@ async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
             try {
                 const atome = await db.getAtome(atomeId);
                 if (atome) {
+                    const atomeType = String(atome.atome_type || atome.type || '').trim().toLowerCase();
+                    if (!atomeType || atomeType === 'atome') continue;
                     await broadcastAtomeCreate({
                         atomeId,
-                        atomeType: atome.atome_type || atome.type || 'atome',
+                        atomeType,
                         parentId: atome.parent_id || null,
                         particles: atome.data || {},
                         senderUserId: sharerId

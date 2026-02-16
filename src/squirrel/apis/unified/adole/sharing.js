@@ -60,9 +60,15 @@ const ensureFastifyAtomeExists = async (atomeId) => {
     if (!raw) return { ok: false, error: 'atome_not_found' };
 
     const normalized = normalizeAtomeRecord(raw) || raw;
+    const normalizedType = String(
+      normalized.atome_type || normalized.atomeType || normalized.type || normalized.kind || ''
+    ).trim().toLowerCase();
+    if (!normalizedType || normalizedType === 'atome') {
+      return { ok: false, error: 'invalid_atome_type' };
+    }
     const payload = {
       id: normalized.atome_id || normalized.atomeId || normalized.id || atomeId,
-      type: normalized.atome_type || normalized.atomeType || normalized.type || 'atome',
+      type: normalizedType,
       ownerId: normalized.owner_id || normalized.ownerId || normalized.owner || normalized.userId || null,
       parentId: normalized.parent_id || normalized.parentId || normalized.parent || null,
       properties: extract_atome_properties(normalized),

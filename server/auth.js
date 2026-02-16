@@ -146,6 +146,37 @@ async function ensureUserAtomeType(dataSource, userId, currentType = null) {
     }
 }
 
+async function repairMistypedUserAtomes(dataSource) {
+    if (!dataSource) return 0;
+    try {
+        const rows = await dataSource.query(
+            `SELECT a.atome_id, a.atome_type
+             FROM atomes a
+             WHERE a.deleted_at IS NULL
+               AND a.atome_type != 'user'
+               AND EXISTS (
+                   SELECT 1 FROM particles p
+                   WHERE p.atome_id = a.atome_id
+                     AND p.particle_key = 'password_hash'
+               )
+               AND EXISTS (
+                   SELECT 1 FROM particles p
+                   WHERE p.atome_id = a.atome_id
+                     AND p.particle_key = 'phone'
+               )`
+        );
+        let repaired = 0;
+        for (const row of rows || []) {
+            if (!row?.atome_id) continue;
+            const changed = await ensureUserAtomeType(dataSource, row.atome_id, row.atome_type || null);
+            if (changed) repaired += 1;
+        }
+        return repaired;
+    } catch {
+        return 0;
+    }
+}
+
 async function upsertUserStateCurrent(dataSource, userId, username, phone, visibility, now, optional = {}) {
     if (!dataSource || !userId) return;
     const patch = {
@@ -641,6 +672,8 @@ async function findUserById(dataSource, userId) {
  * @returns {Promise<Array>} Array of user objects
  */
 async function listAllUsers(dataSource, includePrivate = false) {
+    await repairMistypedUserAtomes(dataSource);
+
     // Build query with visibility filter
     const visibilityFilter = includePrivate
         ? ''

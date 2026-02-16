@@ -103,7 +103,8 @@ const sanitizeProperties = (properties = {}) => {
 const buildUpsertPayload = (record, ownerIdFallback) => {
     const id = resolveAtomeId(record);
     if (!id) return null;
-    const type = record?.atome_type || record?.type || record?.kind || 'atome';
+    const type = String(record?.atome_type || record?.type || record?.kind || '').trim().toLowerCase();
+    if (!type || type === 'atome') return null;
     const ownerId = record?.owner_id || record?.ownerId || record?.owner || ownerIdFallback || null;
     const parentId = resolveAtomeParentId(record);
     const properties = sanitizeProperties(record?.properties || record?.particles || record?.data || {});

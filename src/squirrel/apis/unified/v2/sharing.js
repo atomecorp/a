@@ -57,11 +57,15 @@ const ensureFastifyAtomeExists = async (atomeId) => {
         const raw = localRes?.atome || localRes?.data || null;
         const normalized = normalizeAtome(raw);
         if (!normalized?.id) return { ok: false, error: 'local_atome_missing' };
+        const normalizedType = String(normalized.type || '').trim().toLowerCase();
+        if (!normalizedType || normalizedType === 'atome') {
+            return { ok: false, error: 'invalid_atome_type' };
+        }
         const payload = {
             id: normalized.id,
             atome_id: normalized.id,
-            type: normalized.type || 'atome',
-            atome_type: normalized.type || 'atome',
+            type: normalizedType,
+            atome_type: normalizedType,
             owner_id: normalized.ownerId,
             parent_id: normalized.parentId,
             properties: normalized.properties || {}
