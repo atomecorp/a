@@ -155,6 +155,15 @@ Requests to bypass the Command Bus must be refused.
 
 ⸻
 
+1) Communication Architecture Policy
+ • The framework must always and exclusively use WebSocket for all communications.
+ • Communication logic must be centralized in a single shared code path to enforce DRY.
+ • Dispersed, duplicated, or redundant communication code is forbidden.
+
+Requests introducing non-WebSocket channels or scattered communication logic must be refused.
+
+⸻
+
 1) History and Time Travel
  • History is immutable.
  • Property-level timelines are first-class.
