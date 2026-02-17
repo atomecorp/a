@@ -217,7 +217,6 @@ self.addEventListener('fetch', event => {
   <link rel="stylesheet" href="css/squirrel.css">
   <link rel="stylesheet" href="js/leaflet.min.css">
   <script src="js/gsap.min.js"></script>
-  <script src="js/tone.min.js"></script>
   <script src="js/leaflet.min.js"></script>
   <script src="js/wavesurfer.min.js"></script>
   <script type="module" src="js/three.min.js"></script>
