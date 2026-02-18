@@ -104,6 +104,17 @@ function isLoopbackHost(hostname) {
     return host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
 }
 
+function readPortFromLocation(locationLike) {
+    const rawPort = String(locationLike?.port || '').trim();
+    if (rawPort) {
+        const parsed = Number(rawPort);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    const protocol = String(locationLike?.protocol || '').toLowerCase();
+    if (protocol === 'https:') return 443;
+    return 80;
+}
+
 function readExpectedFastifyLoopbackPort(config = null) {
     const raw = config?.fastify?.port
         ?? window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port
@@ -144,6 +155,22 @@ function isInvalidFastifyLoopbackBase(base) {
         if (!isLoopbackHost(parsed.hostname)) return false;
         const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
         return Number.isFinite(candidatePort) && candidatePort === localPort;
+    } catch (_) {
+        return false;
+    }
+}
+
+function isLikelyUiLoopbackBase(base, config = null) {
+    if (typeof base !== 'string' || !base.trim()) return false;
+    if (typeof window === 'undefined') return false;
+    try {
+        const parsed = new URL(base.trim());
+        if (!isLoopbackHost(parsed.hostname)) return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        if (!Number.isFinite(candidatePort) || candidatePort <= 0) return false;
+        const expectedPort = readExpectedFastifyLoopbackPort(config);
+        const currentPort = readPortFromLocation(window.location);
+        return candidatePort === currentPort && candidatePort !== expectedPort;
     } catch (_) {
         return false;
     }
@@ -330,27 +357,44 @@ export async function loadServerConfigOnce() {
         let tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';
         const applyFallbackBase = () => {
             if (typeof window === 'undefined') return;
+            const currentConfig = window.__SQUIRREL_SERVER_CONFIG__ || null;
             const existing = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
-                ? window.__SQUIRREL_FASTIFY_URL__.trim()
+                ? normalizeNoTrailingSlash(window.__SQUIRREL_FASTIFY_URL__)
                 : '';
-            if (existing) return;
+            if (existing) {
+                const invalidExisting = (
+                    isInvalidFastifyLoopbackBase(existing)
+                    || isDisallowedFastifyLoopbackPort(existing, currentConfig)
+                    || isLikelyUiLoopbackBase(existing, currentConfig)
+                );
+                if (!invalidExisting) return;
+            }
             if (isEmbeddedIOSRuntime()) {
                 const fallback = resolveTauriProdFastifyHttpBase();
                 if (fallback) {
-                    applyFastifyGlobalsFromHttpBase(fallback, window.__SQUIRREL_SERVER_CONFIG__ || null);
+                    applyFastifyGlobalsFromHttpBase(fallback, currentConfig);
                 }
                 return;
             }
             if (isTauriRuntime) {
                 const fallback = resolveTauriProdFastifyHttpBase();
                 if (fallback) {
-                    applyFastifyGlobalsFromHttpBase(fallback, window.__SQUIRREL_SERVER_CONFIG__ || null);
+                    applyFastifyGlobalsFromHttpBase(fallback, currentConfig);
                 }
                 return;
             }
             const origin = window.location?.origin;
             if (typeof origin === 'string' && origin && origin !== 'null') {
-                applyFastifyGlobalsFromHttpBase(origin, window.__SQUIRREL_SERVER_CONFIG__ || null);
+                try {
+                    const parsedOrigin = new URL(origin);
+                    if (isLoopbackHost(parsedOrigin.hostname)) {
+                        const expectedPort = readExpectedFastifyLoopbackPort(currentConfig);
+                        const host = parsedOrigin.hostname || '127.0.0.1';
+                        applyFastifyGlobalsFromHttpBase(`${parsedOrigin.protocol}//${host}:${expectedPort}`, currentConfig);
+                        return;
+                    }
+                } catch (_) { }
+                applyFastifyGlobalsFromHttpBase(origin, currentConfig);
             }
         };
 

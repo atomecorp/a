@@ -1367,27 +1367,91 @@ async function clear_stored_fastify_token_in_axum() {
     return true;
 }
 
+function is_loopback_hostname(hostname) {
+    const host = String(hostname || '').trim().toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
+}
+
+function read_location_port(locationLike) {
+    const rawPort = String(locationLike?.port || '').trim();
+    if (rawPort) {
+        const parsed = Number(rawPort);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    const protocol = String(locationLike?.protocol || '').toLowerCase();
+    if (protocol === 'https:') return 443;
+    return 80;
+}
+
+function read_expected_fastify_loopback_port() {
+    const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
+    let expected = Number(config?.fastify?.port || 3001);
+    if (!Number.isFinite(expected) || expected <= 0) expected = 3001;
+
+    if (typeof window !== 'undefined') {
+        const runtimePort = Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null);
+        if (Number.isFinite(runtimePort) && runtimePort > 0 && expected === runtimePort) {
+            expected = 3001;
+        }
+    }
+    return expected;
+}
+
+function is_likely_ui_loopback_base(baseUrl) {
+    if (typeof baseUrl !== 'string' || !baseUrl.trim()) return false;
+    if (typeof window === 'undefined') return false;
+    try {
+        const parsed = new URL(baseUrl.trim());
+        if (!is_loopback_hostname(parsed.hostname)) return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        if (!Number.isFinite(candidatePort) || candidatePort <= 0) return false;
+        const currentPort = read_location_port(window.location);
+        const expectedPort = read_expected_fastify_loopback_port();
+        return candidatePort === currentPort && candidatePort !== expectedPort;
+    } catch {
+        return false;
+    }
+}
+
 function resolve_fastify_http_base() {
     let baseUrl = '';
+    const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
 
-    if (!is_tauri_runtime() && typeof window !== 'undefined') {
-        const origin = typeof window.location?.origin === 'string' ? window.location.origin : '';
-        if (origin && origin !== 'null' && !origin.startsWith('file:')) {
-            baseUrl = origin.replace(/\/$/, '');
+    if (typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
+        const explicit = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
+        if (explicit && !is_likely_ui_loopback_base(explicit)) {
+            baseUrl = explicit;
         }
     }
 
-    if (!baseUrl && typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
-        baseUrl = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
+    if (!baseUrl && !is_tauri_runtime() && typeof window !== 'undefined') {
+        const origin = typeof window.location?.origin === 'string' ? window.location.origin : '';
+        if (origin && origin !== 'null' && !origin.startsWith('file:')) {
+            const normalizedOrigin = origin.replace(/\/$/, '');
+            try {
+                const parsed = new URL(normalizedOrigin);
+                if (!is_loopback_hostname(parsed.hostname) || !is_likely_ui_loopback_base(normalizedOrigin)) {
+                    baseUrl = normalizedOrigin;
+                }
+            } catch {
+                baseUrl = normalizedOrigin;
+            }
+        }
     }
 
     if (!baseUrl) {
-        const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
-        const port = config?.fastify?.port || 3001;
+        let port = Number(config?.fastify?.port || 3001);
+        if (!Number.isFinite(port) || port <= 0) port = 3001;
+        const runtimePort = (typeof window !== 'undefined')
+            ? Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null)
+            : null;
+        if (Number.isFinite(runtimePort) && runtimePort > 0 && port === runtimePort) {
+            port = 3001;
+        }
         baseUrl = `http://127.0.0.1:${port}`;
     }
 
-    return baseUrl;
+    return String(baseUrl || '').replace(/\/$/, '');
 }
 
 /**
