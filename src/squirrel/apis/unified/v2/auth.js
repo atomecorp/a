@@ -176,6 +176,29 @@ const loadFastifyLoginCache = () => {
     }
 };
 
+const isAnonymousLikePhone = (phone) => {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return false;
+    if (normalized === '0000000000' || normalized === '0000000001') return true;
+    if (normalized.startsWith('999')) return true;
+    return false;
+};
+
+const persistFastifyLoginCache = ({ phone, password } = {}) => {
+    if (typeof localStorage === 'undefined') return;
+    const normalizedPhone = normalizePhone(phone || '');
+    const plainPassword = String(password || '');
+    if (!normalizedPhone || !plainPassword) return;
+    if (isAnonymousLikePhone(normalizedPhone)) return;
+    try {
+        localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
+            phone: normalizedPhone,
+            password: plainPassword,
+            updated_at: new Date().toISOString()
+        }));
+    } catch (_) { }
+};
+
 const ensureFastifyTokenLocal = async () => {
     const existing = FastifyAdapter?.getToken?.();
     if (existing) return { ok: true, reason: 'token_present' };
@@ -183,6 +206,29 @@ const ensureFastifyTokenLocal = async () => {
     const state = getSessionState();
     if (state?.mode !== 'authenticated') {
         return { ok: false, reason: 'not_authenticated' };
+    }
+
+    // In dev/local Tauri setups, Fastify and Tauri can share JWT secret.
+    // If local token is accepted by Fastify, reuse it immediately.
+    if (isTauriRuntime()) {
+        const tauriToken = TauriAdapter?.getToken?.();
+        if (tauriToken) {
+            try {
+                FastifyAdapter?.setToken?.(tauriToken);
+                const me = await meBackend('fastify');
+                const expectedUserId = state?.user?.id ? String(state.user.id) : null;
+                const resolvedUserId = me?.user?.id ? String(me.user.id) : null;
+                if (me?.ok && resolvedUserId && (!expectedUserId || resolvedUserId === expectedUserId)) {
+                    try {
+                        if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
+                    } catch (_) { }
+                    return { ok: true, reason: 'tauri_token_bridge' };
+                }
+            } catch (_) {
+                // Ignore and continue with credential cache fallback.
+            }
+            try { FastifyAdapter?.clearToken?.(); } catch (_) { }
+        }
     }
 
     const cached = loadFastifyLoginCache();
@@ -208,6 +254,9 @@ const ensureFastifyTokenLocal = async () => {
             error: loginResult.error || null
         };
     }
+    try {
+        if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
+    } catch (_) { }
     return { ok: true, reason: 'cache_login_success' };
 };
 
@@ -353,6 +402,7 @@ export const auth = {
         }
 
         if (activeResult?.ok && activeResult.user) {
+            persistFastifyLoginCache({ phone: cleanPhone, password });
             setSessionState({
                 mode: 'authenticated',
                 user: activeResult.user,
@@ -442,6 +492,7 @@ export const auth = {
         }
 
         if (activeResult.ok && loggedUser?.id) {
+            persistFastifyLoginCache({ phone: cleanPhone, password });
             setSessionState({
                 mode: 'authenticated',
                 user: loggedUser,

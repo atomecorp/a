@@ -218,7 +218,6 @@ async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId, s
 
   for (const recipientId of recipients) {
     if (!recipientId) continue;
-    if (String(recipientId) === authorIdStr) continue;
 
     const payload = {
       type: 'console-message',
@@ -231,7 +230,11 @@ async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId, s
 
     try {
       const targetUserId = String(recipientId);
-      wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
+      if (senderConnection && targetUserId === authorIdStr) {
+        wsSendJsonToUserExcept(targetUserId, payload, senderConnection, { scope: 'ws/api', op: 'share-sync', targetUserId });
+      } else {
+        wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
+      }
     } catch (_) { }
   }
 }
