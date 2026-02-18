@@ -618,6 +618,14 @@ const normalizeAtomePayload = (payload = {}) => {
     return { atome, atomeId, properties };
 };
 
+const isSoftDeletedPayload = ({ payload, atome, properties }) => {
+    if (payload?.deleted === true) return true;
+    if (atome?.deleted === true) return true;
+    if (atome?.deleted_at || atome?.deletedAt) return true;
+    if (!properties || typeof properties !== 'object') return false;
+    return properties.__deleted === true || !!properties.deleted_at || !!properties.deletedAt;
+};
+
 const normalizeOwnershipInfo = (payload, atome) => {
     const ownerId = payload?.owner_id || payload?.ownerId || atome?.owner_id || atome?.ownerId || atome?.owner || null;
     const sharedWith = payload?.shared_with || payload?.sharedWith || atome?.shared_with || atome?.sharedWith || null;
@@ -929,6 +937,13 @@ const connectRealtime = async (options = {}) => {
             const parentId = atome?.parent_id || atome?.parentId || payload.parent_id || payload.parentId || null;
             const currentUserId = getCurrentUserId();
             const ownership = normalizeOwnershipInfo(payload, atome);
+            if (atomeId && isSoftDeletedPayload({ payload, atome, properties })) {
+                if (runtime === 'tauri' && canMirrorToLocal(ownership, currentUserId)) {
+                    mirrorDeleteToLocal(atomeId);
+                }
+                dispatchAtomeEvent('squirrel:atome-deleted', payload);
+                return;
+            }
             if (runtime === 'tauri' && atomeId && properties && canMirrorToLocal(ownership, currentUserId)) {
                 mirrorUpdateToLocal({
                     atomeId,

@@ -59,6 +59,24 @@ const resolveSyncAtomeType = (...candidates) => {
     return null;
 };
 
+const hasSoftDeleteMarker = (atome, particles) => {
+    if (atome?.deleted === true) return true;
+    if (atome?.deleted_at || atome?.deletedAt) return true;
+    if (!particles || typeof particles !== 'object') return false;
+    return particles.__deleted === true || !!particles.deleted_at || !!particles.deletedAt;
+};
+
+const normalizeSyncOperation = (operation, atome, particles) => {
+    const raw = String(operation || 'update').trim().toLowerCase();
+    const normalized = raw === 'create' || raw === 'delete' || raw === 'update'
+        ? raw
+        : 'update';
+    if (normalized !== 'create' && hasSoftDeleteMarker(atome, particles)) {
+        return 'delete';
+    }
+    return normalized;
+};
+
 function syncAtomeViaWebSocket(atome, operation = 'create') {
     try {
         const eventBus = getABoxEventBus();
@@ -73,19 +91,21 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             return;
         }
         const atomeType = resolveSyncAtomeType(atome?.atome_type, atome?.type);
-        if (operation === 'create' && !atomeType) {
-            syncDebugLog('Skipping create sync payload without valid atome type');
-            return;
-        }
         const parentId = atome?.parent_id || atome?.parent || null;
         const ownerId = atome?.owner_id || atome?.owner || null;
         const particles = atome?.particles || atome?.data || atome?.properties || {};
+        const resolvedOperation = normalizeSyncOperation(operation, atome, particles);
+        if (resolvedOperation === 'create' && !atomeType) {
+            syncDebugLog('Skipping create sync payload without valid atome type');
+            return;
+        }
+        const deletedAt = atome?.deleted_at || atome?.deletedAt || particles?.deleted_at || particles?.deletedAt || null;
 
         // Emit sync event - clients MUST validate owner_id before local mirroring
         // The owner_id is critical for client-side security filtering
         eventBus.emit('event', {
             type: 'atome-sync',
-            operation,
+            operation: resolvedOperation,
             atome: {
                 atome_id: atomeId,
                 atome_type: atomeType || null,
@@ -94,7 +114,8 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
                 created_at: atome.created_at,
                 updated_at: atome.updated_at,
                 particles,
-                deleted: operation === 'delete',
+                deleted: resolvedOperation === 'delete',
+                deleted_at: deletedAt,
                 id: atomeId,
                 type: atomeType || null,
                 properties: particles,
@@ -104,7 +125,7 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
         });
 
         syncDebugLog('atome sync emitted', {
-            operation,
+            operation: resolvedOperation,
             atome_id: atomeId,
             atome_type: atomeType,
             parent_id: parentId,
