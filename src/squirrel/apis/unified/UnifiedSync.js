@@ -343,9 +343,13 @@ const resolveRemoteTraceIds = (payload = {}, atome = null) => {
 
 const DRAG_TRACE_STORE_KEY = '__EVE_DRAG_TRACE_STORE__';
 const ACTIVE_LOCAL_DRAG_ATOMES_KEY = '__EVE_ACTIVE_LOCAL_DRAG_ATOMES__';
+const RECENT_LOCAL_DRAG_ENDS_KEY = '__EVE_RECENT_LOCAL_DRAG_ENDS__';
 const DRAG_TRACE_CORRELATION_MAX_AGE_MS = 20000;
 const DRAG_TRACE_CORRELATION_MAX_DISTANCE = 1.2;
 const REMOTE_PATCH_REPEAT_WINDOW_MS = 1200;
+const RECENT_LOCAL_DRAG_END_BLANKET_WINDOW_MS = 900;
+const RECENT_LOCAL_DRAG_END_ECHO_WINDOW_MS = 4000;
+const RECENT_LOCAL_DRAG_END_MAX_DISTANCE = 2.5;
 const remotePatchRepeatByAtome = new Map();
 
 const correlateWithLocalGestureTrace = (atomeId, left, top) => {
@@ -422,6 +426,26 @@ const hasPositionProperties = (properties = null) => {
     );
 };
 
+const readRecentLocalDragEndEntry = (atomeId) => {
+    if (!atomeId || typeof window === 'undefined') return null;
+    const map = window[RECENT_LOCAL_DRAG_ENDS_KEY];
+    if (!map || typeof map !== 'object') return null;
+    const now = Date.now();
+    let match = null;
+    Object.keys(map).forEach((key) => {
+        const entry = map[key];
+        const endedAt = Number(entry?.endedAt || 0);
+        if (!endedAt || (now - endedAt) > RECENT_LOCAL_DRAG_END_ECHO_WINDOW_MS) {
+            delete map[key];
+            return;
+        }
+        if (String(key) === String(atomeId)) {
+            match = entry;
+        }
+    });
+    return match;
+};
+
 const shouldSkipLocalDragEchoPatch = (atomeId, properties = null) => {
     if (!atomeId || typeof window === 'undefined') return false;
     if (!hasPositionProperties(properties)) return false;
@@ -433,6 +457,35 @@ const shouldSkipLocalDragEchoPatch = (atomeId, properties = null) => {
     if (!Number.isFinite(startedAt) || startedAt <= 0) return false;
     const ageMs = Date.now() - startedAt;
     if (ageMs < 0 || ageMs > 20000) return false;
+    return true;
+};
+
+const shouldSkipRecentLocalDragEndEchoPatch = (atomeId, properties = null) => {
+    if (!atomeId || typeof window === 'undefined') return false;
+    if (!hasPositionProperties(properties)) return false;
+    const recent = readRecentLocalDragEndEntry(atomeId);
+    if (!recent || typeof recent !== 'object') return false;
+    const endedAt = Number(recent.endedAt || 0);
+    if (Number.isFinite(endedAt) && endedAt > 0) {
+        const ageMs = Date.now() - endedAt;
+        if (ageMs >= 0 && ageMs <= RECENT_LOCAL_DRAG_END_BLANKET_WINDOW_MS) {
+            return true;
+        }
+    }
+    const patchPos = extractPatchPosition(properties);
+    if (!patchPos.hasPosition) return false;
+    const recentLeft = toNumberOrNull(recent.left);
+    const recentTop = toNumberOrNull(recent.top);
+    let comparedAxes = 0;
+    if (patchPos.left !== null && recentLeft !== null) {
+        comparedAxes += 1;
+        if (Math.abs(patchPos.left - recentLeft) > RECENT_LOCAL_DRAG_END_MAX_DISTANCE) return false;
+    }
+    if (patchPos.top !== null && recentTop !== null) {
+        comparedAxes += 1;
+        if (Math.abs(patchPos.top - recentTop) > RECENT_LOCAL_DRAG_END_MAX_DISTANCE) return false;
+    }
+    if (!comparedAxes) return false;
     return true;
 };
 
@@ -1164,7 +1217,7 @@ const connectRealtime = async (options = {}) => {
                 });
                 return;
             }
-            if (shouldSkipLocalDragEchoPatch(atomeId, properties)) {
+            if (shouldSkipLocalDragEchoPatch(atomeId, properties) || shouldSkipRecentLocalDragEndEchoPatch(atomeId, properties)) {
                 traceRemotePatchCorrelation({
                     stage: 'skip_local_drag_echo',
                     payload,
