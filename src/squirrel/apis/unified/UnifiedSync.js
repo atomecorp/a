@@ -279,6 +279,186 @@ const getCurrentUserId = () => {
     return null;
 };
 
+const dragSyncTraceEnabled = () => {
+    if (typeof window === 'undefined') return false;
+    if (window.__EVE_DRAG_SYNC_TRACE__ === true) return true;
+    if (window.__EVE_DRAG_TRACE__ === true) return true;
+    if (window.__EVE_ATOME_EVENTS_TRACE__ === true) return true;
+    if (window.__SYNC_DEBUG__ === true) return true;
+    return false;
+};
+
+const logDragSync = (message, data = null) => {
+    if (!dragSyncTraceEnabled()) return;
+    if (typeof console === 'undefined') return;
+    if (data == null) return;
+    try {
+        console.log(`[eVe:drag_sync] ${message}`, data);
+    } catch (_) { }
+};
+
+const toNumberOrNull = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+        const parsed = Number.parseFloat(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+};
+
+const extractPatchPosition = (properties = null) => {
+    if (!properties || typeof properties !== 'object') {
+        return { left: null, top: null, hasPosition: false };
+    }
+    const left = toNumberOrNull(properties.left);
+    const top = toNumberOrNull(properties.top);
+    return {
+        left,
+        top,
+        hasPosition: left !== null || top !== null
+    };
+};
+
+const resolveRemoteTraceIds = (payload = {}, atome = null) => {
+    const txId = String(
+        payload?.tx_id
+        || payload?.txId
+        || payload?.event?.tx_id
+        || payload?.event?.txId
+        || atome?.tx_id
+        || atome?.txId
+        || ''
+    ).trim() || null;
+    const gestureId = String(
+        payload?.gesture_id
+        || payload?.gestureId
+        || payload?.event?.gesture_id
+        || payload?.event?.gestureId
+        || atome?.gesture_id
+        || atome?.gestureId
+        || ''
+    ).trim() || null;
+    return { txId, gestureId };
+};
+
+const DRAG_TRACE_STORE_KEY = '__EVE_DRAG_TRACE_STORE__';
+const ACTIVE_LOCAL_DRAG_ATOMES_KEY = '__EVE_ACTIVE_LOCAL_DRAG_ATOMES__';
+const DRAG_TRACE_CORRELATION_MAX_AGE_MS = 20000;
+const DRAG_TRACE_CORRELATION_MAX_DISTANCE = 1.2;
+const REMOTE_PATCH_REPEAT_WINDOW_MS = 1200;
+const remotePatchRepeatByAtome = new Map();
+
+const correlateWithLocalGestureTrace = (atomeId, left, top) => {
+    if (typeof window === 'undefined') return { matched: false };
+    const store = window[DRAG_TRACE_STORE_KEY];
+    const map = store?.eventsByAtome;
+    if (!map || typeof map !== 'object') return { matched: false };
+    const entries = Array.isArray(map[atomeId]) ? map[atomeId] : [];
+    if (!entries.length) return { matched: false };
+    const nowTs = Date.now();
+    let best = null;
+    entries.forEach((entry) => {
+        const ts = Number(entry?.ts || 0);
+        if (!Number.isFinite(ts)) return;
+        const ageMs = nowTs - ts;
+        if (ageMs < 0 || ageMs > DRAG_TRACE_CORRELATION_MAX_AGE_MS) return;
+        const entryLeft = toNumberOrNull(entry?.left);
+        const entryTop = toNumberOrNull(entry?.top);
+        if (entryLeft === null && entryTop === null) return;
+        const dx = (left === null || entryLeft === null) ? 0 : Math.abs(left - entryLeft);
+        const dy = (top === null || entryTop === null) ? 0 : Math.abs(top - entryTop);
+        const distance = Math.hypot(dx, dy);
+        if (!best || distance < best.distance) {
+            best = {
+                matched: distance <= DRAG_TRACE_CORRELATION_MAX_DISTANCE,
+                distance,
+                age_ms: Math.round(ageMs),
+                kind: String(entry?.kind || ''),
+                tx_id: String(entry?.tx_id || '').trim() || null,
+                gesture_id: String(entry?.gesture_id || '').trim() || null,
+                left: entryLeft,
+                top: entryTop
+            };
+        }
+    });
+    return best || { matched: false };
+};
+
+const resolveRemoteRepeatInfo = (atomeId, fingerprint, left, top) => {
+    const nowTs = Date.now();
+    const previous = remotePatchRepeatByAtome.get(atomeId) || null;
+    let repeated = false;
+    let repeatCount = 1;
+    if (previous && (nowTs - previous.ts) <= REMOTE_PATCH_REPEAT_WINDOW_MS) {
+        const sameFingerprint = previous.fingerprint && fingerprint && previous.fingerprint === fingerprint;
+        const sameLeft = (previous.left === null && left === null)
+            || (previous.left !== null && left !== null && Math.abs(previous.left - left) < 0.01);
+        const sameTop = (previous.top === null && top === null)
+            || (previous.top !== null && top !== null && Math.abs(previous.top - top) < 0.01);
+        if (sameFingerprint && sameLeft && sameTop) {
+            repeated = true;
+            repeatCount = Number(previous.repeatCount || 1) + 1;
+        }
+    }
+    remotePatchRepeatByAtome.set(atomeId, {
+        ts: nowTs,
+        fingerprint: fingerprint || null,
+        left,
+        top,
+        repeatCount
+    });
+    return { repeated, repeatCount };
+};
+
+const hasPositionProperties = (properties = null) => {
+    if (!properties || typeof properties !== 'object') return false;
+    return (
+        Object.prototype.hasOwnProperty.call(properties, 'left')
+        || Object.prototype.hasOwnProperty.call(properties, 'top')
+        || Object.prototype.hasOwnProperty.call(properties, 'right')
+        || Object.prototype.hasOwnProperty.call(properties, 'bottom')
+        || Object.prototype.hasOwnProperty.call(properties, 'x')
+        || Object.prototype.hasOwnProperty.call(properties, 'y')
+    );
+};
+
+const shouldSkipLocalDragEchoPatch = (atomeId, properties = null) => {
+    if (!atomeId || typeof window === 'undefined') return false;
+    if (!hasPositionProperties(properties)) return false;
+    const map = window[ACTIVE_LOCAL_DRAG_ATOMES_KEY];
+    if (!map || typeof map !== 'object') return false;
+    const entry = map[String(atomeId)] || null;
+    if (!entry || typeof entry !== 'object') return false;
+    const startedAt = Number(entry.startedAt || 0);
+    if (!Number.isFinite(startedAt) || startedAt <= 0) return false;
+    const ageMs = Date.now() - startedAt;
+    if (ageMs < 0 || ageMs > 20000) return false;
+    return true;
+};
+
+const traceRemotePatchCorrelation = ({ stage, payload, atomeId, atome, properties, authorId }) => {
+    if (!atomeId) return;
+    const { txId, gestureId } = resolveRemoteTraceIds(payload, atome);
+    const { left, top, hasPosition } = extractPatchPosition(properties);
+    if (!hasPosition && !txId && !gestureId) return;
+    const fingerprint = (properties && typeof properties === 'object') ? buildFingerprint(properties) : '';
+    const localMatch = correlateWithLocalGestureTrace(atomeId, left, top);
+    const repeatInfo = resolveRemoteRepeatInfo(atomeId, fingerprint, left, top);
+    logDragSync('remote_patch', {
+        stage: String(stage || ''),
+        type: String(payload?.type || ''),
+        atome_id: String(atomeId || ''),
+        left,
+        top,
+        tx_id: txId,
+        gesture_id: gestureId,
+        author_id: String(authorId || '').trim() || null,
+        local_match: localMatch,
+        repeated: repeatInfo.repeated,
+        repeat_count: repeatInfo.repeatCount
+    });
+};
+
 const readQueue = () => {
     try {
         const raw = localStorage.getItem(STORAGE_KEYS.queue);
@@ -610,6 +790,12 @@ const realtimeState = {
 };
 
 const realtimeListeners = new Map();
+const realtimeSubscriptionState = {
+    bound: false
+};
+const realtimeOptionsRef = {
+    current: {}
+};
 
 const normalizeAtomePayload = (payload = {}) => {
     const atome = payload.atome || payload.data?.atome || payload.data || payload.record || null;
@@ -857,6 +1043,7 @@ const dispatchAtomeEvent = (type, payload) => {
 // =============================================================================
 
 const connectRealtime = async (options = {}) => {
+    realtimeOptionsRef.current = options || {};
     const onPayload = (payload) => {
         if (!payload || !payload.type) return;
 
@@ -956,11 +1143,46 @@ const connectRealtime = async (options = {}) => {
             const authorId = payload.authorId || payload.author_id
                 || payload.params?.authorId || payload.params?.author_id || null;
             if (authorId && isFromCurrentUser(authorId)) {
+                traceRemotePatchCorrelation({
+                    stage: 'skip_same_author',
+                    payload,
+                    atomeId,
+                    atome,
+                    properties,
+                    authorId
+                });
                 return;
             }
             if (properties && shouldIgnoreRealtimePatch(atomeId, properties, { authorId })) {
+                traceRemotePatchCorrelation({
+                    stage: 'skip_realtime_dedupe',
+                    payload,
+                    atomeId,
+                    atome,
+                    properties,
+                    authorId
+                });
                 return;
             }
+            if (shouldSkipLocalDragEchoPatch(atomeId, properties)) {
+                traceRemotePatchCorrelation({
+                    stage: 'skip_local_drag_echo',
+                    payload,
+                    atomeId,
+                    atome,
+                    properties,
+                    authorId
+                });
+                return;
+            }
+            traceRemotePatchCorrelation({
+                stage: 'apply_dom',
+                payload,
+                atomeId,
+                atome,
+                properties,
+                authorId
+            });
             dispatchAtomeEvent('squirrel:atome-updated', payload);
             if (properties) applyAtomePatchToDom(atomeId, properties);
         }
@@ -978,17 +1200,18 @@ const connectRealtime = async (options = {}) => {
             try { fn(payload); } catch (_) { }
         });
 
-        if (options.onAtomeCreated && payload.type === 'atome:created') {
-            options.onAtomeCreated(payload);
+        const liveOptions = realtimeOptionsRef.current || {};
+        if (liveOptions.onAtomeCreated && payload.type === 'atome:created') {
+            liveOptions.onAtomeCreated(payload);
         }
-        if (options.onAtomeUpdated && payload.type === 'atome:updated') {
-            options.onAtomeUpdated(payload);
+        if (liveOptions.onAtomeUpdated && payload.type === 'atome:updated') {
+            liveOptions.onAtomeUpdated(payload);
         }
-        if (options.onAtomeAltered && payload.type === 'atome:altered') {
-            options.onAtomeAltered(payload);
+        if (liveOptions.onAtomeAltered && payload.type === 'atome:altered') {
+            liveOptions.onAtomeAltered(payload);
         }
-        if (options.onAtomeDeleted && payload.type === 'atome:deleted') {
-            options.onAtomeDeleted(payload);
+        if (liveOptions.onAtomeDeleted && payload.type === 'atome:deleted') {
+            liveOptions.onAtomeDeleted(payload);
         }
     };
 
@@ -1016,25 +1239,33 @@ const connectRealtime = async (options = {}) => {
             }));
         }
 
-        if (typeof options.onConnected === 'function') {
-            options.onConnected({ clientId });
+        const liveOptions = realtimeOptionsRef.current || {};
+        if (typeof liveOptions.onConnected === 'function') {
+            liveOptions.onConnected({ clientId });
         }
     };
 
     const onDisconnected = (payload) => {
         realtimeState.connected = false;
-        if (typeof options.onDisconnected === 'function') {
-            options.onDisconnected(payload);
+        const liveOptions = realtimeOptionsRef.current || {};
+        if (typeof liveOptions.onDisconnected === 'function') {
+            liveOptions.onDisconnected(payload);
         }
     };
 
-    realtimeSocket.subscribe((payload) => {
-        if (payload?.type === 'connected') onConnected();
-        if (payload?.type === 'disconnected') onDisconnected(payload);
-        onPayload(payload);
-    });
+    if (!realtimeSubscriptionState.bound) {
+        realtimeSocket.subscribe((payload) => {
+            if (payload?.type === 'connected') onConnected();
+            if (payload?.type === 'disconnected') onDisconnected(payload);
+            onPayload(payload);
+        });
+        realtimeSubscriptionState.bound = true;
+    }
 
-    realtimeSocket.connect();
+    const socketState = realtimeSocket.getState();
+    if (!socketState.connected && !socketState.connecting) {
+        realtimeSocket.connect();
+    }
     return true;
 };
 
@@ -1167,6 +1398,7 @@ const commandState = {
     active: false,
     currentUserId: null,
     authInFlight: false,
+    subscribed: false,
     allowedSenders: new Set(),
     handlers: new Map()
 };
@@ -1225,8 +1457,14 @@ const ensureCommandAuth = async (userId) => {
 
 const commands = {
     async start(userId) {
-        fastifyApiSocket.subscribe(onCommandMessage);
-        fastifyApiSocket.connect();
+        if (!commandState.subscribed) {
+            fastifyApiSocket.subscribe(onCommandMessage);
+            commandState.subscribed = true;
+        }
+        const state = fastifyApiSocket.getState();
+        if (!state.connected && !state.connecting) {
+            fastifyApiSocket.connect();
+        }
         const ok = await ensureCommandAuth(userId || getCurrentUserId());
         commandState.active = ok;
         return ok;

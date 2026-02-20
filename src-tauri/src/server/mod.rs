@@ -22,6 +22,7 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
+    time::UNIX_EPOCH,
 };
 use tokio::{
     fs,
@@ -127,6 +128,50 @@ fn sanitize_file_name(name: &str) -> String {
         "upload.bin".to_string()
     } else {
         sanitized
+    }
+}
+
+fn download_verbose_logs_enabled() -> bool {
+    static DOWNLOAD_VERBOSE_LOGS: OnceLock<bool> = OnceLock::new();
+    *DOWNLOAD_VERBOSE_LOGS.get_or_init(|| {
+        std::env::var("SQUIRREL_DOWNLOAD_LOG_VERBOSE")
+            .ok()
+            .map(|value| {
+                let normalized = value.trim().to_lowercase();
+                normalized == "1"
+                    || normalized == "true"
+                    || normalized == "yes"
+                    || normalized == "on"
+            })
+            .unwrap_or(false)
+    })
+}
+
+fn guess_content_type_from_name(file_name: &str) -> &'static str {
+    let ext = Path::new(file_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.trim().to_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "mp4" => "video/mp4",
+        "m4v" => "video/x-m4v",
+        "mov" => "video/quicktime",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "flac" => "audio/flac",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        _ => "application/octet-stream",
     }
 }
 
@@ -1694,42 +1739,102 @@ async fn download_upload_handler(
 
     let safe_name = sanitize_file_name(&file);
     let file_path = downloads_dir.join(&safe_name);
+    let verbose_logs = download_verbose_logs_enabled();
+    if verbose_logs {
+        println!(
+            "[download_upload_handler] user_id={}, file={}, safe_name={}, downloads_dir={:?}, file_path={:?}, exists={}",
+            user_id,
+            file,
+            safe_name,
+            downloads_dir,
+            file_path,
+            file_path.exists()
+        );
+    }
 
-    println!(
-        "[download_upload_handler] user_id={}, file={}, safe_name={}, downloads_dir={:?}, file_path={:?}, exists={}",
-        user_id,
-        file,
-        safe_name,
-        downloads_dir,
-        file_path,
-        file_path.exists()
-    );
+    let metadata = match fs::metadata(&file_path).await {
+        Ok(value) => value,
+        Err(err) => {
+            if verbose_logs {
+                println!(
+                    "[download_upload_handler] ❌ Metadata not found: {:?}, error: {}",
+                    file_path, err
+                );
+            }
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "success": false, "error": "File not found", "path": file_path.to_string_lossy() })),
+            )
+                .into_response();
+        }
+    };
+    let file_size = metadata.len();
+    let modified_epoch = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_secs())
+        .unwrap_or(0);
+    let etag_value = format!("W/\"{}-{}\"", file_size, modified_epoch);
+    let if_none_match = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default();
+
+    if !if_none_match.is_empty() && if_none_match == etag_value {
+        let mut response_headers = HeaderMap::new();
+        if let Ok(header_value) = HeaderValue::from_str(&etag_value) {
+            response_headers.insert(header::ETAG, header_value);
+        }
+        response_headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("private, max-age=300"),
+        );
+        return (StatusCode::NOT_MODIFIED, response_headers).into_response();
+    }
 
     match fs::read(&file_path).await {
         Ok(bytes) => {
-            println!(
-                "[download_upload_handler] ✅ Serving file: {:?} ({} bytes)",
-                file_path,
-                bytes.len()
-            );
+            if verbose_logs {
+                println!(
+                    "[download_upload_handler] ✅ Serving file: {:?} ({} bytes)",
+                    file_path,
+                    bytes.len()
+                );
+            }
             let mut headers = HeaderMap::new();
             headers.insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/octet-stream"),
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("private, max-age=300"),
             );
-            if let Ok(header_value) =
-                HeaderValue::from_str(&format!("attachment; filename=\"{}\"", safe_name))
+            if let Ok(header_value) = HeaderValue::from_str(&etag_value) {
+                headers.insert(header::ETAG, header_value);
+            }
+            headers.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(guess_content_type_from_name(&safe_name)),
+            );
+            headers.insert(
+                header::CONTENT_DISPOSITION,
+                HeaderValue::from_str(&format!("inline; filename=\"{}\"", safe_name))
+                    .unwrap_or_else(|_| HeaderValue::from_static("inline")),
+            );
+
+            if let Ok(length_header) = HeaderValue::from_str(&bytes.len().to_string())
             {
-                headers.insert(header::CONTENT_DISPOSITION, header_value);
+                headers.insert(header::CONTENT_LENGTH, length_header);
             }
 
             (StatusCode::OK, headers, bytes).into_response()
         }
         Err(err) => {
-            println!(
-                "[download_upload_handler] ❌ File not found: {:?}, error: {}",
-                file_path, err
-            );
+            if verbose_logs {
+                println!(
+                    "[download_upload_handler] ❌ File not found: {:?}, error: {}",
+                    file_path, err
+                );
+            }
             (
                 StatusCode::NOT_FOUND,
                 Json(json!({ "success": false, "error": "File not found", "path": file_path.to_string_lossy() })),

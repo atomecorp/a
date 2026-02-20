@@ -967,10 +967,19 @@ async fn handle_list(
     let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(100);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
 
-    println!(
-        "[Atome List Debug] atome_type={:?}, owner_id={:?}, user_id={}, includeDeleted={}",
-        atome_type, owner_id, user_id, include_deleted
-    );
+    let atome_list_debug_enabled = std::env::var("ATOME_LIST_DEBUG")
+        .ok()
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on"
+        })
+        .unwrap_or(false);
+    if atome_list_debug_enabled {
+        println!(
+            "[Atome List Debug] atome_type={:?}, owner_id={:?}, user_id={}, includeDeleted={}",
+            atome_type, owner_id, user_id, include_deleted
+        );
+    }
 
     let db = match state.db.lock() {
         Ok(d) => d,
