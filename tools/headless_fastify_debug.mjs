@@ -10,6 +10,7 @@ const clearStorage = process.env.ADOLE_CLEAR_STORAGE === '1';
 const lightSnapshot = process.env.ADOLE_LIGHT_SNAPSHOT !== '0';
 const switchToTauriOnRefresh = process.env.ADOLE_SWITCH_TAURI_ON_REFRESH === '1';
 const forceDataTauri = process.env.ADOLE_FORCE_DATA_TAURI === '1';
+const probeMtrackOpen = process.env.ADOLE_PROBE_MTRACK_OPEN === '1';
 const outDir = path.resolve('tools/headless_output');
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -197,6 +198,23 @@ const run = async () => {
       window.__SQUIRREL_DATA_SOURCE__ = 'tauri';
     });
   }
+  if (probeMtrackOpen) {
+    await context.addInitScript(() => {
+      window.__EVE_MTRAX_BRIDGE_LOGS__ = true;
+      window.__EVE_PANEL_OPEN_DEBUG__ = true;
+      window.__EVE_PROBE_EVENTS__ = [];
+      const push = (name, detail) => {
+        try {
+          const list = Array.isArray(window.__EVE_PROBE_EVENTS__) ? window.__EVE_PROBE_EVENTS__ : [];
+          list.push({ name, detail: detail || null, at: Date.now() });
+          window.__EVE_PROBE_EVENTS__ = list.slice(-120);
+        } catch (_) {}
+      };
+      window.addEventListener('eve:tool-state-changed', (event) => push('eve:tool-state-changed', event?.detail || null));
+      window.addEventListener('eve:mtrack-panel-closed', (event) => push('eve:mtrack-panel-closed', event?.detail || null));
+      window.addEventListener('eve:group-open-request', (event) => push('eve:group-open-request', event?.detail || null));
+    });
+  }
   const page = await context.newPage();
 
   page.on('console', msg => log('console', { type: msg.type(), text: msg.text() }));
@@ -252,6 +270,110 @@ const run = async () => {
   }, null, { ok: false, error: 'eval_failed' });
   fs.writeFileSync(path.join(outDir, 'atome_result.json'), JSON.stringify(atomeResult, null, 2));
   log('atome_result', atomeResult);
+
+  if (probeMtrackOpen) {
+    const probe = await safeEval(page, async () => {
+      const normalizeId = (value) => String(value || '').trim();
+      const normText = (value) => String(value || '').trim().toLowerCase();
+      const selectedBefore = (window.AdoleAPI?.selection?.get ? window.AdoleAPI.selection.get() : [])
+        .map((entry) => normalizeId(entry))
+        .filter(Boolean);
+      const candidate = Array.from(document.querySelectorAll('[data-atome-id]')).find((node) => {
+        const kind = String(node?.dataset?.atomeKind || '').trim().toLowerCase();
+        if (!kind) return true;
+        return kind !== 'group' && kind !== 'tool_shortcut';
+      }) || null;
+      const toolCandidates = Array.from(document.querySelectorAll('#menu_container_v2 .eve-toolbox-v2-tool, [data-name-key], [data-tool-id], [id]'))
+        .filter((el) => {
+          const id = normText(el?.id || '');
+          const nameKey = normText(el?.dataset?.nameKey || el?.dataset?.name_key || '');
+          const toolId = normText(el?.dataset?.toolId || el?.dataset?.tool_id || '');
+          return (
+            id.includes('mtrack')
+            || id.includes('mtrax')
+            || nameKey === 'mtrack'
+            || nameKey === 'mtrax'
+            || toolId === 'tool.main.mtrack'
+            || toolId === 'ui.mtrax.open'
+            || toolId === 'ui.mtrack.panel'
+          );
+        });
+      const tool = document.getElementById('_intuition_v2_mtrack')
+        || document.getElementById('_intuition_mtrack')
+        || document.querySelector('[data-name-key="mtrack"]')
+        || document.querySelector('[data-name-key="mtrax"]')
+        || toolCandidates[0]
+        || null;
+      if (!candidate) {
+        return {
+          ok: false,
+          error: 'probe_candidate_missing',
+          has_candidate: !!candidate,
+          has_tool: !!tool,
+          tool_candidates: toolCandidates.slice(0, 20).map((el) => ({
+            id: normalizeId(el.id),
+            name_key: normalizeId(el?.dataset?.nameKey || el?.dataset?.name_key || ''),
+            tool_id: normalizeId(el?.dataset?.toolId || el?.dataset?.tool_id || '')
+          }))
+        };
+      }
+      const click = (el) => {
+        const rect = el.getBoundingClientRect();
+        const x = rect.left + Math.max(4, Math.min(rect.width - 4, rect.width / 2));
+        const y = rect.top + Math.max(4, Math.min(rect.height - 4, rect.height / 2));
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 41, button: 0, clientX: x, clientY: y }));
+        el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 41, button: 0, clientX: x, clientY: y }));
+        if (typeof el.click === 'function') el.click();
+      };
+      click(candidate);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      if (tool) click(tool);
+      const runtime = window.atome?.tools?.v2Runtime || null;
+      const runtimeOpenResult = (runtime && typeof runtime.invokeById === 'function')
+        ? await runtime.invokeById({
+          tool_id: 'ui.mtrax.open',
+          event: 'touch',
+          action: 'pointer.click',
+          input: {
+            action: 'open',
+            toggle: false,
+            target_id: normalizeId(tool?.id || '_intuition_v2_mtrack')
+          },
+          presentation: 'ui',
+          source: { type: 'ui', layer: 'headless_probe' }
+        })
+        : { ok: false, error: 'runtime_unavailable' };
+      await new Promise((resolve) => setTimeout(resolve, 2600));
+      const panel = document.getElementById('eve_mtrack_dialog');
+      const state = (window.eveMtrackApi && typeof window.eveMtrackApi.getState === 'function')
+        ? window.eveMtrackApi.getState()
+        : null;
+      const selectedAfter = (window.AdoleAPI?.selection?.get ? window.AdoleAPI.selection.get() : [])
+        .map((entry) => normalizeId(entry))
+        .filter(Boolean);
+      const events = Array.isArray(window.__EVE_PROBE_EVENTS__) ? window.__EVE_PROBE_EVENTS__ : [];
+      return {
+        ok: true,
+        selected_before: selectedBefore,
+        selected_after: selectedAfter,
+        probe_atome_id: normalizeId(candidate.dataset?.atomeId || ''),
+        tool_id: normalizeId(tool.id || tool.dataset?.toolId || tool.dataset?.tool_id || ''),
+        tool_candidates: toolCandidates.slice(0, 20).map((el) => ({
+          id: normalizeId(el.id),
+          name_key: normalizeId(el?.dataset?.nameKey || el?.dataset?.name_key || ''),
+          tool_id: normalizeId(el?.dataset?.toolId || el?.dataset?.tool_id || '')
+        })),
+        runtime_open_result: runtimeOpenResult || null,
+        panel_exists: !!panel,
+        panel_display: panel ? panel.style.display : null,
+        panel_parent: panel?.parentElement?.id || null,
+        mtrack_state: state || null,
+        probe_events: events.slice(-40)
+      };
+    }, null, { ok: false, error: 'probe_eval_failed' }, 16000);
+    fs.writeFileSync(path.join(outDir, 'mtrack_open_probe.json'), JSON.stringify(probe, null, 2));
+    log('mtrack_open_probe', probe);
+  }
 
   await browser.close();
   log('done');
