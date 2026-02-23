@@ -126,7 +126,6 @@
     "mediasoup-client": "^3.13.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
-    "pixi.js": "^8.16.0",
     "three": "^0.181.2",
     "tone": "^15.1.22",
     "tslib": "^2.8.1",
