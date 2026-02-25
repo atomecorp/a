@@ -1993,8 +1993,10 @@ async fn download_recording_handler(
             safe_id, exists
         );
 
+        // Recording binaries must remain retrievable by id even when the atome is soft-deleted.
+        // Soft-delete hides it from normal lists, but linked media atomes can still reference it.
         let owner_id: Option<String> = match db.query_row(
-        "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND atome_type IN ('audio_recording', 'video_recording') AND deleted_at IS NULL",
+        "SELECT owner_id FROM atomes WHERE atome_id = ?1 AND atome_type IN ('audio_recording', 'video_recording')",
         params![safe_id],
         |row| row.get(0),
     ) {
