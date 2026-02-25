@@ -176,6 +176,23 @@ function isLikelyUiLoopbackBase(base, config = null) {
     }
 }
 
+function isLikelyTauriLoopbackBase(base, config = null) {
+    if (typeof base !== 'string' || !base.trim()) return false;
+    if (typeof window === 'undefined') return false;
+    if (isInTauriRuntime()) return false;
+    try {
+        const parsed = new URL(base.trim());
+        if (!isLoopbackHost(parsed.hostname)) return false;
+        const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+        if (!Number.isFinite(candidatePort) || candidatePort <= 0) return false;
+        const expectedFastifyPort = readExpectedFastifyLoopbackPort(config);
+        const tauriPort = readLocalTauriHttpPort() || 3000;
+        return candidatePort === tauriPort && candidatePort !== expectedFastifyPort;
+    } catch (_) {
+        return false;
+    }
+}
+
 function clearFastifyOverrideStorage() {
     if (typeof window === 'undefined') return;
     try {
@@ -219,7 +236,11 @@ function toWsBase(httpBase) {
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
     const base = normalizeNoTrailingSlash(httpBase);
     if (!base) return;
-    if (isInvalidFastifyLoopbackBase(base) || isDisallowedFastifyLoopbackPort(base, config)) {
+    if (
+        isInvalidFastifyLoopbackBase(base)
+        || isDisallowedFastifyLoopbackPort(base, config)
+        || isLikelyTauriLoopbackBase(base, config)
+    ) {
         clearFastifyOverrideStorage();
         return;
     }
@@ -366,6 +387,7 @@ export async function loadServerConfigOnce() {
                     isInvalidFastifyLoopbackBase(existing)
                     || isDisallowedFastifyLoopbackPort(existing, currentConfig)
                     || isLikelyUiLoopbackBase(existing, currentConfig)
+                    || isLikelyTauriLoopbackBase(existing, currentConfig)
                 );
                 if (!invalidExisting) return;
             }
