@@ -1000,6 +1000,22 @@ const applySemanticTextToElement = (hostEl, textValue) => {
     }
 };
 
+const applyRichContentToElement = (hostEl, htmlValue) => {
+    if (!hostEl) return;
+    const next = htmlValue == null ? '' : String(htmlValue);
+    const textContainer = hostEl.querySelector?.('[data-role="atome-text"]');
+    if (textContainer) {
+        if (textContainer.innerHTML !== next) textContainer.innerHTML = next;
+        return;
+    }
+    const hasStructuralChildren = hostEl.querySelector?.('[data-role]');
+    if (!hasStructuralChildren) {
+        if (hostEl.innerHTML !== next) hostEl.innerHTML = next;
+        return;
+    }
+    console.warn('[UnifiedSync] Atome has structural children but no [data-role="atome-text"]. Rich content not applied to preserve structure.');
+};
+
 const applyAtomePatchToDom = (atomeId, properties = {}) => {
     if (!atomeId || typeof document === 'undefined') return;
     const elements = new Set();
@@ -1043,14 +1059,23 @@ const applyAtomePatchToDom = (atomeId, properties = {}) => {
         });
     }
 
+    const hasOwnContent = Object.prototype.hasOwnProperty.call(properties || {}, 'content');
+    const hasOwnText = Object.prototype.hasOwnProperty.call(properties || {}, 'text');
+    const hasOwnTextContent = Object.prototype.hasOwnProperty.call(properties || {}, 'textContent');
+    if (hasOwnContent) {
+        patchableElements.forEach((el) => {
+            applyRichContentToElement(el, properties.content);
+        });
+    } else if (hasOwnText || hasOwnTextContent) {
+        const nextText = hasOwnText ? properties.text : properties.textContent;
+        patchableElements.forEach((el) => {
+            applySemanticTextToElement(el, nextText);
+        });
+    }
+
     Object.entries(properties || {}).forEach(([key, value]) => {
         if (value == null) return;
         if (key === 'text' || key === 'content' || key === 'textContent') {
-            // CRITICAL FIX: Apply text to the dedicated text container,
-            // NOT to the host element, to preserve DOM structure
-            patchableElements.forEach((el) => {
-                applySemanticTextToElement(el, value);
-            });
             return;
         }
         if (key.startsWith('css.')) {
