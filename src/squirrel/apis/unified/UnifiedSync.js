@@ -926,6 +926,27 @@ const coerceStyleValue = (value) => {
     return String(value);
 };
 
+// Avoid flooding console when remote patches target structural atomes that
+// intentionally do not expose a dedicated [data-role="atome-text"] node.
+const structuralTextWarningSeen = new WeakMap();
+const shouldLogStructuralTextWarning = () => {
+    if (typeof window !== 'undefined' && window.__EVE_UNIFIEDSYNC_STRUCTURAL_TEXT_WARN__ === true) return true;
+    if (typeof globalThis !== 'undefined' && globalThis.__EVE_UNIFIEDSYNC_STRUCTURAL_TEXT_WARN__ === true) return true;
+    return false;
+};
+const warnStructuralTextMissingOnce = (hostEl, mode = 'text') => {
+    if (!hostEl) return;
+    if (!shouldLogStructuralTextWarning()) return;
+    const previous = structuralTextWarningSeen.get(hostEl) || {};
+    if (previous?.[mode]) return;
+    structuralTextWarningSeen.set(hostEl, { ...previous, [mode]: true });
+    if (mode === 'rich') {
+        console.warn('[UnifiedSync] Atome has structural children but no [data-role="atome-text"]. Rich content not applied to preserve structure.');
+        return;
+    }
+    console.warn('[UnifiedSync] Atome has structural children but no [data-role="atome-text"]. Text not applied to preserve structure.');
+};
+
 /**
  * Check if an atome element is currently in local editing mode.
  * When true, we must NOT apply remote patches to avoid destroying the editing state.
@@ -994,8 +1015,7 @@ const applySemanticTextToElement = (hostEl, textValue) => {
         if (!hasStructuralChildren) {
             hostEl.textContent = String(textValue);
         } else {
-            // Element has structural children but no text container - create one
-            console.warn('[UnifiedSync] Atome has structural children but no [data-role="atome-text"]. Text not applied to preserve structure.');
+            warnStructuralTextMissingOnce(hostEl, 'text');
         }
     }
 };
@@ -1013,7 +1033,7 @@ const applyRichContentToElement = (hostEl, htmlValue) => {
         if (hostEl.innerHTML !== next) hostEl.innerHTML = next;
         return;
     }
-    console.warn('[UnifiedSync] Atome has structural children but no [data-role="atome-text"]. Rich content not applied to preserve structure.');
+    warnStructuralTextMissingOnce(hostEl, 'rich');
 };
 
 const applyAtomePatchToDom = (atomeId, properties = {}) => {
