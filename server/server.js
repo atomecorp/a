@@ -838,6 +838,36 @@ async function startServer() {
       return payload;
     };
 
+    // Register CORS first so all routes share the same behavior.
+    await server.register(fastifyCors, {
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Accept',
+        'X-Client-Id',
+        'X-Filename',
+        'X-Upload-Id',
+        'X-Chunk-Index',
+        'X-Chunk-Count',
+        'X-Chunk-Size',
+        'X-Total-Size',
+        'X-Original-Name',
+        'X-File-Path',
+        'X-Atome-Id',
+        'X-Atome-Type',
+        'X-Mime-Type',
+        'X-User-Id',
+        'X-UserId',
+        'X-Username',
+        'X-User-Name',
+        'X-Phone',
+        'X-User-Phone'
+      ]
+    });
+
     // Always-on diagnostic endpoint (useful in production to confirm which code is running)
     server.get('/__whoami', async () => {
       return {
@@ -952,23 +982,31 @@ async function startServer() {
     });
 
     const clientLogHandler = async (request, reply) => {
-      const payload = coerceLogEnvelope(request.body, {
-        source: 'browser',
-        component: 'ui'
-      });
+      const rawBody = request.body;
+      const inputLogs = Array.isArray(rawBody)
+        ? rawBody
+        : (Array.isArray(rawBody?.logs) ? rawBody.logs : [rawBody]);
+      const validLogs = inputLogs
+        .map((entry) => coerceLogEnvelope(entry, { source: 'browser', component: 'ui' }))
+        .filter((entry) => isValidLogEnvelope(entry));
 
-      if (!isValidLogEnvelope(payload)) {
+      if (!validLogs.length) {
         return replyJson(reply, 400, { success: false, error: 'invalid log envelope' });
       }
 
       try {
-        await fs.appendFile(BROWSER_LOG_FILE, `${JSON.stringify(payload)}\n`);
+        const lines = validLogs.map((entry) => JSON.stringify(entry)).join('\n');
+        await fs.appendFile(BROWSER_LOG_FILE, `${lines}\n`);
       } catch (error) {
         const message = error?.message || String(error);
         return replyJson(reply, 500, { success: false, error: message });
       }
 
-      return { success: true };
+      return {
+        success: true,
+        accepted: validLogs.length,
+        dropped: Math.max(0, inputLogs.length - validLogs.length)
+      };
     };
 
     // Keep both endpoints for compatibility (older builds used /client-log).
@@ -1037,36 +1075,6 @@ async function startServer() {
     // ===========================
     // 1. PLUGINS DE BASE
     // ===========================
-
-    // CORS for development and cross-origin requests
-    await server.register(fastifyCors, {
-      origin: true,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      allowedHeaders: [
-        'Content-Type',
-        'Authorization',
-        'Accept',
-        'X-Client-Id',
-        'X-Filename',
-        'X-Upload-Id',
-        'X-Chunk-Index',
-        'X-Chunk-Count',
-        'X-Chunk-Size',
-        'X-Total-Size',
-        'X-Original-Name',
-        'X-File-Path',
-        'X-Atome-Id',
-        'X-Atome-Type',
-        'X-Mime-Type',
-        'X-User-Id',
-        'X-UserId',
-        'X-Username',
-        'X-User-Name',
-        'X-Phone',
-        'X-User-Phone'
-      ]
-    });
 
     // Servir les fichiers statiques depuis staticRoot (../src en dev)
     await server.register(fastifyStatic, {

@@ -10,6 +10,11 @@ const LOG_ENDPOINT = '/dev/client-log';
 const FASTIFY_FALLBACK = 'http://127.0.0.1:3001';
 const SESSION_KEY = 'atome_session_id';
 const MAX_ARG_STRING = 2000;
+const NETWORK_LOG_FLUSH_INTERVAL_MS = 120;
+const NETWORK_LOG_BATCH_SIZE = 20;
+const NETWORK_LOG_MAX_QUEUE = 400;
+const NETWORK_LOG_FAILURE_COOLDOWN_MS = 15000;
+const NETWORK_LOG_MAX_CONSECUTIVE_FAILURES = 3;
 const DEFAULT_LOG_ALLOWLIST = [
   /\[SyncDebug\]/,
   /\[SyncCommit\]/,
@@ -76,15 +81,53 @@ function resolveFastifyBase() {
     return configured;
   }
 
-  const location = window.location;
-  if (!location) return FASTIFY_FALLBACK;
-
-  if (isLocalHostname(location.hostname)) {
-    return FASTIFY_FALLBACK;
+  if (!isTauriRuntime()) {
+    const origin = normalizeBase(window.location?.origin);
+    return origin && origin !== 'null' ? origin : '';
   }
 
-  const origin = normalizeBase(location.origin);
-  return origin && origin !== 'null' ? origin : FASTIFY_FALLBACK;
+  return FASTIFY_FALLBACK;
+}
+
+const networkLogState = {
+  queue: [],
+  flushTimer: null,
+  inFlight: false,
+  disabledUntilMs: 0,
+  consecutiveFailures: 0,
+  permanentlyDisabled: false,
+  configPromise: null
+};
+
+function ensureServerConfigInitialized() {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (!networkLogState.configPromise) {
+    networkLogState.configPromise = Promise.resolve()
+      .then(() => loadServerConfigOnce())
+      .catch(() => null);
+  }
+  return networkLogState.configPromise;
+}
+
+function scheduleNetworkFlush(delayMs = NETWORK_LOG_FLUSH_INTERVAL_MS) {
+  if (networkLogState.flushTimer) return;
+  const safeDelay = Number.isFinite(delayMs) ? Math.max(0, delayMs) : NETWORK_LOG_FLUSH_INTERVAL_MS;
+  networkLogState.flushTimer = setTimeout(() => {
+    networkLogState.flushTimer = null;
+    void flushNetworkQueue();
+  }, safeDelay);
+}
+
+function enqueueNetworkLog(payload) {
+  if (networkLogState.permanentlyDisabled) return false;
+  if (!payload || typeof payload !== 'object') return false;
+  if (networkLogState.queue.length >= NETWORK_LOG_MAX_QUEUE) {
+    const overflow = networkLogState.queue.length - NETWORK_LOG_MAX_QUEUE + 1;
+    networkLogState.queue.splice(0, overflow);
+  }
+  networkLogState.queue.push(payload);
+  scheduleNetworkFlush();
+  return true;
 }
 
 function getSessionId() {
@@ -156,18 +199,58 @@ function shouldPrintConsole(level, args) {
   return shouldAllowConsoleLog(level, args);
 }
 
-async function sendToFastify(payload) {
-  const base = resolveFastifyBase();
-  const url = `${base}${LOG_ENDPOINT}`;
+async function flushNetworkQueue() {
+  if (networkLogState.inFlight) return;
+  if (!networkLogState.queue.length) return;
+
+  const now = Date.now();
+  if (networkLogState.disabledUntilMs > now) {
+    scheduleNetworkFlush(networkLogState.disabledUntilMs - now);
+    return;
+  }
+
+  networkLogState.inFlight = true;
+  const batch = networkLogState.queue.splice(0, NETWORK_LOG_BATCH_SIZE);
+  if (!batch.length) {
+    networkLogState.inFlight = false;
+    return;
+  }
+
   try {
-    await fetch(url, {
+    await ensureServerConfigInitialized();
+    const base = resolveFastifyBase();
+    if (!base) {
+      networkLogState.queue = batch.concat(networkLogState.queue).slice(0, NETWORK_LOG_MAX_QUEUE);
+      scheduleNetworkFlush(1000);
+      return;
+    }
+
+    const response = await fetch(`${base}${LOG_ENDPOINT}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-      keepalive: true
+      body: JSON.stringify(batch.length === 1 ? batch[0] : { logs: batch }),
+      keepalive: false
     });
+    if (!response || response.ok !== true) {
+      networkLogState.consecutiveFailures += 1;
+      if (networkLogState.consecutiveFailures >= NETWORK_LOG_MAX_CONSECUTIVE_FAILURES) {
+        networkLogState.disabledUntilMs = Date.now() + NETWORK_LOG_FAILURE_COOLDOWN_MS;
+      }
+      networkLogState.queue = batch.concat(networkLogState.queue).slice(0, NETWORK_LOG_MAX_QUEUE);
+      return;
+    }
+    networkLogState.consecutiveFailures = 0;
   } catch (_) {
-    // Avoid recursive logging when the log endpoint is offline.
+    networkLogState.consecutiveFailures += 1;
+    if (networkLogState.consecutiveFailures >= NETWORK_LOG_MAX_CONSECUTIVE_FAILURES) {
+      networkLogState.disabledUntilMs = Date.now() + NETWORK_LOG_FAILURE_COOLDOWN_MS;
+    }
+    networkLogState.queue = batch.concat(networkLogState.queue).slice(0, NETWORK_LOG_MAX_QUEUE);
+  } finally {
+    networkLogState.inFlight = false;
+    if (networkLogState.queue.length) {
+      scheduleNetworkFlush(networkLogState.consecutiveFailures > 0 ? 300 : NETWORK_LOG_FLUSH_INTERVAL_MS);
+    }
   }
 }
 
@@ -213,7 +296,7 @@ async function emitLog(level, args) {
     // Fall through to HTTP logging.
   }
 
-  await sendToFastify(finalPayload);
+  enqueueNetworkLog(finalPayload);
 }
 
 function installConsoleWrapper() {
@@ -260,7 +343,7 @@ function bootstrapLogging() {
 
   installConsoleWrapper();
   Promise.resolve()
-    .then(() => loadServerConfigOnce())
+    .then(() => ensureServerConfigInitialized())
     .catch(() => null);
 }
 
