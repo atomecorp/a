@@ -854,6 +854,12 @@ class TauriWebSocket {
                                     : String(atomeId).replace(/"/g, '\\"');
                                 document.querySelectorAll(`[data-atome-id="${escapedId}"]`).forEach((el) => elements.add(el));
                                 if (!elements.size) return;
+                                const isMediaLikeElement = (el) => {
+                                    if (!el) return false;
+                                    const kind = String(el.dataset?.atomeKind || el.dataset?.kind || '').trim().toLowerCase();
+                                    if (kind === 'video' || kind === 'sound' || kind === 'audio' || kind === 'image') return true;
+                                    return !!el.querySelector?.('video, audio, img');
+                                };
                                 const cssProps = properties?.css && typeof properties.css === 'object' ? properties.css : null;
                                 if (cssProps) {
                                     Object.entries(cssProps).forEach(([key, value]) => {
@@ -862,8 +868,26 @@ class TauriWebSocket {
                                 }
                                 Object.entries(properties || {}).forEach(([key, value]) => {
                                     if (value == null) return;
-                                    if (key === 'text') {
-                                        elements.forEach((el) => { el.textContent = String(value); });
+                                    if (key === 'text' || key === 'textContent' || key === 'content') {
+                                        elements.forEach((el) => {
+                                            if (isMediaLikeElement(el)) return;
+                                            const textTarget = el.querySelector?.('[data-role="atome-text"]') || null;
+                                            if (key === 'content') {
+                                                if (textTarget instanceof HTMLElement) {
+                                                    textTarget.innerHTML = String(value);
+                                                    return;
+                                                }
+                                                const hasStructuralChildren = !!el.querySelector?.('[data-role], video, audio, img, svg, canvas');
+                                                if (!hasStructuralChildren) el.innerHTML = String(value);
+                                                return;
+                                            }
+                                            if (textTarget instanceof HTMLElement) {
+                                                textTarget.textContent = String(value);
+                                                return;
+                                            }
+                                            const hasStructuralChildren = !!el.querySelector?.('[data-role], video, audio, img, svg, canvas');
+                                            if (!hasStructuralChildren) el.textContent = String(value);
+                                        });
                                         return;
                                     }
                                     if (key.startsWith('css.')) {
@@ -914,7 +938,7 @@ class TauriWebSocket {
                                             return;
                                         }
                                         window.dispatchEvent(new CustomEvent('squirrel:atome-updated', {
-                                            detail: { id: atomeId, atome_id: atomeId, properties, source: 'realtime' }
+                                            detail: { id: atomeId, atome_id: atomeId, properties, source: 'realtime', origin: 'adole:share-sync' }
                                         }));
                                         applyDomPatch(atomeId, properties);
                                     }

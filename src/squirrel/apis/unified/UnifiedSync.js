@@ -969,6 +969,13 @@ const isElementInEditMode = (el) => {
     return false;
 };
 
+const isMediaHostElement = (el) => {
+    if (!el) return false;
+    const kind = String(el.dataset?.atomeKind || el.dataset?.kind || '').trim().toLowerCase();
+    if (kind === 'video' || kind === 'sound' || kind === 'audio' || kind === 'image') return true;
+    return !!el.querySelector?.('video, audio, img');
+};
+
 /**
  * Extract semantic text content from an atome's text container.
  * Converts browser-generated div/br structures back to plain text with newlines.
@@ -1009,9 +1016,13 @@ const applySemanticTextToElement = (hostEl, textValue) => {
         // Apply text only to the text container, preserving other children (resize-handle, etc.)
         textContainer.textContent = String(textValue);
     } else {
+        if (isMediaHostElement(hostEl)) {
+            warnStructuralTextMissingOnce(hostEl, 'text');
+            return;
+        }
         // Fallback: if no text container exists, check if this is a simple text element
         // Only set textContent if there are no special child elements to preserve
-        const hasStructuralChildren = hostEl.querySelector?.('[data-role]');
+        const hasStructuralChildren = hostEl.querySelector?.('[data-role], video, audio, img, svg, canvas');
         if (!hasStructuralChildren) {
             hostEl.textContent = String(textValue);
         } else {
@@ -1028,7 +1039,11 @@ const applyRichContentToElement = (hostEl, htmlValue) => {
         if (textContainer.innerHTML !== next) textContainer.innerHTML = next;
         return;
     }
-    const hasStructuralChildren = hostEl.querySelector?.('[data-role]');
+    if (isMediaHostElement(hostEl)) {
+        warnStructuralTextMissingOnce(hostEl, 'rich');
+        return;
+    }
+    const hasStructuralChildren = hostEl.querySelector?.('[data-role], video, audio, img, svg, canvas');
     if (!hasStructuralChildren) {
         if (hostEl.innerHTML !== next) hostEl.innerHTML = next;
         return;
@@ -1131,7 +1146,8 @@ const dispatchAtomeEvent = (type, payload) => {
         atome_id: atomeId || atome?.atome_id || atome?.id || null,
         atome,
         properties: properties || atome?.properties || atome?.particles || atome?.data || null,
-        source: 'realtime'
+        source: 'realtime',
+        origin: payload?.origin || payload?.source || 'unifiedsync'
     };
     window.dispatchEvent(new CustomEvent(type, { detail }));
 };
