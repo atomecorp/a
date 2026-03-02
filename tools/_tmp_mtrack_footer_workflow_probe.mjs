@@ -381,11 +381,11 @@ const run = async () => {
       const host = document.querySelector(`[data-atome-id="${input.atome_id}"]`);
       return host instanceof HTMLElement
         ? {
-            left: host.style.left,
-            top: host.style.top,
-            mtrack_active: !!window.eveMtrackApi?.isActive?.(),
-            debug: window.__DEBUG__?.getAppState?.() || null
-          }
+          left: host.style.left,
+          top: host.style.top,
+          mtrack_active: !!window.eveMtrackApi?.isActive?.(),
+          debug: window.__DEBUG__?.getAppState?.() || null
+        }
         : null;
     }, { atome_id: atomeId }, null);
     report.context.before_play = beforePlay;
@@ -433,13 +433,13 @@ const run = async () => {
         const state = window.eveMtrackApi?.getState?.() || null;
         return host instanceof HTMLElement
           ? {
-              left: host.style.left,
-              top: host.style.top,
-              width: host.style.width,
-              opacity: host.style.opacity,
-              playhead: Number(state?.playhead || 0),
-              playing: state?.playing === true
-            }
+            left: host.style.left,
+            top: host.style.top,
+            width: host.style.width,
+            opacity: host.style.opacity,
+            playhead: Number(state?.playhead || 0),
+            playing: state?.playing === true
+          }
           : null;
       }, { atome_id: atomeId }, null);
       playbackSamples.push(sample);
