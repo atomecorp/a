@@ -42,6 +42,40 @@ const _connectionState = {
     tauri: { online: null, lastCheck: 0, failCount: 0 },
     fastify: { online: null, lastCheck: 0, failCount: 0 }
 };
+const MEDIA_PATCH_KIND_HINTS = new Set(['video', 'audio', 'sound', 'image']);
+const mediaPatchHintsByAtomeId = new Map();
+const normalizeMediaPatchKindHint = (value) => String(value || '').trim().toLowerCase();
+const hasMediaSourceHintsInPatch = (properties = {}) => {
+    if (!properties || typeof properties !== 'object') return false;
+    const direct = (
+        properties.media_url
+        || properties.mediaUrl
+        || properties.src
+        || properties.url
+        || properties.file_path
+        || properties.filePath
+        || ''
+    );
+    if (String(direct || '').trim()) return true;
+    const mime = String(
+        properties.mime_type
+        || properties.mimeType
+        || properties.content_type
+        || properties.contentType
+        || ''
+    ).trim().toLowerCase();
+    return mime.startsWith('video/') || mime.startsWith('audio/') || mime.startsWith('image/');
+};
+const rememberMediaPatchHint = (atomeId, kindHint = '') => {
+    const id = String(atomeId || '').trim();
+    const kind = normalizeMediaPatchKindHint(kindHint);
+    if (!id || !MEDIA_PATCH_KIND_HINTS.has(kind)) return;
+    mediaPatchHintsByAtomeId.set(id, kind);
+    if (mediaPatchHintsByAtomeId.size > 2000) {
+        const first = mediaPatchHintsByAtomeId.keys().next();
+        if (first && !first.done) mediaPatchHintsByAtomeId.delete(first.value);
+    }
+};
 
 function isAnonymousLogin(phone, username, password) {
     if (typeof window === 'undefined') return false;
@@ -860,6 +894,29 @@ class TauriWebSocket {
                                     if (kind === 'video' || kind === 'sound' || kind === 'audio' || kind === 'image') return true;
                                     return !!el.querySelector?.('video, audio, img');
                                 };
+                                const patchKind = normalizeMediaPatchKindHint(
+                                    properties?.kind
+                                    || properties?.type
+                                    || properties?.media_type
+                                    || properties?.mediaType
+                                    || ''
+                                );
+                                if (MEDIA_PATCH_KIND_HINTS.has(patchKind)) {
+                                    rememberMediaPatchHint(atomeId, patchKind);
+                                }
+                                let mediaLikePatch = !!(String(atomeId || '').trim() && mediaPatchHintsByAtomeId.has(String(atomeId).trim()));
+                                if (!mediaLikePatch && hasMediaSourceHintsInPatch(properties)) {
+                                    mediaLikePatch = true;
+                                }
+                                if (!mediaLikePatch) {
+                                    elements.forEach((el) => {
+                                        if (mediaLikePatch) return;
+                                        if (!isMediaLikeElement(el)) return;
+                                        mediaLikePatch = true;
+                                        const elKind = normalizeMediaPatchKindHint(el.dataset?.atomeKind || el.dataset?.kind || '');
+                                        if (MEDIA_PATCH_KIND_HINTS.has(elKind)) rememberMediaPatchHint(atomeId, elKind);
+                                    });
+                                }
                                 const cssProps = properties?.css && typeof properties.css === 'object' ? properties.css : null;
                                 if (cssProps) {
                                     Object.entries(cssProps).forEach(([key, value]) => {
@@ -870,7 +927,7 @@ class TauriWebSocket {
                                     if (value == null) return;
                                     if (key === 'text' || key === 'textContent' || key === 'content') {
                                         elements.forEach((el) => {
-                                            if (isMediaLikeElement(el)) return;
+                                            if (mediaLikePatch || isMediaLikeElement(el)) return;
                                             const textTarget = el.querySelector?.('[data-role="atome-text"]') || null;
                                             if (key === 'content') {
                                                 if (textTarget instanceof HTMLElement) {

@@ -975,6 +975,72 @@ const isMediaHostElement = (el) => {
     if (kind === 'video' || kind === 'sound' || kind === 'audio' || kind === 'image') return true;
     return !!el.querySelector?.('video, audio, img');
 };
+const MEDIA_PATCH_KIND_HINTS = new Set(['video', 'audio', 'sound', 'image']);
+const mediaPatchHintsByAtomeId = new Map();
+const normalizeMediaPatchKindHint = (value) => String(value || '').trim().toLowerCase();
+const hasMediaSourceHintsInPatch = (properties = {}) => {
+    if (!properties || typeof properties !== 'object') return false;
+    const direct = (
+        properties.media_url
+        || properties.mediaUrl
+        || properties.src
+        || properties.url
+        || properties.file_path
+        || properties.filePath
+        || ''
+    );
+    if (String(direct || '').trim()) return true;
+    const mime = String(
+        properties.mime_type
+        || properties.mimeType
+        || properties.content_type
+        || properties.contentType
+        || ''
+    ).trim().toLowerCase();
+    return mime.startsWith('video/') || mime.startsWith('audio/') || mime.startsWith('image/');
+};
+const rememberMediaPatchHint = (atomeId, kindHint = '') => {
+    const id = String(atomeId || '').trim();
+    const kind = normalizeMediaPatchKindHint(kindHint);
+    if (!id || !MEDIA_PATCH_KIND_HINTS.has(kind)) return;
+    mediaPatchHintsByAtomeId.set(id, kind);
+    if (mediaPatchHintsByAtomeId.size > 2000) {
+        const first = mediaPatchHintsByAtomeId.keys().next();
+        if (first && !first.done) mediaPatchHintsByAtomeId.delete(first.value);
+    }
+};
+const resolveMediaPatchHint = (atomeId, properties = {}, patchableElements = null) => {
+    const id = String(atomeId || '').trim();
+    const patchKind = normalizeMediaPatchKindHint(
+        properties?.kind
+        || properties?.type
+        || properties?.media_type
+        || properties?.mediaType
+        || ''
+    );
+    if (MEDIA_PATCH_KIND_HINTS.has(patchKind)) {
+        rememberMediaPatchHint(id, patchKind);
+        return true;
+    }
+    if (hasMediaSourceHintsInPatch(properties)) {
+        if (id && mediaPatchHintsByAtomeId.has(id)) return true;
+        return true;
+    }
+    if (patchableElements && typeof patchableElements.forEach === 'function') {
+        let matched = false;
+        patchableElements.forEach((el) => {
+            if (matched) return;
+            if (!isMediaHostElement(el)) return;
+            matched = true;
+            const elKind = normalizeMediaPatchKindHint(el.dataset?.atomeKind || el.dataset?.kind || '');
+            if (MEDIA_PATCH_KIND_HINTS.has(elKind)) {
+                rememberMediaPatchHint(id, elKind);
+            }
+        });
+        if (matched) return true;
+    }
+    return !!(id && mediaPatchHintsByAtomeId.has(id));
+};
 
 /**
  * Extract semantic text content from an atome's text container.
@@ -1084,6 +1150,7 @@ const applyAtomePatchToDom = (atomeId, properties = {}) => {
     if (!patchableElements.size) {
         return;
     }
+    const mediaLikePatch = resolveMediaPatchHint(atomeId, properties, patchableElements);
 
     const cssProps = properties?.css && typeof properties.css === 'object' ? properties.css : null;
     if (cssProps) {
@@ -1097,7 +1164,16 @@ const applyAtomePatchToDom = (atomeId, properties = {}) => {
     const hasOwnContent = Object.prototype.hasOwnProperty.call(properties || {}, 'content');
     const hasOwnText = Object.prototype.hasOwnProperty.call(properties || {}, 'text');
     const hasOwnTextContent = Object.prototype.hasOwnProperty.call(properties || {}, 'textContent');
-    if (hasOwnContent) {
+    if (mediaLikePatch && (hasOwnContent || hasOwnText || hasOwnTextContent)) {
+        if (typeof window !== 'undefined' && window.__EVE_MEDIA_INTEGRITY_LOGS__ === true) {
+            try {
+                console.warn('[eVe:media_integrity] blocked_textual_media_patch', {
+                    atome_id: String(atomeId || ''),
+                    patch_keys: Object.keys(properties || {})
+                });
+            } catch (_) { }
+        }
+    } else if (hasOwnContent) {
         patchableElements.forEach((el) => {
             applyRichContentToElement(el, properties.content);
         });
