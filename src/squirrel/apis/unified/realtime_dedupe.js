@@ -34,6 +34,85 @@ const REALTIME_KEYS = [
 const dedupMap = new Map();
 const selfPatchMap = new Map();
 const editingAtomes = new Map();
+const RECENT_LOCAL_DRAG_ENDS_KEY = '__EVE_RECENT_LOCAL_DRAG_ENDS__';
+const RECENT_LOCAL_RESIZE_ENDS_KEY = '__EVE_RECENT_LOCAL_RESIZE_ENDS__';
+const RECENT_LOCAL_GESTURE_END_TTL_MS = 4200;
+
+const normalizeAtomeId = (value) => String(value || '').trim();
+
+const resolveAtomeIdAliases = (atomeId) => {
+    const id = normalizeAtomeId(atomeId);
+    if (!id) return [];
+    const aliases = new Set([id]);
+    if (id.startsWith('atome_')) {
+        const unprefixed = normalizeAtomeId(id.slice(6));
+        if (unprefixed) aliases.add(unprefixed);
+    } else {
+        aliases.add(`atome_${id}`);
+    }
+    return Array.from(aliases);
+};
+
+const isRealtimeDedupDebugEnabled = () => {
+    if (typeof window === 'undefined') return false;
+    if (window.__EVE_DEBUG_REALTIME_DEDUP__ === true) return true;
+    try {
+        return window.localStorage?.getItem('eve.debug.realtime_dedup') === '1';
+    } catch (_) {
+        return false;
+    }
+};
+
+const logRealtimeDedup = (stage, detail = {}) => {
+    if (!isRealtimeDedupDebugEnabled()) return;
+    try {
+        console.log('[eVe:realtime_dedup]', stage, detail);
+    } catch (_) { }
+};
+
+const parseFiniteRealtimeNumber = (value) => {
+    const normalized = normalizeValue(value);
+    return Number.isFinite(normalized) ? Number(normalized) : null;
+};
+
+const resolveRecentLocalGestureEndByAliases = (aliases = [], storageKey = '') => {
+    if (typeof window === 'undefined') return null;
+    if (!Array.isArray(aliases) || !aliases.length) return null;
+    const key = String(storageKey || '').trim();
+    if (!key) return null;
+    const map = window[key];
+    if (!map || typeof map !== 'object') return null;
+    const now = Date.now();
+    let best = null;
+    aliases.forEach((alias) => {
+        const entry = map[alias];
+        const endedAt = Number(entry?.endedAt || 0);
+        if (!endedAt || (now - endedAt) > RECENT_LOCAL_GESTURE_END_TTL_MS) {
+            delete map[alias];
+            return;
+        }
+        if (!best || endedAt > Number(best?.endedAt || 0)) {
+            best = {
+                alias,
+                endedAt,
+                left: parseFiniteRealtimeNumber(entry?.left),
+                top: parseFiniteRealtimeNumber(entry?.top),
+                width: parseFiniteRealtimeNumber(entry?.width),
+                height: parseFiniteRealtimeNumber(entry?.height),
+                gestureId: String(entry?.gestureId || '').trim() || null,
+                txId: String(entry?.txId || '').trim() || null
+            };
+        }
+    });
+    return best;
+};
+
+const resolveRealtimePatchGeometry = (payload = {}) => ({
+    left: parseFiniteRealtimeNumber(payload?.left ?? payload?.x),
+    top: parseFiniteRealtimeNumber(payload?.top ?? payload?.y),
+    width: parseFiniteRealtimeNumber(payload?.width),
+    height: parseFiniteRealtimeNumber(payload?.height)
+});
 
 /**
  * Mark an atome as being actively edited locally.
@@ -41,8 +120,16 @@ const editingAtomes = new Map();
  * @param {string} atomeId - The atome ID being edited
  */
 export function markAtomeAsEditing(atomeId) {
-    if (!atomeId) return;
-    editingAtomes.set(String(atomeId), Date.now());
+    const aliases = resolveAtomeIdAliases(atomeId);
+    if (!aliases.length) return;
+    const now = Date.now();
+    aliases.forEach((alias) => {
+        editingAtomes.set(alias, now);
+    });
+    logRealtimeDedup('mark_editing', {
+        atome_id: normalizeAtomeId(atomeId) || null,
+        aliases
+    });
 }
 
 /**
@@ -51,7 +138,14 @@ export function markAtomeAsEditing(atomeId) {
  * @param {string} atomeId - The atome ID that finished editing
  */
 export function unmarkAtomeAsEditing(atomeId) {
-    if (atomeId) editingAtomes.delete(String(atomeId));
+    const aliases = resolveAtomeIdAliases(atomeId);
+    aliases.forEach((alias) => {
+        editingAtomes.delete(alias);
+    });
+    logRealtimeDedup('unmark_editing', {
+        atome_id: normalizeAtomeId(atomeId) || null,
+        aliases
+    });
 }
 
 /**
@@ -60,10 +154,15 @@ export function unmarkAtomeAsEditing(atomeId) {
  * @returns {boolean} True if the atome is in edit mode
  */
 export function isAtomeBeingEdited(atomeId) {
-    if (!atomeId) return false;
-    const ts = editingAtomes.get(String(atomeId));
-    if (!ts) return false;
-    return (Date.now() - ts) <= EDITING_IDLE_WINDOW_MS;
+    const aliases = resolveAtomeIdAliases(atomeId);
+    if (!aliases.length) return false;
+    const now = Date.now();
+    for (const alias of aliases) {
+        const ts = editingAtomes.get(alias);
+        if (!ts) continue;
+        if ((now - ts) <= EDITING_IDLE_WINDOW_MS) return true;
+    }
+    return false;
 }
 
 const getCurrentUserId = () => {
@@ -79,11 +178,19 @@ const getCurrentUserId = () => {
 };
 
 export function rememberSelfPatch(atomeId, fingerprint) {
-    if (!atomeId || !fingerprint) return;
-    const key = `${atomeId}:${fingerprint}`;
-    selfPatchMap.set(key, Date.now());
+    const aliases = resolveAtomeIdAliases(atomeId);
+    if (!aliases.length || !fingerprint) return;
+    const now = Date.now();
+    aliases.forEach((alias) => {
+        const key = `${alias}:${fingerprint}`;
+        selfPatchMap.set(key, now);
+    });
+    logRealtimeDedup('remember_self_patch', {
+        atome_id: normalizeAtomeId(atomeId) || null,
+        aliases,
+        fingerprint
+    });
     if (selfPatchMap.size > 500) {
-        const now = Date.now();
         for (const [k, ts] of selfPatchMap.entries()) {
             if (now - ts > SELF_PATCH_TTL_MS * 2) selfPatchMap.delete(k);
         }
@@ -91,16 +198,20 @@ export function rememberSelfPatch(atomeId, fingerprint) {
 }
 
 export function isSelfPatch(atomeId, fingerprint) {
-    if (!atomeId || !fingerprint) return false;
-    const key = `${atomeId}:${fingerprint}`;
-    const ts = selfPatchMap.get(key);
-    if (!ts) return false;
+    const aliases = resolveAtomeIdAliases(atomeId);
+    if (!aliases.length || !fingerprint) return false;
     const now = Date.now();
-    if (now - ts > SELF_PATCH_TTL_MS) {
-        selfPatchMap.delete(key);
-        return false;
+    for (const alias of aliases) {
+        const key = `${alias}:${fingerprint}`;
+        const ts = selfPatchMap.get(key);
+        if (!ts) continue;
+        if (now - ts > SELF_PATCH_TTL_MS) {
+            selfPatchMap.delete(key);
+            continue;
+        }
+        return true;
     }
-    return true;
+    return false;
 }
 
 export function isFromCurrentUser(authorId) {
@@ -182,34 +293,112 @@ const buildFingerprint = (payload) => {
 };
 
 export function shouldIgnoreRealtimePatch(atomeId, payload, options = {}) {
-    if (!atomeId) return false;
+    const aliases = resolveAtomeIdAliases(atomeId);
+    if (!aliases.length) return false;
+    const baseLog = {
+        atome_id: normalizeAtomeId(atomeId) || null,
+        aliases,
+        source: String(options?.source || '').trim() || null,
+        origin: String(options?.origin || '').trim() || null
+    };
 
     // CRITICAL: Check if this atome is currently being edited locally.
     // If so, ignore all remote patches to prevent destroying the editing state.
-    if (isAtomeBeingEdited(atomeId)) {
+    if (isAtomeBeingEdited(aliases[0])) {
+        logRealtimeDedup('ignore_patch', {
+            reason: 'editing_active',
+            ...baseLog
+        });
         return true;
     }
 
     const authorId = options.authorId || payload?.authorId || payload?.author_id || null;
     if (authorId && isFromCurrentUser(authorId)) {
+        logRealtimeDedup('ignore_patch', {
+            reason: 'same_author',
+            ...baseLog,
+            author_id: String(authorId || '')
+        });
         return true;
     }
 
     const fingerprint = buildFingerprint(payload);
-    if (!fingerprint) return false;
+    if (!fingerprint) {
+        logRealtimeDedup('allow_patch', {
+            reason: 'fingerprint_missing',
+            ...baseLog
+        });
+        return false;
+    }
 
-    if (isSelfPatch(atomeId, fingerprint)) {
+    if (!authorId) {
+        const recentDragEnd = resolveRecentLocalGestureEndByAliases(aliases, RECENT_LOCAL_DRAG_ENDS_KEY);
+        const recentResizeEnd = resolveRecentLocalGestureEndByAliases(aliases, RECENT_LOCAL_RESIZE_ENDS_KEY);
+        const recentLocalEnd = (() => {
+            if (recentDragEnd && recentResizeEnd) {
+                return Number(recentResizeEnd.endedAt || 0) >= Number(recentDragEnd.endedAt || 0)
+                    ? recentResizeEnd
+                    : recentDragEnd;
+            }
+            return recentResizeEnd || recentDragEnd || null;
+        })();
+        if (recentLocalEnd) {
+            const geometry = resolveRealtimePatchGeometry(payload);
+            const hasGeometry = [geometry.left, geometry.top, geometry.width, geometry.height]
+                .some((value) => Number.isFinite(value));
+            if (hasGeometry) {
+                logRealtimeDedup('ignore_patch', {
+                    reason: 'recent_local_gesture_guard',
+                    ...baseLog,
+                    fingerprint,
+                    ended_at: Number(recentLocalEnd.endedAt || 0),
+                    age_ms: Math.max(0, Date.now() - Number(recentLocalEnd.endedAt || 0)),
+                    recent_geometry: {
+                        left: recentLocalEnd.left,
+                        top: recentLocalEnd.top,
+                        width: recentLocalEnd.width,
+                        height: recentLocalEnd.height
+                    },
+                    incoming_geometry: geometry
+                });
+                return true;
+            }
+        }
+    }
+
+    if (isSelfPatch(aliases[0], fingerprint)) {
+        logRealtimeDedup('ignore_patch', {
+            reason: 'self_patch_fingerprint',
+            ...baseLog,
+            fingerprint
+        });
         return true;
     }
 
     const now = Date.now();
-    const key = `${atomeId}:${fingerprint}`;
-    const last = dedupMap.get(key) || 0;
-    if (now - last <= REALTIME_DEDUP_WINDOW_MS) {
-        return true;
+    for (const alias of aliases) {
+        const key = `${alias}:${fingerprint}`;
+        const last = dedupMap.get(key) || 0;
+        if (now - last <= REALTIME_DEDUP_WINDOW_MS) {
+            logRealtimeDedup('ignore_patch', {
+                reason: 'dedup_window',
+                ...baseLog,
+                fingerprint,
+                dedup_alias: alias,
+                age_ms: Math.max(0, now - last)
+            });
+            return true;
+        }
     }
 
-    dedupMap.set(key, now);
+    aliases.forEach((alias) => {
+        dedupMap.set(`${alias}:${fingerprint}`, now);
+    });
+    logRealtimeDedup('allow_patch', {
+        reason: 'new_patch',
+        ...baseLog,
+        fingerprint
+    });
     if (dedupMap.size > 800) {
         for (const [entryKey, ts] of dedupMap.entries()) {
             if (now - ts > REALTIME_DEDUP_WINDOW_MS * 2) {
