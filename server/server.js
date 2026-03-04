@@ -144,6 +144,41 @@ const SYNC_TARGET_SERVER = 'tauri';
 const SYNC_BACKOFF_BASE_MS = Number(process.env.SQUIRREL_SYNC_BACKOFF_MS || 1000);
 const SYNC_BACKOFF_MAX_MS = Number(process.env.SQUIRREL_SYNC_BACKOFF_MAX_MS || 60000);
 const SYNC_QUEUE_LIMIT = Number(process.env.SQUIRREL_SYNC_BATCH || 50);
+const CORS_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'];
+
+const buildAllowedCorsOrigins = () => {
+  const fromEnv = String(process.env.SQUIRREL_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return new Set([
+    ...fromEnv,
+    'http://127.0.0.1:3000',
+    'http://localhost:3000',
+    'http://127.0.0.1:3001',
+    'http://localhost:3001',
+    'tauri://localhost',
+    'null'
+  ]);
+};
+
+const ALLOWED_CORS_ORIGINS = buildAllowedCorsOrigins();
+
+const isAllowedCorsOrigin = (origin) => {
+  if (!origin) return true;
+  if (ALLOWED_CORS_ORIGINS.has(origin)) return true;
+  if (origin === 'null') return true;
+  try {
+    const parsed = new URL(origin);
+    const protocol = String(parsed.protocol || '').toLowerCase();
+    const hostname = String(parsed.hostname || '').toLowerCase();
+    if (protocol === 'tauri:' && hostname === 'localhost') return true;
+    if ((protocol === 'http:' || protocol === 'https:') && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+      return true;
+    }
+  } catch (_) { }
+  return false;
+};
 
 function getSchemaHash() {
   if (cachedSchemaHash) return cachedSchemaHash;
@@ -840,32 +875,26 @@ async function startServer() {
 
     // Register CORS first so all routes share the same behavior.
     await server.register(fastifyCors, {
-      origin: true,
+      origin: (origin, callback) => {
+        if (isAllowedCorsOrigin(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(null, false);
+      },
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      allowedHeaders: [
-        'Content-Type',
-        'Authorization',
-        'Accept',
-        'X-Client-Id',
-        'X-Filename',
-        'X-Upload-Id',
-        'X-Chunk-Index',
-        'X-Chunk-Count',
-        'X-Chunk-Size',
-        'X-Total-Size',
-        'X-Original-Name',
-        'X-File-Path',
-        'X-Atome-Id',
-        'X-Atome-Type',
-        'X-Mime-Type',
-        'X-User-Id',
-        'X-UserId',
-        'X-Username',
-        'X-User-Name',
-        'X-Phone',
-        'X-User-Phone'
-      ]
+      methods: CORS_METHODS,
+      exposedHeaders: ['X-Request-Id'],
+      maxAge: 86400,
+      strictPreflight: false
+    });
+
+    server.addHook('onSend', async (request, reply, payload) => {
+      if (String(request.headers['access-control-request-private-network'] || '').toLowerCase() === 'true') {
+        reply.header('Access-Control-Allow-Private-Network', 'true');
+        reply.header('Vary', 'Origin, Access-Control-Request-Headers, Access-Control-Request-Method, Access-Control-Request-Private-Network');
+      }
+      return payload;
     });
 
     // Always-on diagnostic endpoint (useful in production to confirm which code is running)
