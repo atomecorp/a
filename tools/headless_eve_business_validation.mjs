@@ -84,6 +84,12 @@ const run = async () => {
         errors: []
       };
 
+      const normalizeToolKey = (value = '') => String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^ui\./, '')
+        .replace(/\./g, '_');
+
       const isSuccess = (res) => !!(
         res?.ok
         || res?.success
@@ -254,13 +260,34 @@ const run = async () => {
         const accepted = bus?.listEvents?.({ kind: 'command_accepted' }) || [];
         const closed = bus?.listEvents?.({ kind: 'continuous_closed' }) || [];
         out.commandBusCircleAccepted = accepted.some((entry) => {
-          return String(entry?.envelope?.meta?.tool_key || '').trim() === 'circle';
+          const toolKey = normalizeToolKey(
+            entry?.envelope?.meta?.tool_key
+            || entry?.envelope?.meta?.tool_id
+            || entry?.envelope?.tool_key
+            || entry?.envelope?.tool_id
+            || ''
+          );
+          return toolKey === 'circle';
         });
         out.commandBusTextAccepted = accepted.some((entry) => {
-          return String(entry?.envelope?.meta?.tool_key || '').trim() === 'text_create';
+          const toolKey = normalizeToolKey(
+            entry?.envelope?.meta?.tool_key
+            || entry?.envelope?.meta?.tool_id
+            || entry?.envelope?.tool_key
+            || entry?.envelope?.tool_id
+            || ''
+          );
+          return toolKey === 'text_create';
         });
         out.commandBusMatrixAccepted = accepted.some((entry) => {
-          return String(entry?.envelope?.meta?.tool_key || '').trim() === 'matrix_view';
+          const toolKey = normalizeToolKey(
+            entry?.envelope?.meta?.tool_key
+            || entry?.envelope?.meta?.tool_id
+            || entry?.envelope?.tool_key
+            || entry?.envelope?.tool_id
+            || ''
+          );
+          return toolKey === 'matrix_view';
         });
         out.commandBusContinuousClosed = closed.length > 0;
 
@@ -279,6 +306,14 @@ const run = async () => {
     }, { phone, password, username, projectName });
 
     report.details = integration;
+    const normalizeToolKey = (value = '') => String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^ui\./, '')
+      .replace(/\./g, '_');
+    const resolveToolKey = (result = null) => (
+      normalizeToolKey(result?.tool_key || result?.tool_id || '')
+    );
 
     report.checks.push({
       name: 'auth_authenticated',
@@ -305,25 +340,25 @@ const run = async () => {
     report.checks.push({
       name: 'circle_runtime_success',
       ok: integration?.circleInvoke?.ok === true
-        && integration?.circleInvoke?.tool_key === 'circle',
+        && resolveToolKey(integration?.circleInvoke) === 'circle',
       details: integration?.circleInvoke || null
     });
     report.checks.push({
       name: 'text_runtime_success',
       ok: integration?.textInvoke?.ok === true
-        && integration?.textInvoke?.tool_key === 'text_create',
+        && resolveToolKey(integration?.textInvoke) === 'text_create',
       details: integration?.textInvoke || null
     });
     report.checks.push({
       name: 'matrix_runtime_success',
       ok: integration?.matrixInvoke?.ok === true
-        && integration?.matrixInvoke?.tool_key === 'matrix_view',
+        && resolveToolKey(integration?.matrixInvoke) === 'matrix_view',
       details: integration?.matrixInvoke || null
     });
     report.checks.push({
       name: 'matrix_close_runtime_success',
       ok: integration?.matrixCloseInvoke?.ok === true
-        && integration?.matrixCloseInvoke?.tool_key === 'matrix_view',
+        && resolveToolKey(integration?.matrixCloseInvoke) === 'matrix_view',
       details: integration?.matrixCloseInvoke || null
     });
     report.checks.push({

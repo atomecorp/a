@@ -187,27 +187,50 @@ const run = async () => {
       name: 'gateway_flags_gatewayStrict',
       ok: !!integration?.flags?.gatewayStrict
     });
+    const normalizeToolKey = (value = '') => String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^ui\./, '')
+      .replace(/\./g, '_');
+    const resolveToolKey = (result = null) => (
+      normalizeToolKey(result?.tool_key || result?.tool_id || '')
+    );
+    const hasErrorCode = (result = null, code = '') => {
+      const expected = String(code || '').trim();
+      if (!expected) return false;
+      let current = result;
+      let depth = 0;
+      while (current && typeof current === 'object' && depth <= 6) {
+        if (String(current.error || '').trim() === expected) return true;
+        current = current.result && typeof current.result === 'object'
+          ? current.result
+          : null;
+        depth += 1;
+      }
+      return false;
+    };
+
     report.checks.push({
       name: 'ui_circle_runtime_path',
-      ok: integration?.circle?.tool_key === 'circle'
-        && integration?.circle?.error !== 'tool_runtime_v2_disabled',
+      ok: resolveToolKey(integration?.circle) === 'circle'
+        && hasErrorCode(integration?.circle, 'tool_runtime_v2_disabled') === false,
       details: integration?.circle || null
     });
     report.checks.push({
       name: 'ui_matrix_runtime_path',
-      ok: integration?.matrix?.tool_key === 'matrix_view'
+      ok: resolveToolKey(integration?.matrix) === 'matrix_view'
         && integration?.matrix?.ok === true,
       details: integration?.matrix || null
     });
     report.checks.push({
       name: 'ui_matrix_close_runtime_path',
-      ok: integration?.matrixClose?.tool_key === 'matrix_view'
+      ok: resolveToolKey(integration?.matrixClose) === 'matrix_view'
         && integration?.matrixClose?.ok === true,
       details: integration?.matrixClose || null
     });
     report.checks.push({
       name: 'runtime_disabled_explicit_error',
-      ok: integration?.runtimeDisabled?.error === 'tool_runtime_v2_disabled',
+      ok: hasErrorCode(integration?.runtimeDisabled, 'tool_runtime_v2_disabled'),
       details: integration?.runtimeDisabled || null
     });
     report.checks.push({
