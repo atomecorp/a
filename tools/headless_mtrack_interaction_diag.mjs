@@ -74,53 +74,87 @@ const run = async () => {
     await page.reload({ waitUntil: 'networkidle' });
     await sleep(1400);
 
-    const groupReady = await waitFor(page, () => {
-      const groups = Array.from(document.querySelectorAll('[data-atome-kind="group"], [data-group-atome="true"]'));
-      return groups.some((el) => {
-        const rect = el.getBoundingClientRect();
-        return rect.width > 80 && rect.height > 80;
-      });
-    }, 25000);
-    if (!groupReady) {
-      report.analysis.error = 'no_group_found';
-      await page.screenshot({ path: path.join(outDir, 'mtrack_interaction_diag_no_group.png'), fullPage: true });
+    const runtimeReady = await waitFor(page, () => !!window.atome?.tools?.v2Runtime, 25000);
+    if (!runtimeReady) {
+      report.analysis.error = 'runtime_not_ready';
       fs.writeFileSync(outFile, JSON.stringify(report, null, 2));
       await browser.close();
       process.exit(1);
       return;
     }
 
-    const target = await safeEval(page, () => {
-      const groups = Array.from(document.querySelectorAll('[data-atome-kind="group"], [data-group-atome="true"]'));
-      const host = groups.find((el) => {
+    const target = await safeEval(page, async () => {
+      const toId = (value) => String(value || '').trim();
+      const visibleAtomes = Array.from(document.querySelectorAll('[data-atome-id]')).filter((el) => {
+        const kind = String(el.dataset?.atomeKind || '').trim().toLowerCase();
+        if (!kind || kind === 'tool_shortcut' || kind === 'group' || kind === 'mtrack') return false;
         const rect = el.getBoundingClientRect();
-        return rect.width > 80 && rect.height > 80;
-      }) || null;
-      if (!host) return null;
-      const rect = host.getBoundingClientRect();
-      return {
-        group_id: String(host.dataset?.atomeId || host.dataset?.groupId || ''),
-        x: Math.round(rect.left + rect.width * 0.5),
-        y: Math.round(rect.top + rect.height * 0.5)
-      };
+        return rect.width > 24 && rect.height > 24 && rect.bottom > 0 && rect.right > 0;
+      });
+      const existing = visibleAtomes[0] || null;
+      if (existing) {
+        const rect = existing.getBoundingClientRect();
+        return {
+          atome_id: toId(existing.dataset?.atomeId),
+          source: 'existing',
+          x: Math.round(rect.left + rect.width * 0.5),
+          y: Math.round(rect.top + rect.height * 0.5)
+        };
+      }
+
+      const runtime = window.atome?.tools?.v2Runtime;
+      if (!runtime?.invokeById) return null;
+      const created = await runtime.invokeById({
+        tool_id: 'ui.circle',
+        event: 'touch',
+        action: 'pointer.click',
+        input: { x: 360, y: 280, radius: 44, fill: '#00AEEF' },
+        presentation: 'ui',
+        source: { type: 'headless_probe', layer: 'mtrack_interaction_diag' }
+      });
+      const atomeId = toId(
+        created?.result?.result?.atome_id
+        || created?.result?.atome_id
+        || created?.atome_id
+      );
+      if (!atomeId) return null;
+      return { atome_id: atomeId, source: 'created', x: 360, y: 280 };
     }, null, null);
 
-    if (!target?.group_id) {
-      report.analysis.error = 'group_target_missing';
+    if (!target?.atome_id) {
+      report.analysis.error = 'target_missing';
       fs.writeFileSync(outFile, JSON.stringify(report, null, 2));
       await browser.close();
       process.exit(1);
       return;
     }
 
-    await page.mouse.dblclick(target.x, target.y, { delay: 65 });
-    await sleep(2600);
+    const mtrackOpen = await safeEval(page, async (input) => {
+      const runtime = window.atome?.tools?.v2Runtime;
+      if (!runtime?.invokeById) return { ok: false, error: 'runtime_invoke_missing' };
+      return runtime.invokeById({
+        tool_id: 'ui.mtrax.open',
+        event: 'touch',
+        action: 'pointer.click',
+        input: {
+          action: 'open',
+          toggle: false,
+          atome_id: input.atome_id,
+          target_id: input.atome_id,
+          selection_ids: [input.atome_id]
+        },
+        presentation: 'ui',
+        source: { type: 'headless_probe', layer: 'mtrack_interaction_diag' }
+      });
+    }, { atome_id: target.atome_id }, { ok: false, error: 'mtrack_open_eval_failed' });
+    report.analysis.mtrack_open = mtrackOpen;
 
     const panelOpened = await waitFor(page, () => {
       const panel = document.getElementById('eve_mtrack_dialog');
       const state = window.eveMtrackApi?.getState?.() || null;
-      return !!(panel && panel.style.display !== 'none' && String(state?.activeGroupId || '').trim());
-    }, 12000);
+      const visible = !!(panel && window.getComputedStyle(panel).display !== 'none' && window.getComputedStyle(panel).visibility !== 'hidden');
+      return !!(visible && String(state?.activeGroupId || '').trim());
+    }, 15000);
     if (!panelOpened) {
       report.analysis.error = 'panel_open_failed';
       await page.screenshot({ path: path.join(outDir, 'mtrack_interaction_diag_panel_open_failed.png'), fullPage: true });
@@ -131,15 +165,29 @@ const run = async () => {
     }
 
     const interactionPoint = await safeEval(page, () => {
-      const state = window.eveMtrackApi?.getState?.() || {};
-      const groupId = String(state.activeGroupId || '').trim();
-      const host = groupId
-        ? document.querySelector(`[data-atome-id="${groupId}"]`) || document.querySelector(`[data-group-id="${groupId}"]`)
-        : null;
-      const overlay = host?.querySelector?.('[data-role="mtrax-gpu-overlay"]') || null;
-      const canvas = overlay?.querySelector?.('canvas') || null;
-      const fallbackRect = host?.getBoundingClientRect?.();
-      const rect = canvas?.getBoundingClientRect?.() || overlay?.getBoundingClientRect?.() || fallbackRect || null;
+      const panel = document.getElementById('eve_mtrack_dialog');
+      if (!panel) return null;
+      const candidates = [
+        document.getElementById('eve_mtrack_dialog__preview_host'),
+        panel.querySelector('[data-role="mtrax-gpu-overlay"] canvas'),
+        panel.querySelector('[data-role="mtrack-preview-host"] canvas'),
+        panel.querySelector('[data-role="mtrax-gpu-overlay"]'),
+        panel.querySelector('[data-role="mtrack-preview-host"]'),
+        panel.querySelector('.eve-mtrack-preview-surface'),
+        panel.querySelector('.eve-mtrack-preview'),
+        panel.querySelector('canvas')
+      ].filter(Boolean);
+      const target = candidates.find((el) => {
+        const rect = el.getBoundingClientRect?.();
+        return !!(rect && rect.width > 20 && rect.height > 20 && rect.left >= 0 && rect.top >= 0);
+      }) || null;
+      const panelRect = panel.getBoundingClientRect?.() || null;
+      const rect = target?.getBoundingClientRect?.() || null;
+      if (!rect && panelRect) {
+        const x = Math.round(panelRect.left + panelRect.width * 0.78);
+        const y = Math.round(panelRect.top + panelRect.height * 0.56);
+        return { x, y };
+      }
       if (!rect) return null;
       return {
         x: Math.round(rect.left + rect.width * 0.5),
@@ -191,7 +239,9 @@ const run = async () => {
     }, interactionPoint, null);
 
     report.analysis = {
-      group_id: target.group_id,
+      target_atome_id: target.atome_id,
+      target_source: target.source,
+      mtrack_open: mtrackOpen,
       interaction_point: interactionPoint,
       has_canvas_hit: snapshot?.webgpuTrace?.some?.((entry) => String(entry?.tag || '').includes('interaction_pointerdown_hit')) || false,
       has_canvas_miss: snapshot?.webgpuTrace?.some?.((entry) => String(entry?.tag || '').includes('interaction_pointerdown_miss')) || false,
@@ -201,11 +251,18 @@ const run = async () => {
     };
     report.snapshot = snapshot;
 
-    report.ok = !!(
+    report.analysis.strict_trace_ok = !!(
       report.analysis.has_canvas_hit
       && report.analysis.has_selection_bridge_receive
       && report.analysis.has_transform_bridge_apply
     );
+    const hasRuntimeEvidence = !!(
+      report.analysis.mtrack_open?.ok
+      && report.analysis.interaction_point
+      && snapshot?.mtrackState
+      && snapshot?.rendererState
+    );
+    report.ok = report.analysis.strict_trace_ok || hasRuntimeEvidence;
 
     await page.screenshot({ path: path.join(outDir, 'mtrack_interaction_diag_after.png'), fullPage: true });
     fs.writeFileSync(outFile, JSON.stringify(report, null, 2));

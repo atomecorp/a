@@ -976,6 +976,7 @@ const isMediaHostElement = (el) => {
     return !!el.querySelector?.('video, audio, img');
 };
 const MEDIA_PATCH_KIND_HINTS = new Set(['video', 'audio', 'sound', 'image']);
+const MEDIA_TEXTUAL_PATCH_KEYS = new Set(['text', 'content', 'textcontent', 'texthtml', 'richtext']);
 const mediaPatchHintsByAtomeId = new Map();
 const normalizeMediaPatchKindHint = (value) => String(value || '').trim().toLowerCase();
 const hasMediaSourceHintsInPatch = (properties = {}) => {
@@ -1040,6 +1041,43 @@ const resolveMediaPatchHint = (atomeId, properties = {}, patchableElements = nul
         if (matched) return true;
     }
     return !!(id && mediaPatchHintsByAtomeId.has(id));
+};
+const sanitizeMediaTextualPatchProperties = (atomeId, properties = null, atome = null) => {
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return properties;
+    const patchableElements = (() => {
+        const id = String(atomeId || '').trim();
+        if (!id || typeof document === 'undefined') return null;
+        const elements = new Set();
+        const byData = document.querySelector?.(`[data-atome-id="${id}"]`);
+        const byId = document.getElementById?.(`atome_${id}`) || document.getElementById?.(id);
+        if (byData) elements.add(byData);
+        if (byId) elements.add(byId);
+        return elements.size ? elements : null;
+    })();
+    const inferredKind = normalizeMediaPatchKindHint(
+        properties.kind
+        || properties.type
+        || properties.media_type
+        || properties.mediaType
+        || atome?.atome_type
+        || atome?.type
+        || atome?.kind
+        || atome?.media_type
+        || atome?.mediaType
+        || ''
+    );
+    const mediaLikePatch = MEDIA_PATCH_KIND_HINTS.has(inferredKind)
+        || resolveMediaPatchHint(atomeId, { ...properties, kind: inferredKind }, patchableElements);
+    if (!mediaLikePatch) return properties;
+    const sanitized = { ...properties };
+    let changed = false;
+    Object.keys(sanitized).forEach((key) => {
+        const normalizedKey = String(key || '').replace(/[_\-\s]/g, '').trim().toLowerCase();
+        if (!MEDIA_TEXTUAL_PATCH_KEYS.has(normalizedKey)) return;
+        delete sanitized[key];
+        changed = true;
+    });
+    return changed ? sanitized : properties;
 };
 
 /**
@@ -1217,11 +1255,17 @@ const dispatchAtomeEvent = (type, payload) => {
     if (typeof window === 'undefined') return;
     const { atome, atomeId, properties } = normalizeAtomePayload(payload);
     if (!atomeId && !atome) return;
+    const normalizedAtomeId = atomeId || atome?.atome_id || atome?.id || null;
+    const safeProperties = sanitizeMediaTextualPatchProperties(
+        normalizedAtomeId,
+        properties || atome?.properties || atome?.particles || atome?.data || null,
+        atome
+    );
     const detail = {
         id: atomeId || atome?.id || atome?.atome_id || null,
         atome_id: atomeId || atome?.atome_id || atome?.id || null,
         atome,
-        properties: properties || atome?.properties || atome?.particles || atome?.data || null,
+        properties: safeProperties,
         source: 'realtime',
         origin: payload?.origin || payload?.source || 'unifiedsync'
     };
@@ -1239,6 +1283,7 @@ const connectRealtime = async (options = {}) => {
 
         if (payload.type === 'atome:created') {
             const { atome, atomeId, properties } = normalizeAtomePayload(payload);
+            const safeProperties = sanitizeMediaTextualPatchProperties(atomeId, properties, atome);
             const ownerId = atome?.owner_id || atome?.ownerId || payload.owner_id || payload.ownerId || null;
             const currentUserId = getCurrentUserId();
 
@@ -1262,7 +1307,7 @@ const connectRealtime = async (options = {}) => {
 
             // Always dispatch event for UI updates (non-persistent)
             dispatchAtomeEvent('squirrel:atome-created', payload);
-            if (properties) applyAtomePatchToDom(atomeId, properties);
+            if (safeProperties) applyAtomePatchToDom(atomeId, safeProperties);
 
             // SECURITY FIX: Only mirror to Tauri DB if owned by current user or explicitly shared
             if (runtime === 'tauri' && atomeId && !shouldSkipMirrorCreate(atomeId)) {
@@ -1310,6 +1355,7 @@ const connectRealtime = async (options = {}) => {
         if (payload.type === 'atome:updated' || payload.type === 'atome:altered') {
             const { atomeId, properties } = normalizeAtomePayload(payload);
             const atome = payload.atome || payload.data?.atome || payload.data || payload.record || null;
+            const safeProperties = sanitizeMediaTextualPatchProperties(atomeId, properties, atome);
             const atomeType = atome?.atome_type || atome?.type || payload.atomeType || payload.atome_type || null;
             const parentId = atome?.parent_id || atome?.parentId || payload.parent_id || payload.parentId || null;
             const currentUserId = getCurrentUserId();
@@ -1374,7 +1420,7 @@ const connectRealtime = async (options = {}) => {
                 authorId
             });
             dispatchAtomeEvent('squirrel:atome-updated', payload);
-            if (properties) applyAtomePatchToDom(atomeId, properties);
+            if (safeProperties) applyAtomePatchToDom(atomeId, safeProperties);
         }
         if (payload.type === 'atome:deleted') {
             const { atomeId } = normalizeAtomePayload(payload);
@@ -1719,9 +1765,9 @@ const builtinHandlers = {
             const properties = params?.properties || params?.particles || params?.patch || null;
             if (!atomeId || !properties || typeof properties !== 'object') return;
             if (shouldIgnoreRealtimePatch(atomeId, properties)) return;
-
-            applyAtomePatchToDom(atomeId, properties);
-            dispatchAtomeEvent('squirrel:atome-updated', { atomeId, properties });
+            const safeProperties = sanitizeMediaTextualPatchProperties(atomeId, properties, null);
+            applyAtomePatchToDom(atomeId, safeProperties);
+            dispatchAtomeEvent('squirrel:atome-updated', { atomeId, properties: safeProperties });
         });
         return true;
     },
