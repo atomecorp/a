@@ -275,7 +275,7 @@ const resolveOrCreateTargetGroup = async (page) => {
             kind: 'video',
             type: 'video',
             name: 'probe_video',
-            src: '/assets/videos/video_missing.mp4',
+            src: '/assets/videos/superman.mp4',
             left: '260px',
             top: '220px',
             width: '240px',
