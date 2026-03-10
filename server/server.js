@@ -1216,6 +1216,40 @@ async function startServer() {
       };
     };
 
+    const normalizeUploadResolvedUser = (user = null) => {
+      if (!user || typeof user !== 'object') return null;
+      const userId = String(user.user_id || user.userId || user.id || '').trim();
+      if (!userId) return null;
+      return {
+        id: userId,
+        user_id: userId,
+        username: user.username || user.name || null,
+        phone: user.phone || null
+      };
+    };
+
+    const resolvePersistedUploadUserFromHeaders = async (headerUser = null) => {
+      if (!headerUser || typeof headerUser !== 'object' || DATABASE_ENABLED !== true) return null;
+      const dataSource = db.getDataSourceAdapter?.();
+      if (!dataSource) return null;
+
+      const normalizedPhone = normalizePhone(headerUser.phone || '');
+      if (normalizedPhone) {
+        const byPhone = await findUserByPhone(dataSource, normalizedPhone);
+        const normalizedByPhone = normalizeUploadResolvedUser(byPhone);
+        if (normalizedByPhone) return normalizedByPhone;
+      }
+
+      const headerUserId = String(headerUser.id || headerUser.user_id || headerUser.userId || '').trim();
+      if (headerUserId) {
+        const byId = await findUserById(dataSource, headerUserId);
+        const normalizedById = normalizeUploadResolvedUser(byId);
+        if (normalizedById) return normalizedById;
+      }
+
+      return null;
+    };
+
     const resolveUploadIdentity = async (request) => {
       const tokenUser = await validateToken(request);
       if (tokenUser) {
@@ -1223,6 +1257,10 @@ async function startServer() {
       }
       const headerUser = resolveUserFromHeaders(request);
       if (headerUser) {
+        const persistedUser = await resolvePersistedUploadUserFromHeaders(headerUser);
+        if (persistedUser) {
+          return { user: persistedUser, userId: resolveUserId(persistedUser), source: 'headers_resolved' };
+        }
         return { user: headerUser, userId: resolveUserId(headerUser), source: 'headers' };
       }
       return { user: null, userId: 'anonymous', source: 'anonymous' };
@@ -1284,9 +1322,7 @@ async function startServer() {
 
     server.post('/api/uploads', async (request, reply) => {
       try {
-        // Get user info if authenticated (optional for uploads)
-        const user = await validateToken(request);
-        const userId = resolveUserId(user);
+        const { user, userId } = await resolveUploadIdentity(request);
 
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
@@ -1361,7 +1397,7 @@ async function startServer() {
             ? request.headers['x-original-name'][0]
             : request.headers['x-original-name'];
 
-          await registerFileUpload(fileName, userId, {
+          const registration = await registerFileUpload(fileName, userId, {
             atome_id: atomeIdHeader || null,
             atome_type: atomeTypeHeader || null,
             original_name: originalNameHeader || decodedName || fileName,
@@ -1369,6 +1405,11 @@ async function startServer() {
             size_bytes: bodyBuffer.length,
             file_path: relativePath || null
           });
+          if (!registration?.success) {
+            try { await fs.rm(filePath, { force: true }); } catch (_) { }
+            reply.code(500);
+            return { success: false, error: registration?.error || 'file_registration_failed' };
+          }
         }
 
         return { success: true, file_name: fileName, owner_id: userId, file_path: relativePath || null };
@@ -1381,9 +1422,7 @@ async function startServer() {
 
     server.post('/api/uploads/chunk', async (request, reply) => {
       try {
-        // Get user info if authenticated (optional for uploads)
-        const user = await validateToken(request);
-        const userId = resolveUserId(user);
+        const { userId } = await resolveUploadIdentity(request);
 
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
@@ -1455,9 +1494,7 @@ async function startServer() {
 
     server.post('/api/uploads/complete', async (request, reply) => {
       try {
-        // Get user info if authenticated (optional for uploads)
-        const user = await validateToken(request);
-        const userId = resolveUserId(user);
+        const { user, userId } = await resolveUploadIdentity(request);
 
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
@@ -1557,7 +1594,7 @@ async function startServer() {
           const mimeType = mimeHeader || null;
           const atomeIdHeader = getHeaderValue(request, 'x-atome-id');
           const stats = await fs.stat(filePath).catch(() => null);
-          await registerFileUpload(fileName, userId, {
+          const registration = await registerFileUpload(fileName, userId, {
             atome_id: atomeIdHeader || null,
             atome_type: atomeTypeHeader || null,
             original_name: decodedName,
@@ -1565,6 +1602,11 @@ async function startServer() {
             size_bytes: stats ? stats.size : null,
             file_path: relativePath || null
           });
+          if (!registration?.success) {
+            try { await fs.rm(filePath, { force: true }); } catch (_) { }
+            reply.code(500);
+            return { success: false, error: registration?.error || 'file_registration_failed' };
+          }
         }
 
         return { success: true, file_name: fileName, owner_id: userId, file_path: relativePath || null };

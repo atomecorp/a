@@ -53,8 +53,19 @@ const openEditor = function openCodeEditor(key) {
   createNewCodeEditor();
 };
 
+const triggerPlayMediaShortcut = function triggerPlayMediaShortcut(key, event) {
+  if (typeof window.__eveRunPlayMediaShortcut !== 'function') return;
+  try {
+    window.__eveRunPlayMediaShortcut(event);
+  } catch (error) {
+    console.error('[Shortcut] Failed to trigger Play Media shortcut:', error);
+  }
+};
+
 shortcut('alt-t', openConsole);
 shortcut('alt-e', openEditor);
+shortcut('space', triggerPlayMediaShortcut);
 
 window.openConsole = openConsole;
 window.openEditor = openEditor;
+window.triggerPlayMediaShortcut = triggerPlayMediaShortcut;
