@@ -148,21 +148,29 @@ fn download_verbose_logs_enabled() -> bool {
 }
 
 fn guess_content_type_from_name(file_name: &str) -> &'static str {
+    let lower_name = file_name.trim().to_lowercase();
     let ext = Path::new(file_name)
         .extension()
         .and_then(|value| value.to_str())
         .map(|value| value.trim().to_lowercase())
         .unwrap_or_default();
+    if ext == "webm"
+        && (lower_name.starts_with("audio_recording_") || lower_name.starts_with("audio_"))
+    {
+        return "audio/webm";
+    }
     match ext.as_str() {
         "mp4" => "video/mp4",
         "m4v" => "video/x-m4v",
         "mov" => "video/quicktime",
+        "weba" => "audio/webm",
         "webm" => "video/webm",
         "mkv" => "video/x-matroska",
         "avi" => "video/x-msvideo",
         "mp3" => "audio/mpeg",
         "wav" => "audio/wav",
         "ogg" => "audio/ogg",
+        "opus" => "audio/opus",
         "m4a" => "audio/mp4",
         "aac" => "audio/aac",
         "flac" => "audio/flac",
