@@ -80,6 +80,14 @@ import './ai/agent_gateway.js';
 import './ai/default_tools.js';
 import './dev/logging.js';
 import './dev/dev_console.js';
+import './security/bootstrap.js';
+import './observability/bootstrap.js';
+import './bank/bootstrap.js';
+import './calendar/bootstrap.js';
+import './contacts/bootstrap.js';
+import './mail/bootstrap.js';
+import './voice/bootstrap.js';
+import './voice/panel.js';
 
 // === STATIC ES6 IMPORTS ===
 import './apis/essentials.js';

@@ -49,6 +49,16 @@ const hashString = (input) => {
 
 const makeParamsHash = (params) => hashString(stableStringify(params || {}));
 
+const normalizeSource = (value) => {
+  if (value && typeof value === 'object') {
+    const type = String(value.type || '').trim() || 'ai';
+    const layer = String(value.layer || '').trim() || null;
+    return layer ? { type, layer } : { type };
+  }
+  const type = String(value || '').trim();
+  return type ? { type } : { type: 'ai' };
+};
+
 const validateType = (value, type) => {
   if (type === 'array') return Array.isArray(value);
   if (type === 'null') return value === null;
@@ -144,6 +154,12 @@ const normalizeToolResult = (result) => {
   };
 };
 
+const buildExecutionIds = (request = {}) => ({
+  trace_id: String(request?.trace_id || '').trim() || makeId('trace'),
+  intent_id: String(request?.intent_id || '').trim() || makeId('intent'),
+  source: normalizeSource(request?.source)
+});
+
 const runWithTimeout = (promise, timeoutMs) => new Promise((resolve, reject) => {
   let settled = false;
   const timer = setTimeout(() => {
@@ -173,14 +189,15 @@ const executeTool = async ({
   actor,
   signals,
   idempotency_key,
-  dry_run
+  dry_run,
+  trace_id = null,
+  intent_id = null,
+  source = null
 }) => {
   if (idempotency_key && idempotencyCache.has(idempotency_key)) {
     return idempotencyCache.get(idempotency_key);
   }
 
-  const trace_id = makeId('trace');
-  const intent_id = makeId('intent');
   const context = {
     tool_name: tool.name,
     actor,
@@ -188,7 +205,8 @@ const executeTool = async ({
     idempotency_key,
     trace_id,
     intent_id,
-    dry_run
+    dry_run,
+    source: normalizeSource(source)
   };
 
   const handlerPromise = Promise.resolve(tool.handler({ params, context }));
@@ -197,7 +215,9 @@ const executeTool = async ({
   const output = {
     ...normalized,
     human_summary: normalized.human_summary || buildHumanSummary(tool, params),
-    machine_events: normalized.machine_events || []
+    machine_events: normalized.machine_events || [],
+    trace_id,
+    intent_id
   };
 
   if (idempotency_key) {
@@ -211,13 +231,15 @@ const executeTool = async ({
     params_hash: makeParamsHash(params),
     status: output.status,
     trace_id,
-    intent_id
+    intent_id,
+    source: context.source?.type || null,
+    source_layer: context.source?.layer || null
   });
 
   return output;
 };
 
-const createProposal = ({ tool, params, actor, signals, policy }) => {
+const createProposal = ({ tool, params, actor, signals, policy, trace_id, intent_id, source }) => {
   const proposal_id = makeId('proposal');
   const proposal = {
     proposal_id,
@@ -233,7 +255,10 @@ const createProposal = ({ tool, params, actor, signals, policy }) => {
       method: 'user_confirm',
       level: tool.risk_level || 'LOW'
     },
-    status: 'NEEDS_CONFIRMATION'
+    status: 'NEEDS_CONFIRMATION',
+    trace_id,
+    intent_id,
+    source: normalizeSource(source)
   };
   proposals.set(proposal_id, proposal);
   return proposal;
@@ -275,6 +300,7 @@ const AgentGateway = {
     const signals = request.signals || {};
     const idempotency_key = request.idempotency_key || null;
     const dry_run = request.dry_run === true;
+    const executionIds = buildExecutionIds(request);
 
     const validation = validateParams(tool.params_schema, params);
     if (!validation.ok) {
@@ -284,9 +310,13 @@ const AgentGateway = {
         actor,
         params_hash: makeParamsHash(params),
         status: TOOL_STATUS.ERROR,
-        error: validation.error
+        error: validation.error,
+        trace_id: executionIds.trace_id,
+        intent_id: executionIds.intent_id,
+        source: executionIds.source.type || null,
+        source_layer: executionIds.source.layer || null
       });
-      return { status: TOOL_STATUS.ERROR, error: validation.error };
+      return { status: TOOL_STATUS.ERROR, error: validation.error, ...executionIds };
     }
 
     const policy = policyEngine.evaluate({ tool, params, signals, actor });
@@ -294,7 +324,8 @@ const AgentGateway = {
       const denied = {
         status: TOOL_STATUS.DENIED,
         human_summary: buildHumanSummary(tool, params),
-        reason: policy.reasons
+        reason: policy.reasons,
+        ...executionIds
       };
       recordAudit({
         timestamp: toIso(),
@@ -303,13 +334,26 @@ const AgentGateway = {
         params_hash: makeParamsHash(params),
         status: denied.status,
         decision: policy.decision,
-        reason: policy.reasons
+        reason: policy.reasons,
+        trace_id: executionIds.trace_id,
+        intent_id: executionIds.intent_id,
+        source: executionIds.source.type || null,
+        source_layer: executionIds.source.layer || null
       });
       return denied;
     }
 
     if (policy.decision === POLICY_DECISION.REQUIRE_CONFIRM) {
-      const proposal = createProposal({ tool, params, actor, signals, policy });
+      const proposal = createProposal({
+        tool,
+        params,
+        actor,
+        signals,
+        policy,
+        trace_id: executionIds.trace_id,
+        intent_id: executionIds.intent_id,
+        source: executionIds.source
+      });
       recordAudit({
         timestamp: toIso(),
         tool_name: tool.name,
@@ -317,12 +361,17 @@ const AgentGateway = {
         params_hash: proposal.params_hash,
         status: TOOL_STATUS.CONFIRMATION_REQUIRED,
         decision: policy.decision,
-        proposal_id: proposal.proposal_id
+        proposal_id: proposal.proposal_id,
+        trace_id: executionIds.trace_id,
+        intent_id: executionIds.intent_id,
+        source: executionIds.source.type || null,
+        source_layer: executionIds.source.layer || null
       });
       return {
         status: TOOL_STATUS.CONFIRMATION_REQUIRED,
         proposal_id: proposal.proposal_id,
-        human_summary: proposal.summary_human
+        human_summary: proposal.summary_human,
+        ...executionIds
       };
     }
 
@@ -333,7 +382,10 @@ const AgentGateway = {
         actor,
         signals,
         idempotency_key,
-        dry_run
+        dry_run,
+        trace_id: executionIds.trace_id,
+        intent_id: executionIds.intent_id,
+        source: executionIds.source
       });
     } catch (error) {
       const message = error && error.message ? error.message : 'TOOL_ERROR';
@@ -343,9 +395,13 @@ const AgentGateway = {
         actor,
         params_hash: makeParamsHash(params),
         status: TOOL_STATUS.ERROR,
-        error: message
+        error: message,
+        trace_id: executionIds.trace_id,
+        intent_id: executionIds.intent_id,
+        source: executionIds.source.type || null,
+        source_layer: executionIds.source.layer || null
       });
-      return { status: TOOL_STATUS.ERROR, error: message };
+      return { status: TOOL_STATUS.ERROR, error: message, ...executionIds };
     }
   },
 
@@ -357,18 +413,31 @@ const AgentGateway = {
   },
 
   proposal: {
-    create({ tool_name, params, actor, signals }) {
+    create({ tool_name, params, actor, signals, source, trace_id, intent_id }) {
       const tool = toolRegistry.get(tool_name);
       if (!tool) return null;
       const policy = { reasons: ['manual'] };
-      const proposal = createProposal({ tool, params, actor, signals, policy });
+      const proposal = createProposal({
+        tool,
+        params,
+        actor,
+        signals,
+        policy,
+        trace_id: String(trace_id || '').trim() || makeId('trace'),
+        intent_id: String(intent_id || '').trim() || makeId('intent'),
+        source: normalizeSource(source)
+      });
       recordAudit({
         timestamp: toIso(),
         tool_name: tool.name,
         actor,
         params_hash: proposal.params_hash,
         status: TOOL_STATUS.CONFIRMATION_REQUIRED,
-        proposal_id: proposal.proposal_id
+        proposal_id: proposal.proposal_id,
+        trace_id: proposal.trace_id,
+        intent_id: proposal.intent_id,
+        source: proposal.source?.type || null,
+        source_layer: proposal.source?.layer || null
       });
       return proposal;
     },
@@ -381,6 +450,18 @@ const AgentGateway = {
       proposal.status = 'APPROVED';
       proposal.confirmation_token = confirmation_token || null;
       proposal.approved_at = toIso();
+      recordAudit({
+        timestamp: toIso(),
+        tool_name: proposal.tool_name,
+        actor: proposal.requested_by,
+        params_hash: proposal.params_hash,
+        status: 'APPROVED',
+        proposal_id: proposal.proposal_id,
+        trace_id: proposal.trace_id,
+        intent_id: proposal.intent_id,
+        source: proposal.source?.type || null,
+        source_layer: proposal.source?.layer || null
+      });
       return proposal;
     },
     reject(proposal_id) {
@@ -388,6 +469,18 @@ const AgentGateway = {
       if (!proposal) return null;
       proposal.status = 'REJECTED';
       proposal.rejected_at = toIso();
+      recordAudit({
+        timestamp: toIso(),
+        tool_name: proposal.tool_name,
+        actor: proposal.requested_by,
+        params_hash: proposal.params_hash,
+        status: 'REJECTED',
+        proposal_id: proposal.proposal_id,
+        trace_id: proposal.trace_id,
+        intent_id: proposal.intent_id,
+        source: proposal.source?.type || null,
+        source_layer: proposal.source?.layer || null
+      });
       return proposal;
     },
     async execute(proposal_id) {
@@ -408,7 +501,10 @@ const AgentGateway = {
         actor: proposal.requested_by,
         signals: {},
         idempotency_key: proposal.params_hash,
-        dry_run: false
+        dry_run: false,
+        trace_id: proposal.trace_id,
+        intent_id: proposal.intent_id,
+        source: proposal.source
       });
       proposal.status = result.status === TOOL_STATUS.OK ? 'EXECUTED' : 'FAILED';
       proposal.executed_at = toIso();
@@ -417,8 +513,15 @@ const AgentGateway = {
   },
 
   audit: {
-    list({ limit = 20 } = {}) {
-      return auditLog.slice(-limit);
+    list({ limit = 20, trace_id = null, status = null, source = null } = {}) {
+      const normalizedTrace = String(trace_id || '').trim();
+      const normalizedStatus = String(status || '').trim();
+      const normalizedSource = String(source || '').trim();
+      return auditLog
+        .filter((entry) => (normalizedTrace ? String(entry?.trace_id || '').trim() === normalizedTrace : true))
+        .filter((entry) => (normalizedStatus ? String(entry?.status || '').trim() === normalizedStatus : true))
+        .filter((entry) => (normalizedSource ? String(entry?.source || '').trim() === normalizedSource : true))
+        .slice(-limit);
     }
   }
 };

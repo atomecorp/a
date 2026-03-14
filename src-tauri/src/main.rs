@@ -5,6 +5,7 @@
 
 mod dev_logging;
 mod iplug_bridge;
+mod native_contacts;
 mod native_recorder;
 mod server;
 use std::fs;
@@ -132,6 +133,7 @@ fn main() {
             dev_logging::log_from_webview,
             iplug_bridge::iplug_send,
             iplug_bridge::iplug_poll_events,
+            native_contacts::macos_contacts_snapshot,
             project_root
         ])
         .setup(|app| {
