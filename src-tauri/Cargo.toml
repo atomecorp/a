@@ -25,6 +25,7 @@ tower-http = { version = "0.5.0", features = ["fs", "cors", "limit"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-stt = { path = "vendor/tauri-plugin-stt" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

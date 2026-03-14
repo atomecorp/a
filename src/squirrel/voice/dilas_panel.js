@@ -4,6 +4,8 @@ import { mountHomeVoiceSurface } from './home_surface.js';
 
 const PANEL_KEY = '__SQUIRREL_DILAS_PANEL__';
 
+const toText = (value) => String(value || '').trim();
+
 const ensureDilasPanel = async ({
     env = globalThis
 } = {}) => {
@@ -36,6 +38,42 @@ const ensureDilasPanel = async ({
         });
     }
 
+    const headerVoiceWrap = env.document.createElement('div');
+    headerVoiceWrap.id = 'eve_dilas_dialog__voice_status';
+    Object.assign(headerVoiceWrap.style, {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginLeft: 'auto',
+        marginRight: '10px',
+        minWidth: '0',
+        maxWidth: '240px'
+    });
+
+    const headerVoiceText = env.document.createElement('div');
+    headerVoiceText.id = 'eve_dilas_dialog__voice_status__text';
+    Object.assign(headerVoiceText.style, {
+        fontSize: '10px',
+        color: 'rgba(255,255,255,0.82)',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        minWidth: '0'
+    });
+
+    const headerVoiceMeterHost = env.document.createElement('div');
+    headerVoiceMeterHost.id = 'eve_dilas_dialog__voice_status__meter';
+    Object.assign(headerVoiceMeterHost.style, {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: '116px',
+        height: '26px'
+    });
+
+    headerVoiceWrap.append(headerVoiceText, headerVoiceMeterHost);
+    dialog.header?.insertBefore(headerVoiceWrap, env.document.getElementById('eve_dilas_dialog__close') || null);
+
     const host = env.document.createElement('div');
     host.id = 'eve_dilas_dialog_voice_surface';
     Object.assign(host.style, {
@@ -46,6 +84,34 @@ const ensureDilasPanel = async ({
     dialog.body.appendChild(host);
 
     let surfacePromise = null;
+    let runtimeUnsubscribe = () => {};
+
+    const syncHeaderState = () => {
+        const controller = host?.__eveHomeVoiceSurfaceController;
+        const state = controller?.getState?.() || null;
+        if (!state) {
+            headerVoiceText.textContent = '';
+            return;
+        }
+        if (toText(state.errorMessage)) {
+            headerVoiceText.textContent = state.errorMessage;
+            return;
+        }
+        if (state.processing) {
+            headerVoiceText.textContent = 'Je reflechis';
+            return;
+        }
+        if (state.speaking) {
+            headerVoiceText.textContent = 'Je parle';
+            return;
+        }
+        if (state.listening) {
+            headerVoiceText.textContent = 'J ecoute';
+            return;
+        }
+        headerVoiceText.textContent = '';
+    };
+
     const ensureSurface = () => {
         if (surfacePromise) return surfacePromise;
         surfacePromise = mountHomeVoiceSurface({
@@ -55,6 +121,18 @@ const ensureDilasPanel = async ({
             surfacePromise = null;
             env.console?.warn?.('[voice.dilas_panel] Failed to mount Dilas surface:', error?.message || error);
             return null;
+        }).then((controller) => {
+            const meterCanvas = host.querySelector('[data-role="eve-voice-meter"]');
+            if (meterCanvas && meterCanvas.parentNode !== headerVoiceMeterHost) {
+                headerVoiceMeterHost.innerHTML = '';
+                headerVoiceMeterHost.appendChild(meterCanvas);
+            }
+            syncHeaderState();
+            try { runtimeUnsubscribe(); } catch (_) { }
+            runtimeUnsubscribe = env?.Squirrel?.voice?.subscribe?.(() => {
+                syncHeaderState();
+            }) || (() => {});
+            return controller;
         });
         return surfacePromise;
     };
@@ -63,6 +141,7 @@ const ensureDilasPanel = async ({
         revealEveDialog(dialog, { center: false });
         const controller = await ensureSurface();
         controller?.activate?.();
+        syncHeaderState();
         return controller;
     };
 
@@ -71,6 +150,7 @@ const ensureDilasPanel = async ({
             dialog.root.style.display = 'none';
         }
         await host?.__eveHomeVoiceSurfaceController?.deactivate?.();
+        syncHeaderState();
         return true;
     };
     closePanel = close;
@@ -80,6 +160,7 @@ const ensureDilasPanel = async ({
 
     onEveLocaleChange(() => {
         host?.__eveHomeVoiceSurfaceController?.refreshLabels?.();
+        syncHeaderState();
     });
 
     env.open_dilas_panel = open;
@@ -92,6 +173,9 @@ const ensureDilasPanel = async ({
         close,
         get controller() {
             return host?.__eveHomeVoiceSurfaceController || null;
+        },
+        destroy() {
+            try { runtimeUnsubscribe(); } catch (_) { }
         }
     };
     return env[PANEL_KEY];

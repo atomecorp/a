@@ -78,6 +78,7 @@ import './atome/atome.js';
 import './atome/mcp.js';
 import './ai/agent_gateway.js';
 import './ai/default_tools.js';
+import { bootstrapAiModelCatalogRefresh } from './ai/model_catalog_refresh.js';
 import './dev/logging.js';
 import './dev/dev_console.js';
 import './security/bootstrap.js';
@@ -88,6 +89,8 @@ import './contacts/bootstrap.js';
 import './mail/bootstrap.js';
 import './voice/bootstrap.js';
 import './voice/panel.js';
+
+bootstrapAiModelCatalogRefresh({ env: window });
 
 // === STATIC ES6 IMPORTS ===
 import './apis/essentials.js';

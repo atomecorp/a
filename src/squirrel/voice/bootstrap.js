@@ -47,6 +47,13 @@ export const ensureVoiceBridgeModules = async ({
         loaded.push('record_audio_api');
     }
 
+    const tauriGlobal = readEnv(env, '__TAURI__');
+    const tauriInternals = readEnv(env, '__TAURI_INTERNALS__');
+    if (tauri && !(tauriGlobal?.stt || tauriInternals?.stt)) {
+        await importModule('../../application/apis/___stt_api.js');
+        loaded.push('stt_api');
+    }
+
     return loaded;
 };
 

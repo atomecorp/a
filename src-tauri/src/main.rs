@@ -129,6 +129,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_stt::init())
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
             iplug_bridge::iplug_send,
@@ -138,6 +139,7 @@ fn main() {
         ])
         .setup(|app| {
             println!("[tauri] fs plugin enabled");
+            println!("[tauri] stt plugin enabled");
             let path_resolver = app.path();
             let static_dir: PathBuf = match path_resolver.resource_dir() {
                 Ok(dir) => {

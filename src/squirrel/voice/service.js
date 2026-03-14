@@ -6,6 +6,24 @@ import { createVoiceAiPlanner } from './ai_planner.js';
 
 const DEFAULT_LANG = 'fr-FR';
 
+const toDebugPayload = (value) => {
+    try {
+        return JSON.stringify(value);
+    } catch (_) {
+        return String(value);
+    }
+};
+
+const debugVoiceService = (...args) => {
+    try {
+        globalThis?.console?.log?.('[eVe:voice:service]', ...args.map((entry) => (
+            typeof entry === 'string' ? entry : toDebugPayload(entry)
+        )));
+    } catch (_) {
+        // Ignore logging failures.
+    }
+};
+
 export const VOICE_V1_PROVIDER_DECISION = Object.freeze({
     stt: {
         primary: 'tauri_plugin_stt',
@@ -63,6 +81,10 @@ const createSegment = (text, confidence = null) => ({
     text: String(text || '').trim(),
     ...(Number.isFinite(confidence) ? { confidence } : {})
 });
+
+const isPermissionGranted = (permission = null) => permission === 'granted';
+
+const isPermissionDenied = (permission = null) => permission === 'denied';
 
 export const resolveVoiceProviders = (env = globalThis) => {
     const recognitionCtor = getSpeechRecognitionCtor(env);
@@ -315,6 +337,252 @@ export const createVoiceService = ({
         };
     };
 
+    const startTauriRecognition = async (sessionId, options = {}) => {
+        const bridge = getTauriSttBridge(env);
+        if (!bridge) {
+            throw new Error('Tauri STT bridge is not available');
+        }
+        if (typeof bridge.onResult !== 'function'
+            || typeof bridge.onStateChange !== 'function'
+            || typeof bridge.onError !== 'function') {
+            throw new Error('Tauri STT events are not available');
+        }
+
+        if (typeof bridge.checkPermission === 'function') {
+            const permissions = await bridge.checkPermission();
+            const microphone = permissions?.microphone || 'unknown';
+            const speechRecognition = permissions?.speechRecognition || 'unknown';
+            if (isPermissionDenied(microphone) || isPermissionDenied(speechRecognition)) {
+                if (typeof bridge.requestPermission === 'function') {
+                    const requested = await bridge.requestPermission();
+                    const nextMicrophone = requested?.microphone || microphone;
+                    const nextSpeechRecognition = requested?.speechRecognition || speechRecognition;
+                    if (!isPermissionGranted(nextMicrophone) || !isPermissionGranted(nextSpeechRecognition)) {
+                        throw new Error('permission_denied');
+                    }
+                } else {
+                    throw new Error('permission_denied');
+                }
+            }
+        }
+
+        const deferred = createDeferred();
+        const silenceMs = Number.isFinite(options.silenceMs) && options.silenceMs >= 0
+            ? Number(options.silenceMs)
+            : 1200;
+        const state = {
+            session_id: sessionId,
+            bridge,
+            deferred,
+            cancelled: false,
+            settled: false,
+            stopReason: null,
+            stopRequested: false,
+            cleanup: [],
+            final_texts: [],
+            segments: [],
+            confidence: null,
+            latest_text: '',
+            inactivityTimer: null
+        };
+
+        const clearInactivityTimer = () => {
+            if (state.inactivityTimer) {
+                clearTimeout(state.inactivityTimer);
+                state.inactivityTimer = null;
+            }
+        };
+
+        const requestBridgeStop = async (reason = 'manual') => {
+            if (state.stopRequested || typeof bridge.stop !== 'function') return;
+            state.stopRequested = true;
+            state.stopReason = state.stopReason || reason;
+            debugVoiceService('tauri_stt.stop_requested', { sessionId, reason: state.stopReason });
+            try {
+                await bridge.stop();
+            } catch (_) {
+                // Ignore native stop failures and let listeners settle from existing events.
+            }
+        };
+
+        const scheduleSilenceStop = () => {
+            if (silenceMs <= 0 || state.settled || state.cancelled) return;
+            clearInactivityTimer();
+            state.inactivityTimer = setTimeout(() => {
+                void requestBridgeStop('silence');
+            }, silenceMs);
+        };
+
+        const cleanup = async () => {
+            clearInactivityTimer();
+            await Promise.allSettled(
+                state.cleanup.map(async (unlisten) => {
+                    if (typeof unlisten === 'function') {
+                        return unlisten();
+                    }
+                    return null;
+                })
+            );
+            state.cleanup = [];
+            sttSessions.delete(sessionId);
+        };
+
+        const settleFinal = async (result = {}) => {
+            if (state.settled) return;
+            state.settled = true;
+            clearInactivityTimer();
+            const finalText = String(result.text || state.final_texts.join(' ').trim()).trim();
+            const payload = {
+                text: finalText,
+                confidence: result.confidence ?? state.confidence,
+                segments: result.segments || state.segments,
+                provider: providers.stt.selected
+            };
+            if (result.skipStop !== true) {
+                await requestBridgeStop(result.reason || 'final');
+            }
+            sessionRuntime.finalizeListening(sessionId, payload);
+            await cleanup();
+            deferred.resolve({
+                session_id: sessionId,
+                ...payload
+            });
+        };
+
+        const settleStopped = async () => {
+            if (state.settled) return;
+            state.settled = true;
+            clearInactivityTimer();
+            await cleanup();
+            deferred.resolve({
+                session_id: sessionId,
+                provider: providers.stt.selected,
+                cancelled: true,
+                reason: state.stopReason || 'stopped',
+                text: ''
+            });
+        };
+
+        const settleError = async (error) => {
+            if (state.settled) return;
+            state.settled = true;
+            clearInactivityTimer();
+            await cleanup();
+            const message = String(error?.message || error?.code || error || 'tauri_stt_error');
+            sessionRuntime.interrupt(sessionId, {
+                reason: `stt_error:${message}`
+            });
+            deferred.reject(new Error(message));
+        };
+
+        state.cleanup.push(await bridge.onStateChange((event = {}) => {
+            const next = String(event?.state || '').trim();
+            debugVoiceService('tauri_stt.state', {
+                sessionId,
+                state: next,
+                stopReason: state.stopReason || null,
+                cancelled: state.cancelled === true
+            });
+            if (next === 'listening') {
+                sessionRuntime.startListening(sessionId, {
+                    lang: options.lang || DEFAULT_LANG,
+                    partial: options.partial !== false,
+                    provider: providers.stt.selected
+                });
+                return;
+            }
+            if (next === 'idle') {
+                if (state.cancelled || state.stopReason === 'cancelled' || state.stopReason === 'manual') {
+                    void settleStopped();
+                    return;
+                }
+                const fallbackText = String(state.final_texts.join(' ').trim() || state.latest_text || '').trim();
+                if (fallbackText) {
+                    void settleFinal({
+                        text: fallbackText,
+                        confidence: state.confidence,
+                        segments: state.segments,
+                        skipStop: true,
+                        reason: state.stopReason || 'idle'
+                    });
+                    return;
+                }
+                void settleStopped();
+            }
+        }));
+
+        state.cleanup.push(await bridge.onResult((result = {}) => {
+            const text = String(result?.transcript || '').trim();
+            if (!text) return;
+            state.latest_text = text;
+            const confidence = Number.isFinite(result?.confidence) ? result.confidence : null;
+            debugVoiceService('tauri_stt.result', {
+                sessionId,
+                text,
+                isFinal: result?.isFinal === true,
+                confidence
+            });
+            if (result?.isFinal) {
+                state.final_texts.push(text);
+                state.segments.push(createSegment(text, confidence));
+                if (confidence !== null) {
+                    state.confidence = confidence;
+                }
+                clearInactivityTimer();
+                void settleFinal({
+                    text,
+                    confidence,
+                    segments: state.segments,
+                    reason: 'final'
+                });
+                return;
+            }
+            sessionRuntime.pushPartial(sessionId, {
+                text
+            });
+            scheduleSilenceStop();
+        }));
+
+        state.cleanup.push(await bridge.onError((error = {}) => {
+            debugVoiceService('tauri_stt.error', {
+                sessionId,
+                error: error?.message || error?.code || String(error)
+            });
+            void settleError(error);
+        }));
+
+        if (typeof bridge.onDownloadProgress === 'function') {
+            state.cleanup.push(await bridge.onDownloadProgress((progress = {}) => {
+                debugVoiceService('tauri_stt.download_progress', {
+                    sessionId,
+                    status: String(progress?.status || '').trim() || 'downloading',
+                    model: String(progress?.model || '').trim() || null,
+                    progress: Number.isFinite(Number(progress?.progress)) ? Number(progress.progress) : null
+                });
+                sessionRuntime.publishEvent(sessionId, 'voice.stt.download_progress', {
+                    status: String(progress?.status || '').trim() || 'downloading',
+                    model: String(progress?.model || '').trim() || null,
+                    progress: Number.isFinite(Number(progress?.progress)) ? Number(progress.progress) : null
+                });
+            }));
+        }
+
+        await bridge.start({
+            language: options.lang || DEFAULT_LANG,
+            interimResults: options.partial !== false,
+            continuous: options.continuous === true,
+            maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
+            onDevice: options.onDevice === true
+        });
+
+        sttSessions.set(sessionId, state);
+        return {
+            session_id: sessionId,
+            provider: providers.stt.selected,
+            promise: deferred.promise
+        };
+    };
+
     const startSpeechSynthesis = (sessionId, text, options = {}) => {
         const synth = getSpeechSynthesis(env);
         const UtteranceCtor = getSpeechSynthesisUtteranceCtor(env);
@@ -428,6 +696,9 @@ export const createVoiceService = ({
         async start(options = {}) {
             ensureSupported('stt', providers.stt.selected);
             const session = ensureSession(options);
+            if (providers.stt.selected === 'tauri_plugin_stt') {
+                return startTauriRecognition(session.session_id, options);
+            }
             if (providers.stt.selected === 'browser_web_speech') {
                 return startBrowserRecognition(session.session_id, options);
             }
@@ -437,6 +708,12 @@ export const createVoiceService = ({
             const state = sttSessions.get(String(sessionId));
             if (!state) {
                 return sessionRuntime.getSession(sessionId);
+            }
+            if (state.bridge && typeof state.bridge.stop === 'function') {
+                state.stopReason = 'manual';
+                state.stopRequested = true;
+                await state.bridge.stop();
+                return state.deferred.promise;
             }
             state.recognition.stop();
             return state.deferred.promise;
@@ -450,6 +727,17 @@ export const createVoiceService = ({
                 };
             }
             state.cancelled = true;
+            state.stopReason = 'cancelled';
+            if (state.bridge && typeof state.bridge.stop === 'function') {
+                await state.bridge.stop();
+                sessionRuntime.publishEvent(sessionId, 'voice.cancel.requested', {
+                    source: 'stt'
+                });
+                sessionRuntime.interrupt(sessionId, {
+                    reason: 'stt_cancel'
+                });
+                return state.deferred.promise;
+            }
             if (typeof state.recognition.abort === 'function') {
                 state.recognition.abort();
             } else {

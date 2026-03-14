@@ -1,10 +1,29 @@
 import { getEveLocale } from '../../application/eVe/i18n/i18n.js';
+import { mountVoiceMeter } from './voice_meter.js';
 
 const HISTORY_STORAGE_KEY = 'eve_voice_history_v1';
 const LEGACY_HISTORY_STORAGE_KEY = 'eve_dilas_voice_history_v1';
 const MAX_HISTORY_ITEMS = 80;
 
 const toText = (value) => String(value || '').trim();
+
+const toDebugPayload = (value) => {
+    try {
+        return JSON.stringify(value);
+    } catch (_) {
+        return String(value);
+    }
+};
+
+const debugVoice = (...args) => {
+    try {
+        globalThis?.console?.log?.('[eVe:voice]', ...args.map((entry) => (
+            typeof entry === 'string' ? entry : toDebugPayload(entry)
+        )));
+    } catch (_) {
+        // Ignore logging failures.
+    }
+};
 
 const cloneValue = (value) => {
     if (typeof structuredClone === 'function') return structuredClone(value);
@@ -19,6 +38,78 @@ const resolveLocale = () => {
 };
 
 const isEnglish = (locale = '') => toText(locale).toLowerCase().startsWith('en');
+
+const localizeVoiceError = (code = '', locale = 'fr-FR') => {
+    const english = isEnglish(locale);
+    switch (toText(code)) {
+    case 'unsupported_stt':
+    case 'voice_stt_backend_unavailable':
+    case 'browser_speech_recognition_unavailable':
+        return english
+            ? 'Voice recognition is unavailable in this environment.'
+            : 'La reconnaissance vocale est indisponible dans cet environnement.';
+    case 'microphone_unavailable':
+        return english
+            ? 'Microphone access is unavailable.'
+            : 'L acces au micro est indisponible.';
+    case 'audio_context_unavailable':
+        return english
+            ? 'Audio visualization is unavailable here.'
+            : 'La visualisation audio est indisponible ici.';
+    case 'voice_api_unavailable':
+        return english
+            ? 'The voice runtime is unavailable.'
+            : 'Le moteur vocal est indisponible.';
+    default:
+        return english
+            ? 'Voice input is unavailable right now.'
+            : 'L entree vocale est indisponible pour le moment.';
+    }
+};
+
+const localizeExecutionError = (code = '', locale = 'fr-FR') => {
+    const english = isEnglish(locale);
+    switch (toText(code)) {
+    case 'no_ai_key_configured':
+        return english ? 'No AI key is configured.' : "Aucune cle IA n'est configuree.";
+    case 'provider_timeout':
+    case 'provider_auth_failed':
+    case 'provider_unreachable':
+    case 'provider_invalid_response':
+    case 'voice_agent_bridge_unavailable':
+    case 'voice_execution_bridge_unavailable':
+    case 'voice_toolchain_empty':
+        return english ? 'The AI is not responding.' : "L'IA ne repond pas.";
+    default:
+        return '';
+    }
+};
+
+const localizeDownloadProgress = ({ status = 'downloading', model = '', progress = null } = {}, locale = 'fr-FR') => {
+    const english = isEnglish(locale);
+    const normalizedStatus = toText(status) || 'downloading';
+    const modelName = toText(model);
+    const suffix = Number.isFinite(Number(progress)) ? ` ${Math.max(0, Math.min(100, Math.round(Number(progress))))}%` : '';
+    if (normalizedStatus === 'ready' || normalizedStatus === 'done' || normalizedStatus === 'completed') {
+        return english ? 'Voice model ready.' : 'Modele vocal pret.';
+    }
+    if (normalizedStatus === 'error' || normalizedStatus === 'failed') {
+        return english ? 'Voice model download failed.' : 'Le telechargement du modele vocal a echoue.';
+    }
+    const base = english ? 'Downloading voice model' : 'Telechargement du modele vocal';
+    return `${base}${modelName ? ` ${modelName}` : ''}${suffix}`;
+};
+
+const classifyVoiceError = (error) => {
+    const raw = toText(error?.code || error?.message || error);
+    if (!raw) return 'voice_input_unavailable';
+    if (raw === 'microphone_unavailable') return raw;
+    if (raw === 'audio_context_unavailable') return raw;
+    if (raw === 'voice_api_unavailable') return raw;
+    if (/Voice stt backend is not available/i.test(raw)) return 'voice_stt_backend_unavailable';
+    if (/Browser speech recognition is not available/i.test(raw)) return 'browser_speech_recognition_unavailable';
+    return raw;
+};
 
 const createElement = (doc, tag, style = {}, attrs = {}) => {
     const node = doc.createElement(tag);
@@ -95,7 +186,8 @@ const readAssistantText = (response = {}, locale = 'fr-FR') => {
 export const mountHomeVoiceSurface = async ({
     env = globalThis,
     host,
-    voiceApi = null
+    voiceApi = null,
+    voiceMeterFactory = mountVoiceMeter
 } = {}) => {
     if (!env?.document || !host) return null;
     if (host.__eveHomeVoiceSurfaceController) return host.__eveHomeVoiceSurfaceController;
@@ -111,8 +203,12 @@ export const mountHomeVoiceSurface = async ({
         sessionId: null,
         history: loadHistory(env),
         transcriptDraft: '',
+        errorMessage: '',
+        infoMessage: '',
         unsubscribe: () => {},
-        listeningPromise: null
+        listeningPromise: null,
+        voiceMeter: null,
+        meterRunning: false
     };
 
     const locale = () => resolveLocale();
@@ -143,7 +239,9 @@ export const mountHomeVoiceSurface = async ({
     const titleWrap = createElement(doc, 'div', {
         display: 'flex',
         flexDirection: 'column',
-        gap: '2px'
+        gap: '4px',
+        flex: '1 1 auto',
+        minWidth: '0'
     });
     const title = createElement(doc, 'div', {
         fontSize: '13px',
@@ -155,7 +253,18 @@ export const mountHomeVoiceSurface = async ({
         fontSize: '11px',
         opacity: '0.8'
     }, { text: labels().idle });
-    titleWrap.append(title, status);
+    const meterCanvas = createElement(doc, 'canvas', {
+        width: '116px',
+        height: '26px',
+        borderRadius: '8px',
+        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'rgba(255,255,255,0.03)',
+        display: 'block'
+    }, {
+        'data-role': 'eve-voice-meter',
+        'aria-hidden': 'true'
+    });
+    titleWrap.append(title, status, meterCanvas);
 
     const controls = createElement(doc, 'div', {
         display: 'flex',
@@ -194,6 +303,15 @@ export const mountHomeVoiceSurface = async ({
 
     controls.append(actionButton, sendButton);
     header.append(titleWrap, controls);
+
+    const noticeLine = createElement(doc, 'div', {
+        minHeight: '18px',
+        fontSize: '11px',
+        color: 'rgba(251, 113, 133, 0.96)'
+    }, {
+        'data-role': 'eve-voice-notice',
+        text: ''
+    });
 
     const transcriptLine = createElement(doc, 'div', {
         minHeight: '18px',
@@ -239,13 +357,33 @@ export const mountHomeVoiceSurface = async ({
     });
     composer.append(input);
 
-    root.append(header, transcriptLine, history, composer);
+    root.append(header, noticeLine, transcriptLine, history, composer);
     host.prepend(root);
 
     const persistHistory = () => saveHistory(env, state.history);
 
     const setStatus = (value) => {
         status.textContent = value;
+    };
+
+    const renderNotice = () => {
+        const message = toText(state.errorMessage) || toText(state.infoMessage);
+        noticeLine.textContent = message;
+        noticeLine.style.color = state.errorMessage
+            ? 'rgba(251, 113, 133, 0.96)'
+            : 'rgba(191, 219, 254, 0.96)';
+    };
+
+    const setError = (codeOrMessage = '') => {
+        state.errorMessage = codeOrMessage
+            ? localizeVoiceError(codeOrMessage, locale())
+            : '';
+        renderNotice();
+    };
+
+    const setInfo = (message = '') => {
+        state.infoMessage = toText(message);
+        renderNotice();
     };
 
     const renderTranscript = () => {
@@ -323,7 +461,40 @@ export const mountHomeVoiceSurface = async ({
             setStatus(activeLabels.listening);
             return;
         }
+        if (state.errorMessage) {
+            setStatus(activeLabels.unavailable);
+            return;
+        }
         setStatus(activeLabels.idle);
+    };
+
+    const startVoiceMeter = async () => {
+        if (!state.voiceMeter && typeof voiceMeterFactory === 'function') {
+            state.voiceMeter = voiceMeterFactory({
+                env,
+                canvas: meterCanvas
+            });
+        }
+        if (!state.voiceMeter?.start || state.meterRunning) return;
+        try {
+            await state.voiceMeter.start();
+            state.meterRunning = true;
+        } catch (error) {
+            state.meterRunning = false;
+            setError(classifyVoiceError(error));
+            updateControls();
+        }
+    };
+
+    const stopVoiceMeter = async () => {
+        if (!state.voiceMeter?.stop) return;
+        try {
+            await state.voiceMeter.stop();
+        } catch (_) {
+            // Ignore meter teardown failures.
+        } finally {
+            state.meterRunning = false;
+        }
     };
 
     const pushEntry = (role, text) => {
@@ -344,6 +515,7 @@ export const mountHomeVoiceSurface = async ({
         if (!state.api || typeof state.api.ensureReady !== 'function') {
             updateControls();
             setStatus(labels().unavailable);
+            setError('voice_api_unavailable');
             throw new Error('voice_api_unavailable');
         }
         await state.api.ensureReady();
@@ -359,8 +531,11 @@ export const mountHomeVoiceSurface = async ({
     const startListeningLoop = async () => {
         if (!state.active || state.listening || state.processing || state.speaking) return;
         const sessionId = await ensureSession();
+        debugVoice('start_listening', { sessionId, locale: locale() });
         state.listening = true;
         state.transcriptDraft = '';
+        setError('');
+        setInfo('');
         renderTranscript();
         updateControls();
         try {
@@ -374,6 +549,12 @@ export const mountHomeVoiceSurface = async ({
             state.listening = false;
             updateControls();
             const text = toText(result?.text);
+            debugVoice('listen_resolved', {
+                sessionId,
+                text,
+                cancelled: result?.cancelled === true,
+                reason: result?.reason || null
+            });
             state.transcriptDraft = '';
             renderTranscript();
             if (text) {
@@ -381,9 +562,14 @@ export const mountHomeVoiceSurface = async ({
             } else if (state.active) {
                 void startListeningLoop();
             }
-        } catch (_) {
+        } catch (error) {
+            debugVoice('listen_failed', {
+                sessionId,
+                error: error?.message || String(error)
+            });
             state.listening = false;
             state.transcriptDraft = '';
+            setError(classifyVoiceError(error));
             renderTranscript();
             updateControls();
         }
@@ -405,6 +591,12 @@ export const mountHomeVoiceSurface = async ({
         const normalized = toText(text);
         if (!normalized) return;
         await ensureSession();
+        debugVoice('execute_utterance:start', {
+            sessionId: state.sessionId,
+            text: normalized,
+            locale: locale()
+        });
+        setError('');
         pushEntry('user', normalized);
         state.processing = true;
         state.transcriptDraft = '';
@@ -415,11 +607,23 @@ export const mountHomeVoiceSurface = async ({
                 session_id: state.sessionId,
                 locale: locale()
             });
-            const assistantText = readAssistantText(response, locale());
+            debugVoice('execute_utterance:response', {
+                sessionId: state.sessionId,
+                ok: response?.ok === true,
+                executed: response?.executed === true,
+                error: response?.error || null,
+                reply_text: toText(response?.reply_text || response?.spoken_reply || '')
+            });
+            const assistantText = readAssistantText(response, locale())
+                || localizeExecutionError(response?.error, locale());
             if (assistantText) {
                 pushEntry('assistant', assistantText);
             }
+            setInfo('');
         } catch (_) {
+            debugVoice('execute_utterance:failed', {
+                sessionId: state.sessionId
+            });
             const fallback = isEnglish(locale()) ? 'The AI is not responding.' : "L'IA ne repond pas.";
             pushEntry('assistant', fallback);
         } finally {
@@ -433,7 +637,12 @@ export const mountHomeVoiceSurface = async ({
 
     const bindRuntime = async () => {
         if (!state.api || typeof state.api.ensureReady !== 'function') return;
-        await state.api.ensureReady();
+        const ready = await state.api.ensureReady();
+        const providers = ready?.providers || state.api.providers;
+        if (providers?.stt?.selected === 'unsupported') {
+            setError('unsupported_stt');
+            updateControls();
+        }
         if (typeof state.api.subscribe !== 'function') return;
         state.unsubscribe = state.api.subscribe((event) => {
             if (state.sessionId && event.session_id !== state.sessionId) return;
@@ -442,10 +651,28 @@ export const mountHomeVoiceSurface = async ({
             }
             if (event.type === 'voice.stt.partial' || event.type === 'voice.stt.final') {
                 state.transcriptDraft = toText(event.payload?.text);
+                debugVoice(event.type, {
+                    sessionId: event.session_id,
+                    text: state.transcriptDraft
+                });
                 renderTranscript();
+            }
+            if (event.type === 'voice.stt.download_progress') {
+                debugVoice('voice.stt.download_progress', {
+                    sessionId: event.session_id,
+                    status: event.payload?.status || null,
+                    model: event.payload?.model || null,
+                    progress: event.payload?.progress ?? null
+                });
+                setInfo(localizeDownloadProgress(event.payload, locale()));
+                updateControls();
             }
             if (event.type === 'voice.tts.state') {
                 const next = toText(event.payload?.state);
+                debugVoice('voice.tts.state', {
+                    sessionId: event.session_id,
+                    state: next
+                });
                 state.speaking = next === 'speaking';
                 if (next === 'done' || next === 'interrupted') {
                     state.speaking = false;
@@ -454,6 +681,10 @@ export const mountHomeVoiceSurface = async ({
             }
             if (event.type === 'voice.processing.state') {
                 const next = toText(event.payload?.state);
+                debugVoice('voice.processing.state', {
+                    sessionId: event.session_id,
+                    state: next
+                });
                 state.processing = next === 'processing';
                 if (next === 'done' || next === 'failed' || next === 'interrupted') {
                     state.processing = false;
@@ -461,6 +692,10 @@ export const mountHomeVoiceSurface = async ({
                 updateControls();
             }
             if (event.type === 'voice.cancel.requested') {
+                debugVoice('voice.cancel.requested', {
+                    sessionId: event.session_id,
+                    source: event.payload?.source || null
+                });
                 state.listening = false;
                 state.speaking = false;
                 state.processing = false;
@@ -514,6 +749,7 @@ export const mountHomeVoiceSurface = async ({
     });
 
     renderHistory();
+    renderNotice();
     renderTranscript();
     updateControls();
     await bindRuntime();
@@ -522,6 +758,7 @@ export const mountHomeVoiceSurface = async ({
         root,
         activate() {
             state.active = true;
+            void startVoiceMeter();
             void startListeningLoop();
         },
         async deactivate() {
@@ -538,10 +775,12 @@ export const mountHomeVoiceSurface = async ({
             state.processing = false;
             state.transcriptDraft = '';
             renderTranscript();
+            await stopVoiceMeter();
             updateControls();
         },
         refreshLabels() {
             updateControls();
+            renderNotice();
             renderTranscript();
             renderHistory();
         },
@@ -551,12 +790,15 @@ export const mountHomeVoiceSurface = async ({
                 listening: state.listening,
                 processing: state.processing,
                 speaking: state.speaking,
+                errorMessage: state.errorMessage,
                 sessionId: state.sessionId,
-                history: state.history
+                history: state.history,
+                meterRunning: state.meterRunning
             });
         },
         destroy() {
             try { state.unsubscribe(); } catch (_) { }
+            void stopVoiceMeter();
             root.remove();
             delete host.__eveHomeVoiceSurfaceController;
         }

@@ -11,6 +11,14 @@ const { window } = dom;
 globalThis.window = window;
 globalThis.document = window.document;
 globalThis.localStorage = window.localStorage;
+window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    fillRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {}
+});
 
 let sessionCounter = 0;
 const listeners = [];

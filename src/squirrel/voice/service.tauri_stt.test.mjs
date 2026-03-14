@@ -1,0 +1,202 @@
+import assert from 'node:assert/strict';
+
+import { createVoiceSessionRuntime } from './session_runtime.js';
+import { createVoiceService, resolveVoiceProviders } from './service.js';
+
+const listeners = {
+    result: new Set(),
+    stateChange: new Set(),
+    error: new Set()
+};
+
+const emit = (kind, payload) => {
+    for (const handler of listeners[kind]) {
+        handler(payload);
+    }
+};
+
+const resetListeners = () => {
+    Object.values(listeners).forEach((set) => set.clear());
+};
+
+const env = {
+    __TAURI__: {
+        stt: {
+            async checkPermission() {
+                return {
+                    microphone: 'granted',
+                    speechRecognition: 'granted'
+                };
+            },
+            async start(config = {}) {
+                emit('stateChange', { state: 'listening', config });
+                setTimeout(() => {
+                    emit('result', {
+                        transcript: 'Releve mes mails',
+                        isFinal: true,
+                        confidence: 0.91
+                    });
+                }, 0);
+            },
+            async stop() {
+                return true;
+            },
+            async onResult(handler) {
+                listeners.result.add(handler);
+                return () => listeners.result.delete(handler);
+            },
+            async onStateChange(handler) {
+                listeners.stateChange.add(handler);
+                return () => listeners.stateChange.delete(handler);
+            },
+            async onError(handler) {
+                listeners.error.add(handler);
+                return () => listeners.error.delete(handler);
+            }
+        }
+    }
+};
+
+const providers = resolveVoiceProviders(env);
+assert.equal(providers.stt.selected, 'tauri_plugin_stt', 'native Tauri STT should be selected when the bridge is available');
+
+const runtime = createVoiceSessionRuntime();
+const voice = createVoiceService({
+    env,
+    sessionRuntime: runtime,
+    aiPlanner: { async plan() { return null; } }
+});
+
+const started = await voice.stt.start({
+    lang: 'fr-FR',
+    partial: true
+});
+
+const final = await started.promise;
+assert.equal(final.provider, 'tauri_plugin_stt', 'voice.stt.start should expose the native Tauri STT provider');
+assert.equal(final.text, 'Releve mes mails', 'voice.stt.start should resolve with the native final transcript');
+
+const snapshot = runtime.getSession(started.session_id);
+assert.equal(snapshot.transcript.final, 'Releve mes mails', 'native Tauri STT should finalize the runtime transcript');
+assert.equal(snapshot.phase, 'processing', 'native Tauri STT should move the session into processing after the final transcript');
+
+resetListeners();
+
+const idleEnv = {
+    __TAURI__: {
+        stt: {
+            async checkPermission() {
+                return {
+                    microphone: 'granted',
+                    speechRecognition: 'granted'
+                };
+            },
+            async start() {
+                emit('stateChange', { state: 'listening' });
+                setTimeout(() => {
+                    emit('result', {
+                        transcript: 'Releve mes mails',
+                        isFinal: false
+                    });
+                }, 0);
+            },
+            async stop() {
+                setTimeout(() => {
+                    emit('stateChange', { state: 'idle' });
+                }, 0);
+                return true;
+            },
+            async onResult(handler) {
+                listeners.result.add(handler);
+                return () => listeners.result.delete(handler);
+            },
+            async onStateChange(handler) {
+                listeners.stateChange.add(handler);
+                return () => listeners.stateChange.delete(handler);
+            },
+            async onError(handler) {
+                listeners.error.add(handler);
+                return () => listeners.error.delete(handler);
+            }
+        }
+    }
+};
+
+const idleRuntime = createVoiceSessionRuntime();
+const idleVoice = createVoiceService({
+    env: idleEnv,
+    sessionRuntime: idleRuntime,
+    aiPlanner: { async plan() { return null; } }
+});
+
+const idleStarted = await idleVoice.stt.start({
+    lang: 'fr-FR',
+    partial: true,
+    silenceMs: 5
+});
+
+const idleFinal = await idleStarted.promise;
+assert.equal(idleFinal.text, 'Releve mes mails', 'native Tauri STT should finalize from the last partial when the bridge returns to idle');
+assert.equal(idleRuntime.getSession(idleStarted.session_id).transcript.final, 'Releve mes mails', 'idle finalization should preserve the last partial transcript');
+
+resetListeners();
+
+const manualStopEnv = {
+    __TAURI__: {
+        stt: {
+            async checkPermission() {
+                return {
+                    microphone: 'granted',
+                    speechRecognition: 'granted'
+                };
+            },
+            async start() {
+                emit('stateChange', { state: 'listening' });
+                setTimeout(() => {
+                    emit('result', {
+                        transcript: 'Brouillon',
+                        isFinal: false
+                    });
+                }, 0);
+            },
+            async stop() {
+                setTimeout(() => {
+                    emit('stateChange', { state: 'idle' });
+                }, 0);
+                return true;
+            },
+            async onResult(handler) {
+                listeners.result.add(handler);
+                return () => listeners.result.delete(handler);
+            },
+            async onStateChange(handler) {
+                listeners.stateChange.add(handler);
+                return () => listeners.stateChange.delete(handler);
+            },
+            async onError(handler) {
+                listeners.error.add(handler);
+                return () => listeners.error.delete(handler);
+            }
+        }
+    }
+};
+
+const manualRuntime = createVoiceSessionRuntime();
+const manualVoice = createVoiceService({
+    env: manualStopEnv,
+    sessionRuntime: manualRuntime,
+    aiPlanner: { async plan() { return null; } }
+});
+
+const manualStarted = await manualVoice.stt.start({
+    lang: 'fr-FR',
+    partial: true,
+    silenceMs: 5000
+});
+
+const manualStoppedPromise = manualVoice.stt.stop(manualStarted.session_id);
+const manualStopped = await manualStoppedPromise;
+assert.equal(manualStopped.cancelled, true, 'manual stop should resolve as a cancelled voice turn');
+assert.equal(manualStopped.text, '', 'manual stop should not promote the partial transcript into a final utterance');
+
+console.log('voice_service_tauri_stt: ok');

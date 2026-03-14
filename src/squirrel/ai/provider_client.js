@@ -1,47 +1,23 @@
 import { loadUserProfile } from '../../application/eVe/APIS/login.js';
+import {
+    AI_MODEL_PROVIDER_LIST,
+    AI_MODEL_PROVIDER_REGISTRY
+} from './model_catalog_registry.js';
 
-export const AI_PROVIDER_DEFINITIONS = Object.freeze({
-    openai: {
-        id: 'openai',
-        label: 'OpenAI',
-        type: 'openai',
-        endpoint: 'https://api.openai.com/v1/chat/completions',
-        models: ['gpt-4o-mini', 'gpt-4o']
-    },
-    anthropic: {
-        id: 'anthropic',
-        label: 'Anthropic',
-        type: 'anthropic',
-        endpoint: 'https://api.anthropic.com/v1/messages',
-        models: ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022']
-    },
-    mistral: {
-        id: 'mistral',
-        label: 'Mistral',
-        type: 'openai',
-        endpoint: 'https://api.mistral.ai/v1/chat/completions',
-        models: ['mistral-large-latest', 'mistral-small-latest']
-    },
-    google: {
-        id: 'google',
-        label: 'Google',
-        type: 'google',
-        endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
-        models: ['gemini-1.5-flash', 'gemini-1.5-pro']
-    },
-    deepseek: {
-        id: 'deepseek',
-        label: 'DeepSeek',
-        type: 'openai',
-        endpoint: 'https://api.deepseek.com/v1/chat/completions',
-        models: ['deepseek-chat', 'deepseek-reasoner']
-    }
-});
+export const AI_PROVIDER_DEFINITIONS = Object.freeze(Object.fromEntries(
+    Object.entries(AI_MODEL_PROVIDER_REGISTRY).map(([key, entry]) => ([key, Object.freeze({
+        id: entry.id,
+        label: entry.label,
+        type: entry.request_type,
+        endpoint: entry.completion_endpoint,
+        models: Object.freeze([...entry.recommended_models, ...entry.fallback_models])
+    })]))
+));
 
-export const AI_PROVIDER_LIST = Object.freeze(Object.values(AI_PROVIDER_DEFINITIONS).map((entry) => ({
+export const AI_PROVIDER_LIST = Object.freeze(AI_MODEL_PROVIDER_LIST.map((entry) => Object.freeze({
     id: entry.id,
     label: entry.label,
-    models: [...entry.models]
+    models: Object.freeze([...entry.models])
 })));
 
 const DEFAULT_TIMEOUT_MS = 20000;
