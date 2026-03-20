@@ -11,6 +11,8 @@ const env = {
                     message: {
                         content: JSON.stringify({
                             reply: 'J ouvre Mtrack.',
+                            domain: 'ui_navigation',
+                            action: 'open_tool',
                             target: 'runtime_v2',
                             actions: [{
                                 target: 'runtime_v2',
@@ -60,6 +62,8 @@ const planned = await planner.planUtterance('Ouvre Mtrack', {
 assert.equal(planned.execution.target, 'runtime_v2', 'voice ai planner should preserve runtime target planning');
 assert.equal(planned.execution.toolchain[0]?.tool_id, 'tool.main.mtrack', 'voice ai planner should return runtime tool ids from the provider plan');
 assert.equal(planned.assistant_reply, 'J ouvre Mtrack.', 'voice ai planner should preserve the provider spoken reply');
+assert.equal(planned.domain, 'ui_navigation', 'voice ai planner should preserve the domain selected by the provider');
+assert.equal(planned.action, 'open_tool', 'voice ai planner should preserve the action selected by the provider');
 
 const failingPlanner = createVoiceAiPlanner({
     env: {

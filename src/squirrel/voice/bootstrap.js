@@ -5,6 +5,24 @@ const READY_PROMISE_KEY = '__SQUIRREL_VOICE_READY_PROMISE__';
 const SERVICE_KEY = '__SQUIRREL_VOICE_SERVICE__';
 const API_KEY = '__SQUIRREL_VOICE_API__';
 
+const toDebugPayload = (value) => {
+    try {
+        return JSON.stringify(value);
+    } catch (_) {
+        return String(value);
+    }
+};
+
+const debugVoiceBootstrap = (...args) => {
+    try {
+        globalThis?.console?.log?.('[eVe:voice:bootstrap]', ...args.map((entry) => (
+            typeof entry === 'string' ? entry : toDebugPayload(entry)
+        )));
+    } catch (_) {
+        // Ignore logging failures.
+    }
+};
+
 const readEnv = (env, key) => {
     if (!env || typeof env !== 'object') return null;
     if (key in env) return env[key];
@@ -36,6 +54,11 @@ export const ensureVoiceBridgeModules = async ({
     if (!env || typeof env !== 'object') return [];
     const loaded = [];
     const tauri = isTauriLikeEnv(env);
+    debugVoiceBootstrap('bridge_modules:resolve', {
+        tauri,
+        hasTauri: !!readEnv(env, '__TAURI__'),
+        hasTauriInternals: !!readEnv(env, '__TAURI_INTERNALS__')
+    });
 
     if (tauri && typeof readEnv(env, '__toDSP') !== 'function') {
         await importModule('../../application/iplug/tauri_iplug_bridge.js');
@@ -54,6 +77,9 @@ export const ensureVoiceBridgeModules = async ({
         loaded.push('stt_api');
     }
 
+    debugVoiceBootstrap('bridge_modules:loaded', {
+        loaded
+    });
     return loaded;
 };
 
@@ -96,8 +122,15 @@ export const createGlobalVoiceApi = ({
     const ensureReady = async () => {
         if (!env[READY_PROMISE_KEY]) {
             env[READY_PROMISE_KEY] = (async () => {
+                debugVoiceBootstrap('ensure_ready:start');
                 await ensureVoiceBridgeModules({ env, importModule });
-                return getOrCreateService(env);
+                const service = getOrCreateService(env);
+                debugVoiceBootstrap('ensure_ready:service_ready', {
+                    stt: service?.providers?.stt?.selected || null,
+                    tts: service?.providers?.tts?.selected || null,
+                    capture: service?.providers?.capture?.selected || null
+                });
+                return service;
             })();
         }
         return env[READY_PROMISE_KEY];
@@ -203,6 +236,10 @@ export const createGlobalVoiceApi = ({
         async planUtterance(utterance, options = {}) {
             const service = await ensureReady();
             return service.planUtterance(utterance, options);
+        },
+        async executeIntent(intent, options = {}) {
+            const service = await ensureReady();
+            return service.executeIntent(intent, options);
         },
         async executeUtterance(utterance, options = {}) {
             const service = await ensureReady();

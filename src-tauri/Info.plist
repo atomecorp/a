@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>eVe a besoin du microphone pour t ecouter et transcrire ta voix.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>eVe a besoin de la reconnaissance vocale pour comprendre tes commandes en francais.</string>
+</dict>
+</plist>

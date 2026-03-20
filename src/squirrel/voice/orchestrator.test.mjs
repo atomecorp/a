@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 
 import { createVoiceSessionRuntime } from './session_runtime.js';
 import { createVoiceOrchestrator } from './orchestrator.js';
+import { createGlobalMailApi } from '../mail/bootstrap.js';
 
 const runtimeTools = [
     { tool_id: 'tool.main.mtrack', tool_key: 'main_mtrack' },
@@ -102,10 +103,92 @@ assert.deepEqual(
 const mailRead = await orchestrator.executeUtterance('Lis mes mails', {
     session_id: mailSession.session_id
 });
-assert.equal(mailRead.ok, true);
+assert.equal(mailRead.ok, false);
 assert.equal(mailRead.executed, false);
-assert.equal(mailRead.transport, 'pending_connector');
-assert.deepEqual(mailRead.requested_capabilities, ['mail_read', 'mail_next_unread']);
+assert.equal(mailRead.transport, 'mail_api');
+assert.equal(mailRead.error, 'mail_connector_unavailable');
+assert.match(mailRead.reply_text, /acces a tes mails ici/i);
+
+const mailEnsureReadyEnv = {
+    atome: {
+        mail: {
+            __readyCalls: 0,
+            async ensureReady() {
+                this.__readyCalls += 1;
+                return {
+                    ok: true,
+                    items: [
+                        {
+                            message_id: 'voice_mail_ready_1',
+                            mailbox: 'inbox',
+                            subject: 'Mail distant disponible',
+                            preview: 'Le miroir Fastify a hydrate l index local',
+                            body_text: 'Le miroir Fastify a hydrate l index local',
+                            unread: true,
+                            from: { address: 'alice@example.test' },
+                            received_at: '2026-03-17T13:00:00Z'
+                        }
+                    ]
+                };
+            },
+            connectorStatus() {
+                return { ok: true, configured: false, provider: null };
+            },
+            list() {
+                return {
+                    ok: true,
+                    items: [
+                        {
+                            message_id: 'voice_mail_ready_1',
+                            mailbox: 'inbox',
+                            subject: 'Mail distant disponible',
+                            preview: 'Le miroir Fastify a hydrate l index local',
+                            body_text: 'Le miroir Fastify a hydrate l index local',
+                            unread: true,
+                            from: { address: 'alice@example.test' },
+                            received_at: '2026-03-17T13:00:00Z'
+                        }
+                    ]
+                };
+            },
+            nextUnread() {
+                return {
+                    ok: true,
+                    item: {
+                        message_id: 'voice_mail_ready_1',
+                        mailbox: 'inbox',
+                        subject: 'Mail distant disponible',
+                        preview: 'Le miroir Fastify a hydrate l index local',
+                        body_text: 'Le miroir Fastify a hydrate l index local',
+                        unread: true,
+                        from: { address: 'alice@example.test' }
+                    }
+                };
+            },
+            buildReadout() {
+                return {
+                    ok: true,
+                    text: 'De alice@example.test. Sujet: Mail distant disponible. Le miroir Fastify a hydrate l index local.'
+                };
+            },
+            summarize() {
+                return {
+                    ok: true,
+                    summary: '1 unread message out of 1.'
+                };
+            }
+        }
+    }
+};
+const readyOrchestrator = createVoiceOrchestrator({
+    env: mailEnsureReadyEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const readyMail = await readyOrchestrator.executeUtterance('Lis mes mails');
+assert.equal(readyMail.ok, true, 'mail ensureReady should unblock mail execution before the connector check');
+assert.equal(readyMail.transport, 'mail_api');
+assert.match(readyMail.reply_text, /Mail distant disponible/);
+assert.equal(mailEnsureReadyEnv.atome.mail.__readyCalls, 1, 'mail ensureReady should be attempted once before pending connector execution');
 
 const localCommand = await orchestrator.executeUtterance('stop');
 assert.equal(localCommand.ok, true);
@@ -120,7 +203,7 @@ assert.equal(nextIntent.action, 'next_item');
 assert.deepEqual(nextIntent.requested_capabilities, ['mail_next_unread']);
 const nextExecution = await orchestrator.executeSessionFollowup(mailSession.session_id);
 assert.equal(nextExecution.executed, false);
-assert.equal(nextExecution.transport, 'pending_connector');
+assert.equal(nextExecution.transport, 'mail_api');
 
 runtime.handleLocalCommand(mailSession.session_id, 'precedent');
 const previousIntent = orchestrator.planSessionFollowup(mailSession.session_id);
@@ -183,6 +266,261 @@ const confirmedDelete = await orchestrator.executeIntent({
 });
 assert.equal(confirmedDelete.executed, true);
 assert.equal(confirmedDelete.result.tool_id, 'calendar.delete_event');
+
+const mailExecEnv = {};
+const mailApi = createGlobalMailApi({ env: mailExecEnv });
+mailApi.ingest([{
+    message_id: 'voice_mail_1',
+    mailbox: 'inbox',
+    thread_id: 'voice_thread_1',
+    subject: 'Bonjour Jean',
+    preview: 'Peux-tu lire ce message',
+    body_text: 'Peux-tu lire ce message',
+    from: { name: 'Alice', address: 'alice@example.test' },
+    to: [{ name: 'Jean', address: 'jean@example.test' }],
+    unread: true,
+    received_at: '2026-03-14T12:00:00.000Z'
+}]);
+const mailExecRuntime = createVoiceSessionRuntime();
+const mailExecOrchestrator = createVoiceOrchestrator({
+    env: mailExecEnv,
+    sessionRuntime: mailExecRuntime
+});
+const mailExecSession = mailExecRuntime.createSession({
+    session_id: 'voice_session_orchestrator_mail_exec'
+});
+const mailReadExecuted = await mailExecOrchestrator.executeUtterance('Lis mes mails', {
+    session_id: mailExecSession.session_id
+});
+assert.equal(mailReadExecuted.ok, true);
+assert.equal(mailReadExecuted.executed, true);
+assert.equal(mailReadExecuted.transport, 'mail_api');
+assert.match(mailReadExecuted.reply_text, /Bonjour Jean/);
+
+const stalledMailEnv = {
+    __SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS: 5,
+    Squirrel: {
+        mail: {
+            connectorStatus() {
+                return { ok: true, configured: true, provider: 'icloud_imap_smtp' };
+            },
+            syncPull() {
+                return new Promise(() => {});
+            },
+            list() {
+                return {
+                    ok: true,
+                    items: [{
+                        message_id: 'voice_mail_stalled_1',
+                        subject: 'Resume hebdomadaire',
+                        preview: 'Voici le resume',
+                        body_text: 'Voici le resume',
+                        from: { name: 'Alice', address: 'alice@example.test' }
+                    }]
+                };
+            },
+            nextUnread() {
+                return {
+                    ok: true,
+                    item: {
+                        message_id: 'voice_mail_stalled_1',
+                        subject: 'Resume hebdomadaire',
+                        preview: 'Voici le resume',
+                        body_text: 'Voici le resume',
+                        from: { name: 'Alice', address: 'alice@example.test' }
+                    }
+                };
+            },
+            buildReadout() {
+                return {
+                    ok: true,
+                    text: 'De Alice. Sujet: Resume hebdomadaire. Voici le resume'
+                };
+            }
+        }
+    }
+};
+const stalledMailOrchestrator = createVoiceOrchestrator({
+    env: stalledMailEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const stalledMailResult = await stalledMailOrchestrator.executeUtterance('Lis mes mails');
+assert.equal(stalledMailResult.ok, true, 'mail connector stalls should not block the voice orchestrator');
+assert.equal(stalledMailResult.executed, true, 'mail connector stalls should still fall back to the local mail index');
+assert.equal(stalledMailResult.transport, 'mail_api', 'mail connector stalls should keep the local mail API transport');
+assert.match(stalledMailResult.reply_text, /Resume hebdomadaire/, 'mail connector stalls should still produce a readout from local mail data');
+assert.equal(
+    stalledMailOrchestrator.listJournal().some((entry) => entry.type === 'voice.intent.connector_timeout'),
+    true,
+    'mail connector stalls should be recorded in the orchestrator journal'
+);
+
+const mailSummaryEnv = {};
+const summaryMailApi = createGlobalMailApi({ env: mailSummaryEnv });
+summaryMailApi.ingest([
+    {
+        message_id: 'voice_mail_summary_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_summary_1',
+        subject: 'Facture mars',
+        preview: 'Merci de valider la facture avant vendredi.',
+        body_text: 'Merci de valider la facture avant vendredi.',
+        from: { name: 'Compta', address: 'compta@example.test' },
+        unread: false,
+        received_at: '2026-03-20T10:00:00.000Z'
+    },
+    {
+        message_id: 'voice_mail_summary_2',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_summary_2',
+        subject: 'Invitation reunion',
+        preview: 'Peux-tu confirmer ta presence demain a 9h ?',
+        body_text: 'Peux-tu confirmer ta presence demain a 9h ?',
+        from: { name: 'Paul', address: 'paul@example.test' },
+        unread: false,
+        received_at: '2026-03-20T11:00:00.000Z'
+    }
+]);
+const summaryOrchestrator = createVoiceOrchestrator({
+    env: mailSummaryEnv,
+    sessionRuntime: createVoiceSessionRuntime(),
+    mailAiSummarizer: async () => ({
+        ok: true,
+        text: 'Tu as recu deux mails recents: une facture a valider avant vendredi et une invitation a confirmer pour demain 9h.'
+    })
+});
+const summaryResult = await summaryOrchestrator.executeUtterance('Fais moi un resume de mes derniers mails');
+assert.equal(summaryResult.ok, true, 'mail summarize should succeed when local mail exists');
+assert.equal(summaryResult.executed, true, 'mail summarize should execute through the mail api');
+assert.equal(summaryResult.transport, 'mail_api', 'mail summarize should stay on the mail api transport');
+assert.match(summaryResult.reply_text, /facture a valider/i, 'mail summarize should prefer the AI summary when available');
+
+const mailReplyEnv = {};
+const replyMailApi = createGlobalMailApi({ env: mailReplyEnv });
+replyMailApi.ingest([
+    {
+        message_id: 'voice_mail_reply_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_reply_1',
+        subject: 'Cool',
+        preview: 'Cool',
+        body_text: 'Cool',
+        from: { name: 'Jean-Eric Godard', address: 'jean-eric@example.test' },
+        unread: false,
+        received_at: '2026-03-20T12:00:00.000Z'
+    },
+    {
+        message_id: 'voice_mail_reply_2',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_reply_2',
+        subject: 'Configuration mail',
+        preview: 'Voici les parametres de configuration.',
+        body_text: 'Voici les parametres de configuration.',
+        from: { name: 'cPanel', address: 'noreply@example.test' },
+        unread: false,
+        received_at: '2026-03-20T11:00:00.000Z'
+    }
+]);
+const replyRuntime = createVoiceSessionRuntime();
+const replyOrchestrator = createVoiceOrchestrator({
+    env: mailReplyEnv,
+    sessionRuntime: replyRuntime
+});
+const replySession = replyRuntime.createSession({
+    session_id: 'voice_session_orchestrator_mail_reply'
+});
+await replyOrchestrator.executeUtterance('Fais moi un resume de mes derniers mails', {
+    session_id: replySession.session_id
+});
+const replyResult = await replyOrchestrator.executeUtterance('Reponds a Jean-Eric que j ai bien recu le mail', {
+    session_id: replySession.session_id
+});
+assert.equal(replyResult.ok, true, 'mail reply should succeed when recent mail context exists');
+assert.equal(replyResult.executed, true, 'mail reply should execute through the mail api');
+assert.equal(replyResult.transport, 'mail_api', 'mail reply should stay on the mail api transport');
+assert.equal(replyResult.result?.draft?.in_reply_to, 'voice_mail_reply_1', 'mail reply should target the matched sender mail');
+assert.equal(replyResult.result?.draft?.body_text, 'j ai bien recu le mail', 'mail reply should sanitize the dictated body');
+assert.equal(replyResult.result?.draft?.status, 'queued_local_only', 'mail reply with dictated body should send immediately');
+assert.match(replyResult.reply_text, /mail a ete envoye|file d'attente locale/i, 'mail reply with dictated body should acknowledge direct sending');
+const sendResult = await replyOrchestrator.executeUtterance('Envoie le mail', {
+    session_id: replySession.session_id
+});
+assert.equal(sendResult.ok, true, 'mail send should succeed once a reply draft exists in the current session');
+assert.equal(sendResult.executed, true, 'mail send should execute directly without a confirmation gate');
+assert.equal(sendResult.transport, 'mail_api', 'mail send should stay on the mail api transport');
+assert.equal(sendResult.result?.draft?.status, 'queued_local_only', 'mail send should dispatch the current draft through the mail api');
+assert.match(sendResult.reply_text, /mail a ete envoye|file d'attente locale/i, 'mail send should acknowledge immediate sending instead of asking for confirmation');
+
+const directReplyEnv = {};
+const directReplyMailApi = createGlobalMailApi({ env: directReplyEnv });
+directReplyMailApi.ingest([
+    {
+        message_id: 'voice_mail_direct_reply_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_direct_reply_1',
+        subject: 'Cool',
+        preview: 'Cool',
+        body_text: 'Cool',
+        from: { name: 'Jean-Eric Godard', address: 'jean-eric@example.test' },
+        received_at: '2026-03-20T12:00:00.000Z'
+    }
+]);
+const directReplyOrchestrator = createVoiceOrchestrator({
+    env: directReplyEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const directReplyResult = await directReplyOrchestrator.executeUtterance('Reponds a Jean-Eric que j ai bien recu le mail');
+assert.equal(directReplyResult.ok, true, 'mail reply should work even without a prior mail summary step');
+assert.equal(directReplyResult.executed, true, 'mail reply should execute directly from a generic reply utterance');
+assert.equal(directReplyResult.result?.draft?.in_reply_to, 'voice_mail_direct_reply_1', 'mail reply should still resolve the matching recent mail');
+assert.equal(directReplyResult.result?.draft?.status, 'queued_local_only', 'generic direct reply should send immediately when body text is provided');
+
+const misflaggedReplyEnv = {};
+const misflaggedReplyMailApi = createGlobalMailApi({ env: misflaggedReplyEnv });
+misflaggedReplyMailApi.ingest([
+    {
+        message_id: 'voice_mail_misflagged_reply_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_misflagged_reply_1',
+        subject: 'Cool',
+        body_text: 'Cool',
+        from: { name: 'Jean-Eric Godard', address: 'jean-eric@example.test' },
+        received_at: '2026-03-20T12:00:00.000Z'
+    }
+]);
+const misflaggedReplyOrchestrator = createVoiceOrchestrator({
+    env: misflaggedReplyEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const misflaggedReplyResult = await misflaggedReplyOrchestrator.executeIntent({
+    intent_id: 'voice_intent_reply_misflagged',
+    type: 'connector_tool',
+    domain: 'mail',
+    action: 'reply_current',
+    status: 'pending_connector',
+    requested_capabilities: ['mail_reply_draft'],
+    entities: {
+        reply_target: 'Jean-Eric',
+        draft_text: 'bien recu',
+        auto_send: true
+    },
+    execution: {
+        target: 'pending_connector',
+        confirmation_required: true,
+        toolchain: [{
+            source: 'pending_connector',
+            capability: 'mail_reply_draft',
+            input: {
+                reply_target: 'Jean-Eric',
+                draft_text: 'bien recu',
+                auto_send: true
+            }
+        }]
+    }
+});
+assert.equal(misflaggedReplyResult.executed, true, 'mail reply should ignore stray confirmation flags');
+assert.equal(misflaggedReplyResult.result?.draft?.in_reply_to, 'voice_mail_misflagged_reply_1');
+assert.equal(misflaggedReplyResult.result?.draft?.status, 'queued_local_only', 'misflagged reply should still send immediately');
 
 const journal = orchestrator.listJournal({ limit: 10 });
 assert.ok(journal.length >= 4, 'orchestrator should record planning/execution journal entries');

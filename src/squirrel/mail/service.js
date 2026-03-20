@@ -231,6 +231,22 @@ export const createMailService = ({
             if (!draft) return { ok: false, error: 'mail_draft_not_found' };
             return { ok: true, draft: { ...draft } };
         },
+        mailApplyRemoteDelivery(draftId, delivery = {}) {
+            const draft = drafts.get(String(draftId || ''));
+            if (!draft) {
+                return { ok: false, error: 'mail_draft_not_found' };
+            }
+            draft.status = delivery?.queued === true ? 'queued_local_only' : 'sent';
+            draft.sent_at = delivery?.accepted_at || now();
+            draft.remote_id = delivery?.remote_id || delivery?.message_id || null;
+            delete draft.error;
+            delete draft.failed_at;
+            drafts.set(draft.draft_id, draft);
+            return {
+                ok: true,
+                draft: { ...draft }
+            };
+        },
         async mailSend(draftId, {
             confirmed = false
         } = {}) {

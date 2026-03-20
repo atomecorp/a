@@ -1,12 +1,13 @@
 use serde::de::DeserializeOwned;
 use std::fs::{self, File};
-use std::io::{self, Cursor};
+use std::io::{self};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{plugin::PluginApi, AppHandle, Emitter, Manager, Runtime};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use vosk::{Model, Recognizer};
 
 use crate::models::*;
@@ -141,6 +142,51 @@ impl<R: Runtime> Stt<R> {
             .join("vosk-models")
     }
 
+    fn get_downloads_dir(&self) -> PathBuf {
+        self.get_models_dir().join(".downloads")
+    }
+
+    fn resolve_download_url(&self, model_name: &str, default_url: &str) -> String {
+        if let Ok(full_url) = std::env::var("SQUIRREL_STT_MODEL_URL") {
+            let trimmed = full_url.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+
+        let env_key = format!(
+            "SQUIRREL_STT_MODEL_URL_{}",
+            model_name
+                .chars()
+                .map(|ch| if ch.is_ascii_alphanumeric() {
+                    ch.to_ascii_uppercase()
+                } else {
+                    '_'
+                })
+                .collect::<String>()
+        );
+
+        if let Ok(url) = std::env::var(&env_key) {
+            let trimmed = url.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+
+        if let Ok(base_url) = std::env::var("SQUIRREL_STT_MODEL_BASE_URL") {
+            let trimmed = base_url.trim().trim_end_matches('/');
+            if !trimmed.is_empty() {
+                let file_name = default_url
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(default_url);
+                return format!("{}/{}", trimmed, file_name);
+            }
+        }
+
+        default_url.to_string()
+    }
+
     fn resolve_french_model(&self) -> (&'static str, &'static str) {
         let override_value = std::env::var("SQUIRREL_STT_FR_MODEL")
             .ok()
@@ -153,14 +199,6 @@ impl<R: Runtime> Stt<R> {
         }
         if override_value == "full" {
             return (FR_FULL_MODEL_NAME, FR_FULL_MODEL_URL);
-        }
-
-        let models_dir = self.get_models_dir();
-        if models_dir.join(FR_FULL_MODEL_NAME).exists() {
-            return (FR_FULL_MODEL_NAME, FR_FULL_MODEL_URL);
-        }
-        if models_dir.join(FR_SMALL_MODEL_NAME).exists() {
-            return (FR_SMALL_MODEL_NAME, FR_SMALL_MODEL_URL);
         }
 
         (FR_FULL_MODEL_NAME, FR_FULL_MODEL_URL)
@@ -200,15 +238,31 @@ impl<R: Runtime> Stt<R> {
         fs::create_dir_all(&models_dir).map_err(|e| {
             crate::Error::Recording(format!("Failed to create models directory: {}", e))
         })?;
+        let downloads_dir = self.get_downloads_dir();
+        fs::create_dir_all(&downloads_dir).map_err(|e| {
+            crate::Error::Recording(format!("Failed to create download cache directory: {}", e))
+        })?;
 
         let model_path = models_dir.join(model_name);
+        let zip_path = downloads_dir.join(format!("{}.zip", model_name));
+        let part_path = downloads_dir.join(format!("{}.zip.part", model_name));
+        let resolved_url = self.resolve_download_url(model_name, url);
 
         // If already exists, return path
         if model_path.exists() {
+            println!("Using cached model '{}' at {:?}", model_name, model_path);
+            let _ = self.app.emit(
+                "stt://download-progress",
+                serde_json::json!({
+                    "status": "ready",
+                    "model": model_name,
+                    "progress": 100
+                }),
+            );
             return Ok(model_path);
         }
 
-        println!("Downloading model '{}' from {}", model_name, url);
+        println!("Downloading model '{}' from {}", model_name, resolved_url);
 
         // Emit download start event
         let _ = self.app.emit(
@@ -221,24 +275,46 @@ impl<R: Runtime> Stt<R> {
         );
 
         // Download in a separate thread to avoid tokio runtime conflicts
-        let url_owned = url.to_string();
+        let url_owned = resolved_url;
         let model_name_owned = model_name.to_string();
         let app_handle = self.app.clone();
+        let zip_path_owned = zip_path.clone();
+        let part_path_owned = part_path.clone();
 
-        let handle = std::thread::spawn(move || -> Result<Vec<u8>, String> {
+        let handle = std::thread::spawn(move || -> Result<PathBuf, String> {
+            if zip_path_owned.exists() {
+                let _ = app_handle.emit(
+                    "stt://download-progress",
+                    serde_json::json!({
+                        "status": "extracting",
+                        "model": model_name_owned,
+                        "progress": 50
+                    }),
+                );
+                return Ok(zip_path_owned);
+            }
+
             let client = reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(3000)) // Timeout total de 3000s
                 .build()
                 .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-            let response = client
-                .get(&url_owned)
+            use std::io::Read;
+            let existing_size = fs::metadata(&part_path_owned)
+                .map(|metadata| metadata.len())
+                .unwrap_or(0);
+            let mut request = client.get(&url_owned);
+            if existing_size > 0 {
+                request = request.header(RANGE, format!("bytes={}-", existing_size));
+            }
+
+            let mut response = request
                 .send()
                 .map_err(|e| format!("Failed to download model from {}: {}", url_owned, e))?;
 
             let status = response.status();
 
-            if !status.is_success() {
+            if !(status.is_success() || status == reqwest::StatusCode::PARTIAL_CONTENT) {
                 return Err(format!(
                     "Failed to download model: HTTP {} - {}",
                     status,
@@ -248,32 +324,68 @@ impl<R: Runtime> Stt<R> {
                 ));
             }
 
-            // Get content length if available
-            let total_size = response.content_length();
+            let resumed = status == reqwest::StatusCode::PARTIAL_CONTENT && existing_size > 0;
+            let mut file = if resumed {
+                println!(
+                    "Resuming model download '{}' from {:.2} MB",
+                    model_name_owned,
+                    existing_size as f64 / 1_048_576.0
+                );
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&part_path_owned)
+                    .map_err(|e| format!("Failed to open partial download: {}", e))?
+            } else {
+                if existing_size > 0 {
+                    println!(
+                        "Server did not accept resume for '{}', restarting download",
+                        model_name_owned
+                    );
+                }
+                File::create(&part_path_owned)
+                    .map_err(|e| format!("Failed to create partial download: {}", e))?
+            };
 
-            // Read bytes in chunks with progress tracking
-            use std::io::Read;
-            let mut reader = response;
-            let mut buffer = Vec::new();
-            let mut downloaded: usize = 0;
+            let total_size = if resumed {
+                response
+                    .headers()
+                    .get(CONTENT_RANGE)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.rsplit('/').next())
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .or_else(|| {
+                        response
+                            .headers()
+                            .get(CONTENT_LENGTH)
+                            .and_then(|value| value.to_str().ok())
+                            .and_then(|value| value.parse::<u64>().ok())
+                            .map(|length| existing_size + length)
+                    })
+            } else {
+                response.content_length()
+            };
+
+            let mut downloaded = if resumed { existing_size } else { 0 };
             let chunk_size = 64 * 1024; // 64KB chunks for better performance
             let mut chunk = vec![0u8; chunk_size];
-            let mut last_progress_mb = 0;
+            let mut last_progress_percent: Option<u8> = None;
 
             loop {
-                match reader.read(&mut chunk) {
+                match response.read(&mut chunk) {
                     Ok(0) => break, // EOF
                     Ok(n) => {
-                        buffer.extend_from_slice(&chunk[..n]);
-                        downloaded += n;
+                        use std::io::Write;
+                        file.write_all(&chunk[..n])
+                            .map_err(|e| format!("Failed to write download chunk: {}", e))?;
+                        downloaded += n as u64;
 
-                        // Show progress every 5MB
-                        let current_mb = downloaded / (5 * 1024 * 1024);
-                        if current_mb > last_progress_mb {
-                            last_progress_mb = current_mb;
-
-                            if let Some(total) = total_size {
-                                let progress = ((downloaded as f64 / total as f64) * 50.0) as u8;
+                        if let Some(total) = total_size {
+                            let progress = ((downloaded as f64 / total as f64) * 50.0)
+                                .floor()
+                                .clamp(0.0, 50.0) as u8;
+                            if last_progress_percent != Some(progress) {
+                                last_progress_percent = Some(progress);
                                 print!(
                                     "\rProgress: {:.2} / {:.2} MB   ",
                                     downloaded as f64 / 1_048_576.0,
@@ -289,10 +401,10 @@ impl<R: Runtime> Stt<R> {
                                         "progress": progress
                                     }),
                                 );
-                            } else {
-                                print!("\rProgress: {:.2} MB   ", downloaded as f64 / 1_048_576.0);
-                                std::io::Write::flush(&mut std::io::stdout()).ok();
                             }
+                        } else {
+                            print!("\rProgress: {:.2} MB   ", downloaded as f64 / 1_048_576.0);
+                            std::io::Write::flush(&mut std::io::stdout()).ok();
                         }
                     }
                     Err(e) => {
@@ -301,6 +413,11 @@ impl<R: Runtime> Stt<R> {
                     }
                 }
             }
+
+            file.sync_all()
+                .map_err(|e| format!("Failed to flush download to disk: {}", e))?;
+            fs::rename(&part_path_owned, &zip_path_owned)
+                .map_err(|e| format!("Failed to finalize cached model zip: {}", e))?;
 
             println!(); // New line after progress bar
             println!(
@@ -318,11 +435,11 @@ impl<R: Runtime> Stt<R> {
                 }),
             );
 
-            Ok(buffer)
+            Ok(zip_path_owned)
         });
 
         // Wait for download to complete
-        let bytes = handle
+        let zip_path = handle
             .join()
             .map_err(|_| crate::Error::Recording("Download thread panicked".to_string()))?
             .map_err(crate::Error::Recording)?;
@@ -330,8 +447,9 @@ impl<R: Runtime> Stt<R> {
         println!("Extracting model...");
 
         // Extract the zip (this is fast enough to do on main thread)
-        let cursor = Cursor::new(bytes);
-        let mut archive = zip::ZipArchive::new(cursor)
+        let zip_file = File::open(&zip_path)
+            .map_err(|e| crate::Error::Recording(format!("Failed to open cached zip: {}", e)))?;
+        let mut archive = zip::ZipArchive::new(zip_file)
             .map_err(|e| crate::Error::Recording(format!("Failed to open zip: {}", e)))?;
 
         for i in 0..archive.len() {
@@ -418,6 +536,15 @@ impl<R: Runtime> Stt<R> {
             .ok_or_else(|| crate::Error::Recording("Failed to load Vosk model".to_string()))?;
 
         let model = Arc::new(model);
+        println!("Loaded STT model '{}' from {:?}", model_name, model_path);
+        let _ = self.app.emit(
+            "stt://download-progress",
+            serde_json::json!({
+                "status": "ready",
+                "model": model_name,
+                "progress": 100
+            }),
+        );
 
         let mut state = self.state.lock().unwrap();
         state.model = Some(model.clone());

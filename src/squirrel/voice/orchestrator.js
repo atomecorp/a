@@ -1,4 +1,9 @@
 import { classifyVoiceIntent, normalizeVoiceIntent } from './intent_schema.js';
+import {
+    normalizeAiProviderError,
+    requestProviderCompletion,
+    resolveFirstAiProviderConfig
+} from '../ai/provider_client.js';
 
 export const VOICE_ORCHESTRATOR_EVENT_NAME = 'squirrel:voice:orchestrator';
 
@@ -51,6 +56,36 @@ const buildPendingConnectorStep = (capability, input = {}) => ({
     input: input && typeof input === 'object' ? { ...input } : {}
 });
 
+const BUSINESS_CONNECTOR_DOMAINS = new Set(['mail', 'calendar', 'contacts', 'bank']);
+
+const wait = (ms = 0) => new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+});
+
+const withSoftTimeout = async (task, {
+    timeoutMs = 0,
+    fallbackValue = null
+} = {}) => {
+    const duration = Number(timeoutMs);
+    if (!Number.isFinite(duration) || duration <= 0) {
+        return task();
+    }
+    return Promise.race([
+        Promise.resolve().then(() => task()),
+        wait(duration).then(() => fallbackValue)
+    ]);
+};
+
+const resolveMailApi = async (env) => {
+    const existing = env?.Squirrel?.mail || env?.atome?.mail || env?.AtomeMail || env?.window?.Squirrel?.mail || env?.window?.atome?.mail || env?.window?.AtomeMail || null;
+    if (existing) return existing;
+    const mod = await import('../mail/bootstrap.js');
+    if (typeof mod?.createGlobalMailApi === 'function') {
+        return mod.createGlobalMailApi({ env });
+    }
+    return null;
+};
+
 const dispatchWindowEvent = (env, name, detail) => {
     if (!env || typeof env.dispatchEvent !== 'function') return;
     if (!name || typeof env.CustomEvent !== 'function') return;
@@ -58,6 +93,195 @@ const dispatchWindowEvent = (env, name, detail) => {
         env.dispatchEvent(new env.CustomEvent(name, { detail }));
     } catch (_) {
         // Ignore non-browser hosts.
+    }
+};
+
+const truncateForAi = (value, maxLength = 600) => {
+    const text = String(value || '').trim().replace(/\s+/g, ' ');
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+};
+
+const normalizeComparableText = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const sanitizeReplyDraftText = (value) => String(value || '')
+    .trim()
+    .replace(/^(?:que\s+|qu['’]\s*)/i, '')
+    .trim();
+
+const collectMailCandidates = (...groups) => {
+    const seen = new Set();
+    const items = [];
+    for (const group of groups) {
+        for (const item of Array.isArray(group) ? group : []) {
+            const messageId = String(item?.message_id || '').trim();
+            if (!messageId || seen.has(messageId)) continue;
+            seen.add(messageId);
+            items.push(item);
+        }
+    }
+    return items;
+};
+
+const findMailByReplyTarget = (items = [], replyTarget = '') => {
+    const normalizedTarget = normalizeComparableText(replyTarget);
+    if (!normalizedTarget) return null;
+    return items.find((item) => {
+        const senderName = normalizeComparableText(item?.from?.name);
+        const senderAddress = normalizeComparableText(item?.from?.address);
+        return (
+            (senderName && (senderName.includes(normalizedTarget) || normalizedTarget.includes(senderName)))
+            || (senderAddress && senderAddress.includes(normalizedTarget))
+        );
+    }) || null;
+};
+
+const buildMailReplyAcknowledgement = ({
+    draft = null,
+    sourceItem = null,
+    locale = 'fr-FR'
+} = {}) => {
+    const english = String(locale || '').toLowerCase().startsWith('en');
+    const recipient = String(
+        sourceItem?.from?.name
+        || sourceItem?.from?.address
+        || draft?.to?.[0]?.name
+        || draft?.to?.[0]?.address
+        || ''
+    ).trim();
+    const bodyText = String(draft?.body_text || '').trim();
+    if (english) {
+        return recipient
+            ? `I prepared a reply to ${recipient}: "${bodyText}". Say "send the mail" to send it.`
+            : `I prepared the reply draft: "${bodyText}". Say "send the mail" to send it.`;
+    }
+    return recipient
+        ? `J'ai prepare une reponse a ${recipient}: "${bodyText}". Dis "envoie le mail" pour l'envoyer.`
+        : `J'ai prepare le brouillon de reponse: "${bodyText}". Dis "envoie le mail" pour l'envoyer.`;
+};
+
+const buildMailSendAcknowledgement = ({
+    locale = 'fr-FR',
+    queued = false,
+    recipient = ''
+} = {}) => {
+    const english = String(locale || '').toLowerCase().startsWith('en');
+    if (english) {
+        if (queued) {
+            return recipient
+                ? `The mail for ${recipient} is queued locally.`
+                : 'The mail is queued locally.';
+        }
+        return recipient
+            ? `The mail has been sent to ${recipient}.`
+            : 'The mail has been sent.';
+    }
+    if (queued) {
+        return recipient
+            ? `Le mail pour ${recipient} est en file d'attente locale.`
+            : "Le mail est en file d'attente locale.";
+    }
+    return recipient
+        ? `Le mail a ete envoye a ${recipient}.`
+        : 'Le mail a ete envoye.';
+};
+
+const buildMailSummaryPrompt = ({
+    items = [],
+    stats = {},
+    locale = 'fr-FR'
+} = {}) => {
+    const english = String(locale || '').toLowerCase().startsWith('en');
+    const payload = items.slice(0, 5).map((item, index) => ({
+        rank: index + 1,
+        subject: String(item?.subject || '').trim() || '(sans objet)',
+        from: String(item?.from?.name || item?.from?.address || '').trim() || '(expediteur inconnu)',
+        unread: item?.unread === true,
+        received_at: item?.received_at || null,
+        preview: truncateForAi(item?.preview || item?.body_text || '', 800),
+        body_text: truncateForAi(item?.body_text || '', 1600)
+    }));
+
+    const instructions = english
+        ? [
+            'You are eVe, summarizing recent emails for a voice reply.',
+            'Use the provided emails only.',
+            'Respond in concise natural English for speech.',
+            'Mention the important senders, topics, and any clear action items.',
+            'If there are no unread emails but there are recent emails, summarize the latest recent emails anyway.',
+            'Do not say "message(s) out of". Do not produce raw counts only.'
+        ]
+        : [
+            'Tu es eVe, tu resumes des emails recents pour une reponse vocale.',
+            'Utilise uniquement les emails fournis.',
+            'Reponds en francais naturel, concis, adapte a l oral.',
+            'Mentionne les expediteurs importants, les sujets, et les actions evidentes si elles existent.',
+            "S'il n'y a aucun mail non lu mais qu'il y a des mails recents, resume quand meme les derniers mails.",
+            'Ne dis pas "message(s) out of". Ne renvoie pas seulement un compteur brut.'
+        ];
+
+    return [
+        instructions.join('\n'),
+        '',
+        `MAIL_STATS:\n${JSON.stringify({
+            total: Number(stats?.total || 0),
+            unread: Number(stats?.unread || 0)
+        }, null, 2)}`,
+        '',
+        `MAIL_ITEMS:\n${JSON.stringify(payload, null, 2)}`
+    ].join('\n');
+};
+
+const createDefaultMailAiSummarizer = ({
+    env = defaultEnv(),
+    fetchImpl = null
+} = {}) => async ({
+    items = [],
+    stats = {},
+    locale = 'fr-FR'
+} = {}) => {
+    const providerConfig = await resolveFirstAiProviderConfig();
+    if (providerConfig?.ok !== true) {
+        return {
+            ok: false,
+            error: String(providerConfig?.error || 'no_ai_key_configured')
+        };
+    }
+    try {
+        const text = await requestProviderCompletion({
+            providerId: providerConfig.providerId,
+            model: providerConfig.model,
+            apiKey: providerConfig.apiKey,
+            systemPrompt: buildMailSummaryPrompt({ items, stats, locale }),
+            prompt: String(locale || '').toLowerCase().startsWith('en')
+                ? 'Summarize these recent emails for the user.'
+                : 'Resume ces derniers emails pour l utilisateur.',
+            ...(typeof fetchImpl === 'function'
+                ? { fetchImpl }
+                : (typeof env?.fetch === 'function' ? { fetchImpl: env.fetch.bind(env) } : {}))
+        });
+        const normalized = String(text || '').trim();
+        if (!normalized) {
+            return { ok: false, error: 'provider_empty_response' };
+        }
+        return {
+            ok: true,
+            text: normalized
+        };
+    } catch (error) {
+        const normalized = normalizeAiProviderError(error);
+        return {
+            ok: false,
+            error: normalized.code,
+            message: normalized.message
+        };
     }
 };
 
@@ -144,6 +368,7 @@ class VoiceOrchestrator {
         env = defaultEnv(),
         bridge = resolveVoiceExecutionBridge(env),
         aiPlanner = null,
+        mailAiSummarizer = null,
         classifyIntent = classifyVoiceIntent,
         sessionRuntime = null,
         now = () => Date.now(),
@@ -152,6 +377,9 @@ class VoiceOrchestrator {
         this.env = env;
         this.bridge = bridge;
         this.aiPlanner = aiPlanner && typeof aiPlanner.planUtterance === 'function' ? aiPlanner : null;
+        this.mailAiSummarizer = typeof mailAiSummarizer === 'function'
+            ? mailAiSummarizer
+            : createDefaultMailAiSummarizer({ env });
         this.classifyIntent = typeof classifyIntent === 'function' ? classifyIntent : classifyVoiceIntent;
         this.sessionRuntime = sessionRuntime && typeof sessionRuntime.getSession === 'function' ? sessionRuntime : null;
         this.now = typeof now === 'function' ? now : (() => Date.now());
@@ -196,20 +424,33 @@ class VoiceOrchestrator {
             refresh: options.refresh_catalog === true
         });
         const planningContext = this.#buildPlanningContext(options.session_id, options.context);
+        const aiFirst = options.use_ai !== false && !!this.aiPlanner;
         const heuristicIntent = this.classifyIntent(utterance, {
             intent_id: options.intent_id,
             locale: options.locale,
             source: options.source,
             context: planningContext,
-            runtime_tools: runtimeTools
+            runtime_tools: runtimeTools,
+            allow_business_heuristics: aiFirst !== true
         });
         const normalizedHeuristic = normalizeVoiceIntent(heuristicIntent);
+        const normalizedFallback = aiFirst === true
+            ? normalizeVoiceIntent(this.classifyIntent(utterance, {
+                intent_id: options.intent_id,
+                locale: options.locale,
+                source: options.source,
+                context: planningContext,
+                runtime_tools: runtimeTools,
+                allow_business_heuristics: true
+            }))
+            : normalizedHeuristic;
         const normalizedIntent = await this.#resolvePlanningIntent(utterance, {
             ...options,
             locale: options.locale,
             context: planningContext,
             runtime_tools: runtimeTools,
-            heuristic_intent: normalizedHeuristic
+            heuristic_intent: normalizedHeuristic,
+            fallback_intent: normalizedFallback
         });
         this.#bindSessionIntent(options.session_id, normalizedIntent, {
             phase: 'planned'
@@ -270,6 +511,17 @@ class VoiceOrchestrator {
 
     async executeIntent(intent, options = {}) {
         const normalizedIntent = normalizeVoiceIntent(intent);
+        const intentCapabilities = Array.isArray(normalizedIntent?.requested_capabilities)
+            ? normalizedIntent.requested_capabilities.map((entry) => String(entry || '').trim()).filter(Boolean)
+            : [];
+        const isMailDraftIntent = normalizedIntent?.domain === 'mail'
+            && (
+                normalizedIntent?.action === 'reply_current'
+                || intentCapabilities.includes('mail_reply_draft')
+            );
+        if (isMailDraftIntent && normalizedIntent.execution?.confirmation_required === true) {
+            normalizedIntent.execution.confirmation_required = false;
+        }
         this.#bindSessionIntent(options.session_id, normalizedIntent, {
             phase: 'executing'
         });
@@ -336,6 +588,11 @@ class VoiceOrchestrator {
         }
 
         if (normalizedIntent.execution.target === 'pending_connector') {
+            const resolved = await this.#executePendingConnector(normalizedIntent, toolchain, options);
+            if (resolved) {
+                this.#pushJournal('voice.intent.executed', resolved);
+                return resolved;
+            }
             const response = {
                 ok: true,
                 executed: false,
@@ -445,10 +702,23 @@ class VoiceOrchestrator {
 
     async #resolvePlanningIntent(utterance, options = {}) {
         const heuristicIntent = normalizeVoiceIntent(options.heuristic_intent);
-        if (heuristicIntent.type === 'local_command' || options.use_ai === false || !this.aiPlanner) {
-            return heuristicIntent;
+        const fallbackIntent = normalizeVoiceIntent(options.fallback_intent || heuristicIntent);
+        if (
+            heuristicIntent.type === 'local_command'
+            || options.use_ai === false
+            || !this.aiPlanner
+        ) {
+            return fallbackIntent;
         }
-        return this.aiPlanner.planUtterance(utterance, {
+
+        const fallbackExecutable = fallbackIntent?.status !== 'ambiguous'
+            && fallbackIntent?.status !== 'failed'
+            && (
+                fallbackIntent?.execution?.target !== 'none'
+                || String(fallbackIntent?.assistant_reply || '').trim().length > 0
+            );
+
+        const plannedIntent = normalizeVoiceIntent(await this.aiPlanner.planUtterance(utterance, {
             intent_id: options.intent_id,
             locale: options.locale,
             source: options.source,
@@ -456,7 +726,42 @@ class VoiceOrchestrator {
             runtime_tools: options.runtime_tools,
             heuristic_intent: heuristicIntent,
             ...(options.signal ? { signal: options.signal } : {})
-        });
+        }));
+
+        const plannedTarget = String(plannedIntent?.execution?.target || 'none').trim();
+        const plannedToolchain = ensureToolchain(plannedIntent);
+        const plannedReply = String(plannedIntent?.assistant_reply || '').trim();
+        const plannerProducedToolIntent = plannedIntent?.status === 'ready'
+            && plannedTarget !== 'none'
+            && plannedToolchain.length > 0;
+        const plannerProducedFreeReply = plannedIntent?.status === 'ready'
+            && plannedTarget === 'none'
+            && plannedReply.length > 0;
+        const businessConnectorFallback = fallbackExecutable
+            && BUSINESS_CONNECTOR_DOMAINS.has(String(fallbackIntent?.domain || '').trim());
+
+        // For business connectors, keep the LLM as the interpreter but execute through the
+        // deterministic connector route when one is available. This prevents the planner from
+        // claiming that a mail was sent while bypassing the real mail transport.
+        if (businessConnectorFallback) {
+            return fallbackIntent;
+        }
+
+        if (plannerProducedToolIntent) {
+            return plannedIntent;
+        }
+
+        // If the planner only produced a conversational placeholder while a concrete
+        // local/business route exists, prefer the executable fallback.
+        if (fallbackExecutable) {
+            return fallbackIntent;
+        }
+
+        if (plannerProducedFreeReply) {
+            return plannedIntent;
+        }
+
+        return plannedIntent;
     }
 
     #bindSessionIntent(sessionId, intent, meta = {}) {
@@ -541,6 +846,428 @@ class VoiceOrchestrator {
             result: { results },
             ...(intent.assistant_reply ? { reply_text: intent.assistant_reply, spoken_reply: intent.assistant_reply } : {})
         };
+    }
+
+    async #executePendingConnector(intent, toolchain, options = {}) {
+        if (intent?.domain !== 'mail') return null;
+        const mail = await resolveMailApi(this.env);
+        if (!mail) return null;
+        let readyResult = null;
+
+        try {
+            if (typeof mail.ensureReady === 'function') {
+                readyResult = await mail.ensureReady({
+                    initial: false,
+                    limit: 20
+                });
+            }
+        } catch (_) {
+            // Keep the rest of the mail fallback path alive.
+        }
+
+        let connectorStatus = null;
+        try {
+            connectorStatus = typeof mail.connectorStatus === 'function' ? mail.connectorStatus() : null;
+            if (connectorStatus?.configured && typeof mail.syncPull === 'function') {
+                const syncTimeoutMs = Number.isFinite(Number(
+                    this.env?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
+                    || this.env?.window?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
+                ))
+                    ? Math.max(0, Number(
+                        this.env?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
+                        || this.env?.window?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
+                    ))
+                    : 2500;
+                const syncResult = await withSoftTimeout(
+                    () => mail.syncPull({ initial: false }),
+                    {
+                        timeoutMs: syncTimeoutMs,
+                        fallbackValue: {
+                            ok: false,
+                            error: 'mail_sync_pull_timeout'
+                        }
+                    }
+                );
+                if (syncResult?.error === 'mail_sync_pull_timeout') {
+                    this.#pushJournal('voice.intent.connector_timeout', {
+                        domain: 'mail',
+                        action: intent?.action || null,
+                        timeout_ms: syncTimeoutMs
+                    });
+                }
+            }
+        } catch (_) {
+            // Ignore sync refresh failures and keep the local index fallback.
+        }
+
+        const capabilities = toolchain
+            .map((step) => String(step?.capability || '').trim())
+            .filter(Boolean);
+
+        const locale = String(intent?.locale || options?.locale || 'fr-FR').toLowerCase();
+        const english = locale.startsWith('en');
+        const buildResponse = (payload = {}) => ({
+            ok: payload.ok !== false,
+            executed: payload.executed !== false,
+            transport: 'mail_api',
+            intent,
+            ...(payload.error ? { error: payload.error } : {}),
+            ...(payload.result ? { result: payload.result } : {}),
+            ...(payload.reply_text ? { reply_text: payload.reply_text, spoken_reply: payload.reply_text } : {})
+        });
+
+        const topList = typeof mail.list === 'function' ? mail.list({ limit: 5 }) : { ok: false, items: [] };
+        const hasIndexedMail = Array.isArray(topList?.items) && topList.items.length > 0;
+        if (!connectorStatus?.configured && !hasIndexedMail) {
+            const readyError = String(readyResult?.error || '').trim();
+            if (
+                readyError === 'icloud_mail_live_smoke_missing_credentials'
+                || readyError === 'icloud_mail_credentials_missing'
+            ) {
+                return buildResponse({
+                    ok: false,
+                    executed: false,
+                    error: readyError,
+                    reply_text: english
+                        ? 'I do not see any iCloud Mail credentials configured on this machine yet.'
+                        : "Je ne trouve pas encore les identifiants iCloud Mail sur cette machine."
+                });
+            }
+            const surfacedError = readyError && readyError !== 'mail_connector_missing' && readyError !== 'mail_remote_sync_unavailable'
+                ? readyError
+                : 'mail_connector_unavailable';
+            return buildResponse({
+                ok: false,
+                executed: false,
+                error: surfacedError,
+                reply_text: english
+                    ? 'I do not have access to your mail here yet.'
+                    : "Je n'ai pas encore acces a tes mails ici."
+            });
+        }
+        const nextUnread = typeof mail.nextUnread === 'function' ? mail.nextUnread({}) : { ok: false, error: 'mail_next_unread_not_found' };
+
+        if (capabilities.includes('mail_next_unread') || intent.action === 'read') {
+            if (nextUnread?.ok === true && nextUnread.item?.message_id && typeof mail.buildReadout === 'function') {
+                const readout = mail.buildReadout(nextUnread.item.message_id, {
+                    mode: 'summary'
+                });
+                if (readout?.ok === true) {
+                    return buildResponse({
+                        result: {
+                            item: nextUnread.item,
+                            readout
+                        },
+                        reply_text: readout.text
+                    });
+                }
+            }
+            const fallback = topList?.items?.[0];
+            if (fallback?.message_id && typeof mail.buildReadout === 'function') {
+                const readout = mail.buildReadout(fallback.message_id, {
+                    mode: 'summary'
+                });
+                if (readout?.ok === true) {
+                    return buildResponse({
+                        result: {
+                            item: fallback,
+                            readout
+                        },
+                        reply_text: readout.text
+                    });
+                }
+            }
+            return buildResponse({
+                ok: false,
+                executed: false,
+                error: 'mail_next_unread_not_found',
+                reply_text: english ? 'I do not see any mail to read right now.' : "Je ne vois pas de mail a lire pour le moment."
+            });
+        }
+
+        if (capabilities.includes('mail_summarize') || intent.action === 'summarize') {
+            const summary = typeof mail.summarize === 'function'
+                ? mail.summarize({
+                    unread_only: true,
+                    limit: 10
+                })
+                : null;
+            if (summary?.ok === true) {
+                const itemsForAi = Array.isArray(summary?.items) && summary.items.length > 0
+                    ? summary.items
+                    : (Array.isArray(topList?.items) ? topList.items : []);
+                if (itemsForAi.length > 0 && typeof this.mailAiSummarizer === 'function') {
+                    const aiSummary = await this.mailAiSummarizer({
+                        items: itemsForAi,
+                        stats: summary?.stats || topList?.stats || null,
+                        locale
+                    });
+                    if (aiSummary?.ok === true && aiSummary?.text) {
+                        return buildResponse({
+                            result: {
+                                ...summary,
+                                ai_summary: aiSummary.text
+                            },
+                            reply_text: aiSummary.text
+                        });
+                    }
+                }
+                return buildResponse({
+                    result: summary,
+                    reply_text: summary.summary
+                });
+            }
+        }
+
+        if (capabilities.includes('mail_list') || intent.action === 'list') {
+            if (topList?.ok === true) {
+                const subjects = (topList.items || [])
+                    .slice(0, 3)
+                    .map((item) => String(item?.subject || '').trim())
+                    .filter(Boolean);
+                const replyText = subjects.length
+                    ? (english
+                        ? `Here are the latest mails: ${subjects.join(', ')}.`
+                        : `Voici les derniers mails: ${subjects.join(', ')}.`)
+                    : (english
+                        ? 'I do not see any mail right now.'
+                        : "Je ne vois pas de mail pour le moment.");
+                return buildResponse({
+                    result: topList,
+                    reply_text: replyText
+                });
+            }
+        }
+
+        if (capabilities.includes('mail_reply_draft')) {
+            const replyStep = toolchain.find((step) => step?.capability === 'mail_reply_draft') || null;
+            const replyTarget = String(
+                replyStep?.input?.reply_target
+                || intent?.entities?.reply_target
+                || ''
+            ).trim();
+            const autoSend = (
+                replyStep?.input?.auto_send === true
+                || intent?.entities?.auto_send === true
+            );
+            const rawDraftText = String(
+                replyStep?.input?.draft_text
+                || intent?.entities?.draft_text
+                || ''
+            ).trim();
+            const draftText = sanitizeReplyDraftText(rawDraftText);
+
+            if (!draftText) {
+                return buildResponse({
+                    ok: false,
+                    executed: false,
+                    error: 'mail_reply_text_missing',
+                    reply_text: english
+                        ? 'What should I reply to this mail?'
+                        : 'Que veux-tu que je reponde a ce mail ?'
+                });
+            }
+
+            const candidates = collectMailCandidates(
+                topList?.items,
+                nextUnread?.ok === true ? [nextUnread.item] : []
+            );
+            const sourceItem = findMailByReplyTarget(candidates, replyTarget)
+                || (nextUnread?.ok === true ? nextUnread.item : null)
+                || candidates[0]
+                || null;
+
+            if (!sourceItem?.message_id || typeof mail.replyDraft !== 'function') {
+                return buildResponse({
+                    ok: false,
+                    executed: false,
+                    error: 'mail_not_found',
+                    reply_text: english
+                        ? 'I do not see which mail to reply to right now.'
+                        : "Je ne vois pas encore a quel mail repondre."
+                });
+            }
+
+            const draftResult = mail.replyDraft(sourceItem.message_id, {
+                reply_text: draftText
+            });
+            if (draftResult?.ok === true && draftResult?.draft) {
+                const boundIntent = {
+                    ...intent,
+                    entities: {
+                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
+                        draft_text: draftText,
+                        auto_send: autoSend,
+                        last_draft_id: draftResult.draft.draft_id,
+                        last_source_message_id: sourceItem.message_id,
+                        ...(replyTarget ? { reply_target: replyTarget } : {})
+                    },
+                    followups: {
+                        send_current: {
+                            intent_id: intent?.intent_id || null,
+                            type: 'connector_tool',
+                            domain: 'mail',
+                            action: 'send',
+                            status: 'pending_connector',
+                            requested_capabilities: ['mail_send'],
+                            entities: {
+                                last_draft_id: draftResult.draft.draft_id
+                            },
+                            execution: {
+                                target: 'pending_connector',
+                                confirmation_required: false,
+                                toolchain: [buildPendingConnectorStep('mail_send', {
+                                    draft_id: draftResult.draft.draft_id
+                                })]
+                            }
+                        }
+                    }
+                };
+                this.#bindSessionIntent(options.session_id, {
+                    ...boundIntent
+                }, {
+                    phase: 'executed',
+                    draft_id: draftResult.draft.draft_id
+                });
+
+                if (autoSend && typeof mail.send === 'function') {
+                    const sendResult = await mail.send(draftResult.draft.draft_id, {
+                        confirmed: true
+                    });
+                    if (sendResult?.ok === true) {
+                        const recipient = String(
+                            sendResult?.draft?.to?.[0]?.name
+                            || sendResult?.draft?.to?.[0]?.address
+                            || sourceItem?.from?.name
+                            || sourceItem?.from?.address
+                            || ''
+                        ).trim();
+                        this.#bindSessionIntent(options.session_id, {
+                            ...boundIntent,
+                            entities: {
+                                ...boundIntent.entities,
+                                last_sent_draft_id: draftResult.draft.draft_id
+                            }
+                        }, {
+                            phase: 'executed',
+                            draft_id: draftResult.draft.draft_id,
+                            sent: true
+                        });
+                        return buildResponse({
+                            result: {
+                                ...sendResult,
+                                source_item: sourceItem
+                            },
+                            reply_text: buildMailSendAcknowledgement({
+                                locale,
+                                queued: sendResult?.queued === true,
+                                recipient
+                            })
+                        });
+                    }
+                    return buildResponse({
+                        ok: false,
+                        executed: false,
+                        error: sendResult?.error || 'mail_send_failed',
+                        result: {
+                            draft: draftResult.draft,
+                            send_result: sendResult,
+                            source_item: sourceItem
+                        },
+                        reply_text: english
+                            ? 'I prepared the reply, but I could not send it.'
+                            : "J'ai prepare la reponse, mais je n'ai pas pu l'envoyer."
+                    });
+                }
+
+                return buildResponse({
+                    result: {
+                        ...draftResult,
+                        source_item: sourceItem
+                    },
+                    reply_text: buildMailReplyAcknowledgement({
+                        draft: draftResult.draft,
+                        sourceItem,
+                        locale
+                    })
+                });
+            }
+            return buildResponse({
+                ok: false,
+                executed: false,
+                error: draftResult?.error || 'mail_reply_draft_failed',
+                result: draftResult || undefined,
+                reply_text: english
+                    ? 'I could not prepare the reply draft for this mail.'
+                    : "Je n'ai pas pu preparer le brouillon de reponse pour ce mail."
+            });
+        }
+
+        if (capabilities.includes('mail_send')) {
+            const sendStep = toolchain.find((step) => step?.capability === 'mail_send') || null;
+            const activeIntent = intent?.context?.active_intent || null;
+            const draftId = String(
+                sendStep?.input?.draft_id
+                || intent?.entities?.last_draft_id
+                || activeIntent?.entities?.last_draft_id
+                || ''
+            ).trim();
+            if (!draftId || typeof mail.send !== 'function') {
+                return buildResponse({
+                    ok: false,
+                    executed: false,
+                    error: 'mail_draft_not_found',
+                    reply_text: english
+                        ? 'I do not have any reply draft ready to send.'
+                        : "Je n'ai pas encore de brouillon pret a envoyer."
+                });
+            }
+            const sendResult = await mail.send(draftId, {
+                confirmed: true
+            });
+            if (sendResult?.ok === true) {
+                const recipient = String(
+                    sendResult?.draft?.to?.[0]?.name
+                    || sendResult?.draft?.to?.[0]?.address
+                    || ''
+                ).trim();
+                this.#bindSessionIntent(options.session_id, {
+                    ...intent,
+                    entities: {
+                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
+                        last_draft_id: draftId,
+                        last_sent_draft_id: draftId
+                    }
+                }, {
+                    phase: 'executed',
+                    draft_id: draftId,
+                    sent: true
+                });
+                return buildResponse({
+                    result: sendResult,
+                    reply_text: buildMailSendAcknowledgement({
+                        locale,
+                        queued: sendResult?.queued === true,
+                        recipient
+                    })
+                });
+            }
+            return buildResponse({
+                ok: false,
+                executed: false,
+                error: sendResult?.error || 'mail_send_failed',
+                result: sendResult || undefined,
+                reply_text: english
+                    ? 'I could not send that mail.'
+                    : "Je n'ai pas pu envoyer ce mail."
+            });
+        }
+
+        if (capabilities.includes('mail_search')) {
+            return null;
+        }
+
+        return null;
     }
 
     #buildContextualFollowupIntent({ sessionId, followup, activeIntent }) {

@@ -39,6 +39,9 @@ const env = {
                 }, 0);
             },
             async stop() {
+                setTimeout(() => {
+                    emit('stateChange', { state: 'idle' });
+                }, 0);
                 return true;
             },
             async onResult(handler) {
@@ -69,7 +72,8 @@ const voice = createVoiceService({
 
 const started = await voice.stt.start({
     lang: 'fr-FR',
-    partial: true
+    partial: true,
+    silenceMs: 5
 });
 
 const final = await started.promise;
@@ -198,5 +202,71 @@ const manualStoppedPromise = manualVoice.stt.stop(manualStarted.session_id);
 const manualStopped = await manualStoppedPromise;
 assert.equal(manualStopped.cancelled, true, 'manual stop should resolve as a cancelled voice turn');
 assert.equal(manualStopped.text, '', 'manual stop should not promote the partial transcript into a final utterance');
+
+resetListeners();
+
+let recoveredStartCalls = 0;
+const recoveryEnv = {
+    __TAURI__: {
+        stt: {
+            async checkPermission() {
+                return {
+                    microphone: 'granted',
+                    speechRecognition: 'granted'
+                };
+            },
+            async start() {
+                recoveredStartCalls += 1;
+                if (recoveredStartCalls === 1) {
+                    throw new Error('Recording error: Already listening');
+                }
+                emit('stateChange', { state: 'listening' });
+                setTimeout(() => {
+                    emit('result', {
+                        transcript: 'Lis mes mails',
+                        isFinal: true,
+                        confidence: 0.88
+                    });
+                }, 0);
+            },
+            async stop() {
+                setTimeout(() => {
+                    emit('stateChange', { state: 'idle' });
+                }, 0);
+                return true;
+            },
+            async onResult(handler) {
+                listeners.result.add(handler);
+                return () => listeners.result.delete(handler);
+            },
+            async onStateChange(handler) {
+                listeners.stateChange.add(handler);
+                return () => listeners.stateChange.delete(handler);
+            },
+            async onError(handler) {
+                listeners.error.add(handler);
+                return () => listeners.error.delete(handler);
+            }
+        }
+    }
+};
+
+const recoveryRuntime = createVoiceSessionRuntime();
+const recoveryVoice = createVoiceService({
+    env: recoveryEnv,
+    sessionRuntime: recoveryRuntime,
+    aiPlanner: { async plan() { return null; } }
+});
+
+const recoveryStarted = await recoveryVoice.stt.start({
+    lang: 'fr-FR',
+    partial: true,
+    silenceMs: 5
+});
+
+const recoveryFinal = await recoveryStarted.promise;
+assert.equal(recoveredStartCalls, 2, 'native Tauri STT should retry once after an already-listening startup failure');
+assert.equal(recoveryFinal.text, 'Lis mes mails', 'native Tauri STT recovery should still resolve with the final transcript');
+assert.equal(recoveryRuntime.getSession(recoveryStarted.session_id).transcript.final, 'Lis mes mails', 'native Tauri STT recovery should finalize the runtime transcript after retry');
 
 console.log('voice_service_tauri_stt: ok');

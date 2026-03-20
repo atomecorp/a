@@ -1552,6 +1552,41 @@ async function fastify_http_register(phone, password, username) {
     }
 }
 
+async function validate_fastify_token({ clearStored = true } = {}) {
+    const token = FastifyAdapter.getToken?.();
+    if (!token) {
+        return { ok: false, reason: 'missing_token' };
+    }
+
+    try {
+        const meResult = await FastifyAdapter.auth.me();
+        if (!(meResult?.ok || meResult?.success)) {
+            throw new Error(meResult?.error || 'fastify_me_failed');
+        }
+
+        if (is_tauri_runtime()) {
+            const tauriMe = await TauriAdapter.auth.me?.();
+            const tauriUserId = tauriMe?.user?.user_id || tauriMe?.user?.id || null;
+            const fastifyUserId = meResult?.user?.user_id || meResult?.user?.id || null;
+            if (tauriUserId && fastifyUserId && String(tauriUserId) !== String(fastifyUserId)) {
+                throw new Error('user_id_mismatch');
+            }
+        }
+
+        return { ok: true, reason: 'token_valid', user: meResult?.user || null };
+    } catch (e) {
+        try { FastifyAdapter.clearToken?.(); } catch { }
+        if (clearStored && is_tauri_runtime()) {
+            try { await clear_stored_fastify_token_in_axum(); } catch { }
+        }
+        return {
+            ok: false,
+            reason: 'token_invalid',
+            error: e?.message || String(e)
+        };
+    }
+}
+
 /**
  * Sync the current Tauri user to Fastify when Fastify becomes available.
  * This ensures users created on Tauri while Fastify was offline get synced.
@@ -1579,8 +1614,10 @@ async function sync_current_user_to_fastify() {
     // Check if we already have a Fastify token (user already synced)
     const existingFastifyToken = FastifyAdapter.getToken?.();
     if (existingFastifyToken) {
-        // Already connected to Fastify - user likely exists there
-        return { synced: false, reason: 'already_has_fastify_token' };
+        const tokenStatus = await validate_fastify_token();
+        if (tokenStatus.ok) {
+            return { synced: false, reason: 'already_has_fastify_token' };
+        }
     }
 
 
@@ -1595,7 +1632,7 @@ async function sync_current_user_to_fastify() {
     if (loginResult.success && loginResult.token) {
         // User exists on Fastify - login succeeded
         FastifyAdapter.setToken?.(loginResult.token);
-        try { await store_fastify_token_in_axum(loginResult.token); } catch { }
+        try { await save_fastify_token_to_axum(loginResult.token); } catch { }
         return { synced: true, reason: 'user_exists_login_succeeded' };
     }
 
@@ -1618,7 +1655,7 @@ async function sync_current_user_to_fastify() {
     const postRegisterLogin = await fastify_http_login(userInfo.phone, cachedCreds.password);
     if (postRegisterLogin.success && postRegisterLogin.token) {
         FastifyAdapter.setToken?.(postRegisterLogin.token);
-        try { await store_fastify_token_in_axum(postRegisterLogin.token); } catch { }
+        try { await save_fastify_token_to_axum(postRegisterLogin.token); } catch { }
         return { synced: true, reason: 'user_synced' };
     }
 
@@ -1637,7 +1674,10 @@ async function ensure_fastify_token() {
     if (!needsFastify) return { ok: false, reason: 'fastify_not_required' };
     if (!is_tauri_runtime()) {
         const existing = FastifyAdapter.getToken?.();
-        if (existing) return { ok: true, reason: 'token_present' };
+        if (existing) {
+            const tokenStatus = await validate_fastify_token({ clearStored: false });
+            if (tokenStatus.ok) return { ok: true, reason: 'token_present' };
+        }
         const cached = load_fastify_login_cache();
         if (cached?.phone && is_any_anonymous_phone(cached.phone)) {
             return { ok: false, reason: 'cached_anonymous' };
@@ -1657,7 +1697,10 @@ async function ensure_fastify_token() {
     }
 
     const existing = FastifyAdapter.getToken?.();
-    if (existing) return { ok: true, reason: 'token_present' };
+    if (existing) {
+        const tokenStatus = await validate_fastify_token();
+        if (tokenStatus.ok) return { ok: true, reason: 'token_present' };
+    }
 
     const now = Date.now();
     if (_lastFastifyAutoLoginAttempt && (now - _lastFastifyAutoLoginAttempt < 15000)) {
@@ -2004,7 +2047,7 @@ async function maybe_sync_atomes(reason = 'auto') {
     const sourceToken = syncPolicy.from === 'tauri' ? TauriAdapter.getToken?.() : FastifyAdapter.getToken?.();
     let targetToken = syncPolicy.to === 'fastify' ? FastifyAdapter.getToken?.() : TauriAdapter.getToken?.();
 
-    if (!targetToken && syncPolicy.to === 'fastify') {
+    if (syncPolicy.to === 'fastify') {
         try { await ensure_fastify_token(); } catch { }
         targetToken = FastifyAdapter.getToken?.();
     }
@@ -2346,12 +2389,13 @@ function start_fastify_connection_polling() {
         // Check if we already have a Fastify token
         const existingToken = FastifyAdapter.getToken?.();
         if (existingToken) {
-            // We have a token - Fastify is connected
-            // But we should still check if there are pending syncs
-            if (_pendingUserSync) {
-                clear_user_sync_pending();
+            const tokenStatus = await validate_fastify_token();
+            if (tokenStatus.ok) {
+                if (_pendingUserSync) {
+                    clear_user_sync_pending();
+                }
+                return;
             }
-            return;
         }
 
         // No Fastify token - check if Fastify is now available
@@ -2420,9 +2464,11 @@ function start_user_sync_polling() {
         if (!_pendingUserSync) return;
         const existingToken = FastifyAdapter.getToken?.();
         if (existingToken) {
-            // Already have token, clear pending flag
-            clear_user_sync_pending();
-            return;
+            const tokenStatus = await validate_fastify_token();
+            if (tokenStatus.ok) {
+                clear_user_sync_pending();
+                return;
+            }
         }
 
         // Check if Fastify is now available

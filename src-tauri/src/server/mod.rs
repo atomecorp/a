@@ -21,6 +21,7 @@ use std::{
     io::{Cursor, Read},
     net::SocketAddr,
     path::{Path, PathBuf},
+    process::Command,
     sync::{Arc, Mutex, OnceLock},
     time::UNIX_EPOCH,
 };
@@ -74,6 +75,20 @@ struct StateCurrentQuery {
     owner_id: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
+}
+
+#[derive(Deserialize, Default)]
+struct MailSyncRequest {
+    initial: Option<bool>,
+    mailbox: Option<String>,
+    limit: Option<i64>,
+    unread_only: Option<bool>,
+}
+
+#[derive(Deserialize, Default)]
+struct MailSendRequest {
+    draft: Option<JsonValue>,
+    confirmed: Option<bool>,
 }
 
 const SERVER_TYPE: &str = "Tauri frontend process";
@@ -726,6 +741,151 @@ async fn fastify_status_handler(State(state): State<AppState>) -> impl IntoRespo
         "port": port
     }))
     .into_response()
+}
+
+async fn eve_mail_sync_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<MailSyncRequest>,
+) -> impl IntoResponse {
+    let project_root = state.project_root.as_ref().clone();
+    let request_payload = json!({
+        "initial": payload.initial.unwrap_or(false),
+        "mailbox": payload.mailbox,
+        "limit": payload.limit.unwrap_or(20),
+        "unread_only": payload.unread_only.unwrap_or(false)
+    })
+    .to_string();
+
+    let task = tokio::task::spawn_blocking(move || {
+        let node_binary = std::env::var("SQUIRREL_NODE_BINARY")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "node".to_string());
+        let script_path = project_root.join("tools").join("axum_mail_sync_bridge.mjs");
+        let output = Command::new(node_binary)
+            .current_dir(&project_root)
+            .arg(script_path)
+            .arg(request_payload)
+            .output();
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                if !stdout.is_empty() {
+                    match serde_json::from_str::<JsonValue>(&stdout) {
+                        Ok(value) => return Ok((output.status.success(), value)),
+                        Err(error) => {
+                            return Err(format!(
+                                "mail_sync_invalid_json:{}:{}",
+                                error,
+                                stdout
+                            ))
+                        }
+                    }
+                }
+                Err(if stderr.is_empty() {
+                    "mail_sync_bridge_no_output".to_string()
+                } else {
+                    stderr
+                })
+            }
+            Err(error) => Err(format!("mail_sync_bridge_spawn_failed:{}", error)),
+        }
+    })
+    .await;
+
+    match task {
+        Ok(Ok((true, value))) => Json(value).into_response(),
+        Ok(Ok((false, value))) => (StatusCode::SERVICE_UNAVAILABLE, Json(value)).into_response(),
+        Ok(Err(error)) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "ok": false,
+                "error": error
+            })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "ok": false,
+                "error": format!("mail_sync_bridge_join_failed:{}", error)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+async fn eve_mail_send_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<MailSendRequest>,
+) -> impl IntoResponse {
+    let project_root = state.project_root.as_ref().clone();
+    let request_payload = json!({
+        "action": "send",
+        "draft": payload.draft.unwrap_or_else(|| json!(null)),
+        "confirmed": payload.confirmed.unwrap_or(true)
+    })
+    .to_string();
+
+    let task = tokio::task::spawn_blocking(move || {
+        let node_binary = std::env::var("SQUIRREL_NODE_BINARY")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "node".to_string());
+        let script_path = project_root.join("tools").join("axum_mail_sync_bridge.mjs");
+        let output = Command::new(node_binary)
+            .current_dir(&project_root)
+            .arg(script_path)
+            .arg(request_payload)
+            .output();
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                if !stdout.is_empty() {
+                    match serde_json::from_str::<JsonValue>(&stdout) {
+                        Ok(value) => return Ok((output.status.success(), value)),
+                        Err(error) => {
+                            return Err(format!(
+                                "mail_send_invalid_json:{}:{}",
+                                error,
+                                stdout
+                            ))
+                        }
+                    }
+                }
+                Err(if stderr.is_empty() {
+                    "mail_send_bridge_no_output".to_string()
+                } else {
+                    stderr
+                })
+            }
+            Err(error) => Err(format!("mail_send_bridge_spawn_failed:{}", error)),
+        }
+    })
+    .await;
+
+    match task {
+        Ok(Ok((true, value))) => Json(value).into_response(),
+        Ok(Ok((false, value))) => (StatusCode::SERVICE_UNAVAILABLE, Json(value)).into_response(),
+        Ok(Err(error)) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "ok": false,
+                "error": error
+            })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "ok": false,
+                "error": format!("mail_send_bridge_join_failed:{}", error)
+            })),
+        )
+            .into_response(),
+    }
 }
 
 /// Debug log handler - receives logs from frontend to survive page reloads
@@ -3199,6 +3359,8 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/debug-log", post(debug_log_handler))
         .route("/api/adole/debug/tables", get(adole_debug_tables_handler))
         .route("/api/db/status", get(db_status_handler))
+        .route("/api/eve/mail/sync", post(eve_mail_sync_handler))
+        .route("/api/eve/mail/send", post(eve_mail_send_handler))
         .route("/api/events/commit", post(events_commit_handler))
         .route("/api/events/commit-batch", post(events_commit_batch_handler))
         .route("/api/events", get(events_list_handler))

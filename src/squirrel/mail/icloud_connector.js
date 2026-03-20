@@ -310,7 +310,7 @@ export const createIcloudMailConnector = ({
             } catch (error) {
                 return createFactoryError(
                     'icloud_imap_initial_failed',
-                    error?.message || 'Unable to fetch the initial iCloud mailbox snapshot',
+                    error?.message || 'Unable to fetch the initial mailbox snapshot',
                     {
                         provider: config.provider,
                         mailbox: request.local_mailbox
@@ -338,7 +338,7 @@ export const createIcloudMailConnector = ({
             } catch (error) {
                 return createFactoryError(
                     'icloud_imap_delta_failed',
-                    error?.message || 'Unable to fetch the incremental iCloud mailbox delta',
+                    error?.message || 'Unable to fetch the incremental mailbox delta',
                     {
                         provider: config.provider,
                         mailbox: request.local_mailbox,
@@ -389,7 +389,7 @@ export const createIcloudMailConnector = ({
             } catch (error) {
                 return createFactoryError(
                     'icloud_smtp_send_failed',
-                    error?.message || 'Unable to deliver the draft through iCloud SMTP',
+                    error?.message || 'Unable to deliver the draft through SMTP',
                     {
                         provider: config.provider,
                         draft_id: normalizeText(draft.draft_id) || null

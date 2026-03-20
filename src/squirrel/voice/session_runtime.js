@@ -57,32 +57,42 @@ const detectLocalCommand = (utterance) => {
     const matchers = [
         {
             command: VOICE_LOCAL_COMMANDS.STOP,
-            aliases: ['stop', 'arrete', 'arret', 'ca suffit', 'suffit', 'stoppe']
+            aliases: ['stop', 'arrete', 'arret', 'ca suffit', 'suffit', 'stoppe'],
+            mode: 'includes'
         },
         {
             command: VOICE_LOCAL_COMMANDS.NEXT,
-            aliases: ['suivant', 'au suivant', 'passe au suivant', 'passe suivant', 'next']
+            aliases: ['suivant', 'au suivant', 'passe au suivant', 'passe suivant', 'next'],
+            mode: 'includes'
         },
         {
             command: VOICE_LOCAL_COMMANDS.PREVIOUS,
-            aliases: ['precedent', 'precedente', 'au precedent', 'passe au precedent', 'retour', 'reviens']
+            aliases: ['precedent', 'precedente', 'au precedent', 'passe au precedent', 'retour', 'reviens'],
+            mode: 'includes'
         },
         {
             command: VOICE_LOCAL_COMMANDS.CANCEL,
-            aliases: ['annule', 'annuler', 'annulation', 'cancel']
+            aliases: ['annule', 'annuler', 'annulation', 'cancel'],
+            mode: 'includes'
         },
         {
             command: VOICE_LOCAL_COMMANDS.SUMMARIZE,
-            aliases: ['resume', 'resumer', 'plus court', 'plus bref', 'fais court']
+            aliases: ['resume', 'resumer', 'plus court', 'plus bref', 'fais court'],
+            mode: 'exact'
         },
         {
             command: VOICE_LOCAL_COMMANDS.REPLY,
-            aliases: ['reponds', 'repond', 'reply']
+            aliases: ['reponds', 'repond', 'reply'],
+            mode: 'exact'
         }
     ];
 
     for (const matcher of matchers) {
-        const alias = matcher.aliases.find((entry) => normalized === entry || normalized.includes(entry));
+        const alias = matcher.aliases.find((entry) => (
+            matcher.mode === 'exact'
+                ? normalized === entry
+                : (normalized === entry || normalized.includes(entry))
+        ));
         if (alias) {
             return {
                 command: matcher.command,

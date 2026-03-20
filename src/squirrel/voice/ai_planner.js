@@ -64,9 +64,12 @@ const buildPlannerPrompt = ({
             'Return JSON only.',
             'Do not use markdown.',
             'Use exactly one execution target for all actions: "atome_ai", "runtime_v2", or "none".',
+            'Choose the best domain and action yourself from the user request.',
             'Use "atome_ai" for business tools such as mail, contacts, calendar, banking, documents, and high-level actions.',
             'Use "runtime_v2" for direct UI manipulation when a runtime tool exists.',
-            'If the request is unclear or purely conversational, use target "none" and actions [].',
+            'If the request is purely conversational, informational, or does not need a tool, use target "none" and actions [].',
+            'Do not answer with progress placeholders like "I am preparing" or "it is coming".',
+            'If a tool is needed to answer, choose the tool. If no tool is needed, give the final answer directly.',
             'Never invent tools.',
             'Never choose another provider or mention fallback.'
         ]
@@ -75,9 +78,12 @@ const buildPlannerPrompt = ({
             'Retourne du JSON uniquement.',
             'Pas de markdown.',
             'Utilise exactement une seule cible d execution pour toutes les actions: "atome_ai", "runtime_v2" ou "none".',
+            "Choisis toi-meme le meilleur domain et la meilleure action a partir de la demande utilisateur.",
             'Utilise "atome_ai" pour les outils metier comme mail, contacts, agenda, banque, documents et actions de haut niveau.',
             'Utilise "runtime_v2" pour la manipulation directe de l interface quand un tool runtime existe.',
-            'Si la demande est floue ou purement conversationnelle, utilise la cible "none" et actions [].',
+            'Si la demande est conversationnelle, informative ou ne necessite aucun outil, utilise la cible "none" et actions [].',
+            'Ne reponds jamais par une promesse vague du type "je prepare", "ca arrive" ou "je m en occupe" sans resultat concret.',
+            'Si un outil est necessaire pour repondre, choisis un outil. Sinon, donne directement la reponse finale.',
             "N invente jamais d outils.",
             "Ne choisis jamais un autre provider et ne parle jamais de fallback."
         ];
@@ -86,8 +92,8 @@ const buildPlannerPrompt = ({
         rules.join('\n'),
         '',
         english
-            ? 'JSON schema: {"reply":"<string>","target":"atome_ai|runtime_v2|none","needs_confirmation":false,"actions":[{"target":"atome_ai","tool_name":"<string>","params":{}},{"target":"runtime_v2","tool_id":"<string>","action":"pointer.click","input":{}}]}'
-            : 'Schema JSON: {"reply":"<string>","target":"atome_ai|runtime_v2|none","needs_confirmation":false,"actions":[{"target":"atome_ai","tool_name":"<string>","params":{}},{"target":"runtime_v2","tool_id":"<string>","action":"pointer.click","input":{}}]}',
+            ? 'JSON schema: {"reply":"<string>","domain":"<string>","action":"<string>","target":"atome_ai|runtime_v2|none","needs_confirmation":false,"actions":[{"target":"atome_ai","tool_name":"<string>","params":{}},{"target":"runtime_v2","tool_id":"<string>","action":"pointer.click","input":{}}]}'
+            : 'Schema JSON: {"reply":"<string>","domain":"<string>","action":"<string>","target":"atome_ai|runtime_v2|none","needs_confirmation":false,"actions":[{"target":"atome_ai","tool_name":"<string>","params":{}},{"target":"runtime_v2","tool_id":"<string>","action":"pointer.click","input":{}}]}',
         '',
         `LOCALE:\n${locale}`,
         '',
@@ -212,13 +218,15 @@ export const createVoiceAiPlanner = ({
                 assistant_reply: toText(parsed?.reply) || '',
                 llm_raw_response: text,
                 type: intentType,
-                domain: options.heuristic_intent?.domain || 'unknown',
-                action: options.heuristic_intent?.action || 'ai_planned',
+                domain: toText(parsed?.domain) || options.heuristic_intent?.domain || 'unknown',
+                action: toText(parsed?.action) || options.heuristic_intent?.action || 'ai_planned',
                 confidence: Number.isFinite(Number(parsed?.confidence)) ? Number(parsed.confidence) : 0.85,
                 status: 'ready',
                 execution: {
                     target: normalizedTarget,
-                    confirmation_required: parsed?.needs_confirmation === true,
+                    confirmation_required: parsed?.needs_confirmation === true
+                        && normalizedTarget !== 'none'
+                        && toolchain.length > 0,
                     toolchain
                 }
             });

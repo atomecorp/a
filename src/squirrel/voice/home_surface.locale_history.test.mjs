@@ -40,6 +40,10 @@ const controller = await mountHomeVoiceSurface({
 const historyBefore = controller.getState().history;
 assert.equal(historyBefore.length, 2, 'home voice surface should restore stored history');
 assert.equal(host.textContent.includes('Hello eVe'), true, 'home voice surface should render stored history entries');
+const renderedEntries = Array.from(host.querySelectorAll('[data-role="eve-voice-history-entry"]'));
+assert.equal(renderedEntries.length >= 2, true, 'home voice surface should expose rendered history entries');
+assert.equal(renderedEntries[0].style.userSelect, 'text', 'home voice surface history should allow text selection');
+assert.equal(renderedEntries[0].style.webkitUserSelect, 'text', 'home voice surface history should allow text selection on WebKit');
 
 setEveLocale('en-US');
 window.document.documentElement.lang = 'en-US';

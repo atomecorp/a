@@ -1536,12 +1536,7 @@ const onRealtime = (eventType, callback) => {
 
 const requestApi = async (backend, payload, options = {}) => {
     const socket = backend === 'tauri' ? tauriApiSocket : fastifyApiSocket;
-
-    const token = backend === 'tauri' ? getTauriToken() : getFastifyToken();
-    const headers = {
-        ...(payload.headers || {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-    };
+    const headers = buildRequestAuthHeaders(backend, payload.headers || {});
 
     const requestPayload = {
         ...payload,
@@ -1549,6 +1544,21 @@ const requestApi = async (backend, payload, options = {}) => {
     };
 
     return socket.request(requestPayload, options);
+};
+
+const buildRequestAuthHeaders = (backend, payloadHeaders = {}) => {
+    const token = backend === 'tauri' ? getTauriToken() : getFastifyToken();
+    const headers = {
+        ...(payloadHeaders || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+    };
+    if (backend === 'tauri') {
+        const userId = getCurrentUserId();
+        if (userId && headers['X-User-Id'] == null && headers['x-user-id'] == null) {
+            headers['X-User-Id'] = String(userId);
+        }
+    }
+    return headers;
 };
 
 const apiRequest = (backend, method, path, body = null, headers = {}) => {
@@ -1860,3 +1870,4 @@ const UnifiedSync = {
 
 export default UnifiedSync;
 export { UnifiedSync };
+export const __UNIFIED_SYNC_TEST_ONLY__ = { buildRequestAuthHeaders };

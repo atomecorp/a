@@ -1,11 +1,106 @@
 import { getEveLocale } from '../../application/eVe/i18n/i18n.js';
 import { mountVoiceMeter } from './voice_meter.js';
+import { createVoiceActivityDetector } from './vad.js';
 
 const HISTORY_STORAGE_KEY = 'eve_voice_history_v1';
 const LEGACY_HISTORY_STORAGE_KEY = 'eve_dilas_voice_history_v1';
 const MAX_HISTORY_ITEMS = 80;
+const DEFAULT_ECHO_COOLDOWN_MS = 1200;
+const DEFAULT_BARGE_ARM_DELAY_MS = 700;
+const LOW_INFORMATION_TOKENS = new Set([
+    'tout',
+    'tous',
+    'toutes',
+    'oui',
+    'non',
+    'mais',
+    'bon',
+    'alors',
+    'donc',
+    'ok',
+    'hum',
+    'hein'
+]);
+const AFFIRMATIVE_TOKENS = new Set([
+    'oui',
+    'ouais',
+    'ok',
+    'okay',
+    'd accord',
+    'dac',
+    'vas y',
+    'continue',
+    'continuer'
+]);
+const NEGATIVE_TOKENS = new Set([
+    'non',
+    'nan',
+    'no',
+    'stop',
+    'annule',
+    'annuler',
+    'laisse tomber',
+    'pas maintenant'
+]);
 
 const toText = (value) => String(value || '').trim();
+
+const normalizeComparisonText = (value = '') => toText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isLikelyAssistantEcho = ({
+    heard = '',
+    assistant = '',
+    now = Date.now(),
+    spokenAt = 0,
+    cooldownMs = DEFAULT_ECHO_COOLDOWN_MS
+} = {}) => {
+    const heardText = normalizeComparisonText(heard);
+    const assistantText = normalizeComparisonText(assistant);
+    if (!heardText || !assistantText) return false;
+    if (now - Number(spokenAt || 0) > cooldownMs) return false;
+    if (heardText.length < 4) return false;
+    return heardText === assistantText || assistantText.includes(heardText) || heardText.includes(assistantText);
+};
+
+const isTranscriptActionable = (value = '') => {
+    const normalized = normalizeComparisonText(value);
+    if (!normalized) return false;
+    const words = normalized.split(' ').filter(Boolean);
+    if (words.length >= 2) return true;
+    const [first = ''] = words;
+    if (!first) return false;
+    if (LOW_INFORMATION_TOKENS.has(first)) return false;
+    if ([
+        'mail', 'mails', 'agenda', 'calendrier', 'contact', 'contacts', 'compte', 'projet',
+        'ouvre', 'ouvre', 'lis', 'ajoute', 'cree', 'supprime', 'stop', 'annule', 'suivant',
+        'precedent', 'reponds', 'resume'
+    ].some((token) => normalized.includes(token))) {
+        return true;
+    }
+    return first.length >= 6;
+};
+
+const mergeTranscriptFragments = (prefix = '', next = '') => {
+    const left = toText(prefix);
+    const right = toText(next);
+    if (!left) return right;
+    if (!right) return left;
+    const normalizedLeft = normalizeComparisonText(left);
+    const normalizedRight = normalizeComparisonText(right);
+    if (normalizedLeft && normalizedLeft === normalizedRight) return right;
+    if (normalizedLeft && normalizedRight && normalizedRight.startsWith(normalizedLeft)) return right;
+    return `${left} ${right}`.trim();
+};
+
+const isAffirmativeDecision = (value = '') => AFFIRMATIVE_TOKENS.has(normalizeComparisonText(value));
+
+const isNegativeDecision = (value = '') => NEGATIVE_TOKENS.has(normalizeComparisonText(value));
 
 const toDebugPayload = (value) => {
     try {
@@ -46,8 +141,13 @@ const localizeVoiceError = (code = '', locale = 'fr-FR') => {
     case 'voice_stt_backend_unavailable':
     case 'browser_speech_recognition_unavailable':
         return english
-            ? 'Voice recognition is unavailable in this environment.'
-            : 'La reconnaissance vocale est indisponible dans cet environnement.';
+            ? 'Voice recognition is unavailable here. Do you want to continue by typing?'
+            : 'La reconnaissance vocale est indisponible ici. Veux-tu continuer par ecrit ?';
+    case 'browser_speech_permission_check_failed':
+    case 'browser_speech_service_not_allowed':
+        return english
+            ? 'Voice recognition permission checks failed here. Do you want to continue by typing?'
+            : 'La verification du service vocal a echoue ici. Veux-tu continuer par ecrit ?';
     case 'microphone_unavailable':
         return english
             ? 'Microphone access is unavailable.'
@@ -62,8 +162,8 @@ const localizeVoiceError = (code = '', locale = 'fr-FR') => {
             : 'Le moteur vocal est indisponible.';
     default:
         return english
-            ? 'Voice input is unavailable right now.'
-            : 'L entree vocale est indisponible pour le moment.';
+            ? 'Voice input is unavailable right now. Do you want to continue by typing?'
+            : 'L entree vocale est indisponible pour le moment. Veux-tu continuer par ecrit ?';
     }
 };
 
@@ -80,10 +180,18 @@ const localizeExecutionError = (code = '', locale = 'fr-FR') => {
     case 'voice_execution_bridge_unavailable':
     case 'voice_toolchain_empty':
         return english ? 'The AI is not responding.' : "L'IA ne repond pas.";
+    case 'mail_connector_unavailable':
+        return english ? 'I do not have access to your mail here yet.' : "Je n'ai pas encore acces a tes mails ici.";
     default:
         return '';
     }
 };
+
+const localizeFragmentPrompt = (locale = 'fr-FR') => (
+    isEnglish(locale)
+        ? 'I only heard part of the sentence. Continue.'
+        : "Je n'ai entendu qu'un fragment. Continue."
+);
 
 const localizeDownloadProgress = ({ status = 'downloading', model = '', progress = null } = {}, locale = 'fr-FR') => {
     const english = isEnglish(locale);
@@ -106,10 +214,56 @@ const classifyVoiceError = (error) => {
     if (raw === 'microphone_unavailable') return raw;
     if (raw === 'audio_context_unavailable') return raw;
     if (raw === 'voice_api_unavailable') return raw;
+    if (/Speech recognition service permission check has failed/i.test(raw)) return 'browser_speech_permission_check_failed';
+    if (/service-not-allowed|not-allowed/i.test(raw)) return 'browser_speech_service_not_allowed';
     if (/Voice stt backend is not available/i.test(raw)) return 'voice_stt_backend_unavailable';
     if (/Browser speech recognition is not available/i.test(raw)) return 'browser_speech_recognition_unavailable';
     return raw;
 };
+
+const resolveUserFirstName = (env) => {
+    const raw = toText(env?.__currentUser?.name || env?.window?.__currentUser?.name || '');
+    if (!raw) return '';
+    return raw.split(/\s+/).filter(Boolean)[0] || '';
+};
+
+const localizeReadyLine = (locale = 'fr-FR', userName = '') => {
+    if (isEnglish(locale)) {
+        return userName ? `Hi ${userName}, I'm listening.` : 'Hi, what do you want?';
+    }
+    return userName ? `Salut ${userName}, je t ecoute.` : 'Salut, que veux-tu ?';
+};
+
+const localizeClosingLine = (locale = 'fr-FR') => (
+    isEnglish(locale)
+        ? "I'm heading out. Call me if you need me."
+        : "Je m'en vais, rappelle-moi si tu as besoin."
+);
+
+const localizeTextOnlyReadyLine = (locale = 'fr-FR', userName = '') => {
+    if (isEnglish(locale)) {
+        return userName ? `Hi ${userName}, type what you want and I will answer out loud.` : 'Hi, type what you want and I will answer out loud.';
+    }
+    return userName ? `Salut ${userName}, ecris-moi ce que tu veux et je te repondrai a voix haute.` : 'Salut, ecris-moi ce que tu veux et je te repondrai a voix haute.';
+};
+
+const localizeTextOnlyInfo = (locale = 'fr-FR') => (
+    isEnglish(locale)
+        ? 'Text mode only. Type your request below.'
+        : 'Mode texte uniquement. Ecris ta demande ci-dessous.'
+);
+
+const localizeDeclineLine = (locale = 'fr-FR') => (
+    isEnglish(locale)
+        ? "Okay, I will stop here."
+        : "D'accord, j'en reste la."
+);
+
+const localizeNoResultLine = (locale = 'fr-FR') => (
+    isEnglish(locale)
+        ? 'I could not produce a usable answer for that request yet.'
+        : "Je n'ai pas encore pu produire une reponse exploitable pour cette demande."
+);
 
 const createElement = (doc, tag, style = {}, attrs = {}) => {
     const node = doc.createElement(tag);
@@ -163,7 +317,12 @@ const createLabels = (locale) => ({
 });
 
 const readAssistantText = (response = {}, locale = 'fr-FR') => {
-    const direct = toText(response?.reply_text || response?.spoken_reply || response?.assistant_reply);
+    const direct = toText(
+        response?.reply_text
+        || response?.spoken_reply
+        || response?.assistant_reply
+        || response?.confirmation_prompt
+    );
     if (direct) return direct;
 
     const results = response?.result?.results;
@@ -187,12 +346,18 @@ export const mountHomeVoiceSurface = async ({
     env = globalThis,
     host,
     voiceApi = null,
-    voiceMeterFactory = mountVoiceMeter
+    voiceMeterFactory = mountVoiceMeter,
+    textOnly = false
 } = {}) => {
     if (!env?.document || !host) return null;
     if (host.__eveHomeVoiceSurfaceController) return host.__eveHomeVoiceSurfaceController;
 
     const api = resolveVoiceApi(env, voiceApi);
+    debugVoice('surface_mount', {
+        hasApi: !!api,
+        hasEnsureReady: typeof api?.ensureReady === 'function',
+        hasSubscribe: typeof api?.subscribe === 'function'
+    });
     const doc = env.document;
     const state = {
         api,
@@ -208,11 +373,60 @@ export const mountHomeVoiceSurface = async ({
         unsubscribe: () => {},
         listeningPromise: null,
         voiceMeter: null,
-        meterRunning: false
+        meterRunning: false,
+        suppressAutoRestartOnce: false,
+        lastAssistantReply: '',
+        lastAssistantSpokenAt: 0,
+        restartTimer: null,
+        bargeInDetector: null,
+        bargeInPending: false,
+        bargeInArmAt: 0,
+        pendingTranscriptPrefix: '',
+        lastFailureNotice: '',
+        activationPromise: null
     };
 
     const locale = () => resolveLocale();
     const labels = () => createLabels(locale());
+    const echoCooldownMs = Number.isFinite(Number(env?.__EVE_VOICE_ECHO_COOLDOWN_MS))
+        ? Math.max(0, Number(env.__EVE_VOICE_ECHO_COOLDOWN_MS))
+        : DEFAULT_ECHO_COOLDOWN_MS;
+    const bargeArmDelayMs = Number.isFinite(Number(env?.__EVE_VOICE_BARGE_ARM_DELAY_MS))
+        ? Math.max(0, Number(env.__EVE_VOICE_BARGE_ARM_DELAY_MS))
+        : DEFAULT_BARGE_ARM_DELAY_MS;
+
+    const resetBargeInDetector = () => {
+        state.bargeInPending = false;
+        state.bargeInArmAt = 0;
+        state.bargeInDetector?.reset?.();
+    };
+
+    const handleBargeInDetected = async () => {
+        if (state.bargeInPending || !state.active || !state.speaking || !state.sessionId) return;
+        state.bargeInPending = true;
+        debugVoice('barge_in_detected', {
+            sessionId: state.sessionId
+        });
+        clearRestartTimer();
+        try {
+            if (state.api?.stopSpeaking) {
+                await state.api.stopSpeaking(state.sessionId, { reason: 'eve_voice_barge_in' });
+            }
+        } catch (_) {
+            // Ignore stop failures and continue toward a fresh listen cycle.
+        } finally {
+            state.speaking = false;
+            updateControls();
+            resetBargeInDetector();
+            if (state.active && !state.listening && !state.processing) {
+                const timer = env.setTimeout?.(() => {
+                    state.restartTimer = null;
+                    void startListeningLoop();
+                }, 80) || null;
+                state.restartTimer = timer;
+            }
+        }
+    };
 
     const root = createElement(doc, 'section', {
         display: 'flex',
@@ -362,6 +576,63 @@ export const mountHomeVoiceSurface = async ({
 
     const persistHistory = () => saveHistory(env, state.history);
 
+    const clearRestartTimer = () => {
+        if (state.restartTimer) {
+            env.clearTimeout?.(state.restartTimer);
+            state.restartTimer = null;
+        }
+    };
+
+    const rememberAssistantReply = (text = '', spokenAt = 0) => {
+        const normalized = toText(text);
+        if (!normalized) return;
+        state.lastAssistantReply = normalized;
+        state.lastAssistantSpokenAt = spokenAt;
+    };
+
+    const speakAssistantLine = async (text, {
+        pushHistoryEntry = true,
+        rememberReply = false
+    } = {}) => {
+        const normalized = toText(text);
+        if (!normalized) return false;
+        debugVoice('assistant_text', normalized);
+        if (pushHistoryEntry) {
+            pushEntry('assistant', normalized);
+        }
+        if (rememberReply) {
+            rememberAssistantReply(normalized, 0);
+        }
+        if (!state.api?.speak) return false;
+        await ensureSession();
+        try {
+            const started = await state.api.speak(normalized, {
+                session_id: state.sessionId,
+                lang: locale()
+            });
+            await (started?.promise || Promise.resolve(started));
+            if (rememberReply) {
+                rememberAssistantReply(normalized, Date.now());
+            }
+            return true;
+        } catch (_) {
+            return false;
+        }
+    };
+
+    const announceListenFailure = async (error) => {
+        const code = classifyVoiceError(error);
+        setError(code);
+        const failureNotice = localizeVoiceError(code, locale());
+        if (!failureNotice || state.lastFailureNotice === failureNotice) return;
+        state.lastFailureNotice = failureNotice;
+        pushEntry('assistant', failureNotice);
+        await speakAssistantLine(failureNotice, {
+            pushHistoryEntry: false,
+            rememberReply: false
+        });
+    };
+
     const setStatus = (value) => {
         status.textContent = value;
     };
@@ -424,9 +695,14 @@ export const mountHomeVoiceSurface = async ({
                 border: isUser ? 'none' : '1px solid rgba(255,255,255,0.08)',
                 whiteSpace: 'pre-wrap',
                 lineHeight: '1.4',
-                fontSize: '12px'
+                fontSize: '12px',
+                cursor: 'text',
+                userSelect: 'text',
+                webkitUserSelect: 'text',
+                pointerEvents: 'auto'
             }, {
-                text: toText(entry.text)
+                text: toText(entry.text),
+                'data-role': 'eve-voice-history-entry'
             });
             bubble.append(meta, body);
             history.appendChild(bubble);
@@ -440,8 +716,20 @@ export const mountHomeVoiceSurface = async ({
         input.setAttribute('placeholder', activeLabels.placeholder);
         sendButton.textContent = activeLabels.send;
 
-        actionButton.style.display = state.active ? 'inline-flex' : 'none';
-        if (state.listening || state.processing || state.speaking) {
+        actionButton.style.display = (textOnly ? state.speaking : state.active) ? 'inline-flex' : 'none';
+        actionButton.disabled = false;
+        actionButton.style.opacity = '1';
+        actionButton.style.cursor = 'pointer';
+
+        if (textOnly && !state.speaking) {
+            actionButton.style.display = 'none';
+        } else if (state.processing && !state.listening && !state.speaking) {
+            actionButton.textContent = activeLabels.thinking;
+            actionButton.style.background = 'rgba(255,255,255,0.08)';
+            actionButton.disabled = true;
+            actionButton.style.opacity = '0.72';
+            actionButton.style.cursor = 'default';
+        } else if (state.listening || state.speaking) {
             actionButton.textContent = activeLabels.stop;
             actionButton.style.background = 'linear-gradient(135deg, #b91c1c, #dc2626)';
         } else {
@@ -469,13 +757,33 @@ export const mountHomeVoiceSurface = async ({
     };
 
     const startVoiceMeter = async () => {
+        if (textOnly) return;
         if (!state.voiceMeter && typeof voiceMeterFactory === 'function') {
             state.voiceMeter = voiceMeterFactory({
                 env,
-                canvas: meterCanvas
+                canvas: meterCanvas,
+                onFrame: (frame) => {
+                    if (!state.bargeInDetector) return;
+                    if (!state.active || !state.speaking || state.listening || state.processing) {
+                        state.bargeInDetector.reset();
+                        return;
+                    }
+                    if (Date.now() < state.bargeInArmAt) return;
+                    const next = state.bargeInDetector.push(frame);
+                    if (next?.state === 'speech') {
+                        void handleBargeInDetected();
+                    }
+                }
             });
         }
         if (!state.voiceMeter?.start || state.meterRunning) return;
+        if (!state.bargeInDetector) {
+            state.bargeInDetector = createVoiceActivityDetector({
+                threshold: 0.08,
+                minSpeechFrames: 4,
+                releaseFrames: 5
+            });
+        }
         try {
             await state.voiceMeter.start();
             state.meterRunning = true;
@@ -487,6 +795,7 @@ export const mountHomeVoiceSurface = async ({
     };
 
     const stopVoiceMeter = async () => {
+        if (textOnly) return;
         if (!state.voiceMeter?.stop) return;
         try {
             await state.voiceMeter.stop();
@@ -510,6 +819,42 @@ export const mountHomeVoiceSurface = async ({
         renderHistory();
     };
 
+    const logExecutionResponse = (response = {}, debugEvent = 'execute_utterance:response') => {
+        debugVoice(debugEvent, {
+            sessionId: state.sessionId,
+            ok: response?.ok === true,
+            executed: response?.executed === true,
+            error: response?.error || null,
+            reply_text: toText(response?.reply_text || response?.spoken_reply || response?.confirmation_prompt || '')
+        });
+    };
+
+    const applyExecutionResponse = async (response = {}, debugEvent = 'execute_utterance:response') => {
+        logExecutionResponse(response, debugEvent);
+        const directAssistantText = toText(
+            response?.reply_text
+            || response?.spoken_reply
+            || response?.assistant_reply
+            || response?.confirmation_prompt
+        );
+        const assistantText = directAssistantText
+            || readAssistantText(response, locale())
+            || localizeExecutionError(response?.error, locale());
+        if (assistantText) {
+            debugVoice('assistant_text', assistantText);
+            pushEntry('assistant', assistantText);
+            rememberAssistantReply(assistantText, Date.now());
+            if (!directAssistantText) {
+                await speakAssistantLine(assistantText, {
+                    pushHistoryEntry: false,
+                    rememberReply: true
+                });
+            }
+        }
+        setInfo('');
+        return assistantText;
+    };
+
     const ensureSession = async () => {
         if (state.sessionId) return state.sessionId;
         if (!state.api || typeof state.api.ensureReady !== 'function') {
@@ -528,12 +873,121 @@ export const mountHomeVoiceSurface = async ({
         return state.sessionId;
     };
 
+    const getSessionSnapshot = async () => {
+        if (!state.sessionId || typeof state.api?.getSession !== 'function') return null;
+        try {
+            return await state.api.getSession(state.sessionId);
+        } catch (_) {
+            return null;
+        }
+    };
+
+    const clearConfirmationContext = (activeIntent = null) => {
+        if (!activeIntent || typeof state.api?.runtime?.bindIntentContext !== 'function' || !state.sessionId) return;
+        try {
+            state.api.runtime.bindIntentContext(state.sessionId, {
+                ...activeIntent,
+                execution: {
+                    ...(activeIntent.execution && typeof activeIntent.execution === 'object' ? activeIntent.execution : {}),
+                    confirmation_required: false
+                }
+            }, {
+                phase: 'confirmation_declined'
+            });
+        } catch (_) {
+            // Ignore stale session context updates.
+        }
+    };
+
+    const finishTurnAndMaybeRestart = () => {
+        state.processing = false;
+        updateControls();
+        if (state.active) {
+            const delay = state.lastAssistantReply ? echoCooldownMs : 0;
+            const timer = env.setTimeout?.(() => {
+                state.restartTimer = null;
+                void startListeningLoop();
+            }, delay) || null;
+            state.restartTimer = timer;
+        }
+    };
+
+    const handleDecisionUtterance = async (text) => {
+        const normalized = toText(text);
+        const affirmative = isAffirmativeDecision(normalized);
+        const negative = isNegativeDecision(normalized);
+        if (!affirmative && !negative) return false;
+
+        const snapshot = await getSessionSnapshot();
+        const pendingFollowup = toText(snapshot?.conversation?.pending_followup);
+        const resumeAvailable = snapshot?.conversation?.resume_available === true;
+        const activeIntent = snapshot?.conversation?.active_intent || null;
+        const confirmationRequired = activeIntent?.execution?.confirmation_required === true;
+        if (!pendingFollowup && !resumeAvailable && !confirmationRequired) return false;
+
+        clearRestartTimer();
+        state.pendingTranscriptPrefix = '';
+        pushEntry('user', normalized);
+        state.processing = true;
+        state.transcriptDraft = '';
+        renderTranscript();
+        updateControls();
+
+        try {
+            let response = null;
+            if (affirmative) {
+                if ((pendingFollowup || resumeAvailable) && typeof state.api?.executeFollowup === 'function') {
+                    response = await state.api.executeFollowup(state.sessionId, {
+                        locale: locale()
+                    });
+                }
+                if (!response && confirmationRequired && typeof state.api?.executeIntent === 'function') {
+                    response = await state.api.executeIntent(activeIntent, {
+                        session_id: state.sessionId,
+                        locale: locale(),
+                        confirmed: true
+                    });
+                }
+            } else {
+                if ((pendingFollowup || resumeAvailable) && typeof state.api?.takePendingFollowup === 'function') {
+                    state.api.takePendingFollowup(state.sessionId, {
+                        nextPhase: 'completed',
+                        allowResume: false
+                    });
+                }
+                if (confirmationRequired) {
+                    clearConfirmationContext(activeIntent);
+                }
+                response = {
+                    ok: true,
+                    executed: false,
+                    transport: 'none',
+                    reply_text: localizeDeclineLine(locale())
+                };
+            }
+
+            if (response) {
+                await applyExecutionResponse(response, 'execute_followup:response');
+            }
+        } catch (_) {
+            const fallback = isEnglish(locale()) ? 'The AI is not responding.' : "L'IA ne repond pas.";
+            pushEntry('assistant', fallback);
+            rememberAssistantReply(fallback, Date.now());
+        } finally {
+            finishTurnAndMaybeRestart();
+        }
+        return true;
+    };
+
     const startListeningLoop = async () => {
+        if (textOnly) return;
+        clearRestartTimer();
         if (!state.active || state.listening || state.processing || state.speaking) return;
         const sessionId = await ensureSession();
         debugVoice('start_listening', { sessionId, locale: locale() });
         state.listening = true;
         state.transcriptDraft = '';
+        state.lastFailureNotice = '';
         setError('');
         setInfo('');
         renderTranscript();
@@ -542,25 +996,66 @@ export const mountHomeVoiceSurface = async ({
             const started = await state.api.startListening({
                 session_id: sessionId,
                 lang: locale(),
-                partial: true
+                partial: true,
+                continuous: true,
+                silenceMs: 900,
+                finalSilenceMs: 320,
+                maxAlternatives: 3
             });
             state.listeningPromise = started?.promise || Promise.resolve(null);
             const result = await state.listeningPromise;
             state.listening = false;
             updateControls();
             const text = toText(result?.text);
+            const mergedText = mergeTranscriptFragments(state.pendingTranscriptPrefix, text);
             debugVoice('listen_resolved', {
                 sessionId,
-                text,
+                text: mergedText || text,
                 cancelled: result?.cancelled === true,
                 reason: result?.reason || null
             });
             state.transcriptDraft = '';
             renderTranscript();
-            if (text) {
-                await runUtterance(text);
+            if (isLikelyAssistantEcho({
+                heard: mergedText || text,
+                assistant: state.lastAssistantReply,
+                spokenAt: state.lastAssistantSpokenAt,
+                cooldownMs: echoCooldownMs
+            })) {
+                debugVoice('listen_echo_ignored', {
+                    sessionId,
+                    text: mergedText || text
+                });
+                if (state.active) {
+                    const timer = env.setTimeout?.(() => {
+                        state.restartTimer = null;
+                        void startListeningLoop();
+                    }, echoCooldownMs) || null;
+                    state.restartTimer = timer;
+                }
+            } else if (await handleDecisionUtterance(mergedText)) {
+                return;
+            } else if (mergedText && !isTranscriptActionable(mergedText)) {
+                state.pendingTranscriptPrefix = mergedText;
+                setInfo(localizeFragmentPrompt(locale()));
+                if (state.active) {
+                    const timer = env.setTimeout?.(() => {
+                        state.restartTimer = null;
+                        void startListeningLoop();
+                    }, 0) || null;
+                    state.restartTimer = timer;
+                }
+            } else if (mergedText) {
+                state.pendingTranscriptPrefix = '';
+                await runUtterance(mergedText);
+            } else if (state.suppressAutoRestartOnce) {
+                state.suppressAutoRestartOnce = false;
             } else if (state.active) {
-                void startListeningLoop();
+                const timer = env.setTimeout?.(() => {
+                    state.restartTimer = null;
+                    void startListeningLoop();
+                }, 0) || null;
+                state.restartTimer = timer;
             }
         } catch (error) {
             debugVoice('listen_failed', {
@@ -569,8 +1064,9 @@ export const mountHomeVoiceSurface = async ({
             });
             state.listening = false;
             state.transcriptDraft = '';
-            setError(classifyVoiceError(error));
+            clearRestartTimer();
             renderTranscript();
+            await announceListenFailure(error);
             updateControls();
         }
     };
@@ -590,6 +1086,9 @@ export const mountHomeVoiceSurface = async ({
     const runUtterance = async (text) => {
         const normalized = toText(text);
         if (!normalized) return;
+        clearRestartTimer();
+        state.pendingTranscriptPrefix = '';
+        state.lastFailureNotice = '';
         await ensureSession();
         debugVoice('execute_utterance:start', {
             sessionId: state.sessionId,
@@ -607,43 +1106,53 @@ export const mountHomeVoiceSurface = async ({
                 session_id: state.sessionId,
                 locale: locale()
             });
-            debugVoice('execute_utterance:response', {
-                sessionId: state.sessionId,
-                ok: response?.ok === true,
-                executed: response?.executed === true,
-                error: response?.error || null,
-                reply_text: toText(response?.reply_text || response?.spoken_reply || '')
-            });
-            const assistantText = readAssistantText(response, locale())
-                || localizeExecutionError(response?.error, locale());
-            if (assistantText) {
-                pushEntry('assistant', assistantText);
+            const assistantText = await applyExecutionResponse(response, 'execute_utterance:response');
+            if (!assistantText) {
+                await speakAssistantLine(localizeNoResultLine(locale()), {
+                    pushHistoryEntry: true,
+                    rememberReply: true
+                });
             }
-            setInfo('');
         } catch (_) {
             debugVoice('execute_utterance:failed', {
                 sessionId: state.sessionId
             });
             const fallback = isEnglish(locale()) ? 'The AI is not responding.' : "L'IA ne repond pas.";
             pushEntry('assistant', fallback);
+            rememberAssistantReply(fallback, Date.now());
         } finally {
-            state.processing = false;
-            updateControls();
-            if (state.active) {
-                void startListeningLoop();
-            }
+            finishTurnAndMaybeRestart();
         }
     };
 
     const bindRuntime = async () => {
-        if (!state.api || typeof state.api.ensureReady !== 'function') return;
+        if (!state.api || typeof state.api.ensureReady !== 'function') {
+            debugVoice('runtime_bind_skipped', {
+                hasApi: !!state.api,
+                hasEnsureReady: typeof state.api?.ensureReady === 'function'
+            });
+            return;
+        }
+        debugVoice('runtime_bind_start');
         const ready = await state.api.ensureReady();
         const providers = ready?.providers || state.api.providers;
-        if (providers?.stt?.selected === 'unsupported') {
+        debugVoice('runtime_ready', {
+            stt: providers?.stt?.selected || null,
+            tts: providers?.tts?.selected || null,
+            capture: providers?.capture?.selected || null
+        });
+        if (textOnly) {
+            setInfo(localizeTextOnlyInfo(locale()));
+            updateControls();
+        } else if (providers?.stt?.selected === 'unsupported') {
             setError('unsupported_stt');
             updateControls();
         }
-        if (typeof state.api.subscribe !== 'function') return;
+        if (typeof state.api.subscribe !== 'function') {
+            debugVoice('runtime_subscribe_unavailable');
+            return;
+        }
+        debugVoice('runtime_subscribe_attached');
         state.unsubscribe = state.api.subscribe((event) => {
             if (state.sessionId && event.session_id !== state.sessionId) return;
             if (!state.sessionId && event.session_id) {
@@ -674,8 +1183,14 @@ export const mountHomeVoiceSurface = async ({
                     state: next
                 });
                 state.speaking = next === 'speaking';
+                if (next === 'speaking') {
+                    state.bargeInArmAt = Date.now() + bargeArmDelayMs;
+                    state.bargeInPending = false;
+                    state.bargeInDetector?.reset?.();
+                }
                 if (next === 'done' || next === 'interrupted') {
                     state.speaking = false;
+                    resetBargeInDetector();
                 }
                 updateControls();
             }
@@ -699,6 +1214,7 @@ export const mountHomeVoiceSurface = async ({
                 state.listening = false;
                 state.speaking = false;
                 state.processing = false;
+                resetBargeInDetector();
                 updateControls();
             }
         });
@@ -708,21 +1224,30 @@ export const mountHomeVoiceSurface = async ({
         if (!state.active) {
             state.active = true;
         }
-        if (state.listening) {
-            await stopListeningLoop();
+        if (textOnly) {
+            if (state.speaking && state.sessionId && state.api?.stopSpeaking) {
+                try {
+                    await state.api.stopSpeaking(state.sessionId, { reason: 'eve_panel_stop' });
+                } catch (_) { }
+                state.speaking = false;
+                updateControls();
+            }
             return;
         }
-        if (state.processing && state.sessionId && state.api?.interrupt) {
-            try {
-                await state.api.interrupt(state.sessionId, { reason: 'eve_panel_stop' });
-            } catch (_) { }
-            state.processing = false;
+        if (state.listening) {
+            state.suppressAutoRestartOnce = true;
+            await stopListeningLoop();
+            return;
         }
         if (state.speaking && state.sessionId && state.api?.stopSpeaking) {
             try {
                 await state.api.stopSpeaking(state.sessionId, { reason: 'eve_panel_stop' });
             } catch (_) { }
             state.speaking = false;
+        }
+        if (state.processing) {
+            updateControls();
+            return;
         }
         updateControls();
         if (!state.listening && !state.processing && !state.speaking) {
@@ -736,6 +1261,7 @@ export const mountHomeVoiceSurface = async ({
         input.value = '';
         state.active = true;
         if (state.listening) {
+            state.suppressAutoRestartOnce = true;
             await stopListeningLoop();
         }
         await runUtterance(text);
@@ -757,12 +1283,29 @@ export const mountHomeVoiceSurface = async ({
     const controller = {
         root,
         activate() {
+            if (state.activationPromise) return state.activationPromise;
+            if (state.active) return Promise.resolve();
             state.active = true;
-            void startVoiceMeter();
-            void startListeningLoop();
+            state.activationPromise = (async () => {
+                await startVoiceMeter();
+                const readyLine = textOnly
+                    ? localizeTextOnlyReadyLine(locale(), resolveUserFirstName(env))
+                    : localizeReadyLine(locale(), resolveUserFirstName(env));
+                await speakAssistantLine(readyLine, {
+                    pushHistoryEntry: true,
+                    rememberReply: true
+                });
+                if (state.active && !textOnly) {
+                    await startListeningLoop();
+                }
+            })().finally(() => {
+                state.activationPromise = null;
+            });
+            return state.activationPromise;
         },
         async deactivate() {
             state.active = false;
+            clearRestartTimer();
             if (state.listening) {
                 await stopListeningLoop();
             }
@@ -774,7 +1317,12 @@ export const mountHomeVoiceSurface = async ({
             state.speaking = false;
             state.processing = false;
             state.transcriptDraft = '';
+            resetBargeInDetector();
             renderTranscript();
+            await speakAssistantLine(localizeClosingLine(locale()), {
+                pushHistoryEntry: true,
+                rememberReply: false
+            });
             await stopVoiceMeter();
             updateControls();
         },
@@ -790,6 +1338,7 @@ export const mountHomeVoiceSurface = async ({
                 listening: state.listening,
                 processing: state.processing,
                 speaking: state.speaking,
+                textOnly,
                 errorMessage: state.errorMessage,
                 sessionId: state.sessionId,
                 history: state.history,
@@ -797,7 +1346,9 @@ export const mountHomeVoiceSurface = async ({
             });
         },
         destroy() {
-            try { state.unsubscribe(); } catch (_) { }
+        try { state.unsubscribe(); } catch (_) { }
+            clearRestartTimer();
+            resetBargeInDetector();
             void stopVoiceMeter();
             root.remove();
             delete host.__eveHomeVoiceSurfaceController;

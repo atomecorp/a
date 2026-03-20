@@ -132,6 +132,8 @@ assert.equal(snapshot.conversation.status, 'cancelled', 'cancel commands should 
 assert.equal(normalizeLocalVoiceCommand('passe au suivant')?.command, VOICE_LOCAL_COMMANDS.NEXT, 'passe au suivant should normalize to next');
 assert.equal(normalizeLocalVoiceCommand('precedent')?.command, VOICE_LOCAL_COMMANDS.PREVIOUS, 'precedent should normalize to previous');
 assert.equal(normalizeLocalVoiceCommand('reponds')?.command, VOICE_LOCAL_COMMANDS.REPLY, 'reponds should normalize to reply');
+assert.equal(normalizeLocalVoiceCommand('Fais moi un résumé de mes nouveaux mails'), null, 'business utterances containing resume should not be downgraded to local summarize commands');
+assert.equal(normalizeLocalVoiceCommand('Reponds au message de Paul'), null, 'business utterances containing reponds should not be downgraded to local reply commands');
 assert.equal(normalizeLocalVoiceCommand('bonjour'), null, 'non-command utterances should not be classified as local commands');
 
 assert.equal(uiEvents.some((event) => event.type === 'voice.tts.state'), true, 'voice runtime should emit TTS events to the UI channel');

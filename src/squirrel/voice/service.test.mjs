@@ -75,7 +75,11 @@ class FakeSpeechSynthesis {
     }
 
     getVoices() {
-        return [{ name: 'system-fr', voiceURI: 'system-fr' }];
+        return [
+            { name: 'Compact', voiceURI: 'compact', lang: 'en-US', default: true, localService: true },
+            { name: 'Amelie Enhanced', voiceURI: 'amelie-enhanced', lang: 'fr-FR', localService: true },
+            { name: 'system-fr', voiceURI: 'system-fr', lang: 'fr-FR', localService: true }
+        ];
     }
 }
 
@@ -117,7 +121,8 @@ const providers = resolveVoiceProviders(env);
 assert.equal(providers.stt.selected, 'browser_web_speech', 'browser speech recognition should be selected when host STT plugin is absent');
 assert.equal(providers.tts.selected, 'browser_speech_synthesis', 'speechSynthesis should be selected as the v1 TTS backend');
 assert.equal(providers.capture.selected, 'iplug_native_recorder', 'native recorder bridge should be selected when record_start/stop are available');
-assert.equal(VOICE_V1_PROVIDER_DECISION.stt.primary, 'tauri_plugin_stt', 'the v1 provider decision should keep tauri-plugin-stt as the preferred STT backend');
+assert.equal(VOICE_V1_PROVIDER_DECISION.stt.primary, 'browser_web_speech', 'the v1 provider decision should now prefer the browser online STT backend');
+assert.equal(VOICE_V1_PROVIDER_DECISION.stt.fallback, 'tauri_plugin_stt', 'the v1 provider decision should keep Tauri STT as the local fallback backend');
 
 const runtime = createVoiceSessionRuntime({
     now: () => {
@@ -135,6 +140,29 @@ const voice = createVoiceService({
     sessionRuntime: runtime
 });
 assert.ok(voice.orchestrator, 'voice service should expose the shared voice orchestrator');
+
+const hybridProviders = resolveVoiceProviders({
+    ...env,
+    __TAURI__: {
+        stt: {
+            async start() {},
+            async stop() {}
+        }
+    }
+});
+assert.equal(hybridProviders.stt.selected, 'tauri_plugin_stt', 'native Tauri STT should win over browser STT when both are available inside the desktop runtime');
+
+const forcedBrowserProviders = resolveVoiceProviders({
+    ...env,
+    SQUIRREL_STT_PROVIDER: 'browser',
+    __TAURI__: {
+        stt: {
+            async start() {},
+            async stop() {}
+        }
+    }
+});
+assert.equal(forcedBrowserProviders.stt.selected, 'browser_web_speech', 'an explicit browser override should still force browser STT when requested');
 
 const started = await voice.stt.start({
     lang: 'fr-FR',
@@ -172,9 +200,9 @@ assert.equal(telemetry.metrics.cancel_roundtrip_ms > 0, true, 'voice telemetry s
 
 const completedSession = runtime.createSession({ locale: 'fr-FR' });
 const speakingDone = await voice.tts.speak('Bonjour complet.', {
-    session_id: completedSession.session_id,
-    voiceId: 'system-fr'
+    session_id: completedSession.session_id
 });
+assert.equal(synth.queue[0]?.voice?.voiceURI, 'amelie-enhanced', 'voice.tts.speak should prefer a higher quality locale-matching system voice when no explicit voice is provided');
 synth.finishCurrent();
 const finalTts = await speakingDone.promise;
 snapshot = runtime.getSession(completedSession.session_id);
@@ -212,12 +240,12 @@ const mailSession = runtime.createSession({ locale: 'fr-FR' });
 const mailIntent = await voice.executeUtterance('Lis mes mails', {
     session_id: mailSession.session_id
 });
-assert.equal(mailIntent.transport, 'pending_connector', 'voice service should expose utterance execution through the orchestrator');
+assert.equal(mailIntent.transport, 'mail_api', 'voice service should expose utterance execution through the orchestrator');
 runtime.handleLocalCommand(mailSession.session_id, 'reponds');
 const replyPlan = voice.planFollowup(mailSession.session_id);
 assert.equal(replyPlan.action, 'reply_current', 'voice service should resolve contextual reply followups');
 const replyExecution = await voice.executeFollowup(mailSession.session_id);
-assert.equal(replyExecution.transport, 'pending_connector', 'voice service should execute contextual followups through the orchestrator facade');
+assert.equal(replyExecution.transport, 'mail_api', 'voice service should execute contextual followups through the orchestrator facade');
 
 const runtimeSession = runtime.createSession({ locale: 'fr-FR' });
 const runtimeExecution = await voice.executeUtterance('Ouvre Mtrack', {

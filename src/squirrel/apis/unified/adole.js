@@ -606,6 +606,16 @@ export function generateClientId() {
  */
 const tokenMemory = new Map();
 
+function clearLegacyFastifyTokenStorage() {
+    if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('auth_token');
+    }
+    if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('auth_token');
+    }
+    tokenMemory.delete('auth_token');
+}
+
 function isCloudFastifyTarget() {
     if (typeof window === 'undefined') return false;
     const base = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
@@ -677,6 +687,14 @@ export function clearToken(key) {
         sessionStorage.removeItem(key);
     }
     tokenMemory.delete(key);
+
+    const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
+    if (key === cloudKey) {
+        // Legacy Fastify builds stored the same JWT under auth_token.
+        // If we only clear cloud_auth_token, getToken() may immediately
+        // rehydrate the expired legacy token and recreate the 401 loop.
+        clearLegacyFastifyTokenStorage();
+    }
 }
 
 // ============================================

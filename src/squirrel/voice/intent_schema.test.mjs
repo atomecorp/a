@@ -80,6 +80,49 @@ assert.equal(mailIntent.domain, 'mail');
 assert.equal(mailIntent.action, 'read');
 assert.equal(mailIntent.execution.target, 'pending_connector');
 
+const mailSummaryIntent = classifyVoiceIntent('Fais moi un résumé de mes nouveaux mails', {
+    runtime_tools: runtimeTools
+});
+assert.equal(mailSummaryIntent.type, 'connector_toolchain');
+assert.equal(mailSummaryIntent.domain, 'mail');
+assert.equal(mailSummaryIntent.action, 'summarize');
+assert.equal(mailSummaryIntent.execution.target, 'pending_connector');
+
+const mailSendIntent = classifyVoiceIntent('Envoie le mail', {
+    runtime_tools: runtimeTools
+});
+assert.equal(mailSendIntent.domain, 'mail');
+assert.equal(mailSendIntent.action, 'send');
+assert.equal(mailSendIntent.execution.confirmation_required, false);
+
+const directReplyIntent = classifyVoiceIntent('Reponds a Jean-Eric que j ai bien recu le mail', {
+    runtime_tools: runtimeTools
+});
+assert.equal(directReplyIntent.domain, 'mail');
+assert.equal(directReplyIntent.action, 'reply');
+assert.deepEqual(directReplyIntent.requested_capabilities, ['mail_reply_draft']);
+assert.equal(directReplyIntent.entities.reply_target, 'Jean-Eric');
+assert.equal(directReplyIntent.entities.draft_text, 'j ai bien recu le mail');
+
+const contextualReplyIntent = classifyVoiceIntent('Reponds a Jean-Eric que j ai bien recu le mail', {
+    runtime_tools: runtimeTools,
+    context: {
+        active_domain: 'mail'
+    }
+});
+assert.equal(contextualReplyIntent.domain, 'mail');
+assert.equal(contextualReplyIntent.action, 'reply_current');
+assert.equal(contextualReplyIntent.execution.target, 'pending_connector');
+assert.equal(contextualReplyIntent.entities.reply_target, 'Jean-Eric');
+assert.equal(contextualReplyIntent.entities.draft_text, 'j ai bien recu le mail');
+
+const aiFirstHeuristic = classifyVoiceIntent('Lis mes mails', {
+    runtime_tools: runtimeTools,
+    allow_business_heuristics: false
+});
+assert.equal(aiFirstHeuristic.status, 'ambiguous');
+assert.equal(aiFirstHeuristic.execution.target, 'none');
+
 const normalized = normalizeVoiceIntent({
     utterance: '  Ouvre calendrier  ',
     type: 'runtime_tool',

@@ -66,6 +66,7 @@ import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, lis
 import { registerAtomeRoutes, syncAtomeViaWebSocket } from './atomeRoutes.orm.js';
 import { registerSharingRoutes, handleShareMessage } from './sharing.js';
 import { buildUserExportZip, inspectUserExportZip, importUserExportZip } from './userExportImport.js';
+import { registerMailRoutes } from './mailRoutes.js';
 import {
   initUserFiles,
   registerFileUpload,
@@ -1292,6 +1293,8 @@ async function startServer() {
       server.post('/api/auth/request-otp', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
       server.post('/api/auth/reset-password', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
     }
+
+    registerMailRoutes(server);
 
     const visioService = createVisioService({
       databaseEnabled: DATABASE_ENABLED,

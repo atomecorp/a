@@ -116,7 +116,8 @@ const ensureDilasPanel = async ({
         if (surfacePromise) return surfacePromise;
         surfacePromise = mountHomeVoiceSurface({
             env,
-            host
+            host,
+            textOnly: true
         }).catch((error) => {
             surfacePromise = null;
             env.console?.warn?.('[voice.dilas_panel] Failed to mount Dilas surface:', error?.message || error);

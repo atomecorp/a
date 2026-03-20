@@ -210,6 +210,16 @@ const resolveHttpBaseUrl = (backend, adapter) => {
     return `http://127.0.0.1:${port}`;
 };
 
+const buildBackendAuthHeaders = (backend, token) => {
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (backend === 'tauri') {
+        const userId = getCurrentUserId();
+        if (userId) headers['X-User-Id'] = String(userId);
+    }
+    return headers;
+};
+
 const listStateCurrentOnBackend = async (backend, options) => {
     const adapter = adapters[backend];
     const baseUrl = resolveHttpBaseUrl(backend, adapter);
@@ -224,7 +234,7 @@ const listStateCurrentOnBackend = async (backend, options) => {
     try {
         const response = await fetch(url, {
             method: 'GET',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: buildBackendAuthHeaders(backend, token),
             credentials: 'include'
         });
         if (!response.ok) {
@@ -238,6 +248,8 @@ const listStateCurrentOnBackend = async (backend, options) => {
         return { ok: false, list: [], error: e?.message || 'state_current_failed' };
     }
 };
+
+export const __ATOMES_TEST_ONLY__ = { buildBackendAuthHeaders };
 
 const canUseFastify = async (currentUserId) => {
     if (!FastifyAdapter?.getToken?.()) return false;

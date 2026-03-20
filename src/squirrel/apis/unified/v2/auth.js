@@ -688,7 +688,21 @@ export const auth = {
 
     async ensureFastifyToken() {
         const token = FastifyAdapter?.getToken?.();
-        if (token) return { ok: true, reason: 'token_present' };
+        if (token) {
+            try {
+                const me = await meBackend('fastify');
+                if (me?.ok) {
+                    try {
+                        if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
+                    } catch (_) { }
+                    return { ok: true, reason: 'token_valid' };
+                }
+            } catch (_) { }
+            try { FastifyAdapter?.clearToken?.(); } catch (_) { }
+            try {
+                if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = true;
+            } catch (_) { }
+        }
         try {
             const result = await ensureFastifyTokenLocal();
             if (result?.ok) {

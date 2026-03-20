@@ -80,6 +80,23 @@ const prepareContactsApi = async (options = {}) => {
     return api;
 };
 
+const prepareMailApi = async (options = {}) => {
+    const api = await requireMailApi();
+    if (!api) {
+        throw new Error('Mail API is not available');
+    }
+    if (typeof api.ensureReady === 'function') {
+        const ready = await api.ensureReady(options);
+        if (ready?.ok === false) {
+            const cached = typeof api.list === 'function' ? api.list({ limit: 1 }) : null;
+            if (!Array.isArray(cached?.items) || !cached.items.length) {
+                throw new Error(ready?.error || 'mail_sync_failed');
+            }
+        }
+    }
+    return api;
+};
+
 const requireRuntimeToolApi = () => {
     const runtime = globalThis?.atome?.tools?.v2Runtime || globalThis?.window?.atome?.tools?.v2Runtime || null;
     if (!runtime || typeof runtime.invokeById !== 'function') {
@@ -667,7 +684,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = await requireMailApi();
+            const api = await prepareMailApi(params || {});
             return api.list(params || {});
         },
         summary: () => 'List mail'
@@ -685,7 +702,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = await requireMailApi();
+            const api = await prepareMailApi(params || {});
             const messageId = safeString(params?.message_id || params?.messageId || params?.id);
             if (!messageId) throw new Error('Missing message_id');
             return api.read(messageId);
@@ -708,7 +725,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = await requireMailApi();
+            const api = await prepareMailApi(params || {});
             const query = safeString(params?.query || params?.q);
             if (!query) throw new Error('Missing query');
             return api.search(query, params || {});
@@ -728,7 +745,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = await requireMailApi();
+            const api = await prepareMailApi(params || {});
             return api.nextUnread(params || {});
         },
         summary: () => 'Next unread mail'
@@ -747,7 +764,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = await requireMailApi();
+            const api = await prepareMailApi(params || {});
             return api.summarize(params || {});
         },
         summary: () => 'Summarize mail'
@@ -767,7 +784,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = await requireMailApi();
+            const api = await prepareMailApi(params || {});
             const messageId = safeString(params?.message_id || params?.messageId || params?.id);
             if (!messageId) throw new Error('Missing message_id');
             return api.replyDraft(messageId, {
@@ -791,7 +808,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = await requireMailApi();
+            const api = await prepareMailApi(params || {});
             const draftId = safeString(params?.draft_id || params?.draftId || params?.id);
             if (!draftId) throw new Error('Missing draft_id');
             return api.send(draftId, {

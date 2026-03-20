@@ -1,7 +1,53 @@
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { selectIcloudAccount } from './icloud_account_discovery.mjs';
 
+let envLoadedFromFiles = false;
+
+const applyEnvFile = (filePath, { overrideExisting = false } = {}) => {
+    if (!filePath || !fs.existsSync(filePath)) return false;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    for (const rawLine of raw.split(/\r?\n/)) {
+        const line = String(rawLine || '').trim();
+        if (!line || line.startsWith('#')) continue;
+        const separatorIndex = line.indexOf('=');
+        if (separatorIndex <= 0) continue;
+        const key = line.slice(0, separatorIndex).trim();
+        if (!key) continue;
+        if (!overrideExisting && String(process.env[key] || '').trim()) continue;
+        let value = line.slice(separatorIndex + 1).trim();
+        if (
+            (value.startsWith('"') && value.endsWith('"'))
+            || (value.startsWith('\'') && value.endsWith('\''))
+        ) {
+            value = value.slice(1, -1);
+        }
+        process.env[key] = value.replace(/\\n/g, '\n');
+    }
+    return true;
+};
+
+const loadEnvFromProjectRootIfNeeded = () => {
+    if (envLoadedFromFiles) return;
+    envLoadedFromFiles = true;
+    const candidates = [];
+    const cwd = process.cwd();
+    if (cwd) candidates.push(cwd);
+    const scriptDir = path.dirname(new URL(import.meta.url).pathname);
+    if (scriptDir) candidates.push(path.resolve(scriptDir, '..'));
+
+    for (const baseDir of candidates) {
+        const envPath = path.join(baseDir, '.env');
+        if (applyEnvFile(envPath, { overrideExisting: false })) {
+            applyEnvFile(path.join(baseDir, '.env.local'), { overrideExisting: true });
+            return;
+        }
+    }
+};
+
 export const readEnv = (...keys) => {
+    loadEnvFromProjectRootIfNeeded();
     for (const key of keys) {
         const value = String(process.env[key] || '').trim();
         if (value) return value;
@@ -91,6 +137,54 @@ export const resolveIcloudMailCredentials = () => {
         mode: 'keychain',
         email: account,
         appPassword: password
+    };
+};
+
+export const resolveMailCredentials = () => {
+    const email = readEnv('MAIL_EMAIL', 'MAIL_ACCOUNT_EMAIL', 'MAIL_USERNAME', 'SMTP_USERNAME', 'IMAP_USERNAME');
+    const password = readEnv('MAIL_PASSWORD', 'MAIL_APP_PASSWORD', 'SMTP_PASSWORD', 'IMAP_PASSWORD');
+    const imapHost = readEnv('MAIL_IMAP_HOST', 'IMAP_HOST');
+    const smtpHost = readEnv('MAIL_SMTP_HOST', 'SMTP_HOST');
+
+    if (email && password && imapHost && smtpHost) {
+        return {
+            mode: 'env_generic',
+            provider: readEnv('MAIL_PROVIDER') || 'custom_imap_smtp',
+            email,
+            username: readEnv('MAIL_USERNAME', 'IMAP_USERNAME', 'SMTP_USERNAME') || email,
+            password,
+            appPassword: password,
+            mailbox: readEnv('MAIL_MAILBOX', 'MAILBOX', 'ICLOUD_MAILBOX') || 'INBOX',
+            imap: {
+                host: imapHost,
+                port: Number(readEnv('MAIL_IMAP_PORT', 'IMAP_PORT') || 993),
+                security: readEnv('MAIL_IMAP_SECURITY', 'IMAP_SECURITY') || 'tls'
+            },
+            smtp: {
+                host: smtpHost,
+                port: Number(readEnv('MAIL_SMTP_PORT', 'SMTP_PORT') || 587),
+                security: readEnv('MAIL_SMTP_SECURITY', 'SMTP_SECURITY') || 'starttls'
+            }
+        };
+    }
+
+    const icloud = resolveIcloudMailCredentials();
+    return {
+        ...icloud,
+        provider: 'icloud_imap_smtp',
+        username: icloud.email,
+        password: icloud.appPassword,
+        mailbox: readEnv('ICLOUD_MAILBOX') || 'INBOX',
+        imap: {
+            host: readEnv('ICLOUD_IMAP_HOST') || 'imap.mail.me.com',
+            port: Number(readEnv('ICLOUD_IMAP_PORT') || 993),
+            security: readEnv('ICLOUD_IMAP_SECURITY') || 'tls'
+        },
+        smtp: {
+            host: readEnv('ICLOUD_SMTP_HOST') || 'smtp.mail.me.com',
+            port: Number(readEnv('ICLOUD_SMTP_PORT') || 587),
+            security: readEnv('ICLOUD_SMTP_SECURITY') || 'starttls'
+        }
     };
 };
 

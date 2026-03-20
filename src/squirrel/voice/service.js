@@ -26,8 +26,8 @@ const debugVoiceService = (...args) => {
 
 export const VOICE_V1_PROVIDER_DECISION = Object.freeze({
     stt: {
-        primary: 'tauri_plugin_stt',
-        fallback: 'browser_web_speech',
+        primary: 'browser_web_speech',
+        fallback: 'tauri_plugin_stt',
         partials: true,
         lang: DEFAULT_LANG
     },
@@ -55,6 +55,61 @@ const getSpeechSynthesisUtteranceCtor = (env) => readEnv(env, 'SpeechSynthesisUt
 
 const getSpeechSynthesis = (env) => readEnv(env, 'speechSynthesis') || null;
 
+const normalizeVoiceLocale = (value = '') => String(value || '').trim().replace('_', '-').toLowerCase();
+
+const resolvePreferredSpeechVoice = (synth, {
+    lang = DEFAULT_LANG,
+    voiceId = null
+} = {}) => {
+    if (!synth || typeof synth.getVoices !== 'function') return null;
+    const voices = synth.getVoices();
+    if (!Array.isArray(voices) || !voices.length) return null;
+
+    if (voiceId) {
+        const explicit = voices.find((voice) => voice?.name === voiceId || voice?.voiceURI === voiceId);
+        if (explicit) return explicit;
+    }
+
+    const normalizedLang = normalizeVoiceLocale(lang);
+    const langRoot = normalizedLang.split('-')[0] || normalizedLang;
+    const preferredNames = langRoot === 'fr'
+        ? ['thomas', 'amelie', 'aurelie', 'marie', 'remy', 'audrey', 'super', 'premium', 'enhanced']
+        : ['premium', 'enhanced', 'natural', 'neural'];
+
+    let best = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (const voice of voices) {
+        const voiceLocale = normalizeVoiceLocale(voice?.lang);
+        const voiceName = String(voice?.name || '').toLowerCase();
+        const voiceUri = String(voice?.voiceURI || '').toLowerCase();
+        let score = 0;
+
+        if (voiceLocale === normalizedLang) score += 120;
+        else if (voiceLocale.startsWith(`${langRoot}-`)) score += 90;
+        else if (voiceLocale === langRoot) score += 75;
+
+        if (voice?.localService === true) score += 20;
+        if (voice?.default === true) score += 8;
+
+        for (const keyword of preferredNames) {
+            if (voiceName.includes(keyword) || voiceUri.includes(keyword)) {
+                score += 12;
+            }
+        }
+
+        if (voiceName.includes('compact') || voiceUri.includes('compact')) score -= 6;
+        if (voiceName.includes('novelty') || voiceUri.includes('novelty')) score -= 20;
+
+        if (score > bestScore) {
+            bestScore = score;
+            best = voice;
+        }
+    }
+
+    return best;
+};
+
 const getTauriSttBridge = (env) => {
     const tauri = readEnv(env, '__TAURI__');
     if (tauri?.stt && typeof tauri.stt.start === 'function') {
@@ -77,6 +132,10 @@ const createDeferred = () => {
     return { promise, resolve, reject };
 };
 
+const wait = (ms = 0) => new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+});
+
 const createSegment = (text, confidence = null) => ({
     text: String(text || '').trim(),
     ...(Number.isFinite(confidence) ? { confidence } : {})
@@ -86,6 +145,30 @@ const isPermissionGranted = (permission = null) => permission === 'granted';
 
 const isPermissionDenied = (permission = null) => permission === 'denied';
 
+const normalizeErrorMessage = (error) => String(error?.message || error?.code || error || '').trim();
+
+const resolvePreferredSttProvider = (env, {
+    hasBrowserRecognition = false,
+    hasTauriStt = false
+} = {}) => {
+    const explicit = String(
+        readEnv(env, 'SQUIRREL_STT_PROVIDER')
+        || readEnv(env, '__SQUIRREL_STT_PROVIDER__')
+        || ''
+    ).trim().toLowerCase();
+
+    if (explicit === 'browser' || explicit === 'browser_web_speech' || explicit === 'online') {
+        if (hasBrowserRecognition) return 'browser_web_speech';
+    }
+    if (explicit === 'tauri' || explicit === 'tauri_plugin_stt' || explicit === 'local') {
+        if (hasTauriStt) return 'tauri_plugin_stt';
+    }
+
+    if (hasTauriStt) return 'tauri_plugin_stt';
+    if (hasBrowserRecognition) return 'browser_web_speech';
+    return 'unsupported';
+};
+
 export const resolveVoiceProviders = (env = globalThis) => {
     const recognitionCtor = getSpeechRecognitionCtor(env);
     const tauriStt = getTauriSttBridge(env);
@@ -94,9 +177,10 @@ export const resolveVoiceProviders = (env = globalThis) => {
     const recordStart = readEnv(env, 'record_start');
     const recordStop = readEnv(env, 'record_stop');
 
-    const sttSelected = tauriStt
-        ? 'tauri_plugin_stt'
-        : (recognitionCtor ? 'browser_web_speech' : 'unsupported');
+    const sttSelected = resolvePreferredSttProvider(env, {
+        hasBrowserRecognition: !!recognitionCtor,
+        hasTauriStt: !!tauriStt
+    });
 
     const ttsSelected = (synth && utteranceCtor)
         ? 'browser_speech_synthesis'
@@ -134,13 +218,18 @@ export const createVoiceService = ({
     aiPlanner = null
 } = {}) => {
     const providers = resolveVoiceProviders(env);
+    debugVoiceService('providers_resolved', {
+        stt: providers?.stt?.selected || null,
+        tts: providers?.tts?.selected || null,
+        capture: providers?.capture?.selected || null
+    });
     const sttSessions = new Map();
     const ttsSessions = new Map();
     const processingTasks = new Map();
     const telemetry = createVoiceLatencyTelemetry();
     telemetry.attachRuntime(sessionRuntime);
     const resolvedAiPlanner = aiPlanner === null
-        ? (((env?.AtomeAI || env?.window?.AtomeAI) && env?.fetch) ? createVoiceAiPlanner({ env }) : null)
+        ? ((env?.fetch || env?.window?.fetch) ? createVoiceAiPlanner({ env }) : null)
         : aiPlanner;
     const orchestrator = createVoiceOrchestrator({
         env,
@@ -233,7 +322,9 @@ export const createVoiceService = ({
         };
     };
 
-    const startBrowserRecognition = (sessionId, options = {}) => {
+    const startBrowserRecognition = (sessionId, options = {}, {
+        provider = 'browser_web_speech'
+    } = {}) => {
         const RecognitionCtor = getSpeechRecognitionCtor(env);
         if (!RecognitionCtor) {
             throw new Error('Browser speech recognition is not available');
@@ -245,6 +336,7 @@ export const createVoiceService = ({
             session_id: sessionId,
             recognition,
             deferred,
+            settled: false,
             cancelled: false,
             final_texts: [],
             segments: [],
@@ -259,7 +351,7 @@ export const createVoiceService = ({
             sessionRuntime.startListening(sessionId, {
                 lang: recognition.lang,
                 partial: recognition.interimResults,
-                provider: providers.stt.selected
+                provider
             });
         };
 
@@ -291,8 +383,10 @@ export const createVoiceService = ({
         };
 
         recognition.onerror = (event) => {
+            if (state.settled) return;
+            state.settled = true;
             sttSessions.delete(sessionId);
-            const error = String(event?.error || event?.message || 'speech_recognition_error');
+            const error = normalizeErrorMessage(event) || 'speech_recognition_error';
             sessionRuntime.interrupt(sessionId, {
                 reason: `stt_error:${error}`
             });
@@ -300,12 +394,14 @@ export const createVoiceService = ({
         };
 
         recognition.onend = () => {
+            if (state.settled) return;
+            state.settled = true;
             sttSessions.delete(sessionId);
             if (state.cancelled) {
                 deferred.resolve({
                     session_id: sessionId,
                     cancelled: true,
-                    provider: providers.stt.selected
+                    provider
                 });
                 return;
             }
@@ -318,7 +414,7 @@ export const createVoiceService = ({
                 text: finalText,
                 confidence: state.confidence,
                 segments: state.segments,
-                provider: providers.stt.selected
+                provider
             };
             sessionRuntime.finalizeListening(sessionId, result);
             deferred.resolve({
@@ -327,17 +423,29 @@ export const createVoiceService = ({
             });
         };
 
-        recognition.start();
         sttSessions.set(sessionId, state);
+        try {
+            recognition.start();
+        } catch (error) {
+            state.settled = true;
+            sttSessions.delete(sessionId);
+            const message = normalizeErrorMessage(error) || 'speech_recognition_error';
+            sessionRuntime.interrupt(sessionId, {
+                reason: `stt_error:${message}`
+            });
+            throw error;
+        }
 
         return {
             session_id: sessionId,
-            provider: providers.stt.selected,
+            provider,
             promise: deferred.promise
         };
     };
 
-    const startTauriRecognition = async (sessionId, options = {}) => {
+    const startTauriRecognition = async (sessionId, options = {}, {
+        provider = 'tauri_plugin_stt'
+    } = {}) => {
         const bridge = getTauriSttBridge(env);
         if (!bridge) {
             throw new Error('Tauri STT bridge is not available');
@@ -369,13 +477,17 @@ export const createVoiceService = ({
         const deferred = createDeferred();
         const silenceMs = Number.isFinite(options.silenceMs) && options.silenceMs >= 0
             ? Number(options.silenceMs)
-            : 1200;
+            : 1800;
+        const finalSilenceMs = Number.isFinite(options.finalSilenceMs) && options.finalSilenceMs >= 0
+            ? Number(options.finalSilenceMs)
+            : Math.min(silenceMs, 450);
         const state = {
             session_id: sessionId,
             bridge,
             deferred,
             cancelled: false,
             settled: false,
+            recoveringStart: false,
             stopReason: null,
             stopRequested: false,
             cleanup: [],
@@ -405,12 +517,12 @@ export const createVoiceService = ({
             }
         };
 
-        const scheduleSilenceStop = () => {
-            if (silenceMs <= 0 || state.settled || state.cancelled) return;
+        const scheduleSilenceStop = (delayMs = silenceMs) => {
+            if (delayMs <= 0 || state.settled || state.cancelled) return;
             clearInactivityTimer();
             state.inactivityTimer = setTimeout(() => {
                 void requestBridgeStop('silence');
-            }, silenceMs);
+            }, delayMs);
         };
 
         const cleanup = async () => {
@@ -427,6 +539,45 @@ export const createVoiceService = ({
             sttSessions.delete(sessionId);
         };
 
+        const startBridgeWithRecovery = async () => {
+            try {
+                await bridge.start({
+                    language: options.lang || DEFAULT_LANG,
+                    interimResults: options.partial !== false,
+                    continuous: options.continuous !== false,
+                    maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
+                    maxAlternatives: Number.isFinite(options.maxAlternatives) ? options.maxAlternatives : 3,
+                    onDevice: options.onDevice === true
+                });
+            } catch (error) {
+                const message = String(error?.message || error || '');
+                if (!/already listening/i.test(message)) {
+                    throw error;
+                }
+                debugVoiceService('tauri_stt.recover_already_listening', {
+                    sessionId
+                });
+                state.recoveringStart = true;
+                if (typeof bridge.stop === 'function') {
+                    try {
+                        await bridge.stop();
+                    } catch (_) {
+                        // Ignore recovery stop failures and retry once anyway.
+                    }
+                }
+                await wait(80);
+                await bridge.start({
+                    language: options.lang || DEFAULT_LANG,
+                    interimResults: options.partial !== false,
+                    continuous: options.continuous !== false,
+                    maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
+                    maxAlternatives: Number.isFinite(options.maxAlternatives) ? options.maxAlternatives : 3,
+                    onDevice: options.onDevice === true
+                });
+                state.recoveringStart = false;
+            }
+        };
+
         const settleFinal = async (result = {}) => {
             if (state.settled) return;
             state.settled = true;
@@ -436,7 +587,7 @@ export const createVoiceService = ({
                 text: finalText,
                 confidence: result.confidence ?? state.confidence,
                 segments: result.segments || state.segments,
-                provider: providers.stt.selected
+                provider
             };
             if (result.skipStop !== true) {
                 await requestBridgeStop(result.reason || 'final');
@@ -456,7 +607,7 @@ export const createVoiceService = ({
             await cleanup();
             deferred.resolve({
                 session_id: sessionId,
-                provider: providers.stt.selected,
+                provider,
                 cancelled: true,
                 reason: state.stopReason || 'stopped',
                 text: ''
@@ -487,11 +638,17 @@ export const createVoiceService = ({
                 sessionRuntime.startListening(sessionId, {
                     lang: options.lang || DEFAULT_LANG,
                     partial: options.partial !== false,
-                    provider: providers.stt.selected
+                    provider
                 });
                 return;
             }
             if (next === 'idle') {
+                if (state.recoveringStart) {
+                    debugVoiceService('tauri_stt.idle_ignored_during_recovery', {
+                        sessionId
+                    });
+                    return;
+                }
                 if (state.cancelled || state.stopReason === 'cancelled' || state.stopReason === 'manual') {
                     void settleStopped();
                     return;
@@ -528,19 +685,17 @@ export const createVoiceService = ({
                 if (confidence !== null) {
                     state.confidence = confidence;
                 }
-                clearInactivityTimer();
-                void settleFinal({
-                    text,
-                    confidence,
-                    segments: state.segments,
-                    reason: 'final'
+                const combinedText = String(state.final_texts.join(' ').trim() || text).trim();
+                sessionRuntime.pushPartial(sessionId, {
+                    text: combinedText
                 });
+                scheduleSilenceStop(finalSilenceMs);
                 return;
             }
             sessionRuntime.pushPartial(sessionId, {
                 text
             });
-            scheduleSilenceStop();
+            scheduleSilenceStop(silenceMs);
         }));
 
         state.cleanup.push(await bridge.onError((error = {}) => {
@@ -567,18 +722,16 @@ export const createVoiceService = ({
             }));
         }
 
-        await bridge.start({
-            language: options.lang || DEFAULT_LANG,
-            interimResults: options.partial !== false,
-            continuous: options.continuous === true,
-            maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
-            onDevice: options.onDevice === true
-        });
-
         sttSessions.set(sessionId, state);
+        try {
+            await startBridgeWithRecovery();
+        } catch (error) {
+            await cleanup();
+            throw error;
+        }
         return {
             session_id: sessionId,
-            provider: providers.stt.selected,
+            provider,
             promise: deferred.promise
         };
     };
@@ -595,9 +748,12 @@ export const createVoiceService = ({
         if (typeof options.rate === 'number') utterance.rate = options.rate;
         if (typeof options.pitch === 'number') utterance.pitch = options.pitch;
         if (typeof options.volume === 'number') utterance.volume = options.volume;
-        if (options.voiceId && typeof synth.getVoices === 'function') {
-            const match = synth.getVoices().find((voice) => voice?.name === options.voiceId || voice?.voiceURI === options.voiceId);
-            if (match) utterance.voice = match;
+        const selectedVoice = resolvePreferredSpeechVoice(synth, {
+            lang: utterance.lang,
+            voiceId: options.voiceId || null
+        });
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
         }
 
         const deferred = createDeferred();
@@ -627,6 +783,18 @@ export const createVoiceService = ({
             state.settled = true;
             ttsSessions.delete(sessionId);
             const error = String(event?.error || event?.message || 'speech_synthesis_error');
+            if (/canceled|cancelled|interrupted/i.test(error)) {
+                sessionRuntime.finishSpeaking(sessionId, {
+                    reason: 'interrupted'
+                });
+                deferred.resolve({
+                    session_id: sessionId,
+                    provider: providers.tts.selected,
+                    stopped: true,
+                    reason: error
+                });
+                return;
+            }
             sessionRuntime.interrupt(sessionId, {
                 reason: `tts_error:${error}`
             });
@@ -635,7 +803,7 @@ export const createVoiceService = ({
 
         sessionRuntime.startSpeaking(sessionId, {
             text,
-            voice_id: options.voiceId || null
+            voice_id: selectedVoice?.voiceURI || selectedVoice?.name || options.voiceId || null
         });
         if (typeof synth.cancel === 'function') {
             synth.cancel();
@@ -694,15 +862,20 @@ export const createVoiceService = ({
 
     const stt = {
         async start(options = {}) {
-            ensureSupported('stt', providers.stt.selected);
+            const selectedProvider = providers.stt.selected;
+            ensureSupported('stt', selectedProvider);
             const session = ensureSession(options);
-            if (providers.stt.selected === 'tauri_plugin_stt') {
-                return startTauriRecognition(session.session_id, options);
+            if (selectedProvider === 'tauri_plugin_stt') {
+                return startTauriRecognition(session.session_id, options, {
+                    provider: selectedProvider
+                });
             }
-            if (providers.stt.selected === 'browser_web_speech') {
-                return startBrowserRecognition(session.session_id, options);
+            if (selectedProvider === 'browser_web_speech') {
+                return startBrowserRecognition(session.session_id, options, {
+                    provider: selectedProvider
+                });
             }
-            throw new Error(`Unsupported STT provider bridge: ${providers.stt.selected}`);
+            throw new Error(`Unsupported STT provider bridge: ${selectedProvider}`);
         },
         async stop(sessionId) {
             const state = sttSessions.get(String(sessionId));
@@ -896,6 +1069,10 @@ export const createVoiceService = ({
         },
         planUtterance(utterance, options = {}) {
             return orchestrator.planUtterance(utterance, options);
+        },
+        async executeIntent(intent, options = {}) {
+            const response = await orchestrator.executeIntent(intent, options);
+            return maybeSpeakResponse(response, options);
         },
         async executeUtterance(utterance, options = {}) {
             const response = await orchestrator.executeUtterance(utterance, options);

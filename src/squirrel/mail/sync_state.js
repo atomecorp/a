@@ -9,7 +9,7 @@ export const createMailSyncState = ({
     now = () => Date.now()
 } = {}) => {
     const state = {
-        provider: 'icloud_imap',
+        provider: 'remote_imap',
         cursor: null,
         last_sync_at: null,
         batches: 0,
@@ -20,7 +20,7 @@ export const createMailSyncState = ({
     return {
         applyBatch(messages = [], {
             cursor = null,
-            source = { provider: 'icloud_imap' }
+            source = { provider: 'remote_imap' }
         } = {}) {
             const timestamp = now();
             const list = Array.isArray(messages) ? messages : [messages];
@@ -32,7 +32,7 @@ export const createMailSyncState = ({
                 at: timestamp,
                 cursor: state.cursor,
                 count: list.length,
-                source: source && typeof source === 'object' ? { ...source } : { provider: 'icloud_imap' }
+                source: source && typeof source === 'object' ? { ...source } : { provider: 'remote_imap' }
             });
             if (state.changes.length > 50) {
                 state.changes.splice(0, state.changes.length - 50);

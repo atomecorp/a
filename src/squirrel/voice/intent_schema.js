@@ -77,11 +77,58 @@ const readParticipant = (rawUtterance) => {
     return value || null;
 };
 
-const readReplyDraft = (rawUtterance) => {
-    const match = String(rawUtterance || '').match(/^\s*reponds?\s+(.+)$/i);
+const readReplyDraftDetails = (rawUtterance) => {
+    const match = String(rawUtterance || '').match(/^\s*r(?:e|é)ponds?\s+(.+)$/i);
     if (!match) return null;
     const value = String(match[1] || '').trim();
-    return value || null;
+    if (!value) return null;
+
+    const targetedWithClause = value.match(/^(?:a|à)\s+(.+?)\s+que\s+(.+)$/i);
+    if (targetedWithClause) {
+        const replyTarget = String(targetedWithClause[1] || '').trim();
+        const draftText = String(targetedWithClause[2] || '').trim();
+        return {
+            reply_target: replyTarget || null,
+            draft_text: draftText || null
+        };
+    }
+
+    const targetedDirect = value.match(/^(?:a|à)\s+(.+?)\s*[:,]\s*(.+)$/i);
+    if (targetedDirect) {
+        const replyTarget = String(targetedDirect[1] || '').trim();
+        const draftText = String(targetedDirect[2] || '').trim();
+        return {
+            reply_target: replyTarget || null,
+            draft_text: draftText || null
+        };
+    }
+
+    return {
+        reply_target: null,
+        draft_text: value
+    };
+};
+
+const readReplyDraft = (rawUtterance) => readReplyDraftDetails(rawUtterance)?.draft_text || null;
+
+const shouldAutoSendReply = (rawUtterance, draftText) => {
+    const normalized = normalizeText(rawUtterance);
+    if (!String(draftText || '').trim()) return false;
+    if (!normalized) return true;
+    if (
+        hasAnyKeyword(normalized, [
+            'confirme moi',
+            'confirme avant',
+            'demande moi avant',
+            'sans envoyer',
+            'brouillon',
+            'prepare un brouillon',
+            'prepare la reponse'
+        ])
+    ) {
+        return false;
+    }
+    return true;
 };
 
 const buildRuntimeToolStep = ({
@@ -267,8 +314,9 @@ const tryBuildContextualMailIntent = (base) => {
         });
     }
 
-    const replyDraft = readReplyDraft(base.utterance.raw);
+    const replyDraft = readReplyDraftDetails(base.utterance.raw);
     if (normalized.startsWith('reponds ') || normalized === 'reponds' || normalized === 'repond') {
+        const autoSend = shouldAutoSendReply(base.utterance.raw, replyDraft?.draft_text);
         return normalizeVoiceIntent({
             ...base,
             type: 'connector_tool',
@@ -277,7 +325,9 @@ const tryBuildContextualMailIntent = (base) => {
             confidence: 0.92,
             status: 'pending_connector',
             entities: {
-                draft_text: replyDraft
+                draft_text: replyDraft?.draft_text || null,
+                auto_send: autoSend,
+                ...(replyDraft?.reply_target ? { reply_target: replyDraft.reply_target } : {})
             },
             requested_capabilities: ['mail_reply_draft'],
             execution: {
@@ -288,7 +338,9 @@ const tryBuildContextualMailIntent = (base) => {
                     description: 'Draft a reply for the current mail context.',
                     input: {
                         context: 'current',
-                        draft_text: replyDraft
+                        draft_text: replyDraft?.draft_text || null,
+                        auto_send: autoSend,
+                        ...(replyDraft?.reply_target ? { reply_target: replyDraft.reply_target } : {})
                     }
                 })]
             }
@@ -370,6 +422,43 @@ const tryBuildMailIntent = (base) => {
         send: ['mail_send'],
         search: ['mail_search']
     };
+    const replyDraft = action === 'reply'
+        ? readReplyDraftDetails(base.utterance.raw)
+        : null;
+    const autoSend = action === 'reply'
+        ? shouldAutoSendReply(base.utterance.raw, replyDraft?.draft_text)
+        : false;
+
+    if (action === 'reply') {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'connector_tool',
+            domain: 'mail',
+            action,
+            confidence: 0.82,
+            status: 'pending_connector',
+            entities: {
+                temporal_ref: readTimeReference(normalized),
+                draft_text: replyDraft?.draft_text || null,
+                auto_send: autoSend,
+                ...(replyDraft?.reply_target ? { reply_target: replyDraft.reply_target } : {})
+            },
+            requested_capabilities: ['mail_reply_draft'],
+            execution: {
+                target: 'pending_connector',
+                toolchain: [buildPendingConnectorStep({
+                    capability: 'mail_reply_draft',
+                    input: {
+                        temporal_ref: readTimeReference(normalized),
+                        draft_text: replyDraft?.draft_text || null,
+                        auto_send: autoSend,
+                        ...(replyDraft?.reply_target ? { reply_target: replyDraft.reply_target } : {})
+                    }
+                })],
+                confirmation_required: false
+            }
+        });
+    }
 
     return normalizeVoiceIntent({
         ...base,
@@ -390,7 +479,7 @@ const tryBuildMailIntent = (base) => {
                     temporal_ref: readTimeReference(normalized)
                 }
             })),
-            confirmation_required: action === 'send'
+            confirmation_required: false
         }
     });
 };
@@ -571,7 +660,8 @@ export const classifyVoiceIntent = (utterance, {
     locale = DEFAULT_LOCALE,
     source = null,
     context = {},
-    runtime_tools = []
+    runtime_tools = [],
+    allow_business_heuristics = true
 } = {}) => {
     const rawUtterance = String(utterance || '').trim();
     const base = buildBaseIntent({
@@ -593,6 +683,14 @@ export const classifyVoiceIntent = (utterance, {
             locale,
             source,
             context
+        });
+    }
+
+    if (allow_business_heuristics !== true) {
+        return normalizeVoiceIntent({
+            ...base,
+            confidence: 0.18,
+            status: 'ambiguous'
         });
     }
 

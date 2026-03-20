@@ -11,6 +11,8 @@ const { window } = dom;
 globalThis.window = window;
 globalThis.document = window.document;
 globalThis.localStorage = window.localStorage;
+window.__currentUser = { name: 'Jean-Eric' };
+window.__EVE_VOICE_ECHO_COOLDOWN_MS = 5000;
 window.HTMLCanvasElement.prototype.getContext = () => ({
     clearRect() {},
     fillRect() {},
@@ -26,7 +28,8 @@ const calls = {
     startListening: 0,
     stopListening: 0,
     executeUtterance: 0,
-    stopSpeaking: 0
+    stopSpeaking: 0,
+    speak: []
 };
 
 const voiceApi = {
@@ -43,7 +46,13 @@ const voiceApi = {
     },
     async startListening() {
         calls.startListening += 1;
-        if (calls.startListening > 1) {
+        if (calls.startListening === 2) {
+            return {
+                session_id: `eve_session_${sessionCounter}`,
+                promise: Promise.resolve({ text: 'Reponse pour: Lis mes mails' })
+            };
+        }
+        if (calls.startListening > 2) {
             return {
                 session_id: `eve_session_${sessionCounter}`,
                 promise: new Promise(() => {})
@@ -69,6 +78,13 @@ const voiceApi = {
     async stopSpeaking() {
         calls.stopSpeaking += 1;
         return { stopped: true };
+    },
+    async speak(text) {
+        calls.speak.push(text);
+        return {
+            text,
+            promise: Promise.resolve({ text })
+        };
     }
 };
 
@@ -82,20 +98,22 @@ const controller = await mountHomeVoiceSurface({
 assert.ok(controller, 'home voice surface should mount a controller');
 assert.ok(host.querySelector('[data-role="eve-voice-surface"]'), 'home voice surface should render into the host');
 
-controller.activate();
+await controller.activate();
+await new Promise((resolve) => setTimeout(resolve, 0));
 await new Promise((resolve) => setTimeout(resolve, 0));
 await new Promise((resolve) => setTimeout(resolve, 0));
 
 const state = controller.getState();
 assert.equal(calls.startListening >= 1, true, 'home voice surface should auto-start listening when activated');
-assert.equal(calls.executeUtterance >= 1, true, 'home voice surface should execute the utterance after STT completes');
+assert.equal(calls.speak[0], 'Salut Jean-Eric, je t ecoute.', 'home voice surface should announce readiness when activated');
+assert.equal(calls.executeUtterance, 1, 'home voice surface should execute the utterance once and ignore its own echoed reply');
 assert.equal(state.history.some((entry) => entry.role === 'user' && entry.text === 'Lis mes mails'), true, 'home voice surface should store the user question in history');
 assert.equal(state.history.some((entry) => entry.role === 'assistant' && entry.text === 'Reponse pour: Lis mes mails'), true, 'home voice surface should store the assistant reply in history');
 
 const action = host.querySelector('[data-role="eve-voice-action"]');
 const input = host.querySelector('[data-role="eve-voice-input"]');
 const send = host.querySelector('[data-role="eve-voice-send"]');
-assert.equal(action.textContent, 'Stop', 'home voice surface should expose a stop control while listening');
+assert.equal(action.textContent, 'Reprendre l ecoute', 'home voice surface should wait before listening again after speaking to avoid hearing itself');
 input.value = 'Ouvre Mtrack';
 send.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -104,6 +122,7 @@ assert.equal(calls.executeUtterance >= 2, true, 'home voice surface should allow
 
 await controller.deactivate();
 assert.equal(calls.stopSpeaking >= 1, true, 'home voice surface should stop speech on deactivate');
+assert.equal(calls.speak.at(-1), "Je m'en vais, rappelle-moi si tu as besoin.", 'home voice surface should announce closure on deactivate');
 
 delete globalThis.window;
 delete globalThis.document;

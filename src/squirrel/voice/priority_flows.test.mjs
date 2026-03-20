@@ -48,20 +48,20 @@ const calendarSession = runtime.createSession({ session_id: 'voice_priority_cale
 const mailList = await orchestrator.executeUtterance('Lis mes mails', {
     session_id: mailSession.session_id
 });
-assert.equal(mailList.transport, 'pending_connector');
-assert.deepEqual(mailList.requested_capabilities, ['mail_read', 'mail_next_unread']);
+assert.equal(mailList.transport, 'mail_api');
+assert.deepEqual(mailList.intent.requested_capabilities, ['mail_read', 'mail_next_unread']);
 
 const mailNext = await orchestrator.executeUtterance('Lis le suivant', {
     session_id: mailSession.session_id
 });
-assert.equal(mailNext.transport, 'pending_connector');
-assert.deepEqual(mailNext.requested_capabilities, ['mail_next_unread']);
+assert.equal(mailNext.transport, 'mail_api');
+assert.deepEqual(mailNext.intent.requested_capabilities, ['mail_next_unread']);
 
 const mailReply = await orchestrator.executeUtterance('Reponds que je m en occupe demain', {
     session_id: mailSession.session_id
 });
-assert.equal(mailReply.transport, 'pending_connector');
-assert.deepEqual(mailReply.requested_capabilities, ['mail_reply_draft']);
+assert.equal(mailReply.transport, 'mail_api');
+assert.deepEqual(mailReply.intent.requested_capabilities, ['mail_reply_draft']);
 assert.equal(mailReply.intent.entities.draft_text, 'que je m en occupe demain');
 
 const calendarList = await orchestrator.executeUtterance('Quels sont mes rendez-vous demain', {
