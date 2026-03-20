@@ -988,9 +988,24 @@ function ensureCalendarApi() {
 async function prepareContactsApi(options = {}) {
     const api = ensureContactsApi();
     if (typeof api.ensureReady === 'function') {
-        const ready = await api.ensureReady(options);
+        const ready = await Promise.race([
+            Promise.resolve().then(() => api.ensureReady({
+                import_legacy_if_empty: false,
+                ...options
+            })),
+            new Promise((resolve) => {
+                setTimeout(() => resolve({
+                    ok: false,
+                    error: 'contacts_sync_timeout'
+                }), 1500);
+            })
+        ]);
         if (ready?.ok !== false) return api;
-        throw new Error(ready?.error || 'contacts_sync_failed');
+        const cached = typeof api.list === 'function' ? api.list({ limit: 1 }) : null;
+        if (Array.isArray(cached?.items) && cached.items.length) {
+            return api;
+        }
+        return api;
     }
     if (typeof api.configureMacosSource === 'function') {
         api.configureMacosSource(options);

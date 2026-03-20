@@ -2,6 +2,74 @@ const DEFAULT_MAILBOX = 'inbox';
 
 const normalizeText = (value) => String(value || '').trim();
 
+const decodeBytesToText = (bytes, charset = 'utf-8') => {
+    const normalizedCharset = String(charset || 'utf-8').trim().toLowerCase();
+    try {
+        if (typeof TextDecoder === 'function') {
+            const decoder = new TextDecoder(
+                normalizedCharset === 'utf8' ? 'utf-8' : normalizedCharset,
+                { fatal: false }
+            );
+            return decoder.decode(bytes);
+        }
+    } catch (_) {
+        // Fall through to Buffer decoding.
+    }
+    if (typeof Buffer !== 'undefined') {
+        if (normalizedCharset.includes('iso-8859-1') || normalizedCharset.includes('latin1')) {
+            return Buffer.from(bytes).toString('latin1');
+        }
+        return Buffer.from(bytes).toString('utf8');
+    }
+    return String.fromCharCode(...bytes);
+};
+
+const decodeBase64Bytes = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return new Uint8Array();
+    if (typeof Buffer !== 'undefined') {
+        return Uint8Array.from(Buffer.from(text, 'base64'));
+    }
+    if (typeof atob === 'function') {
+        const binary = atob(text);
+        return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    }
+    return new Uint8Array();
+};
+
+const decodeQuotedPrintableBytes = (value) => {
+    const text = String(value || '').replace(/_/g, ' ');
+    const bytes = [];
+    for (let index = 0; index < text.length; index += 1) {
+        const current = text[index];
+        if (
+            current === '='
+            && index + 2 < text.length
+            && /^[0-9A-Fa-f]{2}$/.test(text.slice(index + 1, index + 3))
+        ) {
+            bytes.push(Number.parseInt(text.slice(index + 1, index + 3), 16));
+            index += 2;
+            continue;
+        }
+        bytes.push(text.charCodeAt(index));
+    }
+    return Uint8Array.from(bytes);
+};
+
+const decodeMimeEncodedWords = (value) => String(value || '').replace(
+    /=\?([^?]+)\?([bBqQ])\?([^?]*)\?=/g,
+    (_match, charset, encoding, encodedText) => {
+        try {
+            const bytes = String(encoding || '').toUpperCase() === 'B'
+                ? decodeBase64Bytes(encodedText)
+                : decodeQuotedPrintableBytes(encodedText);
+            return decodeBytesToText(bytes, charset);
+        } catch (_) {
+            return String(encodedText || '');
+        }
+    }
+).replace(/\s{2,}/g, ' ').trim();
+
 const normalizeSearchText = (value) => normalizeText(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -51,7 +119,7 @@ export const normalizeMailRecord = (record = {}) => {
         message_id: messageId,
         thread_id: normalizeText(record.thread_id || record.threadId || messageId),
         mailbox: normalizeText(record.mailbox || record.folder || DEFAULT_MAILBOX) || DEFAULT_MAILBOX,
-        subject: normalizeText(record.subject),
+        subject: normalizeText(decodeMimeEncodedWords(record.subject)),
         preview: normalizeText(record.preview || record.snippet),
         body_text: normalizeText(record.body_text || record.bodyText || record.body),
         received_at: parseDateMs(record.received_at || record.receivedAt || record.date),

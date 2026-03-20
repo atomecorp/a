@@ -47,6 +47,20 @@ assert.deepEqual(
 const read = index.read('mail_1');
 assert.equal(read.subject, 'Paiement Roméo', 'mail index should read one message by id');
 
+index.upsert([
+    {
+        message_id: 'mail_4',
+        mailbox: 'inbox',
+        subject: '=?UTF-8?B?W2F0b21lLm9uZV0gQ2xpZW50IGNvbmZpZ3VyYXRpb24gc2V0dGluZ3MgZm9yIOKAnGplZXpzQGF0b21lLm9uZeKAnS4=?=',
+        preview: 'Configuration',
+        body_text: 'Configuration',
+        unread: true,
+        from: { name: 'cPanel', address: 'noreply@example.test' },
+        received_at: '2026-03-13T10:00:00Z'
+    }
+]);
+assert.match(index.read('mail_4').subject, /\[atome\.one\] Client configuration settings/, 'mail index should decode MIME encoded subjects');
+
 const search = index.search('romeo');
 assert.deepEqual(
     search.map((entry) => entry.message_id),
@@ -55,10 +69,10 @@ assert.deepEqual(
 );
 
 const nextUnread = index.nextUnread({ mailbox: 'inbox' });
-assert.equal(nextUnread.message_id, 'mail_1', 'mail index should expose the next unread message');
+assert.equal(nextUnread.message_id, 'mail_4', 'mail index should expose the most recent unread message');
 
 const stats = index.stats();
-assert.equal(stats.total, 3, 'mail index stats should count all records');
-assert.equal(stats.unread, 2, 'mail index stats should count unread messages');
+assert.equal(stats.total, 4, 'mail index stats should count all records');
+assert.equal(stats.unread, 3, 'mail index stats should count unread messages');
 
 console.log('mail_local_index: ok');

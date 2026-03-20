@@ -131,8 +131,8 @@ const createImapServer = (transcript) => tls.createServer({
             socket.write(`${tag} OK LOGIN completed\r\n`);
             return;
         }
-        if (/^SELECT /i.test(command)) {
-            socket.write(`* 3 EXISTS\r\n* OK [UIDNEXT 104] next uid\r\n${tag} OK [READ-WRITE] SELECT completed\r\n`);
+        if (/^EXAMINE /i.test(command)) {
+            socket.write(`* 3 EXISTS\r\n* OK [UIDNEXT 104] next uid\r\n${tag} OK [READ-ONLY] EXAMINE completed\r\n`);
             return;
         }
         if (/^UID SEARCH ALL/i.test(command)) {
@@ -151,7 +151,7 @@ const createImapServer = (transcript) => tls.createServer({
                 if (!item) return;
                 const literalLength = Buffer.byteLength(item.raw);
                 const flags = item.flags.join(' ');
-                socket.write(`* ${index + 1} FETCH (UID ${uid} FLAGS (${flags}) INTERNALDATE "${item.internalDate}" RFC822 {${literalLength}}\r\n${item.raw})\r\n`);
+                socket.write(`* ${index + 1} FETCH (UID ${uid} FLAGS (${flags}) INTERNALDATE "${item.internalDate}" BODY[] {${literalLength}}\r\n${item.raw})\r\n`);
             });
             socket.write(`${tag} OK FETCH completed\r\n`);
             return;

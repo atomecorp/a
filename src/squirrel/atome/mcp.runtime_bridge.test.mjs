@@ -4,6 +4,7 @@ const runtimeCalls = [];
 const runtimeBatchCalls = [];
 let contactsConfigured = 0;
 let contactsSynced = 0;
+const contactsReadyOptions = [];
 let contactsImported = 0;
 let contactsIcloudImported = 0;
 let contactsIcloudPushed = 0;
@@ -117,9 +118,10 @@ globalThis.atome = {
         }
     },
     contacts: {
-        ensureReady() {
+        ensureReady(options = {}) {
             contactsConfigured += 1;
             contactsSynced += 1;
+            contactsReadyOptions.push(options);
             return { ok: true };
         },
         sources() {
@@ -385,6 +387,7 @@ assert.equal(contactsRead.error, undefined, 'contacts.read should succeed');
 assert.equal(contactsRead.result?.contact?.source_contact_id, 'mac_contact_mcp_1', 'contacts.read should bridge to the global contacts API');
 assert.equal(contactsConfigured > 0, true, 'contacts MCP bridge should prepare the shared contacts service before reads');
 assert.equal(contactsSynced > 0, true, 'contacts MCP bridge should trigger a readiness sync before reads');
+assert.equal(contactsReadyOptions.some((entry) => entry?.import_legacy_if_empty === false), true, 'contacts MCP reads should avoid implicit macOS imports');
 
 const contactsImport = await globalThis.handleAtomeMCPRequestAsync({
     jsonrpc: '2.0',

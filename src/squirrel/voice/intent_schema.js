@@ -53,6 +53,37 @@ const hasAnyKeyword = (normalized, keywords = []) => {
     return keywords.some((keyword) => normalized.includes(keyword));
 };
 
+const hasUnreadMailQualifier = (normalized = '') => {
+    if (!normalized) return false;
+    return (
+        hasAnyKeyword(normalized, [
+            'non lu',
+            'non lus',
+            'non lue',
+            'non lues',
+            'nouveau mail',
+            'nouveaux mails',
+            'new mail',
+            'new mails'
+        ])
+        || /\bn\w{1,4}\s+lu(?:e|es|s)?\b/.test(normalized)
+    );
+};
+
+const hasMailStatusQuestion = (normalized = '') => {
+    if (!normalized) return false;
+    return (
+        hasAnyKeyword(normalized, [
+            'ai je',
+            'ais je',
+            'est ce que j ai',
+            'y a t il',
+            'il y a',
+            'combien'
+        ])
+    );
+};
+
 const readTimeReference = (normalized) => {
     if (!normalized) return null;
     if (hasAnyKeyword(normalized, ['aujourd hui', 'today'])) return 'today';
@@ -406,6 +437,8 @@ const tryBuildCalendarIntent = (base, runtimeToolSet) => {
 const tryBuildMailIntent = (base) => {
     const normalized = base.utterance.normalized;
     if (!hasAnyKeyword(normalized, ['mail', 'mails', 'message', 'messages', 'courriel'])) return null;
+    const unreadOnly = hasUnreadMailQualifier(normalized);
+    const statusOnly = unreadOnly && hasMailStatusQuestion(normalized);
 
     let action = 'list';
     if (hasAnyKeyword(normalized, ['reponds', 'repond', 'reponse'])) action = 'reply';
@@ -468,7 +501,9 @@ const tryBuildMailIntent = (base) => {
         confidence: 0.78,
         status: 'pending_connector',
         entities: {
-            temporal_ref: readTimeReference(normalized)
+            temporal_ref: readTimeReference(normalized),
+            unread_only: unreadOnly,
+            status_only: statusOnly
         },
         requested_capabilities: capabilityMap[action] || ['mail_list'],
         execution: {
@@ -476,7 +511,9 @@ const tryBuildMailIntent = (base) => {
             toolchain: (capabilityMap[action] || ['mail_list']).map((capability) => buildPendingConnectorStep({
                 capability,
                 input: {
-                    temporal_ref: readTimeReference(normalized)
+                    temporal_ref: readTimeReference(normalized),
+                    unread_only: unreadOnly,
+                    status_only: statusOnly
                 }
             })),
             confirmation_required: false

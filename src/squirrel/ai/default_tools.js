@@ -11,6 +11,22 @@ const safeString = (value) => {
     return str ? str : null;
 };
 
+const withSoftTimeout = async (task, {
+    timeoutMs = 0,
+    fallbackValue = null
+} = {}) => {
+    const duration = Number(timeoutMs);
+    if (!Number.isFinite(duration) || duration <= 0) {
+        return task();
+    }
+    return Promise.race([
+        Promise.resolve().then(() => task()),
+        new Promise((resolve) => {
+            setTimeout(() => resolve(fallbackValue), duration);
+        })
+    ]);
+};
+
 const loadCalendarApi = async () => {
     if (globalThis.CalendarAPI) return globalThis.CalendarAPI;
     const mod = await import('../../application/eVe/intuition/tools/calendar.js');
@@ -59,9 +75,24 @@ const prepareContactsApi = async (options = {}) => {
         throw new Error('Contacts API is not available');
     }
     if (typeof api.ensureReady === 'function') {
-        const ready = await api.ensureReady(options);
+        const ready = await withSoftTimeout(
+            () => api.ensureReady({
+                import_legacy_if_empty: false,
+                ...options
+            }),
+            {
+                timeoutMs: 1500,
+                fallbackValue: {
+                    ok: false,
+                    error: 'contacts_sync_timeout'
+                }
+            }
+        );
         if (ready?.ok === false) {
-            throw new Error(ready?.error || 'contacts_sync_failed');
+            const cached = typeof api.list === 'function' ? api.list({ limit: 1 }) : null;
+            if (!Array.isArray(cached?.items) || !cached.items.length) {
+                return api;
+            }
         }
         return api;
     }

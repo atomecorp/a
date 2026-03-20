@@ -369,7 +369,7 @@ class NodeImapClient {
     async selectMailbox(mailbox) {
         const normalized = normalizeText(mailbox || this.config.mailbox) || 'INBOX';
         if (normalized === this.selectedMailbox) return;
-        await this.command(`SELECT ${quoteImapString(normalized)}`);
+        await this.command(`EXAMINE ${quoteImapString(normalized)}`);
         this.selectedMailbox = normalized;
     }
 
@@ -473,7 +473,7 @@ class NodeImapClient {
     async fetchUidSet(uids = []) {
         if (!Array.isArray(uids) || !uids.length) return [];
         const uidSet = uids.join(',');
-        const response = await this.command(`UID FETCH ${uidSet} (UID FLAGS INTERNALDATE RFC822)`);
+        const response = await this.command(`UID FETCH ${uidSet} (UID FLAGS INTERNALDATE BODY.PEEK[])`);
         return response.fetchBlocks.map((entry) => this.parseFetchBlock(entry));
     }
 

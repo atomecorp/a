@@ -915,8 +915,15 @@ class VoiceOrchestrator {
             ...(payload.result ? { result: payload.result } : {}),
             ...(payload.reply_text ? { reply_text: payload.reply_text, spoken_reply: payload.reply_text } : {})
         });
+        const unreadOnly = intent?.entities?.unread_only === true
+            || toolchain.some((step) => step?.input?.unread_only === true);
+        const statusOnly = intent?.entities?.status_only === true
+            || toolchain.some((step) => step?.input?.status_only === true);
 
         const topList = typeof mail.list === 'function' ? mail.list({ limit: 5 }) : { ok: false, items: [] };
+        const unreadList = typeof mail.list === 'function'
+            ? mail.list({ limit: 5, unread_only: true })
+            : { ok: false, items: [] };
         const hasIndexedMail = Array.isArray(topList?.items) && topList.items.length > 0;
         if (!connectorStatus?.configured && !hasIndexedMail) {
             const readyError = String(readyResult?.error || '').trim();
@@ -988,7 +995,7 @@ class VoiceOrchestrator {
         if (capabilities.includes('mail_summarize') || intent.action === 'summarize') {
             const summary = typeof mail.summarize === 'function'
                 ? mail.summarize({
-                    unread_only: true,
+                    unread_only: unreadOnly,
                     limit: 10
                 })
                 : null;
@@ -1020,20 +1027,45 @@ class VoiceOrchestrator {
         }
 
         if (capabilities.includes('mail_list') || intent.action === 'list') {
-            if (topList?.ok === true) {
-                const subjects = (topList.items || [])
+            const listing = unreadOnly ? unreadList : topList;
+            if (statusOnly) {
+                const unreadCount = Number(unreadList?.stats?.unread || 0);
+                const subjects = (unreadList?.items || [])
+                    .slice(0, 3)
+                    .map((item) => String(item?.subject || '').trim())
+                    .filter(Boolean);
+                const replyText = unreadCount <= 0
+                    ? (english ? 'You do not have any unread mail.' : "Tu n'as pas de mail non lu.")
+                    : (subjects.length
+                        ? (english
+                            ? `You have ${unreadCount} unread mail(s): ${subjects.join(', ')}.`
+                            : `Tu as ${unreadCount} mail(s) non lu(s): ${subjects.join(', ')}.`)
+                        : (english
+                            ? `You have ${unreadCount} unread mail(s).`
+                            : `Tu as ${unreadCount} mail(s) non lu(s).`));
+                return buildResponse({
+                    result: unreadList,
+                    reply_text: replyText
+                });
+            }
+            if (listing?.ok === true) {
+                const subjects = (listing.items || [])
                     .slice(0, 3)
                     .map((item) => String(item?.subject || '').trim())
                     .filter(Boolean);
                 const replyText = subjects.length
                     ? (english
-                        ? `Here are the latest mails: ${subjects.join(', ')}.`
-                        : `Voici les derniers mails: ${subjects.join(', ')}.`)
+                        ? (unreadOnly
+                            ? `Here are the unread mails: ${subjects.join(', ')}.`
+                            : `Here are the latest mails: ${subjects.join(', ')}.`)
+                        : (unreadOnly
+                            ? `Voici les mails non lus: ${subjects.join(', ')}.`
+                            : `Voici les derniers mails: ${subjects.join(', ')}.`))
                     : (english
-                        ? 'I do not see any mail right now.'
-                        : "Je ne vois pas de mail pour le moment.");
+                        ? (unreadOnly ? 'I do not see any unread mail right now.' : 'I do not see any mail right now.')
+                        : (unreadOnly ? "Je ne vois pas de mail non lu pour le moment." : "Je ne vois pas de mail pour le moment."));
                 return buildResponse({
-                    result: topList,
+                    result: listing,
                     reply_text: replyText
                 });
             }

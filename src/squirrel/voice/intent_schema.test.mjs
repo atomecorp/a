@@ -88,6 +88,14 @@ assert.equal(mailSummaryIntent.domain, 'mail');
 assert.equal(mailSummaryIntent.action, 'summarize');
 assert.equal(mailSummaryIntent.execution.target, 'pending_connector');
 
+const unreadMailIntent = classifyVoiceIntent('Ais je de nouveaux mails nion lues ?', {
+    runtime_tools: runtimeTools
+});
+assert.equal(unreadMailIntent.domain, 'mail');
+assert.equal(unreadMailIntent.action, 'list');
+assert.equal(unreadMailIntent.entities.unread_only, true);
+assert.equal(unreadMailIntent.entities.status_only, true);
+
 const mailSendIntent = classifyVoiceIntent('Envoie le mail', {
     runtime_tools: runtimeTools
 });

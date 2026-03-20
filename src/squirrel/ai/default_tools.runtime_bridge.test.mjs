@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 const registeredTools = new Map();
 const runtimeCalls = [];
 let contactsReadyCalls = 0;
+const contactsReadyOptions = [];
 let contactsOpenPanelCalls = 0;
 let contactsImportCalls = 0;
 let contactsIcloudImportCalls = 0;
@@ -61,8 +62,9 @@ globalThis.atome = {
         }
     },
     contacts: {
-        async ensureReady() {
+        async ensureReady(options = {}) {
             contactsReadyCalls += 1;
+            contactsReadyOptions.push(options);
             return { ok: true };
         },
         sources() {
@@ -453,5 +455,6 @@ assert.equal(contactsImportCalls, 1, 'contacts.import_macos should call the shar
 assert.equal(contactsIcloudImportCalls, 1, 'contacts.import_icloud should call the shared iCloud contacts import bridge once');
 assert.equal(contactsIcloudPushCalls, 1, 'contacts.push_icloud should call the shared iCloud write bridge once');
 assert.equal(contactsOpenPanelCalls, 1, 'contacts.open_panel should call the shared contacts UI bridge once');
+assert.equal(contactsReadyOptions.some((entry) => entry?.import_legacy_if_empty === false), true, 'contacts reads should not trigger an implicit macOS import');
 
 console.log('default_tools.runtime_bridge.test: PASS');

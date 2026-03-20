@@ -395,6 +395,43 @@ assert.equal(summaryResult.executed, true, 'mail summarize should execute throug
 assert.equal(summaryResult.transport, 'mail_api', 'mail summarize should stay on the mail api transport');
 assert.match(summaryResult.reply_text, /facture a valider/i, 'mail summarize should prefer the AI summary when available');
 
+const unreadMailEnv = {};
+const unreadMailApi = createGlobalMailApi({ env: unreadMailEnv });
+unreadMailApi.ingest([
+    {
+        message_id: 'voice_mail_unread_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_unread_1',
+        subject: 'Cool',
+        preview: 'Cool',
+        body_text: 'Cool',
+        from: { name: 'Jean-Eric Godard', address: 'jean-eric@example.test' },
+        unread: false,
+        received_at: '2026-03-20T12:00:00.000Z'
+    },
+    {
+        message_id: 'voice_mail_unread_2',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_unread_2',
+        subject: '=?UTF-8?B?W2F0b21lLm9uZV0gQ2xpZW50IGNvbmZpZ3VyYXRpb24gc2V0dGluZ3MgZm9yIOKAnGplZXpzQGF0b21lLm9uZeKAnS4=?=',
+        preview: 'Parametres',
+        body_text: 'Parametres',
+        from: { name: 'cPanel', address: 'noreply@example.test' },
+        unread: true,
+        received_at: '2026-03-20T13:00:00.000Z'
+    }
+]);
+const unreadOrchestrator = createVoiceOrchestrator({
+    env: unreadMailEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const unreadResult = await unreadOrchestrator.executeUtterance('Ais je de nouveaux mails nion lues ?');
+assert.equal(unreadResult.ok, true, 'unread mail status question should succeed');
+assert.equal(unreadResult.transport, 'mail_api', 'unread mail status question should stay on the mail api transport');
+assert.match(unreadResult.reply_text, /mail\(s\) non lu\(s\)|mail non lu/i, 'unread mail status question should answer on unread mail only');
+assert.doesNotMatch(unreadResult.reply_text, /^Voici les derniers mails:/i, 'unread mail status question should not fall back to the latest mail list');
+assert.doesNotMatch(unreadResult.reply_text, /=\?UTF-8\?/i, 'unread mail status question should not expose raw MIME encoded subjects');
+
 const mailReplyEnv = {};
 const replyMailApi = createGlobalMailApi({ env: mailReplyEnv });
 replyMailApi.ingest([
