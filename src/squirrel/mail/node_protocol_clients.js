@@ -194,6 +194,115 @@ const connectSocket = async (transport = {}) => {
 
 const quoteImapString = (value) => `"${String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
+const decodeBytesToText = (bytes, charset = 'utf-8') => {
+    const normalizedCharset = String(charset || 'utf-8').trim().toLowerCase();
+    try {
+        if (typeof TextDecoder === 'function') {
+            const decoder = new TextDecoder(
+                normalizedCharset === 'utf8' ? 'utf-8' : normalizedCharset,
+                { fatal: false }
+            );
+            return decoder.decode(bytes);
+        }
+    } catch (_) {
+        // Fall through to Buffer decoding.
+    }
+    if (typeof Buffer !== 'undefined') {
+        if (normalizedCharset.includes('iso-8859-1') || normalizedCharset.includes('latin1')) {
+            return Buffer.from(bytes).toString('latin1');
+        }
+        return Buffer.from(bytes).toString('utf8');
+    }
+    return String.fromCharCode(...bytes);
+};
+
+const decodeBase64Bytes = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return new Uint8Array();
+    if (typeof Buffer !== 'undefined') {
+        return Uint8Array.from(Buffer.from(text, 'base64'));
+    }
+    if (typeof atob === 'function') {
+        const binary = atob(text);
+        return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    }
+    return new Uint8Array();
+};
+
+const decodeQuotedPrintableBytes = (value) => {
+    const text = String(value || '')
+        .replace(/=\r?\n/g, '')
+        .replace(/=$/, '')
+        .replace(/_/g, ' ');
+    const bytes = [];
+    for (let index = 0; index < text.length; index += 1) {
+        const current = text[index];
+        if (
+            current === '='
+            && index + 2 < text.length
+            && /^[0-9A-Fa-f]{2}$/.test(text.slice(index + 1, index + 3))
+        ) {
+            bytes.push(Number.parseInt(text.slice(index + 1, index + 3), 16));
+            index += 2;
+            continue;
+        }
+        bytes.push(text.charCodeAt(index));
+    }
+    return Uint8Array.from(bytes);
+};
+
+const buildDestinationMailboxCandidates = (sourceMailbox, destinationMailbox, error = null) => {
+    const requested = normalizeText(destinationMailbox);
+    if (!requested) return [];
+    const candidates = [requested];
+    const source = normalizeText(sourceMailbox).toUpperCase();
+    const message = String(error?.message || error || '');
+    const hintedPrefix = message.match(/prefixed with:\s*([A-Z0-9._-]+)/i)?.[1] || '';
+    if (!requested.includes('.')) {
+        if (hintedPrefix) {
+            candidates.push(`${hintedPrefix.replace(/\.+$/, '')}.${requested}`);
+        } else if (source === 'INBOX' || source.startsWith('INBOX.')) {
+            candidates.push(`INBOX.${requested}`);
+        }
+    }
+    return Array.from(new Set(candidates.map((entry) => normalizeText(entry)).filter(Boolean)));
+};
+
+const decodeMimeEncodedWords = (value) => String(value || '').replace(
+    /=\?([^?]+)\?([bBqQ])\?([^?]*)\?=/g,
+    (_match, charset, encoding, encodedText) => {
+        try {
+            const bytes = String(encoding || '').toUpperCase() === 'B'
+                ? decodeBase64Bytes(encodedText)
+                : decodeQuotedPrintableBytes(encodedText);
+            return decodeBytesToText(bytes, charset);
+        } catch (_) {
+            return String(encodedText || '');
+        }
+    }
+);
+
+const decodeLooseQuotedPrintableText = (value, charset = 'utf-8') => {
+    const text = String(value || '').trim();
+    if (!/=([0-9A-Fa-f]{2})/.test(text)) return text;
+    try {
+        return decodeBytesToText(decodeQuotedPrintableBytes(text), charset);
+    } catch (_) {
+        return text;
+    }
+};
+
+const normalizeHeaderText = (value, charset = 'utf-8') => {
+    const decodedWords = decodeMimeEncodedWords(value);
+    const looselyDecoded = decodeLooseQuotedPrintableText(decodedWords, charset);
+    return String(looselyDecoded || '').replace(/\s{2,}/g, ' ').trim();
+};
+
+const readCharsetFromContentType = (value = '') => {
+    const match = String(value || '').match(/charset\s*=\s*("?)([^";\s]+)\1/i);
+    return String(match?.[2] || 'utf-8').trim() || 'utf-8';
+};
+
 const parseAddressToken = (token = '') => {
     const raw = String(token || '').trim();
     if (!raw) return null;
@@ -248,24 +357,65 @@ const parseHeaders = (headerText = '') => {
     return headers;
 };
 
+const extractTextFromMultipart = (body, boundary) => {
+    const parts = body.split(`--${boundary}`);
+    for (const part of parts) {
+        if (part.trim() === '--' || !part.trim()) continue;
+        const partSepMatch = part.match(/\r?\n\r?\n/);
+        if (!partSepMatch) continue;
+        const partHeaderText = part.slice(0, partSepMatch.index);
+        const partBody = part.slice(partSepMatch.index + partSepMatch[0].length);
+        const partHeaders = parseHeaders(partHeaderText);
+        const partContentType = (partHeaders['content-type'] || '').toLowerCase();
+        // Recurse into nested multipart
+        const nestedBoundaryMatch = partContentType.match(/boundary\s*=\s*"?([^";\s]+)"?/i);
+        if (partContentType.includes('multipart/') && nestedBoundaryMatch) {
+            const nested = extractTextFromMultipart(partBody, nestedBoundaryMatch[1]);
+            if (nested) return nested;
+            continue;
+        }
+        if (partContentType.includes('text/plain') || (!partContentType && partBody.trim())) {
+            const partCharset = readCharsetFromContentType(partHeaders['content-type'] || '');
+            const partEncoding = normalizeText(partHeaders['content-transfer-encoding'] || '').toLowerCase();
+            if (partEncoding === 'quoted-printable') return decodeBytesToText(decodeQuotedPrintableBytes(partBody), partCharset);
+            if (partEncoding === 'base64') return decodeBytesToText(decodeBase64Bytes(partBody.replace(/\s+/g, '')), partCharset);
+            return partBody;
+        }
+    }
+    return null;
+};
+
 const parseRawEmail = (raw = '') => {
     const message = String(raw || '');
     const separatorMatch = message.match(/\r?\n\r?\n/);
     const separatorIndex = separatorMatch ? separatorMatch.index : -1;
     const headerText = separatorIndex >= 0 ? message.slice(0, separatorIndex) : message;
-    const bodyText = separatorIndex >= 0 ? message.slice(separatorIndex + separatorMatch[0].length) : '';
+    const rawBodyText = separatorIndex >= 0 ? message.slice(separatorIndex + separatorMatch[0].length) : '';
     const headers = parseHeaders(headerText);
+    const contentType = headers['content-type'] || '';
+    const charset = readCharsetFromContentType(contentType);
+    const transferEncoding = normalizeText(headers['content-transfer-encoding'] || '').toLowerCase();
+    const boundaryMatch = contentType.match(/boundary\s*=\s*"?([^";\s]+)"?/i);
+    let bodyText = rawBodyText;
+    if (boundaryMatch) {
+        // Multipart MIME: extract only the text/plain part
+        bodyText = extractTextFromMultipart(rawBodyText, boundaryMatch[1]) || '';
+    } else if (transferEncoding === 'quoted-printable') {
+        bodyText = decodeBytesToText(decodeQuotedPrintableBytes(rawBodyText), charset);
+    } else if (transferEncoding === 'base64') {
+        bodyText = decodeBytesToText(decodeBase64Bytes(rawBodyText.replace(/\s+/g, '')), charset);
+    }
     const preview = bodyText.replace(/\s+/g, ' ').trim().slice(0, 240);
     return {
-        message_id: headers['message-id'] || null,
-        subject: headers.subject || '',
-        from: splitAddressTokens(headers.from || '')[0] || null,
-        to: splitAddressTokens(headers.to || ''),
-        cc: splitAddressTokens(headers.cc || ''),
-        bcc: splitAddressTokens(headers.bcc || ''),
-        in_reply_to: headers['in-reply-to'] || null,
-        references: normalizeText(headers.references || '').split(/\s+/).filter(Boolean),
-        date: headers.date || null,
+        message_id: normalizeHeaderText(headers['message-id'] || '', charset) || null,
+        subject: normalizeHeaderText(headers.subject || '', charset),
+        from: splitAddressTokens(normalizeHeaderText(headers.from || '', charset))[0] || null,
+        to: splitAddressTokens(normalizeHeaderText(headers.to || '', charset)),
+        cc: splitAddressTokens(normalizeHeaderText(headers.cc || '', charset)),
+        bcc: splitAddressTokens(normalizeHeaderText(headers.bcc || '', charset)),
+        in_reply_to: normalizeHeaderText(headers['in-reply-to'] || '', charset) || null,
+        references: normalizeText(normalizeHeaderText(headers.references || '', charset)).split(/\s+/).filter(Boolean),
+        date: normalizeHeaderText(headers.date || '', charset) || null,
         preview,
         body_text: bodyText.trim()
     };
@@ -338,6 +488,7 @@ class NodeImapClient {
         this.socket = null;
         this.tagSeq = 0;
         this.selectedMailbox = null;
+        this.selectedMailboxReadOnly = true;
     }
 
     async connect() {
@@ -366,11 +517,14 @@ class NodeImapClient {
         return `A${String(this.tagSeq).padStart(4, '0')}`;
     }
 
-    async selectMailbox(mailbox) {
+    async selectMailbox(mailbox, {
+        readOnly = true
+    } = {}) {
         const normalized = normalizeText(mailbox || this.config.mailbox) || 'INBOX';
-        if (normalized === this.selectedMailbox) return;
-        await this.command(`EXAMINE ${quoteImapString(normalized)}`);
+        if (normalized === this.selectedMailbox && this.selectedMailboxReadOnly === readOnly) return;
+        await this.command(`${readOnly ? 'EXAMINE' : 'SELECT'} ${quoteImapString(normalized)}`);
         this.selectedMailbox = normalized;
+        this.selectedMailboxReadOnly = readOnly;
     }
 
     async command(commandText) {
@@ -478,7 +632,7 @@ class NodeImapClient {
     }
 
     async fetchInitialMailbox(request = {}) {
-        await this.selectMailbox(request.mailbox || this.config.mailbox);
+        await this.selectMailbox(request.mailbox || this.config.mailbox, { readOnly: true });
         const limit = Math.max(1, toFiniteNumber(request.limit, 50));
         const uids = await this.searchUids();
         const selected = uids.slice(-limit);
@@ -493,7 +647,7 @@ class NodeImapClient {
     }
 
     async fetchDelta(request = {}) {
-        await this.selectMailbox(request.mailbox || this.config.mailbox);
+        await this.selectMailbox(request.mailbox || this.config.mailbox, { readOnly: true });
         const limit = Math.max(1, toFiniteNumber(request.limit, 50));
         const cursorNumber = toFiniteNumber(request.cursor, null);
         const uids = await this.searchUids({
@@ -509,6 +663,79 @@ class NodeImapClient {
             mailbox: request.local_mailbox || request.mailbox || this.config.mailbox,
             cursor,
             messages
+        };
+    }
+
+    async markRead(request = {}) {
+        const uid = Number(request.uid || request?.meta?.uid || 0);
+        if (!Number.isFinite(uid) || uid <= 0) {
+            throw new Error('imap_uid_required');
+        }
+        await this.selectMailbox(request.mailbox || this.config.mailbox, { readOnly: false });
+        const read = request?.read !== false;
+        await this.command(`UID STORE ${uid} ${read ? '+FLAGS.SILENT' : '-FLAGS.SILENT'} (\\Seen)`);
+        return {
+            ok: true,
+            uid,
+            mailbox: request.local_mailbox || request.mailbox || this.config.mailbox,
+            read
+        };
+    }
+
+    async moveMessage(request = {}) {
+        const uid = Number(request.uid || request?.meta?.uid || 0);
+        if (!Number.isFinite(uid) || uid <= 0) {
+            throw new Error('imap_uid_required');
+        }
+        const sourceMailbox = normalizeText(request.mailbox || this.config.mailbox) || 'INBOX';
+        const destinationMailbox = normalizeText(request.destination_mailbox || request.destinationMailbox || '');
+        if (!destinationMailbox) {
+            throw new Error('imap_destination_mailbox_required');
+        }
+        await this.selectMailbox(sourceMailbox, { readOnly: false });
+        let resolvedDestination = destinationMailbox;
+        let lastError = null;
+        const attemptMove = async (targetMailbox) => {
+            try {
+                await this.command(`UID MOVE ${uid} ${quoteImapString(targetMailbox)}`);
+                return;
+            } catch (error) {
+                const message = String(error?.message || '');
+                if (!message.startsWith('imap_command_failed:')) {
+                    throw error;
+                }
+                await this.command(`UID COPY ${uid} ${quoteImapString(targetMailbox)}`);
+                await this.command(`UID STORE ${uid} +FLAGS.SILENT (\\Deleted \\Seen)`);
+                await this.command('EXPUNGE');
+            }
+        };
+        const queue = buildDestinationMailboxCandidates(sourceMailbox, destinationMailbox);
+        const tried = new Set();
+        while (queue.length) {
+            const candidate = queue.shift();
+            if (!candidate || tried.has(candidate)) continue;
+            tried.add(candidate);
+            try {
+                await attemptMove(candidate);
+                resolvedDestination = candidate;
+                lastError = null;
+                break;
+            } catch (error) {
+                lastError = error;
+                for (const retryCandidate of buildDestinationMailboxCandidates(sourceMailbox, destinationMailbox, error)) {
+                    if (!retryCandidate || tried.has(retryCandidate) || queue.includes(retryCandidate)) continue;
+                    queue.push(retryCandidate);
+                }
+            }
+        }
+        if (lastError) throw lastError;
+        return {
+            ok: true,
+            uid,
+            mailbox: request.local_mailbox || sourceMailbox,
+            remote_mailbox: sourceMailbox,
+            destination_mailbox: request.destination_local_mailbox || request.destinationLocalMailbox || destinationMailbox,
+            destination_remote_mailbox: resolvedDestination
         };
     }
 }

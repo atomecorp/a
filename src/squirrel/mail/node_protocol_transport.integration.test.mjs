@@ -82,12 +82,14 @@ Deuxieme message local IMAP.\r
         flags: [],
         internalDate: '13-Mar-2026 09:00:00 +0000',
         raw: `Message-ID: <mail-node-103@example.test>\r
-Subject: Delta local IMAP\r
+Subject: Tu re=C3=A7ois mes mails ?=\r
 From: Carol <carol@example.test>\r
 To: <user@icloud.test>\r
 Date: Fri, 13 Mar 2026 09:00:00 +0000\r
+Content-Type: text/plain; charset=UTF-8\r
+Content-Transfer-Encoding: quoted-printable\r
 \r
-Troisieme message pour le delta.\r
+Tu re=C3=A7ois mes mails ?=\r
 `
     }
 };
@@ -154,6 +156,32 @@ const createImapServer = (transcript) => tls.createServer({
                 socket.write(`* ${index + 1} FETCH (UID ${uid} FLAGS (${flags}) INTERNALDATE "${item.internalDate}" BODY[] {${literalLength}}\r\n${item.raw})\r\n`);
             });
             socket.write(`${tag} OK FETCH completed\r\n`);
+            return;
+        }
+        if (/^UID MOVE /i.test(command)) {
+            const destination = command.match(/^UID MOVE \d+ "([^"]+)"/i)?.[1] || '';
+            if (destination === 'Archive' || destination === 'Trash') {
+                socket.write(`${tag} NO Client tried to access nonexistent namespace. (Mailbox name should probably be prefixed with: INBOX.) (0.001 + 0.000 secs).\r\n`);
+                return;
+            }
+            socket.write(`${tag} OK MOVE completed\r\n`);
+            return;
+        }
+        if (/^UID COPY /i.test(command)) {
+            const destination = command.match(/^UID COPY \d+ "([^"]+)"/i)?.[1] || '';
+            if (destination === 'Archive' || destination === 'Trash') {
+                socket.write(`${tag} NO Client tried to access nonexistent namespace. (Mailbox name should probably be prefixed with: INBOX.) (0.001 + 0.000 secs).\r\n`);
+                return;
+            }
+            socket.write(`${tag} OK COPY completed\r\n`);
+            return;
+        }
+        if (/^UID STORE /i.test(command)) {
+            socket.write(`${tag} OK STORE completed\r\n`);
+            return;
+        }
+        if (/^EXPUNGE/i.test(command)) {
+            socket.write(`* 1 EXPUNGE\r\n${tag} OK EXPUNGE completed\r\n`);
             return;
         }
         if (/^LOGOUT/i.test(command)) {
@@ -301,7 +329,24 @@ try {
     assert.equal(delta.ok, true, 'node transport should fetch incremental IMAP delta over TLS');
     assert.equal(delta.messages.length, 1, 'node IMAP transport should only fetch UIDs after the cursor');
     assert.equal(delta.messages[0].message_id, '<mail-node-103@example.test>', 'node IMAP delta should parse the new message');
+    assert.equal(delta.messages[0].subject, 'Tu reçois mes mails ?', 'node IMAP delta should decode loosely quoted-printable subjects');
+    assert.equal(delta.messages[0].preview, 'Tu reçois mes mails ?', 'node IMAP delta should decode quoted-printable bodies for previews');
+    assert.equal(delta.messages[0].body_text, 'Tu reçois mes mails ?', 'node IMAP delta should decode quoted-printable bodies');
     assert.equal(delta.cursor, '103', 'node IMAP delta should update the cursor to the newest UID');
+
+    const archived = await connector.archiveMessage({
+        mailbox: 'inbox',
+        uid: '103'
+    });
+    assert.equal(archived.ok, true, 'node IMAP transport should archive messages even when the server requires an INBOX namespace prefix');
+    assert.equal(archived.destination_remote_mailbox, 'INBOX.Archive', 'node IMAP transport should retry archive moves with the hinted namespace prefix');
+
+    const deleted = await connector.deleteMessage({
+        mailbox: 'inbox',
+        uid: '103'
+    });
+    assert.equal(deleted.ok, true, 'node IMAP transport should delete messages even when the server requires an INBOX namespace prefix');
+    assert.equal(deleted.destination_remote_mailbox, 'INBOX.Trash', 'node IMAP transport should retry delete moves with the hinted namespace prefix');
 
     const delivery = await connector.sendDraft({
         draft_id: 'mail_draft_node_protocol_1',
@@ -320,6 +365,10 @@ try {
 
     assert.ok(imapTranscript.some((entry) => /UID SEARCH ALL/i.test(entry)), 'node IMAP transport should issue UID SEARCH ALL for the initial sync');
     assert.ok(imapTranscript.some((entry) => /UID SEARCH UID 103:\*/i.test(entry)), 'node IMAP transport should issue UID SEARCH by cursor for incremental sync');
+    assert.ok(imapTranscript.some((entry) => /UID MOVE 103 "Archive"/i.test(entry)), 'node IMAP transport should first try the requested archive mailbox');
+    assert.ok(imapTranscript.some((entry) => /UID MOVE 103 "INBOX\.Archive"/i.test(entry)), 'node IMAP transport should retry archive with the server namespace prefix when needed');
+    assert.ok(imapTranscript.some((entry) => /UID MOVE 103 "Trash"/i.test(entry)), 'node IMAP transport should first try the requested trash mailbox');
+    assert.ok(imapTranscript.some((entry) => /UID MOVE 103 "INBOX\.Trash"/i.test(entry)), 'node IMAP transport should retry delete with the server namespace prefix when needed');
     assert.ok(smtpTranscript.some((entry) => /^STARTTLS$/i.test(entry)), 'node SMTP transport should request STARTTLS before authentication');
 } finally {
     await new Promise((resolve) => imapServer.close(() => resolve()));

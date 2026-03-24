@@ -44,9 +44,25 @@ assert.deepEqual(
     'mail service should list ingested inbox messages'
 );
 
+const listedExcludingAlice = service.mailList({
+    mailbox: 'inbox',
+    not_from: 'alice'
+});
+assert.deepEqual(
+    listedExcludingAlice.items.map((entry) => entry.message_id),
+    ['mail_service_2'],
+    'mail service should pass sender exclusion filters to the local index'
+);
+
 const read = service.mailRead('mail_service_1');
 assert.equal(read.ok, true, 'mail service should read a message by id');
 assert.equal(read.item.subject, 'Bonjour', 'mail service should return the full normalized message');
+
+const markedRead = await service.mailMarkRead('mail_service_1', {
+    read: true
+});
+assert.equal(markedRead.ok, true, 'mail service should mark a message as read locally');
+assert.equal(markedRead.item.unread, false, 'mail service should clear the unread flag after marking a message as read');
 
 const search = service.mailSearch('premier');
 assert.deepEqual(
@@ -55,14 +71,23 @@ assert.deepEqual(
     'mail service should search through the local mail index'
 );
 
+const filteredSearch = service.mailSearch('message', {
+    not_from: 'alice'
+});
+assert.deepEqual(
+    filteredSearch.items.map((entry) => entry.message_id),
+    ['mail_service_2'],
+    'mail service search should support sender exclusion filters'
+);
+
 const nextUnread = service.mailNextUnread({ mailbox: 'inbox' });
-assert.equal(nextUnread.ok, true, 'mail service should expose next unread');
-assert.equal(nextUnread.item.message_id, 'mail_service_1', 'mail service should return the next unread message');
+assert.equal(nextUnread.ok, false, 'mail service should no longer expose an unread message once the only unread mail is marked as read');
+assert.equal(nextUnread.error, 'mail_next_unread_not_found', 'mail service should report the absence of unread mail after read-state update');
 
 const summary = service.mailSummarize({ mailbox: 'inbox' });
 assert.equal(summary.ok, true, 'mail service should summarize indexed mail locally');
 assert.match(summary.summary, /unread message/, 'mail summary should describe unread counts');
-assert.equal(summary.items[0].message_id, 'mail_service_1', 'mail summary should return the top indexed messages');
+assert.equal(summary.items.length, 0, 'mail summary should only include unread mail by default');
 
 const draft = service.mailReplyDraft('mail_service_1', {
     reply_text: 'Je te reponds demain.'
@@ -80,6 +105,14 @@ const sendConfirmed = await service.mailSend(draft.draft.draft_id, {
 });
 assert.equal(sendConfirmed.ok, true, 'mail service should queue the draft once confirmation is explicit');
 assert.equal(sendConfirmed.draft.status, 'queued_local_only', 'mail send should remain local-only until SMTP is implemented');
+
+const archived = await service.mailArchive('mail_service_2');
+assert.equal(archived.ok, true, 'mail service should archive a message locally');
+assert.equal(archived.item.mailbox, 'archive', 'mail archive should move the message to the archive mailbox');
+
+const deleted = await service.mailDelete('mail_service_2');
+assert.equal(deleted.ok, true, 'mail service should delete a message locally');
+assert.equal(deleted.item.mailbox, 'trash', 'mail delete should move the message to the trash mailbox');
 
 const sync = service.syncApply([
     {

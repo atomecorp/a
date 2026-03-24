@@ -6,6 +6,17 @@ const requests = [];
 const env = {
     __SQUIRREL_FORCE_BROWSER_RUNTIME__: true,
     __SQUIRREL_FORCE_TAURI_RUNTIME__: true,
+    __eveProfilePreferences: {
+        mail: {
+            provider: 'custom_imap_smtp',
+            email: 'jeezs@atome.one',
+            username: 'jeezs@atome.one',
+            password: 'secret-pass',
+            mailbox: 'INBOX',
+            imap: { host: 'imap.example.test', port: 993, security: 'tls' },
+            smtp: { host: 'smtp.example.test', port: 587, security: 'starttls' }
+        }
+    },
     fetch: async (url, options = {}) => {
         requests.push({
             url,
@@ -50,5 +61,6 @@ assert.equal(sent.ok, true, 'mail bootstrap should support remote SMTP sends in 
 assert.equal(sent.draft.status, 'sent', 'mail bootstrap should mark the local draft as sent after a remote SMTP delivery');
 assert.equal(requests.length, 1, 'mail bootstrap should issue a single remote send request');
 assert.equal(requests[0].url, 'http://127.0.0.1:3000/api/eve/mail/send', 'mail bootstrap should target the local Axum mail send endpoint in Tauri mode');
+assert.equal(JSON.parse(requests[0].options.body).credentials.smtp.host, 'smtp.example.test', 'mail bootstrap should forward profile SMTP settings to remote send');
 
 console.log('mail_bootstrap_remote_send: ok');

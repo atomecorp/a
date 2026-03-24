@@ -15,6 +15,25 @@ const buildReplySubject = (subject = '') => {
     return `Re: ${normalized}`;
 };
 
+const normalizeMailboxName = (value, fallback = 'inbox') => String(value || fallback).trim().toLowerCase() || fallback;
+
+const normalizeSpeechMailLabel = (item = {}) => {
+    const subject = String(item?.subject || '').trim();
+    if (
+        subject
+        && !/^[\s?._\uFFFD-]+$/.test(subject)
+        && !/^=\?[^?]+\?[bqBQ]\?/.test(subject)
+    ) {
+        return subject;
+    }
+    const preview = String(item?.preview || item?.body_text || '').trim();
+    if (preview) {
+        return preview.length > 120 ? `${preview.slice(0, 119).trim()}…` : preview;
+    }
+    const sender = String(item?.from?.name || item?.from?.address || '').trim();
+    return sender || 'sans objet';
+};
+
 const buildMailSummary = (items = [], stats = {}) => {
     const subjects = items.slice(0, 3).map((entry) => entry.subject).filter(Boolean);
     const senders = Array.from(new Set(
@@ -33,7 +52,7 @@ const buildMailSummary = (items = [], stats = {}) => {
 
 const buildMailReadout = (item = {}, { mode = 'summary' } = {}) => {
     const sender = item?.from?.name || item?.from?.address || 'expediteur inconnu';
-    const subject = String(item?.subject || 'sans objet');
+    const subject = normalizeSpeechMailLabel(item);
     const preview = String(item?.preview || item?.body_text || '').trim();
     if (mode === 'full') {
         return `Mail de ${sender}. Sujet: ${subject}. ${preview}`.trim();
@@ -121,6 +140,44 @@ export const createMailService = ({
         });
     };
 
+    const moveMessage = async (messageId, {
+        mailbox = 'archive',
+        remote_mailbox = null,
+        read = true
+    } = {}) => {
+        const item = index.read(messageId);
+        if (!item) {
+            return { ok: false, error: 'mail_not_found', message_id: String(messageId || '') || null };
+        }
+        if (activeConnector && typeof activeConnector.moveMessage === 'function') {
+            const remote = await activeConnector.moveMessage(item, {
+                destination_local_mailbox: normalizeMailboxName(mailbox),
+                ...(remote_mailbox ? { destination_remote_mailbox: remote_mailbox } : {})
+            });
+            if (remote?.ok !== true) {
+                return {
+                    ok: false,
+                    error: remote?.error || 'mail_move_failed',
+                    item,
+                    remote
+                };
+            }
+        }
+        const updated = index.patch(messageId, {
+            mailbox: normalizeMailboxName(mailbox),
+            unread: read === true ? false : item.unread,
+            source: {
+                ...(item?.source && typeof item.source === 'object' ? item.source : {}),
+                mailbox: normalizeMailboxName(mailbox),
+                ...(remote_mailbox ? { remote_mailbox } : {})
+            }
+        });
+        return {
+            ok: true,
+            item: updated || item
+        };
+    };
+
     return {
         index,
         syncState,
@@ -148,7 +205,10 @@ export const createMailService = ({
                 unread_only: options.unread_only === true,
                 thread_id: options.thread_id,
                 limit: toLimit(options.limit, 50),
-                after_id: options.after_id
+                after_id: options.after_id,
+                from: options.from,
+                not_from: options.not_from,
+                order: options.order
             });
             return {
                 ok: true,
@@ -163,11 +223,57 @@ export const createMailService = ({
             }
             return { ok: true, item };
         },
+        async mailMarkRead(messageId, {
+            read = true
+        } = {}) {
+            const item = index.read(messageId);
+            if (!item) {
+                return { ok: false, error: 'mail_not_found', message_id: String(messageId || '') || null };
+            }
+            const unread = read !== true;
+            const updated = index.patch(messageId, {
+                unread
+            });
+            if (activeConnector && typeof activeConnector.markRead === 'function') {
+                const remote = await activeConnector.markRead(updated || item, {
+                    read
+                });
+                if (remote?.ok !== true) {
+                    return {
+                        ok: false,
+                        error: remote?.error || 'mail_mark_read_failed',
+                        item: updated || item,
+                        remote
+                    };
+                }
+            }
+            return {
+                ok: true,
+                item: updated || item
+            };
+        },
+        async mailArchive(messageId, options = {}) {
+            return moveMessage(messageId, {
+                mailbox: 'archive',
+                remote_mailbox: options?.remote_mailbox || 'Archive',
+                read: options?.read !== false
+            });
+        },
+        async mailDelete(messageId, options = {}) {
+            return moveMessage(messageId, {
+                mailbox: 'trash',
+                remote_mailbox: options?.remote_mailbox || 'Trash',
+                read: options?.read !== false
+            });
+        },
         mailSearch(query, options = {}) {
             const items = index.search(query, {
                 mailbox: options.mailbox,
                 unread_only: options.unread_only === true,
-                limit: toLimit(options.limit, 50)
+                limit: toLimit(options.limit, 50),
+                from: options.from,
+                not_from: options.not_from,
+                order: options.order
             });
             return {
                 ok: true,
@@ -178,7 +284,8 @@ export const createMailService = ({
         mailNextUnread(options = {}) {
             const item = index.nextUnread({
                 mailbox: options.mailbox,
-                after_id: options.after_id
+                after_id: options.after_id,
+                order: options.order
             });
             if (!item) {
                 return { ok: false, error: 'mail_next_unread_not_found' };
@@ -189,7 +296,10 @@ export const createMailService = ({
             const items = index.list({
                 mailbox: options.mailbox,
                 unread_only: options.unread_only !== false,
-                limit: toLimit(options.limit, 10)
+                limit: toLimit(options.limit, 10),
+                from: options.from,
+                not_from: options.not_from,
+                order: options.order
             });
             const stats = index.stats();
             return {

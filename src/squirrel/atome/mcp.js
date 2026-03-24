@@ -1460,6 +1460,12 @@ function buildRuntimeInvocationPayload(params = {}, defaults = {}) {
     const meta = params?.meta && typeof params.meta === 'object'
         ? { ...params.meta }
         : {};
+    if (params?.trace_id && !meta.trace_id) {
+        meta.trace_id = String(params.trace_id);
+    }
+    if (params?.intent_id && !meta.intent_id) {
+        meta.intent_id = String(params.intent_id);
+    }
     if (params?.idempotency_key && !meta.idempotency_key) {
         meta.idempotency_key = params.idempotency_key;
     }
@@ -1539,6 +1545,10 @@ const atomeMCPHandlers = {
                 'mail.next_unread',
                 'mail.summarize',
                 'mail.reply_draft',
+                'mail.mark_read',
+                'mail.mark_unread',
+                'mail.archive',
+                'mail.delete',
                 'mail.send',
                 'contacts.sources',
                 'contacts.list',
@@ -1929,6 +1939,26 @@ const atomeMCPHandlers = {
             signature: params?.signature || '',
             to: params?.to
         });
+    },
+    'mail.mark_read'(params = {}) {
+        const mail = ensureMailApi();
+        const messageId = params?.message_id || params?.messageId || params?.id;
+        return mail.markRead(messageId, { read: true });
+    },
+    'mail.mark_unread'(params = {}) {
+        const mail = ensureMailApi();
+        const messageId = params?.message_id || params?.messageId || params?.id;
+        return mail.markUnread(messageId, { read: false });
+    },
+    'mail.archive'(params = {}) {
+        const mail = ensureMailApi();
+        const messageId = params?.message_id || params?.messageId || params?.id;
+        return mail.archive(messageId, params || {});
+    },
+    'mail.delete'(params = {}) {
+        const mail = ensureMailApi();
+        const messageId = params?.message_id || params?.messageId || params?.id;
+        return mail.delete(messageId, params || {});
     },
     'mail.send'(params = {}) {
         const mail = ensureMailApi();

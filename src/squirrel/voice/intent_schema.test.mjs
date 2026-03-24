@@ -103,6 +103,27 @@ assert.equal(mailSendIntent.domain, 'mail');
 assert.equal(mailSendIntent.action, 'send');
 assert.equal(mailSendIntent.execution.confirmation_required, false);
 
+const mailArchiveIntent = classifyVoiceIntent('Archive ce mail', {
+    runtime_tools: runtimeTools
+});
+assert.equal(mailArchiveIntent.domain, 'mail');
+assert.equal(mailArchiveIntent.action, 'archive');
+assert.deepEqual(mailArchiveIntent.requested_capabilities, ['mail_archive']);
+
+const mailDeleteIntent = classifyVoiceIntent('Supprime ce mail', {
+    runtime_tools: runtimeTools
+});
+assert.equal(mailDeleteIntent.domain, 'mail');
+assert.equal(mailDeleteIntent.action, 'delete');
+assert.deepEqual(mailDeleteIntent.requested_capabilities, ['mail_delete']);
+
+const mailMarkUnreadIntent = classifyVoiceIntent('Marque ce mail comme non lu', {
+    runtime_tools: runtimeTools
+});
+assert.equal(mailMarkUnreadIntent.domain, 'mail');
+assert.equal(mailMarkUnreadIntent.action, 'mark_unread');
+assert.equal(mailMarkUnreadIntent.execution.toolchain[0]?.input?.read, false);
+
 const directReplyIntent = classifyVoiceIntent('Reponds a Jean-Eric que j ai bien recu le mail', {
     runtime_tools: runtimeTools
 });
@@ -123,6 +144,26 @@ assert.equal(contextualReplyIntent.action, 'reply_current');
 assert.equal(contextualReplyIntent.execution.target, 'pending_connector');
 assert.equal(contextualReplyIntent.entities.reply_target, 'Jean-Eric');
 assert.equal(contextualReplyIntent.entities.draft_text, 'j ai bien recu le mail');
+
+const contextualArchiveIntent = classifyVoiceIntent('Archive le', {
+    runtime_tools: runtimeTools,
+    context: {
+        active_domain: 'mail'
+    }
+});
+assert.equal(contextualArchiveIntent.domain, 'mail');
+assert.equal(contextualArchiveIntent.action, 'archive_current');
+assert.deepEqual(contextualArchiveIntent.requested_capabilities, ['mail_archive']);
+
+const contextualDeleteIntent = classifyVoiceIntent('Supprime le', {
+    runtime_tools: runtimeTools,
+    context: {
+        active_domain: 'mail'
+    }
+});
+assert.equal(contextualDeleteIntent.domain, 'mail');
+assert.equal(contextualDeleteIntent.action, 'delete_current');
+assert.deepEqual(contextualDeleteIntent.requested_capabilities, ['mail_delete']);
 
 const aiFirstHeuristic = classifyVoiceIntent('Lis mes mails', {
     runtime_tools: runtimeTools,

@@ -1,3 +1,5 @@
+import { createWorkingMemory } from './working_memory.js';
+
 const DEFAULT_UI_EVENT_NAME = 'squirrel:voice';
 const DEFAULT_MCP_EVENT_NAME = 'squirrel:voice:mcp';
 const DEFAULT_SOURCE_LAYER = 'voice_session_runtime';
@@ -91,7 +93,7 @@ const detectLocalCommand = (utterance) => {
         const alias = matcher.aliases.find((entry) => (
             matcher.mode === 'exact'
                 ? normalized === entry
-                : (normalized === entry || normalized.includes(entry))
+                : (normalized === entry || new RegExp(`\\b${entry}\\b`).test(normalized))
         ));
         if (alias) {
             return {
@@ -257,11 +259,12 @@ class VoiceSessionRuntime {
         this.mcpSink = typeof mcpSink === 'function' ? mcpSink : null;
         this.listeners = new Set();
         this.sessions = new Map();
+        this.workingMemory = createWorkingMemory({ now: this.now });
     }
 
     subscribe(listener) {
         if (typeof listener !== 'function') {
-            return () => {};
+            return () => { };
         }
         this.listeners.add(listener);
         return () => this.listeners.delete(listener);
@@ -829,4 +832,4 @@ export const normalizeLocalVoiceCommand = detectLocalCommand;
 
 export const createVoiceSessionRuntime = (options = {}) => new VoiceSessionRuntime(options);
 
-export { VoiceSessionRuntime };
+export { VoiceSessionRuntime, createWorkingMemory };

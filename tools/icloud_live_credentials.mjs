@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { selectIcloudAccount } from './icloud_account_discovery.mjs';
+import { normalizeRuntimeMailPreferences } from '../src/squirrel/mail/runtime_preferences.js';
 
 let envLoadedFromFiles = false;
 
@@ -140,50 +141,48 @@ export const resolveIcloudMailCredentials = () => {
     };
 };
 
-export const resolveMailCredentials = () => {
-    const email = readEnv('MAIL_EMAIL', 'MAIL_ACCOUNT_EMAIL', 'MAIL_USERNAME', 'SMTP_USERNAME', 'IMAP_USERNAME');
-    const password = readEnv('MAIL_PASSWORD', 'MAIL_APP_PASSWORD', 'SMTP_PASSWORD', 'IMAP_PASSWORD');
-    const imapHost = readEnv('MAIL_IMAP_HOST', 'IMAP_HOST');
-    const smtpHost = readEnv('MAIL_SMTP_HOST', 'SMTP_HOST');
-
-    if (email && password && imapHost && smtpHost) {
-        return {
-            mode: 'env_generic',
-            provider: readEnv('MAIL_PROVIDER') || 'custom_imap_smtp',
-            email,
-            username: readEnv('MAIL_USERNAME', 'IMAP_USERNAME', 'SMTP_USERNAME') || email,
-            password,
-            appPassword: password,
-            mailbox: readEnv('MAIL_MAILBOX', 'MAILBOX', 'ICLOUD_MAILBOX') || 'INBOX',
-            imap: {
-                host: imapHost,
-                port: Number(readEnv('MAIL_IMAP_PORT', 'IMAP_PORT') || 993),
-                security: readEnv('MAIL_IMAP_SECURITY', 'IMAP_SECURITY') || 'tls'
-            },
-            smtp: {
-                host: smtpHost,
-                port: Number(readEnv('MAIL_SMTP_PORT', 'SMTP_PORT') || 587),
-                security: readEnv('MAIL_SMTP_SECURITY', 'SMTP_SECURITY') || 'starttls'
-            }
-        };
-    }
-
-    const icloud = resolveIcloudMailCredentials();
+export const resolveMailCredentials = (runtimeOverrides = null) => {
+    const runtimeConfig = (runtimeOverrides && typeof runtimeOverrides === 'object')
+        ? normalizeRuntimeMailPreferences(runtimeOverrides)
+        : null;
+    const collectMissingFields = (config) => {
+        const missing = [];
+        if (!String(config?.email || '').trim()) missing.push('email');
+        if (!String(config?.password || '').trim()) missing.push('password');
+        if (!String(config?.imap?.host || '').trim()) missing.push('imap_host');
+        if (!String(config?.smtp?.host || '').trim()) missing.push('smtp_host');
+        return missing;
+    };
     return {
-        ...icloud,
-        provider: 'icloud_imap_smtp',
-        username: icloud.email,
-        password: icloud.appPassword,
-        mailbox: readEnv('ICLOUD_MAILBOX') || 'INBOX',
+        ...(() => {
+            if (!runtimeConfig) {
+                throw new Error('mail_credentials_missing');
+            }
+            const missingFields = collectMissingFields(runtimeConfig);
+            if (missingFields.length > 0) {
+                throw new Error(`mail_credentials_missing:${missingFields.join(',')}`);
+            }
+            const email = String(runtimeConfig.email || '').trim();
+            const password = String(runtimeConfig.password || '').trim();
+            return {
+                mode: 'profile_generic',
+                provider: String(runtimeConfig.provider || 'custom_imap_smtp').trim() || 'custom_imap_smtp',
+                email,
+                username: String(runtimeConfig.username || email).trim() || email,
+                password,
+                appPassword: password,
+                mailbox: String(runtimeConfig.mailbox || 'INBOX').trim() || 'INBOX'
+            };
+        })(),
         imap: {
-            host: readEnv('ICLOUD_IMAP_HOST') || 'imap.mail.me.com',
-            port: Number(readEnv('ICLOUD_IMAP_PORT') || 993),
-            security: readEnv('ICLOUD_IMAP_SECURITY') || 'tls'
+            host: String(runtimeConfig?.imap?.host || '').trim(),
+            port: Number(runtimeConfig?.imap?.port || 993),
+            security: String(runtimeConfig?.imap?.security || 'tls').trim() || 'tls'
         },
         smtp: {
-            host: readEnv('ICLOUD_SMTP_HOST') || 'smtp.mail.me.com',
-            port: Number(readEnv('ICLOUD_SMTP_PORT') || 587),
-            security: readEnv('ICLOUD_SMTP_SECURITY') || 'starttls'
+            host: String(runtimeConfig?.smtp?.host || '').trim(),
+            port: Number(runtimeConfig?.smtp?.port || 587),
+            security: String(runtimeConfig?.smtp?.security || 'starttls').trim() || 'starttls'
         }
     };
 };

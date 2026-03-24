@@ -259,7 +259,9 @@ const called = await globalThis.handleAtomeMCPRequestAsync({
         action: 'pointer.click',
         input: { x: 10, y: 20 },
         actor: { user_id: 'user_test' },
-        idempotency_key: 'circle:10:20'
+        idempotency_key: 'circle:10:20',
+        trace_id: 'trace_runtime_circle_1',
+        intent_id: 'intent_runtime_circle_1'
     }
 });
 assert.equal(called.error, undefined, 'runtime.tools.call should succeed');
@@ -267,6 +269,8 @@ assert.equal(called.result?.ok, true, 'runtime.tools.call should bridge to runti
 assert.equal(runtimeCalls.length, 1, 'runtime.tools.call should invoke runtime once');
 assert.equal(runtimeCalls[0]?.tool_id, 'ui.circle', 'runtime.tools.call should forward tool_id');
 assert.equal(runtimeCalls[0]?.meta?.idempotency_key, 'circle:10:20', 'runtime.tools.call should forward idempotency key into meta');
+assert.equal(runtimeCalls[0]?.meta?.trace_id, 'trace_runtime_circle_1', 'runtime.tools.call should forward trace_id into meta');
+assert.equal(runtimeCalls[0]?.meta?.intent_id, 'intent_runtime_circle_1', 'runtime.tools.call should forward intent_id into meta');
 assert.equal(runtimeCalls[0]?.source?.type, 'mcp', 'runtime.tools.call should stamp MCP source');
 
 const batchCalled = await globalThis.handleAtomeMCPRequestAsync({

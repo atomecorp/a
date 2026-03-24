@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 
 import { createVoiceSessionRuntime } from './session_runtime.js';
 import { createVoiceOrchestrator } from './orchestrator.js';
+import { normalizeVoiceIntent } from './intent_schema.js';
 import { createGlobalMailApi } from '../mail/bootstrap.js';
 
 const runtimeTools = [
@@ -190,6 +191,64 @@ assert.equal(readyMail.transport, 'mail_api');
 assert.match(readyMail.reply_text, /Mail distant disponible/);
 assert.equal(mailEnsureReadyEnv.atome.mail.__readyCalls, 1, 'mail ensureReady should be attempted once before pending connector execution');
 
+const hostWindowMailRequests = [];
+const hostWindow = {
+    location: {
+        origin: 'http://127.0.0.1:3000',
+        protocol: 'http:',
+        hostname: '127.0.0.1'
+    },
+    fetch: async (url, options = {}) => {
+        hostWindowMailRequests.push({ url, options });
+        return {
+            ok: true,
+            async json() {
+                return {
+                    ok: true,
+                    provider: 'custom_imap_smtp',
+                    mailbox: 'inbox',
+                    items: [{
+                        message_id: 'voice_mail_host_window_1',
+                        mailbox: 'inbox',
+                        subject: 'Mail via host window',
+                        preview: 'Lecture depuis le host window',
+                        body_text: 'Lecture depuis le host window',
+                        unread: true,
+                        from: { address: 'host@example.test' },
+                        received_at: '2026-03-18T10:00:00Z'
+                    }]
+                };
+            }
+        };
+    },
+    Squirrel: {},
+    atome: {},
+    __eveProfilePreferences: {
+        mail: {
+            provider: 'custom_imap_smtp',
+            email: 'jeezs@atome.one',
+            username: 'jeezs@atome.one',
+            password: 'secret-pass',
+            mailbox: 'INBOX',
+            imap: { host: 'rousse.o2switch.net', port: 993, security: 'tls' },
+            smtp: { host: 'rousse.o2switch.net', port: 587, security: 'starttls' }
+        }
+    }
+};
+const partialVoiceEnv = {
+    window: hostWindow,
+    Squirrel: {},
+    atome: {}
+};
+const hostWindowOrchestrator = createVoiceOrchestrator({
+    env: partialVoiceEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const hostWindowMail = await hostWindowOrchestrator.executeUtterance('Lis mes mails');
+assert.equal(hostWindowMail.ok, true, 'voice mail orchestration should resolve the mail API on the real host window when the injected env is partial');
+assert.match(hostWindowMail.reply_text, /Mail via host window/i, 'voice mail orchestration should use the host-window mail transport when available');
+assert.equal(hostWindowMailRequests[0]?.url, 'http://127.0.0.1:3000/api/eve/mail/sync', 'voice mail orchestration should sync through the host window loopback transport');
+
 const localCommand = await orchestrator.executeUtterance('stop');
 assert.equal(localCommand.ok, true);
 assert.equal(localCommand.executed, false);
@@ -228,7 +287,7 @@ const confirmationGate = await orchestrator.executeIntent({
     domain: 'calendar',
     action: 'delete_event',
     status: 'ready',
-    utterance: { raw: 'Supprime ce rendez-vous' },
+    utterance: { raw: 'Confirme avant de supprimer ce rendez-vous' },
     execution: {
         target: 'runtime_v2',
         confirmation_required: true,
@@ -250,7 +309,7 @@ const confirmedDelete = await orchestrator.executeIntent({
     domain: 'calendar',
     action: 'delete_event',
     status: 'ready',
-    utterance: { raw: 'Supprime ce rendez-vous' },
+    utterance: { raw: 'Confirme avant de supprimer ce rendez-vous' },
     execution: {
         target: 'runtime_v2',
         confirmation_required: true,
@@ -296,6 +355,22 @@ assert.equal(mailReadExecuted.ok, true);
 assert.equal(mailReadExecuted.executed, true);
 assert.equal(mailReadExecuted.transport, 'mail_api');
 assert.match(mailReadExecuted.reply_text, /Bonjour Jean/);
+
+const mailMarkUnreadExecuted = await mailExecOrchestrator.executeUtterance('Marque le comme non lu', {
+    session_id: mailExecSession.session_id
+});
+assert.equal(mailMarkUnreadExecuted.ok, true);
+assert.equal(mailMarkUnreadExecuted.executed, true);
+assert.match(mailMarkUnreadExecuted.reply_text, /non lu/i);
+assert.equal(mailApi.read('voice_mail_1').item.unread, true, 'contextual mark unread should update the current mail state');
+
+const mailArchiveExecuted = await mailExecOrchestrator.executeUtterance('Archive le', {
+    session_id: mailExecSession.session_id
+});
+assert.equal(mailArchiveExecuted.ok, true);
+assert.equal(mailArchiveExecuted.executed, true);
+assert.match(mailArchiveExecuted.reply_text, /archive/i);
+assert.equal(mailApi.read('voice_mail_1').item.mailbox, 'archive', 'contextual archive should move the current mail out of inbox');
 
 const stalledMailEnv = {
     __SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS: 5,
@@ -432,6 +507,116 @@ assert.match(unreadResult.reply_text, /mail\(s\) non lu\(s\)|mail non lu/i, 'unr
 assert.doesNotMatch(unreadResult.reply_text, /^Voici les derniers mails:/i, 'unread mail status question should not fall back to the latest mail list');
 assert.doesNotMatch(unreadResult.reply_text, /=\?UTF-8\?/i, 'unread mail status question should not expose raw MIME encoded subjects');
 
+const unreadReadSession = unreadOrchestrator.sessionRuntime.createSession({
+    session_id: 'voice_session_orchestrator_unread_read_current'
+});
+const unreadStatus = await unreadOrchestrator.executeUtterance('Ais je de nouveaux mails nion lues ?', {
+    session_id: unreadReadSession.session_id
+});
+assert.match(unreadStatus.reply_text, /mail\(s\) non lu\(s\)|mail non lu/i, 'unread status should seed the current unread mail context');
+const readCurrentUnread = await unreadOrchestrator.executeUtterance('lis le', {
+    session_id: unreadReadSession.session_id
+});
+assert.equal(readCurrentUnread.ok, true, 'read current unread followup should succeed');
+assert.equal(readCurrentUnread.executed, true, 'read current unread followup should execute immediately');
+assert.equal(readCurrentUnread.transport, 'mail_api', 'read current unread followup should execute on the mail api');
+assert.match(readCurrentUnread.reply_text, /cPanel|Parametres|configuration/i, 'read current unread followup should read the unread mail currently in context');
+const unreadAfterRead = unreadMailApi.list({ unread_only: true });
+assert.equal(unreadAfterRead.items.length, 0, 'read current unread followup should mark the current unread mail as read');
+
+const junkSubjectEnv = {};
+const junkSubjectMailApi = createGlobalMailApi({ env: junkSubjectEnv });
+junkSubjectMailApi.ingest([
+    {
+        message_id: 'voice_mail_junk_subject_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_junk_subject_1',
+        subject: '?????',
+        preview: 'Facture a regler avant vendredi',
+        body_text: 'Facture a regler avant vendredi',
+        from: { name: 'Compta', address: 'compta@example.test' },
+        unread: true,
+        received_at: '2026-03-20T14:00:00.000Z'
+    }
+]);
+const junkSubjectOrchestrator = createVoiceOrchestrator({
+    env: junkSubjectEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const junkSubjectResult = await junkSubjectOrchestrator.executeUtterance('Ais je de nouveaux mails non lus ?');
+assert.match(junkSubjectResult.reply_text, /Facture a regler avant vendredi/i, 'unread status should fall back to preview text when the subject is unreadable');
+assert.doesNotMatch(junkSubjectResult.reply_text, /\?{3,}/, 'unread status should not speak junk placeholder subjects');
+
+const filteredMailEnv = {};
+const filteredMailApi = createGlobalMailApi({ env: filteredMailEnv });
+filteredMailApi.ingest([
+    {
+        message_id: 'voice_mail_filtered_jean_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_filtered_jean_1',
+        subject: 'Message Jean',
+        preview: 'Message Jean',
+        body_text: 'Message Jean',
+        from: { name: 'Jean-Eric Godard', address: 'jean-eric@example.test' },
+        unread: false,
+        received_at: '2026-03-20T15:00:00.000Z'
+    },
+    {
+        message_id: 'voice_mail_filtered_other_old',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_filtered_other_old',
+        subject: 'ALPHA ancien',
+        preview: 'Ancien message robot alpha',
+        body_text: 'Contenu ancien robot alpha',
+        from: { name: 'EVE TEST ROBOT ALPHA', address: 'alpha@example.test' },
+        unread: false,
+        received_at: '2026-03-20T10:00:00.000Z'
+    },
+    {
+        message_id: 'voice_mail_filtered_other_new',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_filtered_other_new',
+        subject: 'BETA recent',
+        preview: 'Message beta recent',
+        body_text: 'Contenu recent robot beta',
+        from: { name: 'EVE TEST ROBOT BETA', address: 'beta@example.test' },
+        unread: false,
+        received_at: '2026-03-20T14:00:00.000Z'
+    }
+]);
+const filteredRuntime = createVoiceSessionRuntime();
+const filteredSummaryCalls = [];
+const filteredOrchestrator = createVoiceOrchestrator({
+    env: filteredMailEnv,
+    sessionRuntime: filteredRuntime,
+    mailAiSummarizer: async ({ items = [] }) => {
+        filteredSummaryCalls.push(items.map((item) => item?.message_id));
+        const item = items[0] || {};
+        return {
+            ok: true,
+            text: `Resume cible: ${item.subject || 'sans objet'}`
+        };
+    }
+});
+const filteredSession = filteredRuntime.createSession({
+    session_id: 'voice_session_orchestrator_filtered_mail'
+});
+const filteredStatus = await filteredOrchestrator.executeUtterance('Ais je des messages d autres personnes que Jean-Eric ?', {
+    session_id: filteredSession.session_id
+});
+assert.match(filteredStatus.reply_text, /BETA recent/i, 'sender exclusion status should seed the latest non-Jean-Eric mail in context');
+const filteredSummary = await filteredOrchestrator.executeUtterance('Que contient ce mail, fais moi un resume', {
+    session_id: filteredSession.session_id
+});
+assert.equal(filteredSummary.ok, true, 'current mail summary should succeed');
+assert.match(filteredSummary.reply_text, /Resume cible: BETA recent/i, 'current mail summary should target the current filtered mail only');
+assert.deepEqual(filteredSummaryCalls.at(-1), ['voice_mail_filtered_other_new'], 'current mail summary should summarize only one selected mail');
+const oldestFilteredRead = await filteredOrchestrator.executeUtterance('Lis moi le mail le plus ancien', {
+    session_id: filteredSession.session_id
+});
+assert.equal(oldestFilteredRead.ok, true, 'oldest filtered mail read should succeed');
+assert.match(oldestFilteredRead.reply_text, /ALPHA ancien|Contenu ancien robot alpha/i, 'oldest filtered mail read should select the oldest mail inside the active filtered result set');
+
 const mailReplyEnv = {};
 const replyMailApi = createGlobalMailApi({ env: mailReplyEnv });
 replyMailApi.ingest([
@@ -558,6 +743,91 @@ const misflaggedReplyResult = await misflaggedReplyOrchestrator.executeIntent({
 assert.equal(misflaggedReplyResult.executed, true, 'mail reply should ignore stray confirmation flags');
 assert.equal(misflaggedReplyResult.result?.draft?.in_reply_to, 'voice_mail_misflagged_reply_1');
 assert.equal(misflaggedReplyResult.result?.draft?.status, 'queued_local_only', 'misflagged reply should still send immediately');
+
+const contextualReplyEnv = {};
+const contextualReplyMailApi = createGlobalMailApi({ env: contextualReplyEnv });
+contextualReplyMailApi.ingest([
+    {
+        message_id: 'voice_mail_contextual_reply_1',
+        mailbox: 'inbox',
+        thread_id: 'voice_thread_contextual_reply_1',
+        subject: 'Salut, tu as encore de bonnes nouvelles aujourd hui ?',
+        preview: 'Salut, tu as encore de bonnes nouvelles aujourd hui ?',
+        body_text: 'Salut, tu as encore de bonnes nouvelles aujourd hui ?',
+        from: { name: 'Jean-Eric Godard', address: 'jean-eric@example.test' },
+        unread: true,
+        received_at: '2026-03-21T07:50:00.000Z'
+    }
+]);
+const contextualReplyRuntime = createVoiceSessionRuntime();
+const contextualReplyOrchestrator = createVoiceOrchestrator({
+    env: contextualReplyEnv,
+    sessionRuntime: contextualReplyRuntime,
+    aiPlanner: {
+        async planUtterance(utterance, options = {}) {
+            if (/j ai de nouveaux mails/i.test(String(utterance))) {
+                return normalizeVoiceIntent({
+                    intent_id: options.intent_id,
+                    utterance: { raw: utterance },
+                    locale: options.locale || 'fr-FR',
+                    source: options.source,
+                    context: options.context,
+                    type: 'agent_tool',
+                    domain: 'mail',
+                    action: 'list',
+                    status: 'ready',
+                    assistant_reply: '',
+                    execution: {
+                        target: 'atome_ai',
+                        confirmation_required: false,
+                        toolchain: [{
+                            source: 'atome_ai',
+                            tool_name: 'mail.status',
+                            params: { unread_only: true, status_only: true }
+                        }]
+                    }
+                });
+            }
+            return normalizeVoiceIntent({
+                intent_id: options.intent_id,
+                utterance: { raw: utterance },
+                locale: options.locale || 'fr-FR',
+                source: options.source,
+                context: options.context,
+                type: 'agent_tool',
+                domain: 'mail',
+                action: 'list',
+                status: 'ready',
+                assistant_reply: '',
+                execution: {
+                    target: 'atome_ai',
+                    confirmation_required: false,
+                    toolchain: [{
+                        source: 'atome_ai',
+                        tool_name: 'mail.list',
+                        params: { unread_only: true }
+                    }]
+                }
+            });
+        }
+    }
+});
+const contextualReplySession = contextualReplyRuntime.createSession({
+    session_id: 'voice_session_orchestrator_contextual_reply'
+});
+const contextualStatus = await contextualReplyOrchestrator.executeUtterance('J ai de nouveaux mails ?', {
+    session_id: contextualReplySession.session_id
+});
+assert.match(contextualStatus.reply_text, /mail\(s\) non lu\(s\)|nouveau mail/i, 'mail status should establish the current unread mail context');
+const contextualReplyResult = await contextualReplyOrchestrator.executeUtterance('Reponds oui tout va bien', {
+    session_id: contextualReplySession.session_id
+});
+assert.equal(contextualReplyResult.ok, true, 'contextual reply should succeed after a mail status question');
+assert.equal(contextualReplyResult.executed, true, 'contextual reply should execute immediately');
+assert.equal(contextualReplyResult.transport, 'mail_api', 'contextual reply should stay on the mail api');
+assert.equal(contextualReplyResult.result?.draft?.in_reply_to, 'voice_mail_contextual_reply_1', 'contextual reply should target the current unread mail');
+assert.equal(contextualReplyResult.result?.draft?.body_text, 'oui tout va bien', 'contextual reply should preserve the dictated reply body');
+assert.match(contextualReplyResult.reply_text, /mail a ete envoye|file d'attente locale/i, 'contextual reply should acknowledge sending instead of listing unread mails');
 
 const journal = orchestrator.listJournal({ limit: 10 });
 assert.ok(journal.length >= 4, 'orchestrator should record planning/execution journal entries');

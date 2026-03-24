@@ -1,5 +1,10 @@
 import { createIcloudMailConnector } from './icloud_connector.js';
 import { createMailService } from './service.js';
+import {
+    normalizeRuntimeMailPreferences,
+    persistRuntimeMailPreferences,
+    readPersistedRuntimeMailPreferences
+} from './runtime_preferences.js';
 
 const SERVICE_KEY = '__SQUIRREL_MAIL_SERVICE__';
 const API_KEY = '__SQUIRREL_MAIL_API__';
@@ -7,9 +12,32 @@ const REMOTE_SYNC_TIMEOUT_MS = 12000;
 const FASTIFY_FALLBACK = 'http://127.0.0.1:3001';
 const TAURI_LOCAL_FALLBACK = 'http://127.0.0.1:3000';
 
+const resolveTransportHost = (env = globalThis) => {
+    const fallback = typeof window !== 'undefined' ? window : globalThis;
+    if (!env || typeof env !== 'object') return fallback;
+    const shouldInheritHostTransport = (
+        env.__SQUIRREL_FORCE_BROWSER_RUNTIME__ === true
+        || env.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true
+    );
+    if (
+        env.location
+        || env.fetch
+        || env.document
+        || env.navigator
+        || env.__TAURI__
+        || env.__TAURI_INTERNALS__
+    ) {
+        return env;
+    }
+    return shouldInheritHostTransport ? fallback : env;
+};
+
 const isNodeRuntime = (env = globalThis) => {
-    if (env?.__SQUIRREL_FORCE_BROWSER_RUNTIME__ === true) return false;
-    if (typeof window !== 'undefined' && env === window) return false;
+    const host = resolveTransportHost(env);
+    if (env?.__SQUIRREL_FORCE_BROWSER_RUNTIME__ === true || host?.__SQUIRREL_FORCE_BROWSER_RUNTIME__ === true) return false;
+    if (typeof window !== 'undefined' && (host === window || host?.window === window)) return false;
+    if (host?.location || host?.document || host?.navigator) return false;
+    if (isTauriRuntime(host)) return false;
     return typeof process !== 'undefined' && !!process.versions?.node;
 };
 
@@ -20,19 +48,41 @@ const readEnv = (env, key) => {
     return null;
 };
 
+const resolveLoopbackOrigin = (env) => {
+    const host = resolveTransportHost(env);
+    const rawOrigin = String(
+        host?.location?.origin
+        || host?.location?.href
+        || ''
+    ).trim();
+    if (!rawOrigin) return '';
+    try {
+        const parsed = new URL(rawOrigin);
+        const protocol = String(parsed.protocol || '').toLowerCase();
+        if (protocol !== 'http:' && protocol !== 'https:') return '';
+        if (!['127.0.0.1', 'localhost', '0.0.0.0'].includes(String(parsed.hostname || '').toLowerCase())) {
+            return '';
+        }
+        return `${parsed.protocol}//${parsed.host}`.replace(/\/$/, '');
+    } catch (_) {
+        return '';
+    }
+};
+
 const isTauriRuntime = (env) => {
-    if (!env || typeof env !== 'object') return false;
-    if (env.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
-    if (env.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
-    const protocol = String(env.location?.protocol || '').toLowerCase();
-    const host = String(env.location?.hostname || '').toLowerCase();
+    const hostEnv = resolveTransportHost(env);
+    if (!hostEnv || typeof hostEnv !== 'object') return false;
+    if (env?.__SQUIRREL_FORCE_FASTIFY__ === true || hostEnv.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (env?.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true || hostEnv.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
+    const protocol = String(hostEnv.location?.protocol || '').toLowerCase();
+    const host = String(hostEnv.location?.hostname || '').toLowerCase();
     if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
     if (host === 'tauri.localhost') return true;
-    const hasTauriInvoke = !!(env.__TAURI_INTERNALS__ && typeof env.__TAURI_INTERNALS__.invoke === 'function');
+    const hasTauriInvoke = !!(hostEnv.__TAURI_INTERNALS__ && typeof hostEnv.__TAURI_INTERNALS__.invoke === 'function');
     if (hasTauriInvoke) return true;
-    const hasTauriObjects = !!(env.__TAURI__ || env.__TAURI_INTERNALS__);
+    const hasTauriObjects = !!(hostEnv.__TAURI__ || hostEnv.__TAURI_INTERNALS__);
     if (!hasTauriObjects) return false;
-    const userAgent = typeof env.navigator !== 'undefined' ? String(env.navigator.userAgent || '') : '';
+    const userAgent = typeof hostEnv.navigator !== 'undefined' ? String(hostEnv.navigator.userAgent || '') : '';
     return /tauri/i.test(userAgent);
 };
 
@@ -47,6 +97,8 @@ const resolveFastifyBase = (env) => {
         .map((value) => String(value || '').trim().replace(/\/$/, ''))
         .find(Boolean);
     if (found) return found;
+    const currentOrigin = resolveLoopbackOrigin(env);
+    if (currentOrigin) return currentOrigin;
     if (isTauriRuntime(env)) return FASTIFY_FALLBACK;
     return '';
 };
@@ -73,20 +125,143 @@ const resolveLocalServerBase = (env) => {
     if (Number.isFinite(dynamicPort) && dynamicPort > 0) {
         return `http://127.0.0.1:${dynamicPort}`;
     }
+    const currentOrigin = resolveLoopbackOrigin(env);
+    if (currentOrigin) return currentOrigin;
     return TAURI_LOCAL_FALLBACK;
 };
 
 const resolveMailSyncBase = (env) => {
     if (isTauriRuntime(env)) {
-        return resolveLocalServerBase(env);
+        const localBase = resolveLocalServerBase(env);
+        if (localBase) return localBase;
+        // In Tauri, if no local server port is detected, try the Fastify endpoint
+        // instead of silently returning an unreachable fallback.
+        const fastifyBase = resolveFastifyBase(env);
+        if (fastifyBase) return fastifyBase;
+        return TAURI_LOCAL_FALLBACK;
     }
     return resolveFastifyBase(env);
 };
 
 const resolveFetch = (env) => {
+    const host = resolveTransportHost(env);
     if (typeof env?.fetch === 'function') return env.fetch.bind(env);
+    if (typeof host?.fetch === 'function') return host.fetch.bind(host);
     if (typeof globalThis?.fetch === 'function') return globalThis.fetch.bind(globalThis);
     return null;
+};
+
+const mergeMailCredentialSources = (...sources) => {
+    const merged = {};
+    const applyValue = (target, key, value) => {
+        if (value === undefined || value === null) return;
+        if (typeof value === 'string' && !value.trim()) return;
+        target[key] = value;
+    };
+    sources.forEach((source) => {
+        if (!source || typeof source !== 'object') return;
+        applyValue(merged, 'provider', source.provider);
+        applyValue(merged, 'email', source.email);
+        applyValue(merged, 'username', source.username);
+        applyValue(merged, 'password', source.password);
+        applyValue(merged, 'mailbox', source.mailbox);
+        if (source.imap && typeof source.imap === 'object') {
+            merged.imap = merged.imap || {};
+            applyValue(merged.imap, 'host', source.imap.host);
+            applyValue(merged.imap, 'port', source.imap.port);
+            applyValue(merged.imap, 'security', source.imap.security);
+        }
+        if (source.smtp && typeof source.smtp === 'object') {
+            merged.smtp = merged.smtp || {};
+            applyValue(merged.smtp, 'host', source.smtp.host);
+            applyValue(merged.smtp, 'port', source.smtp.port);
+            applyValue(merged.smtp, 'security', source.smtp.security);
+        }
+    });
+    return Object.keys(merged).length ? merged : null;
+};
+
+const hasCompleteRuntimeMailCredentials = (source) => !!(
+    source
+    && typeof source === 'object'
+    && String(source.email || '').trim()
+    && String(source.password || '').trim()
+    && String(source?.imap?.host || '').trim()
+    && String(source?.smtp?.host || '').trim()
+);
+
+const loadPersistedMailPreferences = async (env) => {
+    const localSettings = readPersistedRuntimeMailPreferences(env);
+    if (hasCompleteRuntimeMailCredentials(localSettings)) {
+        return localSettings;
+    }
+    const explicitLoader = env?.__eveLoadUserProfile;
+    if (typeof explicitLoader === 'function') {
+        try {
+            const result = await explicitLoader();
+            const profile = result?.profile && typeof result.profile === 'object' ? result.profile : null;
+            if (!profile) return null;
+            return persistRuntimeMailPreferences(env, mergeMailCredentialSources(
+                profile?.preferences?.mail && typeof profile.preferences.mail === 'object' ? profile.preferences.mail : null,
+                profile?.email ? { email: profile.email } : null
+            ));
+        } catch (_) {
+            return null;
+        }
+    }
+    if (typeof window === 'undefined' || env !== window) return null;
+    try {
+        const mod = await import('../../application/eVe/APIS/login.js');
+        if (typeof mod?.loadUserProfile !== 'function') return null;
+        const result = await mod.loadUserProfile();
+        const profile = result?.profile && typeof result.profile === 'object' ? result.profile : null;
+        if (!profile) return null;
+        return persistRuntimeMailPreferences(env, mergeMailCredentialSources(
+            profile?.preferences?.mail && typeof profile.preferences.mail === 'object' ? profile.preferences.mail : null,
+            profile?.email ? { email: profile.email } : null
+        ));
+    } catch (_) {
+        return null;
+    }
+};
+
+const resolveRuntimeMailCredentials = async (env, options = {}) => {
+    const prefs = env?.__eveProfilePreferences;
+    let source = mergeMailCredentialSources(
+        prefs?.mail && typeof prefs.mail === 'object' ? prefs.mail : null,
+        readPersistedRuntimeMailPreferences(env),
+        options?.credentials && typeof options.credentials === 'object' ? options.credentials : null
+    );
+    if (!hasCompleteRuntimeMailCredentials(source)) {
+        source = mergeMailCredentialSources(
+            await loadPersistedMailPreferences(env),
+            source
+        );
+    }
+    if (!source) return null;
+    source = normalizeRuntimeMailPreferences(source);
+    persistRuntimeMailPreferences(env, source);
+    const email = String(source.email || '').trim();
+    const password = String(source.password || '').trim();
+    const imapHost = String(source?.imap?.host || '').trim();
+    const smtpHost = String(source?.smtp?.host || '').trim();
+    return {
+        provider: String(source.provider || 'custom_imap_smtp').trim() || 'custom_imap_smtp',
+        email,
+        username: String(source.username || '').trim() || email,
+        password,
+        mailbox: String(source.mailbox || 'INBOX').trim() || 'INBOX',
+        imap: {
+            host: imapHost,
+            port: Number(source?.imap?.port) || 993,
+            security: String(source?.imap?.security || 'tls').trim() || 'tls'
+        },
+        smtp: {
+            host: smtpHost,
+            port: Number(source?.smtp?.port) || 587,
+            security: String(source?.smtp?.security || 'starttls').trim() || 'starttls'
+        }
+    };
 };
 
 const applyRemoteSyncPayload = (service, payload = {}, options = {}) => {
@@ -144,11 +319,23 @@ const syncThroughFastify = async (env, service, options = {}) => {
             body: JSON.stringify({
                 initial: options?.initial === true,
                 mailbox: options?.mailbox,
-                limit: Number.isFinite(Number(options?.limit)) ? Math.max(1, Number(options.limit)) : 20
+                limit: Number.isFinite(Number(options?.limit)) ? Math.max(1, Number(options.limit)) : 20,
+                credentials: await resolveRuntimeMailCredentials(env, options)
             }),
             ...(controller ? { signal: controller.signal } : {})
         });
         const payload = await response.json().catch(() => null);
+        if (env?.console?.log) {
+            env.console.log('[mail:bootstrap:syncThroughFastify] server response:', JSON.stringify({
+                httpStatus: response.status,
+                httpOk: response.ok,
+                payloadOk: payload?.ok,
+                payloadError: payload?.error || null,
+                payloadItemCount: Array.isArray(payload?.items) ? payload.items.length : null,
+                payloadProvider: payload?.provider || null,
+                payloadMode: payload?.mode || null
+            }));
+        }
         if (!response.ok || payload?.ok !== true) {
             return {
                 ok: false,
@@ -197,7 +384,8 @@ const sendThroughRemote = async (env, service, draftId, options = {}) => {
             },
             body: JSON.stringify({
                 draft: localDraft.draft,
-                confirmed: options?.confirmed !== false
+                confirmed: options?.confirmed !== false,
+                credentials: await resolveRuntimeMailCredentials(env, options)
             }),
             ...(controller ? { signal: controller.signal } : {})
         });
@@ -222,6 +410,132 @@ const sendThroughRemote = async (env, service, draftId, options = {}) => {
         return {
             ok: false,
             error: error?.name === 'AbortError' ? 'mail_remote_send_timeout' : 'mail_remote_send_failed',
+            message: error?.message || String(error)
+        };
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+};
+
+const markReadThroughRemote = async (env, service, messageId, options = {}) => {
+    const fetchImpl = resolveFetch(env);
+    const baseUrl = resolveMailSyncBase(env);
+    if (!fetchImpl || !baseUrl) {
+        return { ok: false, error: 'mail_remote_mark_read_unavailable' };
+    }
+
+    const itemResult = typeof service.mailRead === 'function'
+        ? service.mailRead(messageId)
+        : { ok: false, error: 'mail_not_found' };
+    if (itemResult?.ok !== true || !itemResult?.item) {
+        return {
+            ok: false,
+            error: itemResult?.error || 'mail_not_found'
+        };
+    }
+
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeoutId = controller
+        ? setTimeout(() => controller.abort(), REMOTE_SYNC_TIMEOUT_MS)
+        : null;
+    try {
+        const response = await fetchImpl(`${baseUrl}/api/eve/mail/mark-read`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: itemResult.item,
+                read: options?.read !== false,
+                credentials: await resolveRuntimeMailCredentials(env, options)
+            }),
+            ...(controller ? { signal: controller.signal } : {})
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || payload?.ok !== true) {
+            return {
+                ok: false,
+                error: payload?.error || `mail_remote_mark_read_http_${response.status}`,
+                message: payload?.message || null
+            };
+        }
+        return {
+            ok: true,
+            item: typeof service.mailRead === 'function'
+                ? service.mailRead(messageId)?.item || itemResult.item
+                : itemResult.item,
+            remote: payload
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            error: error?.name === 'AbortError' ? 'mail_remote_mark_read_timeout' : 'mail_remote_mark_read_failed',
+            message: error?.message || String(error)
+        };
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+};
+
+const moveMessageThroughRemote = async (env, service, messageId, {
+    action = 'archive',
+    mailbox = action === 'delete' ? 'trash' : 'archive',
+    remote_mailbox = action === 'delete' ? 'Trash' : 'Archive'
+} = {}) => {
+    const fetchImpl = resolveFetch(env);
+    const baseUrl = resolveMailSyncBase(env);
+    if (!fetchImpl || !baseUrl) {
+        return { ok: false, error: `mail_remote_${action}_unavailable` };
+    }
+
+    const itemResult = typeof service.mailRead === 'function'
+        ? service.mailRead(messageId)
+        : { ok: false, error: 'mail_not_found' };
+    if (itemResult?.ok !== true || !itemResult?.item) {
+        return {
+            ok: false,
+            error: itemResult?.error || 'mail_not_found'
+        };
+    }
+
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeoutId = controller
+        ? setTimeout(() => controller.abort(), REMOTE_SYNC_TIMEOUT_MS)
+        : null;
+    try {
+        const response = await fetchImpl(`${baseUrl}/api/eve/mail/${action}`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: itemResult.item,
+                mailbox,
+                remote_mailbox,
+                credentials: await resolveRuntimeMailCredentials(env, {})
+            }),
+            ...(controller ? { signal: controller.signal } : {})
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || payload?.ok !== true) {
+            return {
+                ok: false,
+                error: payload?.error || `mail_remote_${action}_http_${response.status}`,
+                message: payload?.message || null
+            };
+        }
+        const localResult = action === 'delete'
+            ? await service.mailDelete(messageId, { remote_mailbox })
+            : await service.mailArchive(messageId, { remote_mailbox });
+        return {
+            ok: localResult?.ok === true,
+            item: localResult?.item || itemResult.item,
+            remote: payload
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            error: error?.name === 'AbortError' ? `mail_remote_${action}_timeout` : `mail_remote_${action}_failed`,
             message: error?.message || String(error)
         };
     } finally {
@@ -289,6 +603,28 @@ export const createGlobalMailApi = ({
         read(messageId) {
             return getOrCreateService(env).mailRead(messageId);
         },
+        async markRead(messageId, options = {}) {
+            const service = getOrCreateService(env);
+            const localResult = await service.mailMarkRead(messageId, options);
+            if (localResult?.ok !== true || isNodeRuntime(env) || service.connectorStatus().configured) {
+                return localResult;
+            }
+            const remoteResult = await markReadThroughRemote(env, service, messageId, options);
+            if (remoteResult?.ok === true) {
+                return remoteResult;
+            }
+            return {
+                ...localResult,
+                remote_error: remoteResult?.error || null,
+                remote_message: remoteResult?.message || null
+            };
+        },
+        async markUnread(messageId, options = {}) {
+            return this.markRead(messageId, {
+                ...options,
+                read: false
+            });
+        },
         search(query, options = {}) {
             return getOrCreateService(env).mailSearch(query, options);
         },
@@ -314,6 +650,34 @@ export const createGlobalMailApi = ({
         },
         connectorStatus() {
             return getOrCreateService(env).connectorStatus();
+        },
+        async archive(messageId, options = {}) {
+            const service = getOrCreateService(env);
+            if (service.connectorStatus().configured) {
+                return service.mailArchive(messageId, options);
+            }
+            if (!isNodeRuntime(env)) {
+                return moveMessageThroughRemote(env, service, messageId, {
+                    action: 'archive',
+                    mailbox: 'archive',
+                    remote_mailbox: options?.remote_mailbox || 'Archive'
+                });
+            }
+            return service.mailArchive(messageId, options);
+        },
+        async delete(messageId, options = {}) {
+            const service = getOrCreateService(env);
+            if (service.connectorStatus().configured) {
+                return service.mailDelete(messageId, options);
+            }
+            if (!isNodeRuntime(env)) {
+                return moveMessageThroughRemote(env, service, messageId, {
+                    action: 'delete',
+                    mailbox: 'trash',
+                    remote_mailbox: options?.remote_mailbox || 'Trash'
+                });
+            }
+            return service.mailDelete(messageId, options);
         },
         async send(draftId, options = {}) {
             const service = getOrCreateService(env);
@@ -348,6 +712,24 @@ export const createGlobalMailApi = ({
             const service = getOrCreateService(env);
             const hasIndexedMail = Array.isArray(service.mailList({ limit: 1 })?.items)
                 && service.mailList({ limit: 1 }).items.length > 0;
+
+            // Pre-check credentials and produce an explicit diagnostic if missing.
+            const creds = await resolveRuntimeMailCredentials(env, options);
+            const missingFields = [];
+            if (!creds || !String(creds.email || '').trim()) missingFields.push('email');
+            if (!creds || !String(creds.password || '').trim()) missingFields.push('password');
+            if (!creds || !String(creds.imap?.host || '').trim()) missingFields.push('imap_host');
+            if (!creds || !String(creds.smtp?.host || '').trim()) missingFields.push('smtp_host');
+
+            if (missingFields.length > 0 && !hasIndexedMail) {
+                return {
+                    ok: false,
+                    error: 'mail_credentials_missing',
+                    message: `Missing mail settings: ${missingFields.join(', ')}`,
+                    missing_fields: missingFields
+                };
+            }
+
             if (service.connectorStatus().configured) {
                 const syncResult = await service.syncPull(options);
                 if (syncResult?.ok === true) return syncResult;
@@ -366,6 +748,16 @@ export const createGlobalMailApi = ({
             }
             if (!isNodeRuntime(env)) {
                 const mirrored = await syncThroughFastify(env, service, options);
+                if (env?.console?.log) {
+                    env.console.log('[mail:bootstrap:ensureReady] syncThroughFastify result:', JSON.stringify({
+                        ok: mirrored?.ok,
+                        error: mirrored?.error || null,
+                        itemCount: Array.isArray(mirrored?.items) ? mirrored.items.length : null,
+                        hasRemote: !!mirrored?.remote,
+                        remoteOk: mirrored?.remote?.ok,
+                        remoteItemCount: Array.isArray(mirrored?.remote?.items) ? mirrored.remote.items.length : null
+                    }));
+                }
                 if (mirrored?.ok === true) return mirrored;
                 if (hasIndexedMail) {
                     return {

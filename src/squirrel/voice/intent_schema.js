@@ -1,4 +1,5 @@
 import { normalizeLocalVoiceCommand } from './session_runtime.js';
+import { normalizeSTTUtterance } from './stt_normalizer.js';
 
 export const VOICE_INTENT_SCHEMA_VERSION = '1.0.0';
 export const VOICE_INTENT_TYPES = Object.freeze([
@@ -84,6 +85,46 @@ const hasMailStatusQuestion = (normalized = '') => {
     );
 };
 
+const readMailAction = (normalized = '') => {
+    if (!normalized) return 'list';
+    if (hasAnyKeyword(normalized, ['archive', 'archiver', 'range', 'classe', 'classer', 'ranger', 'de cote'])) return 'archive';
+    if (hasAnyKeyword(normalized, [
+        'supprime', 'supprimer', 'efface', 'effacer', 'poubelle', 'corbeille',
+        'delete', 'trash', 'remove', 'vire', 'virer', 'degager', 'degage',
+        'jette', 'jeter', 'debarrasse', 'debarrasser'
+    ])) return 'delete';
+    if (
+        hasAnyKeyword(normalized, ['marque', 'marquer', 'remets', 'remet', 'repasse', 'repasser'])
+        && hasAnyKeyword(normalized, ['non lu', 'non lus', 'non lue', 'non lues', 'unread'])
+    ) {
+        return 'mark_unread';
+    }
+    if (
+        hasAnyKeyword(normalized, ['marque', 'marquer', 'note', 'noter', 'met en lu', 'mets en lu'])
+        && hasAnyKeyword(normalized, ['lu', 'lue', 'lus', 'lues', 'read'])
+    ) {
+        return 'mark_read';
+    }
+    if (hasAnyKeyword(normalized, ['reponds', 'repond', 'reponse', 'repondre', 'reply', 'respond'])) return 'reply';
+    if (/\b(?:demande|dis|ecris)\s+(?:a|à)\b/i.test(normalized)) return 'reply';
+    if (hasAnyKeyword(normalized, ['envoie', 'envoyer', 'send', 'expedie', 'expedier', 'ecris', 'ecrire'])) return 'send';
+    if (hasAnyKeyword(normalized, ['cherche', 'recherche', 'trouve', 'trouver', 'search', 'find', 'look for'])) return 'search';
+    if (hasAnyKeyword(normalized, [
+        'lis', 'lire', 'lecture', 'suivant', 'prochain', 'read',
+        'ouvre', 'ouvrir', 'affiche', 'afficher', 'montre', 'montrer',
+        'show', 'open', 'display', 'c est quoi', 'dis moi'
+    ])) return 'read';
+    if (hasAnyKeyword(normalized, [
+        'resume', 'resumer', 'summary', 'summarize', 'summarise',
+        'un point', 'le point',
+        'en resume', 'en bref', 'raconte', 'raconter',
+        'de quoi ca parle', 'de quoi il parle', 'de quoi parle',
+        'ca dit quoi', 'il dit quoi', 'elle dit quoi',
+        'qu est ce que ca dit', 'que dit', 'contenu'
+    ])) return 'summarize';
+    return 'list';
+};
+
 const readTimeReference = (normalized) => {
     if (!normalized) return null;
     if (hasAnyKeyword(normalized, ['aujourd hui', 'today'])) return 'today';
@@ -91,6 +132,61 @@ const readTimeReference = (normalized) => {
     if (hasAnyKeyword(normalized, ['cette semaine', 'semaine'])) return 'this_week';
     if (hasAnyKeyword(normalized, ['ce mois', 'mois'])) return 'this_month';
     return null;
+};
+
+export const readMailOrderReference = (normalized = '') => {
+    if (!normalized) return null;
+    if (hasAnyKeyword(normalized, [
+        'plus ancien', 'plus ancienne', 'plus vieille', 'plus vieux',
+        'le premier', 'la premiere', 'premier arrive', 'premiere arrivee',
+        'tout premier', 'toute premiere',
+        'oldest', 'earliest', 'first',
+        'plis ancien', 'pliss ancien'
+    ])) return 'oldest';
+    if (hasAnyKeyword(normalized, [
+        'plus recent', 'plus recente', 'plus recents', 'plus recentes',
+        'dernier', 'derniere', 'derniers', 'dernieres',
+        'le tout dernier', 'la toute derniere',
+        'latest', 'newest', 'most recent', 'last',
+        'tout frais', 'le plus frais', 'la plus fraiche',
+        'plis recent', 'pliss recent'
+    ])) return 'newest';
+    return null;
+};
+
+const cleanSenderReference = (value = '') => String(value || '')
+    .replace(/^(?:ceux|celles|mails|mail|messages|message)\s+de\s+/i, '')
+    .replace(/\s*\?+\s*$/, '')
+    .trim();
+
+const readMailSenderFilters = (normalized = '') => {
+    if (!normalized) return { from: null, not_from: null };
+    const notFromPatterns = [
+        /\bd?\s*autres personnes que\s+(.+)$/i,
+        /\bautres que\s+(.+)$/i,
+        /\bqui ne viennent pas de\s+(.+)$/i,
+        /\bqui ne viennent pas d\s+(.+)$/i
+    ];
+    for (const pattern of notFromPatterns) {
+        const match = normalized.match(pattern);
+        if (match) {
+            const value = cleanSenderReference(match[1]);
+            if (value) return { from: null, not_from: value };
+        }
+    }
+    const fromPatterns = [
+        /\bmessages?\s+de\s+(.+)$/i,
+        /\bmails?\s+de\s+(.+)$/i,
+        /\bcourriels?\s+de\s+(.+)$/i
+    ];
+    for (const pattern of fromPatterns) {
+        const match = normalized.match(pattern);
+        if (match) {
+            const value = cleanSenderReference(match[1]);
+            if (value) return { from: value, not_from: null };
+        }
+    }
+    return { from: null, not_from: null };
 };
 
 const readHourReference = (rawUtterance) => {
@@ -109,28 +205,81 @@ const readParticipant = (rawUtterance) => {
 };
 
 const readReplyDraftDetails = (rawUtterance) => {
-    const match = String(rawUtterance || '').match(/^\s*r(?:e|é)ponds?\s+(.+)$/i);
+    const raw = String(rawUtterance || '').trim();
+    if (!raw) return null;
+
+    // "demande a X si/de/que Y", "dis a X de/que Y", "ecris a X que Y"
+    const demandeMatch = raw.match(/^\s*(?:demande|dis|ecris)\s+(?:a|à)\s+(.+?)\s+((?:si|de|que|d')\s+.+)$/i);
+    if (demandeMatch) {
+        return {
+            reply_target: String(demandeMatch[1] || '').trim() || null,
+            draft_text: String(demandeMatch[2] || '').trim() || null
+        };
+    }
+    // "demande a X" / "dis a X" / "ecris a X" with no body
+    const demandeTargetOnly = raw.match(/^\s*(?:demande|dis|ecris)\s+(?:a|à)\s+(\S+.*)$/i);
+    if (demandeTargetOnly) {
+        return {
+            reply_target: String(demandeTargetOnly[1] || '').trim() || null,
+            draft_text: null
+        };
+    }
+
+    // Match direct forms: "reponds a X que Y", "reponds a X, Y"
+    const directMatch = raw.match(/^\s*r(?:e|é)ponds?\s+(.+)$/i);
+    // Match polite/indirect forms: "peux tu repondre a X ...", "tu peux repondre a X ...",
+    // "est ce que tu peux repondre a X ...", "pourrais tu repondre a X ..."
+    const indirectMatch = !directMatch
+        ? raw.match(/(?:peux[- ]tu|tu peux|pourrais[- ]tu|tu pourrais|(?:est[- ]ce que )?tu (?:peux|pourrais))\s+r(?:e|é)pondr?e?\s+(.+)$/i)
+        : null;
+
+    const match = directMatch || indirectMatch;
     if (!match) return null;
     const value = String(match[1] || '').trim();
     if (!value) return null;
 
-    const targetedWithClause = value.match(/^(?:a|à)\s+(.+?)\s+que\s+(.+)$/i);
-    if (targetedWithClause) {
-        const replyTarget = String(targetedWithClause[1] || '').trim();
-        const draftText = String(targetedWithClause[2] || '').trim();
+    // "a X que Y" — e.g. "reponds a Alice que je suis ok"
+    const targetedWithQue = value.match(/^(?:a|à)\s+(.+?)\s+que\s+(.+)$/i);
+    if (targetedWithQue) {
         return {
-            reply_target: replyTarget || null,
-            draft_text: draftText || null
+            reply_target: String(targetedWithQue[1] || '').trim() || null,
+            draft_text: String(targetedWithQue[2] || '').trim() || null
         };
     }
 
+    // "a X pour lui demander si/de/que Y" — e.g. "reponds a jean-eric pour lui demander si il travaille"
+    const targetedWithPour = value.match(/^(?:a|à)\s+(.+?)\s+pour\s+(?:lui|leur|elle|eux)\s+(?:demander|dire|signaler|indiquer|confirmer|rappeler)\s+(.+)$/i);
+    if (targetedWithPour) {
+        return {
+            reply_target: String(targetedWithPour[1] || '').trim() || null,
+            draft_text: String(targetedWithPour[2] || '').trim() || null
+        };
+    }
+
+    // "a X: Y" or "a X, Y" — e.g. "reponds a Alice: oui je suis dispo"
     const targetedDirect = value.match(/^(?:a|à)\s+(.+?)\s*[:,]\s*(.+)$/i);
     if (targetedDirect) {
-        const replyTarget = String(targetedDirect[1] || '').trim();
-        const draftText = String(targetedDirect[2] || '').trim();
         return {
-            reply_target: replyTarget || null,
-            draft_text: draftText || null
+            reply_target: String(targetedDirect[1] || '').trim() || null,
+            draft_text: String(targetedDirect[2] || '').trim() || null
+        };
+    }
+
+    // "a X pour Y" (generic) — e.g. "reponds a jean-eric pour confirmer la reunion"
+    const targetedWithPourGeneric = value.match(/^(?:a|à)\s+(.+?)\s+pour\s+(.+)$/i);
+    if (targetedWithPourGeneric) {
+        return {
+            reply_target: String(targetedWithPourGeneric[1] || '').trim() || null,
+            draft_text: String(targetedWithPourGeneric[2] || '').trim() || null
+        };
+    }
+
+    // "a X" only (no body) — just a target with no draft text
+    const targetOnly = value.match(/^(?:a|à)\s+(\S+.*)$/i);
+    if (targetOnly) {
+        return {
+            reply_target: String(targetOnly[1] || '').trim() || null,
+            draft_text: null
         };
     }
 
@@ -251,39 +400,40 @@ const buildBaseIntent = ({
 });
 
 export const normalizeVoiceIntent = (intent = {}) => {
+    const safe = intent && typeof intent === 'object' ? intent : {};
     const base = buildBaseIntent({
-        intent_id: intent.intent_id,
-        utterance: intent?.utterance?.raw || intent.utterance || '',
-        locale: intent.locale,
-        source: intent.source,
-        context: intent.context
+        intent_id: safe.intent_id,
+        utterance: safe?.utterance?.raw || safe.utterance || '',
+        locale: safe.locale,
+        source: safe.source,
+        context: safe.context
     });
 
     const normalized = {
         ...base,
-        ...intent,
+        ...safe,
         schema_version: VOICE_INTENT_SCHEMA_VERSION,
-        type: VOICE_INTENT_TYPES.includes(intent.type) ? intent.type : base.type,
-        domain: VOICE_INTENT_DOMAINS.includes(intent.domain) ? intent.domain : base.domain,
-        confidence: Number.isFinite(Number(intent.confidence)) ? Number(intent.confidence) : base.confidence,
-        status: String(intent.status || base.status),
+        type: VOICE_INTENT_TYPES.includes(safe.type) ? safe.type : base.type,
+        domain: VOICE_INTENT_DOMAINS.includes(safe.domain) ? safe.domain : base.domain,
+        confidence: Number.isFinite(Number(safe.confidence)) ? Number(safe.confidence) : base.confidence,
+        status: String(safe.status || base.status),
         utterance: {
-            raw: String(intent?.utterance?.raw || intent.utterance?.raw || base.utterance.raw),
-            normalized: normalizeText(intent?.utterance?.normalized || intent?.utterance?.raw || intent.utterance || base.utterance.raw)
+            raw: String(safe?.utterance?.raw || safe.utterance?.raw || base.utterance.raw),
+            normalized: normalizeText(safe?.utterance?.normalized || safe?.utterance?.raw || safe.utterance || base.utterance.raw)
         },
         source: {
-            type: String(intent?.source?.type || base.source.type),
-            layer: String(intent?.source?.layer || base.source.layer)
+            type: String(safe?.source?.type || base.source.type),
+            layer: String(safe?.source?.layer || base.source.layer)
         },
-        context: intent?.context && typeof intent.context === 'object' ? { ...intent.context } : base.context,
-        entities: intent?.entities && typeof intent.entities === 'object' ? { ...intent.entities } : {},
-        requested_capabilities: uniqueStrings(intent.requested_capabilities),
+        context: safe?.context && typeof safe.context === 'object' ? { ...safe.context } : base.context,
+        entities: safe?.entities && typeof safe.entities === 'object' ? { ...safe.entities } : {},
+        requested_capabilities: uniqueStrings(safe.requested_capabilities),
         execution: {
-            target: VOICE_INTENT_TARGETS.includes(intent?.execution?.target) ? intent.execution.target : base.execution.target,
-            toolchain: Array.isArray(intent?.execution?.toolchain)
-                ? intent.execution.toolchain.map((step) => ({ ...step }))
+            target: VOICE_INTENT_TARGETS.includes(safe?.execution?.target) ? safe.execution.target : base.execution.target,
+            toolchain: Array.isArray(safe?.execution?.toolchain)
+                ? safe.execution.toolchain.map((step) => ({ ...step }))
                 : [],
-            confirmation_required: intent?.execution?.confirmation_required === true
+            confirmation_required: safe?.execution?.confirmation_required === true
         }
     };
 
@@ -323,6 +473,199 @@ const tryBuildContextualMailIntent = (base) => {
     const activeDomain = readActiveDomain(base.context);
     const normalized = base.utterance.normalized;
     if (activeDomain !== 'mail') return null;
+    const order = readMailOrderReference(normalized);
+
+    if (
+        hasAnyKeyword(normalized, [
+            'que contient ce mail',
+            'que contient ce message',
+            'resume ce mail',
+            'resume ce message',
+            'resumer ce mail',
+            'resumer ce message'
+        ])
+        || (
+            hasAnyKeyword(normalized, ['resume', 'resumer', 'summary', 'summarize'])
+            && hasAnyKeyword(normalized, ['ce mail', 'ce message'])
+        )
+    ) {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'connector_tool',
+            domain: 'mail',
+            action: 'summarize_current',
+            confidence: 0.92,
+            status: 'pending_connector',
+            entities: {
+                ...(order ? { order } : {})
+            },
+            requested_capabilities: ['mail_read'],
+            execution: {
+                target: 'pending_connector',
+                confirmation_required: false,
+                toolchain: [buildPendingConnectorStep({
+                    capability: 'mail_read',
+                    description: 'Summarize the current mail in context.',
+                    input: {
+                        context: 'current',
+                        ...(order ? { order } : {})
+                    }
+                })]
+            }
+        });
+    }
+
+    if (
+        normalized === 'lis le'
+        || normalized === 'lis le mail'
+        || normalized === 'lis le message'
+        || normalized === 'lis'
+        || normalized.includes('lis moi le mail le plus ancien')
+        || normalized.includes('lis moi le plus ancien')
+        || normalized.includes('lis le mail le plus ancien')
+    ) {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'connector_tool',
+            domain: 'mail',
+            action: 'read_current',
+            confidence: 0.92,
+            status: 'pending_connector',
+            requested_capabilities: ['mail_read', 'mail_mark_read'],
+            execution: {
+                target: 'pending_connector',
+                confirmation_required: false,
+                toolchain: [
+                    buildPendingConnectorStep({
+                        capability: 'mail_read',
+                        description: 'Read the current mail in context.',
+                        input: {
+                            context: 'current',
+                            ...(order ? { order } : {})
+                        }
+                    }),
+                    buildPendingConnectorStep({
+                        capability: 'mail_mark_read',
+                        description: 'Mark the current mail as read after reading it.',
+                        input: {
+                            context: 'current',
+                            ...(order ? { order } : {})
+                        }
+                    })
+                ]
+            }
+        });
+    }
+
+    if (
+        normalized === 'archive le'
+        || normalized === 'archive le mail'
+        || normalized === 'archive le message'
+        || normalized === 'archive'
+        || normalized === 'range le'
+    ) {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'connector_tool',
+            domain: 'mail',
+            action: 'archive_current',
+            confidence: 0.92,
+            status: 'pending_connector',
+            requested_capabilities: ['mail_archive'],
+            execution: {
+                target: 'pending_connector',
+                confirmation_required: false,
+                toolchain: [buildPendingConnectorStep({
+                    capability: 'mail_archive',
+                    description: 'Archive the current mail in context.',
+                    input: { context: 'current' }
+                })]
+            }
+        });
+    }
+
+    if (
+        normalized === 'supprime le'
+        || normalized === 'supprime le mail'
+        || normalized === 'supprime le message'
+        || normalized === 'efface le'
+        || normalized === 'mets le a la poubelle'
+        || normalized === 'supprime'
+    ) {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'connector_tool',
+            domain: 'mail',
+            action: 'delete_current',
+            confidence: 0.92,
+            status: 'pending_connector',
+            requested_capabilities: ['mail_delete'],
+            execution: {
+                target: 'pending_connector',
+                confirmation_required: false,
+                toolchain: [buildPendingConnectorStep({
+                    capability: 'mail_delete',
+                    description: 'Delete the current mail in context.',
+                    input: { context: 'current' }
+                })]
+            }
+        });
+    }
+
+    if (
+        normalized === 'marque le comme non lu'
+        || normalized === 'remets le en non lu'
+        || normalized === 'marque le non lu'
+    ) {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'connector_tool',
+            domain: 'mail',
+            action: 'mark_unread_current',
+            confidence: 0.92,
+            status: 'pending_connector',
+            entities: {
+                read: false
+            },
+            requested_capabilities: ['mail_mark_read'],
+            execution: {
+                target: 'pending_connector',
+                confirmation_required: false,
+                toolchain: [buildPendingConnectorStep({
+                    capability: 'mail_mark_read',
+                    description: 'Mark the current mail as unread.',
+                    input: { context: 'current', read: false }
+                })]
+            }
+        });
+    }
+
+    if (
+        normalized === 'marque le comme lu'
+        || normalized === 'marque le lu'
+    ) {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'connector_tool',
+            domain: 'mail',
+            action: 'mark_read_current',
+            confidence: 0.92,
+            status: 'pending_connector',
+            entities: {
+                read: true
+            },
+            requested_capabilities: ['mail_mark_read'],
+            execution: {
+                target: 'pending_connector',
+                confirmation_required: false,
+                toolchain: [buildPendingConnectorStep({
+                    capability: 'mail_mark_read',
+                    description: 'Mark the current mail as read.',
+                    input: { context: 'current', read: true }
+                })]
+            }
+        });
+    }
 
     if (normalized.startsWith('lis le suivant') || normalized.startsWith('lis suivant')) {
         return normalizeVoiceIntent({
@@ -434,26 +777,49 @@ const tryBuildCalendarIntent = (base, runtimeToolSet) => {
     });
 };
 
+const looksLikeMailContext = (normalized = '', context = {}) => {
+    if (hasAnyKeyword(normalized, [
+        'mail', 'mails', 'message', 'messages', 'courriel', 'courriels', 'courrier',
+        'inbox', 'boite de reception', 'boite mail',
+        'email', 'e mail'
+    ])) return true;
+    // Reply/respond/demand verbs are inherently mail actions even without explicit mail keyword
+    if (hasAnyKeyword(normalized, [
+        'reponds', 'repond', 'repondre', 'reponse',
+        'reply', 'respond',
+        'demande a', 'dis a', 'ecris a', 'envoie a'
+    ])) return true;
+    const activeMailDomain = context?.active_intent?.domain === 'mail';
+    if (activeMailDomain && hasAnyKeyword(normalized, [
+        'lis', 'lire', 'ouvre', 'ouvrir', 'supprime', 'supprimer',
+        'archive', 'archiver', 'resume', 'resumer', 'suivant', 'prochain',
+        'reponds', 'repondre', 'le dernier', 'le plus ancien', 'le plus recent',
+        'celui la', 'celui ci', 'ceux la', 'ceux ci',
+        'non lu', 'non lus', 'nouveau', 'nouveaux'
+    ])) return true;
+    return false;
+};
+
 const tryBuildMailIntent = (base) => {
     const normalized = base.utterance.normalized;
-    if (!hasAnyKeyword(normalized, ['mail', 'mails', 'message', 'messages', 'courriel'])) return null;
+    if (!looksLikeMailContext(normalized, base.context)) return null;
     const unreadOnly = hasUnreadMailQualifier(normalized);
     const statusOnly = unreadOnly && hasMailStatusQuestion(normalized);
-
-    let action = 'list';
-    if (hasAnyKeyword(normalized, ['reponds', 'repond', 'reponse'])) action = 'reply';
-    else if (hasAnyKeyword(normalized, ['envoie', 'envoyer'])) action = 'send';
-    else if (hasAnyKeyword(normalized, ['cherche', 'recherche', 'trouve'])) action = 'search';
-    else if (hasAnyKeyword(normalized, ['lis', 'lecture', 'suivant', 'prochain'])) action = 'read';
-    else if (hasAnyKeyword(normalized, ['resume', 'resumer'])) action = 'summarize';
+    const action = readMailAction(normalized);
+    const order = readMailOrderReference(normalized);
+    const senderFilters = readMailSenderFilters(normalized);
 
     const capabilityMap = {
         list: ['mail_list'],
-        read: ['mail_read', 'mail_next_unread'],
+        read: ['mail_read', 'mail_next_unread', 'mail_mark_read'],
         summarize: ['mail_list', 'mail_summarize'],
         reply: ['mail_reply_draft', 'mail_send'],
         send: ['mail_send'],
-        search: ['mail_search']
+        search: ['mail_search'],
+        archive: ['mail_archive'],
+        delete: ['mail_delete'],
+        mark_read: ['mail_mark_read'],
+        mark_unread: ['mail_mark_read']
     };
     const replyDraft = action === 'reply'
         ? readReplyDraftDetails(base.utterance.raw)
@@ -493,28 +859,40 @@ const tryBuildMailIntent = (base) => {
         });
     }
 
+    const commonInput = {
+        temporal_ref: readTimeReference(normalized),
+        ...(order ? { order } : {}),
+        unread_only: unreadOnly,
+        status_only: statusOnly,
+        ...(senderFilters.from ? { from: senderFilters.from } : {}),
+        ...(senderFilters.not_from ? { not_from: senderFilters.not_from } : {}),
+        ...(action === 'mark_unread' ? { read: false } : {}),
+        ...(action === 'mark_read' ? { read: true } : {})
+    };
+
     return normalizeVoiceIntent({
         ...base,
-        type: action === 'reply' || action === 'summarize' ? 'connector_toolchain' : 'connector_tool',
+        type: action === 'summarize' ? 'connector_toolchain' : 'connector_tool',
         domain: 'mail',
         action,
         confidence: 0.78,
         status: 'pending_connector',
         entities: {
             temporal_ref: readTimeReference(normalized),
+            ...(order ? { order } : {}),
             unread_only: unreadOnly,
-            status_only: statusOnly
+            status_only: statusOnly,
+            ...(senderFilters.from ? { from: senderFilters.from } : {}),
+            ...(senderFilters.not_from ? { not_from: senderFilters.not_from } : {}),
+            ...(action === 'mark_unread' ? { read: false } : {}),
+            ...(action === 'mark_read' ? { read: true } : {})
         },
         requested_capabilities: capabilityMap[action] || ['mail_list'],
         execution: {
             target: 'pending_connector',
             toolchain: (capabilityMap[action] || ['mail_list']).map((capability) => buildPendingConnectorStep({
                 capability,
-                input: {
-                    temporal_ref: readTimeReference(normalized),
-                    unread_only: unreadOnly,
-                    status_only: statusOnly
-                }
+                input: commonInput
             })),
             confirmation_required: false
         }
@@ -583,7 +961,7 @@ const tryBuildRuntimeUiIntent = (base, runtimeToolSet) => {
             }
         },
         {
-            when: ['ouvre les messages', 'ouvre la communication', 'contacts', 'communique', 'message'],
+            when: ['ouvre les messages', 'ouvre la communication', 'contacts', 'communique'],
             intent: {
                 domain: 'ui_navigation',
                 action: 'open_communicate',
@@ -701,13 +1079,21 @@ export const classifyVoiceIntent = (utterance, {
     allow_business_heuristics = true
 } = {}) => {
     const rawUtterance = String(utterance || '').trim();
+    // Apply STT normalization before classification to handle noisy transcripts.
+    const sttNormalized = normalizeSTTUtterance(rawUtterance, { locale });
+    const effectiveUtterance = sttNormalized || rawUtterance;
     const base = buildBaseIntent({
         intent_id,
-        utterance: rawUtterance,
+        utterance: effectiveUtterance,
         locale,
         source,
         context
     });
+    // Preserve the original raw utterance in the intent for downstream use.
+    if (base.utterance && typeof base.utterance === 'object') {
+        base.utterance.raw = rawUtterance;
+        base.utterance.stt_normalized = sttNormalized;
+    }
     const runtimeToolSet = getRuntimeToolSet(runtime_tools);
 
     const contextualMailIntent = tryBuildContextualMailIntent(base);

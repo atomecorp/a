@@ -1,6 +1,6 @@
 import { createIcloudMailConnector } from '../src/squirrel/mail/icloud_connector.js';
 import { createMailService } from '../src/squirrel/mail/service.js';
-import { readEnv, resolveMailCredentials } from '../tools/icloud_live_credentials.mjs';
+import { resolveMailCredentials } from '../tools/icloud_live_credentials.mjs';
 
 const DEFAULT_LIMIT = 20;
 
@@ -13,15 +13,19 @@ export const createMailGateway = ({
     resolveCredentials = resolveMailCredentials,
     connectorFactory = createIcloudMailConnector,
     serviceFactory = createMailService,
-    resolveMailbox = () => readEnv('MAIL_MAILBOX', 'MAILBOX', 'ICLOUD_MAILBOX') || 'INBOX'
+    resolveMailbox = (credentials = null) => credentials?.mailbox || 'INBOX'
 } = {}) => {
     let cachedRuntime = null;
 
-    const getRuntime = async () => {
-        const credentials = resolveCredentials();
-        const mailbox = String(resolveMailbox() || 'INBOX').trim() || 'INBOX';
+    const getRuntime = async (options = {}) => {
+        const credentials = resolveCredentials(options?.credentials || null);
+        const mailbox = String(options?.mailbox || resolveMailbox(credentials) || 'INBOX').trim() || 'INBOX';
         const cacheKey = JSON.stringify({
+            provider: credentials?.provider || '',
             email: credentials?.email || '',
+            username: credentials?.username || '',
+            imap_host: credentials?.imap?.host || '',
+            smtp_host: credentials?.smtp?.host || '',
             mailbox
         });
         if (cachedRuntime?.key === cacheKey) {
@@ -56,7 +60,7 @@ export const createMailGateway = ({
     return {
         async sync(options = {}) {
             try {
-                const { service, connector, credentials, mailbox } = await getRuntime();
+                const { service, connector, credentials, mailbox } = await getRuntime(options);
                 const syncStatus = service.syncStatus?.().sync || null;
                 const shouldRunInitial = options?.initial === true || !String(syncStatus?.cursor || '').trim();
                 const syncResult = shouldRunInitial
@@ -100,7 +104,7 @@ export const createMailGateway = ({
         },
         async send(options = {}) {
             try {
-                const { connector, credentials } = await getRuntime();
+                const { connector, credentials } = await getRuntime(options);
                 const draft = options?.draft && typeof options.draft === 'object' ? options.draft : null;
                 if (!draft) {
                     return {
@@ -136,6 +140,133 @@ export const createMailGateway = ({
                     message: error?.message || String(error)
                 };
             }
+        },
+        async markRead(options = {}) {
+            try {
+                const { connector, credentials } = await getRuntime(options);
+                const message = options?.message && typeof options.message === 'object' ? options.message : null;
+                if (!message) {
+                    return {
+                        ok: false,
+                        error: 'mail_message_missing',
+                        message: 'A message payload is required.'
+                    };
+                }
+                const result = typeof connector?.markRead === 'function'
+                    ? await connector.markRead(message, {
+                        read: options?.read !== false
+                    })
+                    : { ok: false, error: 'mail_mark_read_not_supported' };
+                if (result?.ok !== true) {
+                    return {
+                        ok: false,
+                        error: result?.error || 'mail_mark_read_failed',
+                        message: result?.message || null
+                    };
+                }
+                return {
+                    ok: true,
+                    read: options?.read !== false,
+                    provider: connector?.provider || credentials?.provider || 'remote_imap_smtp',
+                    email: credentials?.email || null,
+                    message_id: message?.message_id || null,
+                    uid: message?.meta?.uid || null
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    error: error?.message || 'mail_gateway_unavailable',
+                    message: error?.message || String(error)
+                };
+            }
+        },
+        async archive(options = {}) {
+            try {
+                const { connector, credentials } = await getRuntime(options);
+                const message = options?.message && typeof options.message === 'object' ? options.message : null;
+                if (!message) {
+                    return {
+                        ok: false,
+                        error: 'mail_message_missing',
+                        message: 'A message payload is required.'
+                    };
+                }
+                const result = typeof connector?.archiveMessage === 'function'
+                    ? await connector.archiveMessage(message, {
+                        remote_mailbox: options?.remote_mailbox || 'Archive'
+                    })
+                    : (typeof connector?.moveMessage === 'function'
+                        ? await connector.moveMessage(message, {
+                            destination_local_mailbox: 'archive',
+                            destination_remote_mailbox: options?.remote_mailbox || 'Archive'
+                        })
+                        : { ok: false, error: 'mail_archive_not_supported' });
+                if (result?.ok !== true) {
+                    return {
+                        ok: false,
+                        error: result?.error || 'mail_archive_failed',
+                        message: result?.message || null
+                    };
+                }
+                return {
+                    ok: true,
+                    archived: true,
+                    provider: connector?.provider || credentials?.provider || 'remote_imap_smtp',
+                    email: credentials?.email || null,
+                    message_id: message?.message_id || null,
+                    uid: message?.meta?.uid || null
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    error: error?.message || 'mail_gateway_unavailable',
+                    message: error?.message || String(error)
+                };
+            }
+        },
+        async delete(options = {}) {
+            try {
+                const { connector, credentials } = await getRuntime(options);
+                const message = options?.message && typeof options.message === 'object' ? options.message : null;
+                if (!message) {
+                    return {
+                        ok: false,
+                        error: 'mail_message_missing',
+                        message: 'A message payload is required.'
+                    };
+                }
+                const result = typeof connector?.deleteMessage === 'function'
+                    ? await connector.deleteMessage(message, {
+                        remote_mailbox: options?.remote_mailbox || 'Trash'
+                    })
+                    : (typeof connector?.moveMessage === 'function'
+                        ? await connector.moveMessage(message, {
+                            destination_local_mailbox: 'trash',
+                            destination_remote_mailbox: options?.remote_mailbox || 'Trash'
+                        })
+                        : { ok: false, error: 'mail_delete_not_supported' });
+                if (result?.ok !== true) {
+                    return {
+                        ok: false,
+                        error: result?.error || 'mail_delete_failed',
+                        message: result?.message || null
+                    };
+                }
+                return {
+                    ok: true,
+                    deleted: true,
+                    provider: connector?.provider || credentials?.provider || 'remote_imap_smtp',
+                    email: credentials?.email || null,
+                    message_id: message?.message_id || null,
+                    uid: message?.meta?.uid || null
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    error: error?.message || 'mail_gateway_unavailable',
+                    message: error?.message || String(error)
+                };
+            }
         }
     };
 };
@@ -153,6 +284,30 @@ export const registerMailRoutes = (server, {
     });
     server.post('/api/eve/mail/send', async (request, reply) => {
         const result = await gateway.send(request.body || {});
+        if (result?.ok === true) {
+            return result;
+        }
+        reply.code(503);
+        return result;
+    });
+    server.post('/api/eve/mail/mark-read', async (request, reply) => {
+        const result = await gateway.markRead(request.body || {});
+        if (result?.ok === true) {
+            return result;
+        }
+        reply.code(503);
+        return result;
+    });
+    server.post('/api/eve/mail/archive', async (request, reply) => {
+        const result = await gateway.archive(request.body || {});
+        if (result?.ok === true) {
+            return result;
+        }
+        reply.code(503);
+        return result;
+    });
+    server.post('/api/eve/mail/delete', async (request, reply) => {
+        const result = await gateway.delete(request.body || {});
         if (result?.ok === true) {
             return result;
         }

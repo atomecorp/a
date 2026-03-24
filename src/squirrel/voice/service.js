@@ -237,6 +237,17 @@ export const createVoiceService = ({
         aiPlanner: resolvedAiPlanner
     });
 
+    // Lazily initialize the unified tool router so domain connectors are wired.
+    if (typeof orchestrator.initToolRouter === 'function') {
+        orchestrator.initToolRouter({
+            workingMemory: sessionRuntime?.workingMemory ?? null
+        }).catch((err) => {
+            if (env?.console?.warn) {
+                env.console.warn('[voice:service] initToolRouter failed:', err?.message || err);
+            }
+        });
+    }
+
     const resolveResponseLocale = (response = {}, options = {}) => {
         const locale = String(
             options?.lang
@@ -1092,7 +1103,7 @@ export const createVoiceService = ({
             const started = await stt.start(options);
             if (Number.isFinite(options.timeoutMs) && options.timeoutMs > 0) {
                 const timeout = setTimeout(() => {
-                    stt.stop(started.session_id).catch(() => {});
+                    stt.stop(started.session_id).catch(() => { });
                 }, options.timeoutMs);
                 return started.promise.finally(() => clearTimeout(timeout));
             }

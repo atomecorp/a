@@ -134,6 +134,14 @@ const resolveLocale = () => {
 
 const isEnglish = (locale = '') => toText(locale).toLowerCase().startsWith('en');
 
+const looksLikeInternalToolSummary = (value = '') => {
+    const normalized = normalizeComparisonText(value);
+    if (!normalized) return false;
+    if (/^(mail|calendar|contact|contacts|bank|atome|mtrack)[\s:./_-]/.test(normalized)) return true;
+    return /^(list|read|search|next unread|summarize|draft|send|create|update|delete|open|ensure|share|export|import|push|grant|publish|alter|move|crop)\b/.test(normalized)
+        && /(mail|calendar|contact|contacts|bank|atome|mtrack|event|events|draft|user|users|source|sources)\b/.test(normalized);
+};
+
 const localizeVoiceError = (code = '', locale = 'fr-FR') => {
     const english = isEnglish(locale);
     switch (toText(code)) {
@@ -328,13 +336,14 @@ const readAssistantText = (response = {}, locale = 'fr-FR') => {
     const results = response?.result?.results;
     if (Array.isArray(results)) {
         const summaries = results
-            .map((entry) => toText(entry?.result?.human_summary || entry?.result?.result?.human_summary || entry?.tool_name))
-            .filter(Boolean);
+            .map((entry) => toText(entry?.result?.human_summary || entry?.result?.result?.human_summary))
+            .filter(Boolean)
+            .filter((entry) => !looksLikeInternalToolSummary(entry));
         if (summaries.length) return summaries.join('\n');
     }
 
     const one = toText(response?.result?.human_summary);
-    if (one) return one;
+    if (one && !looksLikeInternalToolSummary(one)) return one;
 
     if (response?.ok === true && response?.executed === true) {
         return isEnglish(locale) ? 'Done.' : 'C est fait.';

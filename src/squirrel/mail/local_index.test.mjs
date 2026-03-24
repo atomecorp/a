@@ -68,6 +68,23 @@ assert.deepEqual(
     'mail index search should match normalized sender/body text'
 );
 
+const filteredBySender = index.list({ mailbox: 'inbox', limit: 10, not_from: 'Romeo' });
+assert.deepEqual(
+    filteredBySender.map((entry) => entry.message_id),
+    ['mail_4', 'mail_2'],
+    'mail index should support sender exclusion filters'
+);
+
+const searchedBySenderFilter = index.search('configuration', {
+    mailbox: 'inbox',
+    not_from: 'Romeo'
+});
+assert.deepEqual(
+    searchedBySenderFilter.map((entry) => entry.message_id),
+    ['mail_4'],
+    'mail index search should honor sender filters'
+);
+
 const nextUnread = index.nextUnread({ mailbox: 'inbox' });
 assert.equal(nextUnread.message_id, 'mail_4', 'mail index should expose the most recent unread message');
 

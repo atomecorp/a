@@ -65,6 +65,86 @@ assert.equal(planned.assistant_reply, 'J ouvre Mtrack.', 'voice ai planner shoul
 assert.equal(planned.domain, 'ui_navigation', 'voice ai planner should preserve the domain selected by the provider');
 assert.equal(planned.action, 'open_tool', 'voice ai planner should preserve the action selected by the provider');
 
+const mailPlanner = createVoiceAiPlanner({
+    env: {
+        ...env,
+        fetch: async () => ({
+            ok: true,
+            async json() {
+                return {
+                    choices: [{
+                        message: {
+                            content: JSON.stringify({
+                                reply: '',
+                                domain: 'mail',
+                                action: 'list',
+                                target: 'atome_ai',
+                                actions: [{
+                                    target: 'atome_ai',
+                                    tool_name: 'mail.list',
+                                    params: {
+                                        status_only: true,
+                                        not_from: 'Jean-Eric'
+                                    }
+                                }]
+                            })
+                        }
+                    }]
+                };
+            }
+        })
+    },
+    async loadProfile() {
+        return {
+            ok: true,
+            profile: {
+                passkeys: {
+                    keys: [
+                        { provider: 'openai', model: 'gpt-4o-mini', key: 'voice-key' }
+                    ]
+                }
+            }
+        };
+    },
+    fetchImpl: async () => ({
+        ok: true,
+        async json() {
+            return {
+                choices: [{
+                    message: {
+                        content: JSON.stringify({
+                            reply: '',
+                                domain: 'mail',
+                                action: 'list',
+                                target: 'atome_ai',
+                                actions: [{
+                                    target: 'atome_ai',
+                                    tool_name: 'mail.list',
+                                    params: {
+                                        status_only: true,
+                                        not_from: 'Jean-Eric'
+                                    }
+                                }]
+                        })
+                    }
+                }]
+            };
+        }
+    })
+});
+
+const plannedMailFilter = await mailPlanner.planUtterance('Ai je des messages d autres personnes que Jean-Eric ?', {
+    locale: 'fr-FR',
+    heuristic_intent: {
+        domain: 'mail',
+        action: 'list'
+    }
+});
+assert.equal(plannedMailFilter.execution.target, 'atome_ai', 'voice ai planner should preserve mail tool targets');
+assert.equal(plannedMailFilter.execution.toolchain[0]?.tool_name, 'mail.list', 'voice ai planner should preserve planned mail tools');
+assert.equal(plannedMailFilter.execution.toolchain[0]?.params?.not_from, 'Jean-Eric', 'voice ai planner should preserve semantic sender exclusion filters');
+assert.equal(plannedMailFilter.execution.toolchain[0]?.params?.unread_only, undefined, 'voice ai planner should not inject unread_only when the request only excludes a sender');
+
 const failingPlanner = createVoiceAiPlanner({
     env: {
         ...env,

@@ -5,6 +5,10 @@ import {
 
 const DEFAULT_REMOTE_MAILBOX = 'INBOX';
 const DEFAULT_LOCAL_MAILBOX = 'inbox';
+const DEFAULT_REMOTE_ARCHIVE_MAILBOX = 'Archive';
+const DEFAULT_REMOTE_TRASH_MAILBOX = 'Trash';
+const DEFAULT_LOCAL_ARCHIVE_MAILBOX = 'archive';
+const DEFAULT_LOCAL_TRASH_MAILBOX = 'trash';
 
 const normalizeText = (value) => String(value || '').trim();
 
@@ -165,6 +169,14 @@ const normalizeAuthConfig = (auth = {}) => {
         username: username || null,
         password: password || null
     };
+};
+
+const resolveRemoteDestinationMailbox = (mailbox = DEFAULT_LOCAL_MAILBOX) => {
+    const normalized = normalizeLocalMailbox(mailbox);
+    if (normalized === DEFAULT_LOCAL_ARCHIVE_MAILBOX) return DEFAULT_REMOTE_ARCHIVE_MAILBOX;
+    if (normalized === DEFAULT_LOCAL_TRASH_MAILBOX) return DEFAULT_REMOTE_TRASH_MAILBOX;
+    if (normalized === DEFAULT_LOCAL_MAILBOX) return DEFAULT_REMOTE_MAILBOX;
+    return normalizeText(mailbox) || DEFAULT_REMOTE_MAILBOX;
 };
 
 export const normalizeIcloudMailConnectorConfig = ({
@@ -396,6 +408,121 @@ export const createIcloudMailConnector = ({
                     }
                 );
             }
+        },
+        async markRead(message = {}, options = {}) {
+            const uid = normalizeText(message?.meta?.uid || message?.uid || '');
+            const remoteMailbox = normalizeRemoteMailbox(
+                message?.source?.remote_mailbox
+                || message?.source?.mailbox
+                || message?.mailbox
+                || config.mailbox
+            );
+            const request = {
+                provider: config.provider,
+                mailbox: remoteMailbox,
+                local_mailbox: normalizeLocalMailbox(message?.mailbox || config.mailbox),
+                uid,
+                auth: { ...config.auth },
+                imap: { ...config.imap },
+                read: options?.read !== false
+            };
+            try {
+                const payload = await withProtocolClient({
+                    role: 'icloud_imap',
+                    factory: await resolveImapClientFactory(),
+                    config: request
+                }, async (client) => callFirstAvailable(client, [
+                    'markRead'
+                ], request));
+                return {
+                    ok: true,
+                    provider: config.provider,
+                    uid,
+                    response: payload && typeof payload === 'object' ? { ...payload } : payload
+                };
+            } catch (error) {
+                return createFactoryError(
+                    'icloud_imap_mark_read_failed',
+                    error?.message || 'Unable to mark the message as read',
+                    {
+                        provider: config.provider,
+                        uid
+                    }
+                );
+            }
+        },
+        async moveMessage(message = {}, options = {}) {
+            const uid = normalizeText(message?.meta?.uid || message?.uid || '');
+            const remoteMailbox = normalizeRemoteMailbox(
+                message?.source?.remote_mailbox
+                || message?.source?.mailbox
+                || message?.mailbox
+                || config.mailbox
+            );
+            const destinationLocalMailbox = normalizeLocalMailbox(
+                options?.destination_local_mailbox
+                || options?.destinationMailbox
+                || options?.destination_mailbox
+                || DEFAULT_LOCAL_ARCHIVE_MAILBOX
+            );
+            const destinationRemoteMailbox = normalizeText(
+                options?.destination_remote_mailbox
+                || options?.remote_destination_mailbox
+                || resolveRemoteDestinationMailbox(destinationLocalMailbox)
+            ) || DEFAULT_REMOTE_ARCHIVE_MAILBOX;
+            const request = {
+                provider: config.provider,
+                mailbox: remoteMailbox,
+                local_mailbox: normalizeLocalMailbox(message?.mailbox || config.mailbox),
+                destination_mailbox: destinationRemoteMailbox,
+                destination_local_mailbox: destinationLocalMailbox,
+                uid,
+                auth: { ...config.auth },
+                imap: { ...config.imap }
+            };
+            try {
+                const payload = await withProtocolClient({
+                    role: 'icloud_imap',
+                    factory: await resolveImapClientFactory(),
+                    config: request
+                }, async (client) => callFirstAvailable(client, [
+                    'moveMessage'
+                ], request));
+                return {
+                    ok: true,
+                    provider: config.provider,
+                    uid,
+                    mailbox: request.local_mailbox,
+                    destination_mailbox: destinationLocalMailbox,
+                    destination_remote_mailbox: destinationRemoteMailbox,
+                    response: payload && typeof payload === 'object' ? { ...payload } : payload
+                };
+            } catch (error) {
+                return createFactoryError(
+                    'icloud_imap_move_failed',
+                    error?.message || 'Unable to move the message',
+                    {
+                        provider: config.provider,
+                        uid,
+                        mailbox: request.local_mailbox,
+                        destination_mailbox: destinationLocalMailbox
+                    }
+                );
+            }
+        },
+        async archiveMessage(message = {}, options = {}) {
+            return this.moveMessage(message, {
+                ...options,
+                destination_local_mailbox: DEFAULT_LOCAL_ARCHIVE_MAILBOX,
+                destination_remote_mailbox: DEFAULT_REMOTE_ARCHIVE_MAILBOX
+            });
+        },
+        async deleteMessage(message = {}, options = {}) {
+            return this.moveMessage(message, {
+                ...options,
+                destination_local_mailbox: DEFAULT_LOCAL_TRASH_MAILBOX,
+                destination_remote_mailbox: DEFAULT_REMOTE_TRASH_MAILBOX
+            });
         }
     };
 };

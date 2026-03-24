@@ -75,6 +75,15 @@ const normalizeSearchText = (value) => normalizeText(value)
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
+const normalizeComparableText = (value) => normalizeText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[-]+/g, ' ')
+    .replace(/[^a-z0-9\s@._+-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const parseDateMs = (value) => {
     if (Number.isFinite(Number(value))) return Number(value);
     const parsed = Date.parse(String(value || ''));
@@ -98,6 +107,24 @@ const normalizeAddressList = (value) => {
     if (!value) return [];
     const list = Array.isArray(value) ? value : [value];
     return list.map((entry) => normalizeAddress(entry)).filter(Boolean);
+};
+
+const normalizeFilterTerms = (value) => {
+    const list = Array.isArray(value) ? value : [value];
+    return list
+        .map((entry) => normalizeComparableText(entry))
+        .filter(Boolean);
+};
+
+const matchesSenderTerms = (sender = null, terms = []) => {
+    const normalizedTerms = normalizeFilterTerms(terms);
+    if (!normalizedTerms.length) return true;
+    const senderName = normalizeComparableText(sender?.name || '');
+    const senderAddress = normalizeComparableText(sender?.address || '');
+    return normalizedTerms.some((term) => (
+        (senderName && (senderName.includes(term) || term.includes(senderName)))
+        || (senderAddress && (senderAddress.includes(term) || term.includes(senderAddress)))
+    ));
 };
 
 const buildSearchIndex = (record) => normalizeSearchText([
@@ -136,15 +163,28 @@ export const normalizeMailRecord = (record = {}) => {
     return normalized;
 };
 
-const sortMessages = (messages) => messages.sort((left, right) => {
-    if (right.received_at !== left.received_at) return right.received_at - left.received_at;
-    return String(right.message_id).localeCompare(String(left.message_id));
-});
+const sortMessages = (messages, order = 'newest') => {
+    const normalizedOrder = String(order || 'newest').trim().toLowerCase();
+    const descending = normalizedOrder !== 'oldest';
+    return messages.sort((left, right) => {
+        if (right.received_at !== left.received_at) {
+            return descending
+                ? right.received_at - left.received_at
+                : left.received_at - right.received_at;
+        }
+        return descending
+            ? String(right.message_id).localeCompare(String(left.message_id))
+            : String(left.message_id).localeCompare(String(right.message_id));
+    });
+};
 
 export const createMailIndex = () => {
     const records = new Map();
 
-    const getOrdered = () => sortMessages(Array.from(records.values()).map((entry) => ({ ...entry })));
+    const getOrdered = (order = 'newest') => sortMessages(
+        Array.from(records.values()).map((entry) => ({ ...entry })),
+        order
+    );
 
     return {
         upsert(messages = []) {
@@ -160,17 +200,33 @@ export const createMailIndex = () => {
             const record = records.get(key);
             return record ? { ...record } : null;
         },
+        patch(messageId, changes = {}) {
+            const key = normalizeText(messageId);
+            const current = records.get(key);
+            if (!current) return null;
+            const next = normalizeMailRecord({
+                ...current,
+                ...(changes && typeof changes === 'object' ? changes : {})
+            });
+            records.set(key, next);
+            return { ...next };
+        },
         list({
             mailbox = null,
             unread_only = false,
             thread_id = null,
             limit = 50,
-            after_id = null
+            after_id = null,
+            from = null,
+            not_from = null,
+            order = 'newest'
         } = {}) {
-            const ordered = getOrdered().filter((entry) => {
+            const ordered = getOrdered(order).filter((entry) => {
                 if (mailbox && entry.mailbox !== mailbox) return false;
                 if (thread_id && entry.thread_id !== thread_id) return false;
                 if (unread_only && entry.unread !== true) return false;
+                if (from && !matchesSenderTerms(entry.from, from)) return false;
+                if (not_from && matchesSenderTerms(entry.from, not_from)) return false;
                 return true;
             });
             if (after_id) {
@@ -184,27 +240,34 @@ export const createMailIndex = () => {
         search(query, {
             mailbox = null,
             unread_only = false,
-            limit = 50
+            limit = 50,
+            from = null,
+            not_from = null,
+            order = 'newest'
         } = {}) {
             const needle = normalizeSearchText(query);
             if (!needle) return [];
-            return getOrdered()
+            return getOrdered(order)
                 .filter((entry) => {
                     if (mailbox && entry.mailbox !== mailbox) return false;
                     if (unread_only && entry.unread !== true) return false;
+                    if (from && !matchesSenderTerms(entry.from, from)) return false;
+                    if (not_from && matchesSenderTerms(entry.from, not_from)) return false;
                     return entry.search_text.includes(needle);
                 })
                 .slice(0, Math.max(1, Number(limit) || 50));
         },
         nextUnread({
             mailbox = null,
-            after_id = null
+            after_id = null,
+            order = 'newest'
         } = {}) {
             const unread = this.list({
                 mailbox,
                 unread_only: true,
                 limit: records.size || 50,
-                after_id
+                after_id,
+                order
             });
             return unread[0] || null;
         },

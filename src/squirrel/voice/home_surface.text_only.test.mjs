@@ -24,6 +24,7 @@ window.HTMLCanvasElement.prototype.getContext = () => ({
 let startListeningCalls = 0;
 let executeUtteranceCalls = 0;
 const speaks = [];
+let lastUtterance = '';
 
 const voiceApi = {
     async ensureReady() {
@@ -49,6 +50,22 @@ const voiceApi = {
     },
     async executeUtterance(text) {
         executeUtteranceCalls += 1;
+        lastUtterance = text;
+        if (text === 'Nouveaux messages') {
+            return {
+                ok: true,
+                executed: true,
+                result: {
+                    results: [
+                        {
+                            result: {
+                                human_summary: 'Summarize mail'
+                            }
+                        }
+                    ]
+                }
+            };
+        }
         return {
             ok: true,
             executed: true,
@@ -96,6 +113,22 @@ assert.equal(
     state.history.some((entry) => entry.role === 'assistant' && entry.text === 'Reponse pour: Lis mes mails'),
     true,
     'text-only mode should keep assistant responses in history'
+);
+input.value = 'Nouveaux messages';
+send.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+const updatedState = controller.getState();
+
+assert.equal(lastUtterance, 'Nouveaux messages', 'text-only mode should execute the second typed utterance');
+assert.equal(
+    updatedState.history.some((entry) => entry.role === 'assistant' && entry.text === 'Summarize mail'),
+    false,
+    'text-only mode should never leak internal tool summaries into assistant history'
+);
+assert.equal(
+    updatedState.history.some((entry) => entry.role === 'assistant' && entry.text === 'C est fait.'),
+    true,
+    'text-only mode should fall back to a localized neutral completion when no user-facing reply is provided'
 );
 assert.equal(state.textOnly, true, 'controller state should expose text-only mode');
 

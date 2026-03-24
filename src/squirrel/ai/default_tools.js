@@ -827,6 +827,86 @@ const registerDefaultTools = () => {
     });
 
     Agent.registerTool({
+        name: 'mail.mark_read',
+        description: 'Mark one mail item as read.',
+        capabilities: ['mail.write'],
+        risk_level: 'LOW',
+        params_schema: {
+            required: ['message_id'],
+            properties: {
+                message_id: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await prepareMailApi(params || {});
+            const messageId = safeString(params?.message_id || params?.messageId || params?.id);
+            if (!messageId) throw new Error('Missing message_id');
+            return api.markRead(messageId, { read: true });
+        },
+        summary: (params) => `Mark mail read ${params?.message_id || params?.messageId || params?.id || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'mail.mark_unread',
+        description: 'Mark one mail item as unread.',
+        capabilities: ['mail.write'],
+        risk_level: 'LOW',
+        params_schema: {
+            required: ['message_id'],
+            properties: {
+                message_id: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await prepareMailApi(params || {});
+            const messageId = safeString(params?.message_id || params?.messageId || params?.id);
+            if (!messageId) throw new Error('Missing message_id');
+            return api.markUnread(messageId, { read: false });
+        },
+        summary: (params) => `Mark mail unread ${params?.message_id || params?.messageId || params?.id || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'mail.archive',
+        description: 'Archive one mail item.',
+        capabilities: ['mail.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            required: ['message_id'],
+            properties: {
+                message_id: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await prepareMailApi(params || {});
+            const messageId = safeString(params?.message_id || params?.messageId || params?.id);
+            if (!messageId) throw new Error('Missing message_id');
+            return api.archive(messageId, {});
+        },
+        summary: (params) => `Archive mail ${params?.message_id || params?.messageId || params?.id || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'mail.delete',
+        description: 'Delete one mail item.',
+        capabilities: ['mail.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            required: ['message_id'],
+            properties: {
+                message_id: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await prepareMailApi(params || {});
+            const messageId = safeString(params?.message_id || params?.messageId || params?.id);
+            if (!messageId) throw new Error('Missing message_id');
+            return api.delete(messageId, {});
+        },
+        summary: (params) => `Delete mail ${params?.message_id || params?.messageId || params?.id || ''}`
+    });
+
+    Agent.registerTool({
         name: 'mail.send',
         description: 'Queue a locally prepared draft for send after explicit confirmation.',
         capabilities: ['mail.send'],
