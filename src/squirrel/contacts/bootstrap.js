@@ -198,6 +198,15 @@ export const createGlobalContactsApi = ({
                 ...options
             });
         },
+        async createLocalContact(contact = {}, options = {}) {
+            return getOrCreateService(env).createLocalContact(contact, options);
+        },
+        async updateLocalContact(contactId, changes = {}, options = {}) {
+            return getOrCreateService(env).updateLocalContact(contactId, changes, options);
+        },
+        async deleteLocalContact(contactId, options = {}) {
+            return getOrCreateService(env).deleteLocalContact(contactId, options);
+        },
         search(query, options = {}) {
             return getOrCreateService(env).contactsSearch(query, options);
         },

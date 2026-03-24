@@ -107,6 +107,8 @@ const ensurePositiveInt = (value, fallback = null) => {
     return Math.round(num);
 };
 
+const ensureObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {});
+
 /**
  * Creates a normalized structured request.
  *
@@ -152,6 +154,8 @@ export const createStructuredRequest = (raw = {}) => {
         confidence: Number.isFinite(Number(raw.source?.confidence)) ? Number(raw.source.confidence) : null
     };
 
+    const payload = ensureObject(raw.payload);
+
     return Object.freeze({
         domain,
         operation,
@@ -160,6 +164,7 @@ export const createStructuredRequest = (raw = {}) => {
         scope,
         draft,
         source,
+        payload,
         status_only: raw.status_only === true
     });
 };
@@ -240,6 +245,14 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
     const action = ensureString(intent.action, 'list');
     const entities = intent.entities && typeof intent.entities === 'object' ? intent.entities : {};
     const activeEntities = context.active_intent?.entities || {};
+    const sourceToolParams = (Array.isArray(context.toolchain) ? context.toolchain : [])
+        .map((step) => (
+            step?.params && typeof step.params === 'object'
+                ? step.params
+                : (step?.input && typeof step.input === 'object' ? step.input : null)
+        ))
+        .filter((entry) => entry && typeof entry === 'object');
+    const mergedToolParams = sourceToolParams.reduce((acc, entry) => ({ ...acc, ...entry }), {});
 
     const operationMap = {
         list: 'list',
@@ -276,6 +289,12 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
         entities.current_message_id
         || entities.current_contact_id
         || entities.current_event_id
+        || mergedToolParams.message_id
+        || mergedToolParams.contact_id
+        || mergedToolParams.contactId
+        || mergedToolParams.event_id
+        || mergedToolParams.eventId
+        || mergedToolParams.id
         || activeEntities.current_message_id
         || activeEntities.current_contact_id
         || activeEntities.current_event_id
@@ -298,20 +317,20 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
         },
         filters: {
             read_state: readState,
-            from: ensureArray(entities.from || activeEntities.from),
-            not_from: ensureArray(entities.not_from || activeEntities.not_from),
-            mailbox: ensureString(entities.mailbox || activeEntities.mailbox, 'inbox').toLowerCase(),
-            thread_id: ensureString(entities.thread_id || activeEntities.thread_id),
-            query_text: ensureString(entities.query_text || entities.query),
-            order: ensureString(entities.order || activeEntities.order, 'newest'),
-            limit: ensurePositiveInt(entities.limit || activeEntities.limit, 10),
-            temporal_ref: ensureString(entities.temporal_ref)
+            from: ensureArray(entities.from || mergedToolParams.from || activeEntities.from),
+            not_from: ensureArray(entities.not_from || mergedToolParams.not_from || activeEntities.not_from),
+            mailbox: ensureString(entities.mailbox || mergedToolParams.mailbox || activeEntities.mailbox, 'inbox').toLowerCase(),
+            thread_id: ensureString(entities.thread_id || mergedToolParams.thread_id || activeEntities.thread_id),
+            query_text: ensureString(entities.query_text || entities.query || mergedToolParams.query_text || mergedToolParams.query),
+            order: ensureString(entities.order || mergedToolParams.order || activeEntities.order, 'newest'),
+            limit: ensurePositiveInt(entities.limit || mergedToolParams.limit || activeEntities.limit, 10),
+            temporal_ref: ensureString(entities.temporal_ref || mergedToolParams.temporal_ref)
         },
         scope: ensureString(entities.scope, 'mailbox'),
         draft: {
-            reply_text: ensureString(entities.draft_text),
-            reply_target: ensureString(entities.reply_target),
-            auto_send: entities.auto_send === true
+            reply_text: ensureString(entities.draft_text || mergedToolParams.draft_text || mergedToolParams.reply_text),
+            reply_target: ensureString(entities.reply_target || mergedToolParams.reply_target),
+            auto_send: entities.auto_send === true || mergedToolParams.auto_send === true
         },
         source: {
             utterance_raw: ensureString(intent.utterance?.raw),
@@ -321,6 +340,16 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
             locale: ensureString(intent.locale, 'fr-FR'),
             confidence: Number.isFinite(Number(intent.confidence)) ? Number(intent.confidence) : null
         },
+        payload: ensureObject(
+            mergedToolParams.contact
+            || mergedToolParams.event
+            || mergedToolParams.changes
+            || (
+                ['create', 'update'].includes(operation)
+                    ? mergedToolParams
+                    : null
+            )
+        ),
         status_only: entities.status_only === true
     });
 };

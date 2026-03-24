@@ -238,7 +238,7 @@ function resolveRateLimitRule(method, params = {}, policy = {}) {
     if (normalizedMethod === 'mail.send') {
         return MCP_RATE_LIMIT_RULES.find((entry) => entry.id === 'mail.send') || null;
     }
-    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update') {
+    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update' || normalizedMethod === 'calendar.delete') {
         return MCP_RATE_LIMIT_RULES.find((entry) => entry.id === 'calendar.write') || null;
     }
     if (
@@ -518,6 +518,7 @@ function listAclRules() {
             { subject: 'mail.send', access: 'confirm', required_capabilities: ['mail.send'] },
             { subject: 'calendar.create', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.update', access: 'confirm', required_capabilities: ['calendar.write'] },
+            { subject: 'calendar.delete', access: 'confirm', required_capabilities: ['calendar.write'] },
             {
                 subject: 'runtime.tools.call:ui.capture.*',
                 access: 'confirm',
@@ -621,7 +622,7 @@ function resolveAccessPolicy(method, params = {}) {
             idempotent: true
         };
     }
-    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update') {
+    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update' || normalizedMethod === 'calendar.delete') {
         return {
             ...defaultPolicy,
             scope: 'tool',
@@ -697,11 +698,11 @@ function resolveAccessPolicy(method, params = {}) {
                 requiredCapabilities.push('mail.send');
                 return true;
             }
-            if (stepMethod === 'calendar.create' || stepMethod === 'calendar.update') {
+            if (stepMethod === 'calendar.create' || stepMethod === 'calendar.update' || stepMethod === 'calendar.delete') {
                 requiredCapabilities.push('calendar.write');
                 return true;
             }
-            return ['mail.send', 'calendar.create', 'calendar.update'].includes(stepMethod);
+            return ['mail.send', 'calendar.create', 'calendar.update', 'calendar.delete'].includes(stepMethod);
         });
         return sensitive
             ? {
@@ -751,7 +752,13 @@ function resolveAccessPolicy(method, params = {}) {
             idempotent: true
         };
     }
-    if (normalizedMethod === 'contacts.import_macos' || normalizedMethod === 'contacts.import_icloud') {
+    if (
+        normalizedMethod === 'contacts.import_macos'
+        || normalizedMethod === 'contacts.import_icloud'
+        || normalizedMethod === 'contacts.create'
+        || normalizedMethod === 'contacts.update'
+        || normalizedMethod === 'contacts.delete'
+    ) {
         return {
             ...defaultPolicy,
             scope: 'tool',
@@ -765,6 +772,14 @@ function resolveAccessPolicy(method, params = {}) {
             scope: 'tool',
             subject: normalizedMethod,
             required_capabilities: ['contacts.read']
+        };
+    }
+    if (normalizedMethod === 'calendar.delete') {
+        return {
+            ...defaultPolicy,
+            scope: 'tool',
+            subject: normalizedMethod,
+            required_capabilities: ['calendar.write']
         };
     }
     if (normalizedMethod.startsWith('calendar.')) {
@@ -1557,12 +1572,16 @@ const atomeMCPHandlers = {
                 'contacts.import_macos',
                 'contacts.import_icloud',
                 'contacts.push_icloud',
+                'contacts.create',
+                'contacts.update',
+                'contacts.delete',
                 'calendar.sources',
                 'calendar.search',
                 'calendar.today',
                 'calendar.next',
                 'calendar.create',
                 'calendar.update',
+                'calendar.delete',
                 'bank.accounts',
                 'bank.balance',
                 'bank.transactions',
@@ -1985,6 +2004,43 @@ const atomeMCPHandlers = {
         const contactId = params?.contact_id || params?.contactId || params?.id;
         return contacts.read(contactId);
     },
+    async 'contacts.create'(params = {}) {
+        const contacts = ensureContactsApi();
+        if (typeof contacts.createLocalContact !== 'function') {
+            throw new Error('Contacts create API is not available');
+        }
+        const contact = params?.contact && typeof params.contact === 'object'
+            ? { ...params.contact }
+            : { ...params };
+        delete contact.contact;
+        return contacts.createLocalContact(contact, params || {});
+    },
+    async 'contacts.update'(params = {}) {
+        const contacts = ensureContactsApi();
+        if (typeof contacts.updateLocalContact !== 'function') {
+            throw new Error('Contacts update API is not available');
+        }
+        const contactId = params?.contact_id || params?.contactId || params?.id;
+        const changes = params?.changes && typeof params.changes === 'object'
+            ? { ...params.changes }
+            : params?.contact && typeof params.contact === 'object'
+                ? { ...params.contact }
+            : { ...params };
+        delete changes.contact_id;
+        delete changes.contactId;
+        delete changes.id;
+        delete changes.changes;
+        delete changes.contact;
+        return contacts.updateLocalContact(contactId, changes, params || {});
+    },
+    async 'contacts.delete'(params = {}) {
+        const contacts = ensureContactsApi();
+        if (typeof contacts.deleteLocalContact !== 'function') {
+            throw new Error('Contacts delete API is not available');
+        }
+        const contactId = params?.contact_id || params?.contactId || params?.id;
+        return contacts.deleteLocalContact(contactId, params || {});
+    },
     async 'contacts.import_macos'(params = {}) {
         const contacts = ensureContactsApi();
         if (typeof contacts.importMacosContacts !== 'function') {
@@ -2042,6 +2098,11 @@ const atomeMCPHandlers = {
         delete changes.id;
         delete changes.changes;
         return calendar.update(eventId, changes, params);
+    },
+    'calendar.delete'(params = {}) {
+        const calendar = ensureCalendarApi();
+        const eventId = params?.event_id || params?.eventId || params?.id;
+        return calendar.delete(eventId, params || {});
     },
     'bank.accounts'() {
         const bank = ensureBankApi();

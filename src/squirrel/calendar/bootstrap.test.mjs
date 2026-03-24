@@ -41,6 +41,13 @@ globalThis.CalendarAPI = {
         };
         calendarStore.set(event.id, event);
         return { ok: true, event: { ...event } };
+    },
+    async deleteEvent(eventId) {
+        const key = String(eventId || '');
+        const existed = calendarStore.delete(key);
+        return existed
+            ? { ok: true, deleted: true, event_id: key }
+            : { ok: false, error: 'calendar_event_not_found', event_id: key };
     }
 };
 
@@ -54,6 +61,9 @@ const env = {
 };
 
 const api = createGlobalCalendarApi({ env });
+const now = new Date();
+const start = new Date(now.getTime() + (60 * 60 * 1000));
+const end = new Date(now.getTime() + (2 * 60 * 60 * 1000));
 
 assert.equal(env.Squirrel.calendar, api, 'calendar bootstrap should expose a global Squirrel calendar API');
 assert.equal(env.atome.calendar, api, 'calendar bootstrap should expose a global atome calendar API');
@@ -61,14 +71,18 @@ assert.equal(env.atome.tools.calendar, api, 'calendar bootstrap should expose ca
 
 const created = await api.create({
     title: 'Bootstrap event',
-    start: '2026-03-13T09:00:00.000Z',
-    end: '2026-03-13T10:00:00.000Z'
+    start: start.toISOString(),
+    end: end.toISOString()
 });
 assert.equal(created.ok, true, 'calendar bootstrap should expose unified create through the shared singleton');
 
 const today = await api.today();
 assert.equal(today.ok, true, 'calendar bootstrap should expose today events');
 assert.equal(today.items[0]?.id, created.event?.id, 'calendar bootstrap should query the shared singleton service');
+
+const deleted = await api.delete(created.event?.id);
+assert.equal(deleted.ok, true, 'calendar bootstrap should expose unified delete through the shared singleton');
+assert.equal(deleted.deleted, true, 'calendar bootstrap should acknowledge deleted events');
 
 const opened = await api.openPanel();
 assert.equal(opened.ok, true, 'calendar bootstrap should graft onto the existing calendar panel entrypoint');

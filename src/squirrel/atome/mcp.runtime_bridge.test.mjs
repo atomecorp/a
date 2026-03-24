@@ -8,6 +8,10 @@ const contactsReadyOptions = [];
 let contactsImported = 0;
 let contactsIcloudImported = 0;
 let contactsIcloudPushed = 0;
+let contactsCreated = 0;
+let contactsUpdated = 0;
+let contactsDeleted = 0;
+let calendarDeleted = 0;
 
 globalThis.AtomeAI = {
     listTools() {
@@ -90,6 +94,14 @@ globalThis.atome = {
                 ok: true,
                 event: { id: eventId, title: changes.title || '' }
             };
+        },
+        delete(eventId) {
+            calendarDeleted += 1;
+            return {
+                ok: true,
+                deleted: true,
+                event_id: eventId
+            };
         }
     },
     mail: {
@@ -147,6 +159,38 @@ globalThis.atome = {
             return {
                 ok: true,
                 contact: { source_contact_id: contactId, name: 'Chloe Bernard', email: 'chloe@example.test' }
+            };
+        },
+        createLocalContact(contact = {}) {
+            contactsCreated += 1;
+            return {
+                ok: true,
+                created: true,
+                contact: {
+                    source_contact_id: 'local_contact_mcp_created_1',
+                    source_provider: 'eve_contacts_local',
+                    ...contact
+                }
+            };
+        },
+        updateLocalContact(contactId, changes = {}) {
+            contactsUpdated += 1;
+            return {
+                ok: true,
+                updated: true,
+                contact: {
+                    source_contact_id: contactId,
+                    source_provider: 'eve_contacts_local',
+                    ...changes
+                }
+            };
+        },
+        deleteLocalContact(contactId) {
+            contactsDeleted += 1;
+            return {
+                ok: true,
+                deleted: true,
+                contact_id: contactId
             };
         },
         syncStatus() {
@@ -393,6 +437,44 @@ assert.equal(contactsConfigured > 0, true, 'contacts MCP bridge should prepare t
 assert.equal(contactsSynced > 0, true, 'contacts MCP bridge should trigger a readiness sync before reads');
 assert.equal(contactsReadyOptions.some((entry) => entry?.import_legacy_if_empty === false), true, 'contacts MCP reads should avoid implicit macOS imports');
 
+const contactsCreate = await globalThis.handleAtomeMCPRequestAsync({
+    jsonrpc: '2.0',
+    id: 12.1,
+    method: 'contacts.create',
+    params: {
+        name: 'Sylvain Godard',
+        phone: '06 44 55 78 96'
+    }
+});
+assert.equal(contactsCreate.error, undefined, 'contacts.create should succeed');
+assert.equal(contactsCreate.result?.contact?.name, 'Sylvain Godard', 'contacts.create should bridge to the global local contacts API');
+assert.equal(contactsCreated, 1, 'contacts.create should call the shared local contacts creation bridge');
+
+const contactsUpdate = await globalThis.handleAtomeMCPRequestAsync({
+    jsonrpc: '2.0',
+    id: 12.2,
+    method: 'contacts.update',
+    params: {
+        contact_id: 'local_contact_mcp_created_1',
+        phone: '06 44 55 78 97'
+    }
+});
+assert.equal(contactsUpdate.error, undefined, 'contacts.update should succeed');
+assert.equal(contactsUpdate.result?.contact?.phone, '06 44 55 78 97', 'contacts.update should accept top-level change fields for MCP callers');
+assert.equal(contactsUpdated, 1, 'contacts.update should call the shared local contacts update bridge');
+
+const contactsDelete = await globalThis.handleAtomeMCPRequestAsync({
+    jsonrpc: '2.0',
+    id: 12.3,
+    method: 'contacts.delete',
+    params: {
+        contact_id: 'local_contact_mcp_created_1'
+    }
+});
+assert.equal(contactsDelete.error, undefined, 'contacts.delete should succeed');
+assert.equal(contactsDelete.result?.deleted, true, 'contacts.delete should bridge to the global local contacts delete API');
+assert.equal(contactsDeleted, 1, 'contacts.delete should call the shared local contacts delete bridge');
+
 const contactsImport = await globalThis.handleAtomeMCPRequestAsync({
     jsonrpc: '2.0',
     id: 13,
@@ -543,6 +625,31 @@ const calendarCreate = await globalThis.handleAtomeMCPRequestAsync({
 });
 assert.equal(calendarCreate.error, undefined, 'confirmed calendar.create should succeed');
 assert.equal(calendarCreate.result?.event?.id, 'calendar_mcp_created_1', 'confirmed calendar.create should bridge to the global calendar API');
+
+const calendarDeleteGate = await globalThis.handleAtomeMCPRequestAsync({
+    jsonrpc: '2.0',
+    id: 18.1,
+    method: 'calendar.delete',
+    params: {
+        event_id: 'calendar_mcp_created_1'
+    }
+});
+assert.equal(calendarDeleteGate.error, undefined, 'calendar.delete confirmation gate should succeed');
+assert.equal(calendarDeleteGate.result?.confirmation_required, true, 'calendar.delete should require an MCP confirmation token');
+
+const calendarDelete = await globalThis.handleAtomeMCPRequestAsync({
+    jsonrpc: '2.0',
+    id: 18.2,
+    method: 'calendar.delete',
+    params: {
+        event_id: 'calendar_mcp_created_1',
+        confirmed: true,
+        confirmation_id: calendarDeleteGate.result.confirmation_id
+    }
+});
+assert.equal(calendarDelete.error, undefined, 'confirmed calendar.delete should succeed');
+assert.equal(calendarDelete.result?.deleted, true, 'confirmed calendar.delete should bridge to the global calendar API');
+assert.equal(calendarDeleted, 1, 'calendar.delete should call the shared calendar delete bridge');
 
 const bankAccounts = await globalThis.handleAtomeMCPRequestAsync({
     jsonrpc: '2.0',

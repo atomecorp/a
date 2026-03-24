@@ -154,6 +154,116 @@ const buildContactsReply = (items, locale) => {
         : `J'ai trouve ${items.length} contact(s) : ${labels.join(', ')}.`;
 };
 
+const normalizePhoneForContactCreate = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const cleaned = text.replace(/[^\d+]/g, '');
+    if (!cleaned) return '';
+    if (cleaned.startsWith('+')) {
+        return `+${cleaned.slice(1).replace(/\+/g, '')}`;
+    }
+    return cleaned.replace(/\+/g, '');
+};
+
+const toPlainObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {});
+
+const pruneObjectFields = (value = {}, keys = []) => {
+    const next = toPlainObject(value);
+    keys.forEach((key) => {
+        delete next[key];
+    });
+    return next;
+};
+
+const extractContactCreatePayload = (request = {}) => {
+    const structuredPayload = toPlainObject(request?.payload);
+    const structuredName = String(
+        structuredPayload.name
+        || structuredPayload.display_name
+        || structuredPayload.full_name
+        || structuredPayload.nickname
+        || ''
+    ).trim();
+    const structuredPhone = normalizePhoneForContactCreate(
+        structuredPayload.phone
+        || structuredPayload.mobile
+        || structuredPayload.phone_number
+        || ''
+    );
+    const structuredEmail = String(structuredPayload.email || '').trim();
+    if (structuredName || structuredPhone || structuredEmail) {
+        return {
+            ...structuredPayload,
+            ...(structuredName ? { name: structuredName } : {}),
+            ...(structuredPhone ? { phone: structuredPhone } : {}),
+            ...(structuredEmail ? { email: structuredEmail } : {})
+        };
+    }
+
+    const utterances = [
+        request?.source?.utterance_raw,
+        request?.source?.utterance_normalized,
+        request?.filters?.query_text
+    ].map((entry) => String(entry || '').trim()).filter(Boolean);
+    const combined = utterances.join(' ').replace(/\s+/g, ' ').trim();
+    if (!combined) {
+        return { name: '', phone: '' };
+    }
+
+    const phoneMatch = combined.match(/(\+?\d(?:[\d\s().-]{6,}\d))/);
+    const phone = normalizePhoneForContactCreate(phoneMatch?.[1] || '');
+
+    const namePatterns = [
+        /(?:nomm?[ée]?|nom[ée]?|appele?|appel[ée]?|appel[eé])\s+(.+?)(?=\s+(?:qui\b|avec\b|a\b|au\b|tel\b|telephone\b|t[eé]l[eé]phone\b|numero\b|num[eé]ro\b|phone\b)|$)/i,
+        /(?:contact|user)\s+(.+?)(?=\s+(?:qui\b|avec\b|a\b|au\b|tel\b|telephone\b|t[eé]l[eé]phone\b|numero\b|num[eé]ro\b|phone\b)|$)/i
+    ];
+
+    let name = '';
+    for (let index = 0; index < namePatterns.length; index += 1) {
+        const match = combined.match(namePatterns[index]);
+        if (!match?.[1]) continue;
+        name = String(match[1] || '')
+            .replace(/\b(?:nomm?[ée]?|nom[ée]?|appele?|appel[ée]?|appel[eé])\b/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (name) break;
+    }
+
+    if (!name && phone) {
+        const beforePhone = combined.split(phoneMatch?.[1] || '')[0] || combined;
+        name = beforePhone
+            .replace(/\b(?:peux tu|peux-tu|merci de|veuillez|stp|s'il te plait|s il te plait)\b/gi, ' ')
+            .replace(/\b(?:cr[eé]+r?|cree?r?|ajoute|crée|nouveau|nouvelle|contact|user|nomm?[ée]?|nom[ée]?|avec|qui|a|le|la|un|une|numero|num[eé]ro|telephone|t[eé]l[eé]phone)\b/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    return {
+        name: String(name || '').trim(),
+        phone
+    };
+};
+
+const extractContactUpdatePayload = (request = {}) => {
+    const payload = pruneObjectFields(request?.payload, [
+        'contact_id',
+        'contactId',
+        'id',
+        'source_id',
+        'query',
+        'query_text',
+        'limit'
+    ]);
+    if (payload.phone || payload.mobile || payload.phone_number) {
+        payload.phone = normalizePhoneForContactCreate(
+            payload.phone || payload.mobile || payload.phone_number
+        );
+    }
+    if (payload.email) payload.email = String(payload.email).trim();
+    if (payload.name) payload.name = String(payload.name).trim();
+    return payload;
+};
+
 const buildCalendarReply = (items, locale) => {
     const en = isEnglish(locale);
     const labels = items.map((e) => String(e?.title || e?.summary || e?.name || '').trim()).filter(Boolean).slice(0, 3);
@@ -720,6 +830,116 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
             });
         }
 
+        case 'create': {
+            if (typeof contactsApi.createLocalContact !== 'function') {
+                return createStructuredResult({
+                    ok: false, domain: 'contacts', operation: 'create', error: 'contacts_create_unavailable',
+                    reply_text: isEnglish(locale) ? 'Contact creation is not available yet.' : "La creation de contact n'est pas encore disponible."
+                });
+            }
+            const payload = extractContactCreatePayload(request);
+            if (!payload.name && !payload.phone) {
+                return createStructuredResult({
+                    ok: false, domain: 'contacts', operation: 'create', error: 'contacts_create_payload_missing',
+                    reply_text: isEnglish(locale)
+                        ? 'I need at least a name or a phone number to create the contact.'
+                        : "J'ai besoin d'un nom ou d'un numero pour creer le contact."
+                });
+            }
+            const result = await contactsApi.createLocalContact(payload, {
+                source: 'voice'
+            });
+            const createdContact = result?.contact || (Array.isArray(result?.items) ? result.items[0] : null) || null;
+            if (result?.ok === true && createdContact && workingMemory) {
+                const contactId = createdContact.source_contact_id || createdContact.id || null;
+                if (contactId) {
+                    workingMemory.setCurrentItem('contacts', contactId, createdContact);
+                    workingMemory.setLastOperation('contacts', 'create');
+                }
+            }
+            return createStructuredResult({
+                ok: result?.ok !== false, domain: 'contacts', operation: 'create',
+                item: createdContact,
+                reply_text: result?.ok !== false
+                    ? (isEnglish(locale)
+                        ? `The contact ${String(createdContact?.name || payload.name || payload.phone || '').trim()} has been created.`
+                        : `Le contact ${String(createdContact?.name || payload.name || payload.phone || '').trim()} a ete cree.`)
+                    : (isEnglish(locale) ? 'I could not create the contact.' : "Je n'ai pas pu creer le contact.")
+            });
+        }
+
+        case 'update': {
+            const targetId = request.target?.id
+                || request.payload?.contact_id
+                || request.payload?.contactId
+                || request.payload?.id
+                || (workingMemory ? workingMemory.getCurrentItemId('contacts') : null);
+            if (!targetId || typeof contactsApi.updateLocalContact !== 'function') {
+                return createStructuredResult({
+                    ok: false, domain: 'contacts', operation: 'update', error: 'contacts_not_found',
+                    reply_text: isEnglish(locale) ? 'I do not know which contact to update.' : 'Je ne sais pas quel contact mettre a jour.'
+                });
+            }
+            const changes = extractContactUpdatePayload(request);
+            if (!Object.keys(changes).length) {
+                return createStructuredResult({
+                    ok: false, domain: 'contacts', operation: 'update', error: 'contacts_update_payload_missing',
+                    reply_text: isEnglish(locale)
+                        ? 'I need at least one change to update the contact.'
+                        : "J'ai besoin d'au moins une modification pour mettre a jour le contact."
+                });
+            }
+            const result = await contactsApi.updateLocalContact(targetId, changes, {
+                source: 'voice'
+            });
+            const updatedContact = result?.contact || null;
+            if (result?.ok === true && updatedContact && workingMemory) {
+                const contactId = updatedContact.source_contact_id || updatedContact.id || targetId;
+                workingMemory.setCurrentItem('contacts', contactId, updatedContact);
+                workingMemory.setLastOperation('contacts', 'update');
+            }
+            return createStructuredResult({
+                ok: result?.ok !== false,
+                domain: 'contacts',
+                operation: 'update',
+                item: updatedContact,
+                error: result?.ok === false ? (result?.error || 'contacts_update_failed') : '',
+                reply_text: result?.ok !== false
+                    ? (isEnglish(locale) ? 'The contact has been updated.' : 'Le contact a ete mis a jour.')
+                    : (isEnglish(locale) ? 'I could not update the contact.' : "Je n'ai pas pu mettre a jour le contact.")
+            });
+        }
+
+        case 'delete': {
+            const targetId = request.target?.id
+                || request.payload?.contact_id
+                || request.payload?.contactId
+                || request.payload?.id
+                || (workingMemory ? workingMemory.getCurrentItemId('contacts') : null);
+            if (!targetId || typeof contactsApi.deleteLocalContact !== 'function') {
+                return createStructuredResult({
+                    ok: false, domain: 'contacts', operation: 'delete', error: 'contacts_not_found',
+                    reply_text: isEnglish(locale) ? 'I do not know which contact to delete.' : 'Je ne sais pas quel contact supprimer.'
+                });
+            }
+            const result = await contactsApi.deleteLocalContact(targetId, {
+                source: 'voice'
+            });
+            if (result?.ok === true && workingMemory) {
+                workingMemory.removeFromResultSet('contacts', targetId);
+                workingMemory.setLastOperation('contacts', 'delete');
+            }
+            return createStructuredResult({
+                ok: result?.ok !== false,
+                domain: 'contacts',
+                operation: 'delete',
+                error: result?.ok === false ? (result?.error || 'contacts_delete_failed') : '',
+                reply_text: result?.ok !== false
+                    ? (isEnglish(locale) ? 'The contact has been deleted.' : 'Le contact a ete supprime.')
+                    : (isEnglish(locale) ? 'I could not delete the contact.' : "Je n'ai pas pu supprimer le contact.")
+            });
+        }
+
         default:
             return createStructuredResult({
                 ok: false, domain: 'contacts', operation: request.operation,
@@ -811,7 +1031,10 @@ const executeCalendarRequest = async (request, connectors, workingMemory) => {
                     reply_text: isEnglish(locale) ? 'Event creation is not available yet.' : "La creation d'evenement n'est pas encore disponible."
                 });
             }
-            const result = await calendarApi.create(request.draft || {});
+            const payload = Object.keys(toPlainObject(request.payload)).length
+                ? toPlainObject(request.payload)
+                : toPlainObject(request.draft);
+            const result = await calendarApi.create(payload, request.payload || request.draft || {});
             if (workingMemory) workingMemory.setLastOperation('calendar', 'create');
             return createStructuredResult({
                 ok: result?.ok !== false, domain: 'calendar', operation: 'create',
@@ -819,6 +1042,74 @@ const executeCalendarRequest = async (request, connectors, workingMemory) => {
                 reply_text: result?.ok !== false
                     ? (isEnglish(locale) ? 'The event has been created.' : 'Le rendez-vous a ete cree.')
                     : (isEnglish(locale) ? 'I could not create the event.' : "Je n'ai pas pu creer le rendez-vous.")
+            });
+        }
+
+        case 'update': {
+            const targetId = request.target?.id
+                || request.payload?.event_id
+                || request.payload?.eventId
+                || request.payload?.id
+                || (workingMemory ? workingMemory.getCurrentItemId('calendar') : null);
+            if (!targetId || typeof calendarApi.update !== 'function') {
+                return createStructuredResult({
+                    ok: false, domain: 'calendar', operation: 'update', error: 'calendar_event_not_found',
+                    reply_text: isEnglish(locale) ? 'I do not know which event to update.' : 'Je ne sais pas quel rendez-vous mettre a jour.'
+                });
+            }
+            const changes = pruneObjectFields(request.payload, ['event_id', 'eventId', 'id']);
+            if (!Object.keys(changes).length) {
+                return createStructuredResult({
+                    ok: false, domain: 'calendar', operation: 'update', error: 'calendar_update_payload_missing',
+                    reply_text: isEnglish(locale)
+                        ? 'I need at least one change to update the event.'
+                        : "J'ai besoin d'au moins une modification pour mettre a jour le rendez-vous."
+                });
+            }
+            const result = await calendarApi.update(targetId, changes, request.payload || {});
+            if (result?.ok === true && workingMemory) {
+                workingMemory.setLastOperation('calendar', 'update');
+                if (result?.event) {
+                    workingMemory.setCurrentItem('calendar', result.event.id || targetId, result.event);
+                }
+            }
+            return createStructuredResult({
+                ok: result?.ok !== false,
+                domain: 'calendar',
+                operation: 'update',
+                item: result?.event || null,
+                error: result?.ok === false ? (result?.error || 'calendar_update_failed') : '',
+                reply_text: result?.ok !== false
+                    ? (isEnglish(locale) ? 'The event has been updated.' : 'Le rendez-vous a ete mis a jour.')
+                    : (isEnglish(locale) ? 'I could not update the event.' : "Je n'ai pas pu mettre a jour le rendez-vous.")
+            });
+        }
+
+        case 'delete': {
+            const targetId = request.target?.id
+                || request.payload?.event_id
+                || request.payload?.eventId
+                || request.payload?.id
+                || (workingMemory ? workingMemory.getCurrentItemId('calendar') : null);
+            if (!targetId || typeof calendarApi.delete !== 'function') {
+                return createStructuredResult({
+                    ok: false, domain: 'calendar', operation: 'delete', error: 'calendar_event_not_found',
+                    reply_text: isEnglish(locale) ? 'I do not know which event to delete.' : 'Je ne sais pas quel rendez-vous supprimer.'
+                });
+            }
+            const result = await calendarApi.delete(targetId, request.payload || {});
+            if (result?.ok === true && workingMemory) {
+                workingMemory.removeFromResultSet('calendar', targetId);
+                workingMemory.setLastOperation('calendar', 'delete');
+            }
+            return createStructuredResult({
+                ok: result?.ok !== false,
+                domain: 'calendar',
+                operation: 'delete',
+                error: result?.ok === false ? (result?.error || 'calendar_delete_failed') : '',
+                reply_text: result?.ok !== false
+                    ? (isEnglish(locale) ? 'The event has been deleted.' : 'Le rendez-vous a ete supprime.')
+                    : (isEnglish(locale) ? 'I could not delete the event.' : "Je n'ai pas pu supprimer le rendez-vous.")
             });
         }
 

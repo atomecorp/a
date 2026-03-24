@@ -8,6 +8,9 @@ let contactsOpenPanelCalls = 0;
 let contactsImportCalls = 0;
 let contactsIcloudImportCalls = 0;
 let contactsIcloudPushCalls = 0;
+let contactsCreateCalls = 0;
+let contactsUpdateCalls = 0;
+let contactsDeleteCalls = 0;
 
 globalThis.AtomeAI = {
     registerTool(definition = {}) {
@@ -59,6 +62,60 @@ globalThis.atome = {
                     title: changes.title || ''
                 }
             };
+        },
+        delete(eventId) {
+            return {
+                ok: true,
+                deleted: true,
+                event_id: eventId
+            };
+        }
+    },
+    mail: {
+        async ensureReady() {
+            return { ok: true };
+        },
+        list() {
+            return { ok: true, items: [{ message_id: 'mail_ai_1', mailbox: 'inbox', unread: true }] };
+        },
+        read(messageId) {
+            return { ok: true, item: { message_id: messageId, mailbox: 'inbox' } };
+        },
+        search(query) {
+            return { ok: true, query, items: [{ message_id: 'mail_ai_1' }] };
+        },
+        nextUnread() {
+            return { ok: true, item: { message_id: 'mail_ai_1' } };
+        },
+        summarize() {
+            return { ok: true, summary: '1 unread message.' };
+        },
+        replyDraft(messageId, options = {}) {
+            return {
+                ok: true,
+                draft: {
+                    draft_id: 'mail_draft_ai_1',
+                    in_reply_to: messageId,
+                    body_text: options.reply_text || ''
+                }
+            };
+        },
+        send(draftId, options = {}) {
+            return options.confirmed === true
+                ? { ok: true, draft: { draft_id: draftId, status: 'queued_local_only' } }
+                : { ok: false, confirmation_required: true };
+        },
+        markRead(messageId) {
+            return { ok: true, item: { message_id: messageId, unread: false } };
+        },
+        markUnread(messageId) {
+            return { ok: true, item: { message_id: messageId, unread: true } };
+        },
+        archive(messageId) {
+            return { ok: true, item: { message_id: messageId, mailbox: 'archive' } };
+        },
+        delete(messageId) {
+            return { ok: true, item: { message_id: messageId, mailbox: 'trash' } };
         }
     },
     contacts: {
@@ -90,6 +147,38 @@ globalThis.atome = {
             return {
                 ok: true,
                 contact: { source_contact_id: contactId, name: 'Chloe Bernard', email: 'chloe@example.test' }
+            };
+        },
+        async createLocalContact(contact = {}) {
+            contactsCreateCalls += 1;
+            return {
+                ok: true,
+                created: true,
+                contact: {
+                    source_contact_id: 'local_contact_ai_created_1',
+                    source_provider: 'eve_contacts_local',
+                    ...contact
+                }
+            };
+        },
+        async updateLocalContact(contactId, changes = {}) {
+            contactsUpdateCalls += 1;
+            return {
+                ok: true,
+                updated: true,
+                contact: {
+                    source_contact_id: contactId,
+                    source_provider: 'eve_contacts_local',
+                    ...changes
+                }
+            };
+        },
+        async deleteLocalContact(contactId) {
+            contactsDeleteCalls += 1;
+            return {
+                ok: true,
+                deleted: true,
+                contact_id: contactId
             };
         },
         async openPanel() {
@@ -125,19 +214,6 @@ globalThis.atome = {
 };
 
 await import('./default_tools.js');
-const { createGlobalMailApi } = await import('../mail/bootstrap.js');
-const mailApi = createGlobalMailApi({ env: globalThis });
-mailApi.ingest([
-    {
-        message_id: 'mail_ai_1',
-        mailbox: 'inbox',
-        subject: 'Hello AI',
-        body_text: 'Premier message pour le bridge mail.',
-        unread: true,
-        from: { address: 'alice@example.test' },
-        received_at: '2026-03-13T10:00:00Z'
-    }
-]);
 const { createGlobalBankApi } = await import('../bank/bootstrap.js');
 const bankApi = createGlobalBankApi({ env: globalThis });
 bankApi.ingestAccounts([
@@ -197,6 +273,7 @@ const calendarTodayTool = registeredTools.get('calendar.today');
 const calendarNextTool = registeredTools.get('calendar.next');
 const calendarCreateUnifiedTool = registeredTools.get('calendar.create');
 const calendarUpdateUnifiedTool = registeredTools.get('calendar.update');
+const calendarDeleteUnifiedTool = registeredTools.get('calendar.delete');
 const bankAccountsTool = registeredTools.get('bank.accounts');
 const bankBalanceTool = registeredTools.get('bank.balance');
 const bankTransactionsTool = registeredTools.get('bank.transactions');
@@ -217,6 +294,9 @@ const contactsSourcesTool = registeredTools.get('contacts.sources');
 const contactsListTool = registeredTools.get('contacts.list');
 const contactsSearchTool = registeredTools.get('contacts.search');
 const contactsReadTool = registeredTools.get('contacts.read');
+const contactsCreateTool = registeredTools.get('contacts.create');
+const contactsUpdateTool = registeredTools.get('contacts.update');
+const contactsDeleteTool = registeredTools.get('contacts.delete');
 const contactsImportTool = registeredTools.get('contacts.import_macos');
 const contactsImportIcloudTool = registeredTools.get('contacts.import_icloud');
 const contactsPushIcloudTool = registeredTools.get('contacts.push_icloud');
@@ -236,6 +316,7 @@ assert.ok(calendarTodayTool, 'calendar.today should be registered');
 assert.ok(calendarNextTool, 'calendar.next should be registered');
 assert.ok(calendarCreateUnifiedTool, 'calendar.create should be registered');
 assert.ok(calendarUpdateUnifiedTool, 'calendar.update should be registered');
+assert.ok(calendarDeleteUnifiedTool, 'calendar.delete should be registered');
 assert.ok(bankAccountsTool, 'bank.accounts should be registered');
 assert.ok(bankBalanceTool, 'bank.balance should be registered');
 assert.ok(bankTransactionsTool, 'bank.transactions should be registered');
@@ -256,6 +337,9 @@ assert.ok(contactsSourcesTool, 'contacts.sources should be registered');
 assert.ok(contactsListTool, 'contacts.list should be registered');
 assert.ok(contactsSearchTool, 'contacts.search should be registered');
 assert.ok(contactsReadTool, 'contacts.read should be registered');
+assert.ok(contactsCreateTool, 'contacts.create should be registered');
+assert.ok(contactsUpdateTool, 'contacts.update should be registered');
+assert.ok(contactsDeleteTool, 'contacts.delete should be registered');
 assert.ok(contactsImportTool, 'contacts.import_macos should be registered');
 assert.ok(contactsImportIcloudTool, 'contacts.import_icloud should be registered');
 assert.ok(contactsPushIcloudTool, 'contacts.push_icloud should be registered');
@@ -359,6 +443,15 @@ const calendarUnifiedUpdate = await calendarUpdateUnifiedTool.handler({
 assert.equal(calendarUnifiedUpdate?.ok, true, 'calendar.update should bridge to the unified calendar service');
 assert.equal(calendarUnifiedUpdate?.event?.title, 'Unified calendar updated', 'calendar.update should expose the updated unified calendar event');
 
+const calendarUnifiedDelete = await calendarDeleteUnifiedTool.handler({
+    params: {
+        event_id: 'calendar_ai_created_1'
+    }
+});
+assert.equal(calendarUnifiedDelete?.ok, true, 'calendar.delete should bridge to the unified calendar service');
+assert.equal(calendarUnifiedDelete?.deleted, true, 'calendar.delete should expose a deletion acknowledgement');
+assert.equal(calendarUnifiedDelete?.event_id, 'calendar_ai_created_1', 'calendar.delete should expose the deleted unified calendar event id');
+
 const bankAccounts = await bankAccountsTool.handler({ params: {} });
 assert.equal(bankAccounts?.items?.[0]?.account_id, 'bank_ai_1', 'bank.accounts should bridge to the local bank service');
 
@@ -431,6 +524,32 @@ assert.equal(contactsSearch?.query, 'Chloe', 'contacts.search should keep the se
 const contactsRead = await contactsReadTool.handler({ params: { contact_id: 'mac_contact_ai_1' } });
 assert.equal(contactsRead?.contact?.source_contact_id, 'mac_contact_ai_1', 'contacts.read should expose one synchronized contact');
 
+const contactsCreate = await contactsCreateTool.handler({
+    params: {
+        name: 'Sylvain Godard',
+        phone: '06 44 55 78 96'
+    }
+});
+assert.equal(contactsCreate?.ok, true, 'contacts.create should expose the local contacts creation bridge');
+assert.equal(contactsCreate?.contact?.name, 'Sylvain Godard', 'contacts.create should surface the created local contact payload');
+
+const contactsUpdate = await contactsUpdateTool.handler({
+    params: {
+        contact_id: 'local_contact_ai_created_1',
+        phone: '06 44 55 78 97'
+    }
+});
+assert.equal(contactsUpdate?.ok, true, 'contacts.update should expose the local contacts update bridge');
+assert.equal(contactsUpdate?.contact?.phone, '06 44 55 78 97', 'contacts.update should accept top-level change fields for LLM callers');
+
+const contactsDelete = await contactsDeleteTool.handler({
+    params: {
+        contact_id: 'local_contact_ai_created_1'
+    }
+});
+assert.equal(contactsDelete?.ok, true, 'contacts.delete should expose the local contacts delete bridge');
+assert.equal(contactsDelete?.deleted, true, 'contacts.delete should confirm local contact deletion');
+
 const contactsImport = await contactsImportTool.handler({ params: {} });
 assert.equal(contactsImport?.imported, 1, 'contacts.import_macos should expose the explicit import action');
 
@@ -454,6 +573,9 @@ assert.equal(contactsReadyCalls > 0, true, 'contacts default tools should prepar
 assert.equal(contactsImportCalls, 1, 'contacts.import_macos should call the shared contacts import bridge once');
 assert.equal(contactsIcloudImportCalls, 1, 'contacts.import_icloud should call the shared iCloud contacts import bridge once');
 assert.equal(contactsIcloudPushCalls, 1, 'contacts.push_icloud should call the shared iCloud write bridge once');
+assert.equal(contactsCreateCalls, 1, 'contacts.create should call the shared local contacts creation bridge once');
+assert.equal(contactsUpdateCalls, 1, 'contacts.update should call the shared local contacts update bridge once');
+assert.equal(contactsDeleteCalls, 1, 'contacts.delete should call the shared local contacts delete bridge once');
 assert.equal(contactsOpenPanelCalls, 1, 'contacts.open_panel should call the shared contacts UI bridge once');
 assert.equal(contactsReadyOptions.some((entry) => entry?.import_legacy_if_empty === false), true, 'contacts reads should not trigger an implicit macOS import');
 

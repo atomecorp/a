@@ -702,6 +702,27 @@ const registerDefaultTools = () => {
     });
 
     Agent.registerTool({
+        name: 'calendar.delete',
+        description: 'Delete a calendar event through the unified calendar service.',
+        capabilities: ['calendar.write'],
+        risk_level: 'MEDIUM',
+        params_schema: {
+            required: ['event_id'],
+            properties: {
+                event_id: { type: 'string' },
+                source_id: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireCalendarServiceApi();
+            const eventId = safeString(params?.event_id || params?.eventId || params?.id);
+            if (!eventId) throw new Error('Missing event_id');
+            return api.delete(eventId, params || {});
+        },
+        summary: (params) => `Delete calendar event ${params?.event_id || params?.eventId || params?.id || ''}`
+    });
+
+    Agent.registerTool({
         name: 'mail.list',
         description: 'List locally indexed mail items.',
         capabilities: ['mail.read'],
@@ -999,6 +1020,92 @@ const registerDefaultTools = () => {
             return api.read(contactId);
         },
         summary: (params) => `Read contact ${params?.contact_id || params?.contactId || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'contacts.create',
+        description: 'Create one local eVe contact.',
+        capabilities: ['contacts.write'],
+        risk_level: 'LOW',
+        params_schema: {
+            properties: {
+                contact: { type: 'object' },
+                name: { type: 'string' },
+                first_name: { type: 'string' },
+                nickname: { type: 'string' },
+                phone: { type: 'string' },
+                email: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireContactsApi();
+            if (!api || typeof api.createLocalContact !== 'function') {
+                throw new Error('Contacts create API is not available');
+            }
+            const contact = params?.contact && typeof params.contact === 'object'
+                ? { ...params.contact }
+                : { ...(params || {}) };
+            delete contact.contact;
+            return api.createLocalContact(contact, params || {});
+        },
+        summary: (params) => `Create contact ${params?.contact?.name || params?.name || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'contacts.update',
+        description: 'Update one local eVe contact.',
+        capabilities: ['contacts.write'],
+        risk_level: 'LOW',
+        params_schema: {
+            required: ['contact_id'],
+            properties: {
+                contact_id: { type: 'string' },
+                changes: { type: 'object' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireContactsApi();
+            if (!api || typeof api.updateLocalContact !== 'function') {
+                throw new Error('Contacts update API is not available');
+            }
+            const contactId = safeString(params?.contact_id || params?.contactId || params?.id);
+            if (!contactId) throw new Error('Missing contact_id');
+            const changes = params?.changes && typeof params.changes === 'object'
+                ? { ...params.changes }
+                : params?.contact && typeof params.contact === 'object'
+                    ? { ...params.contact }
+                    : { ...(params || {}) };
+            delete changes.contact_id;
+            delete changes.contactId;
+            delete changes.id;
+            delete changes.changes;
+            delete changes.contact;
+            return api.updateLocalContact(contactId, changes, params || {});
+        },
+        summary: (params) => `Update contact ${params?.contact_id || params?.contactId || ''}`
+    });
+
+    Agent.registerTool({
+        name: 'contacts.delete',
+        description: 'Delete one local eVe contact.',
+        capabilities: ['contacts.write'],
+        risk_level: 'LOW',
+        params_schema: {
+            required: ['contact_id'],
+            properties: {
+                contact_id: { type: 'string' }
+            }
+        },
+        handler: async ({ params }) => {
+            const api = await requireContactsApi();
+            if (!api || typeof api.deleteLocalContact !== 'function') {
+                throw new Error('Contacts delete API is not available');
+            }
+            const contactId = safeString(params?.contact_id || params?.contactId || params?.id);
+            if (!contactId) throw new Error('Missing contact_id');
+            return api.deleteLocalContact(contactId, params || {});
+        },
+        summary: (params) => `Delete contact ${params?.contact_id || params?.contactId || ''}`
     });
 
     Agent.registerTool({

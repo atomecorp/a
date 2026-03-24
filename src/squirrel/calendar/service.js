@@ -340,6 +340,40 @@ export const createCalendarService = ({
         };
     };
 
+    const deleteEvent = async (eventId, options = {}) => {
+        const explicitSourceId = options?.source_id || null;
+        let source = null;
+        if (explicitSourceId) {
+            source = getSource(explicitSourceId);
+            if (!source) {
+                return { ok: false, error: 'calendar_source_not_found', source_id: toText(explicitSourceId) || null };
+            }
+        } else {
+            const current = await readEvent(eventId, options);
+            if (current.ok !== true) return current;
+            source = getSource(current.event.source_id);
+        }
+        if (!source) {
+            return { ok: false, error: 'calendar_source_not_found', event_id: toText(eventId) || null };
+        }
+        if (source.writable !== true) {
+            return { ok: false, error: 'calendar_source_read_only', source_id: source.source_id };
+        }
+        if (typeof source.deleteEvent !== 'function') {
+            return { ok: false, error: 'calendar_delete_unavailable', source_id: source.source_id };
+        }
+        const response = await source.deleteEvent(eventId, options);
+        if (response?.ok !== true) {
+            return response || { ok: false, error: 'calendar_delete_failed', source_id: source.source_id };
+        }
+        return {
+            ok: true,
+            source_id: source.source_id,
+            deleted: true,
+            event_id: toText(eventId) || null
+        };
+    };
+
     const runConnectorSync = async (mode = 'delta', options = {}) => {
         const sourceEntries = resolveTargetSources(options?.source_id);
         const results = await Promise.all(sourceEntries.map(async (source) => {
@@ -441,6 +475,9 @@ export const createCalendarService = ({
         },
         async calendarUpdate(eventId, changes = {}, options = {}) {
             return updateEvent(eventId, changes, options);
+        },
+        async calendarDelete(eventId, options = {}) {
+            return deleteEvent(eventId, options);
         }
     };
 };

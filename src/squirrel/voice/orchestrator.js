@@ -1839,13 +1839,17 @@ class VoiceOrchestrator {
         const businessConnectorFallback = fallbackExecutable
             && BUSINESS_CONNECTOR_DOMAINS.has(String(fallbackIntent?.domain || '').trim());
 
+        if (plannedBusinessDomain && plannerProducedToolIntent) {
+            return plannedIntent;
+        }
+
         if (plannedBusinessDomain && String(plannedIntent?.domain || '').trim() === 'mail') {
             return buildMaterializedMailIntent(plannedIntent, utterance, options.context || {}, fallbackIntent);
         }
 
-        // For business connectors, keep the LLM as the interpreter but execute through the
-        // deterministic connector route when one is available. If the planner did not produce
-        // a business-domain interpretation, keep the heuristic fallback.
+        // For business connectors, keep the LLM as the interpreter when it produced
+        // an executable plan. Only fall back when the planner returned no concrete
+        // business action that can be executed deterministically.
         if (businessConnectorFallback) {
             return fallbackIntent;
         }

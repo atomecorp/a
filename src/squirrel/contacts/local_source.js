@@ -27,6 +27,7 @@ const cloneValue = (value) => {
 };
 
 const ensureArray = (value) => (Array.isArray(value) ? value : []);
+const hasFiniteLimit = (value) => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value));
 
 const normalizeCustomFields = (fields = []) => ensureArray(fields)
     .map((entry) => ({
@@ -195,7 +196,7 @@ export const createLocalContactsSource = ({
 
     const listItems = ({ query = '', limit = null } = {}) => {
         const state = readState();
-        const normalizedLimit = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : null;
+        const normalizedLimit = hasFiniteLimit(limit) ? Math.max(1, Number(limit)) : null;
         const items = state.items
             .filter((entry) => matchesQuery(entry, query))
             .slice(0, normalizedLimit || undefined)

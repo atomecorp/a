@@ -47,7 +47,7 @@ export const createCalendarApiSource = ({
     const contract = createCalendarConnectorContract({
         provider: source_id,
         role,
-        write_capabilities: writable ? ['calendar_create', 'calendar_update'] : []
+        write_capabilities: writable ? ['calendar_create', 'calendar_update', 'calendar_delete'] : []
     });
 
     const requireApi = async () => {
@@ -135,6 +135,21 @@ export const createCalendarApiSource = ({
                 ...response,
                 source_id,
                 event: normalizeCalendarEvent(response.event)
+            };
+        },
+        async deleteEvent(eventId, options = {}) {
+            if (!writable) {
+                return { ok: false, error: 'calendar_source_read_only', source_id };
+            }
+            const api = await requireApi();
+            if (typeof api.deleteEvent !== 'function') {
+                return { ok: false, error: 'calendar_delete_unavailable', source_id };
+            }
+            const response = await api.deleteEvent(eventId, options);
+            if (response?.ok !== true) return response;
+            return {
+                ...response,
+                source_id
             };
         }
     };

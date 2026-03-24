@@ -108,6 +108,9 @@ export const createGlobalCalendarApi = ({
         update(eventId, changes = {}, options = {}) {
             return getOrCreateService(env).calendarUpdate(eventId, changes, options);
         },
+        delete(eventId, options = {}) {
+            return getOrCreateService(env).calendarDelete(eventId, options);
+        },
         async configureIcloudLegacyConnector(options = {}) {
             const resolvedOptions = await resolveSecureAuthOptions(env, options);
             const connector = createIcloudLegacyCalendarConnector(resolvedOptions);
