@@ -46,10 +46,21 @@ const sanitizeBodyForSpeech = (raw) => {
     text = text.replace(/--[\w:.+=-]{10,}[\s\S]*?(?=\n[^-]|$)/g, '');
     // Remove embedded MIME headers (Content-Type:, Content-Transfer-Encoding:, etc.)
     text = text.replace(/^(Content-[\w-]+|MIME-Version|Message-Id|Date|From|To|Cc|Bcc|Subject|In-Reply-To|References|Return-Path|Received|X-[\w-]+)\s*:.*$/gim, '');
+    // Remove quoted email lines (> ..., > > ...) — both multiline and inline
+    text = text.replace(/^\s*>+.*$/gm, '');
+    text = text.replace(/\s*>+\s*>*/g, ' ');
+    // Remove attribution lines ("Le 24 mars 2026 à 09:00, X a écrit :", "On Mar 24, 2026, X wrote:") — multiline and inline
+    text = text.replace(/(^|\s)(Le\s+\d.*?a\s+(e|é)crit\s*:|On\s+.*?wrote\s*:)/gim, ' ');
     // Remove long numeric sequences (timestamps, IDs > 8 digits) that are meaningless in speech
     text = text.replace(/\b\d{9,}\b/g, '');
     // Remove email-style angle bracket addresses
     text = text.replace(/<[^>@]+@[^>]+>/g, '');
+    // Remove standalone dates (e.g. "24 mars 2026", "2026-03-24", "Mar 24, 2026")
+    text = text.replace(/\b\d{1,2}\s+(?:janv|f[eé]vr|mars|avr|mai|juin|juil|ao[uû]t|sept|oct|nov|d[eé]c)\w*\s+\d{4}\b/gi, '');
+    text = text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, '');
+    text = text.replace(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},?\s+\d{4}\b/gi, '');
+    // Remove timestamps like "09:00" or "à 09:00"
+    text = text.replace(/(?:a|à)\s+\d{1,2}:\d{2}/gi, '');
     // Collapse whitespace
     text = text.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
     return text;

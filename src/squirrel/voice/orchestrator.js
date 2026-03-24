@@ -1095,7 +1095,16 @@ const buildSingleMailSummary = (item = {}, locale = 'fr-FR') => {
     const english = String(locale || '').toLowerCase().startsWith('en');
     const sender = String(item?.from?.name || item?.from?.address || 'expediteur inconnu').trim();
     const subject = normalizeSpeechSubject(item);
-    const body = truncateForAi(item?.body_text || item?.preview || '', 260);
+    const rawBody = String(item?.body_text || item?.preview || '').trim();
+    // Strip quoted lines, attribution lines, and dates before truncating
+    const cleanBody = rawBody
+        .replace(/^\s*>+.*$/gm, '')
+        .replace(/\s*>+\s*>*/g, ' ')
+        .replace(/(^|\s)(Le\s+\d.*?a\s+(e|é)crit\s*:|On\s+.*?wrote\s*:)/gim, ' ')
+        .replace(/<[^>@]+@[^>]+>/g, '')
+        .replace(/\b\d{9,}\b/g, '')
+        .replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    const body = truncateForAi(cleanBody, 260);
     if (english) {
         return body
             ? `This mail from ${sender}, subject "${subject}", says: ${body}`
@@ -1217,14 +1226,22 @@ const buildMailSummaryPrompt = ({
     locale = 'fr-FR'
 } = {}) => {
     const english = String(locale || '').toLowerCase().startsWith('en');
+    const stripQuotedContent = (text) => {
+        let cleaned = String(text || '').trim();
+        cleaned = cleaned.replace(/^\s*>+.*$/gm, '');
+        cleaned = cleaned.replace(/\s*>+\s*>*/g, ' ');
+        cleaned = cleaned.replace(/(^|\s)(Le\s+\d.*?a\s+(e|é)crit\s*:|On\s+.*?wrote\s*:)/gim, ' ');
+        cleaned = cleaned.replace(/<[^>@]+@[^>]+>/g, '');
+        cleaned = cleaned.replace(/\b\d{9,}\b/g, '');
+        return cleaned.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    };
     const payload = items.slice(0, 5).map((item, index) => ({
         rank: index + 1,
         subject: String(item?.subject || '').trim() || '(sans objet)',
         from: String(item?.from?.name || item?.from?.address || '').trim() || '(expediteur inconnu)',
         unread: item?.unread === true,
-        received_at: item?.received_at || null,
-        preview: truncateForAi(item?.preview || item?.body_text || '', 800),
-        body_text: truncateForAi(item?.body_text || '', 1600)
+        preview: truncateForAi(stripQuotedContent(item?.preview || item?.body_text || ''), 800),
+        body_text: truncateForAi(stripQuotedContent(item?.body_text || ''), 1600)
     }));
 
     const instructions = english
@@ -1233,6 +1250,9 @@ const buildMailSummaryPrompt = ({
             'Use the provided emails only.',
             'Respond in concise natural English for speech.',
             'Mention the important senders, topics, and any clear action items.',
+            'NEVER read out dates, timestamps, long numbers, email addresses, or technical headers.',
+            'NEVER include quoted reply content (lines starting with >).',
+            'Keep each mail summary to ONE short sentence focused on the main point.',
             'If there are no unread emails but there are recent emails, summarize the latest recent emails anyway.',
             'Do not say "message(s) out of". Do not produce raw counts only.'
         ]
@@ -1241,6 +1261,9 @@ const buildMailSummaryPrompt = ({
             'Utilise uniquement les emails fournis.',
             'Reponds en francais naturel, concis, adapte a l oral.',
             'Mentionne les expediteurs importants, les sujets, et les actions evidentes si elles existent.',
+            'NE LIS JAMAIS les dates, les heures, les longs chiffres, les adresses email ou les en-tetes techniques.',
+            'NE CITE JAMAIS le contenu des reponses precedentes (lignes commencant par >).',
+            'Chaque mail doit etre resume en UNE SEULE phrase courte centree sur le point principal.',
             "S'il n'y a aucun mail non lu mais qu'il y a des mails recents, resume quand meme les derniers mails.",
             'Ne dis pas "message(s) out of". Ne renvoie pas seulement un compteur brut.'
         ];
@@ -1970,7 +1993,33 @@ class VoiceOrchestrator {
                         hasReply: !!result?.reply_text
                     });
                     if (result && result.ok !== undefined) {
-                        const replyText = result.reply_text || '';
+                        let replyText = result.reply_text || '';
+
+                        // For summarize operations, use AI summarizer for intelligent responses
+                        if (
+                            structuredRequest.operation === 'summarize'
+                            && structuredRequest.domain === 'mail'
+                            && typeof this.mailAiSummarizer === 'function'
+                        ) {
+                            const itemsForAi = Array.isArray(result?.items) && result.items.length > 0
+                                ? result.items
+                                : (result?.item ? [result.item] : []);
+                            if (itemsForAi.length > 0) {
+                                try {
+                                    const aiSummary = await this.mailAiSummarizer({
+                                        items: itemsForAi,
+                                        stats: result?.stats || null,
+                                        locale: intent?.locale || options?.locale || 'fr-FR'
+                                    });
+                                    if (aiSummary?.ok === true && String(aiSummary.text || '').trim()) {
+                                        replyText = String(aiSummary.text).trim();
+                                    }
+                                } catch (_aiErr) {
+                                    // AI summarizer failed — keep template reply_text
+                                }
+                            }
+                        }
+
                         this.#bindSessionIntent(options.session_id, intent, {
                             phase: 'executed',
                             via: 'tool_router'
