@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 
-import { classifyVoiceIntent } from './intent_schema.js';
-import { createVoiceOrchestrator } from './orchestrator.js';
-import { createVoiceSessionRuntime } from './session_runtime.js';
+globalThis.window = globalThis.window || {};
+globalThis.localStorage = globalThis.localStorage || {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+    clear: () => {}
+};
+
+const { classifyVoiceIntent } = await import('./intent_schema.js');
+const { createVoiceOrchestrator } = await import('./orchestrator.js');
+const { createVoiceSessionRuntime } = await import('./session_runtime.js');
 
 const runtimeTools = [
     { tool_id: 'calendar.ensure_calendar', tool_key: 'calendar_ensure_calendar' },
@@ -49,7 +57,7 @@ const mailList = await orchestrator.executeUtterance('Lis mes mails', {
     session_id: mailSession.session_id
 });
 assert.equal(mailList.transport, 'mail_api');
-assert.deepEqual(mailList.intent.requested_capabilities, ['mail_read', 'mail_next_unread']);
+assert.deepEqual(mailList.intent.requested_capabilities, ['mail_read', 'mail_next_unread', 'mail_mark_read']);
 
 const mailNext = await orchestrator.executeUtterance('Lis le suivant', {
     session_id: mailSession.session_id
@@ -68,7 +76,8 @@ const calendarList = await orchestrator.executeUtterance('Quels sont mes rendez-
     session_id: calendarSession.session_id
 });
 assert.equal(calendarList.executed, true);
-assert.equal(calendarList.result.tool_id, 'calendar.list_events');
+assert.equal(calendarList.transport, 'calendar_api');
+assert.equal(Array.isArray(calendarList.result?.items), true);
 
 const calendarCreate = await orchestrator.executeUtterance('Ajoute un rendez-vous demain a 15h avec Paul', {
     session_id: calendarSession.session_id

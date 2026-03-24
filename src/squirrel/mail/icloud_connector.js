@@ -488,13 +488,18 @@ export const createIcloudMailConnector = ({
                 }, async (client) => callFirstAvailable(client, [
                     'moveMessage'
                 ], request));
+                const resolvedRemoteDestinationMailbox = normalizeText(
+                    payload?.destination_remote_mailbox
+                    || payload?.destinationRemoteMailbox
+                    || destinationRemoteMailbox
+                ) || destinationRemoteMailbox;
                 return {
                     ok: true,
                     provider: config.provider,
                     uid,
                     mailbox: request.local_mailbox,
                     destination_mailbox: destinationLocalMailbox,
-                    destination_remote_mailbox: destinationRemoteMailbox,
+                    destination_remote_mailbox: resolvedRemoteDestinationMailbox,
                     response: payload && typeof payload === 'object' ? { ...payload } : payload
                 };
             } catch (error) {

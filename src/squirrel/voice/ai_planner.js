@@ -106,6 +106,7 @@ const buildPlannerPrompt = ({
             "Choisis toi-meme le meilleur domain et la meilleure action a partir de la demande utilisateur.",
             'Utilise "atome_ai" pour les outils metier comme mail, contacts, agenda, banque, documents et actions de haut niveau.',
             'Utilise "runtime_v2" pour la manipulation directe de l interface quand un tool runtime existe.',
+            'Pour les tools runtime_v2 creatifs et visuels, preserve TOUJOURS les attributs explicites demandes par l utilisateur dans action.input: couleur, texte, taille, position, cible.',
             'Si la demande est conversationnelle, informative ou ne necessite aucun outil, utilise la cible "none" et actions [].',
             'Ne reponds jamais par une promesse vague du type "je prepare", "ca arrive" ou "je m en occupe" sans resultat concret.',
             'Si un outil est necessaire pour repondre, choisis un outil. Sinon, donne directement la reponse finale.',
@@ -120,6 +121,8 @@ const buildPlannerPrompt = ({
             'Distingue bien expediteur (from), sujet et corps du mail. "from" filtre par expediteur, "query" cherche dans le sujet+corps. "Qui m a envoye..." = filtre from. "Mail a propos de X" = filtre query.',
             'Utilise la section CONVERSATION_HISTORY pour comprendre le contexte de la demande actuelle. Les pronoms comme "le", "celui-la", "le plus recent" peuvent se referer a une requete precedente.',
             'Chaque nouvelle phrase est independante: ne reporte PAS order, limit ou filtres de la requete precedente sauf si l utilisateur y fait explicitement reference.',
+            'Exemple runtime_v2: "peux tu me creer un cercle rouge sur le projet courant" -> {"domain":"creative","action":"draw_circle","target":"runtime_v2","actions":[{"target":"runtime_v2","tool_id":"ui.circle","action":"pointer.click","input":{"color":"red"}}]}.',
+            'Exemple runtime_v2 follow-up: "mets le en violet" -> {"domain":"creative","action":"apply_color","target":"runtime_v2","actions":[{"target":"runtime_v2","tool_id":"ui.couleur.apply","action":"pointer.click","input":{"color":"violet"}}]}.',
             "N invente jamais d outils.",
             "Ne choisis jamais un autre provider et ne parle jamais de fallback."
         ];

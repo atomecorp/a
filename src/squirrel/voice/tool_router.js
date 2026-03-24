@@ -18,6 +18,8 @@ import {
     createStructuredResult,
     SEMANTIC_DOMAINS
 } from './semantic_contract.js';
+import { resolveAtomeRuntimeInvocation } from '../atome/runtime_tool_resolution.js';
+import { buildContactQueryReply } from './contact_reply.js';
 
 // ---------------------------------------------------------------------------
 // Reply builders (locale-aware, result-based)
@@ -141,6 +143,208 @@ const buildMailReadReply = (item, locale, request = null) => {
     return body
         ? `Mail de ${sender}. Sujet: ${subject}. ${body}`
         : `Mail de ${sender} concernant "${subject}".`;
+};
+
+const normalizeCommunicationSurfaces = (value = []) => {
+    const valid = new Set(['mail', 'messages']);
+    const list = Array.isArray(value) ? value : [value];
+    const normalized = list
+        .map((entry) => String(entry || '').trim().toLowerCase())
+        .filter((entry) => valid.has(entry));
+    return Array.from(new Set(normalized));
+};
+
+const createCommunicationItemId = (surface, sourceId) => {
+    const normalizedSurface = String(surface || 'mail').trim().toLowerCase() || 'mail';
+    const normalizedSourceId = String(sourceId || '').trim();
+    if (!normalizedSourceId) return '';
+    return `${normalizedSurface}:${normalizedSourceId}`;
+};
+
+const parseCommunicationItemId = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return { surface: 'mail', source_id: '' };
+    const match = normalized.match(/^(mail|messages):(.*)$/i);
+    if (!match) return { surface: 'mail', source_id: normalized };
+    return {
+        surface: String(match[1] || 'mail').trim().toLowerCase() || 'mail',
+        source_id: String(match[2] || '').trim()
+    };
+};
+
+const readCommunicationTimestamp = (item = {}) => (
+    item?.received_at
+    || item?.sent_at
+    || item?.updated_at
+    || item?.date
+    || item?.created_at
+    || null
+);
+
+const normalizeCommunicationItem = (item = {}, surface = 'mail') => {
+    const normalizedSurface = String(surface || 'mail').trim().toLowerCase() || 'mail';
+    const sourceId = String(
+        item?.source_message_id
+        || item?.message_id
+        || item?.id
+        || item?.uid
+        || item?.thread_id
+        || item?.conversation_id
+        || ''
+    ).trim();
+    const senderPhone = String(
+        item?.from?.phone
+        || item?.phone
+        || item?.phone_number
+        || item?.from_phone
+        || item?.sender_phone
+        || ''
+    ).trim();
+    const senderAddress = String(
+        item?.from?.address
+        || item?.from?.email
+        || item?.email
+        || senderPhone
+        || ''
+    ).trim();
+    const senderName = String(
+        item?.from?.name
+        || item?.sender_name
+        || item?.display_name
+        || item?.name
+        || senderPhone
+        || senderAddress
+        || ''
+    ).trim();
+    const preview = String(
+        item?.preview
+        || item?.body_text
+        || item?.text
+        || item?.body
+        || item?.snippet
+        || ''
+    ).trim();
+    return {
+        ...item,
+        comm_surface: normalizedSurface,
+        source_message_id: sourceId,
+        message_id: createCommunicationItemId(normalizedSurface, sourceId) || String(item?.message_id || '').trim(),
+        subject: String(item?.subject || '').trim(),
+        preview,
+        body_text: String(item?.body_text || item?.text || item?.body || preview).trim(),
+        unread: typeof item?.unread === 'boolean' ? item.unread : (item?.read === true ? false : !!item?.unread),
+        from: {
+            name: senderName || null,
+            address: senderAddress || null,
+            phone: senderPhone || null
+        },
+        received_at: readCommunicationTimestamp(item)
+    };
+};
+
+const sortCommunicationItems = (items = [], order = 'newest') => {
+    const safeItems = Array.isArray(items) ? [...items] : [];
+    safeItems.sort((left, right) => {
+        const leftTime = Date.parse(String(left?.received_at || '')) || 0;
+        const rightTime = Date.parse(String(right?.received_at || '')) || 0;
+        return rightTime - leftTime;
+    });
+    if (String(order || 'newest').trim().toLowerCase() === 'oldest') {
+        safeItems.reverse();
+    }
+    return safeItems;
+};
+
+const buildCommunicationCountsReply = (items = [], locale = 'fr-FR', {
+    unreadOnly = false
+} = {}) => {
+    const en = isEnglish(locale);
+    const mailCount = items.filter((entry) => entry?.comm_surface === 'mail').length;
+    const messageCount = items.filter((entry) => entry?.comm_surface === 'messages').length;
+    const total = items.length;
+    if (total === 0) {
+        return en
+            ? (unreadOnly ? 'I do not see any unread mail or message right now.' : 'I do not see any mail or message right now.')
+            : (unreadOnly ? 'Je ne vois ni mail ni message non lu pour le moment.' : 'Je ne vois ni mail ni message pour le moment.');
+    }
+    const parts = [];
+    if (mailCount > 0) parts.push(en ? `${mailCount} mail(s)` : `${mailCount} mail(s)`);
+    if (messageCount > 0) parts.push(en ? `${messageCount} message(s)` : `${messageCount} message(s)`);
+    return en
+        ? `${unreadOnly ? 'You have' : 'I found'} ${total} item(s): ${parts.join(' and ')}.`
+        : `${unreadOnly ? 'Tu as' : "J'ai trouve"} ${total} element(s) : ${parts.join(' et ')}.`;
+};
+
+const buildCommunicationListReply = (items = [], request, locale = 'fr-FR') => {
+    if (!Array.isArray(items) || items.length === 0) {
+        return buildCommunicationCountsReply([], locale, {
+            unreadOnly: request?.filters?.read_state === 'unread' || request?.status_only === true
+        });
+    }
+    const allMail = items.every((entry) => entry?.comm_surface !== 'messages');
+    if (allMail) return buildMailListReply(items, request, {});
+    const en = isEnglish(locale);
+    if (request?.status_only === true) {
+        return buildCommunicationCountsReply(items, locale, {
+            unreadOnly: request?.filters?.read_state === 'unread'
+        });
+    }
+    const labels = items.slice(0, 4).map((item) => {
+        const sender = formatSenderLabel(item);
+        const subject = formatSubjectLabel(item);
+        const kind = item?.comm_surface === 'messages'
+            ? (en ? 'message' : 'message')
+            : (en ? 'mail' : 'mail');
+        if (sender && subject) return `${kind}: ${subject} (${en ? 'from' : 'de'} ${sender})`;
+        return `${kind}: ${subject || sender || ''}`.trim();
+    }).filter(Boolean);
+    return en
+        ? `Here are the latest items: ${labels.join(', ')}.`
+        : `Voici les derniers elements : ${labels.join(', ')}.`;
+};
+
+const buildCommunicationReadReply = (item, locale, request = null) => {
+    if (item?.comm_surface !== 'messages') {
+        return buildMailReadReply(item, locale, request);
+    }
+    const en = isEnglish(locale);
+    const sender = formatSenderLabel(item) || (en ? 'unknown sender' : 'expediteur inconnu');
+    const body = sanitizeBodyForSpeech(item?.body_text || item?.preview || '');
+    if (en) {
+        return body
+            ? `Message from ${sender}. ${body}`
+            : `Message from ${sender}.`;
+    }
+    return body
+        ? `Message de ${sender}. ${body}`
+        : `Message de ${sender}.`;
+};
+
+const loadCommunicationList = async ({
+    request,
+    mailApi,
+    messagesApi,
+    queryText,
+    baseOpts,
+    locale
+}) => {
+    const surfaces = normalizeCommunicationSurfaces(request?.surfaces || ['mail']);
+    const items = [];
+    if (surfaces.includes('mail') && mailApi) {
+        const mailResult = queryText && typeof mailApi.search === 'function'
+            ? await mailApi.search(queryText, baseOpts)
+            : (typeof mailApi.list === 'function' ? await mailApi.list(baseOpts) : { ok: false, items: [] });
+        const mailItems = Array.isArray(mailResult?.items) ? mailResult.items : [];
+        items.push(...mailItems.map((entry) => normalizeCommunicationItem(entry, 'mail')));
+    }
+    if (surfaces.includes('messages') && messagesApi) {
+        const messagesResult = queryText && typeof messagesApi.search === 'function'
+            ? await messagesApi.search(queryText, baseOpts)
+            : (typeof messagesApi.list === 'function' ? await messagesApi.list(baseOpts) : { ok: false, items: [] });
+        const messageItems = Array.isArray(messagesResult?.items) ? messagesResult.items : [];
+        items.push(...messageItems.map((entry) => normalizeCommunicationItem(entry, 'messages')));
+    }
+    return sortCommunicationItems(items, request?.filters?.order || 'newest').slice(0, Math.max(1, Number(baseOpts?.limit) || 10));
 };
 
 const buildContactsReply = (items, locale) => {
@@ -281,6 +485,7 @@ const buildCalendarReply = (items, locale) => {
 
 const executeMailRequest = async (request, connectors, workingMemory) => {
     const mailApi = connectors.mail;
+    const messagesApi = connectors.messages || null;
     if (!mailApi) {
         return createStructuredResult({
             ok: false, domain: 'mail', operation: request.operation,
@@ -336,6 +541,7 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
 
     const locale = request.source?.locale || 'fr-FR';
     const filters = request.filters || {};
+    const requestedSurfaces = normalizeCommunicationSurfaces(request.surfaces || ['mail']);
     const normalizedMailbox = String(filters.mailbox || '').trim().toLowerCase() || '';
     const baseOpts = {
         limit: filters.limit || 10,
@@ -346,6 +552,11 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
         ...(filters.order ? { order: filters.order } : {}),
         ...(filters.read_state === 'unread' ? { unread_only: true } : {})
     };
+    const hasMessagesSurface = requestedSurfaces.includes('messages') && !!messagesApi;
+
+    if (hasMessagesSurface && typeof messagesApi.syncPull === 'function') {
+        try { await messagesApi.syncPull({ limit: 100 }); } catch (_) { /* keep going */ }
+    }
 
     // Diagnostic: compare unfiltered vs filtered list
     if (globalThis?.console?.log) {
@@ -364,6 +575,27 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
 
     switch (request.operation) {
         case 'list': {
+            if (hasMessagesSurface) {
+                const items = await loadCommunicationList({
+                    request,
+                    mailApi,
+                    messagesApi,
+                    queryText: '',
+                    baseOpts,
+                    locale
+                });
+                if (workingMemory) {
+                    workingMemory.setResultSet('mail', items, 'message_id');
+                    workingMemory.setFilters('mail', { ...filters, communication_surfaces: requestedSurfaces });
+                    workingMemory.setOrder('mail', filters.order || 'newest');
+                    workingMemory.setLastOperation('mail', 'list');
+                }
+                return createStructuredResult({
+                    ok: true, domain: 'mail', operation: 'list',
+                    items,
+                    reply_text: buildCommunicationListReply(items, request, locale)
+                });
+            }
             const result = typeof mailApi.list === 'function' ? mailApi.list(baseOpts) : { ok: false, items: [] };
             const items = Array.isArray(result?.items) ? result.items : [];
             if (workingMemory) {
@@ -381,10 +613,21 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
 
         case 'read': {
             let targetId = request.target?.id || null;
+            const currentMemoryItem = workingMemory ? workingMemory.getCurrentItem('mail') : null;
 
             // If no explicit target but we have an order or filters, find the right mail first.
             // This prevents reading a stale working-memory item from a previous query.
-            if (!targetId && typeof mailApi.list === 'function') {
+            if (!targetId && hasMessagesSurface) {
+                const items = await loadCommunicationList({
+                    request,
+                    mailApi,
+                    messagesApi,
+                    queryText: filters.query_text || '',
+                    baseOpts: { ...baseOpts, limit: 1 },
+                    locale
+                });
+                if (items.length > 0) targetId = items[0].message_id;
+            } else if (!targetId && typeof mailApi.list === 'function') {
                 const lookupResult = mailApi.list({ ...baseOpts, limit: 1 });
                 const lookupItems = Array.isArray(lookupResult?.items) ? lookupResult.items : [];
                 if (lookupItems.length > 0) {
@@ -395,6 +638,26 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
             // Fall back to working memory only when no order-based lookup produced a result
             if (!targetId && workingMemory) {
                 targetId = workingMemory.getCurrentItemId('mail');
+            }
+
+            const targetInfo = parseCommunicationItemId(targetId);
+            if (targetInfo.surface === 'messages' && messagesApi) {
+                const readResult = typeof messagesApi.read === 'function'
+                    ? await messagesApi.read(targetInfo.source_id)
+                    : { ok: currentMemoryItem?.comm_surface === 'messages', item: currentMemoryItem };
+                const readItem = readResult?.item || readResult?.message || currentMemoryItem || null;
+                if (readResult?.ok === true && readItem) {
+                    const normalizedItem = normalizeCommunicationItem(readItem, 'messages');
+                    if (workingMemory) {
+                        workingMemory.setCurrentItem('mail', normalizedItem.message_id, normalizedItem);
+                        workingMemory.setLastOperation('mail', 'read');
+                    }
+                    return createStructuredResult({
+                        ok: true, domain: 'mail', operation: 'read',
+                        item: normalizedItem,
+                        reply_text: buildCommunicationReadReply(normalizedItem, locale, request)
+                    });
+                }
             }
 
             if (!targetId || typeof mailApi.read !== 'function') {
@@ -428,6 +691,21 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
             let targetId = request.target?.id || null;
 
             // Find the right mail based on current order/filters, not stale working memory.
+            if (!targetId && hasMessagesSurface) {
+                const items = await loadCommunicationList({
+                    request,
+                    mailApi,
+                    messagesApi,
+                    queryText: filters.query_text || '',
+                    baseOpts: { ...baseOpts, limit: 5 },
+                    locale
+                });
+                return createStructuredResult({
+                    ok: true, domain: 'mail', operation: 'summarize',
+                    items,
+                    reply_text: buildCommunicationListReply(items, request, locale)
+                });
+            }
             if (!targetId && typeof mailApi.list === 'function') {
                 const lookupResult = mailApi.list({ ...baseOpts, limit: 1 });
                 const lookupItems = Array.isArray(lookupResult?.items) ? lookupResult.items : [];
@@ -492,6 +770,34 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
             if (!targetId && workingMemory) {
                 targetId = workingMemory.getCurrentItemId('mail');
             }
+            const targetInfo = parseCommunicationItemId(targetId);
+
+            if (
+                targetInfo.surface === 'messages'
+                && messagesApi
+                && typeof messagesApi.replyDraft === 'function'
+            ) {
+                const draftResult = await messagesApi.replyDraft(targetInfo.source_id, { reply_text: draftText });
+                if (draftResult?.ok === true) {
+                    const rawDraftId = String(draftResult?.draft?.draft_id || draftResult?.draft_id || '').trim();
+                    const draftId = createCommunicationItemId('messages', rawDraftId);
+                    if (workingMemory) {
+                        workingMemory.setCurrentItem('mail_draft', draftId, {
+                            ...(draftResult?.draft || {}),
+                            draft_id: draftId,
+                            raw_draft_id: rawDraftId,
+                            comm_surface: 'messages'
+                        });
+                        workingMemory.setLastOperation('mail', 'reply_drafted');
+                    }
+                    return createStructuredResult({
+                        ok: true, domain: 'mail', operation: 'reply',
+                        reply_text: isEnglish(locale)
+                            ? `Reply draft prepared. Say "send the mail" to send it.`
+                            : `Brouillon de reponse prepare. Dis "envoie le mail" pour l'envoyer.`
+                    });
+                }
+            }
 
             if (!targetId || typeof mailApi.replyDraft !== 'function') {
                 const en = isEnglish(locale);
@@ -513,7 +819,10 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
             if (request.draft?.auto_send && typeof mailApi.send === 'function') {
                 const sendResult = await mailApi.send(draftResult.draft.draft_id, { confirmed: true });
                 if (sendResult?.ok === true) {
-                    if (workingMemory) workingMemory.setLastOperation('mail', 'reply_sent');
+                    if (workingMemory) {
+                        workingMemory.setLastOperation('mail', 'reply_sent');
+                        workingMemory.setCurrentItem('mail_draft', null, null);
+                    }
                     const recipient = formatSenderLabel(sendResult?.draft || {}) || '';
                     return createStructuredResult({
                         ok: true, domain: 'mail', operation: 'reply',
@@ -523,7 +832,17 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                     });
                 }
             }
-            if (workingMemory) workingMemory.setLastOperation('mail', 'reply_drafted');
+            if (workingMemory) {
+                const rawDraftId = String(draftResult?.draft?.draft_id || '').trim();
+                const draftId = createCommunicationItemId('mail', rawDraftId);
+                workingMemory.setCurrentItem('mail_draft', draftId, {
+                    ...(draftResult?.draft || {}),
+                    draft_id: draftId,
+                    raw_draft_id: rawDraftId,
+                    comm_surface: 'mail'
+                });
+                workingMemory.setLastOperation('mail', 'reply_drafted');
+            }
             return createStructuredResult({
                 ok: true, domain: 'mail', operation: 'reply',
                 reply_text: isEnglish(locale)
@@ -533,23 +852,35 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
         }
 
         case 'send': {
-            if (typeof mailApi.send !== 'function') {
+            const currentDraft = workingMemory ? workingMemory.getCurrentItem('mail_draft') : null;
+            const currentDraftId = request.target?.id
+                || (workingMemory ? workingMemory.getCurrentItemId('mail_draft') : null);
+            const currentDraftInfo = parseCommunicationItemId(currentDraftId);
+            const sendSurface = currentDraft?.comm_surface || currentDraftInfo.surface || 'mail';
+            const sendApi = sendSurface === 'messages' ? messagesApi : mailApi;
+            if (!sendApi || typeof sendApi.send !== 'function') {
                 return createStructuredResult({
                     ok: false, domain: 'mail', operation: 'send', error: 'mail_send_unavailable',
                     reply_text: isEnglish(locale) ? 'Mail sending is not available.' : "L'envoi de mail n'est pas disponible."
                 });
             }
             // Look for the draft ID in the working memory context
-            const draftId = request.target?.id
-                || (workingMemory ? workingMemory.getCurrentItemId('mail_draft') : null);
+            const draftId = String(
+                currentDraft?.raw_draft_id
+                || currentDraftInfo.source_id
+                || ''
+            ).trim();
             if (!draftId) {
                 return createStructuredResult({
                     ok: false, domain: 'mail', operation: 'send', error: 'mail_draft_not_found',
                     reply_text: isEnglish(locale) ? 'I do not have a draft to send.' : "Je n'ai pas de brouillon a envoyer."
                 });
             }
-            const result = await mailApi.send(draftId, { confirmed: true });
-            if (workingMemory) workingMemory.setLastOperation('mail', 'send');
+            const result = await sendApi.send(draftId, { confirmed: true });
+            if (workingMemory) {
+                workingMemory.setLastOperation('mail', 'send');
+                workingMemory.setCurrentItem('mail_draft', null, null);
+            }
             return createStructuredResult({
                 ok: result?.ok !== false, domain: 'mail', operation: 'send',
                 error: result?.ok === false ? (result?.error || 'mail_send_failed') : '',
@@ -733,6 +1064,26 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                     reply_text: isEnglish(locale) ? 'What should I search for in your mails?' : 'Que veux-tu que je cherche dans tes mails ?'
                 });
             }
+            if (hasMessagesSurface) {
+                const items = await loadCommunicationList({
+                    request,
+                    mailApi,
+                    messagesApi,
+                    queryText,
+                    baseOpts,
+                    locale
+                });
+                if (workingMemory) {
+                    workingMemory.setResultSet('mail', items, 'message_id');
+                    workingMemory.setFilters('mail', { ...filters, query_text: queryText, communication_surfaces: requestedSurfaces });
+                    workingMemory.setLastOperation('mail', 'search');
+                }
+                return createStructuredResult({
+                    ok: true, domain: 'mail', operation: 'search',
+                    items,
+                    reply_text: buildCommunicationListReply(items, request, locale)
+                });
+            }
             const result = mailApi.search(queryText, baseOpts);
             const items = Array.isArray(result?.items) ? result.items : [];
             if (workingMemory) {
@@ -798,7 +1149,15 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
             return createStructuredResult({
                 ok: result?.ok !== false, domain: 'contacts', operation: queryText ? 'search' : 'list',
                 items,
-                reply_text: buildContactsReply(items, locale)
+                reply_text: (
+                    items.length === 1
+                        ? buildContactQueryReply(items[0], {
+                            locale,
+                            utteranceRaw: request.source?.utterance_raw || '',
+                            utteranceNormalized: request.source?.utterance_normalized || ''
+                        })
+                        : ''
+                ) || buildContactsReply(items, locale)
             });
         }
 
@@ -821,7 +1180,11 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
                 return createStructuredResult({
                     ok: true, domain: 'contacts', operation: 'read',
                     item: result.contact,
-                    reply_text: label ? `Contact: ${label}.` : buildContactsReply([result.contact], locale)
+                    reply_text: buildContactQueryReply(result.contact, {
+                        locale,
+                        utteranceRaw: request.source?.utterance_raw || '',
+                        utteranceNormalized: request.source?.utterance_normalized || ''
+                    }) || (label ? `Contact: ${label}.` : buildContactsReply([result.contact], locale))
                 });
             }
             return createStructuredResult({
@@ -1181,10 +1544,31 @@ export const createToolRouter = ({
                                 : "Le runtime Atome n'est pas disponible."
                         });
                     }
-                    // Delegate to the existing MCP/runtime bridge
+                    const runtimeParams = {
+                        ...(request.filters && typeof request.filters === 'object' ? request.filters : {}),
+                        ...(request.payload && typeof request.payload === 'object' ? request.payload : {}),
+                        ...(request.target?.id ? {
+                            atome_id: request.target.id,
+                            id: request.target.id
+                        } : {})
+                    };
+                    const invocation = resolveAtomeRuntimeInvocation({
+                        operation: request.operation,
+                        params: runtimeParams
+                    });
+                    if (!invocation?.tool_id) {
+                        return createStructuredResult({
+                            ok: false, domain: 'atome', operation: request.operation,
+                            error: 'atome_runtime_tool_unresolved',
+                            reply_text: isEnglish(request.source?.locale)
+                                ? 'I could not resolve this Atome action to a Runtime V2 tool.'
+                                : "Je n'ai pas pu resoudre cette action Atome vers un tool Runtime V2."
+                        });
+                    }
                     const result = await bridge.callRuntimeTool({
-                        tool_name: request.operation,
-                        params: request.filters || {}
+                        tool_id: invocation.tool_id,
+                        action: invocation.action,
+                        input: invocation.input
                     });
                     return createStructuredResult({
                         ok: result?.ok !== false, domain: 'atome', operation: request.operation,

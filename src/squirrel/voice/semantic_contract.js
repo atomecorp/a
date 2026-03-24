@@ -108,6 +108,14 @@ const ensurePositiveInt = (value, fallback = null) => {
 };
 
 const ensureObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {});
+const normalizeCommunicationSurfaces = (value, fallback = []) => {
+    const valid = new Set(['mail', 'messages']);
+    const entries = Array.isArray(value) ? value : (value ? [value] : fallback);
+    const normalized = entries
+        .map((entry) => String(entry || '').trim().toLowerCase())
+        .filter((entry) => valid.has(entry));
+    return Array.from(new Set(normalized));
+};
 
 /**
  * Creates a normalized structured request.
@@ -155,6 +163,9 @@ export const createStructuredRequest = (raw = {}) => {
     };
 
     const payload = ensureObject(raw.payload);
+    const surfaces = domain === 'mail'
+        ? normalizeCommunicationSurfaces(raw.surfaces, ['mail'])
+        : [];
 
     return Object.freeze({
         domain,
@@ -165,6 +176,7 @@ export const createStructuredRequest = (raw = {}) => {
         draft,
         source,
         payload,
+        surfaces,
         status_only: raw.status_only === true
     });
 };
@@ -304,8 +316,8 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
         : (entities.query_text || entities.query) ? 'query'
             : 'none';
 
-    const readState = entities.unread_only === true ? 'unread'
-        : entities.read === true ? 'read'
+    const readState = entities.unread_only === true || mergedToolParams.unread_only === true ? 'unread'
+        : (entities.read === true || mergedToolParams.read === true) ? 'read'
             : 'any';
 
     return createStructuredRequest({
@@ -350,6 +362,12 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
                     : null
             )
         ),
-        status_only: entities.status_only === true
+        surfaces: normalizeCommunicationSurfaces(
+            entities.communication_surfaces
+            || mergedToolParams.communication_surfaces
+            || activeEntities.communication_surfaces,
+            domain === 'mail' ? ['mail'] : []
+        ),
+        status_only: entities.status_only === true || mergedToolParams.status_only === true
     });
 };

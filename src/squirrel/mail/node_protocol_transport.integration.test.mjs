@@ -96,7 +96,7 @@ Tu re=C3=A7ois mes mails ?=\r
 
 const listen = (server) => new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, () => {
         server.off('error', reject);
         resolve(server.address().port);
     });
@@ -133,8 +133,9 @@ const createImapServer = (transcript) => tls.createServer({
             socket.write(`${tag} OK LOGIN completed\r\n`);
             return;
         }
-        if (/^EXAMINE /i.test(command)) {
-            socket.write(`* 3 EXISTS\r\n* OK [UIDNEXT 104] next uid\r\n${tag} OK [READ-ONLY] EXAMINE completed\r\n`);
+        if (/^(EXAMINE|SELECT) /i.test(command)) {
+            const readOnly = /^EXAMINE /i.test(command);
+            socket.write(`* 3 EXISTS\r\n* OK [UIDNEXT 104] next uid\r\n${tag} OK [${readOnly ? 'READ-ONLY' : 'READ-WRITE'}] ${readOnly ? 'EXAMINE' : 'SELECT'} completed\r\n`);
             return;
         }
         if (/^UID SEARCH ALL/i.test(command)) {

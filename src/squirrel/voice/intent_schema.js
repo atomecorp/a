@@ -1,5 +1,6 @@
 import { normalizeLocalVoiceCommand } from './session_runtime.js';
 import { normalizeSTTUtterance } from './stt_normalizer.js';
+import { readNormalizedAtomeColorToken } from '../../application/eVe/intuition/shared/color_value.js';
 
 export const VOICE_INTENT_SCHEMA_VERSION = '1.0.0';
 export const VOICE_INTENT_TYPES = Object.freeze([
@@ -78,6 +79,10 @@ const hasMailStatusQuestion = (normalized = '') => {
             'ai je',
             'ais je',
             'est ce que j ai',
+            'dis moi si',
+            'dis moi si j ai',
+            'dis moi s il y a',
+            'tell me if',
             'y a t il',
             'il y a',
             'combien'
@@ -87,6 +92,17 @@ const hasMailStatusQuestion = (normalized = '') => {
 
 const readMailAction = (normalized = '') => {
     if (!normalized) return 'list';
+    if (
+        hasMailStatusQuestion(normalized)
+        && hasAnyKeyword(normalized, [
+            'nouveau', 'nouveaux', 'nouvelle', 'nouvelles',
+            'non lu', 'non lus', 'message', 'messages',
+            'courrier', 'courriers', 'courriel', 'courriels',
+            'mail', 'mails', 'new', 'unread'
+        ])
+    ) {
+        return 'list';
+    }
     if (hasAnyKeyword(normalized, ['archive', 'archiver', 'range', 'classe', 'classer', 'ranger', 'de cote'])) return 'archive';
     if (hasAnyKeyword(normalized, [
         'supprime', 'supprimer', 'efface', 'effacer', 'poubelle', 'corbeille',
@@ -125,6 +141,24 @@ const readMailAction = (normalized = '') => {
     return 'list';
 };
 
+const readCommunicationSurfaces = (normalized = '') => {
+    if (!normalized) return ['mail'];
+    const surfaces = new Set();
+    if (hasAnyKeyword(normalized, ['message', 'messages', 'sms', 'texto', 'textos', 'conversation', 'conversations'])) {
+        surfaces.add('messages');
+        surfaces.add('mail');
+    }
+    if (hasAnyKeyword(normalized, ['courrier', 'courriers', 'courriel', 'courriels'])) {
+        surfaces.add('messages');
+        surfaces.add('mail');
+    }
+    if (hasAnyKeyword(normalized, ['mail', 'mails', 'email', 'e mail', 'inbox', 'boite de reception', 'boite mail'])) {
+        surfaces.add('mail');
+    }
+    if (!surfaces.size) surfaces.add('mail');
+    return Array.from(surfaces);
+};
+
 const readTimeReference = (normalized) => {
     if (!normalized) return null;
     if (hasAnyKeyword(normalized, ['aujourd hui', 'today'])) return 'today';
@@ -132,6 +166,58 @@ const readTimeReference = (normalized) => {
     if (hasAnyKeyword(normalized, ['cette semaine', 'semaine'])) return 'this_week';
     if (hasAnyKeyword(normalized, ['ce mois', 'mois'])) return 'this_month';
     return null;
+};
+
+const readExplicitColor = (rawUtterance = '') => {
+    const raw = String(rawUtterance || '').trim();
+    if (!raw) return null;
+    const cssLikeMatch = raw.match(/(#[0-9a-f]{3,8}\b|rgba?\([^)]+\)|hsla?\([^)]+\)|oklch\([^)]+\)|oklab\([^)]+\)|lab\([^)]+\)|lch\([^)]+\)|color\([^)]+\)|var\([^)]+\))/i);
+    if (cssLikeMatch) {
+        return readNormalizedAtomeColorToken(cssLikeMatch[1]) || cssLikeMatch[1];
+    }
+    const tokens = String(rawUtterance || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9#(),.%\s-]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean);
+    for (const token of tokens) {
+        const resolved = readNormalizedAtomeColorToken(token);
+        if (resolved) return resolved;
+    }
+    return null;
+};
+
+const readActiveRuntimeAtomeId = (context = {}) => {
+    const candidates = [
+        context?.active_intent?.meta?.atome_id,
+        context?.active_intent?.meta?.result?.atome_id,
+        context?.active_intent?.entities?.current_atome_id,
+        context?.focused_atome_id,
+        context?.selected_atome_id
+    ];
+    for (const candidate of candidates) {
+        const value = String(candidate || '').trim();
+        if (value) return value;
+    }
+    return null;
+};
+
+const wantsRuntimeColorApply = (normalized = '') => {
+    if (!normalized) return false;
+    if (hasAnyKeyword(normalized, ['couleur', 'color', 'colour', 'peins', 'peint', 'colore', 'colorie'])) return true;
+    return (
+        normalized.startsWith('met le en ')
+        || normalized.startsWith('mets le en ')
+        || normalized.startsWith('met la en ')
+        || normalized.startsWith('mets la en ')
+        || normalized.startsWith('mets le ')
+        || normalized.startsWith('met le ')
+        || normalized.startsWith('rends le ')
+        || normalized.startsWith('rend le ')
+        || normalized.startsWith('change le en ')
+        || normalized.startsWith('change la en ')
+    );
 };
 
 export const readMailOrderReference = (normalized = '') => {
@@ -308,6 +394,15 @@ const shouldAutoSendReply = (rawUtterance, draftText) => {
     ) {
         return false;
     }
+    if (
+        normalized.includes('reponds lui')
+        || normalized.includes('repond lui')
+        || normalized.includes('reply to it')
+        || normalized.includes('reply to him')
+        || normalized.includes('reply to her')
+    ) {
+        return false;
+    }
     return true;
 };
 
@@ -364,6 +459,163 @@ const readActiveDomain = (context = {}) => {
         if (value) return value;
     }
     return null;
+};
+
+const readActiveContactId = (context = {}) => {
+    const candidates = [
+        context?.active_intent?.entities?.current_contact_id,
+        context?.current_contact_id,
+        context?.contact_id
+    ];
+    for (const candidate of candidates) {
+        const value = String(candidate || '').trim();
+        if (value) return value;
+    }
+    return null;
+};
+
+const hasContactFieldQuestion = (normalized = '') => {
+    if (!normalized) return false;
+    return hasAnyKeyword(normalized, [
+        'numero de telephone',
+        'telephone',
+        'numero',
+        'phone number',
+        'phone',
+        'mobile',
+        'email',
+        'mail',
+        'adresse mail',
+        'adresse e mail',
+        'societe',
+        'company',
+        'organisation',
+        'organization',
+        'entreprise',
+        'mise a jour',
+        'mis a jour',
+        'updated',
+        'last update',
+        'nom',
+        'name'
+    ]);
+};
+
+const normalizeContactQueryText = (value = '') => String(value || '')
+    .replace(/\b(?:dans|de|parmi)\s+(?:mes\s+)?contacts?\b.*$/i, '')
+    .replace(/\b(?:dans|sur)\s+eve\b.*$/i, '')
+    .replace(/\b(?:dans|sur)\s+mon\s+carnet(?:\s+d\s+adresses?)?\b.*$/i, '')
+    .replace(/[?!.,;:]+$/g, '')
+    .replace(/^(?:le|la|les|du|de la|de l|des|un|une)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const readContactQueryText = (rawUtterance = '', utteranceNormalized = '', context = {}) => {
+    const normalized = String(utteranceNormalized || '').trim();
+    const raw = String(rawUtterance || '').trim();
+    if (!normalized && !raw) return '';
+    if (
+        readActiveContactId(context)
+        && (
+            normalized.startsWith('son ')
+            || normalized.startsWith('sa ')
+            || normalized.startsWith('ses ')
+            || normalized.startsWith('donne moi son ')
+            || normalized.startsWith('donne moi sa ')
+        )
+    ) {
+        return '';
+    }
+
+    const queryPatterns = [
+        /(?:numero(?: de telephone)?|telephone|phone(?: number)?|mobile|email|adresse e mail|adresse mail|societe|entreprise|organisation|organization|mise a jour|updated|nom|name)\s+(?:de|du|d)\s+(.+)$/i,
+        /(?:cherche|recherche|trouve|trouver|find|search|montre|affiche|ouvre|lis|lire)\s+(?:le\s+|la\s+|les\s+)?(?:contact|contacts|user|users|fiche(?:\s+de)?)\s+(.+)$/i,
+        /(?:quel est|quelle est|c est quoi|c'est quoi|donne moi|dis moi|what is|show me)\s+.+?\s+(?:de|du|d)\s+(.+)$/i
+    ];
+
+    const sources = [raw, normalized].filter(Boolean);
+    for (const source of sources) {
+        for (const pattern of queryPatterns) {
+            const match = source.match(pattern);
+            if (!match?.[1]) continue;
+            const value = normalizeContactQueryText(match[1]);
+            if (value) return value;
+        }
+    }
+
+    if (hasAnyKeyword(normalized, ['contact', 'contacts', 'user', 'users'])) {
+        const stripped = normalizeContactQueryText(
+            normalized
+                .replace(/\b(?:liste|list|montre|affiche|cherche|recherche|trouve|trouver|find|search|ouvre|ouvre moi|lis|lire)\b/gi, ' ')
+                .replace(/\b(?:contact|contacts|user|users|fiche)\b/gi, ' ')
+        );
+        if (stripped) return stripped;
+    }
+
+    return '';
+};
+
+const looksLikeContactsContext = (normalized = '', context = {}) => {
+    if (!normalized) return false;
+    if (hasAnyKeyword(normalized, [
+        'contact',
+        'contacts',
+        'user',
+        'users',
+        'carnet d adresse',
+        'carnet d adresses',
+        'repertoire telephonique',
+        'repertoire'
+    ])) return true;
+    if (hasContactFieldQuestion(normalized)) {
+        if (readContactQueryText('', normalized, context)) return true;
+        if (readActiveDomain(context) === 'contacts' || readActiveContactId(context)) return true;
+    }
+    if (
+        (readActiveDomain(context) === 'contacts' || readActiveContactId(context))
+        && hasAnyKeyword(normalized, ['son ', 'sa ', 'ses ', 'ce contact', 'le contact', 'la fiche'])
+    ) {
+        return true;
+    }
+    return false;
+};
+
+const readContactsAction = (normalized = '', context = {}) => {
+    if (!normalized) return 'list_contacts';
+    if (
+        hasAnyKeyword(normalized, ['cree', 'creer', 'ajoute', 'nouveau', 'nouvelle'])
+        && hasAnyKeyword(normalized, ['contact', 'contacts', 'user', 'users'])
+    ) {
+        return 'create';
+    }
+    if (
+        readActiveContactId(context)
+        && hasAnyKeyword(normalized, ['supprime', 'supprimer', 'efface', 'effacer', 'retire', 'retirer', 'delete', 'remove'])
+    ) {
+        return 'delete';
+    }
+    if (
+        readActiveContactId(context)
+        && hasAnyKeyword(normalized, ['change', 'modifie', 'modifier', 'mets a jour', 'met a jour', 'update'])
+    ) {
+        return 'update';
+    }
+    if (
+        hasAnyKeyword(normalized, ['liste', 'list', 'tous', 'toutes', 'donne moi la liste', 'affiche', 'montre'])
+        && hasAnyKeyword(normalized, ['contact', 'contacts', 'user', 'users'])
+    ) {
+        return 'list_contacts';
+    }
+    if (hasContactFieldQuestion(normalized)) {
+        return readContactQueryText('', normalized, context) ? 'search_contacts' : 'read_contact';
+    }
+    if (hasAnyKeyword(normalized, ['cherche', 'recherche', 'trouve', 'trouver', 'find', 'search'])) {
+        return readContactQueryText('', normalized, context) ? 'search_contacts' : 'list_contacts';
+    }
+    if (readActiveContactId(context) && hasAnyKeyword(normalized, ['lis', 'lire', 'ouvre', 'ouvrir', 'montre', 'affiche'])) {
+        return 'read_contact';
+    }
+    return 'list_contacts';
 };
 
 const buildBaseIntent = ({
@@ -520,6 +772,9 @@ const tryBuildContextualMailIntent = (base) => {
         || normalized === 'lis le mail'
         || normalized === 'lis le message'
         || normalized === 'lis'
+        || normalized === 'lire le'
+        || normalized === 'lire le mail'
+        || normalized === 'lire le message'
         || normalized.includes('lis moi le mail le plus ancien')
         || normalized.includes('lis moi le plus ancien')
         || normalized.includes('lis le mail le plus ancien')
@@ -562,6 +817,9 @@ const tryBuildContextualMailIntent = (base) => {
         || normalized === 'archive le mail'
         || normalized === 'archive le message'
         || normalized === 'archive'
+        || normalized === 'archiver le'
+        || normalized === 'archiver le mail'
+        || normalized === 'archiver le message'
         || normalized === 'range le'
     ) {
         return normalizeVoiceIntent({
@@ -588,6 +846,9 @@ const tryBuildContextualMailIntent = (base) => {
         normalized === 'supprime le'
         || normalized === 'supprime le mail'
         || normalized === 'supprime le message'
+        || normalized === 'supprimer le'
+        || normalized === 'supprimer le mail'
+        || normalized === 'supprimer le message'
         || normalized === 'efface le'
         || normalized === 'mets le a la poubelle'
         || normalized === 'supprime'
@@ -808,6 +1069,7 @@ const tryBuildMailIntent = (base) => {
     const action = readMailAction(normalized);
     const order = readMailOrderReference(normalized);
     const senderFilters = readMailSenderFilters(normalized);
+    const communicationSurfaces = readCommunicationSurfaces(normalized);
 
     const capabilityMap = {
         list: ['mail_list'],
@@ -840,6 +1102,7 @@ const tryBuildMailIntent = (base) => {
                 temporal_ref: readTimeReference(normalized),
                 draft_text: replyDraft?.draft_text || null,
                 auto_send: autoSend,
+                communication_surfaces: communicationSurfaces,
                 ...(replyDraft?.reply_target ? { reply_target: replyDraft.reply_target } : {})
             },
             requested_capabilities: ['mail_reply_draft'],
@@ -851,6 +1114,7 @@ const tryBuildMailIntent = (base) => {
                         temporal_ref: readTimeReference(normalized),
                         draft_text: replyDraft?.draft_text || null,
                         auto_send: autoSend,
+                        communication_surfaces: communicationSurfaces,
                         ...(replyDraft?.reply_target ? { reply_target: replyDraft.reply_target } : {})
                     }
                 })],
@@ -861,6 +1125,7 @@ const tryBuildMailIntent = (base) => {
 
     const commonInput = {
         temporal_ref: readTimeReference(normalized),
+        communication_surfaces: communicationSurfaces,
         ...(order ? { order } : {}),
         unread_only: unreadOnly,
         status_only: statusOnly,
@@ -879,6 +1144,7 @@ const tryBuildMailIntent = (base) => {
         status: 'pending_connector',
         entities: {
             temporal_ref: readTimeReference(normalized),
+            communication_surfaces: communicationSurfaces,
             ...(order ? { order } : {}),
             unread_only: unreadOnly,
             status_only: statusOnly,
@@ -895,6 +1161,50 @@ const tryBuildMailIntent = (base) => {
                 input: commonInput
             })),
             confirmation_required: false
+        }
+    });
+};
+
+const tryBuildContactsIntent = (base) => {
+    const normalized = base.utterance.normalized;
+    if (!looksLikeContactsContext(normalized, base.context)) return null;
+
+    const action = readContactsAction(normalized, base.context);
+    const queryText = readContactQueryText(base.utterance.raw, normalized, base.context);
+    const currentContactId = readActiveContactId(base.context);
+    const includeQuery = action !== 'list_contacts' && !!queryText;
+    const capabilityMap = {
+        list_contacts: ['contacts_list'],
+        search_contacts: ['contacts_search'],
+        read_contact: ['contacts_read'],
+        create: ['contacts_create'],
+        update: ['contacts_update'],
+        delete: ['contacts_delete']
+    };
+    const toolInput = {
+        ...(includeQuery ? { query_text: queryText, query: queryText } : {}),
+        ...(currentContactId ? { contact_id: currentContactId } : {})
+    };
+
+    return normalizeVoiceIntent({
+        ...base,
+        type: 'connector_tool',
+        domain: 'contacts',
+        action,
+        confidence: queryText || currentContactId ? 0.86 : 0.8,
+        status: 'pending_connector',
+        entities: {
+            ...(includeQuery ? { query_text: queryText, query: queryText } : {}),
+            ...(currentContactId ? { current_contact_id: currentContactId } : {})
+        },
+        requested_capabilities: capabilityMap[action] || ['contacts_search'],
+        execution: {
+            target: 'pending_connector',
+            toolchain: [buildPendingConnectorStep({
+                capability: (capabilityMap[action] || ['contacts_search'])[0],
+                input: toolInput
+            })],
+            confirmation_required: action === 'delete'
         }
     });
 };
@@ -941,6 +1251,80 @@ const tryBuildBankIntent = (base) => {
 
 const tryBuildRuntimeUiIntent = (base, runtimeToolSet) => {
     const normalized = base.utterance.normalized;
+    const rawUtterance = base.utterance.raw || '';
+    const explicitColor = readExplicitColor(rawUtterance);
+    const activeAtomeId = readActiveRuntimeAtomeId(base.context);
+
+    if (
+        explicitColor
+        && wantsRuntimeColorApply(normalized)
+        && runtimeToolExists('ui.couleur.apply', runtimeToolSet)
+    ) {
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'runtime_tool',
+            domain: 'creative',
+            action: 'apply_color',
+            confidence: 0.86,
+            status: 'ready',
+            entities: {
+                color: explicitColor,
+                ...(activeAtomeId ? { current_atome_id: activeAtomeId } : {})
+            },
+            execution: {
+                target: 'runtime_v2',
+                toolchain: [buildRuntimeToolStep({
+                    tool_id: 'ui.couleur.apply',
+                    input: {
+                        color: explicitColor,
+                        value: explicitColor,
+                        ...(activeAtomeId ? { atome_id: activeAtomeId } : {})
+                    },
+                    description: 'Apply a color to the active runtime selection.'
+                })],
+                confirmation_required: false
+            }
+        });
+    }
+
+    const wantsCircleCreate = normalized.includes('cercle')
+        && hasAnyKeyword(normalized, ['dessine', 'cree', 'creer', 'ajoute', 'draw', 'create', 'add']);
+    if (wantsCircleCreate) {
+        if (!runtimeToolExists('ui.circle', runtimeToolSet)) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'runtime_tool',
+                domain: 'creative',
+                action: 'draw_circle',
+                confidence: 0.74,
+                status: 'ambiguous',
+                execution: {
+                    target: 'none',
+                    toolchain: [],
+                    confirmation_required: false
+                }
+            });
+        }
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'runtime_tool',
+            domain: 'creative',
+            action: 'draw_circle',
+            confidence: 0.84,
+            status: 'ready',
+            entities: explicitColor ? { color: explicitColor } : {},
+            execution: {
+                target: 'runtime_v2',
+                toolchain: [buildRuntimeToolStep({
+                    tool_id: 'ui.circle',
+                    input: explicitColor ? { color: explicitColor } : {},
+                    description: 'Create a circle with the runtime drawing tool.'
+                })],
+                confirmation_required: false
+            }
+        });
+    }
+
     const rules = [
         {
             when: ['ouvre mtrack', 'ouvre le mtrack', 'montage', 'timeline', 'mtrack'],
@@ -976,15 +1360,6 @@ const tryBuildRuntimeUiIntent = (base, runtimeToolSet) => {
                 action: 'open_capture',
                 tool_id: 'tool.main.capture',
                 description: 'Open the capture main tool.'
-            }
-        },
-        {
-            when: ['dessine un cercle', 'cree un cercle', 'ajoute un cercle'],
-            intent: {
-                domain: 'creative',
-                action: 'draw_circle',
-                tool_id: 'ui.circle',
-                description: 'Create a circle with the runtime drawing tool.'
             }
         },
         {
@@ -1063,6 +1438,7 @@ const tryBuildRuntimeUiIntent = (base, runtimeToolSet) => {
             target: 'runtime_v2',
             toolchain: [buildRuntimeToolStep({
                 tool_id: match.intent.tool_id,
+                input: match.intent.input || {},
                 description: match.intent.description
             })],
             confirmation_required: false
@@ -1122,6 +1498,9 @@ export const classifyVoiceIntent = (utterance, {
 
     const runtimeIntent = tryBuildRuntimeUiIntent(base, runtimeToolSet);
     if (runtimeIntent) return runtimeIntent;
+
+    const contactsIntent = tryBuildContactsIntent(base);
+    if (contactsIntent) return contactsIntent;
 
     const mailIntent = tryBuildMailIntent(base);
     if (mailIntent) return mailIntent;

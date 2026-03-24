@@ -11,6 +11,7 @@ const runtimeTools = [
     { tool_id: 'tool.main.time', tool_key: 'main_time' },
     { tool_id: 'tool.main.capture', tool_key: 'main_capture' },
     { tool_id: 'ui.circle', tool_key: 'circle' },
+    { tool_id: 'ui.couleur.apply', tool_key: 'couleur_apply' },
     { tool_id: 'ui.text.create', tool_key: 'text_create' },
     { tool_id: 'ui.select', tool_key: 'select' },
     { tool_id: 'ui.move', tool_key: 'move' },
@@ -59,11 +60,30 @@ assert.equal(runtimeIntent.domain, 'media');
 assert.equal(runtimeIntent.action, 'open_mtrack');
 assert.equal(runtimeIntent.execution.toolchain[0].tool_id, 'tool.main.mtrack');
 
-const creativeIntent = classifyVoiceIntent('Dessine un cercle', {
+const creativeIntent = classifyVoiceIntent('Dessine un cercle rouge', {
     runtime_tools: runtimeTools
 });
 assert.equal(creativeIntent.domain, 'creative');
 assert.equal(creativeIntent.execution.toolchain[0].tool_id, 'ui.circle');
+assert.equal(creativeIntent.execution.toolchain[0].input.color, 'red');
+
+const creativeColorFollowup = classifyVoiceIntent('Mets le en violet', {
+    runtime_tools: runtimeTools,
+    context: {
+        active_intent: {
+            domain: 'creative',
+            action: 'draw_circle',
+            meta: {
+                atome_id: 'atome_circle_test_1'
+            }
+        }
+    }
+});
+assert.equal(creativeColorFollowup.domain, 'creative');
+assert.equal(creativeColorFollowup.action, 'apply_color');
+assert.equal(creativeColorFollowup.execution.toolchain[0].tool_id, 'ui.couleur.apply');
+assert.equal(creativeColorFollowup.execution.toolchain[0].input.color, 'violet');
+assert.equal(creativeColorFollowup.execution.toolchain[0].input.atome_id, 'atome_circle_test_1');
 
 const bankIntent = classifyVoiceIntent('Romeo m a t il paye ce mois ci ?', {
     runtime_tools: runtimeTools
@@ -95,6 +115,47 @@ assert.equal(unreadMailIntent.domain, 'mail');
 assert.equal(unreadMailIntent.action, 'list');
 assert.equal(unreadMailIntent.entities.unread_only, true);
 assert.equal(unreadMailIntent.entities.status_only, true);
+
+const communicationIntent = classifyVoiceIntent("Dis moi si j'ai de nouveaux messages", {
+    runtime_tools: runtimeTools
+});
+assert.equal(communicationIntent.domain, 'mail');
+assert.deepEqual(communicationIntent.entities.communication_surfaces, ['messages', 'mail']);
+
+const directContactPhoneIntent = classifyVoiceIntent('Quel est le numero de telephone de Sylvain ?', {
+    runtime_tools: runtimeTools
+});
+assert.equal(directContactPhoneIntent.domain, 'contacts');
+assert.equal(directContactPhoneIntent.action, 'search_contacts');
+assert.equal(directContactPhoneIntent.execution.target, 'pending_connector');
+assert.equal(directContactPhoneIntent.entities.query_text, 'Sylvain');
+
+const directContactListIntent = classifyVoiceIntent('Donne moi la liste des users', {
+    runtime_tools: runtimeTools
+});
+assert.equal(directContactListIntent.domain, 'contacts');
+assert.equal(directContactListIntent.action, 'list_contacts');
+
+const contextualContactPhoneIntent = classifyVoiceIntent('Son numero ?', {
+    runtime_tools: runtimeTools,
+    context: {
+        active_intent: {
+            domain: 'contacts',
+            entities: {
+                current_contact_id: 'contact_ctx_1'
+            }
+        }
+    }
+});
+assert.equal(contextualContactPhoneIntent.domain, 'contacts');
+assert.equal(contextualContactPhoneIntent.action, 'read_contact');
+assert.equal(contextualContactPhoneIntent.entities.current_contact_id, 'contact_ctx_1');
+
+const courrierIntent = classifyVoiceIntent("As-tu de nouveaux courriers ?", {
+    runtime_tools: runtimeTools
+});
+assert.equal(courrierIntent.domain, 'mail');
+assert.deepEqual(courrierIntent.entities.communication_surfaces, ['messages', 'mail']);
 
 const mailSendIntent = classifyVoiceIntent('Envoie le mail', {
     runtime_tools: runtimeTools

@@ -317,6 +317,40 @@ assert.equal(runtimeCalls[0]?.meta?.trace_id, 'trace_runtime_circle_1', 'runtime
 assert.equal(runtimeCalls[0]?.meta?.intent_id, 'intent_runtime_circle_1', 'runtime.tools.call should forward intent_id into meta');
 assert.equal(runtimeCalls[0]?.source?.type, 'mcp', 'runtime.tools.call should stamp MCP source');
 
+const createdAtome = await globalThis.handleAtomeMCPRequestAsync({
+    jsonrpc: '2.0',
+    id: 21,
+    method: 'atome.create',
+    params: {
+        kind: 'shape',
+        shape_variant: 'circle',
+        color: 'red',
+        x: 42,
+        y: 84
+    }
+});
+assert.equal(createdAtome.error, undefined, 'atome.create should resolve through Runtime V2');
+assert.equal(createdAtome.result?.tool_id, 'ui.circle', 'atome.create should route circle payloads to ui.circle');
+assert.equal(runtimeCalls.at(-1)?.tool_id, 'ui.circle', 'atome.create should invoke Runtime V2 instead of the legacy constructor');
+assert.equal(runtimeCalls.at(-1)?.source?.layer, 'atome_mcp_create', 'atome.create should stamp the MCP create source layer');
+assert.equal(runtimeCalls.at(-1)?.input?.color, 'red', 'atome.create should preserve shape color in Runtime V2 input');
+
+const boxedAtome = await globalThis.handleAtomeMCPRequestAsync({
+    jsonrpc: '2.0',
+    id: 22,
+    method: 'atome.box',
+    params: {
+        width: 160,
+        height: 90,
+        background: 'orange'
+    }
+});
+assert.equal(boxedAtome.error, undefined, 'atome.box should resolve through Runtime V2');
+assert.equal(boxedAtome.result?.tool_id, 'ui.creator', 'atome.box should route box payloads to ui.creator');
+assert.equal(runtimeCalls.at(-1)?.tool_id, 'ui.creator', 'atome.box should invoke Runtime V2 instead of the legacy constructor');
+assert.equal(runtimeCalls.at(-1)?.input?.kind, 'shape', 'atome.box should normalize legacy box payloads as shape creations');
+assert.equal(runtimeCalls.at(-1)?.input?.color, 'orange', 'atome.box should normalize background payloads to the atomic shape color channel');
+
 const batchCalled = await globalThis.handleAtomeMCPRequestAsync({
     jsonrpc: '2.0',
     id: 3,

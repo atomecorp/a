@@ -1,3 +1,5 @@
+import { resolveAtomeRuntimeInvocation } from './runtime_tool_resolution.js';
+
 const hasOwn = Object.prototype.hasOwnProperty;
 const ATOME_MCP_PROTOCOL = '1.0.0';
 const MCP_EVENT_NAME = 'squirrel:mcp';
@@ -1401,12 +1403,9 @@ function ensureAtomeContext() {
     if (typeof globalThis === 'undefined') {
         throw new Error('Global context unavailable for MCP bridge');
     }
-    if (typeof globalThis.Atome !== 'function') {
-        throw new Error('Atome constructor is not exposed on the global scope');
-    }
     return {
         defaults: globalThis.atomeDefaultsParams || {},
-        AtomeCtor: globalThis.Atome
+        AtomeCtor: typeof globalThis.Atome === 'function' ? globalThis.Atome : null
     };
 }
 
@@ -1505,29 +1504,61 @@ function buildRuntimeInvocationPayload(params = {}, defaults = {}) {
 }
 
 const atomeMCPHandlers = {
-    'atome.create'(params = {}) {
-        const { defaults, AtomeCtor } = ensureAtomeContext();
-        const { mergeDefaults, payload } = extractAtomePayload(params);
-        const resolvedPayload = mergeDefaults ? { ...defaults, ...payload } : { ...payload };
-        const instance = new AtomeCtor(resolvedPayload);
-        return {
-            elementId: instance.element ? instance.element.id : null,
-            tag: instance.tag ?? null,
-            params: resolvedPayload
-        };
+    async 'atome.create'(params = {}) {
+        const { defaults } = ensureAtomeContext();
+        const runtime = ensureRuntimeToolApi();
+        const invocation = resolveAtomeRuntimeInvocation({
+            operation: 'create',
+            params,
+            defaults
+        });
+        if (!invocation?.tool_id) {
+            throw new Error('Atome create could not be resolved to a Runtime V2 tool');
+        }
+        return runtime.invokeById(buildRuntimeInvocationPayload({
+            tool_id: invocation.tool_id,
+            action: invocation.action,
+            input: invocation.input,
+            actor: params?.actor,
+            meta: params?.meta,
+            trace_id: params?.trace_id,
+            intent_id: params?.intent_id,
+            idempotency_key: params?.idempotency_key,
+            dry_run: params?.dry_run === true,
+            __mcp: params?.__mcp
+        }, {
+            action: 'pointer.click',
+            presentation: 'mcp',
+            layer: 'atome_mcp_create'
+        }));
     },
-    'atome.box'(params = {}) {
-        const { defaults, AtomeCtor } = ensureAtomeContext();
-        const { mergeDefaults, payload } = extractAtomePayload(params);
-        const resolvedPayload = mergeDefaults ? { ...defaults, ...payload } : { ...payload };
-        const instance = typeof AtomeCtor.box === 'function'
-            ? AtomeCtor.box({ ...payload, mergeDefaults })
-            : new AtomeCtor(resolvedPayload);
-        return {
-            elementId: instance.element ? instance.element.id : null,
-            tag: instance.tag ?? null,
-            params: resolvedPayload
-        };
+    async 'atome.box'(params = {}) {
+        const { defaults } = ensureAtomeContext();
+        const runtime = ensureRuntimeToolApi();
+        const invocation = resolveAtomeRuntimeInvocation({
+            operation: 'box',
+            params,
+            defaults
+        });
+        if (!invocation?.tool_id) {
+            throw new Error('Atome box could not be resolved to a Runtime V2 tool');
+        }
+        return runtime.invokeById(buildRuntimeInvocationPayload({
+            tool_id: invocation.tool_id,
+            action: invocation.action,
+            input: invocation.input,
+            actor: params?.actor,
+            meta: params?.meta,
+            trace_id: params?.trace_id,
+            intent_id: params?.intent_id,
+            idempotency_key: params?.idempotency_key,
+            dry_run: params?.dry_run === true,
+            __mcp: params?.__mcp
+        }, {
+            action: 'pointer.click',
+            presentation: 'mcp',
+            layer: 'atome_mcp_box'
+        }));
     },
     'atome.describe'() {
         const { defaults } = ensureAtomeContext();

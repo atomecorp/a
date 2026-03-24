@@ -107,8 +107,8 @@ const mailRead = await orchestrator.executeUtterance('Lis mes mails', {
 assert.equal(mailRead.ok, false);
 assert.equal(mailRead.executed, false);
 assert.equal(mailRead.transport, 'mail_api');
-assert.equal(mailRead.error, 'mail_connector_unavailable');
-assert.match(mailRead.reply_text, /acces a tes mails ici/i);
+assert.equal(mailRead.error, 'mail_credentials_missing');
+assert.match(mailRead.reply_text, /configuration mail|reglages/i);
 
 const mailEnsureReadyEnv = {
     atome: {

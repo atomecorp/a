@@ -6,6 +6,7 @@ import {
 } from '../ai/provider_client.js';
 import { intentToStructuredRequest } from './semantic_contract.js';
 import { createToolRouter } from './tool_router.js';
+import { buildContactQueryReply } from './contact_reply.js';
 
 export const VOICE_ORCHESTRATOR_EVENT_NAME = 'squirrel:voice:orchestrator';
 
@@ -124,6 +125,17 @@ const resolveMailApi = async (env) => {
         return mod.createGlobalMailApi({ env: hostEnv });
     }
     return null;
+};
+
+const resolveMessagesApi = async (env) => {
+    const hostEnv = resolveHostEnv(env);
+    return hostEnv?.Squirrel?.messages
+        || hostEnv?.atome?.messages
+        || hostEnv?.AtomeMessages
+        || env?.Squirrel?.messages
+        || env?.atome?.messages
+        || env?.AtomeMessages
+        || null;
 };
 
 const resolveContactsApi = async (env) => {
@@ -254,6 +266,14 @@ const buildMailQueryEntities = ({
     unreadOnly = false,
     statusOnly = false
 } = {}) => {
+    const resolvedUnreadOnly = unreadOnly === true
+        || sourceEntities?.unread_only === true
+        || sourceToolParams.some((params) => params?.unread_only === true)
+        || activeEntities?.unread_only === true;
+    const resolvedStatusOnly = statusOnly === true
+        || sourceEntities?.status_only === true
+        || sourceToolParams.some((params) => params?.status_only === true)
+        || activeEntities?.status_only === true;
     // Carry-over fields: these persist across queries when the user doesn't override them
     const fromFilter = pickMailQueryField(sourceToolParams, 'from', sourceEntities?.from || activeEntities?.from || null);
     const notFromFilter = pickMailQueryField(sourceToolParams, 'not_from', sourceEntities?.not_from || activeEntities?.not_from || null);
@@ -266,8 +286,8 @@ const buildMailQueryEntities = ({
     const next = {
         ...activeEntities,
         ...sourceEntities,
-        unread_only: unreadOnly,
-        status_only: statusOnly
+        unread_only: resolvedUnreadOnly,
+        status_only: resolvedStatusOnly
     };
     // Remove stale per-query fields inherited from activeEntities spread above
     delete next.limit;
@@ -440,6 +460,71 @@ const flattenResultPayload = (value, depth = 0) => {
     return value;
 };
 
+const RUNTIME_CRITICAL_INPUT_KEYS = Object.freeze([
+    'color',
+    'fill',
+    'background',
+    'backgroundColor',
+    'bg',
+    'text',
+    'value',
+    'atome_id',
+    'atomeId',
+    'target_id',
+    'targetId',
+    'selection_ids',
+    'selectionIds'
+]);
+
+const hasOwnValue = (input = {}, key = '') => {
+    if (!input || typeof input !== 'object' || !key) return false;
+    if (!Object.prototype.hasOwnProperty.call(input, key)) return false;
+    const value = input[key];
+    if (Array.isArray(value)) return value.length > 0;
+    return value !== undefined && value !== null && String(value).trim() !== '';
+};
+
+const shouldPreferRuntimeFallbackIntent = (fallbackIntent = {}, plannedIntent = {}) => {
+    if (String(fallbackIntent?.execution?.target || '') !== 'runtime_v2') return false;
+    if (String(plannedIntent?.execution?.target || '') !== 'runtime_v2') return false;
+    const fallbackToolchain = ensureToolchain(fallbackIntent);
+    const plannedToolchain = ensureToolchain(plannedIntent);
+    if (fallbackToolchain.length !== 1 || plannedToolchain.length !== 1) return false;
+    const fallbackStep = fallbackToolchain[0];
+    const plannedStep = plannedToolchain[0];
+    if (String(fallbackStep?.tool_id || '') !== String(plannedStep?.tool_id || '')) return false;
+    const fallbackInput = fallbackStep?.input && typeof fallbackStep.input === 'object' ? fallbackStep.input : {};
+    const plannedInput = plannedStep?.input && typeof plannedStep.input === 'object' ? plannedStep.input : {};
+    return RUNTIME_CRITICAL_INPUT_KEYS.some((key) => hasOwnValue(fallbackInput, key) && !hasOwnValue(plannedInput, key));
+};
+
+const buildRuntimeIntentMeta = (result, {
+    phase = 'executed',
+    replyText = ''
+} = {}) => {
+    const resolved = flattenResultPayload(result);
+    const atomeId = String(
+        resolved?.atome_id
+        || resolved?.elementId
+        || resolved?.id
+        || ''
+    ).trim() || null;
+    const selectedIds = Array.isArray(resolved?.selected_ids)
+        ? resolved.selected_ids.map((value) => String(value || '').trim()).filter(Boolean)
+        : [];
+    return {
+        phase,
+        ...(replyText ? { reply_text: replyText, spoken_reply: replyText } : {}),
+        ...(atomeId ? { atome_id: atomeId } : {}),
+        ...(selectedIds.length ? { selected_ids: selectedIds } : {}),
+        result: {
+            ok: resolved?.ok !== false,
+            ...(atomeId ? { atome_id: atomeId } : {}),
+            ...(selectedIds.length ? { selected_ids: selectedIds } : {})
+        }
+    };
+};
+
 const pickFirstArray = (value, depth = 0) => {
     if (!value || typeof value !== 'object' || depth > 6) return [];
     if (Array.isArray(value)) return value;
@@ -594,6 +679,16 @@ const buildStructuredReplyFromPayload = (payload, intent = {}, options = {}) => 
     }
 
     return '';
+};
+
+const buildRuntimeFailureReply = (payload, intent = {}, options = {}) => {
+    const resolved = flattenResultPayload(payload);
+    const explicitReply = String(resolved?.reply_text || '').trim();
+    if (explicitReply) return explicitReply;
+    const locale = resolveIntentLocale(intent, options);
+    return locale.startsWith('en')
+        ? 'The action failed.'
+        : "L'action a echoue.";
 };
 
 const buildMaterializedMailIntent = (sourceIntent = {}, utterance = '', context = {}, heuristicIntent = null) => {
@@ -1446,10 +1541,11 @@ class VoiceOrchestrator {
      */
     async initToolRouter({ workingMemory = null } = {}) {
         const mail = await resolveMailApi(this.env);
+        const messages = await resolveMessagesApi(this.env);
         const contacts = await resolveContactsApi(this.env);
         const calendar = await resolveCalendarApi(this.env);
         this.toolRouter = createToolRouter({
-            connectors: { mail, contacts, calendar },
+            connectors: { mail, messages, contacts, calendar },
             workingMemory: workingMemory
                 || (this.sessionRuntime?.workingMemory ?? null),
             bridge: this.bridge
@@ -1715,10 +1811,17 @@ class VoiceOrchestrator {
 
         if (events.length === 1) {
             const result = await this.bridge.callRuntimeTool(events[0]);
-            const fallbackReply = replyText || buildStructuredReplyFromPayload(result, normalizedIntent, options);
+            const executionOk = result?.ok !== false;
+            const fallbackReply = executionOk
+                ? (replyText || buildStructuredReplyFromPayload(result, normalizedIntent, options))
+                : buildRuntimeFailureReply(result, normalizedIntent, options);
+            this.#bindSessionIntent(options.session_id, normalizedIntent, buildRuntimeIntentMeta(result, {
+                phase: 'executed',
+                replyText: fallbackReply
+            }));
             const response = {
-                ok: result?.ok !== false,
-                executed: true,
+                ok: executionOk,
+                executed: executionOk,
                 transport: this.bridge.kind,
                 intent: normalizedIntent,
                 result,
@@ -1731,10 +1834,17 @@ class VoiceOrchestrator {
         const result = await this.bridge.batchRuntimeTools(events, {
             tx_id: options.tx_id || normalizedIntent.intent_id || undefined
         });
-        const fallbackReply = replyText || buildStructuredReplyFromPayload(result, normalizedIntent, options);
+        const executionOk = result?.ok !== false;
+        const fallbackReply = executionOk
+            ? (replyText || buildStructuredReplyFromPayload(result, normalizedIntent, options))
+            : buildRuntimeFailureReply(result, normalizedIntent, options);
+        this.#bindSessionIntent(options.session_id, normalizedIntent, buildRuntimeIntentMeta(result, {
+            phase: 'executed',
+            replyText: fallbackReply
+        }));
         const response = {
-            ok: result?.ok !== false,
-            executed: true,
+            ok: executionOk,
+            executed: executionOk,
             transport: this.bridge.kind,
             intent: normalizedIntent,
             result,
@@ -1839,18 +1949,22 @@ class VoiceOrchestrator {
         const businessConnectorFallback = fallbackExecutable
             && BUSINESS_CONNECTOR_DOMAINS.has(String(fallbackIntent?.domain || '').trim());
 
-        if (plannedBusinessDomain && plannerProducedToolIntent) {
-            return plannedIntent;
-        }
-
         if (plannedBusinessDomain && String(plannedIntent?.domain || '').trim() === 'mail') {
             return buildMaterializedMailIntent(plannedIntent, utterance, options.context || {}, fallbackIntent);
+        }
+
+        if (plannedBusinessDomain && plannerProducedToolIntent) {
+            return plannedIntent;
         }
 
         // For business connectors, keep the LLM as the interpreter when it produced
         // an executable plan. Only fall back when the planner returned no concrete
         // business action that can be executed deterministically.
         if (businessConnectorFallback) {
+            return fallbackIntent;
+        }
+
+        if (fallbackExecutable && shouldPreferRuntimeFallbackIntent(fallbackIntent, plannedIntent)) {
             return fallbackIntent;
         }
 
@@ -2106,6 +2220,14 @@ class VoiceOrchestrator {
                 ...(payload.reply_text ? { reply_text: payload.reply_text, spoken_reply: payload.reply_text } : {})
             });
             const makeListReply = (items = []) => {
+                if (items.length === 1) {
+                    const focusedReply = buildContactQueryReply(items[0], {
+                        locale,
+                        utteranceRaw: intent?.utterance?.raw || '',
+                        utteranceNormalized: intent?.utterance?.normalized || ''
+                    });
+                    if (focusedReply) return focusedReply;
+                }
                 const labels = items.map((entry) => formatContactLabel(entry)).filter(Boolean).slice(0, 3);
                 if (!items.length) {
                     return english ? 'I do not see any matching contact right now.' : "Je ne vois pas de contact correspondant pour le moment.";
@@ -2144,9 +2266,13 @@ class VoiceOrchestrator {
                     });
                     return buildResponse({
                         result: read,
-                        reply_text: label
+                        reply_text: buildContactQueryReply(read.contact, {
+                            locale,
+                            utteranceRaw: intent?.utterance?.raw || '',
+                            utteranceNormalized: intent?.utterance?.normalized || ''
+                        }) || (label
                             ? (english ? `Contact: ${label}.` : `Contact: ${label}.`)
-                            : makeListReply([read.contact])
+                            : makeListReply([read.contact]))
                     });
                 }
             }
@@ -2419,10 +2545,10 @@ class VoiceOrchestrator {
             || toolchain.some((step) => step?.input?.unread_only === true || step?.params?.unread_only === true);
         const statusOnly = intent?.entities?.status_only === true
             || toolchain.some((step) => step?.input?.status_only === true || step?.params?.status_only === true);
-        // Only mark as unread if the user's utterance explicitly mentions it:
-        // do not rely solely on LLM/entity flags which may over-trigger.
-        const resolvedUnreadOnly = inferredUnreadOnly;
-        const resolvedStatusOnly = statusOnly || (inferredUnreadOnly && inferredStatusOnly);
+        // Preserve explicit planner/tool unread filters while still using
+        // utterance heuristics for noisy STT follow-ups.
+        const resolvedUnreadOnly = unreadOnly || inferredUnreadOnly;
+        const resolvedStatusOnly = statusOnly || (resolvedUnreadOnly && inferredStatusOnly);
         const fromFilter = readMailFilterValue(intent, toolchain, 'from');
         const notFromFilter = readMailFilterValue(intent, toolchain, 'not_from');
         const mailboxFilter = readMailFilterValue(intent, toolchain, 'mailbox');
