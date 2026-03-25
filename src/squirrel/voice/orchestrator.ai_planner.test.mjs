@@ -255,7 +255,8 @@ const fallbackOrchestrator = createVoiceOrchestrator({
 const fallbackMail = await fallbackOrchestrator.executeUtterance('Lis mes mails', {
     session_id: session.session_id
 });
-assert.equal(fallbackMail.transport, 'mail_api', 'voice orchestrator should fall back to deterministic business routing when the ai planner returns no executable plan');
+assert.equal(fallbackMail.transport, 'none', 'voice orchestrator should not silently fall back to legacy business heuristics when the ai planner returns no executable plan');
+assert.equal(fallbackMail.error, 'voice_intent_not_executable', 'voice orchestrator should surface the missing executable plan explicitly');
 
 const contactsContextMailEnv = {};
 const contactsContextMailApi = createGlobalMailApi({ env: contactsContextMailEnv });

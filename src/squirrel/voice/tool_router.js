@@ -4,8 +4,89 @@ import {
 } from './semantic_contract.js';
 import { resolveAtomeRuntimeInvocation } from '../atome/runtime_tool_resolution.js';
 import { buildContactQueryReply, buildContactsFieldReply } from './contact_reply.js';
+import { createOfflineMutationQueue } from '../ai/offline_mutation_queue.js';
 
 const isEnglish = (locale) => String(locale || '').toLowerCase().startsWith('en');
+const OFFLINE_MUTATION_OPERATIONS = new Set(['create', 'update', 'delete']);
+
+const cloneValue = (value) => {
+    if (typeof structuredClone === 'function') return structuredClone(value);
+    return JSON.parse(JSON.stringify(value));
+};
+
+const isOfflineLikeFailure = (value) => {
+    if (!value) return false;
+    if (value?.offline === true || value?.status === 0) return true;
+    const text = String(value?.error || value?.message || value || '').toLowerCase();
+    return text.includes('offline')
+        || text.includes('unreachable')
+        || text.includes('timeout')
+        || text.includes('network')
+        || text.includes('connection lost')
+        || text.includes('fetch failed')
+        || text.includes('service unavailable');
+};
+
+const executeConnectorCall = async (callback, fallbackError = 'connector_execution_failed') => {
+    try {
+        const result = await callback();
+        return result && typeof result === 'object'
+            ? result
+            : { ok: result !== false };
+    } catch (error) {
+        return {
+            ok: false,
+            error: String(error?.message || error || fallbackError),
+            offline: isOfflineLikeFailure(error)
+        };
+    }
+};
+
+const buildOfflineQueuedReply = (domain, operation, locale) => {
+    const en = isEnglish(locale);
+    const subject = domain === 'contacts'
+        ? (en ? 'contact change' : 'modification du contact')
+        : domain === 'calendar'
+            ? (en ? 'calendar change' : 'modification du calendrier')
+            : (en ? 'change' : 'modification');
+    if (en) {
+        return `I cannot reach the ${domain} service right now. I queued this ${subject} locally and will sync it when connectivity returns.`;
+    }
+    return `Je ne peux pas joindre le service ${domain === 'calendar' ? 'calendrier' : domain} pour le moment. J'ai mis cette ${subject} en file locale et elle sera synchronisee quand la connexion reviendra.`;
+};
+
+const queueOfflineMutationResult = ({
+    offlineQueue = null,
+    request = {},
+    domain = '',
+    operation = '',
+    locale = 'fr-FR',
+    item = null,
+    draft = null
+} = {}) => {
+    const queueEntry = offlineQueue && typeof offlineQueue.enqueue === 'function'
+        ? offlineQueue.enqueue(request)
+        : null;
+    const queueSize = offlineQueue && typeof offlineQueue.list === 'function'
+        ? offlineQueue.list().length
+        : (queueEntry ? 1 : 0);
+    return createStructuredResult({
+        ok: true,
+        domain,
+        operation,
+        item,
+        draft,
+        executed: false,
+        queued: true,
+        offline: true,
+        queue_entry_id: queueEntry?.id || '',
+        transport: 'offline_queue',
+        stats: {
+            queue_size: queueSize
+        },
+        reply_text: buildOfflineQueuedReply(domain, operation, locale)
+    });
+};
 
 const formatSenderLabel = (item) => String(
     item?.from?.name || item?.from?.address || ''
@@ -1143,7 +1224,10 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
     }
 };
 
-const executeContactsRequest = async (request, connectors, workingMemory) => {
+const executeContactsRequest = async (request, connectors, workingMemory, {
+    offlineQueue = null,
+    allowQueue = true
+} = {}) => {
     const contactsApi = connectors.contacts;
     if (!contactsApi) {
         return createStructuredResult({
@@ -1275,10 +1359,28 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
                 delete changes.id;
                 delete changes.query;
                 delete changes.query_text;
-                const updated = await contactsApi.updateLocalContact(targetId, changes, {
+                const updated = await executeConnectorCall(() => contactsApi.updateLocalContact(targetId, changes, {
                     source: 'voice'
-                });
+                }), 'contacts_update_failed');
                 const updatedContact = updated?.contact || existingContact;
+                if (allowQueue && offlineQueue && isOfflineLikeFailure(updated)) {
+                    return queueOfflineMutationResult({
+                        offlineQueue,
+                        request: {
+                            ...cloneValue(request),
+                            operation: 'update',
+                            target: {
+                                ...(request.target && typeof request.target === 'object' ? cloneValue(request.target) : {}),
+                                id: targetId
+                            },
+                            payload: changes
+                        },
+                        domain: 'contacts',
+                        operation: 'update',
+                        locale,
+                        item: updatedContact
+                    });
+                }
                 if (workingMemory && targetId) {
                     workingMemory.setCurrentItem('contacts', targetId, updatedContact);
                     workingMemory.setLastOperation('contacts', 'update');
@@ -1299,10 +1401,23 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
                     reply_text: isEnglish(locale) ? 'Contact creation is not available yet.' : "La creation de contact n'est pas encore disponible."
                 });
             }
-            const result = await contactsApi.createLocalContact(payload, {
+            const result = await executeConnectorCall(() => contactsApi.createLocalContact(payload, {
                 source: 'voice'
-            });
+            }), 'contacts_create_failed');
             const createdContact = result?.contact || (Array.isArray(result?.items) ? result.items[0] : null) || null;
+            if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
+                return queueOfflineMutationResult({
+                    offlineQueue,
+                    request: {
+                        ...cloneValue(request),
+                        payload
+                    },
+                    domain: 'contacts',
+                    operation: 'create',
+                    locale,
+                    item: createdContact
+                });
+            }
             if (result?.ok === true && createdContact && workingMemory) {
                 const contactId = createdContact.source_contact_id || createdContact.id || null;
                 if (contactId) {
@@ -1356,10 +1471,27 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
                         : "J'ai besoin d'au moins une modification pour mettre a jour le contact."
                 });
             }
-            const result = await contactsApi.updateLocalContact(targetId, changes, {
+            const result = await executeConnectorCall(() => contactsApi.updateLocalContact(targetId, changes, {
                 source: 'voice'
-            });
+            }), 'contacts_update_failed');
             const updatedContact = result?.contact || null;
+            if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
+                return queueOfflineMutationResult({
+                    offlineQueue,
+                    request: {
+                        ...cloneValue(request),
+                        target: {
+                            ...(request.target && typeof request.target === 'object' ? cloneValue(request.target) : {}),
+                            id: targetId
+                        },
+                        payload: changes
+                    },
+                    domain: 'contacts',
+                    operation: 'update',
+                    locale,
+                    item: updatedContact
+                });
+            }
             if (result?.ok === true && updatedContact && workingMemory) {
                 const contactId = updatedContact.source_contact_id || updatedContact.id || targetId;
                 workingMemory.setCurrentItem('contacts', contactId, updatedContact);
@@ -1389,9 +1521,24 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
                     reply_text: isEnglish(locale) ? 'I do not know which contact to delete.' : 'Je ne sais pas quel contact supprimer.'
                 });
             }
-            const result = await contactsApi.deleteLocalContact(targetId, {
+            const result = await executeConnectorCall(() => contactsApi.deleteLocalContact(targetId, {
                 source: 'voice'
-            });
+            }), 'contacts_delete_failed');
+            if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
+                return queueOfflineMutationResult({
+                    offlineQueue,
+                    request: {
+                        ...cloneValue(request),
+                        target: {
+                            ...(request.target && typeof request.target === 'object' ? cloneValue(request.target) : {}),
+                            id: targetId
+                        }
+                    },
+                    domain: 'contacts',
+                    operation: 'delete',
+                    locale
+                });
+            }
             if (result?.ok === true && workingMemory) {
                 workingMemory.removeFromResultSet('contacts', targetId);
                 workingMemory.setLastOperation('contacts', 'delete');
@@ -1416,7 +1563,10 @@ const executeContactsRequest = async (request, connectors, workingMemory) => {
     }
 };
 
-const executeCalendarRequest = async (request, connectors, workingMemory) => {
+const executeCalendarRequest = async (request, connectors, workingMemory, {
+    offlineQueue = null,
+    allowQueue = true
+} = {}) => {
     const calendarApi = connectors.calendar;
     if (!calendarApi) {
         return createStructuredResult({
@@ -1512,7 +1662,20 @@ const executeCalendarRequest = async (request, connectors, workingMemory) => {
                 ? { ...request.draft }
                 : {};
             const payload = Object.keys(requestPayload).length ? requestPayload : draftPayload;
-            const result = await calendarApi.create(payload, request.payload || request.draft || {});
+            const result = await executeConnectorCall(() => calendarApi.create(payload, request.payload || request.draft || {}), 'calendar_create_failed');
+            if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
+                return queueOfflineMutationResult({
+                    offlineQueue,
+                    request: {
+                        ...cloneValue(request),
+                        payload
+                    },
+                    domain: 'calendar',
+                    operation: 'create',
+                    locale,
+                    item: result?.event || null
+                });
+            }
             if (workingMemory) workingMemory.setLastOperation('calendar', 'create');
             return createStructuredResult({
                 ok: result?.ok !== false, domain: 'calendar', operation: 'create',
@@ -1549,7 +1712,24 @@ const executeCalendarRequest = async (request, connectors, workingMemory) => {
                         : "J'ai besoin d'au moins une modification pour mettre a jour le rendez-vous."
                 });
             }
-            const result = await calendarApi.update(targetId, changes, request.payload || {});
+            const result = await executeConnectorCall(() => calendarApi.update(targetId, changes, request.payload || {}), 'calendar_update_failed');
+            if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
+                return queueOfflineMutationResult({
+                    offlineQueue,
+                    request: {
+                        ...cloneValue(request),
+                        target: {
+                            ...(request.target && typeof request.target === 'object' ? cloneValue(request.target) : {}),
+                            id: targetId
+                        },
+                        payload: changes
+                    },
+                    domain: 'calendar',
+                    operation: 'update',
+                    locale,
+                    item: result?.event || null
+                });
+            }
             if (result?.ok === true && workingMemory) {
                 workingMemory.setLastOperation('calendar', 'update');
                 if (result?.event) {
@@ -1580,7 +1760,22 @@ const executeCalendarRequest = async (request, connectors, workingMemory) => {
                     reply_text: isEnglish(locale) ? 'I do not know which event to delete.' : 'Je ne sais pas quel rendez-vous supprimer.'
                 });
             }
-            const result = await calendarApi.delete(targetId, request.payload || {});
+            const result = await executeConnectorCall(() => calendarApi.delete(targetId, request.payload || {}), 'calendar_delete_failed');
+            if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
+                return queueOfflineMutationResult({
+                    offlineQueue,
+                    request: {
+                        ...cloneValue(request),
+                        target: {
+                            ...(request.target && typeof request.target === 'object' ? cloneValue(request.target) : {}),
+                            id: targetId
+                        }
+                    },
+                    domain: 'calendar',
+                    operation: 'delete',
+                    locale
+                });
+            }
             if (result?.ok === true && workingMemory) {
                 workingMemory.removeFromResultSet('calendar', targetId);
                 workingMemory.setLastOperation('calendar', 'delete');
@@ -1608,13 +1803,61 @@ const executeCalendarRequest = async (request, connectors, workingMemory) => {
 export const createToolRouter = ({
     connectors = {},
     workingMemory = null,
-    bridge = null
+    bridge = null,
+    offlineQueue = null,
+    env = globalThis
 } = {}) => {
     const activeConnectors = { ...connectors };
+    const mutationQueue = offlineQueue && typeof offlineQueue.enqueue === 'function'
+        ? offlineQueue
+        : createOfflineMutationQueue({ env });
+    let flushPromise = null;
+
+    const flushPendingMutations = async ({ limit = 25 } = {}) => {
+        if (!mutationQueue || typeof mutationQueue.flush !== 'function') {
+            return { processed: 0, failed: 0, remaining: 0 };
+        }
+        if (flushPromise) return flushPromise;
+        flushPromise = mutationQueue.flush(async (queuedRequest) => {
+            if (!queuedRequest || typeof queuedRequest !== 'object') {
+                return { ok: false, error: 'offline_queue_request_invalid' };
+            }
+            const domain = String(queuedRequest.domain || '').trim().toLowerCase();
+            if (!OFFLINE_MUTATION_OPERATIONS.has(String(queuedRequest.operation || '').trim().toLowerCase())) {
+                return { ok: false, error: 'offline_queue_operation_invalid' };
+            }
+            switch (domain) {
+                case 'contacts':
+                    return executeContactsRequest(queuedRequest, activeConnectors, workingMemory, {
+                        offlineQueue: mutationQueue,
+                        allowQueue: false
+                    });
+                case 'calendar':
+                    return executeCalendarRequest(queuedRequest, activeConnectors, workingMemory, {
+                        offlineQueue: mutationQueue,
+                        allowQueue: false
+                    });
+                default:
+                    return { ok: false, error: 'offline_queue_domain_unsupported' };
+            }
+        }, { limit }).finally(() => {
+            flushPromise = null;
+        });
+        return flushPromise;
+    };
 
     return {
         setConnector(domain, api) {
             activeConnectors[domain] = api;
+        },
+
+        listPendingMutations({ limit = 50 } = {}) {
+            if (!mutationQueue || typeof mutationQueue.list !== 'function') return [];
+            return mutationQueue.list({ limit });
+        },
+
+        async flushPendingMutations(options = {}) {
+            return flushPendingMutations(options);
         },
 
         async execute(request) {
@@ -1625,13 +1868,21 @@ export const createToolRouter = ({
                 });
             }
 
+            await flushPendingMutations();
+
             switch (request.domain) {
                 case 'mail':
                     return executeMailRequest(request, activeConnectors, workingMemory);
                 case 'contacts':
-                    return executeContactsRequest(request, activeConnectors, workingMemory);
+                    return executeContactsRequest(request, activeConnectors, workingMemory, {
+                        offlineQueue: mutationQueue,
+                        allowQueue: true
+                    });
                 case 'calendar':
-                    return executeCalendarRequest(request, activeConnectors, workingMemory);
+                    return executeCalendarRequest(request, activeConnectors, workingMemory, {
+                        offlineQueue: mutationQueue,
+                        allowQueue: true
+                    });
                 case 'atome': {
                     if (!bridge) {
                         return createStructuredResult({

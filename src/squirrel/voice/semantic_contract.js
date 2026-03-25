@@ -260,7 +260,10 @@ export const createStructuredResult = (raw = {}) => {
         error,
         reply_text,
         executed: raw.executed !== false,
-        transport: ensureString(raw.transport)
+        transport: ensureString(raw.transport),
+        queued: raw.queued === true,
+        offline: raw.offline === true,
+        queue_entry_id: ensureString(raw.queue_entry_id)
     });
 };
 

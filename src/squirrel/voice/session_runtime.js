@@ -154,6 +154,24 @@ const normalizeBoundIntentContext = (intent = {}, meta = {}) => {
     };
 };
 
+const resolveActiveEntityHint = (intent = {}) => {
+    const domain = String(intent?.domain || '').trim();
+    const entities = intent?.entities && typeof intent.entities === 'object' ? intent.entities : {};
+    if (domain === 'mail') {
+        return entities.current_message_id || entities.message_id || null;
+    }
+    if (domain === 'contacts') {
+        return entities.current_contact_id || entities.contact_id || null;
+    }
+    if (domain === 'calendar') {
+        return entities.current_event_id || entities.event_id || null;
+    }
+    if (domain === 'atome') {
+        return entities.current_atome_id || entities.atome_id || null;
+    }
+    return null;
+};
+
 const newSessionSnapshot = ({
     sessionId,
     traceId,
@@ -293,6 +311,9 @@ class VoiceSessionRuntime {
         };
 
         this.sessions.set(sessionId, record);
+        if (this.workingMemory?.setSessionPreference) {
+            this.workingMemory.setSessionPreference('locale', locale);
+        }
         this.#emit(record, 'voice.session.created', {
             session_id: sessionId,
             locale
@@ -339,6 +360,13 @@ class VoiceSessionRuntime {
             }
         }
         record.data.conversation.active_intent = boundIntent;
+        if (this.workingMemory?.setSessionPreference) {
+            this.workingMemory.setSessionPreference('locale', record.data.locale);
+        }
+        const activeEntityId = resolveActiveEntityHint(boundIntent);
+        if (activeEntityId && this.workingMemory?.setActiveEntity) {
+            this.workingMemory.setActiveEntity(boundIntent.domain, activeEntityId);
+        }
         this.#touch(record, now);
         this.#emit(record, 'voice.intent.bound', {
             intent_id: boundIntent.intent_id,
@@ -507,6 +535,19 @@ class VoiceSessionRuntime {
         record.data.playback.text = payload?.text ? String(payload.text) : null;
         record.data.playback.voice_id = payload?.voice_id ? String(payload.voice_id) : null;
         record.data.conversation.last_assistant_text = record.data.playback.text;
+        if (this.workingMemory?.appendTurn && (record.data.conversation.last_user_text || record.data.playback.text)) {
+            const activeIntent = record.data.conversation.active_intent || null;
+            this.workingMemory.appendTurn({
+                user: record.data.conversation.last_user_text || '',
+                assistant: record.data.playback.text || '',
+                domain: activeIntent?.domain || null,
+                action: activeIntent?.action || null,
+                meta: {
+                    intent_id: activeIntent?.intent_id || null,
+                    session_id: record.data.session_id
+                }
+            });
+        }
         markTask(record.data.playback, 'speaking', now, {
             ended_at: null,
             stop_reason: null
@@ -745,6 +786,9 @@ class VoiceSessionRuntime {
         const data = cloneValue(record.data);
         data.history = cloneValue(record.history);
         data.active_channels = Array.from(record.controllers.keys());
+        if (this.workingMemory?.snapshot) {
+            data.working_memory = this.workingMemory.snapshot();
+        }
         return data;
     }
 

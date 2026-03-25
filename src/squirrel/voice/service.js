@@ -3,6 +3,12 @@ import { createVoiceOrchestrator } from './orchestrator.js';
 import { createVoiceLatencyTelemetry } from './telemetry.js';
 import { createVoiceActivityDetector } from './vad.js';
 import { createVoiceAiPlanner } from './ai_planner.js';
+import {
+    buildStartupBriefing,
+    evaluateProactiveNotifications,
+    coalesceProactiveNotifications
+} from '../ai/proactive_scheduler.js';
+import { createProactiveStateStore } from '../ai/proactive_state_store.js';
 
 const DEFAULT_LANG = 'fr-FR';
 
@@ -231,14 +237,32 @@ export const createVoiceService = ({
     const resolvedAiPlanner = aiPlanner === null
         ? ((env?.fetch || env?.window?.fetch) ? createVoiceAiPlanner({ env }) : null)
         : aiPlanner;
+    const proactiveState = createProactiveStateStore({ env });
     const orchestrator = createVoiceOrchestrator({
         env,
         sessionRuntime,
         aiPlanner: resolvedAiPlanner
     });
 
-    // Lazily initialize the unified tool router so domain connectors are wired.
-    if (typeof orchestrator.initToolRouter === 'function') {
+    // Prefer already-registered connectors and avoid importing heavy business
+    // bootstraps in headless or incomplete hosts.
+    const existingToolRouter = typeof orchestrator.ensureExistingToolRouter === 'function'
+        ? orchestrator.ensureExistingToolRouter({
+            workingMemory: sessionRuntime?.workingMemory ?? null
+        })
+        : null;
+    const hasExplicitConnectorHost = !!(
+        env?.Squirrel?.mail
+        || env?.Squirrel?.contacts
+        || env?.Squirrel?.calendar
+        || env?.atome?.mail
+        || env?.atome?.contacts
+        || env?.atome?.calendar
+        || env?.window?.Squirrel?.mail
+        || env?.window?.atome?.mail
+    );
+
+    if (!existingToolRouter && hasExplicitConnectorHost && typeof orchestrator.initToolRouter === 'function') {
         orchestrator.initToolRouter({
             workingMemory: sessionRuntime?.workingMemory ?? null
         }).catch((err) => {
@@ -1081,6 +1105,17 @@ export const createVoiceService = ({
         planUtterance(utterance, options = {}) {
             return orchestrator.planUtterance(utterance, options);
         },
+        listTraces(options = {}) {
+            return typeof orchestrator.listTraces === 'function' ? orchestrator.listTraces(options) : [];
+        },
+        listPendingMutations(options = {}) {
+            return typeof orchestrator.listPendingMutations === 'function' ? orchestrator.listPendingMutations(options) : [];
+        },
+        flushPendingMutations(options = {}) {
+            return typeof orchestrator.flushPendingMutations === 'function'
+                ? orchestrator.flushPendingMutations(options)
+                : Promise.resolve({ processed: 0, failed: 0, remaining: 0 });
+        },
         async executeIntent(intent, options = {}) {
             const response = await orchestrator.executeIntent(intent, options);
             return maybeSpeakResponse(response, options);
@@ -1098,6 +1133,55 @@ export const createVoiceService = ({
                 ...options,
                 session_id: sessionId
             });
+        },
+        proactive: {
+            async buildStartupBriefing(options = {}) {
+                if (!orchestrator.toolRouter && typeof orchestrator.initToolRouter === 'function') {
+                    await orchestrator.initToolRouter({
+                        workingMemory: sessionRuntime?.workingMemory ?? null
+                    }).catch(() => null);
+                }
+                return buildStartupBriefing({
+                    toolRouter: orchestrator.toolRouter,
+                    persistentMemory: orchestrator.persistentMemory,
+                    proactiveState,
+                    locale: options.locale || options.lang || DEFAULT_LANG
+                });
+            },
+            evaluateNotifications(options = {}) {
+                return evaluateProactiveNotifications({
+                    ...options,
+                    persistentMemory: orchestrator.persistentMemory,
+                    proactiveState
+                });
+            },
+            coalesceNotifications(triggers = [], options = {}) {
+                return coalesceProactiveNotifications(triggers, options);
+            },
+            getState() {
+                return proactiveState.load();
+            },
+            setEnabled(enabled) {
+                return proactiveState.setEnabled(enabled);
+            },
+            setStartupBriefingEnabled(enabled) {
+                return proactiveState.setStartupBriefingEnabled(enabled);
+            },
+            recordDelivery(domain, at = new Date()) {
+                return proactiveState.recordDelivery(domain, at);
+            },
+            snoozeDomain(domain, until) {
+                return proactiveState.snoozeDomain(domain, until);
+            },
+            dismissTrigger(triggerKey = '') {
+                if (orchestrator.persistentMemory?.recordDismissFeedback) {
+                    orchestrator.persistentMemory.recordDismissFeedback(triggerKey);
+                }
+                return {
+                    ok: true,
+                    trigger_key: String(triggerKey || '').trim()
+                };
+            }
         },
         async listen(options = {}) {
             const started = await stt.start(options);

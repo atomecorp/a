@@ -74,6 +74,40 @@ const buildConversationHistorySection = (context, english) => {
     return `CONVERSATION_HISTORY:\n${lines.join('\n')}`;
 };
 
+const buildConversationSummariesSection = (context, english) => {
+    const summaries = Array.isArray(context?.conversation_summaries) ? context.conversation_summaries : [];
+    if (!summaries.length) {
+        return english ? 'CONVERSATION_SUMMARIES:\n(none)' : 'CONVERSATION_SUMMARIES:\n(aucune)';
+    }
+    const lines = summaries.map((turn, i) => {
+        const userLine = `  User: ${turn.user || ''}`;
+        const assistLine = turn.assistant ? `  Assistant: ${turn.assistant}` : '  Assistant: (no reply)';
+        const metaLine = turn.domain ? `  [domain: ${turn.domain}, action: ${turn.action || '?'}]` : '';
+        return `Summary ${i + 1}:\n${userLine}\n${assistLine}${metaLine ? '\n' + metaLine : ''}`;
+    });
+    return `CONVERSATION_SUMMARIES:\n${lines.join('\n')}`;
+};
+
+const buildPersistentMemorySection = (context, english) => {
+    const summary = context?.persistent_memory_summary && typeof context.persistent_memory_summary === 'object'
+        ? context.persistent_memory_summary
+        : null;
+    if (!summary) {
+        return english ? 'PERSISTENT_MEMORY:\n(none)' : 'PERSISTENT_MEMORY:\n(aucune)';
+    }
+    return `PERSISTENT_MEMORY:\n${JSON.stringify(summary, null, 2)}`;
+};
+
+const buildIdentityResolutionSection = (context, english) => {
+    const identity = context?.identity_resolution && typeof context.identity_resolution === 'object'
+        ? context.identity_resolution
+        : null;
+    if (!identity) {
+        return english ? 'IDENTITY_RESOLUTION:\n(none)' : 'IDENTITY_RESOLUTION:\n(aucune)';
+    }
+    return `IDENTITY_RESOLUTION:\n${JSON.stringify(identity, null, 2)}`;
+};
+
 const buildPlannerPrompt = ({
     utterance = '',
     locale = DEFAULT_LOCALE,
@@ -112,6 +146,8 @@ const buildPlannerPrompt = ({
             'CRITICAL: draft_text MUST be a proper direct-address message, never indirect speech. Reformulate the user\'s words into a real email sentence addressed to "tu". "reply to Bob to ask if he works today" -> draft_text "Do you work today?" NOT "if he works today". "reply to Alice to tell her to come at 3pm" -> draft_text "Can you come at 3pm?". "ask John if Sylvain is coming" -> draft_text "Is Sylvain coming?". "ask Jean-eric if he goes downtown" -> draft_text "Vas-tu en ville ?". Always reformulate, even when the subject is a third person name. NEVER copy raw text from the utterance starting with "si", "de", "que" — ALWAYS reformulate into a proper sentence.',
             'Distinguish sender (from), subject, and body. "from" filters by sender name/address, "query" searches subject+body text. "Who sent me..." = from filter. "Mail about X" = query filter.',
             'Use the CONVERSATION_HISTORY section to understand the context of the current request. Pronouns like "it", "that one", "the most recent" may refer to a previous query.',
+            'Use the IDENTITY_RESOLUTION section as deterministic grounding when candidates or active entities are already known.',
+            'Use the PERSISTENT_MEMORY section only as preference/context hints, never as proof that an action succeeded.',
             'Each new utterance is independent: do NOT carry over order, limit, or filters from the previous query unless the user explicitly refers to them.',
             'Never invent tools.',
             'Never choose another provider or mention fallback.'
@@ -133,6 +169,7 @@ const buildPlannerPrompt = ({
             'Pour les contacts, prefere update a create quand l utilisateur ajoute ou modifie un champ sur une personne existante.',
             'Les params contacts peuvent inclure query_text, name, email, phone, organization et contact_id.',
             'Exemples: "quel est le numero de Sylvain ?" -> domain "contacts", action "search_contacts", query_text "Sylvain". "Ajoute jeezs@jeezs.net a Regis" -> domain "contacts", action "update", query_text "Regis", email "jeezs@jeezs.net".',
+            'Les contrats d outils listes plus bas sont canoniques: n invente jamais un parametre absent et n invente jamais un outil.',
             'Pour l agenda, choisis parmi list_events, search_events, read_event, create_event, update_event ou delete_event.',
             'Les params agenda peuvent inclure temporal_ref, time_hint, participant_hint, event_id et query_text.',
             'Pour les actions mail, choisis la vraie action mail: list, search, read_current, read_next, summarize, reply_current, send, archive_current, delete_current, mark_read_current ou mark_unread_current.',
@@ -145,6 +182,8 @@ const buildPlannerPrompt = ({
             'CRITIQUE: draft_text DOIT etre un vrai message direct, jamais du discours indirect. Reformule les mots de l utilisateur en une vraie phrase de mail. "reponds a Bob pour lui demander si il travaille aujourd hui" -> draft_text "Travailles-tu aujourd\'hui ?" PAS "si il travaille aujourd hui". "demande a Alice si Sylvain va en ville" -> draft_text "Est-ce que Sylvain va en ville ?". "dis a Pierre de rappeler demain" -> draft_text "Peux-tu rappeler demain ?". "demande a Jean-eric si il va en ville" -> draft_text "Vas-tu en ville ?". Reformule toujours, meme quand le sujet est un prenom tiers. NE COPIE JAMAIS le texte brut commencant par "si", "de", "que" — reformule TOUJOURS en vraie phrase.',
             'Distingue bien expediteur (from), sujet et corps du mail. "from" filtre par expediteur, "query" cherche dans le sujet+corps. "Qui m a envoye..." = filtre from. "Mail a propos de X" = filtre query.',
             'Utilise la section CONVERSATION_HISTORY pour comprendre le contexte de la demande actuelle. Les pronoms comme "le", "celui-la", "le plus recent" peuvent se referer a une requete precedente.',
+            "Utilise la section IDENTITY_RESOLUTION comme ancrage deterministe quand des candidats ou une entite active sont deja connus.",
+            "Utilise la section PERSISTENT_MEMORY seulement comme indice de preference ou d'habitude, jamais comme preuve d'un etat reel.",
             'Chaque nouvelle phrase est independante: ne reporte PAS order, limit ou filtres de la requete precedente sauf si l utilisateur y fait explicitement reference.',
             'Exemple runtime_v2: "peux tu me creer un cercle rouge sur le projet courant" -> {"domain":"creative","action":"draw_circle","target":"runtime_v2","actions":[{"target":"runtime_v2","tool_id":"ui.circle","action":"pointer.click","input":{"color":"red"}}]}.',
             'Exemple runtime_v2 follow-up: "mets le en violet" -> {"domain":"creative","action":"apply_color","target":"runtime_v2","actions":[{"target":"runtime_v2","tool_id":"ui.couleur.apply","action":"pointer.click","input":{"color":"violet"}}]}.',
@@ -153,6 +192,9 @@ const buildPlannerPrompt = ({
         ];
 
     const historySection = buildConversationHistorySection(context, english);
+    const summariesSection = buildConversationSummariesSection(context, english);
+    const persistentMemorySection = buildPersistentMemorySection(context, english);
+    const identityResolutionSection = buildIdentityResolutionSection(context, english);
 
     // Strip draft_text from heuristic so the LLM reformulates from the utterance
     // instead of echoing the raw extracted text
@@ -181,6 +223,12 @@ const buildPlannerPrompt = ({
         `LOCALE:\n${locale}`,
         '',
         historySection,
+        '',
+        summariesSection,
+        '',
+        persistentMemorySection,
+        '',
+        identityResolutionSection,
         '',
         `UTTERANCE:\n${String(utterance || '')}`,
         '',
@@ -296,6 +344,57 @@ const collectPlannerEntities = (parsed = {}, rawActions = []) => {
     return entities;
 };
 
+const SAFE_DEGRADED_DOMAIN_ACTIONS = Object.freeze({
+    contacts: new Set(['list', 'search', 'read', 'read_contact', 'search_contacts', 'list_contacts']),
+    calendar: new Set(['list', 'search', 'read', 'list_events', 'search_events', 'read_event']),
+    mail: new Set(['list', 'search', 'read', 'read_current', 'read_next', 'summarize', 'mark_read_current', 'mark_unread_current'])
+});
+
+export const isSafeDegradedIntent = (intent = {}) => {
+    const normalized = normalizeVoiceIntent(intent);
+    const domain = toText(normalized?.domain);
+    const action = toText(normalized?.action);
+    const toolchain = Array.isArray(normalized?.execution?.toolchain) ? normalized.execution.toolchain : [];
+    const target = toText(normalized?.execution?.target);
+    const safeActions = SAFE_DEGRADED_DOMAIN_ACTIONS[domain];
+    if (!safeActions || !safeActions.has(action)) return false;
+    if (normalized?.execution?.confirmation_required === true) return false;
+    if (target === 'pending_connector') return true;
+    if (toolchain.length > 1) return false;
+    return true;
+};
+
+const buildDegradedIntent = ({
+    utterance = '',
+    locale = DEFAULT_LOCALE,
+    options = {},
+    code = 'provider_unavailable'
+} = {}) => {
+    const heuristicIntent = normalizeVoiceIntent(options?.heuristic_intent);
+    const fallbackIntent = normalizeVoiceIntent(options?.fallback_intent);
+    const degradedIntent = isSafeDegradedIntent(heuristicIntent)
+        ? heuristicIntent
+        : (isSafeDegradedIntent(fallbackIntent) ? fallbackIntent : null);
+    if (!degradedIntent) return null;
+    return normalizeVoiceIntent({
+        ...cloneValue(degradedIntent),
+        intent_id: options.intent_id,
+        utterance: { raw: utterance },
+        locale,
+        source: options.source,
+        context: {
+            ...(options.context && typeof options.context === 'object' ? cloneValue(options.context) : {}),
+            ai_error: code,
+            ai_provider: null,
+            ai_model: 'degraded_local_policy',
+            ai_model_tier: 'degraded'
+        },
+        assistant_reply: '',
+        status: 'ready',
+        confidence: Math.max(Number(degradedIntent?.confidence || 0.6), 0.6)
+    });
+};
+
 export const createVoiceAiPlanner = ({
     env = globalThis,
     loadProfile,
@@ -309,6 +408,15 @@ export const createVoiceAiPlanner = ({
 
         if (providerConfig?.ok !== true) {
             const code = toText(providerConfig?.error) || 'no_ai_key_configured';
+            const degradedIntent = buildDegradedIntent({
+                utterance,
+                locale,
+                options,
+                code
+            });
+            if (degradedIntent) {
+                return degradedIntent;
+            }
             return normalizeVoiceIntent({
                 intent_id: options.intent_id,
                 utterance: { raw: utterance },
@@ -399,6 +507,15 @@ export const createVoiceAiPlanner = ({
             });
         } catch (error) {
             const normalized = normalizeAiProviderError(error);
+            const degradedIntent = buildDegradedIntent({
+                utterance,
+                locale,
+                options,
+                code: normalized.code
+            });
+            if (degradedIntent) {
+                return degradedIntent;
+            }
             return normalizeVoiceIntent({
                 intent_id: options.intent_id,
                 utterance: { raw: utterance },

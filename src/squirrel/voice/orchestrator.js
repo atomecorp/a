@@ -4,9 +4,13 @@ import {
     requestProviderCompletion,
     resolveFirstAiProviderConfig
 } from '../ai/provider_client.js';
+import { isSafeDegradedIntent } from './ai_planner.js';
 import { intentToStructuredRequest } from './semantic_contract.js';
 import { createToolRouter } from './tool_router.js';
 import { buildContactQueryReply } from './contact_reply.js';
+import { resolveIdentityContext } from './identity_resolver.js';
+import { createPersistentMemoryStore } from '../ai/persistent_memory.js';
+import { createAiTraceStore } from '../ai/trace_store.js';
 
 export const VOICE_ORCHESTRATOR_EVENT_NAME = 'squirrel:voice:orchestrator';
 
@@ -47,6 +51,28 @@ const resolveHostEnv = (env = null) => {
         return env;
     }
     return defaultEnv();
+};
+
+const hasExplicitBusinessConnectorHost = (env = null) => {
+    const hostEnv = resolveHostEnv(env);
+    return !!(
+        hostEnv?.Squirrel?.mail
+        || hostEnv?.Squirrel?.contacts
+        || hostEnv?.Squirrel?.calendar
+        || hostEnv?.Squirrel?.messages
+        || hostEnv?.atome?.mail
+        || hostEnv?.atome?.contacts
+        || hostEnv?.atome?.calendar
+        || hostEnv?.atome?.messages
+        || env?.Squirrel?.mail
+        || env?.Squirrel?.contacts
+        || env?.Squirrel?.calendar
+        || env?.Squirrel?.messages
+        || env?.atome?.mail
+        || env?.atome?.contacts
+        || env?.atome?.calendar
+        || env?.atome?.messages
+    );
 };
 
 const cloneValue = (value) => {
@@ -1534,6 +1560,8 @@ class VoiceOrchestrator {
         classifyIntent = classifyVoiceIntent,
         sessionRuntime = null,
         toolRouter = null,
+        persistentMemory = null,
+        traceStore = null,
         now = () => Date.now(),
         eventName = VOICE_ORCHESTRATOR_EVENT_NAME
     } = {}) {
@@ -1546,6 +1574,12 @@ class VoiceOrchestrator {
         this.classifyIntent = typeof classifyIntent === 'function' ? classifyIntent : classifyVoiceIntent;
         this.sessionRuntime = sessionRuntime && typeof sessionRuntime.getSession === 'function' ? sessionRuntime : null;
         this.toolRouter = toolRouter && typeof toolRouter.execute === 'function' ? toolRouter : null;
+        this.persistentMemory = persistentMemory && typeof persistentMemory.getSummary === 'function'
+            ? persistentMemory
+            : createPersistentMemoryStore({ env });
+        this.traceStore = traceStore && typeof traceStore.startTrace === 'function'
+            ? traceStore
+            : createAiTraceStore({ env });
         this.now = typeof now === 'function' ? now : (() => Date.now());
         this.eventName = String(eventName || VOICE_ORCHESTRATOR_EVENT_NAME);
         this.runtimeCatalog = null;
@@ -1625,6 +1659,20 @@ class VoiceOrchestrator {
             refresh: options.refresh_catalog === true
         });
         const planningContext = this.#buildPlanningContext(options.session_id, options.context);
+        if (this.persistentMemory && typeof this.persistentMemory.getSummary === 'function') {
+            planningContext.persistent_memory_summary = this.persistentMemory.getSummary();
+        }
+        planningContext.identity_resolution = await resolveIdentityContext({
+            utterance,
+            workingMemory: this.sessionRuntime?.workingMemory || null,
+            connectors: {
+                contacts: readExistingContactsApi(this.env),
+                calendar: readExistingCalendarApi(this.env),
+                mail: readExistingMailApi(this.env)
+            },
+            ui_context: planningContext.ui_context || {},
+            preferred_domains: ['contacts', 'calendar', 'mail', 'atome']
+        });
         const aiFirst = options.use_ai !== false && !!this.aiPlanner;
         const heuristicIntent = this.classifyIntent(utterance, {
             intent_id: options.intent_id,
@@ -1899,8 +1947,74 @@ class VoiceOrchestrator {
     }
 
     async executeUtterance(utterance, options = {}) {
+        const startedAt = this.now();
+        const trace = this.traceStore?.startTrace?.({
+            trace_id: options.trace_id,
+            input: {
+                utterance,
+                modality: 'voice',
+                locale: options.locale || null
+            }
+        }) || null;
         const intent = await this.planUtterance(utterance, options);
-        return this.executeIntent(intent, options);
+        const response = await this.executeIntent(intent, options);
+        if (trace?.trace_id && this.traceStore?.finishTrace) {
+            this.traceStore.finishTrace(trace.trace_id, {
+                identity_resolution: intent?.context?.identity_resolution
+                    || options?.context?.identity_resolution
+                    || null,
+                llm_call: {
+                    provider: intent?.context?.ai_provider || null,
+                    model: intent?.context?.ai_model || null,
+                    target: intent?.execution?.target || null
+                },
+                autonomy_decision: {
+                    confirmation_required: intent?.execution?.confirmation_required === true,
+                    risk_tier: response?.result?.aggregate_risk || null
+                },
+                response: {
+                    ok: response?.ok === true,
+                    transport: response?.transport || null,
+                    reply_text: response?.reply_text || response?.spoken_reply || null
+                },
+                total_latency_ms: Math.max(0, this.now() - startedAt)
+            });
+        }
+        if (response?.ok === true && response?.executed === true && this.persistentMemory) {
+            try {
+                this.persistentMemory.recordWorkflowPattern({
+                    domain: response?.intent?.domain || null,
+                    action: response?.intent?.action || null
+                });
+                if (response?.intent?.domain === 'contacts') {
+                    this.persistentMemory.recordContactAffinity({
+                        contact_id: response?.intent?.entities?.current_contact_id || response?.intent?.entities?.contact_id || null,
+                        label: response?.intent?.entities?.query_text || null,
+                        channel: 'contacts'
+                    });
+                }
+            } catch (_) {
+                // Persistent memory updates stay off the critical path.
+            }
+        }
+        return response;
+    }
+
+    listTraces(options = {}) {
+        if (!this.traceStore || typeof this.traceStore.list !== 'function') return [];
+        return this.traceStore.list(options);
+    }
+
+    listPendingMutations(options = {}) {
+        if (!this.toolRouter || typeof this.toolRouter.listPendingMutations !== 'function') return [];
+        return this.toolRouter.listPendingMutations(options);
+    }
+
+    async flushPendingMutations(options = {}) {
+        if (!this.toolRouter || typeof this.toolRouter.flushPendingMutations !== 'function') {
+            return { processed: 0, failed: 0, remaining: 0 };
+        }
+        return this.toolRouter.flushPendingMutations(options);
     }
 
     #buildPlanningContext(sessionId, providedContext = {}) {
@@ -1909,6 +2023,25 @@ class VoiceOrchestrator {
             : {};
         const key = String(sessionId || '').trim();
         if (!key || !this.sessionRuntime) return context;
+        const workingMemory = this.sessionRuntime?.workingMemory || null;
+        if (workingMemory && typeof workingMemory.getConversationContext === 'function' && !context.conversation_history) {
+            try {
+                const memoryContext = workingMemory.getConversationContext({ turnLimit: 6, summaryLimit: 3 });
+                if (Array.isArray(memoryContext?.turns) && memoryContext.turns.length) {
+                    context.conversation_history = memoryContext.turns.map((turn) => ({
+                        user: turn.user || '',
+                        assistant: turn.assistant || null,
+                        domain: turn.domain || null,
+                        action: turn.action || null
+                    }));
+                }
+                if (Array.isArray(memoryContext?.summaries) && memoryContext.summaries.length) {
+                    context.conversation_summaries = cloneValue(memoryContext.summaries);
+                }
+            } catch (_) {
+                // Ignore memory context extraction failures.
+            }
+        }
         try {
             const activeIntent = this.sessionRuntime.getActiveIntent(key);
             if (activeIntent && !context.active_intent) {
@@ -1974,6 +2107,7 @@ class VoiceOrchestrator {
             context: options.context,
             runtime_tools: options.runtime_tools,
             heuristic_intent: heuristicIntent,
+            fallback_intent: fallbackIntent,
             ...(options.signal ? { signal: options.signal } : {})
         }));
 
@@ -2004,14 +2138,11 @@ class VoiceOrchestrator {
             return plannedIntent;
         }
 
-        if (businessConnectorFallback && plannedIntent?.status === 'failed') {
-            return fallbackIntent;
-        }
-
         if (
             businessConnectorFallback
-            && !plannedBusinessDomain
-            && (plannedIntent?.status !== 'ready' || plannedTarget === 'none')
+            && plannedIntent?.status === 'failed'
+            && plannedIntent?.context?.ai_error
+            && isSafeDegradedIntent(fallbackIntent)
         ) {
             return fallbackIntent;
         }
@@ -2095,6 +2226,62 @@ class VoiceOrchestrator {
         const source = normalizeInvocationSource(intent, options);
         const results = [];
 
+        if (typeof agent.executeToolchain === 'function') {
+            const toolchainResult = await agent.executeToolchain({
+                steps: toolchain.map((step) => ({
+                    tool_name: step.tool_name,
+                    params: step.params || {}
+                })),
+                actor,
+                signals,
+                trace_id: options.trace_id,
+                intent_id: options.intent_id || intent.intent_id,
+                idempotency_key: options.idempotency_key,
+                source,
+                confirmed: options.confirmed === true
+            });
+
+            if (toolchainResult?.status === 'CONFIRMATION_REQUIRED') {
+                return {
+                    ok: true,
+                    executed: false,
+                    transport: 'atome_ai',
+                    intent,
+                    confirmation_required: true,
+                    reason: 'confirmation_required',
+                    confirmation_prompt: toolchainResult.human_summary || intent.assistant_reply || null,
+                    result: toolchainResult
+                };
+            }
+
+            if (toolchainResult?.status !== 'OK') {
+                return {
+                    ok: false,
+                    executed: toolchainResult?.completed_steps > 0,
+                    transport: 'atome_ai',
+                    intent,
+                    result: toolchainResult?.result || toolchainResult,
+                    error: toolchainResult?.error || toolchainResult?.status || 'voice_toolchain_failed',
+                    ...(intent.assistant_reply ? { reply_text: intent.assistant_reply, spoken_reply: intent.assistant_reply } : {})
+                };
+            }
+
+            const fallbackReply = buildStructuredReplyFromPayload(toolchainResult?.result || toolchainResult, intent, options);
+            return {
+                ok: true,
+                executed: true,
+                transport: 'atome_ai',
+                intent,
+                result: toolchainResult?.result || toolchainResult,
+                ...((intent.assistant_reply || fallbackReply)
+                    ? {
+                        reply_text: intent.assistant_reply || fallbackReply,
+                        spoken_reply: intent.assistant_reply || fallbackReply
+                    }
+                    : {})
+            };
+        }
+
         for (const step of toolchain) {
             const result = await agent.callTool({
                 tool_name: step.tool_name,
@@ -2148,6 +2335,7 @@ class VoiceOrchestrator {
             !this.toolRouter
             && intent?.execution?.target === 'pending_connector'
             && BUSINESS_CONNECTOR_DOMAINS.has(String(intent?.domain || '').trim())
+            && hasExplicitBusinessConnectorHost(this.env)
         ) {
             try {
                 await this.initToolRouter();
