@@ -85,12 +85,32 @@ const withMergedSignal = ({ signal = null, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 };
 
 const readResponseError = async (response) => {
+    let rawText = '';
     try {
-        const text = await response.text();
-        return toText(text) || `HTTP_${response.status}`;
+        rawText = await response.text();
     } catch (_) {
-        return `HTTP_${response.status}`;
+        rawText = '';
     }
+
+    const trimmed = toText(rawText);
+    let providerMessage = trimmed;
+    let providerCode = '';
+
+    if (trimmed) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            const error = parsed?.error && typeof parsed.error === 'object' ? parsed.error : null;
+            providerMessage = toText(error?.message || parsed?.message || trimmed);
+            providerCode = toText(error?.code || error?.type || parsed?.code || parsed?.type || '');
+        } catch (_) {
+            // Keep raw text when the provider did not return JSON.
+        }
+    }
+
+    const segments = [`HTTP_${response.status}`];
+    if (providerCode) segments.push(providerCode);
+    if (providerMessage) segments.push(providerMessage);
+    return segments.join(' ');
 };
 
 const requestOpenAiStyle = async ({
@@ -295,6 +315,34 @@ export const normalizeAiProviderError = (error) => {
             code: 'provider_auth_failed',
             message: raw,
             user_message: "L'IA ne repond pas."
+        };
+    }
+
+    if (
+        lower.includes('insufficient_quota')
+        || lower.includes('quota')
+        || lower.includes('billing')
+        || lower.includes('credits')
+        || lower.includes('credit balance')
+        || lower.includes('hard_limit')
+    ) {
+        return {
+            code: 'provider_quota_exceeded',
+            message: raw,
+            user_message: "L'IA a atteint sa limite de quota ou de credits."
+        };
+    }
+
+    if (
+        lower.includes('429')
+        || lower.includes('too many requests')
+        || lower.includes('rate limit')
+        || lower.includes('rate_limit')
+    ) {
+        return {
+            code: 'provider_rate_limited',
+            message: raw,
+            user_message: "L'IA est temporairement limitee."
         };
     }
 

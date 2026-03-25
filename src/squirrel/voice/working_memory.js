@@ -249,6 +249,13 @@ export const createWorkingMemory = ({
         },
 
         /**
+         * Returns the result set items for a domain.
+         */
+        getResultSetItems(domain) {
+            return cloneValue(getDomainSet(domain).result_set_items);
+        },
+
+        /**
          * Returns the active filters for a domain.
          */
         getFilters(domain) {

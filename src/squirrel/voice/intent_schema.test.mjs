@@ -97,7 +97,7 @@ const mailIntent = classifyVoiceIntent('Lis mes mails', {
     runtime_tools: runtimeTools
 });
 assert.equal(mailIntent.domain, 'mail');
-assert.equal(mailIntent.action, 'read');
+assert.equal(mailIntent.action, 'list');
 assert.equal(mailIntent.execution.target, 'pending_connector');
 
 const mailSummaryIntent = classifyVoiceIntent('Fais moi un résumé de mes nouveaux mails', {
@@ -150,6 +150,51 @@ const contextualContactPhoneIntent = classifyVoiceIntent('Son numero ?', {
 assert.equal(contextualContactPhoneIntent.domain, 'contacts');
 assert.equal(contextualContactPhoneIntent.action, 'read_contact');
 assert.equal(contextualContactPhoneIntent.entities.current_contact_id, 'contact_ctx_1');
+
+const directContactEmailUpdateIntent = classifyVoiceIntent('Ajoute le mail suivant a Regis : jeezs@jeezs.net', {
+    runtime_tools: runtimeTools
+});
+assert.equal(directContactEmailUpdateIntent.domain, 'contacts');
+assert.equal(directContactEmailUpdateIntent.action, 'update');
+assert.equal(directContactEmailUpdateIntent.execution.target, 'pending_connector');
+assert.equal(directContactEmailUpdateIntent.entities.query_text, 'Regis');
+assert.equal(directContactEmailUpdateIntent.entities.email, 'jeezs@jeezs.net');
+
+const explicitMailboxReadAfterContactsIntent = classifyVoiceIntent('Lis moi le mail le plus ancien', {
+    runtime_tools: runtimeTools,
+    context: {
+        active_intent: {
+            domain: 'contacts',
+            entities: {
+                current_contact_id: 'contact_ctx_regis'
+            }
+        }
+    }
+});
+assert.equal(explicitMailboxReadAfterContactsIntent.domain, 'mail');
+assert.equal(explicitMailboxReadAfterContactsIntent.action, 'read');
+
+const explicitMailboxSendAfterContactsIntent = classifyVoiceIntent('Envoie un email a regis pour lui demander si il est ok pour aller en ville la semaine prochaine', {
+    runtime_tools: runtimeTools,
+    context: {
+        active_intent: {
+            domain: 'contacts',
+            entities: {
+                current_contact_id: 'contact_ctx_regis'
+            }
+        }
+    }
+});
+assert.equal(explicitMailboxSendAfterContactsIntent.domain, 'mail');
+assert.equal(explicitMailboxSendAfterContactsIntent.action, 'send');
+
+const directContactPhoneUpdateIntent = classifyVoiceIntent('Change le numero de Regis en 06 11 22 33 44', {
+    runtime_tools: runtimeTools
+});
+assert.equal(directContactPhoneUpdateIntent.domain, 'contacts');
+assert.equal(directContactPhoneUpdateIntent.action, 'update');
+assert.equal(directContactPhoneUpdateIntent.entities.query_text, 'Regis');
+assert.match(String(directContactPhoneUpdateIntent.entities.phone || ''), /06 11 22 33 44/);
 
 const courrierIntent = classifyVoiceIntent("As-tu de nouveaux courriers ?", {
     runtime_tools: runtimeTools

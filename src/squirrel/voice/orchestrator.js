@@ -127,7 +127,23 @@ const resolveMailApi = async (env) => {
     return null;
 };
 
+const readExistingMailApi = (env) => {
+    const hostEnv = resolveHostEnv(env);
+    return hostEnv?.Squirrel?.mail || hostEnv?.atome?.mail || hostEnv?.AtomeMail || env?.Squirrel?.mail || env?.atome?.mail || env?.AtomeMail || null;
+};
+
 const resolveMessagesApi = async (env) => {
+    const hostEnv = resolveHostEnv(env);
+    return hostEnv?.Squirrel?.messages
+        || hostEnv?.atome?.messages
+        || hostEnv?.AtomeMessages
+        || env?.Squirrel?.messages
+        || env?.atome?.messages
+        || env?.AtomeMessages
+        || null;
+};
+
+const readExistingMessagesApi = (env) => {
     const hostEnv = resolveHostEnv(env);
     return hostEnv?.Squirrel?.messages
         || hostEnv?.atome?.messages
@@ -149,6 +165,11 @@ const resolveContactsApi = async (env) => {
     return null;
 };
 
+const readExistingContactsApi = (env) => {
+    const hostEnv = resolveHostEnv(env);
+    return hostEnv?.Squirrel?.contacts || hostEnv?.atome?.contacts || hostEnv?.AtomeContacts || env?.Squirrel?.contacts || env?.atome?.contacts || env?.AtomeContacts || null;
+};
+
 const resolveCalendarApi = async (env) => {
     const hostEnv = resolveHostEnv(env);
     const existing = hostEnv?.Squirrel?.calendar || hostEnv?.atome?.calendar || hostEnv?.AtomeCalendar || env?.Squirrel?.calendar || env?.atome?.calendar || env?.AtomeCalendar || null;
@@ -158,6 +179,11 @@ const resolveCalendarApi = async (env) => {
         return mod.createGlobalCalendarApi({ env: hostEnv });
     }
     return null;
+};
+
+const readExistingCalendarApi = (env) => {
+    const hostEnv = resolveHostEnv(env);
+    return hostEnv?.Squirrel?.calendar || hostEnv?.atome?.calendar || hostEnv?.AtomeCalendar || env?.Squirrel?.calendar || env?.atome?.calendar || env?.AtomeCalendar || null;
 };
 
 const dispatchWindowEvent = (env, name, detail) => {
@@ -1553,6 +1579,24 @@ class VoiceOrchestrator {
         return this.toolRouter;
     }
 
+    ensureExistingToolRouter({ workingMemory = null } = {}) {
+        if (this.toolRouter) return this.toolRouter;
+        const connectors = {
+            mail: readExistingMailApi(this.env),
+            messages: readExistingMessagesApi(this.env),
+            contacts: readExistingContactsApi(this.env),
+            calendar: readExistingCalendarApi(this.env)
+        };
+        if (!Object.values(connectors).some(Boolean)) return null;
+        this.toolRouter = createToolRouter({
+            connectors,
+            workingMemory: workingMemory
+                || (this.sessionRuntime?.workingMemory ?? null),
+            bridge: this.bridge
+        });
+        return this.toolRouter;
+    }
+
     listJournal({ limit = 50 } = {}) {
         const size = Number.isFinite(Number(limit)) ? Math.max(1, Math.round(Number(limit))) : 50;
         return cloneValue(this.journal.slice(-size));
@@ -1937,9 +1981,9 @@ class VoiceOrchestrator {
         const plannedToolchain = ensureToolchain(plannedIntent);
         const plannedReply = String(plannedIntent?.assistant_reply || '').trim();
         const plannedBusinessDomain = BUSINESS_CONNECTOR_DOMAINS.has(String(plannedIntent?.domain || '').trim());
-        const plannerProducedToolIntent = plannedIntent?.status === 'ready'
+        const plannerProducedExecutableIntent = plannedIntent?.status === 'ready'
             && plannedTarget !== 'none'
-            && plannedToolchain.length > 0;
+            && (plannedToolchain.length > 0 || plannedTarget === 'pending_connector');
         const plannerProducedFreeReply = plannedIntent?.status === 'ready'
             && plannedTarget === 'none'
             && plannedReply.length > 0;
@@ -1953,14 +1997,22 @@ class VoiceOrchestrator {
             return buildMaterializedMailIntent(plannedIntent, utterance, options.context || {}, fallbackIntent);
         }
 
-        if (plannedBusinessDomain && plannerProducedToolIntent) {
+        // For business connectors, the LLM/contract path is authoritative when the
+        // planner returned a structured ready intent. Fall back to heuristics only
+        // when the planner failed to produce a usable intent at all.
+        if (plannedBusinessDomain && plannedIntent?.status === 'ready') {
             return plannedIntent;
         }
 
-        // For business connectors, keep the LLM as the interpreter when it produced
-        // an executable plan. Only fall back when the planner returned no concrete
-        // business action that can be executed deterministically.
-        if (businessConnectorFallback) {
+        if (businessConnectorFallback && plannedIntent?.status === 'failed') {
+            return fallbackIntent;
+        }
+
+        if (
+            businessConnectorFallback
+            && !plannedBusinessDomain
+            && (plannedIntent?.status !== 'ready' || plannedTarget === 'none')
+        ) {
             return fallbackIntent;
         }
 
@@ -1968,13 +2020,13 @@ class VoiceOrchestrator {
             return fallbackIntent;
         }
 
-        if (plannerProducedToolIntent) {
+        if (plannerProducedExecutableIntent) {
             return plannedIntent;
         }
 
         // If the planner only produced a conversational placeholder while a concrete
         // local/business route exists, prefer the executable fallback.
-        if (fallbackExecutable) {
+        if (fallbackExecutable && !BUSINESS_CONNECTOR_DOMAINS.has(String(fallbackIntent?.domain || '').trim())) {
             return fallbackIntent;
         }
 
@@ -2089,6 +2141,20 @@ class VoiceOrchestrator {
     }
 
     async #executePendingConnector(intent, toolchain, options = {}) {
+        if (!this.toolRouter && BUSINESS_CONNECTOR_DOMAINS.has(String(intent?.domain || '').trim())) {
+            this.ensureExistingToolRouter();
+        }
+        if (
+            !this.toolRouter
+            && intent?.execution?.target === 'pending_connector'
+            && BUSINESS_CONNECTOR_DOMAINS.has(String(intent?.domain || '').trim())
+        ) {
+            try {
+                await this.initToolRouter();
+            } catch (_) {
+                // Fall back to legacy connector paths when router bootstrap fails.
+            }
+        }
         // --- Unified tool router fast path ---
         if (this.toolRouter) {
             try {
@@ -2112,6 +2178,11 @@ class VoiceOrchestrator {
                     });
                     if (result && result.ok !== undefined) {
                         let replyText = result.reply_text || '';
+                        const structuredResultPayload = {
+                            ...(result.items ? { items: result.items, stats: result.stats } : {}),
+                            ...(result.item ? { item: result.item } : {}),
+                            ...(result.draft ? { draft: result.draft } : {})
+                        };
 
                         // For summarize operations, use AI summarizer for intelligent responses
                         if (
@@ -2148,8 +2219,7 @@ class VoiceOrchestrator {
                             transport: `${result.domain || intent?.domain}_api`,
                             intent,
                             ...(result.error ? { error: result.error } : {}),
-                            ...(result.items ? { result: { items: result.items, stats: result.stats } } : {}),
-                            ...(result.item ? { result: { item: result.item } } : {}),
+                            ...(Object.keys(structuredResultPayload).length ? { result: structuredResultPayload } : {}),
                             ...(replyText ? { reply_text: replyText, spoken_reply: replyText } : {})
                         };
                     }

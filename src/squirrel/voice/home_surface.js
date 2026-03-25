@@ -180,6 +180,14 @@ const localizeExecutionError = (code = '', locale = 'fr-FR') => {
     switch (toText(code)) {
     case 'no_ai_key_configured':
         return english ? 'No AI key is configured.' : "Aucune cle IA n'est configuree.";
+    case 'provider_quota_exceeded':
+        return english
+            ? 'The AI quota or credit balance is exhausted. Check billing or buy more credits.'
+            : "Le quota ou les credits de l'IA sont epuises. Verifie la facturation ou recharge les credits.";
+    case 'provider_rate_limited':
+        return english
+            ? 'The AI is temporarily rate-limited. Try again in a moment.'
+            : "L'IA est temporairement limitee. Reessaie dans un instant.";
     case 'provider_timeout':
     case 'provider_auth_failed':
     case 'provider_unreachable':

@@ -35,8 +35,6 @@ const cloneValue = (value) => {
     return JSON.parse(JSON.stringify(value));
 };
 
-const defaultNow = () => Date.now();
-
 const defaultIdFactory = (prefix = 'voice') => {
     if (globalThis?.crypto?.randomUUID) {
         return `${prefix}_${globalThis.crypto.randomUUID()}`;
@@ -65,12 +63,12 @@ const detectLocalCommand = (utterance) => {
         {
             command: VOICE_LOCAL_COMMANDS.NEXT,
             aliases: ['suivant', 'au suivant', 'passe au suivant', 'passe suivant', 'next'],
-            mode: 'includes'
+            mode: 'exact'
         },
         {
             command: VOICE_LOCAL_COMMANDS.PREVIOUS,
             aliases: ['precedent', 'precedente', 'au precedent', 'passe au precedent', 'retour', 'reviens'],
-            mode: 'includes'
+            mode: 'exact'
         },
         {
             command: VOICE_LOCAL_COMMANDS.CANCEL,
@@ -90,11 +88,11 @@ const detectLocalCommand = (utterance) => {
     ];
 
     for (const matcher of matchers) {
-        const alias = matcher.aliases.find((entry) => (
-            matcher.mode === 'exact'
-                ? normalized === entry
-                : (normalized === entry || new RegExp(`\\b${entry}\\b`).test(normalized))
-        ));
+        const alias = matcher.aliases.find((entry) => {
+            if (!normalized || !entry) return false;
+            if (matcher.mode === 'exact') return normalized === entry;
+            return ` ${normalized} `.includes(` ${entry} `);
+        });
         if (alias) {
             return {
                 command: matcher.command,
@@ -244,14 +242,14 @@ const markTask = (task, nextState, now, extras = {}) => {
 
 class VoiceSessionRuntime {
     constructor({
-        now = defaultNow,
+        now = Date.now,
         idFactory = defaultIdFactory,
         uiEventName = DEFAULT_UI_EVENT_NAME,
         mcpEventName = DEFAULT_MCP_EVENT_NAME,
         uiSink = null,
         mcpSink = null
     } = {}) {
-        this.now = typeof now === 'function' ? now : defaultNow;
+        this.now = typeof now === 'function' ? now : Date.now;
         this.idFactory = typeof idFactory === 'function' ? idFactory : defaultIdFactory;
         this.uiEventName = uiEventName;
         this.mcpEventName = mcpEventName;

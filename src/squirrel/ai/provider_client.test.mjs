@@ -53,6 +53,12 @@ assert.equal(requests.length, 1, 'provider client should attempt a single provid
 const normalized = normalizeAiProviderError(new Error('Unauthorized'));
 assert.equal(normalized.code, 'provider_auth_failed', 'auth failures should be normalized for the voice layer');
 
+const rateLimited = normalizeAiProviderError(new Error('HTTP_429 rate_limit_exceeded Too many requests'));
+assert.equal(rateLimited.code, 'provider_rate_limited', '429 provider errors should be normalized as rate limits');
+
+const quotaExceeded = normalizeAiProviderError(new Error('HTTP_429 insufficient_quota billing hard_limit reached'));
+assert.equal(quotaExceeded.code, 'provider_quota_exceeded', 'quota failures should be normalized separately from transient rate limits');
+
 const parsed = extractJsonResponse('```json\n{"reply":"ok","actions":[]}\n```');
 assert.deepEqual(parsed, { reply: 'ok', actions: [] }, 'provider client should parse fenced JSON replies');
 

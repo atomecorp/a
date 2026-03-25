@@ -257,6 +257,85 @@ const fallbackMail = await fallbackOrchestrator.executeUtterance('Lis mes mails'
 });
 assert.equal(fallbackMail.transport, 'mail_api', 'voice orchestrator should fall back to deterministic business routing when the ai planner returns no executable plan');
 
+const contactsContextMailEnv = {};
+const contactsContextMailApi = createGlobalMailApi({ env: contactsContextMailEnv });
+contactsContextMailApi.ingest([
+    {
+        message_id: 'voice_ai_mail_contacts_ctx_oldest',
+        mailbox: 'inbox',
+        thread_id: 'voice_ai_mail_contacts_ctx_thread',
+        subject: 'Alpha ancien',
+        preview: 'Contenu ancien robot alpha',
+        body_text: 'Contenu ancien robot alpha',
+        from: { name: 'Regis', address: 'jeezs@jeezs.net' },
+        unread: false,
+        received_at: '2026-03-18T08:00:00.000Z'
+    },
+    {
+        message_id: 'voice_ai_mail_contacts_ctx_newest',
+        mailbox: 'inbox',
+        thread_id: 'voice_ai_mail_contacts_ctx_thread',
+        subject: 'Beta recent',
+        preview: 'Contenu recent robot beta',
+        body_text: 'Contenu recent robot beta',
+        from: { name: 'Regis', address: 'jeezs@jeezs.net' },
+        unread: true,
+        received_at: '2026-03-22T08:00:00.000Z'
+    }
+]);
+const contactsContextRuntime = createVoiceSessionRuntime();
+const contactsContextSession = contactsContextRuntime.createSession({
+    session_id: 'voice_ai_session_contacts_context_mail'
+});
+contactsContextRuntime.bindIntentContext(contactsContextSession.session_id, {
+    intent_id: 'voice_contacts_context_active',
+    type: 'connector_tool',
+    domain: 'contacts',
+    action: 'search_contacts',
+    status: 'pending_connector',
+    utterance: { raw: "Donne moi l'adresse mail de Regis" },
+    entities: {
+        current_contact_id: 'contact_regis_primary',
+        query_text: 'Regis'
+    },
+    execution: {
+        target: 'pending_connector',
+        confirmation_required: false,
+        toolchain: []
+    }
+}, {
+    phase: 'executed'
+});
+const contactsContextFailedPlanner = createVoiceOrchestrator({
+    env: contactsContextMailEnv,
+    sessionRuntime: contactsContextRuntime,
+    aiPlanner: {
+        async planUtterance(utterance, options = {}) {
+            return {
+                intent_id: options.intent_id || 'voice_ai_intent_contacts_ctx_failed',
+                utterance: { raw: utterance },
+                locale: options.locale || 'fr-FR',
+                type: 'ambiguous',
+                domain: 'unknown',
+                action: 'unknown',
+                status: 'failed',
+                assistant_reply: "L'IA est temporairement limitee.",
+                context: { ai_error: 'provider_rate_limited' },
+                execution: {
+                    target: 'none',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            };
+        }
+    }
+});
+const explicitMailAfterContactsFailure = await contactsContextFailedPlanner.executeUtterance('Lis moi le mail le plus ancien', {
+    session_id: contactsContextSession.session_id
+});
+assert.equal(explicitMailAfterContactsFailure.transport, 'mail_api', 'explicit mail reads should stay on the mail connector even after a contacts turn when the planner is rate-limited');
+assert.match(explicitMailAfterContactsFailure.reply_text || '', /Alpha ancien|Contenu ancien robot alpha/i, 'explicit oldest-mail reads should resolve against mailbox content instead of the active contacts result set');
+
 const plannerMailReplyShouldUseConnector = createVoiceOrchestrator({
     env,
     sessionRuntime: createVoiceSessionRuntime(),
@@ -392,6 +471,78 @@ const fuzzyMailResult = await fuzzyMailOrchestrator.executeUtterance('j ai de no
 });
 assert.equal(fuzzyMailResult.transport, 'mail_api', 'mail toolchains planned through AtomeAI should still execute through the deterministic mail connector');
 assert.match(fuzzyMailResult.reply_text || '', /mail\(s\) non lu\(s\)|mail non lu|mails non lus/i, 'fuzzy mail requests should produce a real unread mail answer');
+
+const structuredContactsEnv = {
+    Squirrel: {
+        contacts: {
+            async syncPull() {
+                return {
+                    ok: true,
+                    items: [{
+                        source_contact_id: 'contact_structured_1',
+                        name: 'Sylvain Godard',
+                        phone: '08766567',
+                        email: 'sylvain@example.test'
+                    }]
+                };
+            },
+            async search(query) {
+                return {
+                    ok: true,
+                    query,
+                    items: [{
+                        source_contact_id: 'contact_structured_1',
+                        name: 'Sylvain Godard',
+                        phone: '08766567',
+                        email: 'sylvain@example.test'
+                    }]
+                };
+            },
+            async read(contactId) {
+                return {
+                    ok: true,
+                    contact: {
+                        source_contact_id: contactId || 'contact_structured_1',
+                        name: 'Sylvain Godard',
+                        phone: '08766567',
+                        email: 'sylvain@example.test'
+                    }
+                };
+            }
+        }
+    }
+};
+const structuredContactsOrchestrator = createVoiceOrchestrator({
+    env: structuredContactsEnv,
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: {
+        async planUtterance(utterance, options = {}) {
+            return {
+                intent_id: options.intent_id || 'voice_ai_intent_structured_contact',
+                utterance: { raw: utterance },
+                locale: options.locale || 'fr-FR',
+                type: 'connector_tool',
+                domain: 'contacts',
+                action: 'read_contact',
+                status: 'ready',
+                assistant_reply: '',
+                entities: {
+                    query_text: 'Sylvain'
+                },
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            };
+        }
+    }
+});
+const structuredContactsResult = await structuredContactsOrchestrator.executeUtterance('Quel est le numero de Sylvain ?', {
+    session_id: 'voice_ai_session_structured_contacts'
+});
+assert.equal(structuredContactsResult.transport, 'contacts_api', 'structured contact intents without legacy toolchains should execute through the contacts API');
+assert.match(structuredContactsResult.reply_text || '', /08766567|Sylvain Godard/i, 'structured contact intents should return contact data instead of falling back to a free reply');
 
 const senderFilterEnv = {};
 const senderFilterMailApi = createGlobalMailApi({ env: senderFilterEnv });
@@ -685,6 +836,98 @@ const contactsConnectorReply = await contactsConnectorOrchestrator.executeUttera
 });
 assert.equal(contactsConnectorReply.transport, 'contacts_api', 'contacts queries should execute through the deterministic contacts API');
 assert.match(contactsConnectorReply.reply_text || '', /Chloe Martin/i, 'contacts deterministic execution should verbalize returned contacts');
+
+const contactsConflictStore = [
+    {
+        source_contact_id: 'contact_regis_conflict_1',
+        name: 'Regis',
+        phone: '0825232456',
+        email: ''
+    }
+];
+const contactsConflictEnv = {
+    Squirrel: {
+        contacts: {
+            async syncPull() {
+                return {
+                    ok: true,
+                    items: contactsConflictStore.map((entry) => ({ ...entry }))
+                };
+            },
+            async search(query = '') {
+                const needle = String(query || '').trim().toLowerCase();
+                return {
+                    ok: true,
+                    items: contactsConflictStore
+                        .filter((entry) => `${entry.name} ${entry.phone} ${entry.email}`.toLowerCase().includes(needle))
+                        .map((entry) => ({ ...entry }))
+                };
+            },
+            async createLocalContact(input = {}) {
+                const created = {
+                    source_contact_id: `contact_regis_conflict_${contactsConflictStore.length + 1}`,
+                    name: String(input.name || '').trim() || 'Sans nom',
+                    phone: String(input.phone || '').trim(),
+                    email: String(input.email || '').trim()
+                };
+                contactsConflictStore.push(created);
+                return { ok: true, contact: { ...created } };
+            },
+            async updateLocalContact(contactId, changes = {}) {
+                const index = contactsConflictStore.findIndex((entry) => entry.source_contact_id === contactId);
+                if (index < 0) return { ok: false, error: 'contacts_not_found' };
+                contactsConflictStore[index] = { ...contactsConflictStore[index], ...changes };
+                return { ok: true, contact: { ...contactsConflictStore[index] } };
+            }
+        }
+    },
+    AtomeAI: {
+        async callTool(request = {}) {
+            calls.push(request);
+            return {
+                status: 'OK',
+                human_summary: `${request.tool_name} executed`
+            };
+        }
+    }
+};
+const contactsConflictOrchestrator = createVoiceOrchestrator({
+    env: contactsConflictEnv,
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: {
+        async planUtterance(utterance, options = {}) {
+            return {
+                intent_id: options.intent_id || 'voice_ai_intent_contacts_conflict',
+                utterance: { raw: utterance },
+                locale: options.locale || 'fr-FR',
+                type: 'agent_tool',
+                domain: 'contacts',
+                action: 'create',
+                status: 'ready',
+                assistant_reply: 'Je cree le contact.',
+                execution: {
+                    target: 'atome_ai',
+                    confirmation_required: false,
+                    toolchain: [{
+                        source: 'atome_ai',
+                        tool_name: 'contacts.create',
+                        params: {
+                            name: 'Regis',
+                            email: 'jeezs@jeezs.net'
+                        }
+                    }]
+                }
+            };
+        }
+    }
+});
+const contactsConflictReply = await contactsConflictOrchestrator.executeUtterance('Ajoute le mail suivant a Regis : jeezs@jeezs.net', {
+    session_id: 'voice_ai_session_contacts_conflict'
+});
+assert.equal(contactsConflictReply.transport, 'contacts_api', 'contacts updates should prefer the deterministic contacts route over a conflicting AI create plan');
+assert.match(contactsConflictReply.reply_text || '', /mis a jour/i, 'existing contact updates should be confirmed as updates');
+assert.equal(contactsConflictStore.length, 1, 'conflicting AI create plans must not duplicate existing contacts');
+assert.equal(contactsConflictStore[0].email, 'jeezs@jeezs.net', 'the existing contact should be updated in place');
 
 const calendarConnectorEnv = {
     Squirrel: {

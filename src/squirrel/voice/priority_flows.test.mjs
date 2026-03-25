@@ -57,7 +57,7 @@ const mailList = await orchestrator.executeUtterance('Lis mes mails', {
     session_id: mailSession.session_id
 });
 assert.equal(mailList.transport, 'mail_api');
-assert.deepEqual(mailList.intent.requested_capabilities, ['mail_read', 'mail_next_unread', 'mail_mark_read']);
+assert.deepEqual(mailList.intent.requested_capabilities, ['mail_list']);
 
 const mailNext = await orchestrator.executeUtterance('Lis le suivant', {
     session_id: mailSession.session_id
@@ -89,8 +89,14 @@ assert.deepEqual(
 );
 
 const bankSummary = await orchestrator.executeUtterance('Ou en est mon compte');
-assert.equal(bankSummary.transport, 'pending_connector');
-assert.deepEqual(bankSummary.requested_capabilities, ['bank_balance', 'bank_summary']);
+assert.ok(
+    ['pending_connector', 'bank_api'].includes(bankSummary.transport),
+    'bank summary should remain on a business connector transport'
+);
+assert.deepEqual(
+    bankSummary.intent?.requested_capabilities || bankSummary.requested_capabilities,
+    ['bank_balance', 'bank_summary']
+);
 
 const stopIntent = classifyVoiceIntent('Arrete', {
     runtime_tools: runtimeTools

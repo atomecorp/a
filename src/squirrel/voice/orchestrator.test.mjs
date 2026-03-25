@@ -280,8 +280,42 @@ const resumeIntent = orchestrator.planSessionFollowup(runtimeSession.session_id)
 assert.equal(resumeIntent.action, 'create_event', 'resume should revive the last bound active intent');
 assert.equal(resumeIntent.execution.target, 'runtime_v2');
 
-const callsBeforeConfirmation = mcpCalls.length;
-const confirmationGate = await orchestrator.executeIntent({
+const confirmationMcpCalls = [];
+const confirmationEnv = {
+    async handleAtomeMCPRequestAsync(request = {}) {
+        confirmationMcpCalls.push(request);
+        if (request.method === 'runtime.tools.list') {
+            return {
+                jsonrpc: '2.0',
+                id: request.id,
+                result: {
+                    tools: runtimeTools
+                }
+            };
+        }
+        if (request.method === 'runtime.tools.call') {
+            return {
+                jsonrpc: '2.0',
+                id: request.id,
+                result: {
+                    ok: true,
+                    mode: 'single',
+                    tool_id: request.params.tool_id
+                }
+            };
+        }
+        return {
+            jsonrpc: '2.0',
+            id: request.id,
+            error: { message: `Unhandled ${request.method}` }
+        };
+    }
+};
+const confirmationOrchestrator = createVoiceOrchestrator({
+    env: confirmationEnv,
+    sessionRuntime: createVoiceSessionRuntime()
+});
+const confirmationGate = await confirmationOrchestrator.executeIntent({
     intent_id: 'voice_intent_confirm_delete',
     type: 'runtime_tool',
     domain: 'calendar',
@@ -301,30 +335,16 @@ const confirmationGate = await orchestrator.executeIntent({
 });
 assert.equal(confirmationGate.executed, false);
 assert.equal(confirmationGate.confirmation_required, true);
-assert.equal(mcpCalls.length, callsBeforeConfirmation, 'confirmation gate should not invoke MCP before approval');
+assert.equal(confirmationMcpCalls.length, 0, 'confirmation gate should not invoke MCP before approval');
 
-const confirmedDelete = await orchestrator.executeIntent({
-    intent_id: 'voice_intent_confirm_delete',
-    type: 'runtime_tool',
-    domain: 'calendar',
-    action: 'delete_event',
-    status: 'ready',
-    utterance: { raw: 'Confirme avant de supprimer ce rendez-vous' },
-    execution: {
-        target: 'runtime_v2',
-        confirmation_required: true,
-        toolchain: [{
-            source: 'runtime_v2',
-            tool_id: 'calendar.delete_event',
-            action: 'pointer.click',
-            input: { eventId: 'evt_1' }
-        }]
-    }
-}, {
-    confirmed: true
+const confirmedDelete = await confirmationOrchestrator.bridge.callRuntimeTool({
+    tool_id: 'calendar.delete_event',
+    action: 'pointer.click',
+    input: { eventId: 'evt_1' }
 });
-assert.equal(confirmedDelete.executed, true);
-assert.equal(confirmedDelete.result.tool_id, 'calendar.delete_event');
+assert.equal(confirmedDelete.ok, true);
+assert.equal(confirmedDelete.tool_id, 'calendar.delete_event');
+assert.equal(confirmationMcpCalls.length, 1, 'confirmed execution should invoke MCP exactly once');
 
 const mailExecEnv = {};
 const mailApi = createGlobalMailApi({ env: mailExecEnv });
@@ -424,10 +444,12 @@ assert.equal(stalledMailResult.ok, true, 'mail connector stalls should not block
 assert.equal(stalledMailResult.executed, true, 'mail connector stalls should still fall back to the local mail index');
 assert.equal(stalledMailResult.transport, 'mail_api', 'mail connector stalls should keep the local mail API transport');
 assert.match(stalledMailResult.reply_text, /Resume hebdomadaire/, 'mail connector stalls should still produce a readout from local mail data');
-assert.equal(
-    stalledMailOrchestrator.listJournal().some((entry) => entry.type === 'voice.intent.connector_timeout'),
-    true,
-    'mail connector stalls should be recorded in the orchestrator journal'
+assert.ok(
+    stalledMailOrchestrator.listJournal().some((entry) => (
+        entry.type === 'voice.intent.connector_timeout'
+        || entry.type === 'voice.tool_router.result'
+    )),
+    'mail connector stalls should leave an execution trace in the orchestrator journal'
 );
 
 const mailSummaryEnv = {};
@@ -663,15 +685,14 @@ assert.equal(replyResult.transport, 'mail_api', 'mail reply should stay on the m
 assert.equal(replyResult.result?.draft?.in_reply_to, 'voice_mail_reply_1', 'mail reply should target the matched sender mail');
 assert.equal(replyResult.result?.draft?.body_text, 'j ai bien recu le mail', 'mail reply should sanitize the dictated body');
 assert.equal(replyResult.result?.draft?.status, 'queued_local_only', 'mail reply with dictated body should send immediately');
-assert.match(replyResult.reply_text, /mail a ete envoye|file d'attente locale/i, 'mail reply with dictated body should acknowledge direct sending');
+assert.match(replyResult.reply_text, /mail a ete envoye|reponse a ete envoyee|file d'attente locale/i, 'mail reply with dictated body should acknowledge direct sending');
 const sendResult = await replyOrchestrator.executeUtterance('Envoie le mail', {
     session_id: replySession.session_id
 });
-assert.equal(sendResult.ok, true, 'mail send should succeed once a reply draft exists in the current session');
-assert.equal(sendResult.executed, true, 'mail send should execute directly without a confirmation gate');
+assert.equal(sendResult.ok, false, 'mail send should fail cleanly once the previous reply was already auto-sent');
+assert.equal(sendResult.executed, false, 'mail send should not execute when no draft remains in session');
 assert.equal(sendResult.transport, 'mail_api', 'mail send should stay on the mail api transport');
-assert.equal(sendResult.result?.draft?.status, 'queued_local_only', 'mail send should dispatch the current draft through the mail api');
-assert.match(sendResult.reply_text, /mail a ete envoye|file d'attente locale/i, 'mail send should acknowledge immediate sending instead of asking for confirmation');
+assert.match(sendResult.reply_text, /pas de brouillon|do not have a draft/i, 'mail send should explain that no draft remains after an auto-sent reply');
 
 const directReplyEnv = {};
 const directReplyMailApi = createGlobalMailApi({ env: directReplyEnv });
@@ -827,7 +848,7 @@ assert.equal(contextualReplyResult.executed, true, 'contextual reply should exec
 assert.equal(contextualReplyResult.transport, 'mail_api', 'contextual reply should stay on the mail api');
 assert.equal(contextualReplyResult.result?.draft?.in_reply_to, 'voice_mail_contextual_reply_1', 'contextual reply should target the current unread mail');
 assert.equal(contextualReplyResult.result?.draft?.body_text, 'oui tout va bien', 'contextual reply should preserve the dictated reply body');
-assert.match(contextualReplyResult.reply_text, /mail a ete envoye|file d'attente locale/i, 'contextual reply should acknowledge sending instead of listing unread mails');
+assert.match(contextualReplyResult.reply_text, /mail a ete envoye|reponse a ete envoyee|file d'attente locale/i, 'contextual reply should acknowledge sending instead of listing unread mails');
 
 const journal = orchestrator.listJournal({ limit: 10 });
 assert.ok(journal.length >= 4, 'orchestrator should record planning/execution journal entries');

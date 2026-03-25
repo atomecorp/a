@@ -51,6 +51,19 @@ const readContactFieldIntent = ({ utteranceRaw = '', utteranceNormalized = '' } 
     return null;
 };
 
+const isPluralContactFieldQuestion = ({ utteranceRaw = '', utteranceNormalized = '' } = {}) => {
+    const normalized = normalizeText(utteranceNormalized || utteranceRaw);
+    if (!normalized) return false;
+    return (
+        normalized.includes('leurs ')
+        || normalized.includes('leur ')
+        || normalized.includes('their ')
+        || normalized.includes('emails')
+        || normalized.includes('numeros')
+        || normalized.includes('adresses')
+    );
+};
+
 const readContactOrganization = (contact = {}) => toText(
     contact?.organization
     || contact?.company
@@ -139,4 +152,55 @@ export const buildContactQueryReply = (contact = {}, {
             : `Le nom du contact est ${name}.`;
     }
     return '';
+};
+
+export const buildContactsFieldReply = (contacts = [], options = {}) => {
+    const items = Array.isArray(contacts) ? contacts.filter((entry) => entry && typeof entry === 'object') : [];
+    if (!items.length) return '';
+    const field = readContactFieldIntent(options);
+    if (!field) return '';
+    const locale = options?.locale || 'fr-FR';
+    const english = isEnglish(locale);
+    const pluralRequested = isPluralContactFieldQuestion(options);
+
+    const lines = items.map((contact) => {
+        const name = toText(
+            contact?.name
+            || contact?.display_name
+            || contact?.full_name
+            || contact?.nickname
+        ) || (english ? 'this contact' : 'ce contact');
+        if (field === 'email') {
+            const email = toText(contact?.email);
+            if (!email) return english ? `${name}: no email` : `${name} : pas d'adresse email`;
+            return `${name}: ${email}`;
+        }
+        if (field === 'phone') {
+            const phone = toText(contact?.phone);
+            if (!phone) return english ? `${name}: no phone` : `${name} : pas de numero`;
+            return `${name}: ${phone}`;
+        }
+        if (field === 'organization') {
+            const organization = readContactOrganization(contact);
+            if (!organization) return english ? `${name}: no company` : `${name} : pas de societe`;
+            return `${name}: ${organization}`;
+        }
+        if (field === 'updated_at') {
+            const updatedAt = toText(contact?.updated_at || contact?.updatedAt);
+            if (!updatedAt) return english ? `${name}: unknown update` : `${name} : mise a jour inconnue`;
+            return `${name}: ${formatLocalizedDateTime(updatedAt, locale)}`;
+        }
+        if (field === 'name') {
+            return name;
+        }
+        return '';
+    }).filter(Boolean);
+
+    if (!lines.length) return '';
+    if (items.length === 1 && !pluralRequested) {
+        return buildContactQueryReply(items[0], options);
+    }
+    return english
+        ? `I found ${items.length} contacts. ${lines.join('. ')}.`
+        : `J'ai trouve ${items.length} contacts. ${lines.join('. ')}.`;
 };

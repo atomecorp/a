@@ -117,6 +117,29 @@ const normalizeCommunicationSurfaces = (value, fallback = []) => {
     return Array.from(new Set(normalized));
 };
 
+const extractEntityPayload = (entities = {}, operation = '') => {
+    if (!entities || typeof entities !== 'object') return {};
+    if (!['create', 'update'].includes(String(operation || '').trim())) return {};
+    const payload = {};
+    const fields = [
+        'name',
+        'email',
+        'phone',
+        'organization',
+        'company',
+        'temporal_ref',
+        'time_hint',
+        'participant_hint'
+    ];
+    for (const field of fields) {
+        const value = entities[field];
+        if (value !== undefined && value !== null && value !== '') {
+            payload[field] = value;
+        }
+    }
+    return payload;
+};
+
 /**
  * Creates a normalized structured request.
  *
@@ -221,6 +244,7 @@ export const createStructuredResult = (raw = {}) => {
     const operation = ensureString(raw.operation);
     const items = Array.isArray(raw.items) ? raw.items : [];
     const item = raw.item && typeof raw.item === 'object' ? raw.item : null;
+    const draft = raw.draft && typeof raw.draft === 'object' ? { ...raw.draft } : null;
     const error = ensureString(raw.error);
     const reply_text = ensureString(raw.reply_text);
     const stats = raw.stats && typeof raw.stats === 'object' ? { ...raw.stats } : {};
@@ -231,6 +255,7 @@ export const createStructuredResult = (raw = {}) => {
         operation,
         items,
         item,
+        draft,
         stats,
         error,
         reply_text,
@@ -288,6 +313,9 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
         search_contacts: 'search',
         list_contacts: 'list',
         read_contact: 'read',
+        create_event: 'create',
+        update_event: 'update',
+        delete_event: 'delete',
         search_events: 'search',
         list_events: 'list',
         read_event: 'read',
@@ -352,16 +380,19 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
             locale: ensureString(intent.locale, 'fr-FR'),
             confidence: Number.isFinite(Number(intent.confidence)) ? Number(intent.confidence) : null
         },
-        payload: ensureObject(
-            mergedToolParams.contact
-            || mergedToolParams.event
-            || mergedToolParams.changes
-            || (
-                ['create', 'update'].includes(operation)
-                    ? mergedToolParams
-                    : null
+        payload: ensureObject({
+            ...extractEntityPayload(entities, operation),
+            ...ensureObject(
+                mergedToolParams.contact
+                || mergedToolParams.event
+                || mergedToolParams.changes
+                || (
+                    ['create', 'update'].includes(operation)
+                        ? mergedToolParams
+                        : null
+                )
             )
-        ),
+        }),
         surfaces: normalizeCommunicationSurfaces(
             entities.communication_surfaces
             || mergedToolParams.communication_surfaces

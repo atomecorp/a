@@ -76,7 +76,9 @@ const created = await api.create({
 });
 assert.equal(created.ok, true, 'calendar bootstrap should expose unified create through the shared singleton');
 
-const today = await api.today();
+const today = await api.today({
+    reference: start.toISOString()
+});
 assert.equal(today.ok, true, 'calendar bootstrap should expose today events');
 assert.equal(today.items[0]?.id, created.event?.id, 'calendar bootstrap should query the shared singleton service');
 

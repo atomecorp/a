@@ -93,6 +93,30 @@ const hasMailStatusQuestion = (normalized = '') => {
 const readMailAction = (normalized = '') => {
     if (!normalized) return 'list';
     if (
+        (
+            normalized.startsWith('lis ')
+            || normalized.startsWith('lire ')
+            || normalized.startsWith('montre ')
+            || normalized.startsWith('affiche ')
+            || normalized.startsWith('ouvre ')
+        )
+        && hasAnyKeyword(normalized, [
+            'mes mail',
+            'mes mails',
+            'mes message',
+            'mes messages',
+            'mes courrier',
+            'mes courriers',
+            'mes courriel',
+            'mes courriels',
+            'ma boite mail',
+            'ma boite de reception',
+            'mon inbox'
+        ])
+    ) {
+        return 'list';
+    }
+    if (
         hasMailStatusQuestion(normalized)
         && hasAnyKeyword(normalized, [
             'nouveau', 'nouveaux', 'nouvelle', 'nouvelles',
@@ -240,13 +264,12 @@ export const readMailOrderReference = (normalized = '') => {
     return null;
 };
 
-const cleanSenderReference = (value = '') => String(value || '')
-    .replace(/^(?:ceux|celles|mails|mail|messages|message)\s+de\s+/i, '')
-    .replace(/\s*\?+\s*$/, '')
-    .trim();
-
 const readMailSenderFilters = (normalized = '') => {
     if (!normalized) return { from: null, not_from: null };
+    const cleanSender = (value = '') => String(value || '')
+        .replace(/^(?:ceux|celles|mails|mail|messages|message)\s+de\s+/i, '')
+        .replace(/\s*\?+\s*$/, '')
+        .trim();
     const notFromPatterns = [
         /\bd?\s*autres personnes que\s+(.+)$/i,
         /\bautres que\s+(.+)$/i,
@@ -256,7 +279,7 @@ const readMailSenderFilters = (normalized = '') => {
     for (const pattern of notFromPatterns) {
         const match = normalized.match(pattern);
         if (match) {
-            const value = cleanSenderReference(match[1]);
+            const value = cleanSender(match[1]);
             if (value) return { from: null, not_from: value };
         }
     }
@@ -268,33 +291,17 @@ const readMailSenderFilters = (normalized = '') => {
     for (const pattern of fromPatterns) {
         const match = normalized.match(pattern);
         if (match) {
-            const value = cleanSenderReference(match[1]);
+            const value = cleanSender(match[1]);
             if (value) return { from: value, not_from: null };
         }
     }
     return { from: null, not_from: null };
 };
 
-const readHourReference = (rawUtterance) => {
-    const match = String(rawUtterance || '').match(/\b(\d{1,2})\s*h(?:\s*(\d{2}))?\b/i);
-    if (!match) return null;
-    const hour = Math.max(0, Math.min(23, Number(match[1])));
-    const minute = Math.max(0, Math.min(59, Number(match[2] || 0)));
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-};
-
-const readParticipant = (rawUtterance) => {
-    const match = String(rawUtterance || '').match(/\bavec\s+([^\n,.!?]+)/i);
-    if (!match) return null;
-    const value = String(match[1] || '').trim();
-    return value || null;
-};
-
 const readReplyDraftDetails = (rawUtterance) => {
     const raw = String(rawUtterance || '').trim();
     if (!raw) return null;
 
-    // "demande a X si/de/que Y", "dis a X de/que Y", "ecris a X que Y"
     const demandeMatch = raw.match(/^\s*(?:demande|dis|ecris)\s+(?:a|à)\s+(.+?)\s+((?:si|de|que|d')\s+.+)$/i);
     if (demandeMatch) {
         return {
@@ -302,7 +309,6 @@ const readReplyDraftDetails = (rawUtterance) => {
             draft_text: String(demandeMatch[2] || '').trim() || null
         };
     }
-    // "demande a X" / "dis a X" / "ecris a X" with no body
     const demandeTargetOnly = raw.match(/^\s*(?:demande|dis|ecris)\s+(?:a|à)\s+(\S+.*)$/i);
     if (demandeTargetOnly) {
         return {
@@ -311,10 +317,7 @@ const readReplyDraftDetails = (rawUtterance) => {
         };
     }
 
-    // Match direct forms: "reponds a X que Y", "reponds a X, Y"
     const directMatch = raw.match(/^\s*r(?:e|é)ponds?\s+(.+)$/i);
-    // Match polite/indirect forms: "peux tu repondre a X ...", "tu peux repondre a X ...",
-    // "est ce que tu peux repondre a X ...", "pourrais tu repondre a X ..."
     const indirectMatch = !directMatch
         ? raw.match(/(?:peux[- ]tu|tu peux|pourrais[- ]tu|tu pourrais|(?:est[- ]ce que )?tu (?:peux|pourrais))\s+r(?:e|é)pondr?e?\s+(.+)$/i)
         : null;
@@ -324,7 +327,6 @@ const readReplyDraftDetails = (rawUtterance) => {
     const value = String(match[1] || '').trim();
     if (!value) return null;
 
-    // "a X que Y" — e.g. "reponds a Alice que je suis ok"
     const targetedWithQue = value.match(/^(?:a|à)\s+(.+?)\s+que\s+(.+)$/i);
     if (targetedWithQue) {
         return {
@@ -333,7 +335,6 @@ const readReplyDraftDetails = (rawUtterance) => {
         };
     }
 
-    // "a X pour lui demander si/de/que Y" — e.g. "reponds a jean-eric pour lui demander si il travaille"
     const targetedWithPour = value.match(/^(?:a|à)\s+(.+?)\s+pour\s+(?:lui|leur|elle|eux)\s+(?:demander|dire|signaler|indiquer|confirmer|rappeler)\s+(.+)$/i);
     if (targetedWithPour) {
         return {
@@ -342,7 +343,6 @@ const readReplyDraftDetails = (rawUtterance) => {
         };
     }
 
-    // "a X: Y" or "a X, Y" — e.g. "reponds a Alice: oui je suis dispo"
     const targetedDirect = value.match(/^(?:a|à)\s+(.+?)\s*[:,]\s*(.+)$/i);
     if (targetedDirect) {
         return {
@@ -351,7 +351,6 @@ const readReplyDraftDetails = (rawUtterance) => {
         };
     }
 
-    // "a X pour Y" (generic) — e.g. "reponds a jean-eric pour confirmer la reunion"
     const targetedWithPourGeneric = value.match(/^(?:a|à)\s+(.+?)\s+pour\s+(.+)$/i);
     if (targetedWithPourGeneric) {
         return {
@@ -360,7 +359,6 @@ const readReplyDraftDetails = (rawUtterance) => {
         };
     }
 
-    // "a X" only (no body) — just a target with no draft text
     const targetOnly = value.match(/^(?:a|à)\s+(\S+.*)$/i);
     if (targetOnly) {
         return {
@@ -374,8 +372,6 @@ const readReplyDraftDetails = (rawUtterance) => {
         draft_text: value
     };
 };
-
-const readReplyDraft = (rawUtterance) => readReplyDraftDetails(rawUtterance)?.draft_text || null;
 
 const shouldAutoSendReply = (rawUtterance, draftText) => {
     const normalized = normalizeText(rawUtterance);
@@ -484,7 +480,6 @@ const hasContactFieldQuestion = (normalized = '') => {
         'phone',
         'mobile',
         'email',
-        'mail',
         'adresse mail',
         'adresse e mail',
         'societe',
@@ -501,19 +496,256 @@ const hasContactFieldQuestion = (normalized = '') => {
     ]);
 };
 
-const normalizeContactQueryText = (value = '') => String(value || '')
-    .replace(/\b(?:dans|de|parmi)\s+(?:mes\s+)?contacts?\b.*$/i, '')
-    .replace(/\b(?:dans|sur)\s+eve\b.*$/i, '')
-    .replace(/\b(?:dans|sur)\s+mon\s+carnet(?:\s+d\s+adresses?)?\b.*$/i, '')
-    .replace(/[?!.,;:]+$/g, '')
-    .replace(/^(?:le|la|les|du|de la|de l|des|un|une)\s+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+const CONTACT_QUERY_SUFFIXES = Object.freeze([
+    ['dans', 'mes', 'contacts'],
+    ['dans', 'contact'],
+    ['dans', 'contacts'],
+    ['de', 'mes', 'contacts'],
+    ['de', 'contacts'],
+    ['parmi', 'mes', 'contacts'],
+    ['parmi', 'contacts'],
+    ['sur', 'eve'],
+    ['dans', 'eve'],
+    ['sur', 'mon', 'carnet'],
+    ['dans', 'mon', 'carnet'],
+    ['sur', 'mon', 'carnet', 'd', 'adresses'],
+    ['dans', 'mon', 'carnet', 'd', 'adresses']
+]);
+const CONTACT_LEADING_DETERMINERS = new Set(['le', 'la', 'les', 'du', 'de', 'des', 'un', 'une', 'l']);
+const CONTACT_FIELD_ANCHORS = Object.freeze([
+    ['numero', 'de', 'telephone'],
+    ['telephone'],
+    ['numero'],
+    ['phone', 'number'],
+    ['phone'],
+    ['mobile'],
+    ['email'],
+    ['adresse', 'mail'],
+    ['adresse', 'e', 'mail'],
+    ['societe'],
+    ['entreprise'],
+    ['organisation'],
+    ['organization'],
+    ['mise', 'a', 'jour'],
+    ['mis', 'a', 'jour'],
+    ['updated'],
+    ['last', 'update'],
+    ['nom'],
+    ['name']
+]);
+const CONTACT_NOUN_ANCHORS = Object.freeze([
+    ['contact'],
+    ['contacts'],
+    ['user'],
+    ['users'],
+    ['fiche'],
+    ['fiche', 'de']
+]);
+const CONTACT_UPDATE_VERBS = Object.freeze([
+    ['ajoute'],
+    ['ajouter'],
+    ['mets'],
+    ['met'],
+    ['mettre'],
+    ['change'],
+    ['changer'],
+    ['modifie'],
+    ['modifier'],
+    ['remplace'],
+    ['remplacer'],
+    ['update'],
+    ['add']
+]);
+
+const splitNormalizedTokens = (value = '') => normalizeText(value).split(' ').filter(Boolean);
+
+const computeTokenEditDistance = (left = '', right = '') => {
+    const source = String(left || '');
+    const target = String(right || '');
+    if (source === target) return 0;
+    if (!source.length) return target.length;
+    if (!target.length) return source.length;
+    const rows = Array.from({ length: source.length + 1 }, (_, index) => index);
+    for (let column = 1; column <= target.length; column += 1) {
+        let previousDiagonal = rows[0];
+        rows[0] = column;
+        for (let row = 1; row <= source.length; row += 1) {
+            const previousRow = rows[row];
+            const substitutionCost = source[row - 1] === target[column - 1] ? 0 : 1;
+            rows[row] = Math.min(
+                rows[row] + 1,
+                rows[row - 1] + 1,
+                previousDiagonal + substitutionCost
+            );
+            previousDiagonal = previousRow;
+        }
+    }
+    return rows[source.length];
+};
+
+const normalizeContactQueryText = (value = '') => {
+    let text = String(value || '').trim();
+    while (text && '?!.,;:'.includes(text.at(-1))) {
+        text = text.slice(0, -1).trimEnd();
+    }
+    let tokens = splitNormalizedTokens(text);
+    for (const suffix of CONTACT_QUERY_SUFFIXES) {
+        const joined = suffix.join(' ');
+        const haystack = tokens.join(' ');
+        const marker = haystack.indexOf(` ${joined}`);
+        if (marker > -1) {
+            tokens = haystack.slice(0, marker).trim().split(' ').filter(Boolean);
+            break;
+        }
+        if (haystack.startsWith(joined)) {
+            tokens = [];
+            break;
+        }
+    }
+    while (tokens.length && CONTACT_LEADING_DETERMINERS.has(tokens[0])) {
+        tokens.shift();
+    }
+    return tokens.join(' ').trim();
+};
+
+const projectContactTextToRaw = (rawUtterance = '', normalizedValue = '') => {
+    let trimmedRawUtterance = String(rawUtterance || '').trim();
+    while (trimmedRawUtterance && '?!.,;:'.includes(trimmedRawUtterance.at(-1))) {
+        trimmedRawUtterance = trimmedRawUtterance.slice(0, -1).trimEnd();
+    }
+    const rawTokens = trimmedRawUtterance
+        .replaceAll(':', ' ')
+        .replaceAll('?', ' ')
+        .replaceAll('!', ' ')
+        .replaceAll(',', ' ')
+        .replaceAll(';', ' ')
+        .split(/\s+/)
+        .filter(Boolean);
+    const normalizedTokens = splitNormalizedTokens(normalizedValue);
+    if (!rawTokens.length || !normalizedTokens.length) {
+        return normalizedValue;
+    }
+    const rawNormalizedTokens = rawTokens.map((token) => normalizeText(token));
+    for (let index = 0; index <= rawNormalizedTokens.length - normalizedTokens.length; index += 1) {
+        let matches = true;
+        for (let offset = 0; offset < normalizedTokens.length; offset += 1) {
+            if (rawNormalizedTokens[index + offset] !== normalizedTokens[offset]) {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) {
+            return rawTokens.slice(index, index + normalizedTokens.length).join(' ');
+        }
+    }
+    return normalizedValue;
+};
+
+const trimContactValueSuffixTokens = (tokens = [], rawUtterance = '') => {
+    const next = [...tokens];
+    const stripValue = (value = '') => {
+        const parts = splitNormalizedTokens(
+            String(value || '')
+                .replaceAll('@', ' ')
+                .replaceAll('.', ' ')
+        );
+        if (!parts.length || next.length < parts.length) return;
+        const suffix = next.slice(-parts.length);
+        if (suffix.every((token, index) => token === parts[index])) {
+            next.splice(-parts.length, parts.length);
+        }
+    };
+    stripValue(readEmailToken(rawUtterance));
+    stripValue(readPhoneToken(rawUtterance));
+    return next;
+};
+
+const readContactFieldSubject = (rawUtterance = '', normalized = '', phraseGroups = [], trailingStops = []) => {
+    const text = normalizeText(normalized);
+    const tokens = splitNormalizedTokens(text);
+    const subjectPrefixes = [['de'], ['du'], ['d']];
+    for (const phrase of phraseGroups) {
+        for (let index = 0; index <= tokens.length - phrase.length; index += 1) {
+            let phraseMatches = true;
+            for (let offset = 0; offset < phrase.length; offset += 1) {
+                const currentToken = tokens[index + offset];
+                const anchorToken = phrase[offset];
+                if (
+                    currentToken !== anchorToken
+                    && (
+                        !currentToken
+                        || !anchorToken
+                        || computeTokenEditDistance(currentToken, anchorToken) > (anchorToken.length >= 7 ? 2 : 1)
+                    )
+                ) {
+                    phraseMatches = false;
+                    break;
+                }
+            }
+            if (!phraseMatches) continue;
+
+            let afterTokens = tokens.slice(index + phrase.length);
+            let matchedPrefix = false;
+            for (const prefixTokens of subjectPrefixes) {
+                const candidatePrefix = afterTokens.slice(0, prefixTokens.length);
+                if (candidatePrefix.length === prefixTokens.length && candidatePrefix.every((token, offset) => token === prefixTokens[offset])) {
+                    afterTokens = afterTokens.slice(prefixTokens.length);
+                    matchedPrefix = true;
+                    break;
+                }
+            }
+            if (!matchedPrefix) continue;
+
+            for (const stop of trailingStops) {
+                const stopIndex = afterTokens.indexOf(stop);
+                if (stopIndex > -1) {
+                    afterTokens = afterTokens.slice(0, stopIndex);
+                    break;
+                }
+            }
+            const candidate = normalizeContactQueryText(afterTokens.join(' '));
+            if (candidate) return projectContactTextToRaw(rawUtterance, candidate);
+            break;
+        }
+    }
+    return '';
+};
+
+const readEmailToken = (rawUtterance = '') => {
+    const raw = String(rawUtterance || '').trim();
+    if (!raw) return '';
+    const tokens = raw
+        .replace(/[<>()"'`,;!?]/g, ' ')
+        .split(/\s+/)
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean);
+    return tokens.find((token) => token.includes('@') && token.includes('.')) || '';
+};
+
+const readPhoneToken = (rawUtterance = '') => {
+    const raw = String(rawUtterance || '').trim();
+    if (!raw) return '';
+    const candidates = raw
+        .split(/[:]/)
+        .flatMap((entry) => String(entry || '').split(/\s+/))
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean);
+    const joined = [];
+    for (const token of candidates) {
+        const cleaned = token.replace(/[().-]/g, '');
+        if (/^\+?\d+$/.test(cleaned)) {
+            joined.push(token);
+        }
+    }
+    if (!joined.length) return '';
+    const merged = joined.join(' ').trim();
+    const digitCount = merged.replace(/\D/g, '').length;
+    return digitCount >= 7 ? merged : '';
+};
 
 const readContactQueryText = (rawUtterance = '', utteranceNormalized = '', context = {}) => {
     const normalized = String(utteranceNormalized || '').trim();
-    const raw = String(rawUtterance || '').trim();
-    if (!normalized && !raw) return '';
+    if (!normalized && !rawUtterance) return '';
     if (
         readActiveContactId(context)
         && (
@@ -526,37 +758,52 @@ const readContactQueryText = (rawUtterance = '', utteranceNormalized = '', conte
     ) {
         return '';
     }
+    const fieldQuery = readContactFieldSubject(rawUtterance, normalized, CONTACT_FIELD_ANCHORS, ['en', 'par', 'avec', 'pour']);
+    if (fieldQuery) return fieldQuery;
 
-    const queryPatterns = [
-        /(?:numero(?: de telephone)?|telephone|phone(?: number)?|mobile|email|adresse e mail|adresse mail|societe|entreprise|organisation|organization|mise a jour|updated|nom|name)\s+(?:de|du|d)\s+(.+)$/i,
-        /(?:cherche|recherche|trouve|trouver|find|search|montre|affiche|ouvre|lis|lire)\s+(?:le\s+|la\s+|les\s+)?(?:contact|contacts|user|users|fiche(?:\s+de)?)\s+(.+)$/i,
-        /(?:quel est|quelle est|c est quoi|c'est quoi|donne moi|dis moi|what is|show me)\s+.+?\s+(?:de|du|d)\s+(.+)$/i
-    ];
+    if (hasAnyKeyword(normalized, ['mail']) && !hasAnyKeyword(normalized, [
+        'nouveau',
+        'nouveaux',
+        'non lu',
+        'non lus',
+        'message',
+        'messages',
+        'courrier',
+        'courriers',
+        'inbox',
+        'boite mail',
+        'boite de reception'
+    ])) {
+        const plainMailQuery = readContactFieldSubject(rawUtterance, normalizeText(normalized), [['mail']], ['en', 'par', 'avec', 'pour']);
+        if (plainMailQuery) return plainMailQuery;
+    }
 
-    const sources = [raw, normalized].filter(Boolean);
-    for (const source of sources) {
-        for (const pattern of queryPatterns) {
-            const match = source.match(pattern);
-            if (!match?.[1]) continue;
-            const value = normalizeContactQueryText(match[1]);
-            if (value) return value;
+    const tokens = splitNormalizedTokens(normalized);
+    for (const phrase of CONTACT_NOUN_ANCHORS) {
+        for (let index = 0; index <= tokens.length - phrase.length; index += 1) {
+            const candidatePhrase = tokens.slice(index, index + phrase.length);
+            if (!candidatePhrase.every((token, offset) => token === phrase[offset])) continue;
+            const contactQuery = normalizeContactQueryText(tokens.slice(index + phrase.length).join(' '));
+            if (contactQuery) return projectContactTextToRaw(rawUtterance, contactQuery);
         }
     }
 
     if (hasAnyKeyword(normalized, ['contact', 'contacts', 'user', 'users'])) {
         const stripped = normalizeContactQueryText(
-            normalized
-                .replace(/\b(?:liste|list|montre|affiche|cherche|recherche|trouve|trouver|find|search|ouvre|ouvre moi|lis|lire)\b/gi, ' ')
-                .replace(/\b(?:contact|contacts|user|users|fiche)\b/gi, ' ')
+            splitNormalizedTokens(normalized)
+                .filter((token) => !['liste', 'list', 'montre', 'affiche', 'cherche', 'recherche', 'trouve', 'trouver', 'find', 'search', 'ouvre', 'moi', 'lis', 'lire', 'contact', 'contacts', 'user', 'users', 'fiche'].includes(token))
+                .join(' ')
         );
-        if (stripped) return stripped;
+        if (stripped) return projectContactTextToRaw(rawUtterance, stripped);
     }
 
     return '';
 };
 
-const looksLikeContactsContext = (normalized = '', context = {}) => {
+const looksLikeContactsContext = (rawUtterance = '', normalized = '', context = {}) => {
     if (!normalized) return false;
+    const contactQuery = readContactQueryText(rawUtterance, normalized, context);
+    const contactFieldSignal = hasContactFieldQuestion(normalized) || (contactQuery && hasAnyKeyword(normalized, ['mail']));
     if (hasAnyKeyword(normalized, [
         'contact',
         'contacts',
@@ -567,21 +814,36 @@ const looksLikeContactsContext = (normalized = '', context = {}) => {
         'repertoire telephonique',
         'repertoire'
     ])) return true;
-    if (hasContactFieldQuestion(normalized)) {
-        if (readContactQueryText('', normalized, context)) return true;
+    if (contactFieldSignal) {
+        if (contactQuery) return true;
         if (readActiveDomain(context) === 'contacts' || readActiveContactId(context)) return true;
     }
     if (
+        readDirectContactUpdateTarget(rawUtterance, normalized)
+        && hasAnyKeyword(normalized, ['ajoute', 'ajouter', 'change', 'changer', 'modifie', 'modifier', 'mets a jour', 'met a jour', 'remplace', 'remplacer', 'update', 'add'])
+    ) {
+        return true;
+    }
+    if (
         (readActiveDomain(context) === 'contacts' || readActiveContactId(context))
-        && hasAnyKeyword(normalized, ['son ', 'sa ', 'ses ', 'ce contact', 'le contact', 'la fiche'])
+        && hasAnyKeyword(normalized, ['son ', 'sa ', 'ses ', 'leur ', 'leurs ', 'ce contact', 'le contact', 'la fiche', 'email', 'mail', 'numero', 'telephone', 'phone', 'mobile', 'societe', 'entreprise', 'organisation', 'nom'])
     ) {
         return true;
     }
     return false;
 };
 
-const readContactsAction = (normalized = '', context = {}) => {
+const readContactsAction = (rawUtterance = '', normalized = '', context = {}) => {
     if (!normalized) return 'list_contacts';
+    const directUpdateTarget = readDirectContactUpdateTarget(rawUtterance, normalized);
+    const directUpdateChanges = readContactUpdateChanges(rawUtterance, normalized);
+    const queryText = directUpdateTarget || readContactQueryText(rawUtterance, normalized, context);
+    const fieldQuestion = hasContactFieldQuestion(normalized)
+        || (queryText && hasAnyKeyword(normalized, ['mail']))
+        || (
+            (readActiveDomain(context) === 'contacts' || readActiveContactId(context))
+            && hasAnyKeyword(normalized, ['email', 'mail', 'numero', 'telephone', 'phone', 'mobile', 'societe', 'entreprise', 'organisation', 'nom', 'leur ', 'leurs ', 'son ', 'sa ', 'ses '])
+        );
     if (
         hasAnyKeyword(normalized, ['cree', 'creer', 'ajoute', 'nouveau', 'nouvelle'])
         && hasAnyKeyword(normalized, ['contact', 'contacts', 'user', 'users'])
@@ -601,13 +863,20 @@ const readContactsAction = (normalized = '', context = {}) => {
         return 'update';
     }
     if (
+        (directUpdateTarget || readActiveContactId(context))
+        && Object.keys(directUpdateChanges).length > 0
+        && hasAnyKeyword(normalized, ['ajoute', 'ajouter', 'change', 'changer', 'modifie', 'modifier', 'mets a jour', 'met a jour', 'remplace', 'remplacer', 'update', 'add'])
+    ) {
+        return 'update';
+    }
+    if (
         hasAnyKeyword(normalized, ['liste', 'list', 'tous', 'toutes', 'donne moi la liste', 'affiche', 'montre'])
         && hasAnyKeyword(normalized, ['contact', 'contacts', 'user', 'users'])
     ) {
         return 'list_contacts';
     }
-    if (hasContactFieldQuestion(normalized)) {
-        return readContactQueryText('', normalized, context) ? 'search_contacts' : 'read_contact';
+    if (fieldQuestion) {
+        return queryText ? 'search_contacts' : 'read_contact';
     }
     if (hasAnyKeyword(normalized, ['cherche', 'recherche', 'trouve', 'trouver', 'find', 'search'])) {
         return readContactQueryText('', normalized, context) ? 'search_contacts' : 'list_contacts';
@@ -616,6 +885,80 @@ const readContactsAction = (normalized = '', context = {}) => {
         return 'read_contact';
     }
     return 'list_contacts';
+};
+
+const readContactUpdateChanges = (rawUtterance = '', utteranceNormalized = '') => {
+    const raw = String(rawUtterance || '').trim();
+    const normalized = String(utteranceNormalized || '').trim();
+    if (!raw && !normalized) return {};
+
+    const changes = {};
+    const emailValue = readEmailToken(raw);
+    if (emailValue) {
+        changes.email = emailValue;
+    }
+
+    const phoneValue = readPhoneToken(raw);
+    if (phoneValue && hasAnyKeyword(normalized, ['numero', 'telephone', 'phone', 'mobile'])) {
+        changes.phone = phoneValue;
+    }
+
+    const renameSource = normalizeText(raw);
+    for (const marker of [' renomme ', ' rename ']) {
+        const index = ` ${renameSource} `.indexOf(marker);
+        if (index > -1) {
+            const suffix = renameSource.slice(index + marker.length - 1).trim();
+            for (const splitWord of [' en ', ' to ']) {
+                const splitIndex = suffix.indexOf(splitWord);
+                if (splitIndex > -1) {
+                    const renamed = normalizeContactQueryText(suffix.slice(splitIndex + splitWord.length).trim());
+                    if (renamed) changes.name = renamed;
+                }
+            }
+        }
+    }
+
+    return changes;
+};
+
+const readDirectContactUpdateTarget = (rawUtterance = '', utteranceNormalized = '') => {
+    const normalized = String(utteranceNormalized || '').trim();
+    if (!rawUtterance && !normalized) return '';
+
+    const fieldTarget = readContactFieldSubject(rawUtterance, normalized, CONTACT_FIELD_ANCHORS, ['en', 'par', 'avec', 'pour']);
+    if (fieldTarget) return fieldTarget;
+
+    const normalizedText = normalizeText(normalized || rawUtterance);
+    for (const verb of CONTACT_UPDATE_VERBS) {
+        const anchor = `${verb.join(' ')} `;
+        const startIndex = normalizedText.indexOf(anchor);
+        if (startIndex === -1) continue;
+        const suffix = normalizedText.slice(startIndex + anchor.length).trim();
+        for (const link of [' a ', ' au ', ' pour ']) {
+            const linkIndex = suffix.lastIndexOf(link);
+            if (linkIndex > -1) {
+                const targetTokens = trimContactValueSuffixTokens(
+                    splitNormalizedTokens(normalizeContactQueryText(suffix.slice(linkIndex + link.length).trim())),
+                    rawUtterance
+                );
+                const target = normalizeContactQueryText(targetTokens.join(' '));
+                if (target) return projectContactTextToRaw(rawUtterance, target);
+            }
+        }
+    }
+
+    if (normalizedText.startsWith('renomme ') || normalizedText.startsWith('rename ')) {
+        const suffix = normalizedText.replace(/^renomme\s+|^rename\s+/i, '');
+        for (const splitWord of [' en ', ' to ']) {
+            const splitIndex = suffix.indexOf(splitWord);
+            if (splitIndex > -1) {
+                const target = normalizeContactQueryText(suffix.slice(0, splitIndex).trim());
+                if (target) return projectContactTextToRaw(rawUtterance, target);
+            }
+        }
+    }
+
+    return '';
 };
 
 const buildBaseIntent = ({
@@ -995,6 +1338,13 @@ const tryBuildCalendarIntent = (base, runtimeToolSet) => {
     const action = createIntent
         ? 'create_event'
         : (updateIntent ? 'update_event' : (deleteIntent ? 'delete_event' : 'list_events'));
+    const rawUtterance = String(base?.utterance?.raw || '');
+    const hourMatch = rawUtterance.match(/\b(\d{1,2})\s*h(?:\s*(\d{2}))?\b/i);
+    const timeHint = hourMatch
+        ? `${String(Math.max(0, Math.min(23, Number(hourMatch[1])))).padStart(2, '0')}:${String(Math.max(0, Math.min(59, Number(hourMatch[2] || 0)))).padStart(2, '0')}`
+        : null;
+    const participantMatch = rawUtterance.match(/\bavec\s+([^\n,.!?]+)/i);
+    const participantHint = participantMatch?.[1] ? String(participantMatch[1]).trim() || null : null;
 
     const toolchain = [];
     if (action === 'create_event' && runtimeToolExists('calendar.ensure_calendar', runtimeToolSet)) {
@@ -1010,8 +1360,8 @@ const tryBuildCalendarIntent = (base, runtimeToolSet) => {
             tool_id: actionToolId,
             input: {
                 temporal_ref: readTimeReference(normalized),
-                time_hint: readHourReference(base.utterance.raw),
-                participant_hint: readParticipant(base.utterance.raw)
+                time_hint: timeHint,
+                participant_hint: participantHint
             },
             description: `Voice intent routed to ${actionToolId}.`
         }));
@@ -1026,8 +1376,8 @@ const tryBuildCalendarIntent = (base, runtimeToolSet) => {
         status: toolchain.length ? 'ready' : 'pending_connector',
         entities: {
             temporal_ref: readTimeReference(normalized),
-            time_hint: readHourReference(base.utterance.raw),
-            participant_hint: readParticipant(base.utterance.raw)
+            time_hint: timeHint,
+            participant_hint: participantHint
         },
         requested_capabilities: toolchain.length ? [] : [`calendar_${action}`],
         execution: {
@@ -1165,12 +1515,55 @@ const tryBuildMailIntent = (base) => {
     });
 };
 
+const isExplicitMailboxOperationRequest = (rawUtterance = '', normalized = '', context = {}) => {
+    if (!looksLikeMailContext(normalized, context)) return false;
+    const action = readMailAction(normalized);
+    const contactQuery = readContactQueryText(rawUtterance, normalized, context);
+    const contactFieldQuestion = hasContactFieldQuestion(normalized);
+    const directContactUpdateTarget = readDirectContactUpdateTarget(rawUtterance, normalized);
+    const directContactChanges = readContactUpdateChanges(rawUtterance, normalized);
+
+    if (contactFieldQuestion && contactQuery) {
+        return false;
+    }
+
+    if (directContactUpdateTarget && Object.keys(directContactChanges).length > 0) {
+        return false;
+    }
+
+    if (['reply', 'send', 'archive', 'delete', 'mark_read', 'mark_unread', 'summarize', 'search'].includes(action)) {
+        return true;
+    }
+
+    if (action === 'read') {
+        return hasAnyKeyword(normalized, [
+            'mail', 'mails', 'message', 'messages', 'courriel', 'courriels', 'courrier', 'courriers',
+            'inbox', 'boite de reception', 'boite mail',
+            'le plus ancien', 'le plus recent', 'le dernier', 'le premier',
+            'ce mail', 'ce message', 'mes mails', 'mes messages', 'mes courriers'
+        ]);
+    }
+
+    if (action === 'list') {
+        return hasMailStatusQuestion(normalized)
+            || hasAnyKeyword(normalized, [
+                'mes mails', 'mes messages', 'mes courriers', 'mes courriels',
+                'boite de reception', 'boite mail', 'inbox',
+                'nouveau', 'nouveaux', 'non lu', 'non lus'
+            ]);
+    }
+
+    return false;
+};
+
 const tryBuildContactsIntent = (base) => {
     const normalized = base.utterance.normalized;
-    if (!looksLikeContactsContext(normalized, base.context)) return null;
+    if (!looksLikeContactsContext(base.utterance.raw, normalized, base.context)) return null;
 
-    const action = readContactsAction(normalized, base.context);
-    const queryText = readContactQueryText(base.utterance.raw, normalized, base.context);
+    const action = readContactsAction(base.utterance.raw, normalized, base.context);
+    const directChanges = readContactUpdateChanges(base.utterance.raw, normalized);
+    const directUpdateTarget = readDirectContactUpdateTarget(base.utterance.raw, normalized);
+    const queryText = directUpdateTarget || readContactQueryText(base.utterance.raw, normalized, base.context);
     const currentContactId = readActiveContactId(base.context);
     const includeQuery = action !== 'list_contacts' && !!queryText;
     const capabilityMap = {
@@ -1183,6 +1576,7 @@ const tryBuildContactsIntent = (base) => {
     };
     const toolInput = {
         ...(includeQuery ? { query_text: queryText, query: queryText } : {}),
+        ...((action === 'update' || action === 'create') ? directChanges : {}),
         ...(currentContactId ? { contact_id: currentContactId } : {})
     };
 
@@ -1195,6 +1589,7 @@ const tryBuildContactsIntent = (base) => {
         status: 'pending_connector',
         entities: {
             ...(includeQuery ? { query_text: queryText, query: queryText } : {}),
+            ...((action === 'update' || action === 'create') ? directChanges : {}),
             ...(currentContactId ? { current_contact_id: currentContactId } : {})
         },
         requested_capabilities: capabilityMap[action] || ['contacts_search'],
@@ -1455,7 +1850,6 @@ export const classifyVoiceIntent = (utterance, {
     allow_business_heuristics = true
 } = {}) => {
     const rawUtterance = String(utterance || '').trim();
-    // Apply STT normalization before classification to handle noisy transcripts.
     const sttNormalized = normalizeSTTUtterance(rawUtterance, { locale });
     const effectiveUtterance = sttNormalized || rawUtterance;
     const base = buildBaseIntent({
@@ -1465,7 +1859,6 @@ export const classifyVoiceIntent = (utterance, {
         source,
         context
     });
-    // Preserve the original raw utterance in the intent for downstream use.
     if (base.utterance && typeof base.utterance === 'object') {
         base.utterance.raw = rawUtterance;
         base.utterance.stt_normalized = sttNormalized;
@@ -1499,10 +1892,14 @@ export const classifyVoiceIntent = (utterance, {
     const runtimeIntent = tryBuildRuntimeUiIntent(base, runtimeToolSet);
     if (runtimeIntent) return runtimeIntent;
 
+    const mailIntent = tryBuildMailIntent(base);
+    if (mailIntent && isExplicitMailboxOperationRequest(rawUtterance, base.utterance.normalized, context)) {
+        return mailIntent;
+    }
+
     const contactsIntent = tryBuildContactsIntent(base);
     if (contactsIntent) return contactsIntent;
 
-    const mailIntent = tryBuildMailIntent(base);
     if (mailIntent) return mailIntent;
 
     const bankIntent = tryBuildBankIntent(base);
