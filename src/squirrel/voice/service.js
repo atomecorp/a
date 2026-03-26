@@ -11,6 +11,8 @@ import {
 import { createProactiveStateStore } from '../ai/proactive_state_store.js';
 
 const DEFAULT_LANG = 'fr-FR';
+const DEFAULT_STT_SILENCE_MS = 8000;
+const DEFAULT_STT_FINAL_SILENCE_MS = 2400;
 
 const toDebugPayload = (value) => {
     try {
@@ -513,10 +515,10 @@ export const createVoiceService = ({
         const deferred = createDeferred();
         const silenceMs = Number.isFinite(options.silenceMs) && options.silenceMs >= 0
             ? Number(options.silenceMs)
-            : 1800;
+            : DEFAULT_STT_SILENCE_MS;
         const finalSilenceMs = Number.isFinite(options.finalSilenceMs) && options.finalSilenceMs >= 0
             ? Number(options.finalSilenceMs)
-            : Math.min(silenceMs, 450);
+            : Math.min(silenceMs, DEFAULT_STT_FINAL_SILENCE_MS);
         const state = {
             session_id: sessionId,
             bridge,
@@ -686,6 +688,21 @@ export const createVoiceService = ({
                     return;
                 }
                 if (state.cancelled || state.stopReason === 'cancelled' || state.stopReason === 'manual') {
+                    void settleStopped();
+                    return;
+                }
+                if (state.stopReason === 'commit') {
+                    const committedText = String(state.final_texts.join(' ').trim() || state.latest_text || '').trim();
+                    if (committedText) {
+                        void settleFinal({
+                            text: committedText,
+                            confidence: state.confidence,
+                            segments: state.segments,
+                            skipStop: true,
+                            reason: 'commit'
+                        });
+                        return;
+                    }
                     void settleStopped();
                     return;
                 }
@@ -913,13 +930,14 @@ export const createVoiceService = ({
             }
             throw new Error(`Unsupported STT provider bridge: ${selectedProvider}`);
         },
-        async stop(sessionId) {
+        async stop(sessionId, options = {}) {
             const state = sttSessions.get(String(sessionId));
             if (!state) {
                 return sessionRuntime.getSession(sessionId);
             }
+            const commitPartial = options?.commitPartial === true;
             if (state.bridge && typeof state.bridge.stop === 'function') {
-                state.stopReason = 'manual';
+                state.stopReason = commitPartial ? 'commit' : 'manual';
                 state.stopRequested = true;
                 await state.bridge.stop();
                 return state.deferred.promise;

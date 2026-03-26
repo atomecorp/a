@@ -193,9 +193,9 @@ export const createGlobalVoiceApi = ({
             const service = await ensureReady();
             return service.stt.start(options);
         },
-        async stopListening(sessionId) {
+        async stopListening(sessionId, options = {}) {
             const service = await ensureReady();
-            return service.stt.stop(sessionId);
+            return service.stt.stop(sessionId, options);
         },
         async cancelListening(sessionId) {
             const service = await ensureReady();

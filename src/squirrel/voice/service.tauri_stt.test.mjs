@@ -205,6 +205,28 @@ assert.equal(manualStopped.text, '', 'manual stop should not promote the partial
 
 resetListeners();
 
+const commitRuntime = createVoiceSessionRuntime();
+const commitVoice = createVoiceService({
+    env: manualStopEnv,
+    sessionRuntime: commitRuntime,
+    aiPlanner: { async plan() { return null; } }
+});
+
+const commitStarted = await commitVoice.stt.start({
+    lang: 'fr-FR',
+    partial: true,
+    silenceMs: 5000
+});
+
+const commitStopped = await commitVoice.stt.stop(commitStarted.session_id, {
+    commitPartial: true
+});
+assert.equal(commitStopped.cancelled, undefined, 'commit stop should finalize instead of cancelling the voice turn');
+assert.equal(commitStopped.text, 'Brouillon', 'commit stop should promote the latest partial transcript into a final utterance');
+assert.equal(commitRuntime.getSession(commitStarted.session_id).transcript.final, 'Brouillon', 'commit stop should persist the promoted partial transcript');
+
+resetListeners();
+
 let recoveredStartCalls = 0;
 const recoveryEnv = {
     __TAURI__: {

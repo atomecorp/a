@@ -7,6 +7,11 @@ const LEGACY_HISTORY_STORAGE_KEY = 'eve_dilas_voice_history_v1';
 const MAX_HISTORY_ITEMS = 80;
 const DEFAULT_ECHO_COOLDOWN_MS = 1200;
 const DEFAULT_BARGE_ARM_DELAY_MS = 700;
+const DEFAULT_FAST_COMMIT_MS = 1200;
+const DEFAULT_PAUSE_COMMIT_MS = 4200;
+const DEFAULT_FORCE_COMMIT_MS = 6500;
+const DEFAULT_STT_SILENCE_MS = 8000;
+const DEFAULT_STT_FINAL_SILENCE_MS = 2400;
 const LOW_INFORMATION_TOKENS = new Set([
     'tout',
     'tous',
@@ -41,6 +46,51 @@ const NEGATIVE_TOKENS = new Set([
     'annuler',
     'laisse tomber',
     'pas maintenant'
+]);
+const COMMAND_START_TOKENS = new Set([
+    'ouvre',
+    'ouvre-moi',
+    'lis',
+    'ajoute',
+    'cree',
+    'crée',
+    'supprime',
+    'efface',
+    'cherche',
+    'trouve',
+    'montre',
+    'lance',
+    'ferme',
+    'appelle',
+    'envoie',
+    'reponds',
+    'réponds',
+    'resume',
+    'résume',
+    'marque',
+    'archive'
+]);
+const QUESTION_START_TOKENS = new Set([
+    'qui',
+    'que',
+    'quoi',
+    'quel',
+    'quelle',
+    'quels',
+    'quelles',
+    'ou',
+    'où',
+    'quand',
+    'combien',
+    'comment',
+    'est-ce',
+    'est',
+    'ai',
+    'as',
+    'a',
+    'dois',
+    'peux',
+    'peut'
 ]);
 
 const toText = (value) => String(value || '').trim();
@@ -96,6 +146,18 @@ const mergeTranscriptFragments = (prefix = '', next = '') => {
     if (normalizedLeft && normalizedLeft === normalizedRight) return right;
     if (normalizedLeft && normalizedRight && normalizedRight.startsWith(normalizedLeft)) return right;
     return `${left} ${right}`.trim();
+};
+
+const isClearlyCompleteCommand = (value = '') => {
+    const normalized = normalizeComparisonText(value);
+    if (!normalized) return false;
+    const words = normalized.split(' ').filter(Boolean);
+    if (words.length < 2 || words.length > 8) return false;
+    const [first = ''] = words;
+    if (!first) return false;
+    if (COMMAND_START_TOKENS.has(first)) return true;
+    if (QUESTION_START_TOKENS.has(first) && words.length >= 3) return true;
+    return false;
 };
 
 const isAffirmativeDecision = (value = '') => AFFIRMATIVE_TOKENS.has(normalizeComparisonText(value));
@@ -406,7 +468,11 @@ export const mountHomeVoiceSurface = async ({
         lastFailureNotice: '',
         activationPromise: null,
         pendingReadyAnnouncement: false,
-        readyAnnouncementTask: null
+        readyAnnouncementTask: null,
+        transcriptFastCommitTimer: null,
+        transcriptPauseCommitTimer: null,
+        transcriptForceCommitTimer: null,
+        commitRequested: false
     };
 
     const locale = () => resolveLocale();
@@ -417,6 +483,82 @@ export const mountHomeVoiceSurface = async ({
     const bargeArmDelayMs = Number.isFinite(Number(env?.__EVE_VOICE_BARGE_ARM_DELAY_MS))
         ? Math.max(0, Number(env.__EVE_VOICE_BARGE_ARM_DELAY_MS))
         : DEFAULT_BARGE_ARM_DELAY_MS;
+    const fastCommitMs = Number.isFinite(Number(env?.__EVE_VOICE_FAST_COMMIT_MS))
+        ? Math.max(0, Number(env.__EVE_VOICE_FAST_COMMIT_MS))
+        : DEFAULT_FAST_COMMIT_MS;
+    const pauseCommitMs = Number.isFinite(Number(env?.__EVE_VOICE_PAUSE_COMMIT_MS))
+        ? Math.max(fastCommitMs, Number(env.__EVE_VOICE_PAUSE_COMMIT_MS))
+        : DEFAULT_PAUSE_COMMIT_MS;
+    const forceCommitMs = Number.isFinite(Number(env?.__EVE_VOICE_FORCE_COMMIT_MS))
+        ? Math.max(pauseCommitMs, Number(env.__EVE_VOICE_FORCE_COMMIT_MS))
+        : DEFAULT_FORCE_COMMIT_MS;
+    const sttSilenceMs = Number.isFinite(Number(env?.__EVE_VOICE_STT_SILENCE_MS))
+        ? Math.max(forceCommitMs + 500, Number(env.__EVE_VOICE_STT_SILENCE_MS))
+        : DEFAULT_STT_SILENCE_MS;
+    const sttFinalSilenceMs = Number.isFinite(Number(env?.__EVE_VOICE_STT_FINAL_SILENCE_MS))
+        ? Math.max(0, Number(env.__EVE_VOICE_STT_FINAL_SILENCE_MS))
+        : DEFAULT_STT_FINAL_SILENCE_MS;
+
+    const clearTranscriptCommitTimers = () => {
+        if (state.transcriptFastCommitTimer) {
+            env.clearTimeout?.(state.transcriptFastCommitTimer);
+            state.transcriptFastCommitTimer = null;
+        }
+        if (state.transcriptPauseCommitTimer) {
+            env.clearTimeout?.(state.transcriptPauseCommitTimer);
+            state.transcriptPauseCommitTimer = null;
+        }
+        if (state.transcriptForceCommitTimer) {
+            env.clearTimeout?.(state.transcriptForceCommitTimer);
+            state.transcriptForceCommitTimer = null;
+        }
+    };
+
+    const buildMergedTranscript = (value = state.transcriptDraft) => mergeTranscriptFragments(state.pendingTranscriptPrefix, toText(value));
+
+    const requestTranscriptCommit = async ({
+        force = false,
+        reason = 'pause'
+    } = {}) => {
+        if (textOnly || !state.active || !state.listening || state.processing || state.speaking || state.commitRequested) return;
+        const mergedText = buildMergedTranscript();
+        if (!mergedText) return;
+        if (!force && !isTranscriptActionable(mergedText)) return;
+        state.commitRequested = true;
+        clearTranscriptCommitTimers();
+        debugVoice('transcript_commit_requested', {
+            sessionId: state.sessionId,
+            reason,
+            force,
+            text: mergedText
+        });
+        try {
+            await stopListeningLoop({ commitPartial: true });
+        } catch (_) {
+            state.commitRequested = false;
+        }
+    };
+
+    const scheduleTranscriptCommitEvaluation = () => {
+        if (textOnly || !state.active || !state.listening || state.processing || state.speaking || state.commitRequested) return;
+        const mergedText = buildMergedTranscript();
+        if (!mergedText) return;
+        clearTranscriptCommitTimers();
+        if (isClearlyCompleteCommand(mergedText)) {
+            state.transcriptFastCommitTimer = env.setTimeout?.(() => {
+                state.transcriptFastCommitTimer = null;
+                void requestTranscriptCommit({ force: false, reason: 'fast_pause' });
+            }, fastCommitMs) || null;
+        }
+        state.transcriptPauseCommitTimer = env.setTimeout?.(() => {
+            state.transcriptPauseCommitTimer = null;
+            void requestTranscriptCommit({ force: false, reason: 'pause' });
+        }, pauseCommitMs) || null;
+        state.transcriptForceCommitTimer = env.setTimeout?.(() => {
+            state.transcriptForceCommitTimer = null;
+            void requestTranscriptCommit({ force: true, reason: 'force_pause' });
+        }, forceCommitMs) || null;
+    };
 
     const resetBargeInDetector = () => {
         state.bargeInPending = false;
@@ -1031,8 +1173,10 @@ export const mountHomeVoiceSurface = async ({
         const sessionId = await ensureSession();
         debugVoice('start_listening', { sessionId, locale: locale() });
         state.listening = true;
+        state.commitRequested = false;
         state.transcriptDraft = '';
         state.lastFailureNotice = '';
+        clearTranscriptCommitTimers();
         setError('');
         setInfo('');
         renderTranscript();
@@ -1043,13 +1187,15 @@ export const mountHomeVoiceSurface = async ({
                 lang: locale(),
                 partial: true,
                 continuous: true,
-                silenceMs: 900,
-                finalSilenceMs: 320,
+                silenceMs: sttSilenceMs,
+                finalSilenceMs: sttFinalSilenceMs,
                 maxAlternatives: 3
             });
             state.listeningPromise = started?.promise || Promise.resolve(null);
             const result = await state.listeningPromise;
             state.listening = false;
+            state.commitRequested = false;
+            clearTranscriptCommitTimers();
             updateControls();
             const text = toText(result?.text);
             const mergedText = mergeTranscriptFragments(state.pendingTranscriptPrefix, text);
@@ -1108,7 +1254,9 @@ export const mountHomeVoiceSurface = async ({
                 error: error?.message || String(error)
             });
             state.listening = false;
+            state.commitRequested = false;
             state.transcriptDraft = '';
+            clearTranscriptCommitTimers();
             clearRestartTimer();
             renderTranscript();
             await announceListenFailure(error);
@@ -1116,10 +1264,10 @@ export const mountHomeVoiceSurface = async ({
         }
     };
 
-    const stopListeningLoop = async () => {
+    const stopListeningLoop = async (options = {}) => {
         if (!state.listening || !state.sessionId || !state.api?.stopListening) return;
         try {
-            await state.api.stopListening(state.sessionId);
+            await state.api.stopListening(state.sessionId, options);
         } catch (_) {
             // Ignore manual stop failures.
         } finally {
@@ -1220,6 +1368,7 @@ export const mountHomeVoiceSurface = async ({
                     text: state.transcriptDraft
                 });
                 renderTranscript();
+                scheduleTranscriptCommitEvaluation();
             }
             if (event.type === 'voice.stt.download_progress') {
                 debugVoice('voice.stt.download_progress', {
@@ -1239,6 +1388,7 @@ export const mountHomeVoiceSurface = async ({
                 });
                 state.speaking = next === 'speaking';
                 if (next === 'speaking') {
+                    clearTranscriptCommitTimers();
                     state.bargeInArmAt = Date.now() + bargeArmDelayMs;
                     state.bargeInPending = false;
                     state.bargeInDetector?.reset?.();
@@ -1269,6 +1419,8 @@ export const mountHomeVoiceSurface = async ({
                 state.listening = false;
                 state.speaking = false;
                 state.processing = false;
+                state.commitRequested = false;
+                clearTranscriptCommitTimers();
                 resetBargeInDetector();
                 updateControls();
             }
@@ -1362,6 +1514,7 @@ export const mountHomeVoiceSurface = async ({
         async deactivate() {
             state.active = false;
             clearRestartTimer();
+            clearTranscriptCommitTimers();
             if (state.listening) {
                 await stopListeningLoop();
             }
@@ -1404,6 +1557,7 @@ export const mountHomeVoiceSurface = async ({
         destroy() {
         try { state.unsubscribe(); } catch (_) { }
             clearRestartTimer();
+            clearTranscriptCommitTimers();
             resetBargeInDetector();
             void stopVoiceMeter();
             root.remove();
