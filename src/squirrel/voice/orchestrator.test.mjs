@@ -698,7 +698,7 @@ const stalledMailEnv = {
                 return { ok: true, configured: true, provider: 'icloud_imap_smtp' };
             },
             syncPull() {
-                return new Promise(() => {});
+                return new Promise(() => { });
             },
             list() {
                 return {
@@ -1065,8 +1065,8 @@ const misflaggedReplyResult = await misflaggedReplyOrchestrator.executeIntent({
             }
         }]
     }
-});
-assert.equal(misflaggedReplyResult.executed, true, 'mail reply should ignore stray confirmation flags');
+}, { confirmed: true });
+assert.equal(misflaggedReplyResult.executed, true, 'mail reply with confirmed:true should execute despite confirmation flag');
 assert.equal(misflaggedReplyResult.result?.draft?.in_reply_to, 'voice_mail_misflagged_reply_1');
 assert.equal(misflaggedReplyResult.result?.draft?.status, 'queued_local_only', 'misflagged reply should still send immediately');
 

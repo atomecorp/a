@@ -271,7 +271,11 @@ export const createStructuredResult = (raw = {}) => {
         transport: ensureString(raw.transport),
         queued: raw.queued === true,
         offline: raw.offline === true,
-        queue_entry_id: ensureString(raw.queue_entry_id)
+        queue_entry_id: ensureString(raw.queue_entry_id),
+        ...(raw.trust_score !== undefined ? { trust_score: raw.trust_score } : {}),
+        ...(raw.trust_level ? { trust_level: raw.trust_level } : {}),
+        ...(Array.isArray(raw.trust_signals) ? { trust_signals: raw.trust_signals } : {}),
+        ...(raw.confirmation_required === true ? { confirmation_required: true } : {})
     });
 };
 

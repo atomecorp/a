@@ -900,16 +900,8 @@ class VoiceOrchestrator {
 
     async executeIntent(intent, options = {}) {
         const normalizedIntent = normalizeVoiceIntent(intent);
-        if (
-            normalizedIntent.execution?.confirmation_required === true
-            && String(normalizedIntent?.domain || '').trim() === 'mail'
-            && (
-                String(normalizedIntent?.action || '').trim() === 'reply_current'
-                || String(normalizedIntent?.action || '').trim() === 'reply_prompt'
-            )
-        ) {
-            normalizedIntent.execution.confirmation_required = false;
-        }
+        // Trust-gated: mail reply confirmation is no longer forcibly disabled.
+        // The trust scoring engine in tool_router handles confirmation at the result level.
         this.#bindSessionIntent(options.session_id, normalizedIntent, {
             phase: 'executing'
         });
@@ -1525,6 +1517,32 @@ class VoiceOrchestrator {
             });
 
             const result = await this.toolRouter.execute(structuredRequest);
+
+            // Trust gate: if the tool router signals that confirmation is required
+            // due to trust scoring, surface it as a confirmation response.
+            if (result?.confirmation_required === true && result?.trust_level) {
+                this.#pushJournal('voice.trust_gate.triggered', {
+                    domain: structuredRequest.domain,
+                    operation: structuredRequest.operation,
+                    trust_score: result.trust_score,
+                    trust_level: result.trust_level
+                });
+                return {
+                    ok: true,
+                    executed: false,
+                    transport: `${structuredRequest.domain}_api`,
+                    intent,
+                    reason: 'mail_trust_warning',
+                    confirmation_required: true,
+                    trust_score: result.trust_score,
+                    trust_level: result.trust_level,
+                    trust_signals: result.trust_signals,
+                    confirmation_prompt: result.reply_text,
+                    reply_text: result.reply_text,
+                    spoken_reply: result.reply_text
+                };
+            }
+
             this.traceStore?.appendExecution?.(options.trace_id, {
                 tool_name: `${structuredRequest.domain}.${structuredRequest.operation}`,
                 domain: structuredRequest.domain,

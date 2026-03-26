@@ -5,6 +5,12 @@ import {
 import { resolveAtomeRuntimeInvocation } from '../atome/runtime_tool_resolution.js';
 import { buildContactQueryReply, buildContactsFieldReply } from './contact_reply.js';
 import { createOfflineMutationQueue } from '../ai/offline_mutation_queue.js';
+import {
+    computeTrustScore,
+    buildTrustWarning,
+    TRUST_THRESHOLD_OK,
+    TRUST_THRESHOLD_WARN
+} from './mail_trust_scoring.js';
 
 const isEnglish = (locale) => String(locale || '').toLowerCase().startsWith('en');
 const OFFLINE_MUTATION_OPERATIONS = new Set(['create', 'update', 'delete']);
@@ -620,6 +626,36 @@ const buildCalendarReply = (items, locale) => {
         : `Tu as ${items.length} rendez-vous : ${labels.join(', ')}.`;
 };
 
+const checkMailTrust = (workingMemory, locale, operation) => {
+    if (!workingMemory) return null;
+    const currentMail = workingMemory.getCurrentItem('mail');
+    if (!currentMail || typeof currentMail !== 'object') return null;
+    const trust = computeTrustScore(currentMail);
+    if (trust.level === 'trusted') return null;
+    const warning = buildTrustWarning(trust, locale);
+    if (trust.level === 'blocked') {
+        return {
+            ok: false,
+            domain: 'mail',
+            operation,
+            error: 'mail_trust_blocked',
+            trust_score: trust.score,
+            trust_level: trust.level,
+            trust_signals: trust.signals,
+            reply_text: warning,
+            executed: false
+        };
+    }
+    // suspicious — return a result that signals confirmation_required
+    return {
+        __trust_warning: true,
+        trust_score: trust.score,
+        trust_level: trust.level,
+        trust_signals: trust.signals,
+        trust_warning_text: warning
+    };
+};
+
 const executeMailRequest = async (request, connectors, workingMemory) => {
     const mailApi = connectors.mail;
     const messagesApi = connectors.messages || null;
@@ -765,14 +801,20 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 const readItem = readResult?.item || readResult?.message || currentMemoryItem || null;
                 if (readResult?.ok === true && readItem) {
                     const normalizedItem = normalizeCommunicationItem(readItem, 'messages');
+                    const readTrust = computeTrustScore(normalizedItem);
                     if (workingMemory) {
                         workingMemory.setCurrentItem('mail', normalizedItem.message_id, normalizedItem);
                         workingMemory.setLastOperation('mail', 'read');
                     }
+                    const readWarning = readTrust.level !== 'trusted' ? buildTrustWarning(readTrust, locale) : '';
                     return createStructuredResult({
                         ok: true, domain: 'mail', operation: 'read',
                         item: normalizedItem,
+                        trust_score: readTrust.score,
+                        trust_level: readTrust.level,
+                        trust_signals: readTrust.signals,
                         reply_text: buildCommunicationReadReply(normalizedItem, locale, request)
+                            + (readWarning ? '\n\n' + readWarning : '')
                     });
                 }
             }
@@ -788,14 +830,20 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 if (typeof mailApi.markRead === 'function') {
                     await mailApi.markRead(targetId, { read: true });
                 }
+                const mailReadTrust = computeTrustScore(result.item);
                 if (workingMemory) {
                     workingMemory.setCurrentItem('mail', targetId, result.item);
                     workingMemory.setLastOperation('mail', 'read');
                 }
+                const mailReadWarning = mailReadTrust.level !== 'trusted' ? buildTrustWarning(mailReadTrust, locale) : '';
                 return createStructuredResult({
                     ok: true, domain: 'mail', operation: 'read',
                     item: result.item,
+                    trust_score: mailReadTrust.score,
+                    trust_level: mailReadTrust.level,
+                    trust_signals: mailReadTrust.signals,
                     reply_text: buildMailReadReply(result.item, locale, request)
+                        + (mailReadWarning ? '\n\n' + mailReadWarning : '')
                 });
             }
             return createStructuredResult({
@@ -857,6 +905,19 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
         }
 
         case 'compose': {
+            const composeTrust = checkMailTrust(workingMemory, locale, 'compose');
+            if (composeTrust && !composeTrust.__trust_warning) return composeTrust;
+            if (composeTrust?.__trust_warning && !request._trust_acknowledged) {
+                return {
+                    ok: true, domain: 'mail', operation: 'compose',
+                    trust_score: composeTrust.trust_score,
+                    trust_level: composeTrust.trust_level,
+                    trust_signals: composeTrust.trust_signals,
+                    confirmation_required: true,
+                    reply_text: composeTrust.trust_warning_text,
+                    executed: false
+                };
+            }
             const composeText = request.draft?.reply_text;
             if (!composeText) {
                 return createStructuredResult({
@@ -967,6 +1028,19 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
         // fall through to reply when draft_text is available
 
         case 'reply': {
+            const replyTrust = checkMailTrust(workingMemory, locale, 'reply');
+            if (replyTrust && !replyTrust.__trust_warning) return replyTrust;
+            if (replyTrust?.__trust_warning && !request._trust_acknowledged) {
+                return {
+                    ok: true, domain: 'mail', operation: 'reply',
+                    trust_score: replyTrust.trust_score,
+                    trust_level: replyTrust.trust_level,
+                    trust_signals: replyTrust.trust_signals,
+                    confirmation_required: true,
+                    reply_text: replyTrust.trust_warning_text,
+                    executed: false
+                };
+            }
             const draftText = request.draft?.reply_text;
             if (!draftText) {
                 return createStructuredResult({
@@ -1077,6 +1151,19 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
         }
 
         case 'send': {
+            const sendTrust = checkMailTrust(workingMemory, locale, 'send');
+            if (sendTrust && !sendTrust.__trust_warning) return sendTrust;
+            if (sendTrust?.__trust_warning && !request._trust_acknowledged) {
+                return {
+                    ok: true, domain: 'mail', operation: 'send',
+                    trust_score: sendTrust.trust_score,
+                    trust_level: sendTrust.trust_level,
+                    trust_signals: sendTrust.trust_signals,
+                    confirmation_required: true,
+                    reply_text: sendTrust.trust_warning_text,
+                    executed: false
+                };
+            }
             const currentDraft = workingMemory ? workingMemory.getCurrentItem('mail_draft') : null;
             const currentDraftId = request.target?.id
                 || (workingMemory ? workingMemory.getCurrentItemId('mail_draft') : null);
