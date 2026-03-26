@@ -1,4 +1,5 @@
 import { getEveLocale } from '../../application/eVe/i18n/i18n.js';
+import { VOICE_LOCAL_COMMANDS, normalizeLocalVoiceCommand } from './session_runtime.js';
 import { mountVoiceMeter } from './voice_meter.js';
 import { createVoiceActivityDetector } from './vad.js';
 
@@ -12,6 +13,8 @@ const DEFAULT_PAUSE_COMMIT_MS = 4200;
 const DEFAULT_FORCE_COMMIT_MS = 6500;
 const DEFAULT_STT_SILENCE_MS = 8000;
 const DEFAULT_STT_FINAL_SILENCE_MS = 2400;
+const DEFAULT_INTERRUPT_STT_SILENCE_MS = 2600;
+const DEFAULT_INTERRUPT_STT_FINAL_SILENCE_MS = 900;
 const LOW_INFORMATION_TOKENS = new Set([
     'tout',
     'tous',
@@ -92,6 +95,10 @@ const QUESTION_START_TOKENS = new Set([
     'peux',
     'peut'
 ]);
+const INTERRUPT_COMMANDS = new Set([
+    VOICE_LOCAL_COMMANDS.STOP,
+    VOICE_LOCAL_COMMANDS.CANCEL
+]);
 
 const toText = (value) => String(value || '').trim();
 
@@ -163,6 +170,21 @@ const isClearlyCompleteCommand = (value = '') => {
 const isAffirmativeDecision = (value = '') => AFFIRMATIVE_TOKENS.has(normalizeComparisonText(value));
 
 const isNegativeDecision = (value = '') => NEGATIVE_TOKENS.has(normalizeComparisonText(value));
+
+const detectInterruptCommand = (value = '') => {
+    const normalized = normalizeComparisonText(value);
+    if (!normalized) return null;
+    const words = normalized.split(' ').filter(Boolean);
+    if (words.length > 4) return null;
+    const parsed = normalizeLocalVoiceCommand(value);
+    if (!parsed || !INTERRUPT_COMMANDS.has(parsed.command)) return null;
+    const matchedAlias = normalizeComparisonText(parsed.matched_alias || '');
+    if (!matchedAlias) return null;
+    if (normalized === matchedAlias || normalized.startsWith(`${matchedAlias} `)) {
+        return parsed;
+    }
+    return null;
+};
 
 const toDebugPayload = (value) => {
     try {
@@ -472,7 +494,11 @@ export const mountHomeVoiceSurface = async ({
         transcriptFastCommitTimer: null,
         transcriptPauseCommitTimer: null,
         transcriptForceCommitTimer: null,
-        commitRequested: false
+        commitRequested: false,
+        interruptListening: false,
+        interruptListeningPromise: null,
+        interruptRestartTimer: null,
+        interruptCommandPending: false
     };
 
     const locale = () => resolveLocale();
@@ -498,6 +524,12 @@ export const mountHomeVoiceSurface = async ({
     const sttFinalSilenceMs = Number.isFinite(Number(env?.__EVE_VOICE_STT_FINAL_SILENCE_MS))
         ? Math.max(0, Number(env.__EVE_VOICE_STT_FINAL_SILENCE_MS))
         : DEFAULT_STT_FINAL_SILENCE_MS;
+    const interruptSttSilenceMs = Number.isFinite(Number(env?.__EVE_VOICE_INTERRUPT_STT_SILENCE_MS))
+        ? Math.max(0, Number(env.__EVE_VOICE_INTERRUPT_STT_SILENCE_MS))
+        : DEFAULT_INTERRUPT_STT_SILENCE_MS;
+    const interruptSttFinalSilenceMs = Number.isFinite(Number(env?.__EVE_VOICE_INTERRUPT_STT_FINAL_SILENCE_MS))
+        ? Math.max(0, Number(env.__EVE_VOICE_INTERRUPT_STT_FINAL_SILENCE_MS))
+        : DEFAULT_INTERRUPT_STT_FINAL_SILENCE_MS;
 
     const clearTranscriptCommitTimers = () => {
         if (state.transcriptFastCommitTimer) {
@@ -566,6 +598,125 @@ export const mountHomeVoiceSurface = async ({
         state.bargeInDetector?.reset?.();
     };
 
+    const clearInterruptRestartTimer = () => {
+        if (state.interruptRestartTimer) {
+            env.clearTimeout?.(state.interruptRestartTimer);
+            state.interruptRestartTimer = null;
+        }
+    };
+
+    const scheduleInterruptListeningRestart = (delayMs = 120) => {
+        clearInterruptRestartTimer();
+        if (textOnly || !state.active || !state.speaking || state.listening || state.processing || state.interruptListening) return;
+        state.interruptRestartTimer = env.setTimeout?.(() => {
+            state.interruptRestartTimer = null;
+            void startInterruptListening();
+        }, Math.max(0, delayMs)) || null;
+    };
+
+    const stopInterruptListening = async () => {
+        clearInterruptRestartTimer();
+        if (!state.interruptListening || !state.sessionId || !state.api?.stopListening) {
+            state.interruptListening = false;
+            state.interruptListeningPromise = null;
+            state.interruptCommandPending = false;
+            return;
+        }
+        state.interruptListening = false;
+        state.interruptListeningPromise = null;
+        try {
+            await state.api.stopListening(state.sessionId, { commitPartial: false });
+        } catch (_) {
+            // Ignore interrupt-listener teardown failures.
+        } finally {
+            state.interruptCommandPending = false;
+        }
+    };
+
+    const restartListeningAfterInterruption = (delayMs = 80) => {
+        clearRestartTimer();
+        if (!state.active || state.listening || state.processing || state.speaking) return;
+        state.restartTimer = env.setTimeout?.(() => {
+            state.restartTimer = null;
+            void startListeningLoop();
+        }, Math.max(0, delayMs)) || null;
+    };
+
+    const handleInterruptTranscript = async (text) => {
+        if (!state.active || !state.sessionId || !state.speaking || state.interruptCommandPending) return false;
+        const parsed = detectInterruptCommand(text);
+        if (!parsed) return false;
+        state.interruptCommandPending = true;
+        debugVoice('interrupt_command_detected', {
+            sessionId: state.sessionId,
+            text: parsed.raw,
+            command: parsed.command,
+            matchedAlias: parsed.matched_alias
+        });
+        await stopInterruptListening();
+        try {
+            if (typeof state.api?.interrupt === 'function') {
+                await state.api.interrupt(state.sessionId, {
+                    utterance: parsed.raw,
+                    reason: 'eve_voice_interrupt_command'
+                });
+            } else if (typeof state.api?.stopSpeaking === 'function') {
+                await state.api.stopSpeaking(state.sessionId, {
+                    reason: 'eve_voice_interrupt_command'
+                });
+            }
+        } catch (_) {
+            // Fall through to local state recovery.
+        } finally {
+            state.speaking = false;
+            state.processing = false;
+            state.interruptCommandPending = false;
+            updateControls();
+            restartListeningAfterInterruption(80);
+        }
+        return true;
+    };
+
+    const startInterruptListening = async () => {
+        if (textOnly || !state.active || state.listening || state.processing || !state.speaking || state.interruptListening) return;
+        const sessionId = await ensureSession();
+        clearInterruptRestartTimer();
+        state.interruptListening = true;
+        state.interruptCommandPending = false;
+        try {
+            const started = await state.api.startListening({
+                session_id: sessionId,
+                lang: locale(),
+                partial: true,
+                continuous: true,
+                silenceMs: interruptSttSilenceMs,
+                finalSilenceMs: interruptSttFinalSilenceMs,
+                maxAlternatives: 1
+            });
+            const interruptPromise = started?.promise || Promise.resolve(null);
+            state.interruptListeningPromise = interruptPromise;
+            const result = await interruptPromise;
+            if (state.interruptListeningPromise !== interruptPromise) return;
+            state.interruptListening = false;
+            state.interruptListeningPromise = null;
+            const finalText = toText(result?.text);
+            if (await handleInterruptTranscript(finalText)) return;
+            if (state.active && state.speaking && !state.listening && !state.processing) {
+                scheduleInterruptListeningRestart(120);
+            }
+        } catch (error) {
+            state.interruptListening = false;
+            state.interruptListeningPromise = null;
+            debugVoice('interrupt_listen_failed', {
+                sessionId,
+                error: error?.message || String(error)
+            });
+            if (state.active && state.speaking && !state.listening && !state.processing) {
+                scheduleInterruptListeningRestart(240);
+            }
+        }
+    };
+
     const handleBargeInDetected = async () => {
         if (state.bargeInPending || !state.active || !state.speaking || !state.sessionId) return;
         state.bargeInPending = true;
@@ -580,16 +731,11 @@ export const mountHomeVoiceSurface = async ({
         } catch (_) {
             // Ignore stop failures and continue toward a fresh listen cycle.
         } finally {
+            await stopInterruptListening();
             state.speaking = false;
             updateControls();
             resetBargeInDetector();
-            if (state.active && !state.listening && !state.processing) {
-                const timer = env.setTimeout?.(() => {
-                    state.restartTimer = null;
-                    void startListeningLoop();
-                }, 80) || null;
-                state.restartTimer = timer;
-            }
+            restartListeningAfterInterruption(80);
         }
     };
 
@@ -1169,7 +1315,11 @@ export const mountHomeVoiceSurface = async ({
     const startListeningLoop = async () => {
         if (textOnly) return;
         clearRestartTimer();
+        clearInterruptRestartTimer();
         if (!state.active || state.listening || state.processing || state.speaking) return;
+        if (state.interruptListening) {
+            await stopInterruptListening();
+        }
         const sessionId = await ensureSession();
         debugVoice('start_listening', { sessionId, locale: locale() });
         state.listening = true;
@@ -1362,7 +1512,17 @@ export const mountHomeVoiceSurface = async ({
                 }
             }
             if (event.type === 'voice.stt.partial' || event.type === 'voice.stt.final') {
-                state.transcriptDraft = toText(event.payload?.text);
+                const transcriptText = toText(event.payload?.text);
+                if (state.interruptListening && state.speaking) {
+                    debugVoice(event.type, {
+                        sessionId: event.session_id,
+                        text: transcriptText,
+                        mode: 'interrupt_only'
+                    });
+                    void handleInterruptTranscript(transcriptText);
+                    return;
+                }
+                state.transcriptDraft = transcriptText;
                 debugVoice(event.type, {
                     sessionId: event.session_id,
                     text: state.transcriptDraft
@@ -1392,9 +1552,11 @@ export const mountHomeVoiceSurface = async ({
                     state.bargeInArmAt = Date.now() + bargeArmDelayMs;
                     state.bargeInPending = false;
                     state.bargeInDetector?.reset?.();
+                    void startInterruptListening();
                 }
-                if (next === 'done' || next === 'interrupted') {
+                if (next === 'done' || next === 'failed' || next === 'interrupted') {
                     state.speaking = false;
+                    void stopInterruptListening();
                     resetBargeInDetector();
                 }
                 updateControls();
@@ -1421,6 +1583,8 @@ export const mountHomeVoiceSurface = async ({
                 state.processing = false;
                 state.commitRequested = false;
                 clearTranscriptCommitTimers();
+                clearInterruptRestartTimer();
+                void stopInterruptListening();
                 resetBargeInDetector();
                 updateControls();
             }
@@ -1514,10 +1678,12 @@ export const mountHomeVoiceSurface = async ({
         async deactivate() {
             state.active = false;
             clearRestartTimer();
+            clearInterruptRestartTimer();
             clearTranscriptCommitTimers();
             if (state.listening) {
                 await stopListeningLoop();
             }
+            await stopInterruptListening();
             if (state.sessionId && state.api?.stopSpeaking) {
                 try {
                     await state.api.stopSpeaking(state.sessionId, { reason: 'eve_panel_close' });
@@ -1545,6 +1711,7 @@ export const mountHomeVoiceSurface = async ({
             return cloneValue({
                 active: state.active,
                 listening: state.listening,
+                interruptListening: state.interruptListening,
                 processing: state.processing,
                 speaking: state.speaking,
                 textOnly,
@@ -1557,8 +1724,10 @@ export const mountHomeVoiceSurface = async ({
         destroy() {
         try { state.unsubscribe(); } catch (_) { }
             clearRestartTimer();
+            clearInterruptRestartTimer();
             clearTranscriptCommitTimers();
             resetBargeInDetector();
+            void stopInterruptListening();
             void stopVoiceMeter();
             root.remove();
             delete host.__eveHomeVoiceSurfaceController;
