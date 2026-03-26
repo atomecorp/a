@@ -11,7 +11,7 @@ globalThis.AtomeAI = {
 };
 
 installMockBrowserEnv({
-    runTool: async (payload = {}) => ({ ok: true, legacy: true, payload }),
+    runTool: async (payload = {}) => ({ ok: true, payload }),
     eveToolBase: {
         createAtome: async (spec) => ({ ok: true, id: 'default_tools_runtime_trace', spec })
     }

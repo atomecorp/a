@@ -336,6 +336,30 @@ export const createMailService = ({
             drafts.set(draft.draft_id, draft);
             return { ok: true, draft };
         },
+        mailComposeDraft({
+            to = [],
+            subject = '',
+            body_text = '',
+            signature = ''
+        } = {}) {
+            const recipients = Array.isArray(to) ? to : (to ? [to] : []);
+            if (!recipients.length) {
+                return { ok: false, error: 'mail_compose_no_recipient' };
+            }
+            const draft = {
+                draft_id: String(draftIdFactory()),
+                in_reply_to: null,
+                thread_id: null,
+                subject: String(subject || '').trim(),
+                to: recipients,
+                body_text: [String(body_text || '').trim(), String(signature || '').trim()].filter(Boolean).join('\n\n'),
+                quoted_message: null,
+                status: 'draft',
+                created_at: now()
+            };
+            drafts.set(draft.draft_id, draft);
+            return { ok: true, draft };
+        },
         mailGetDraft(draftId) {
             const draft = drafts.get(String(draftId || ''));
             if (!draft) return { ok: false, error: 'mail_draft_not_found' };

@@ -183,7 +183,7 @@ function ensureStreaming(){
                 sampleTapActive = false; sampleTapSR = STREAM_SR; sampleTapEnded = false; sampleTapNodes = null;
             }
         }
-        // 2) Send pre-decoded sample chunk (JSON) if present (legacy path)
+        // 2) Send pre-decoded sample chunk (JSON) if present
         if(samplePlaybackHost && samplePlaybackHost.pcm){
             const sr = samplePlaybackHost.sr || STREAM_SR;
             const need = Math.max(1, Math.floor(sr * drainSec));

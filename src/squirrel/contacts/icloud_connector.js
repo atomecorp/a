@@ -22,15 +22,15 @@ const normalizeAuthConfig = (auth = {}) => {
 };
 
 export const normalizeIcloudContactsConnectorConfig = ({
-    provider = 'icloud_carddav_legacy',
-    source_id = 'icloud_contacts_legacy',
+    provider = 'icloud_carddav',
+    source_id = 'icloud_contacts',
     auth = {},
     carddav = {},
     addressbook_url = null,
     addressbook_id = null
 } = {}) => ({
-    provider: String(provider || 'icloud_carddav_legacy'),
-    source_id: String(source_id || 'icloud_contacts_legacy'),
+    provider: String(provider || 'icloud_carddav'),
+    source_id: String(source_id || 'icloud_contacts'),
     auth: normalizeAuthConfig(auth),
     addressbook_id: normalizeText(addressbook_id || carddav.addressbook_id || '') || null,
     carddav: {
@@ -74,8 +74,8 @@ const withProtocolClient = async ({
 };
 
 export const createIcloudContactsConnector = ({
-    provider = 'icloud_carddav_legacy',
-    source_id = 'icloud_contacts_legacy',
+    provider = 'icloud_carddav',
+    source_id = 'icloud_contacts',
     auth = {},
     carddav = {},
     addressbook_url = null,
@@ -98,7 +98,7 @@ export const createIcloudContactsConnector = ({
     const contract = createContactsConnectorContract({
         provider: config.provider,
         protocol: 'carddav',
-        role: CONTACTS_V1_ARCHITECTURE_DECISION.legacy_import_source.role,
+        role: CONTACTS_V1_ARCHITECTURE_DECISION.import_source.role,
         read_capabilities: ['contacts_list', 'contacts_search', 'contacts_sources'],
         write_capabilities: ['contacts_push']
     });
@@ -242,7 +242,7 @@ export const createIcloudContactsConnector = ({
     return {
         provider: config.provider,
         source_id: config.source_id,
-        role: CONTACTS_V1_ARCHITECTURE_DECISION.legacy_import_source.role,
+        role: CONTACTS_V1_ARCHITECTURE_DECISION.import_source.role,
         writable: true,
         contract,
         async listContacts(options = {}) {

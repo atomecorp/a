@@ -54,7 +54,7 @@ api.configureMacosSource({
 
 const ready = await api.ensureReady();
 assert.equal(ready.ok, true, 'contacts bootstrap should expose a readiness helper for MCP/AI consumers');
-assert.equal(api.list({ source_id: 'eve_contacts_local' }).items[0]?.source_provider, 'eve_contacts_local', 'contacts bootstrap should keep the local contacts store as the primary readable source');
+assert.equal(api.service.getPrimarySource().source_id, 'eve_contacts_local', 'contacts bootstrap should keep the local contacts store as the primary readable source');
 
 const synced = await api.syncInitial();
 assert.equal(synced.ok, true, 'contacts bootstrap should expose sync through the shared singleton');

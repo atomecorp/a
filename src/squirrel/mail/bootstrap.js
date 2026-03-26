@@ -637,6 +637,9 @@ export const createGlobalMailApi = ({
         replyDraft(messageId, options = {}) {
             return getOrCreateService(env).mailReplyDraft(messageId, options);
         },
+        composeDraft(options = {}) {
+            return getOrCreateService(env).mailComposeDraft(options);
+        },
         getDraft(draftId) {
             return getOrCreateService(env).mailGetDraft(draftId);
         },

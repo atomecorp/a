@@ -6,7 +6,7 @@ AgentGateway.registerTool({
     name: 'trace.test.low',
     description: 'Low risk trace propagation probe',
     capabilities: ['trace.read'],
-    risk_level: 'LOW',
+    risk_tier: 'LOW',
     handler: async ({ context }) => ({
         status: TOOL_STATUS.OK,
         result: {
@@ -22,7 +22,7 @@ AgentGateway.registerTool({
     name: 'trace.test.high',
     description: 'High risk proposal trace propagation probe',
     capabilities: ['trace.write'],
-    risk_level: 'HIGH',
+    risk_tier: 'HIGH',
     handler: async ({ context }) => ({
         status: TOOL_STATUS.OK,
         result: {

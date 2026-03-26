@@ -20,13 +20,6 @@ const RISK_TIER_ORDER = Object.freeze({
   irreversible: 4
 });
 
-const LEGACY_RISK_LEVEL_MAP = Object.freeze({
-  LOW: 'low',
-  MEDIUM: 'moderate',
-  HIGH: 'high',
-  CRITICAL: 'irreversible'
-});
-
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.7;
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_TOOLCHAIN_LIMITS = Object.freeze({
@@ -129,8 +122,6 @@ const normalizeRiskTier = (value) => {
   if (!raw) return 'read';
   const normalized = raw.toLowerCase();
   if (RISK_TIERS.includes(normalized)) return normalized;
-  const legacy = LEGACY_RISK_LEVEL_MAP[raw.toUpperCase()];
-  if (legacy) return legacy;
   return 'read';
 };
 
@@ -247,29 +238,16 @@ const publicToolDefinition = (tool) => ({
   latency_class: tool.latency_class,
   requires_user_presence: tool.requires_user_presence,
   freshness_requirements: tool.freshness_requirements,
-  capabilities: [...tool.capabilities],
-  risk_level: tool.risk_level,
-  params_schema: cloneValue(tool.params_schema)
+  capabilities: [...tool.capabilities]
 });
 
 const normalizeToolDefinition = (tool) => {
   const name = String(tool?.name || '').trim();
   const domain = normalizeDomain(tool?.domain, name);
-  const riskTier = normalizeRiskTier(tool?.risk_tier || tool?.risk_level || tool?.riskLevel);
-  const riskSource = tool?.risk_tier ? 'spec' : (tool?.risk_level || tool?.riskLevel ? 'legacy' : 'default');
-  const parameters = normalizeSchema(tool?.parameters || tool?.params_schema);
+  const riskTier = normalizeRiskTier(tool?.risk_tier);
+  const riskSource = tool?.risk_tier ? 'spec' : 'default';
+  const parameters = normalizeSchema(tool?.parameters);
   const outputSchema = normalizeSchema(tool?.output_schema || tool?.outputSchema || DEFAULT_OUTPUT_SCHEMA);
-  const riskLevel = String(
-    tool?.risk_level
-    || tool?.riskLevel
-    || (riskTier === 'moderate'
-      ? 'MEDIUM'
-      : riskTier === 'high'
-        ? 'HIGH'
-        : riskTier === 'irreversible'
-          ? 'CRITICAL'
-          : 'LOW')
-  ).trim().toUpperCase() || 'LOW';
 
   return {
     name,
@@ -312,8 +290,6 @@ const normalizeToolDefinition = (tool) => {
     rollback: typeof tool.rollback === 'function' ? tool.rollback : null,
     confirmation_policy: String(tool.confirmation_policy || '').trim().toLowerCase()
       || (riskSource === 'spec' && ['moderate', 'high', 'irreversible'].includes(riskTier) ? 'always' : 'auto'),
-    risk_level: riskLevel,
-    params_schema: parameters,
     _risk_source: riskSource
   };
 };

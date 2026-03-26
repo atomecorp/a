@@ -12,6 +12,297 @@ const runtimeTools = [
     { tool_id: 'calendar.list_events', tool_key: 'calendar_list_events' }
 ];
 
+const createStructuredPlanner = () => ({
+    async planUtterance(utterance, options = {}) {
+        const raw = String(utterance || '').trim();
+        const normalized = raw.toLowerCase();
+        const locale = options.locale || 'fr-FR';
+        const base = {
+            intent_id: options.intent_id || `voice_test_${normalized.replace(/[^a-z0-9]+/g, '_')}`,
+            utterance: { raw },
+            locale,
+            source: options.source,
+            context: options.context
+        };
+
+        if (normalized === 'ouvre mtrack') {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'runtime_tool',
+                domain: 'ui_navigation',
+                action: 'open_tool',
+                status: 'ready',
+                assistant_reply: 'J ouvre Mtrack.',
+                execution: {
+                    target: 'runtime_v2',
+                    confirmation_required: false,
+                    toolchain: [{
+                        source: 'runtime_v2',
+                        tool_id: 'tool.main.mtrack',
+                        action: 'pointer.click',
+                        input: {}
+                    }]
+                }
+            });
+        }
+
+        if (normalized.includes('ajoute un rendez-vous demain a 15h avec paul')) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'runtime_toolchain',
+                domain: 'calendar',
+                action: 'create_event',
+                status: 'ready',
+                entities: {
+                    temporal_ref: 'tomorrow',
+                    time_hint: '15:00',
+                    participant_hint: 'Paul'
+                },
+                execution: {
+                    target: 'runtime_v2',
+                    confirmation_required: false,
+                    toolchain: [
+                        {
+                            source: 'runtime_v2',
+                            tool_id: 'calendar.ensure_calendar',
+                            action: 'pointer.click',
+                            input: {}
+                        },
+                        {
+                            source: 'runtime_v2',
+                            tool_id: 'calendar.create_event',
+                            action: 'pointer.click',
+                            input: {
+                                temporal_ref: 'tomorrow',
+                                time_hint: '15:00',
+                                participant_hint: 'Paul'
+                            }
+                        }
+                    ]
+                }
+            });
+        }
+
+        if (normalized === 'lis mes mails') {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'list',
+                status: 'ready',
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized === 'marque le comme non lu') {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'mark_unread_current',
+                status: 'ready',
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized === 'archive le') {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'archive_current',
+                status: 'ready',
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized.includes('resume de mes derniers mails') || normalized.includes('fais moi un resume de mes derniers mails')) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'summarize',
+                status: 'ready',
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized.includes('ais je de nouveaux mails') || normalized.includes('j ai de nouveaux mails')) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'list',
+                status: 'ready',
+                entities: {
+                    unread_only: true,
+                    status_only: true
+                },
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized.includes("d autres personnes que jean-eric")) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'list',
+                status: 'ready',
+                entities: {
+                    status_only: true,
+                    not_from: 'Jean-Eric'
+                },
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized.includes('que contient ce mail') || normalized.includes('fais moi un resume')) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'summarize_current',
+                status: 'ready',
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized.includes('mail le plus ancien')) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'read_current',
+                status: 'ready',
+                entities: {
+                    order: 'oldest'
+                },
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized === 'lis le') {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'read_current',
+                status: 'ready',
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized.startsWith('reponds a jean-eric que ')) {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'reply_current',
+                status: 'ready',
+                entities: {
+                    reply_target: 'Jean-Eric',
+                    draft_text: 'j ai bien recu le mail',
+                    auto_send: true
+                },
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized === 'reponds oui tout va bien') {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'reply_current',
+                status: 'ready',
+                entities: {
+                    draft_text: 'oui tout va bien',
+                    auto_send: true
+                },
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        if (normalized === 'envoie le mail') {
+            return normalizeVoiceIntent({
+                ...base,
+                type: 'connector_tool',
+                domain: 'mail',
+                action: 'send',
+                status: 'ready',
+                execution: {
+                    target: 'pending_connector',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
+        }
+
+        return normalizeVoiceIntent({
+            ...base,
+            type: 'ambiguous',
+            domain: 'unknown',
+            action: 'unknown',
+            status: 'failed',
+            assistant_reply: "Le planner IA n'a pas su classifier cette demande de test.",
+            context: {
+                ...(options.context && typeof options.context === 'object' ? options.context : {}),
+                ai_error: 'test_planner_unmatched'
+            },
+            execution: {
+                target: 'none',
+                confirmation_required: false,
+                toolchain: []
+            }
+        });
+    }
+});
+
 const mcpCalls = [];
 const runtime = createVoiceSessionRuntime();
 const env = {
@@ -57,7 +348,11 @@ const env = {
     }
 };
 
-const orchestrator = createVoiceOrchestrator({ env, sessionRuntime: runtime });
+const orchestrator = createVoiceOrchestrator({
+    env,
+    sessionRuntime: runtime,
+    aiPlanner: createStructuredPlanner()
+});
 const journalEvents = [];
 const unsubscribe = orchestrator.subscribe((entry) => {
     journalEvents.push(entry.type);
@@ -183,7 +478,8 @@ const mailEnsureReadyEnv = {
 };
 const readyOrchestrator = createVoiceOrchestrator({
     env: mailEnsureReadyEnv,
-    sessionRuntime: createVoiceSessionRuntime()
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: createStructuredPlanner()
 });
 const readyMail = await readyOrchestrator.executeUtterance('Lis mes mails');
 assert.equal(readyMail.ok, true, 'mail ensureReady should unblock mail execution before the connector check');
@@ -242,7 +538,8 @@ const partialVoiceEnv = {
 };
 const hostWindowOrchestrator = createVoiceOrchestrator({
     env: partialVoiceEnv,
-    sessionRuntime: createVoiceSessionRuntime()
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: createStructuredPlanner()
 });
 const hostWindowMail = await hostWindowOrchestrator.executeUtterance('Lis mes mails');
 assert.equal(hostWindowMail.ok, true, 'voice mail orchestration should resolve the mail API on the real host window when the injected env is partial');
@@ -363,7 +660,8 @@ mailApi.ingest([{
 const mailExecRuntime = createVoiceSessionRuntime();
 const mailExecOrchestrator = createVoiceOrchestrator({
     env: mailExecEnv,
-    sessionRuntime: mailExecRuntime
+    sessionRuntime: mailExecRuntime,
+    aiPlanner: createStructuredPlanner()
 });
 const mailExecSession = mailExecRuntime.createSession({
     session_id: 'voice_session_orchestrator_mail_exec'
@@ -437,7 +735,8 @@ const stalledMailEnv = {
 };
 const stalledMailOrchestrator = createVoiceOrchestrator({
     env: stalledMailEnv,
-    sessionRuntime: createVoiceSessionRuntime()
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: createStructuredPlanner()
 });
 const stalledMailResult = await stalledMailOrchestrator.executeUtterance('Lis mes mails');
 assert.equal(stalledMailResult.ok, true, 'mail connector stalls should not block the voice orchestrator');
@@ -481,6 +780,7 @@ summaryMailApi.ingest([
 const summaryOrchestrator = createVoiceOrchestrator({
     env: mailSummaryEnv,
     sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: createStructuredPlanner(),
     mailAiSummarizer: async () => ({
         ok: true,
         text: 'Tu as recu deux mails recents: une facture a valider avant vendredi et une invitation a confirmer pour demain 9h.'
@@ -520,7 +820,8 @@ unreadMailApi.ingest([
 ]);
 const unreadOrchestrator = createVoiceOrchestrator({
     env: unreadMailEnv,
-    sessionRuntime: createVoiceSessionRuntime()
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: createStructuredPlanner()
 });
 const unreadResult = await unreadOrchestrator.executeUtterance('Ais je de nouveaux mails nion lues ?');
 assert.equal(unreadResult.ok, true, 'unread mail status question should succeed');
@@ -563,7 +864,8 @@ junkSubjectMailApi.ingest([
 ]);
 const junkSubjectOrchestrator = createVoiceOrchestrator({
     env: junkSubjectEnv,
-    sessionRuntime: createVoiceSessionRuntime()
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: createStructuredPlanner()
 });
 const junkSubjectResult = await junkSubjectOrchestrator.executeUtterance('Ais je de nouveaux mails non lus ?');
 assert.match(junkSubjectResult.reply_text, /Facture a regler avant vendredi/i, 'unread status should fall back to preview text when the subject is unreadable');
@@ -611,6 +913,7 @@ const filteredSummaryCalls = [];
 const filteredOrchestrator = createVoiceOrchestrator({
     env: filteredMailEnv,
     sessionRuntime: filteredRuntime,
+    aiPlanner: createStructuredPlanner(),
     mailAiSummarizer: async ({ items = [] }) => {
         filteredSummaryCalls.push(items.map((item) => item?.message_id));
         const item = items[0] || {};
@@ -668,7 +971,8 @@ replyMailApi.ingest([
 const replyRuntime = createVoiceSessionRuntime();
 const replyOrchestrator = createVoiceOrchestrator({
     env: mailReplyEnv,
-    sessionRuntime: replyRuntime
+    sessionRuntime: replyRuntime,
+    aiPlanner: createStructuredPlanner()
 });
 const replySession = replyRuntime.createSession({
     session_id: 'voice_session_orchestrator_mail_reply'
@@ -710,7 +1014,8 @@ directReplyMailApi.ingest([
 ]);
 const directReplyOrchestrator = createVoiceOrchestrator({
     env: directReplyEnv,
-    sessionRuntime: createVoiceSessionRuntime()
+    sessionRuntime: createVoiceSessionRuntime(),
+    aiPlanner: createStructuredPlanner()
 });
 const directReplyResult = await directReplyOrchestrator.executeUtterance('Reponds a Jean-Eric que j ai bien recu le mail');
 assert.equal(directReplyResult.ok, true, 'mail reply should work even without a prior mail summary step');
@@ -815,19 +1120,19 @@ const contextualReplyOrchestrator = createVoiceOrchestrator({
                 locale: options.locale || 'fr-FR',
                 source: options.source,
                 context: options.context,
-                type: 'agent_tool',
+                type: 'connector_tool',
                 domain: 'mail',
-                action: 'list',
+                action: 'reply_current',
                 status: 'ready',
                 assistant_reply: '',
+                entities: {
+                    draft_text: 'oui tout va bien',
+                    auto_send: true
+                },
                 execution: {
-                    target: 'atome_ai',
+                    target: 'pending_connector',
                     confirmation_required: false,
-                    toolchain: [{
-                        source: 'atome_ai',
-                        tool_name: 'mail.list',
-                        params: { unread_only: true }
-                    }]
+                    toolchain: []
                 }
             });
         }

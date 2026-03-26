@@ -94,7 +94,109 @@ const env = {
 const sessionRuntime = createVoiceSessionRuntime();
 const orchestrator = createVoiceOrchestrator({
     env,
-    sessionRuntime
+    sessionRuntime,
+    aiPlanner: {
+        async planUtterance(utterance, options = {}) {
+            const raw = String(utterance || '').trim();
+            const normalized = raw.toLowerCase();
+            const base = {
+                intent_id: options.intent_id || `voice_comm_surface_${normalized.replace(/[^a-z0-9]+/g, '_')}`,
+                utterance: { raw },
+                locale: options.locale || 'fr-FR',
+                source: options.source,
+                context: options.context
+            };
+            if (normalized.includes('nouveaux messages')) {
+                return {
+                    ...base,
+                    type: 'connector_tool',
+                    domain: 'mail',
+                    action: 'list',
+                    status: 'ready',
+                    entities: {
+                        unread_only: true,
+                        status_only: true,
+                        communication_surfaces: ['mail', 'messages']
+                    },
+                    execution: {
+                        target: 'pending_connector',
+                        confirmation_required: false,
+                        toolchain: []
+                    }
+                };
+            }
+            if (normalized === 'lis le dernier message') {
+                return {
+                    ...base,
+                    type: 'connector_tool',
+                    domain: 'mail',
+                    action: 'read_current',
+                    status: 'ready',
+                    entities: {
+                        communication_surfaces: ['mail', 'messages']
+                    },
+                    execution: {
+                        target: 'pending_connector',
+                        confirmation_required: false,
+                        toolchain: []
+                    }
+                };
+            }
+            if (normalized.startsWith('reponds lui')) {
+                return {
+                    ...base,
+                    type: 'connector_tool',
+                    domain: 'mail',
+                    action: 'reply_current',
+                    status: 'ready',
+                    entities: {
+                        draft_text: 'comment vas tu',
+                        auto_send: false,
+                        communication_surfaces: ['mail', 'messages']
+                    },
+                    execution: {
+                        target: 'pending_connector',
+                        confirmation_required: false,
+                        toolchain: []
+                    }
+                };
+            }
+            if (normalized === 'envoie le mail') {
+                return {
+                    ...base,
+                    type: 'connector_tool',
+                    domain: 'mail',
+                    action: 'send',
+                    status: 'ready',
+                    entities: {
+                        communication_surfaces: ['mail', 'messages']
+                    },
+                    execution: {
+                        target: 'pending_connector',
+                        confirmation_required: false,
+                        toolchain: []
+                    }
+                };
+            }
+            return {
+                ...base,
+                type: 'ambiguous',
+                domain: 'unknown',
+                action: 'unknown',
+                status: 'failed',
+                assistant_reply: "Le planner IA n'a pas produit d'intent.",
+                context: {
+                    ...(options.context && typeof options.context === 'object' ? options.context : {}),
+                    ai_error: 'test_planner_unmatched'
+                },
+                execution: {
+                    target: 'none',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            };
+        }
+    }
 });
 await orchestrator.initToolRouter();
 

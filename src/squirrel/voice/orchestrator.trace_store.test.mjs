@@ -53,5 +53,8 @@ assert.equal(traces.length, 1, 'orchestrator should emit a structured trace for 
 assert.equal(traces[0]?.identity_resolution?.resolved?.[0]?.entity_id, 'contact_trace_1', 'structured traces should keep identity resolution data');
 assert.equal(traces[0]?.response?.reply_text, 'Bonjour.', 'structured traces should keep the delivered response');
 
+const metrics = orchestrator.traceMetrics();
+assert.equal(metrics.trace_count, 1, 'orchestrator should expose aggregated trace metrics');
+
 console.log('orchestrator.trace_store.test: PASS');
 process.exit(0);

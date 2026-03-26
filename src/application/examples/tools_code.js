@@ -33,7 +33,7 @@ const codeNudge = {
   props: {
     language: 'javascript',
     capabilities: ['atome.write'],
-    risk_level: 'LOW',
+    risk_tier: 'LOW',
     code: async ({ ctx, input }) => {
       const selection = input?.selection || [];
       const gesture = input?.gesture || {};

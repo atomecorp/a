@@ -204,7 +204,7 @@ globalThis.atome = {
                 },
                 sources: [
                     { source_id: 'eve_contacts_local', provider: 'eve_contacts_local', writable: false },
-                    { source_id: 'icloud_contacts_legacy', provider: 'icloud_carddav_legacy', writable: true }
+                    { source_id: 'icloud_contacts', provider: 'icloud_carddav', writable: true }
                 ]
             };
         },
@@ -331,7 +331,7 @@ const createdAtome = await globalThis.handleAtomeMCPRequestAsync({
 });
 assert.equal(createdAtome.error, undefined, 'atome.create should resolve through Runtime V2');
 assert.equal(createdAtome.result?.tool_id, 'ui.circle', 'atome.create should route circle payloads to ui.circle');
-assert.equal(runtimeCalls.at(-1)?.tool_id, 'ui.circle', 'atome.create should invoke Runtime V2 instead of the legacy constructor');
+assert.equal(runtimeCalls.at(-1)?.tool_id, 'ui.circle', 'atome.create should invoke Runtime V2 directly');
 assert.equal(runtimeCalls.at(-1)?.source?.layer, 'atome_mcp_create', 'atome.create should stamp the MCP create source layer');
 assert.equal(runtimeCalls.at(-1)?.input?.color, 'red', 'atome.create should preserve shape color in Runtime V2 input');
 
@@ -347,8 +347,8 @@ const boxedAtome = await globalThis.handleAtomeMCPRequestAsync({
 });
 assert.equal(boxedAtome.error, undefined, 'atome.box should resolve through Runtime V2');
 assert.equal(boxedAtome.result?.tool_id, 'ui.creator', 'atome.box should route box payloads to ui.creator');
-assert.equal(runtimeCalls.at(-1)?.tool_id, 'ui.creator', 'atome.box should invoke Runtime V2 instead of the legacy constructor');
-assert.equal(runtimeCalls.at(-1)?.input?.kind, 'shape', 'atome.box should normalize legacy box payloads as shape creations');
+assert.equal(runtimeCalls.at(-1)?.tool_id, 'ui.creator', 'atome.box should invoke Runtime V2 directly');
+assert.equal(runtimeCalls.at(-1)?.input?.kind, 'shape', 'atome.box should normalize box payloads as shape creations');
 assert.equal(runtimeCalls.at(-1)?.input?.color, 'orange', 'atome.box should normalize background payloads to the atomic shape color channel');
 
 const batchCalled = await globalThis.handleAtomeMCPRequestAsync({
@@ -469,7 +469,7 @@ assert.equal(contactsRead.error, undefined, 'contacts.read should succeed');
 assert.equal(contactsRead.result?.contact?.source_contact_id, 'mac_contact_mcp_1', 'contacts.read should bridge to the global contacts API');
 assert.equal(contactsConfigured > 0, true, 'contacts MCP bridge should prepare the shared contacts service before reads');
 assert.equal(contactsSynced > 0, true, 'contacts MCP bridge should trigger a readiness sync before reads');
-assert.equal(contactsReadyOptions.some((entry) => entry?.import_legacy_if_empty === false), true, 'contacts MCP reads should avoid implicit macOS imports');
+assert.equal(contactsReadyOptions.length > 0, true, 'contacts MCP reads should forward readiness options to the shared contacts service');
 
 const contactsCreate = await globalThis.handleAtomeMCPRequestAsync({
     jsonrpc: '2.0',

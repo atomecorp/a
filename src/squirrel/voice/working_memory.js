@@ -1,8 +1,8 @@
 /**
  * Canonical session working memory for voice/text assistant flows.
  *
- * The legacy domain working sets remain for result-set navigation, but the
- * module now also owns:
+ * Domain working sets remain available for result-set navigation, and the
+ * module also owns:
  * - conversation turns
  * - compact summaries for evicted turns
  * - active entities
@@ -30,7 +30,7 @@ const createDomainWorkingSet = () => ({
     result_set_ids: [],
     result_set_items: [],
     active_filters: {},
-    active_order: 'newest',
+    active_order: null,
     active_scope: 'mailbox',
     cursor_index: -1,
     last_operation: null,
@@ -178,7 +178,7 @@ export const createWorkingMemory = ({
 
         setOrder(domain, order) {
             const ws = getDomainSet(domain);
-            ws.active_order = String(order || 'newest').trim().toLowerCase();
+            ws.active_order = order ? String(order).trim().toLowerCase() : null;
         },
 
         setScope(domain, scope) {

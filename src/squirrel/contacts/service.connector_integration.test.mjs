@@ -22,7 +22,7 @@ const legacyConnector = createIcloudContactsConnector({
                         name: 'Legacy initial',
                         first_name: 'Legacy',
                         phones: [{ label: 'cell', value: '+33 6 00 00 00 00' }],
-                        emails: [{ label: 'home', value: 'legacy@example.test' }],
+                        emails: [{ label: 'home', value: 'imported@example.test' }],
                         href: '/contact_legacy_1.vcf'
                     }
                 ]
@@ -74,7 +74,7 @@ const service = createContactsService({
     sources: [legacyConnector]
 });
 
-const imported = await service.importSource('icloud_contacts_legacy');
+const imported = await service.importSource('icloud_contacts');
 assert.equal(imported.ok, true, 'contacts service should import direct iCloud contacts into the local primary store');
 assert.equal(imported.target_source_id, 'eve_contacts_local', 'contacts service should import iCloud contacts into the local primary source');
 
@@ -85,9 +85,9 @@ assert.equal(localOnly.items[0]?.source_provider, 'eve_contacts_local', 'contact
 const delta = await legacyConnector.fetchDelta();
 assert.equal(delta.ok, true, 'contacts service integration should still expose direct connector delta sync');
 
-const pushed = await service.pushContactToSource('icloud_contacts_legacy', {
+const pushed = await service.pushContactToSource('icloud_contacts', {
     contact: {
-        name: 'Push legacy contact',
+        name: 'Push imported contact',
         first_name: 'Push',
         phone: '+33 6 33 33 33 33',
         email: 'push@example.test'

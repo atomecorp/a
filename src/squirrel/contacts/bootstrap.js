@@ -107,7 +107,7 @@ export const createGlobalContactsApi = ({
         },
         async importMacosContacts(options = {}) {
             const service = getOrCreateService(env);
-            const hasMacosSource = service.contactsSources()?.items?.some((entry) => entry?.source_id === CONTACTS_V1_ARCHITECTURE_DECISION.legacy_import_source.id);
+            const hasMacosSource = service.contactsSources()?.items?.some((entry) => entry?.source_id === CONTACTS_V1_ARCHITECTURE_DECISION.import_source.id);
             if (!hasMacosSource) {
                 service.setMacosSource({
                     ...options,
@@ -116,7 +116,7 @@ export const createGlobalContactsApi = ({
             }
             return service.importMacosContacts({
                 ...options,
-                source_id: CONTACTS_V1_ARCHITECTURE_DECISION.legacy_import_source.id
+                source_id: CONTACTS_V1_ARCHITECTURE_DECISION.import_source.id
             });
         },
         async configureIcloudConnector(options = {}) {
@@ -131,7 +131,7 @@ export const createGlobalContactsApi = ({
         },
         async importIcloudContacts(options = {}) {
             const service = getOrCreateService(env);
-            const sourceId = String(options?.source_id || 'icloud_contacts_legacy').trim() || 'icloud_contacts_legacy';
+            const sourceId = String(options?.source_id || 'icloud_contacts').trim() || 'icloud_contacts';
             const hasSource = service.contactsSources()?.items?.some((entry) => entry?.source_id === sourceId);
             if (!hasSource) {
                 await api.configureIcloudConnector(options);
@@ -149,7 +149,7 @@ export const createGlobalContactsApi = ({
                 };
             }
             const service = getOrCreateService(env);
-            const sourceId = String(options?.source_id || 'icloud_contacts_legacy').trim() || 'icloud_contacts_legacy';
+            const sourceId = String(options?.source_id || 'icloud_contacts').trim() || 'icloud_contacts';
             const hasSource = service.contactsSources()?.items?.some((entry) => entry?.source_id === sourceId);
             if (!hasSource) {
                 const hasInlineAuth = options?.auth && typeof options.auth === 'object';
@@ -166,13 +166,6 @@ export const createGlobalContactsApi = ({
             const syncResult = await service.syncPull(buildPrimarySyncOptions(options));
             if (syncResult?.ok === true && Array.isArray(syncResult.items) && syncResult.items.length) {
                 return syncResult;
-            }
-            const importLegacyIfEmpty = options.import_legacy_if_empty !== false;
-            if (importLegacyIfEmpty) {
-                const imported = await api.importMacosContacts(options);
-                if (imported?.ok === true) {
-                    return imported;
-                }
             }
             if (syncResult?.ok === true) {
                 return syncResult;

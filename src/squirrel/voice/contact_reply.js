@@ -46,6 +46,9 @@ const readContactFieldIntent = ({ utteranceRaw = '', utteranceNormalized = '' } 
         return 'updated_at';
     }
     if (normalized.includes('nom') || normalized.includes('name')) {
+        if (/\bnom(?:me|ee|mes|ees)\b/.test(normalized) || /\bnamed\b/.test(normalized)) {
+            return null;
+        }
         return 'name';
     }
     return null;
@@ -90,10 +93,25 @@ const formatLocalizedDateTime = (value, locale = 'fr-FR') => {
 export const buildContactQueryReply = (contact = {}, {
     locale = 'fr-FR',
     utteranceRaw = '',
-    utteranceNormalized = ''
+    utteranceNormalized = '',
+    contact_field = null
 } = {}) => {
-    const field = readContactFieldIntent({ utteranceRaw, utteranceNormalized });
-    if (!field) return '';
+    const field = contact_field || readContactFieldIntent({ utteranceRaw, utteranceNormalized });
+    if (!field) {
+        const english = isEnglish(locale);
+        const displayName = toText(
+            contact?.name
+            || contact?.display_name
+            || contact?.full_name
+            || contact?.nickname
+        );
+        if (displayName) {
+            return english
+                ? `Yes, I have a contact named ${displayName}.`
+                : `Oui, j'ai un contact nomme ${displayName}.`;
+        }
+        return '';
+    }
     const english = isEnglish(locale);
     const name = toText(
         contact?.name
@@ -157,7 +175,7 @@ export const buildContactQueryReply = (contact = {}, {
 export const buildContactsFieldReply = (contacts = [], options = {}) => {
     const items = Array.isArray(contacts) ? contacts.filter((entry) => entry && typeof entry === 'object') : [];
     if (!items.length) return '';
-    const field = readContactFieldIntent(options);
+    const field = options?.contact_field || readContactFieldIntent(options);
     if (!field) return '';
     const locale = options?.locale || 'fr-FR';
     const english = isEnglish(locale);

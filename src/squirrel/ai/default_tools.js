@@ -77,7 +77,6 @@ const prepareContactsApi = async (options = {}) => {
     if (typeof api.ensureReady === 'function') {
         const ready = await withSoftTimeout(
             () => api.ensureReady({
-                import_legacy_if_empty: false,
                 ...options
             }),
             {
@@ -186,7 +185,7 @@ const registerDefaultTools = () => {
         name: 'adole.auth.current',
         description: 'Return current authenticated user info (tauri/fastify).',
         capabilities: ['auth.read'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async () => {
             const api = requireGlobal('AdoleAPI', AdoleAPI);
             const fn = api?.auth?.current;
@@ -200,8 +199,8 @@ const registerDefaultTools = () => {
         name: 'adole.atomes.get',
         description: 'Get one atome by id.',
         capabilities: ['atome.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['id'],
             properties: {
                 id: { type: 'string' }
@@ -222,8 +221,8 @@ const registerDefaultTools = () => {
         name: 'adole.atomes.list',
         description: 'List atomes (optional type/projectId/ownerId/includeShared).',
         capabilities: ['atome.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 type: { type: 'string' },
                 projectId: { type: 'string' },
@@ -256,8 +255,8 @@ const registerDefaultTools = () => {
         name: 'adole.atomes.create',
         description: 'Create an atome (type/properties/parentId/ownerId). Useful for messages, documents, shapes, etc.',
         capabilities: ['atome.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             properties: {
                 id: { type: 'string' },
                 type: { type: 'string' },
@@ -292,8 +291,8 @@ const registerDefaultTools = () => {
         name: 'adole.atomes.alter',
         description: 'Alter/patch atome properties by id.',
         capabilities: ['atome.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['id'],
             properties: {
                 id: { type: 'string' },
@@ -320,8 +319,8 @@ const registerDefaultTools = () => {
         name: 'eve.mtrack.clip.move',
         description: 'Move one or more MTrack clips (time and/or track) through the mtrack tool action pipeline.',
         capabilities: ['timeline.write', 'ui.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             properties: {
                 clip_ids: { type: 'array' },
                 clip_id: { type: 'string' },
@@ -352,8 +351,8 @@ const registerDefaultTools = () => {
         name: 'eve.mtrack.clip.crop',
         description: 'Crop one or more MTrack clips (trim in/out) through the mtrack tool action pipeline.',
         capabilities: ['timeline.write', 'ui.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             properties: {
                 clip_ids: { type: 'array' },
                 clip_id: { type: 'string' },
@@ -383,8 +382,8 @@ const registerDefaultTools = () => {
         name: 'calendar.list_events',
         description: 'List calendar events.',
         capabilities: ['calendar.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 projectId: { type: 'string' }
             }
@@ -405,8 +404,8 @@ const registerDefaultTools = () => {
         name: 'calendar.get_event',
         description: 'Get a calendar event by id.',
         capabilities: ['calendar.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['eventId'],
             properties: {
                 eventId: { type: 'string' }
@@ -429,8 +428,8 @@ const registerDefaultTools = () => {
         name: 'calendar.create_event',
         description: 'Create a calendar event.',
         capabilities: ['calendar.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             properties: {
                 event: { type: 'object' },
                 projectId: { type: 'string' }
@@ -456,8 +455,8 @@ const registerDefaultTools = () => {
         name: 'calendar.update_event',
         description: 'Update a calendar event.',
         capabilities: ['calendar.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['eventId'],
             properties: {
                 eventId: { type: 'string' },
@@ -484,8 +483,8 @@ const registerDefaultTools = () => {
         name: 'calendar.delete_event',
         description: 'Delete a calendar event.',
         capabilities: ['calendar.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['eventId'],
             properties: {
                 eventId: { type: 'string' }
@@ -508,8 +507,8 @@ const registerDefaultTools = () => {
         name: 'calendar.ensure_calendar',
         description: 'Ensure a calendar exists (creates default if missing).',
         capabilities: ['calendar.write'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 calendarId: { type: 'string' }
             }
@@ -530,8 +529,8 @@ const registerDefaultTools = () => {
         name: 'calendar.share',
         description: 'Share a calendar with another user.',
         capabilities: ['calendar.write', 'share.write'],
-        risk_level: 'HIGH',
-        params_schema: {
+        risk_tier: 'HIGH',
+        parameters: {
             required: ['phone'],
             properties: {
                 phone: { type: 'string' },
@@ -559,8 +558,8 @@ const registerDefaultTools = () => {
         name: 'calendar.export_webcal',
         description: 'Export calendar events as an ICS feed and optional webcal URL.',
         capabilities: ['calendar.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 calendarId: { type: 'string' },
                 baseUrl: { type: 'string' }
@@ -580,7 +579,7 @@ const registerDefaultTools = () => {
         name: 'calendar.sources',
         description: 'List unified calendar sources and their roles.',
         capabilities: ['calendar.read'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async () => {
             const api = await requireCalendarServiceApi();
             return api.sources();
@@ -592,8 +591,8 @@ const registerDefaultTools = () => {
         name: 'calendar.search',
         description: 'Search the unified calendar view.',
         capabilities: ['calendar.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['query'],
             properties: {
                 query: { type: 'string' },
@@ -614,8 +613,8 @@ const registerDefaultTools = () => {
         name: 'calendar.today',
         description: 'List today calendar events from the unified multi-source calendar view.',
         capabilities: ['calendar.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 source_id: { type: 'string' },
                 limit: { type: 'number' }
@@ -632,8 +631,8 @@ const registerDefaultTools = () => {
         name: 'calendar.next',
         description: 'List upcoming calendar events from the unified multi-source calendar view.',
         capabilities: ['calendar.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 source_id: { type: 'string' },
                 limit: { type: 'number' },
@@ -651,8 +650,8 @@ const registerDefaultTools = () => {
         name: 'calendar.create',
         description: 'Create a calendar event through the unified calendar service.',
         capabilities: ['calendar.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             properties: {
                 title: { type: 'string' },
                 start: { type: 'string' },
@@ -676,8 +675,8 @@ const registerDefaultTools = () => {
         name: 'calendar.update',
         description: 'Update a calendar event through the unified calendar service.',
         capabilities: ['calendar.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['event_id'],
             properties: {
                 event_id: { type: 'string' },
@@ -705,8 +704,8 @@ const registerDefaultTools = () => {
         name: 'calendar.delete',
         description: 'Delete a calendar event through the unified calendar service.',
         capabilities: ['calendar.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['event_id'],
             properties: {
                 event_id: { type: 'string' },
@@ -726,8 +725,8 @@ const registerDefaultTools = () => {
         name: 'mail.list',
         description: 'List locally indexed mail items.',
         capabilities: ['mail.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 mailbox: { type: 'string' },
                 unread_only: { type: 'boolean' },
@@ -746,8 +745,8 @@ const registerDefaultTools = () => {
         name: 'mail.read',
         description: 'Read one locally indexed mail item by message id.',
         capabilities: ['mail.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['message_id'],
             properties: {
                 message_id: { type: 'string' }
@@ -766,8 +765,8 @@ const registerDefaultTools = () => {
         name: 'mail.search',
         description: 'Search the local mail index.',
         capabilities: ['mail.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['query'],
             properties: {
                 query: { type: 'string' },
@@ -789,8 +788,8 @@ const registerDefaultTools = () => {
         name: 'mail.next_unread',
         description: 'Return the next unread mail from the local index.',
         capabilities: ['mail.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 mailbox: { type: 'string' },
                 after_id: { type: 'string' }
@@ -807,8 +806,8 @@ const registerDefaultTools = () => {
         name: 'mail.summarize',
         description: 'Summarize the local mail index.',
         capabilities: ['mail.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 mailbox: { type: 'string' },
                 unread_only: { type: 'boolean' },
@@ -826,8 +825,8 @@ const registerDefaultTools = () => {
         name: 'mail.reply_draft',
         description: 'Create a local reply draft for a mail item.',
         capabilities: ['mail.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['message_id'],
             properties: {
                 message_id: { type: 'string' },
@@ -851,8 +850,8 @@ const registerDefaultTools = () => {
         name: 'mail.mark_read',
         description: 'Mark one mail item as read.',
         capabilities: ['mail.write'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['message_id'],
             properties: {
                 message_id: { type: 'string' }
@@ -871,8 +870,8 @@ const registerDefaultTools = () => {
         name: 'mail.mark_unread',
         description: 'Mark one mail item as unread.',
         capabilities: ['mail.write'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['message_id'],
             properties: {
                 message_id: { type: 'string' }
@@ -891,8 +890,8 @@ const registerDefaultTools = () => {
         name: 'mail.archive',
         description: 'Archive one mail item.',
         capabilities: ['mail.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['message_id'],
             properties: {
                 message_id: { type: 'string' }
@@ -911,8 +910,8 @@ const registerDefaultTools = () => {
         name: 'mail.delete',
         description: 'Delete one mail item.',
         capabilities: ['mail.write'],
-        risk_level: 'MEDIUM',
-        params_schema: {
+        risk_tier: 'MEDIUM',
+        parameters: {
             required: ['message_id'],
             properties: {
                 message_id: { type: 'string' }
@@ -931,8 +930,8 @@ const registerDefaultTools = () => {
         name: 'mail.send',
         description: 'Queue a locally prepared draft for send after explicit confirmation.',
         capabilities: ['mail.send'],
-        risk_level: 'HIGH',
-        params_schema: {
+        risk_tier: 'HIGH',
+        parameters: {
             required: ['draft_id'],
             properties: {
                 draft_id: { type: 'string' },
@@ -954,7 +953,7 @@ const registerDefaultTools = () => {
         name: 'contacts.sources',
         description: 'List contact sources currently bridged into eVe.',
         capabilities: ['contacts.read'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async () => {
             const api = await prepareContactsApi();
             return api.sources();
@@ -966,8 +965,8 @@ const registerDefaultTools = () => {
         name: 'contacts.list',
         description: 'List synchronized contacts available in eVe.',
         capabilities: ['contacts.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 limit: { type: 'number' },
                 source_id: { type: 'string' }
@@ -984,8 +983,8 @@ const registerDefaultTools = () => {
         name: 'contacts.search',
         description: 'Search synchronized contacts by name, email or phone.',
         capabilities: ['contacts.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['query'],
             properties: {
                 query: { type: 'string' },
@@ -1006,8 +1005,8 @@ const registerDefaultTools = () => {
         name: 'contacts.read',
         description: 'Read one synchronized contact by contact id or source contact id.',
         capabilities: ['contacts.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['contact_id'],
             properties: {
                 contact_id: { type: 'string' }
@@ -1026,8 +1025,8 @@ const registerDefaultTools = () => {
         name: 'contacts.create',
         description: 'Create one local eVe contact.',
         capabilities: ['contacts.write'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 contact: { type: 'object' },
                 name: { type: 'string' },
@@ -1055,8 +1054,8 @@ const registerDefaultTools = () => {
         name: 'contacts.update',
         description: 'Update one local eVe contact.',
         capabilities: ['contacts.write'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['contact_id'],
             properties: {
                 contact_id: { type: 'string' },
@@ -1089,8 +1088,8 @@ const registerDefaultTools = () => {
         name: 'contacts.delete',
         description: 'Delete one local eVe contact.',
         capabilities: ['contacts.write'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['contact_id'],
             properties: {
                 contact_id: { type: 'string' }
@@ -1112,7 +1111,7 @@ const registerDefaultTools = () => {
         name: 'contacts.import_macos',
         description: 'Import contacts from the local macOS Contacts snapshot into the eVe local contacts store.',
         capabilities: ['contacts.write'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async ({ params }) => {
             const api = await requireContactsApi();
             if (!api || typeof api.importMacosContacts !== 'function') {
@@ -1127,7 +1126,7 @@ const registerDefaultTools = () => {
         name: 'contacts.import_icloud',
         description: 'Import contacts from iCloud CardDAV into the eVe local contacts store.',
         capabilities: ['contacts.write'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async ({ params }) => {
             const api = await requireContactsApi();
             if (!api || typeof api.importIcloudContacts !== 'function') {
@@ -1142,8 +1141,8 @@ const registerDefaultTools = () => {
         name: 'contacts.push_icloud',
         description: 'Push one eVe contact to iCloud Contacts after explicit confirmation.',
         capabilities: ['contacts.write'],
-        risk_level: 'HIGH',
-        params_schema: {
+        risk_tier: 'HIGH',
+        parameters: {
             properties: {
                 contact_id: { type: 'string' },
                 contact: { type: 'object' },
@@ -1164,7 +1163,7 @@ const registerDefaultTools = () => {
         name: 'contacts.open_panel',
         description: 'Open the existing eVe contact panel.',
         capabilities: ['contacts.read'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async () => {
             const api = await prepareContactsApi();
             return api.openPanel();
@@ -1176,7 +1175,7 @@ const registerDefaultTools = () => {
         name: 'bank.accounts',
         description: 'List normalized bank accounts.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async () => {
             const api = await requireBankApi();
             return api.accounts();
@@ -1188,8 +1187,8 @@ const registerDefaultTools = () => {
         name: 'bank.balance',
         description: 'Read one account balance or the total balance.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 account_id: { type: 'string' }
             }
@@ -1205,8 +1204,8 @@ const registerDefaultTools = () => {
         name: 'bank.transactions',
         description: 'List normalized bank transactions.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 account_id: { type: 'string' },
                 period: { type: 'string' },
@@ -1224,8 +1223,8 @@ const registerDefaultTools = () => {
         name: 'bank.summary',
         description: 'Summarize bank movements over a period.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 account_id: { type: 'string' },
                 period: { type: 'string' }
@@ -1242,8 +1241,8 @@ const registerDefaultTools = () => {
         name: 'bank.search_transactions',
         description: 'Search transactions in natural language over the local bank analytics index.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['query'],
             properties: {
                 query: { type: 'string' },
@@ -1264,8 +1263,8 @@ const registerDefaultTools = () => {
         name: 'bank.find_payer',
         description: 'Find incoming payments from one payer or counterparty.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             required: ['name'],
             properties: {
                 name: { type: 'string' },
@@ -1285,8 +1284,8 @@ const registerDefaultTools = () => {
         name: 'bank.spending_by_period',
         description: 'Aggregate debit spending by period.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 period: { type: 'string' },
                 granularity: { type: 'string' }
@@ -1303,8 +1302,8 @@ const registerDefaultTools = () => {
         name: 'bank.top_merchants',
         description: 'Rank top debit merchants over a period.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
-        params_schema: {
+        risk_tier: 'LOW',
+        parameters: {
             properties: {
                 period: { type: 'string' },
                 limit: { type: 'number' }
@@ -1321,7 +1320,7 @@ const registerDefaultTools = () => {
         name: 'bank.recurring_payments',
         description: 'Detect recurring outgoing payments.',
         capabilities: ['bank.read'],
-        risk_level: 'LOW',
+        risk_tier: 'LOW',
         handler: async ({ params }) => {
             const api = await requireBankApi();
             return api.recurringPayments(params || {});
@@ -1333,8 +1332,8 @@ const registerDefaultTools = () => {
         name: 'adole.share.atomes',
         description: 'Share one or more atomes with a user (by phone number).',
         capabilities: ['share.write'],
-        risk_level: 'HIGH',
-        params_schema: {
+        risk_tier: 'HIGH',
+        parameters: {
             required: ['phoneNumber', 'atomeIds', 'permissions'],
             properties: {
                 phoneNumber: { type: 'string' },
@@ -1369,8 +1368,8 @@ const registerDefaultTools = () => {
         name: 'adole.share.grant_permission',
         description: 'Grant share permissions (Fastify) without creating share_request atomes.',
         capabilities: ['share.write'],
-        risk_level: 'HIGH',
-        params_schema: {
+        risk_tier: 'HIGH',
+        parameters: {
             required: ['atomeId', 'principalId', 'permissions'],
             properties: {
                 atomeId: { type: 'string' },
@@ -1405,8 +1404,8 @@ const registerDefaultTools = () => {
         name: 'adole.share.publish',
         description: 'Publish/share payload via Fastify share.publish.',
         capabilities: ['share.write'],
-        risk_level: 'HIGH',
-        params_schema: {
+        risk_tier: 'HIGH',
+        parameters: {
             properties: {
                 payload: { type: 'object' }
             }

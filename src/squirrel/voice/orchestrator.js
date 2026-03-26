@@ -1,13 +1,11 @@
-import { classifyVoiceIntent, normalizeVoiceIntent, readMailOrderReference } from './intent_schema.js';
+import { classifyVoiceIntent, normalizeVoiceIntent } from './intent_schema.js';
 import {
     normalizeAiProviderError,
     requestProviderCompletion,
     resolveFirstAiProviderConfig
 } from '../ai/provider_client.js';
-import { isSafeDegradedIntent } from './ai_planner.js';
 import { intentToStructuredRequest } from './semantic_contract.js';
 import { createToolRouter } from './tool_router.js';
-import { buildContactQueryReply } from './contact_reply.js';
 import { resolveIdentityContext } from './identity_resolver.js';
 import { createPersistentMemoryStore } from '../ai/persistent_memory.js';
 import { createAiTraceStore } from '../ai/trace_store.js';
@@ -18,6 +16,16 @@ const defaultEnv = () => (typeof window !== 'undefined' ? window : globalThis);
 
 const resolveHostEnv = (env = null) => {
     if (env?.window && typeof env.window === 'object') return env.window;
+    if (
+        env
+        && typeof env === 'object'
+        && (
+            typeof env.handleAtomeMCPRequestAsync === 'function'
+            || typeof env.handleAtomeMCPRequest === 'function'
+        )
+    ) {
+        return env;
+    }
     const hasExplicitBusinessApis = !!(
         env?.Squirrel?.mail
         || env?.Squirrel?.contacts
@@ -146,6 +154,16 @@ const resolveMailApi = async (env) => {
     const hostEnv = resolveHostEnv(env);
     const existing = hostEnv?.Squirrel?.mail || hostEnv?.atome?.mail || hostEnv?.AtomeMail || env?.Squirrel?.mail || env?.atome?.mail || env?.AtomeMail || null;
     if (existing) return existing;
+    const autoBootstrapAllowed = !!(
+        hostEnv?.location
+        || hostEnv?.document
+        || hostEnv?.navigator
+        || hostEnv?.fetch
+        || hostEnv?.__TAURI__
+        || hostEnv?.__TAURI_INTERNALS__
+        || typeof window !== 'undefined'
+    );
+    if (!autoBootstrapAllowed) return null;
     const mod = await import('../mail/bootstrap.js');
     if (typeof mod?.createGlobalMailApi === 'function') {
         return mod.createGlobalMailApi({ env: hostEnv });
@@ -184,6 +202,16 @@ const resolveContactsApi = async (env) => {
     const hostEnv = resolveHostEnv(env);
     const existing = hostEnv?.Squirrel?.contacts || hostEnv?.atome?.contacts || hostEnv?.AtomeContacts || env?.Squirrel?.contacts || env?.atome?.contacts || env?.AtomeContacts || null;
     if (existing) return existing;
+    const autoBootstrapAllowed = !!(
+        hostEnv?.location
+        || hostEnv?.document
+        || hostEnv?.navigator
+        || hostEnv?.fetch
+        || hostEnv?.__TAURI__
+        || hostEnv?.__TAURI_INTERNALS__
+        || typeof window !== 'undefined'
+    );
+    if (!autoBootstrapAllowed) return null;
     const mod = await import('../contacts/bootstrap.js');
     if (typeof mod?.createGlobalContactsApi === 'function') {
         return mod.createGlobalContactsApi({ env: hostEnv });
@@ -200,6 +228,16 @@ const resolveCalendarApi = async (env) => {
     const hostEnv = resolveHostEnv(env);
     const existing = hostEnv?.Squirrel?.calendar || hostEnv?.atome?.calendar || hostEnv?.AtomeCalendar || env?.Squirrel?.calendar || env?.atome?.calendar || env?.AtomeCalendar || null;
     if (existing) return existing;
+    const autoBootstrapAllowed = !!(
+        hostEnv?.location
+        || hostEnv?.document
+        || hostEnv?.navigator
+        || hostEnv?.fetch
+        || hostEnv?.__TAURI__
+        || hostEnv?.__TAURI_INTERNALS__
+        || typeof window !== 'undefined'
+    );
+    if (!autoBootstrapAllowed) return null;
     const mod = await import('../calendar/bootstrap.js');
     if (typeof mod?.createGlobalCalendarApi === 'function') {
         return mod.createGlobalCalendarApi({ env: hostEnv });
@@ -237,245 +275,6 @@ const normalizePlannerText = (value) => String(value || '')
     .replace(/\s+/g, ' ')
     .trim();
 
-const normalizeComparableText = (value) => String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-
-
-const pickMailQueryField = (toolParams = [], fieldName, fallback = null) => {
-    for (const params of Array.isArray(toolParams) ? toolParams : []) {
-        if (!params || typeof params !== 'object') continue;
-        const value = params[fieldName];
-        if (typeof value === 'number' && Number.isFinite(value)) {
-            return value;
-        }
-        if (typeof value === 'string' && value.trim()) {
-            return value.trim();
-        }
-        if (Array.isArray(value) && value.some((entry) => String(entry || '').trim())) {
-            return value.map((entry) => String(entry || '').trim()).filter(Boolean);
-        }
-    }
-    return fallback;
-};
-
-const pickToolParamField = (toolParams = [], fieldName, fallback = null) => {
-    for (const params of Array.isArray(toolParams) ? toolParams : []) {
-        if (!params || typeof params !== 'object') continue;
-        const value = params[fieldName];
-        if (typeof value === 'number' && Number.isFinite(value)) return value;
-        if (typeof value === 'boolean') return value;
-        if (typeof value === 'string' && value.trim()) return value.trim();
-        if (Array.isArray(value) && value.some((entry) => String(entry || '').trim())) {
-            return value.map((entry) => String(entry || '').trim()).filter(Boolean);
-        }
-        if (value && typeof value === 'object') return cloneValue(value);
-    }
-    return fallback;
-};
-
-const buildTemporalRange = (temporalRef, referenceDate = new Date()) => {
-    const date = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
-    if (Number.isNaN(date.getTime())) return {};
-    const startOfDay = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate(), 0, 0, 0, 0);
-    const endOfDay = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate(), 23, 59, 59, 999);
-    const normalized = String(temporalRef || '').trim().toLowerCase();
-    if (!normalized) return {};
-    if (normalized === 'today') {
-        return { start: startOfDay(date), end: endOfDay(date) };
-    }
-    if (normalized === 'tomorrow') {
-        const next = new Date(date);
-        next.setDate(next.getDate() + 1);
-        return { start: startOfDay(next), end: endOfDay(next) };
-    }
-    if (normalized === 'this_week') {
-        const day = date.getDay();
-        const delta = day === 0 ? -6 : 1 - day;
-        const start = new Date(date);
-        start.setDate(date.getDate() + delta);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        return { start: startOfDay(start), end: endOfDay(end) };
-    }
-    if (normalized === 'this_month') {
-        const start = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
-        const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-        return { start, end };
-    }
-    return {};
-};
-
-const buildMailQueryEntities = ({
-    activeEntities = {},
-    sourceEntities = {},
-    sourceToolParams = [],
-    unreadOnly = false,
-    statusOnly = false
-} = {}) => {
-    const resolvedUnreadOnly = unreadOnly === true
-        || sourceEntities?.unread_only === true
-        || sourceToolParams.some((params) => params?.unread_only === true)
-        || activeEntities?.unread_only === true;
-    const resolvedStatusOnly = statusOnly === true
-        || sourceEntities?.status_only === true
-        || sourceToolParams.some((params) => params?.status_only === true)
-        || activeEntities?.status_only === true;
-    // Carry-over fields: these persist across queries when the user doesn't override them
-    const fromFilter = pickMailQueryField(sourceToolParams, 'from', sourceEntities?.from || activeEntities?.from || null);
-    const notFromFilter = pickMailQueryField(sourceToolParams, 'not_from', sourceEntities?.not_from || activeEntities?.not_from || null);
-    const mailbox = pickMailQueryField(sourceToolParams, 'mailbox', sourceEntities?.mailbox || activeEntities?.mailbox || null);
-    const threadId = pickMailQueryField(sourceToolParams, 'thread_id', sourceEntities?.thread_id || activeEntities?.thread_id || null);
-    // Per-query fields: order and limit must NOT bleed from previous queries.
-    // Only use the current LLM output or current sourceEntities, never activeEntities.
-    const limitValue = pickMailQueryField(sourceToolParams, 'limit', sourceEntities?.limit || null);
-    const orderValue = pickMailQueryField(sourceToolParams, 'order', sourceEntities?.order || null);
-    const next = {
-        ...activeEntities,
-        ...sourceEntities,
-        unread_only: resolvedUnreadOnly,
-        status_only: resolvedStatusOnly
-    };
-    // Remove stale per-query fields inherited from activeEntities spread above
-    delete next.limit;
-    delete next.order;
-    if (fromFilter) next.from = cloneValue(fromFilter);
-    if (notFromFilter) next.not_from = cloneValue(notFromFilter);
-    if (mailbox) next.mailbox = mailbox;
-    if (threadId) next.thread_id = threadId;
-    if (limitValue !== null && limitValue !== undefined && String(limitValue).trim() !== '') {
-        next.limit = Number.isFinite(Number(limitValue)) ? Number(limitValue) : limitValue;
-    }
-    if (typeof orderValue === 'string' && orderValue.trim()) {
-        next.order = orderValue.trim().toLowerCase();
-    }
-    return next;
-};
-
-const applyHeuristicOrder = (queryEntities, normalizedUtterance) => {
-    const heuristicOrder = readMailOrderReference(normalizedUtterance);
-    if (heuristicOrder) queryEntities.order = heuristicOrder;
-};
-
-const readMailLimitFromUtterance = (normalized = '') => {
-    if (!normalized) return null;
-    // "les 5 mails", "5 derniers mails", "les 5 plus recents"
-    const preMatch = normalized.match(/\b(\d+)\s*(?:mail|message|courrier|dernier|plus|premier)/i);
-    if (preMatch) {
-        const n = parseInt(preMatch[1], 10);
-        if (Number.isFinite(n) && n > 0 && n <= 500) return n;
-    }
-    // "les derniers 5", "mails les plus recents 10"
-    const postMatch = normalized.match(/(?:dernier|mail|message|recent|ancien)\w*\s+(\d+)/i);
-    if (postMatch) {
-        const n = parseInt(postMatch[1], 10);
-        if (Number.isFinite(n) && n > 0 && n <= 500) return n;
-    }
-    // "tous les mails", "all mails"
-    if (/\b(?:tous les|toutes les|all)\b/i.test(normalized)) return 999;
-    return null;
-};
-
-const applyHeuristicLimit = (queryEntities, normalizedUtterance) => {
-    const heuristicLimit = readMailLimitFromUtterance(normalizedUtterance);
-    if (heuristicLimit) queryEntities.limit = heuristicLimit;
-};
-
-const buildMailQueryInput = (entities = {}) => {
-    const input = {
-        unread_only: entities?.unread_only === true,
-        status_only: entities?.status_only === true
-    };
-    if (entities?.from) input.from = cloneValue(entities.from);
-    if (entities?.not_from) input.not_from = cloneValue(entities.not_from);
-    if (entities?.mailbox) input.mailbox = entities.mailbox;
-    if (entities?.thread_id) input.thread_id = entities.thread_id;
-    if (Number.isFinite(Number(entities?.limit))) input.limit = Number(entities.limit);
-    if (typeof entities?.order === 'string' && entities.order.trim()) input.order = entities.order.trim().toLowerCase();
-    return input;
-};
-
-const buildCurrentMailStepInput = (entities = {}, extra = {}) => ({
-    context: 'current',
-    ...(entities?.current_message_id ? { current_message_id: entities.current_message_id } : {}),
-    ...extra
-});
-
-const readReplyDraftDetails = (rawUtterance = '') => {
-    const text = String(rawUtterance || '').trim();
-    if (!text) return null;
-
-    // "demande a X si/de/que Y", "dis a X de/que Y", "ecris a X que Y"
-    const demandeMatch = text.match(/^\s*(?:demande|dis|ecris)\s+(?:a|à)\s+(.+?)\s+((?:si|de|que|d')\s+.+)$/i);
-    if (demandeMatch) {
-        return {
-            reply_target: String(demandeMatch[1] || '').trim() || null,
-            draft_text: String(demandeMatch[2] || '').trim() || null
-        };
-    }
-    // "demande a X" / "dis a X" / "ecris a X" with no body
-    const demandeTargetOnly = text.match(/^\s*(?:demande|dis|ecris)\s+(?:a|à)\s+(\S+.*)$/i);
-    if (demandeTargetOnly) {
-        return {
-            reply_target: String(demandeTargetOnly[1] || '').trim() || null,
-            draft_text: null
-        };
-    }
-
-    // Direct form: "reponds a X que Y" or "reponds a X: Y"
-    const directMatch = text.match(/^\s*r(?:e|é)ponds?\s+(.+)$/i);
-    if (directMatch) {
-        const value = String(directMatch[1] || '').trim();
-        if (!value) return null;
-
-        const targetedWithClause = value.match(/^(?:a|à)\s+(.+?)\s+que\s+(.+)$/i);
-        if (targetedWithClause) {
-            return {
-                reply_target: String(targetedWithClause[1] || '').trim() || null,
-                draft_text: String(targetedWithClause[2] || '').trim() || null
-            };
-        }
-
-        const targetedDirect = value.match(/^(?:a|à)\s+(.+?)\s*[:,]\s*(.+)$/i);
-        if (targetedDirect) {
-            return {
-                reply_target: String(targetedDirect[1] || '').trim() || null,
-                draft_text: String(targetedDirect[2] || '').trim() || null
-            };
-        }
-
-        return {
-            reply_target: null,
-            draft_text: value
-        };
-    }
-
-    // Natural form: "peux tu repondre a X pour lui dire/demander Y"
-    const naturalMatch = text.match(/r(?:e|é)pond(?:re|s)?\s+(?:a|à)\s+(.+?)\s+(?:pour\s+(?:lui|leur)?\s*(?:dire|demander|signaler|confirmer|indiquer|ecrire|annoncer)?|que|en\s+disant)\s+(.+)$/i);
-    if (naturalMatch) {
-        return {
-            reply_target: String(naturalMatch[1] || '').trim() || null,
-            draft_text: String(naturalMatch[2] || '').trim() || null
-        };
-    }
-
-    // Partial natural: "repondre a X" with no message body
-    const targetOnly = text.match(/r(?:e|é)pond(?:re|s)?\s+(?:a|à)\s+(.+?)(?:[\s?!.]*$)/i);
-    if (targetOnly) {
-        return {
-            reply_target: String(targetOnly[1] || '').trim() || null,
-            draft_text: null
-        };
-    }
-
-    return null;
-};
-
 const isProgressPlaceholderReply = (value = '') => {
     const normalized = normalizePlannerText(value);
     if (!normalized) return false;
@@ -510,44 +309,6 @@ const flattenResultPayload = (value, depth = 0) => {
         return flattenResultPayload(value.result, depth + 1);
     }
     return value;
-};
-
-const RUNTIME_CRITICAL_INPUT_KEYS = Object.freeze([
-    'color',
-    'fill',
-    'background',
-    'backgroundColor',
-    'bg',
-    'text',
-    'value',
-    'atome_id',
-    'atomeId',
-    'target_id',
-    'targetId',
-    'selection_ids',
-    'selectionIds'
-]);
-
-const hasOwnValue = (input = {}, key = '') => {
-    if (!input || typeof input !== 'object' || !key) return false;
-    if (!Object.prototype.hasOwnProperty.call(input, key)) return false;
-    const value = input[key];
-    if (Array.isArray(value)) return value.length > 0;
-    return value !== undefined && value !== null && String(value).trim() !== '';
-};
-
-const shouldPreferRuntimeFallbackIntent = (fallbackIntent = {}, plannedIntent = {}) => {
-    if (String(fallbackIntent?.execution?.target || '') !== 'runtime_v2') return false;
-    if (String(plannedIntent?.execution?.target || '') !== 'runtime_v2') return false;
-    const fallbackToolchain = ensureToolchain(fallbackIntent);
-    const plannedToolchain = ensureToolchain(plannedIntent);
-    if (fallbackToolchain.length !== 1 || plannedToolchain.length !== 1) return false;
-    const fallbackStep = fallbackToolchain[0];
-    const plannedStep = plannedToolchain[0];
-    if (String(fallbackStep?.tool_id || '') !== String(plannedStep?.tool_id || '')) return false;
-    const fallbackInput = fallbackStep?.input && typeof fallbackStep.input === 'object' ? fallbackStep.input : {};
-    const plannedInput = plannedStep?.input && typeof plannedStep.input === 'object' ? plannedStep.input : {};
-    return RUNTIME_CRITICAL_INPUT_KEYS.some((key) => hasOwnValue(fallbackInput, key) && !hasOwnValue(plannedInput, key));
 };
 
 const buildRuntimeIntentMeta = (result, {
@@ -743,439 +504,6 @@ const buildRuntimeFailureReply = (payload, intent = {}, options = {}) => {
         : "L'action a echoue.";
 };
 
-const buildMaterializedMailIntent = (sourceIntent = {}, utterance = '', context = {}, heuristicIntent = null) => {
-    const normalizedUtterance = normalizePlannerText(utterance);
-    const rawUtterance = String(utterance || '').trim().toLowerCase();
-    const activeIntent = context?.active_intent && typeof context.active_intent === 'object'
-        ? context.active_intent
-        : null;
-    const activeEntities = activeIntent?.entities && typeof activeIntent.entities === 'object'
-        ? cloneValue(activeIntent.entities)
-        : {};
-    // Resolve action: if the AI planner returned the generic default 'list'
-    // but the heuristic detected a more specific action, trust the heuristic.
-    const aiAction = String(sourceIntent?.action || '').trim().toLowerCase();
-    const heuristicAction = String(heuristicIntent?.action || '').trim().toLowerCase();
-    const heuristicHasSpecificAction = heuristicAction
-        && heuristicAction !== 'list'
-        && heuristicAction !== 'unknown'
-        && heuristicAction !== 'ai_planned';
-    const resolvedAction = (aiAction === 'list' || aiAction === '' || aiAction === 'unknown' || aiAction === 'ai_planned')
-        && heuristicHasSpecificAction
-        ? heuristicAction
-        : (aiAction || activeIntent?.action || 'list');
-    const normalizedAction = resolvedAction.trim().toLowerCase();
-    const sourceToolchain = Array.isArray(sourceIntent?.execution?.toolchain) ? sourceIntent.execution.toolchain : [];
-    const sourceToolParams = sourceToolchain
-        .map((step) => (
-            step?.input && typeof step.input === 'object'
-                ? step.input
-                : (step?.params && typeof step.params === 'object' ? step.params : null)
-        ))
-        .filter(Boolean);
-    const sourceUnreadOnly = sourceToolParams.some((params) => params.unread_only === true);
-    const sourceStatusOnly = sourceToolParams.some((params) => params.status_only === true);
-    const shortFollowup = normalizedUtterance === 'alors'
-        || normalizedUtterance === 'et alors'
-        || normalizedUtterance === 'du coup'
-        || normalizedUtterance === 'quoi de neuf';
-
-    const wantsUnreadOnly = (
-        normalizedUtterance.includes('non lu')
-        || normalizedUtterance.includes('non lus')
-        || normalizedUtterance.includes('nouveau mail')
-        || normalizedUtterance.includes('nouveaux mail')
-        || normalizedUtterance.includes('nouveau message')
-        || normalizedUtterance.includes('nouveaux message')
-        || normalizedUtterance.includes('new mail')
-        || normalizedUtterance.includes('unread')
-    );
-    const wantsStatusOnly = (
-        normalizedUtterance.includes('ai je')
-        || normalizedUtterance.includes('ais je')
-        || normalizedUtterance.includes('est ce que j ai')
-        || normalizedUtterance.includes('y a t il')
-        || normalizedUtterance.includes('il y a')
-        || normalizedUtterance.includes('combien')
-        || shortFollowup
-        || sourceStatusOnly === true
-        || (sourceUnreadOnly === true && rawUtterance.includes('?'))
-        || (sourceUnreadOnly === true && !String(sourceIntent?.assistant_reply || '').trim())
-        || activeEntities.status_only === true
-    );
-    const sourceEntities = sourceIntent?.entities && typeof sourceIntent.entities === 'object'
-        ? cloneValue(sourceIntent.entities)
-        : {};
-    const queryEntities = buildMailQueryEntities({
-        activeEntities,
-        sourceEntities,
-        sourceToolParams,
-        unreadOnly: wantsUnreadOnly,
-        statusOnly: wantsStatusOnly
-    });
-    applyHeuristicOrder(queryEntities, normalizedUtterance);
-    applyHeuristicLimit(queryEntities, normalizedUtterance);
-    const wantsCurrentMailSummary = (
-        normalizedAction.includes('summarize_current')
-        || (
-            (
-                normalizedUtterance.includes('ce mail')
-                || normalizedUtterance.includes('ce message')
-            )
-            && (
-                normalizedUtterance.includes('que contient')
-                || normalizedUtterance.includes('resume')
-                || normalizedUtterance.includes('resumer')
-                || normalizedUtterance.includes('summary')
-                || normalizedUtterance.includes('summarize')
-            )
-        )
-    );
-    const replyDraft = readReplyDraftDetails(utterance);
-    // AI planner reformulation takes priority over raw heuristic extraction
-    // Check both toolchain params AND entities (entities survive even when toolchain is empty)
-    const aiReplyTarget = sourceToolParams.reduce((acc, p) => acc || String(p?.reply_target || '').trim(), '')
-        || String(sourceEntities?.reply_target || '').trim();
-    const aiDraftText = sourceToolParams.reduce((acc, p) => acc || String(p?.draft_text || '').trim(), '')
-        || String(sourceEntities?.draft_text || '').trim();
-    const explicitReplyDraftText = String(aiDraftText || replyDraft?.draft_text || '').trim();
-    const explicitReplyTarget = String(replyDraft?.reply_target || '').trim() || aiReplyTarget;
-    const explicitAutoSend = replyDraft?.draft_text
-        ? true
-        : sourceToolParams.some((p) => p?.auto_send === true)
-        || sourceEntities?.auto_send === true;
-
-    if (
-        (explicitReplyDraftText || (explicitReplyTarget && normalizedAction.includes('reply')))
-        && (activeIntent?.domain === 'mail' || String(sourceIntent?.domain || '').trim() === 'mail')
-    ) {
-        const currentMessageId = String(
-            sourceIntent?.entities?.current_message_id
-            || activeEntities.current_message_id
-            || ''
-        ).trim();
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'reply_current',
-            status: 'pending_connector',
-            entities: {
-                ...activeEntities,
-                ...(sourceIntent?.entities && typeof sourceIntent.entities === 'object' ? cloneValue(sourceIntent.entities) : {}),
-                ...(currentMessageId ? { current_message_id: currentMessageId } : {}),
-                ...(explicitReplyTarget ? { reply_target: explicitReplyTarget } : {}),
-                draft_text: explicitReplyDraftText,
-                auto_send: explicitAutoSend
-            },
-            requested_capabilities: ['mail_reply_draft'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_reply_draft', {
-                    ...(currentMessageId ? { current_message_id: currentMessageId } : {}),
-                    ...(explicitReplyTarget ? { reply_target: explicitReplyTarget } : {}),
-                    draft_text: explicitReplyDraftText,
-                    auto_send: explicitAutoSend
-                })]
-            }
-        });
-    }
-
-    if (wantsCurrentMailSummary) {
-        const currentMessageId = String(
-            sourceIntent?.entities?.current_message_id
-            || activeEntities.current_message_id
-            || ''
-        ).trim();
-        const summaryEntities = {
-            ...queryEntities,
-            ...(currentMessageId ? { current_message_id: currentMessageId } : {})
-        };
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'summarize_current',
-            status: 'pending_connector',
-            entities: summaryEntities,
-            requested_capabilities: ['mail_read'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_read', buildCurrentMailStepInput(summaryEntities))]
-            }
-        });
-    }
-
-    if (
-        normalizedAction.includes('read')
-        && (
-            activeEntities.current_message_id
-            || sourceIntent?.entities?.current_message_id
-            || queryEntities.order
-        )
-    ) {
-        const currentMessageId = String(
-            sourceIntent?.entities?.current_message_id
-            || activeEntities.current_message_id
-            || ''
-        ).trim();
-        const readEntities = {
-            ...queryEntities,
-            ...(currentMessageId ? { current_message_id: currentMessageId } : {})
-        };
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'read_current',
-            status: 'pending_connector',
-            entities: readEntities,
-            requested_capabilities: ['mail_read', 'mail_mark_read'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [
-                    buildPendingConnectorStep('mail_read', buildCurrentMailStepInput(readEntities)),
-                    buildPendingConnectorStep('mail_mark_read', buildCurrentMailStepInput(readEntities))
-                ]
-            }
-        });
-    }
-
-    if (normalizedAction.includes('read') && normalizedAction.includes('next')) {
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'read_next',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities
-            },
-            requested_capabilities: ['mail_next_unread'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_next_unread', {
-                    context: 'current'
-                })]
-            }
-        });
-    }
-
-    if (normalizedAction === 'send' || normalizedAction.includes('send')) {
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'send',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities
-            },
-            requested_capabilities: ['mail_send'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_send', {})]
-            }
-        });
-    }
-
-    if (normalizedAction.includes('archive')) {
-        const currentMessageId = String(
-            sourceIntent?.entities?.current_message_id
-            || activeEntities.current_message_id
-            || ''
-        ).trim();
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'archive_current',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities,
-                ...(currentMessageId ? { current_message_id: currentMessageId } : {})
-            },
-            requested_capabilities: ['mail_archive'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_archive', buildCurrentMailStepInput({
-                    ...queryEntities,
-                    ...(currentMessageId ? { current_message_id: currentMessageId } : {})
-                }))]
-            }
-        });
-    }
-
-    if (normalizedAction.includes('delete') || normalizedAction.includes('trash')) {
-        const currentMessageId = String(
-            sourceIntent?.entities?.current_message_id
-            || activeEntities.current_message_id
-            || ''
-        ).trim();
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'delete_current',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities,
-                ...(currentMessageId ? { current_message_id: currentMessageId } : {})
-            },
-            requested_capabilities: ['mail_delete'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_delete', buildCurrentMailStepInput({
-                    ...queryEntities,
-                    ...(currentMessageId ? { current_message_id: currentMessageId } : {})
-                }))]
-            }
-        });
-    }
-
-    if (normalizedAction.includes('mark_unread') || normalizedAction.includes('unread')) {
-        const currentMessageId = String(
-            sourceIntent?.entities?.current_message_id
-            || activeEntities.current_message_id
-            || ''
-        ).trim();
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'mark_unread_current',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities,
-                ...(currentMessageId ? { current_message_id: currentMessageId } : {}),
-                read: false
-            },
-            requested_capabilities: ['mail_mark_read'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_mark_read', buildCurrentMailStepInput({
-                    ...queryEntities,
-                    ...(currentMessageId ? { current_message_id: currentMessageId } : {}),
-                    read: false
-                }))]
-            }
-        });
-    }
-
-    if (normalizedAction.includes('mark_read')) {
-        const currentMessageId = String(
-            sourceIntent?.entities?.current_message_id
-            || activeEntities.current_message_id
-            || ''
-        ).trim();
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'mark_read_current',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities,
-                ...(currentMessageId ? { current_message_id: currentMessageId } : {}),
-                read: true
-            },
-            requested_capabilities: ['mail_mark_read'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_mark_read', buildCurrentMailStepInput({
-                    ...queryEntities,
-                    ...(currentMessageId ? { current_message_id: currentMessageId } : {}),
-                    read: true
-                }))]
-            }
-        });
-    }
-
-    if (normalizedAction.includes('search')) {
-        const queryText = pickMailQueryField(sourceToolParams, 'query', sourceEntities?.query_text || activeEntities?.query_text || null)
-            || pickMailQueryField(sourceToolParams, 'query_text', sourceEntities?.query_text || activeEntities?.query_text || null);
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_tool',
-            domain: 'mail',
-            action: 'search',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities,
-                ...(queryText ? { query_text: queryText } : {})
-            },
-            requested_capabilities: ['mail_search'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [buildPendingConnectorStep('mail_search', {
-                    ...buildMailQueryInput(queryEntities),
-                    ...(queryText ? { query: queryText } : {})
-                })]
-            }
-        });
-    }
-
-    if (normalizedAction.includes('summar')) {
-        return normalizeVoiceIntent({
-            ...sourceIntent,
-            type: 'connector_toolchain',
-            domain: 'mail',
-            action: 'summarize',
-            status: 'pending_connector',
-            entities: {
-                ...queryEntities,
-                status_only: false
-            },
-            requested_capabilities: ['mail_list', 'mail_summarize'],
-            execution: {
-                target: 'pending_connector',
-                confirmation_required: false,
-                toolchain: [
-                    buildPendingConnectorStep('mail_list', {
-                        ...buildMailQueryInput({
-                            ...queryEntities,
-                            status_only: false
-                        })
-                    }),
-                    buildPendingConnectorStep('mail_summarize', {
-                        ...buildMailQueryInput({
-                            ...queryEntities,
-                            status_only: false
-                        })
-                    })
-                ]
-            }
-        });
-    }
-
-    return normalizeVoiceIntent({
-        ...sourceIntent,
-        type: 'connector_tool',
-        domain: 'mail',
-        action: 'list',
-        status: 'pending_connector',
-        entities: {
-            ...queryEntities
-        },
-        requested_capabilities: ['mail_list'],
-        execution: {
-            target: 'pending_connector',
-            confirmation_required: false,
-            toolchain: [buildPendingConnectorStep('mail_list', buildMailQueryInput(queryEntities))]
-        }
-    });
-};
-
 const wantsExplicitConfirmation = (intent = {}) => {
     const normalized = String(intent?.utterance?.normalized || '').trim();
     if (!normalized) return false;
@@ -1189,182 +517,6 @@ const wantsExplicitConfirmation = (intent = {}) => {
         || normalized.includes('ask me before')
         || normalized.includes('confirm first')
     );
-};
-
-const collectMailCandidates = (...groups) => {
-    const seen = new Set();
-    const items = [];
-    for (const group of groups) {
-        for (const item of Array.isArray(group) ? group : []) {
-            const messageId = String(item?.message_id || '').trim();
-            if (!messageId || seen.has(messageId)) continue;
-            seen.add(messageId);
-            items.push(item);
-        }
-    }
-    return items;
-};
-
-const normalizeSpeechSubject = (item = {}) => {
-    const subject = String(item?.subject || '').trim();
-    if (
-        subject
-        && !/^[\s?._\uFFFD-]+$/.test(subject)
-        && !/^=\?[^?]+\?[bqBQ]\?/.test(subject)
-    ) {
-        return subject;
-    }
-    const preview = String(item?.preview || '').trim();
-    if (preview) return preview.length > 80 ? `${preview.slice(0, 79).trim()}…` : preview;
-    const sender = String(item?.from?.name || item?.from?.address || '').trim();
-    return sender || 'sans objet';
-};
-
-const pickMailItemByOrder = (items = [], order = 'newest') => {
-    const normalizedOrder = String(order || 'newest').trim().toLowerCase();
-    const candidates = (Array.isArray(items) ? items : [])
-        .filter((entry) => entry && typeof entry === 'object');
-    if (!candidates.length) return null;
-    const sorted = candidates.slice().sort((left, right) => {
-        const leftTs = Number(left?.received_at) || 0;
-        const rightTs = Number(right?.received_at) || 0;
-        if (leftTs !== rightTs) {
-            return normalizedOrder === 'oldest' ? leftTs - rightTs : rightTs - leftTs;
-        }
-        return normalizedOrder === 'oldest'
-            ? String(left?.message_id || '').localeCompare(String(right?.message_id || ''))
-            : String(right?.message_id || '').localeCompare(String(left?.message_id || ''));
-    });
-    return sorted[0] || null;
-};
-
-const buildSingleMailSummary = (item = {}, locale = 'fr-FR') => {
-    const english = String(locale || '').toLowerCase().startsWith('en');
-    const sender = String(item?.from?.name || item?.from?.address || 'expediteur inconnu').trim();
-    const subject = normalizeSpeechSubject(item);
-    const rawBody = String(item?.body_text || item?.preview || '').trim();
-    // Strip quoted lines, attribution lines, and dates before truncating
-    const cleanBody = rawBody
-        .replace(/^\s*>+.*$/gm, '')
-        .replace(/\s*>+\s*>*/g, ' ')
-        .replace(/(^|\s)(Le\s+\d.*?a\s+(e|é)crit\s*:|On\s+.*?wrote\s*:)/gim, ' ')
-        .replace(/<[^>@]+@[^>]+>/g, '')
-        .replace(/\b\d{9,}\b/g, '')
-        .replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-    const body = truncateForAi(cleanBody, 260);
-    if (english) {
-        return body
-            ? `This mail from ${sender}, subject "${subject}", says: ${body}`
-            : `This mail from ${sender} is about "${subject}".`;
-    }
-    return body
-        ? `Ce mail de ${sender}, sujet "${subject}", dit en substance : ${body}`
-        : `Ce mail de ${sender} concerne "${subject}".`;
-};
-
-const findMailByReplyTarget = (items = [], replyTarget = '') => {
-    const normalizedTarget = normalizeComparableText(replyTarget);
-    if (!normalizedTarget) return null;
-    return items.find((item) => {
-        const senderName = normalizeComparableText(item?.from?.name);
-        const senderAddress = normalizeComparableText(item?.from?.address);
-        return (
-            (senderName && (senderName.includes(normalizedTarget) || normalizedTarget.includes(senderName)))
-            || (senderAddress && senderAddress.includes(normalizedTarget))
-        );
-    }) || null;
-};
-
-const readMailFilterValue = (intent = {}, toolchain = [], fieldName) => {
-    const entityValue = intent?.entities?.[fieldName];
-    if (typeof entityValue === 'number' && Number.isFinite(entityValue)) return entityValue;
-    if (typeof entityValue === 'string' && entityValue.trim()) return entityValue.trim();
-    if (Array.isArray(entityValue) && entityValue.some((entry) => String(entry || '').trim())) {
-        return entityValue.map((entry) => String(entry || '').trim()).filter(Boolean);
-    }
-    for (const step of Array.isArray(toolchain) ? toolchain : []) {
-        const value = step?.input?.[fieldName] ?? step?.params?.[fieldName];
-        if (typeof value === 'number' && Number.isFinite(value)) return value;
-        if (typeof value === 'string' && value.trim()) return value.trim();
-        if (Array.isArray(value) && value.some((entry) => String(entry || '').trim())) {
-            return value.map((entry) => String(entry || '').trim()).filter(Boolean);
-        }
-    }
-    const activeEntityValue = intent?.context?.active_intent?.entities?.[fieldName];
-    if (typeof activeEntityValue === 'number' && Number.isFinite(activeEntityValue)) return activeEntityValue;
-    if (typeof activeEntityValue === 'string' && activeEntityValue.trim()) return activeEntityValue.trim();
-    if (Array.isArray(activeEntityValue) && activeEntityValue.some((entry) => String(entry || '').trim())) {
-        return activeEntityValue.map((entry) => String(entry || '').trim()).filter(Boolean);
-    }
-    return null;
-};
-
-const describeMailSenderScope = ({
-    locale = 'fr-FR',
-    from = null,
-    notFrom = null
-} = {}) => {
-    const english = String(locale || '').toLowerCase().startsWith('en');
-    const toLabel = (value) => Array.isArray(value) ? value.join(', ') : String(value || '').trim();
-    const includeLabel = toLabel(from);
-    const excludeLabel = toLabel(notFrom);
-    if (includeLabel) {
-        return english ? ` from ${includeLabel}` : ` de ${includeLabel}`;
-    }
-    if (excludeLabel) {
-        return english ? ` from people other than ${excludeLabel}` : ` d'autres personnes que ${excludeLabel}`;
-    }
-    return '';
-};
-
-const buildMailReplyAcknowledgement = ({
-    draft = null,
-    sourceItem = null,
-    locale = 'fr-FR'
-} = {}) => {
-    const english = String(locale || '').toLowerCase().startsWith('en');
-    const recipient = String(
-        sourceItem?.from?.name
-        || sourceItem?.from?.address
-        || draft?.to?.[0]?.name
-        || draft?.to?.[0]?.address
-        || ''
-    ).trim();
-    const bodyText = String(draft?.body_text || '').trim();
-    if (english) {
-        return recipient
-            ? `I prepared a reply to ${recipient}: "${bodyText}". Say "send the mail" to send it.`
-            : `I prepared the reply draft: "${bodyText}". Say "send the mail" to send it.`;
-    }
-    return recipient
-        ? `J'ai prepare une reponse a ${recipient}: "${bodyText}". Dis "envoie le mail" pour l'envoyer.`
-        : `J'ai prepare le brouillon de reponse: "${bodyText}". Dis "envoie le mail" pour l'envoyer.`;
-};
-
-const buildMailSendAcknowledgement = ({
-    locale = 'fr-FR',
-    queued = false,
-    recipient = ''
-} = {}) => {
-    const english = String(locale || '').toLowerCase().startsWith('en');
-    if (english) {
-        if (queued) {
-            return recipient
-                ? `The mail for ${recipient} is queued locally.`
-                : 'The mail is queued locally.';
-        }
-        return recipient
-            ? `The mail has been sent to ${recipient}.`
-            : 'The mail has been sent.';
-    }
-    if (queued) {
-        return recipient
-            ? `Le mail pour ${recipient} est en file d'attente locale.`
-            : "Le mail est en file d'attente locale.";
-    }
-    return recipient
-        ? `Le mail a ete envoye a ${recipient}.`
-        : 'Le mail a ete envoye.';
 };
 
 const buildMailSummaryPrompt = ({
@@ -1443,7 +595,7 @@ const createDefaultMailAiSummarizer = ({
             };
         }
         try {
-            const text = await requestProviderCompletion({
+            const completion = await requestProviderCompletion({
                 providerId: providerConfig.providerId,
                 model: providerConfig.model,
                 apiKey: providerConfig.apiKey,
@@ -1455,13 +607,15 @@ const createDefaultMailAiSummarizer = ({
                     ? { fetchImpl }
                     : (typeof env?.fetch === 'function' ? { fetchImpl: env.fetch.bind(env) } : {}))
             });
+            const text = completion?.text;
             const normalized = String(text || '').trim();
             if (!normalized) {
                 return { ok: false, error: 'provider_empty_response' };
             }
             return {
                 ok: true,
-                text: normalized
+                text: normalized,
+                usage: completion?.usage || null
             };
         } catch (error) {
             const normalized = normalizeAiProviderError(error);
@@ -1673,33 +827,19 @@ class VoiceOrchestrator {
             ui_context: planningContext.ui_context || {},
             preferred_domains: ['contacts', 'calendar', 'mail', 'atome']
         });
-        const aiFirst = options.use_ai !== false && !!this.aiPlanner;
-        const heuristicIntent = this.classifyIntent(utterance, {
+        const localIntent = this.classifyIntent(utterance, {
             intent_id: options.intent_id,
             locale: options.locale,
             source: options.source,
             context: planningContext,
-            runtime_tools: runtimeTools,
-            allow_business_heuristics: aiFirst !== true
+            runtime_tools: runtimeTools
         });
-        const normalizedHeuristic = normalizeVoiceIntent(heuristicIntent);
-        const normalizedFallback = aiFirst === true
-            ? normalizeVoiceIntent(this.classifyIntent(utterance, {
-                intent_id: options.intent_id,
-                locale: options.locale,
-                source: options.source,
-                context: planningContext,
-                runtime_tools: runtimeTools,
-                allow_business_heuristics: true
-            }))
-            : normalizedHeuristic;
         const normalizedIntent = await this.#resolvePlanningIntent(utterance, {
             ...options,
             locale: options.locale,
             context: planningContext,
             runtime_tools: runtimeTools,
-            heuristic_intent: normalizedHeuristic,
-            fallback_intent: normalizedFallback
+            local_intent: normalizeVoiceIntent(localIntent)
         });
         this.#bindSessionIntent(options.session_id, normalizedIntent, {
             phase: 'planned'
@@ -1760,8 +900,14 @@ class VoiceOrchestrator {
 
     async executeIntent(intent, options = {}) {
         const normalizedIntent = normalizeVoiceIntent(intent);
-        const confirmationRequestedByUser = wantsExplicitConfirmation(normalizedIntent);
-        if (normalizedIntent.execution?.confirmation_required === true && confirmationRequestedByUser !== true) {
+        if (
+            normalizedIntent.execution?.confirmation_required === true
+            && String(normalizedIntent?.domain || '').trim() === 'mail'
+            && (
+                String(normalizedIntent?.action || '').trim() === 'reply_current'
+                || String(normalizedIntent?.action || '').trim() === 'reply_prompt'
+            )
+        ) {
             normalizedIntent.execution.confirmation_required = false;
         }
         this.#bindSessionIntent(options.session_id, normalizedIntent, {
@@ -1903,6 +1049,13 @@ class VoiceOrchestrator {
 
         if (events.length === 1) {
             const result = await this.bridge.callRuntimeTool(events[0]);
+            this.traceStore?.appendExecution?.(options.trace_id, {
+                tool_name: events[0]?.tool_id || 'runtime.tools.call',
+                domain: 'runtime',
+                ok: result?.ok !== false,
+                status: result?.ok === false ? 'ERROR' : 'OK',
+                error: result?.error || null
+            });
             const executionOk = result?.ok !== false;
             const fallbackReply = executionOk
                 ? (replyText || buildStructuredReplyFromPayload(result, normalizedIntent, options))
@@ -1925,6 +1078,16 @@ class VoiceOrchestrator {
 
         const result = await this.bridge.batchRuntimeTools(events, {
             tx_id: options.tx_id || normalizedIntent.intent_id || undefined
+        });
+        events.forEach((event, index) => {
+            const stepResult = Array.isArray(result?.results) ? result.results[index] : result;
+            this.traceStore?.appendExecution?.(options.trace_id, {
+                tool_name: event?.tool_id || 'runtime.tools.call',
+                domain: 'runtime',
+                ok: stepResult?.ok !== false,
+                status: stepResult?.ok === false ? 'ERROR' : 'OK',
+                error: stepResult?.error || null
+            });
         });
         const executionOk = result?.ok !== false;
         const fallbackReply = executionOk
@@ -1957,7 +1120,10 @@ class VoiceOrchestrator {
             }
         }) || null;
         const intent = await this.planUtterance(utterance, options);
-        const response = await this.executeIntent(intent, options);
+        const response = await this.executeIntent(intent, {
+            ...options,
+            trace_id: trace?.trace_id || options.trace_id
+        });
         if (trace?.trace_id && this.traceStore?.finishTrace) {
             this.traceStore.finishTrace(trace.trace_id, {
                 identity_resolution: intent?.context?.identity_resolution
@@ -1966,7 +1132,9 @@ class VoiceOrchestrator {
                 llm_call: {
                     provider: intent?.context?.ai_provider || null,
                     model: intent?.context?.ai_model || null,
-                    target: intent?.execution?.target || null
+                    target: intent?.execution?.target || null,
+                    prompt_tokens: intent?.context?.ai_usage?.prompt_tokens || 0,
+                    completion_tokens: intent?.context?.ai_usage?.completion_tokens || 0
                 },
                 autonomy_decision: {
                     confirmation_required: intent?.execution?.confirmation_required === true,
@@ -2003,6 +1171,16 @@ class VoiceOrchestrator {
     listTraces(options = {}) {
         if (!this.traceStore || typeof this.traceStore.list !== 'function') return [];
         return this.traceStore.list(options);
+    }
+
+    queryTraces(options = {}) {
+        if (!this.traceStore || typeof this.traceStore.query !== 'function') return [];
+        return this.traceStore.query(options);
+    }
+
+    traceMetrics(options = {}) {
+        if (!this.traceStore || typeof this.traceStore.metrics !== 'function') return {};
+        return this.traceStore.metrics(options);
     }
 
     listPendingMutations(options = {}) {
@@ -2080,104 +1258,47 @@ class VoiceOrchestrator {
     }
 
     async #resolvePlanningIntent(utterance, options = {}) {
-        const heuristicIntent = normalizeVoiceIntent(options.heuristic_intent);
-        const fallbackIntent = normalizeVoiceIntent(options.fallback_intent || heuristicIntent);
-        const activeIntent = options?.context?.active_intent && typeof options.context.active_intent === 'object'
-            ? normalizeVoiceIntent(options.context.active_intent)
-            : null;
-        if (
-            heuristicIntent.type === 'local_command'
-            || options.use_ai === false
-            || !this.aiPlanner
-        ) {
-            return fallbackIntent;
+        const localIntent = normalizeVoiceIntent(options.local_intent);
+        if (localIntent.type === 'local_command') {
+            return localIntent;
+        }
+        if (options.use_ai === false || !this.aiPlanner) {
+            const locale = options.locale || options.lang || 'fr-FR';
+            const english = String(locale).toLowerCase().startsWith('en');
+            return normalizeVoiceIntent({
+                intent_id: options.intent_id,
+                utterance: { raw: utterance },
+                locale,
+                source: options.source,
+                context: {
+                    ...(options.context && typeof options.context === 'object' ? cloneValue(options.context) : {}),
+                    ai_error: options.use_ai === false ? 'voice_ai_disabled' : 'voice_ai_unavailable',
+                    ai_provider: null
+                },
+                assistant_reply: english
+                    ? 'The AI planner is required but unavailable.'
+                    : "Le planner IA est requis mais indisponible.",
+                type: 'ambiguous',
+                domain: 'unknown',
+                action: 'unknown',
+                confidence: 0,
+                status: 'failed',
+                execution: {
+                    target: 'none',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            });
         }
 
-        const fallbackExecutable = fallbackIntent?.status !== 'ambiguous'
-            && fallbackIntent?.status !== 'failed'
-            && (
-                fallbackIntent?.execution?.target !== 'none'
-                || String(fallbackIntent?.assistant_reply || '').trim().length > 0
-            );
-
-        const plannedIntent = normalizeVoiceIntent(await this.aiPlanner.planUtterance(utterance, {
+        return normalizeVoiceIntent(await this.aiPlanner.planUtterance(utterance, {
             intent_id: options.intent_id,
             locale: options.locale,
             source: options.source,
             context: options.context,
             runtime_tools: options.runtime_tools,
-            heuristic_intent: heuristicIntent,
-            fallback_intent: fallbackIntent,
             ...(options.signal ? { signal: options.signal } : {})
         }));
-
-        const plannedTarget = String(plannedIntent?.execution?.target || 'none').trim();
-        const plannedToolchain = ensureToolchain(plannedIntent);
-        const plannedReply = String(plannedIntent?.assistant_reply || '').trim();
-        const plannedBusinessDomain = BUSINESS_CONNECTOR_DOMAINS.has(String(plannedIntent?.domain || '').trim());
-        const plannerProducedExecutableIntent = plannedIntent?.status === 'ready'
-            && plannedTarget !== 'none'
-            && (plannedToolchain.length > 0 || plannedTarget === 'pending_connector');
-        const plannerProducedFreeReply = plannedIntent?.status === 'ready'
-            && plannedTarget === 'none'
-            && plannedReply.length > 0;
-        const plannerProducedBusinessPlaceholder = plannedBusinessDomain
-            && plannerProducedFreeReply
-            && isProgressPlaceholderReply(plannedReply);
-        const businessConnectorFallback = fallbackExecutable
-            && BUSINESS_CONNECTOR_DOMAINS.has(String(fallbackIntent?.domain || '').trim());
-
-        if (plannedBusinessDomain && String(plannedIntent?.domain || '').trim() === 'mail') {
-            return buildMaterializedMailIntent(plannedIntent, utterance, options.context || {}, fallbackIntent);
-        }
-
-        // For business connectors, the LLM/contract path is authoritative when the
-        // planner returned a structured ready intent. Fall back to heuristics only
-        // when the planner failed to produce a usable intent at all.
-        if (plannedBusinessDomain && plannedIntent?.status === 'ready') {
-            return plannedIntent;
-        }
-
-        if (
-            businessConnectorFallback
-            && plannedIntent?.status === 'failed'
-            && plannedIntent?.context?.ai_error
-            && isSafeDegradedIntent(fallbackIntent)
-        ) {
-            return fallbackIntent;
-        }
-
-        if (fallbackExecutable && shouldPreferRuntimeFallbackIntent(fallbackIntent, plannedIntent)) {
-            return fallbackIntent;
-        }
-
-        if (plannerProducedExecutableIntent) {
-            return plannedIntent;
-        }
-
-        // If the planner only produced a conversational placeholder while a concrete
-        // local/business route exists, prefer the executable fallback.
-        if (fallbackExecutable && !BUSINESS_CONNECTOR_DOMAINS.has(String(fallbackIntent?.domain || '').trim())) {
-            return fallbackIntent;
-        }
-
-        if (
-            plannerProducedFreeReply
-            && plannerProducedBusinessPlaceholder !== true
-            && !(activeIntent?.domain && BUSINESS_CONNECTOR_DOMAINS.has(String(activeIntent.domain).trim()) && isProgressPlaceholderReply(plannedReply))
-        ) {
-            return plannedIntent;
-        }
-
-        if (
-            plannerProducedFreeReply
-            && isProgressPlaceholderReply(plannedReply)
-            && String(activeIntent?.domain || '').trim() === 'mail'
-        ) {
-            return buildMaterializedMailIntent(activeIntent, utterance, options.context || {}, fallbackIntent);
-        }
-
-        return plannedIntent;
     }
 
     #bindSessionIntent(sessionId, intent, meta = {}) {
@@ -2242,6 +1363,12 @@ class VoiceOrchestrator {
             });
 
             if (toolchainResult?.status === 'CONFIRMATION_REQUIRED') {
+                this.traceStore?.appendExecution?.(options.trace_id, {
+                    tool_name: 'atome_ai.toolchain',
+                    domain: 'atome_ai',
+                    ok: true,
+                    status: toolchainResult.status
+                });
                 return {
                     ok: true,
                     executed: false,
@@ -2255,6 +1382,13 @@ class VoiceOrchestrator {
             }
 
             if (toolchainResult?.status !== 'OK') {
+                this.traceStore?.appendExecution?.(options.trace_id, {
+                    tool_name: 'atome_ai.toolchain',
+                    domain: 'atome_ai',
+                    ok: false,
+                    status: toolchainResult?.status || 'ERROR',
+                    error: toolchainResult?.error || null
+                });
                 return {
                     ok: false,
                     executed: toolchainResult?.completed_steps > 0,
@@ -2267,6 +1401,12 @@ class VoiceOrchestrator {
             }
 
             const fallbackReply = buildStructuredReplyFromPayload(toolchainResult?.result || toolchainResult, intent, options);
+            this.traceStore?.appendExecution?.(options.trace_id, {
+                tool_name: 'atome_ai.toolchain',
+                domain: 'atome_ai',
+                ok: true,
+                status: toolchainResult?.status || 'OK'
+            });
             return {
                 ok: true,
                 executed: true,
@@ -2296,6 +1436,13 @@ class VoiceOrchestrator {
             results.push({
                 tool_name: step.tool_name,
                 result
+            });
+            this.traceStore?.appendExecution?.(options.trace_id, {
+                tool_name: step.tool_name,
+                domain: 'atome_ai',
+                ok: result?.status === 'OK',
+                status: result?.status || null,
+                error: result?.error || null
             });
             if (result?.status && result.status !== 'OK') {
                 return {
@@ -2335,1287 +1482,131 @@ class VoiceOrchestrator {
             !this.toolRouter
             && intent?.execution?.target === 'pending_connector'
             && BUSINESS_CONNECTOR_DOMAINS.has(String(intent?.domain || '').trim())
-            && hasExplicitBusinessConnectorHost(this.env)
         ) {
             try {
                 await this.initToolRouter();
             } catch (_) {
-                // Fall back to legacy connector paths when router bootstrap fails.
-            }
-        }
-        // --- Unified tool router fast path ---
-        if (this.toolRouter) {
-            try {
-                const structuredRequest = intentToStructuredRequest(intent, {
-                    toolchain,
-                    locale: intent?.locale || options?.locale
-                });
-                if (structuredRequest && structuredRequest.domain) {
-                    this.#pushJournal('voice.tool_router.dispatch', {
-                        domain: structuredRequest.domain,
-                        operation: structuredRequest.operation,
-                        hasFilters: !!(structuredRequest.filters && Object.keys(structuredRequest.filters).length)
-                    });
-                    const result = await this.toolRouter.execute(structuredRequest);
-                    this.#pushJournal('voice.tool_router.result', {
-                        domain: structuredRequest.domain,
-                        ok: result?.ok,
-                        error: result?.error || null,
-                        itemCount: Array.isArray(result?.items) ? result.items.length : (result?.item ? 1 : 0),
-                        hasReply: !!result?.reply_text
-                    });
-                    if (result && result.ok !== undefined) {
-                        let replyText = result.reply_text || '';
-                        const structuredResultPayload = {
-                            ...(result.items ? { items: result.items, stats: result.stats } : {}),
-                            ...(result.item ? { item: result.item } : {}),
-                            ...(result.draft ? { draft: result.draft } : {})
-                        };
-
-                        // For summarize operations, use AI summarizer for intelligent responses
-                        if (
-                            structuredRequest.operation === 'summarize'
-                            && structuredRequest.domain === 'mail'
-                            && typeof this.mailAiSummarizer === 'function'
-                        ) {
-                            const itemsForAi = Array.isArray(result?.items) && result.items.length > 0
-                                ? result.items
-                                : (result?.item ? [result.item] : []);
-                            if (itemsForAi.length > 0) {
-                                try {
-                                    const aiSummary = await this.mailAiSummarizer({
-                                        items: itemsForAi,
-                                        stats: result?.stats || null,
-                                        locale: intent?.locale || options?.locale || 'fr-FR'
-                                    });
-                                    if (aiSummary?.ok === true && String(aiSummary.text || '').trim()) {
-                                        replyText = String(aiSummary.text).trim();
-                                    }
-                                } catch (_aiErr) {
-                                    // AI summarizer failed — keep template reply_text
-                                }
-                            }
-                        }
-
-                        this.#bindSessionIntent(options.session_id, intent, {
-                            phase: 'executed',
-                            via: 'tool_router'
-                        });
-                        return {
-                            ok: result.ok,
-                            executed: result.ok,
-                            transport: `${result.domain || intent?.domain}_api`,
-                            intent,
-                            ...(result.error ? { error: result.error } : {}),
-                            ...(Object.keys(structuredResultPayload).length ? { result: structuredResultPayload } : {}),
-                            ...(replyText ? { reply_text: replyText, spoken_reply: replyText } : {})
-                        };
-                    }
-                }
-            } catch (routerErr) {
-                // Tool router failed — fall through to legacy path.
-                this.#pushJournal('voice.tool_router.error', {
-                    domain: intent?.domain,
-                    error: String(routerErr?.message || routerErr || '')
+                this.#pushJournal('voice.tool_router.bootstrap_failed', {
+                    domain: intent?.domain || null
                 });
             }
         }
-
-        if (intent?.domain === 'contacts') {
-            const contactsAction = String(intent?.action || '').trim().toLowerCase();
-            if (
-                contactsAction
-                && !contactsAction.includes('list')
-                && !contactsAction.includes('search')
-                && !contactsAction.includes('read')
-            ) {
-                return null;
-            }
-            const contacts = await resolveContactsApi(this.env);
-            if (!contacts) return null;
-            try {
-                if (typeof contacts.syncPull === 'function') {
-                    await contacts.syncPull({
-                        limit: 100
-                    });
-                }
-            } catch (_) {
-                // Keep the local contacts index path alive.
-            }
-            const locale = String(intent?.locale || options?.locale || 'fr-FR').toLowerCase();
-            const english = locale.startsWith('en');
-            const toolParams = toolchain
-                .map((step) => (
-                    step?.input && typeof step.input === 'object'
-                        ? step.input
-                        : (step?.params && typeof step.params === 'object' ? step.params : null)
-                ))
-                .filter(Boolean);
-            const queryText = String(
-                intent?.entities?.query
-                || intent?.entities?.query_text
-                || pickToolParamField(toolParams, 'query', '')
-                || ''
-            ).trim();
-            const limit = Number.isFinite(Number(
-                intent?.entities?.limit ?? pickToolParamField(toolParams, 'limit', null)
-            ))
-                ? Math.max(1, Number(intent?.entities?.limit ?? pickToolParamField(toolParams, 'limit', null)))
-                : 10;
-            const currentContactId = String(
-                intent?.entities?.current_contact_id
-                || intent?.context?.active_intent?.entities?.current_contact_id
-                || pickToolParamField(toolParams, 'contact_id', '')
-                || ''
-            ).trim();
-            const buildResponse = (payload = {}) => ({
-                ok: payload.ok !== false,
-                executed: payload.executed !== false,
-                transport: 'contacts_api',
-                intent,
-                ...(payload.error ? { error: payload.error } : {}),
-                ...(payload.result ? { result: payload.result } : {}),
-                ...(payload.reply_text ? { reply_text: payload.reply_text, spoken_reply: payload.reply_text } : {})
-            });
-            const makeListReply = (items = []) => {
-                if (items.length === 1) {
-                    const focusedReply = buildContactQueryReply(items[0], {
-                        locale,
-                        utteranceRaw: intent?.utterance?.raw || '',
-                        utteranceNormalized: intent?.utterance?.normalized || ''
-                    });
-                    if (focusedReply) return focusedReply;
-                }
-                const labels = items.map((entry) => formatContactLabel(entry)).filter(Boolean).slice(0, 3);
-                if (!items.length) {
-                    return english ? 'I do not see any matching contact right now.' : "Je ne vois pas de contact correspondant pour le moment.";
-                }
-                if (!labels.length) {
-                    return english ? `I found ${items.length} contact(s).` : `J'ai trouve ${items.length} contact(s).`;
-                }
-                return english
-                    ? `I found ${items.length} contact(s): ${labels.join(', ')}.`
-                    : `J'ai trouve ${items.length} contact(s): ${labels.join(', ')}.`;
-            };
-
-            if (intent?.action === 'read_contact' || intent?.action === 'read_current' || currentContactId) {
-                if (!currentContactId || typeof contacts.read !== 'function') {
-                    return buildResponse({
-                        ok: false,
-                        executed: false,
-                        error: 'contacts_not_found',
-                        reply_text: english ? 'I do not know which contact to read right now.' : "Je ne sais pas quel contact lire pour le moment."
-                    });
-                }
-                const read = await contacts.read(currentContactId);
-                if (read?.ok === true && read.contact) {
-                    const label = formatContactLabel(read.contact);
-                    this.#bindSessionIntent(options.session_id, {
-                        ...intent,
-                        domain: 'contacts',
-                        action: 'read_contact',
-                        entities: {
-                            ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                            current_contact_id: read.contact.source_contact_id || read.contact.id || currentContactId
-                        }
-                    }, {
-                        phase: 'executed',
-                        contact_id: read.contact.source_contact_id || read.contact.id || currentContactId
-                    });
-                    return buildResponse({
-                        result: read,
-                        reply_text: buildContactQueryReply(read.contact, {
-                            locale,
-                            utteranceRaw: intent?.utterance?.raw || '',
-                            utteranceNormalized: intent?.utterance?.normalized || ''
-                        }) || (label
-                            ? (english ? `Contact: ${label}.` : `Contact: ${label}.`)
-                            : makeListReply([read.contact]))
-                    });
-                }
-            }
-
-            const result = queryText && typeof contacts.search === 'function'
-                ? await contacts.search(queryText, { limit })
-                : (typeof contacts.list === 'function' ? await contacts.list({ limit }) : { ok: false, items: [] });
-            const items = Array.isArray(result?.items) ? result.items : [];
-            const currentItem = items[0] || null;
-            this.#bindSessionIntent(options.session_id, {
-                ...intent,
-                domain: 'contacts',
-                action: queryText ? 'search_contacts' : 'list_contacts',
-                entities: {
-                    ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                    ...(queryText ? { query: queryText } : {}),
-                    current_contact_id: currentItem?.source_contact_id || currentItem?.id || null
-                }
-            }, {
-                phase: 'executed',
-                contact_id: currentItem?.source_contact_id || currentItem?.id || null
-            });
-            return buildResponse({
-                result,
-                reply_text: makeListReply(items)
-            });
-        }
-
-        if (intent?.domain === 'calendar') {
-            const calendarAction = String(intent?.action || '').trim().toLowerCase();
-            if (
-                calendarAction
-                && !calendarAction.includes('list')
-                && !calendarAction.includes('search')
-                && !calendarAction.includes('read')
-            ) {
-                return null;
-            }
-            const calendar = await resolveCalendarApi(this.env);
-            if (!calendar) return null;
-            try {
-                if (typeof calendar.syncPull === 'function') {
-                    await calendar.syncPull({});
-                }
-            } catch (_) {
-                // Keep the registered source path alive.
-            }
-            const locale = String(intent?.locale || options?.locale || 'fr-FR').toLowerCase();
-            const english = locale.startsWith('en');
-            const toolParams = toolchain
-                .map((step) => (
-                    step?.input && typeof step.input === 'object'
-                        ? step.input
-                        : (step?.params && typeof step.params === 'object' ? step.params : null)
-                ))
-                .filter(Boolean);
-            const queryText = String(
-                intent?.entities?.query
-                || intent?.entities?.query_text
-                || pickToolParamField(toolParams, 'query', '')
-                || ''
-            ).trim();
-            const temporalRef = String(
-                intent?.entities?.temporal_ref
-                || pickToolParamField(toolParams, 'temporal_ref', '')
-                || ''
-            ).trim();
-            const limit = Number.isFinite(Number(
-                intent?.entities?.limit ?? pickToolParamField(toolParams, 'limit', null)
-            ))
-                ? Math.max(1, Number(intent?.entities?.limit ?? pickToolParamField(toolParams, 'limit', null)))
-                : 10;
-            const currentEventId = String(
-                intent?.entities?.current_event_id
-                || intent?.context?.active_intent?.entities?.current_event_id
-                || pickToolParamField(toolParams, 'event_id', '')
-                || ''
-            ).trim();
-            const buildResponse = (payload = {}) => ({
-                ok: payload.ok !== false,
-                executed: payload.executed !== false,
-                transport: 'calendar_api',
-                intent,
-                ...(payload.error ? { error: payload.error } : {}),
-                ...(payload.result ? { result: payload.result } : {}),
-                ...(payload.reply_text ? { reply_text: payload.reply_text, spoken_reply: payload.reply_text } : {})
-            });
-            const makeListReply = (items = []) => {
-                const labels = items.map((entry) => formatCalendarItemLabel(entry)).filter(Boolean).slice(0, 3);
-                if (!items.length) {
-                    return english ? 'I do not see any calendar event right now.' : "Je ne vois pas de rendez-vous pour le moment.";
-                }
-                if (!labels.length) {
-                    return english ? `You have ${items.length} calendar event(s).` : `Tu as ${items.length} rendez-vous.`;
-                }
-                return english
-                    ? `You have ${items.length} calendar event(s): ${labels.join(', ')}.`
-                    : `Tu as ${items.length} rendez-vous: ${labels.join(', ')}.`;
-            };
-            const range = buildTemporalRange(temporalRef, new Date());
-
-            if ((intent?.action === 'read_event' || intent?.action === 'read_current') && currentEventId && typeof calendar.read === 'function') {
-                const read = await calendar.read(currentEventId, {});
-                if (read?.ok === true && read.event) {
-                    this.#bindSessionIntent(options.session_id, {
-                        ...intent,
-                        domain: 'calendar',
-                        action: 'read_event',
-                        entities: {
-                            ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                            current_event_id: read.event.id || currentEventId
-                        }
-                    }, {
-                        phase: 'executed',
-                        event_id: read.event.id || currentEventId
-                    });
-                    return buildResponse({
-                        result: read,
-                        reply_text: formatCalendarItemLabel(read.event)
-                            ? (english ? `Calendar event: ${formatCalendarItemLabel(read.event)}.` : `Rendez-vous : ${formatCalendarItemLabel(read.event)}.`)
-                            : makeListReply([read.event])
-                    });
-                }
-            }
-
-            let result = null;
-            if (queryText && typeof calendar.search === 'function') {
-                result = await calendar.search(queryText, {
-                    ...(range.start ? { start: range.start } : {}),
-                    ...(range.end ? { end: range.end } : {}),
-                    limit
-                });
-            } else if (temporalRef === 'today' && typeof calendar.today === 'function') {
-                result = await calendar.today({ limit });
-            } else if ((range.start || range.end) && typeof calendar.search === 'function') {
-                result = await calendar.search('', {
-                    ...(range.start ? { start: range.start } : {}),
-                    ...(range.end ? { end: range.end } : {}),
-                    limit
-                });
-            } else if (typeof calendar.next === 'function') {
-                result = await calendar.next({ limit });
-            }
-
-            const items = Array.isArray(result?.items)
-                ? result.items
-                : (result?.event ? [result.event] : []);
-            const currentItem = items[0] || null;
-            this.#bindSessionIntent(options.session_id, {
-                ...intent,
-                domain: 'calendar',
-                action: queryText ? 'search_events' : 'list_events',
-                entities: {
-                    ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                    ...(queryText ? { query: queryText } : {}),
-                    ...(temporalRef ? { temporal_ref: temporalRef } : {}),
-                    current_event_id: currentItem?.id || null
-                }
-            }, {
-                phase: 'executed',
-                event_id: currentItem?.id || null
-            });
-            return buildResponse({
-                result,
-                reply_text: makeListReply(items)
-            });
-        }
-
-        if (intent?.domain !== 'mail') return null;
-        const mail = await resolveMailApi(this.env);
-        if (!mail) return null;
-        let readyResult = null;
-
-        try {
-            if (typeof mail.ensureReady === 'function') {
-                readyResult = await mail.ensureReady({
-                    initial: false,
-                    limit: 20
-                });
-            }
-        } catch (ensureReadyError) {
-            // Capture the real error so downstream logic can surface it.
-            const errMsg = String(ensureReadyError?.message || ensureReadyError || 'ensureReady_threw').trim();
-            readyResult = { ok: false, error: errMsg };
-            this.#pushJournal('voice.mail.ensureReady_error', {
-                error: errMsg,
-                action: intent?.action || null
-            });
-        }
-
-        let connectorStatus = null;
-        try {
-            connectorStatus = typeof mail.connectorStatus === 'function' ? mail.connectorStatus() : null;
-            if (connectorStatus?.configured && typeof mail.syncPull === 'function') {
-                const syncTimeoutMs = Number.isFinite(Number(
-                    this.env?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
-                    || this.env?.window?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
-                ))
-                    ? Math.max(0, Number(
-                        this.env?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
-                        || this.env?.window?.__SQUIRREL_VOICE_MAIL_SYNC_TIMEOUT_MS
-                    ))
-                    : 2500;
-                const syncResult = await withSoftTimeout(
-                    () => mail.syncPull({ initial: false }),
-                    {
-                        timeoutMs: syncTimeoutMs,
-                        fallbackValue: {
-                            ok: false,
-                            error: 'mail_sync_pull_timeout'
-                        }
-                    }
-                );
-                if (syncResult?.error === 'mail_sync_pull_timeout') {
-                    this.#pushJournal('voice.intent.connector_timeout', {
-                        domain: 'mail',
-                        action: intent?.action || null,
-                        timeout_ms: syncTimeoutMs
-                    });
-                }
-            }
-        } catch (syncErr) {
-            // Log sync refresh failures but keep the local index fallback.
-            this.#pushJournal('voice.mail.sync_refresh_error', {
-                error: String(syncErr?.message || syncErr || ''),
-                action: intent?.action || null
-            });
-        }
-
-        const capabilities = toolchain
-            .map((step) => String(step?.capability || '').trim())
-            .filter(Boolean);
-
-        const locale = String(intent?.locale || options?.locale || 'fr-FR').toLowerCase();
-        const english = locale.startsWith('en');
-        const buildResponse = (payload = {}) => ({
-            ok: payload.ok !== false,
-            executed: payload.executed !== false,
-            transport: 'mail_api',
-            intent,
-            ...(payload.error ? { error: payload.error } : {}),
-            ...(payload.result ? { result: payload.result } : {}),
-            ...(payload.reply_text ? { reply_text: payload.reply_text, spoken_reply: payload.reply_text } : {})
-        });
-        const mailUtterance = normalizePlannerText(
-            intent?.utterance?.raw
-            || intent?.utterance?.normalized
-            || ''
-        );
-        const inferredUnreadOnly = (
-            mailUtterance.includes('non lu')
-            || mailUtterance.includes('non lus')
-            || mailUtterance.includes('nouveau mail')
-            || mailUtterance.includes('nouveaux mail')
-            || mailUtterance.includes('nouveau message')
-            || mailUtterance.includes('nouveaux message')
-            || mailUtterance.includes('new mail')
-            || mailUtterance.includes('unread')
-        );
-        const inferredStatusOnly = (
-            mailUtterance.includes('ai je')
-            || mailUtterance.includes('ais je')
-            || mailUtterance.includes("j ai")
-            || mailUtterance.includes('est ce que j ai')
-            || mailUtterance.includes('y a t il')
-            || mailUtterance.includes('il y a')
-            || mailUtterance.includes('combien')
-        );
-        const unreadOnly = intent?.entities?.unread_only === true
-            || toolchain.some((step) => step?.input?.unread_only === true || step?.params?.unread_only === true);
-        const statusOnly = intent?.entities?.status_only === true
-            || toolchain.some((step) => step?.input?.status_only === true || step?.params?.status_only === true);
-        // Preserve explicit planner/tool unread filters while still using
-        // utterance heuristics for noisy STT follow-ups.
-        const resolvedUnreadOnly = unreadOnly || inferredUnreadOnly;
-        const resolvedStatusOnly = statusOnly || (resolvedUnreadOnly && inferredStatusOnly);
-        const fromFilter = readMailFilterValue(intent, toolchain, 'from');
-        const notFromFilter = readMailFilterValue(intent, toolchain, 'not_from');
-        const mailboxFilter = readMailFilterValue(intent, toolchain, 'mailbox');
-        const threadIdFilter = readMailFilterValue(intent, toolchain, 'thread_id');
-        const limitFilter = readMailFilterValue(intent, toolchain, 'limit');
-        const orderFilter = String(readMailFilterValue(intent, toolchain, 'order') || '').trim().toLowerCase() || null;
-        const resolvedLimit = Number.isFinite(Number(limitFilter)) ? Math.max(1, Number(limitFilter)) : 5;
-        const baseListOptions = {
-            limit: resolvedLimit,
-            ...(mailboxFilter ? { mailbox: mailboxFilter } : {}),
-            ...(threadIdFilter ? { thread_id: threadIdFilter } : {}),
-            ...(fromFilter ? { from: fromFilter } : {}),
-            ...(notFromFilter ? { not_from: notFromFilter } : {}),
-            ...(orderFilter ? { order: orderFilter } : {})
-        };
-
-        const topList = typeof mail.list === 'function'
-            ? mail.list(baseListOptions)
-            : { ok: false, items: [] };
-        const unreadList = typeof mail.list === 'function'
-            ? mail.list({
-                ...baseListOptions,
-                unread_only: true
-            })
-            : { ok: false, items: [] };
-        const hasIndexedMail = Array.isArray(topList?.items) && topList.items.length > 0;
-        if (!connectorStatus?.configured && !hasIndexedMail) {
-            const readyError = String(readyResult?.error || '').trim();
-            const readyMessage = String(readyResult?.message || '').trim();
-            if (
-                readyError === 'mail_credentials_missing'
-                || readyError === 'icloud_mail_live_smoke_missing_credentials'
-                || readyError === 'icloud_mail_credentials_missing'
-            ) {
-                const missingFields = readyMessage.startsWith('Missing mail settings:')
-                    ? readyMessage.slice('Missing mail settings:'.length)
-                        .split(',')
-                        .map((entry) => String(entry || '').trim())
-                        .filter(Boolean)
-                    : [];
-                const frFieldLabels = {
-                    email: 'email',
-                    password: 'mot de passe mail',
-                    imap_host: 'hote IMAP',
-                    smtp_host: 'hote SMTP'
+        if (!this.toolRouter) {
+            if (String(intent?.domain || '').trim() === 'mail') {
+                const english = String(intent?.locale || options?.locale || 'fr-FR').toLowerCase().startsWith('en');
+                return {
+                    ok: false,
+                    executed: false,
+                    transport: 'mail_api',
+                    intent,
+                    error: 'mail_credentials_missing',
+                    reply_text: english
+                        ? 'Mail is not configured yet. Check the mail settings first.'
+                        : 'La configuration mail est absente. Verifie les reglages mail d abord.',
+                    spoken_reply: english
+                        ? 'Mail is not configured yet. Check the mail settings first.'
+                        : 'La configuration mail est absente. Verifie les reglages mail d abord.'
                 };
-                const enFieldLabels = {
-                    email: 'email',
-                    password: 'mail password',
-                    imap_host: 'IMAP host',
-                    smtp_host: 'SMTP host'
-                };
-                const labels = english ? enFieldLabels : frFieldLabels;
-                const suffix = missingFields.length > 0
-                    ? (english
-                        ? ` Missing: ${missingFields.map((field) => labels[field] || field).join(', ')}.`
-                        : ` Champs manquants : ${missingFields.map((field) => labels[field] || field).join(', ')}.`)
-                    : '';
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: readyError,
-                    reply_text: english
-                        ? `I do not see any mail credentials configured in your settings yet.${suffix}`
-                        : `Je ne trouve pas encore toute la configuration mail dans tes reglages.${suffix}`
-                });
             }
-            const surfacedError = readyError && readyError !== 'mail_connector_missing' && readyError !== 'mail_remote_sync_unavailable'
-                ? readyError
-                : 'mail_connector_unavailable';
-            this.#pushJournal('voice.mail.connector_unavailable', {
-                readyError,
-                surfacedError,
-                connectorConfigured: connectorStatus?.configured ?? null,
-                hasIndexedMail,
-                action: intent?.action || null
-            });
-            const syncFailReply = readyError === 'mail_remote_sync_failed'
-                || readyError === 'mail_sync_failed'
-                || readyError === 'ensureReady_threw';
-            const replyText = syncFailReply
-                ? (english
-                    ? 'Mail sync failed. Please check your connection and credentials.'
-                    : 'La synchronisation mail a echoue. Verifie ta connexion et tes identifiants.')
-                : (english
-                    ? 'I do not have access to your mail here yet.'
-                    : "Je n'ai pas encore acces a tes mails ici.");
-            return buildResponse({
-                ok: false,
-                executed: false,
-                error: surfacedError,
-                reply_text: replyText
-            });
-        }
-        const currentMessageId = String(
-            intent?.entities?.current_message_id
-            || intent?.context?.active_intent?.entities?.current_message_id
-            || ''
-        ).trim();
-        const currentItem = currentMessageId && typeof mail.read === 'function'
-            ? mail.read(currentMessageId)?.item || null
-            : null;
-        const nextUnread = typeof mail.nextUnread === 'function'
-            ? mail.nextUnread({
-                ...(mailboxFilter ? { mailbox: mailboxFilter } : {}),
-                ...(orderFilter ? { order: orderFilter } : {})
-            })
-            : { ok: false, error: 'mail_next_unread_not_found' };
-        const scopedList = resolvedUnreadOnly ? unreadList : topList;
-        const scopedItems = Array.isArray(scopedList?.items) ? scopedList.items : [];
-        const orderedScopedItem = orderFilter ? pickMailItemByOrder(scopedItems, orderFilter) : null;
-        const selectedCurrentItem = orderedScopedItem || currentItem || scopedItems[0] || (nextUnread?.ok === true ? nextUnread.item : null) || null;
-
-        if (intent.action === 'summarize_current') {
-            const summaryItem = selectedCurrentItem;
-            if (!summaryItem?.message_id) {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_not_found',
-                    reply_text: english
-                        ? 'I do not see which mail to summarize right now.'
-                        : "Je ne vois pas quel mail resumer pour le moment."
-                });
-            }
-            let replyText = buildSingleMailSummary(summaryItem, locale);
-            if (typeof this.mailAiSummarizer === 'function') {
-                const aiSummary = await this.mailAiSummarizer({
-                    items: [summaryItem],
-                    stats: {
-                        total: 1,
-                        unread: summaryItem.unread === true ? 1 : 0
-                    },
-                    locale
-                });
-                if (aiSummary?.ok === true && String(aiSummary.text || '').trim()) {
-                    replyText = String(aiSummary.text || '').trim();
-                }
-            }
-            this.#bindSessionIntent(options.session_id, {
-                ...intent,
-                domain: 'mail',
-                action: 'summarize_current',
-                entities: {
-                    ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                    current_message_id: summaryItem.message_id,
-                    current_mailbox: summaryItem.mailbox || null,
-                    ...(orderFilter ? { order: orderFilter } : {}),
-                    ...(fromFilter ? { from: cloneValue(fromFilter) } : {}),
-                    ...(notFromFilter ? { not_from: cloneValue(notFromFilter) } : {})
-                }
-            }, {
-                phase: 'executed',
-                message_id: summaryItem.message_id
-            });
-            return buildResponse({
-                result: {
-                    item: summaryItem,
-                    summary: replyText
-                },
-                reply_text: replyText
-            });
-        }
-
-        if (capabilities.includes('mail_read') && (intent.action === 'read_current' || currentMessageId)) {
-            const selectedId = String(selectedCurrentItem?.message_id || currentMessageId || nextUnread?.item?.message_id || '').trim();
-            const item = selectedId && typeof mail.read === 'function' ? mail.read(selectedId) : { ok: false, error: 'mail_not_found' };
-            if (item?.ok === true && item.item?.message_id && typeof mail.buildReadout === 'function') {
-                const readout = mail.buildReadout(item.item.message_id, { mode: 'full' });
-                if (typeof mail.markRead === 'function') {
-                    await mail.markRead(item.item.message_id, { read: true });
-                }
-                this.#bindSessionIntent(options.session_id, {
-                    ...intent,
-                    domain: 'mail',
-                    action: 'read_current',
-                    entities: {
-                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                        current_message_id: item.item.message_id,
-                        current_mailbox: item.item.mailbox || null,
-                        ...(orderFilter ? { order: orderFilter } : {}),
-                        ...(fromFilter ? { from: cloneValue(fromFilter) } : {}),
-                        ...(notFromFilter ? { not_from: cloneValue(notFromFilter) } : {})
-                    }
-                }, {
-                    phase: 'executed',
-                    message_id: item.item.message_id,
-                    read: true
-                });
-                return buildResponse({
-                    result: {
-                        item: item.item,
-                        readout
-                    },
-                    reply_text: readout?.text || ''
-                });
-            }
-        }
-
-        if (capabilities.includes('mail_mark_read') && (intent.action === 'mark_unread_current' || intent.action === 'mark_read_current')) {
-            const targetId = currentMessageId || String(nextUnread?.item?.message_id || '').trim();
-            if (!targetId || typeof mail.markRead !== 'function') {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_not_found',
-                    reply_text: english
-                        ? 'I do not see which mail to update right now.'
-                        : "Je ne vois pas quel mail mettre a jour pour le moment."
-                });
-            }
-            const read = intent?.entities?.read !== false;
-            const updated = await mail.markRead(targetId, { read });
-            if (updated?.ok === true) {
-                const item = updated?.item || currentItem || nextUnread?.item || null;
-                this.#bindSessionIntent(options.session_id, {
-                    ...intent,
-                    domain: 'mail',
-                    action: read ? 'mark_read_current' : 'mark_unread_current',
-                    entities: {
-                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                        current_message_id: item?.message_id || targetId,
-                        current_mailbox: item?.mailbox || null,
-                        read
-                    }
-                }, {
-                    phase: 'executed',
-                    message_id: item?.message_id || targetId,
-                    read
-                });
-                return buildResponse({
-                    result: updated,
-                    reply_text: english
-                        ? (read ? 'The mail has been marked as read.' : 'The mail has been marked as unread.')
-                        : (read ? 'Le mail a ete marque comme lu.' : 'Le mail a ete marque comme non lu.')
-                });
-            }
-        }
-
-        if (capabilities.includes('mail_next_unread') || intent.action === 'read') {
-            if (nextUnread?.ok === true && nextUnread.item?.message_id && typeof mail.buildReadout === 'function') {
-                const readout = mail.buildReadout(nextUnread.item.message_id, {
-                    mode: 'summary'
-                });
-                if (readout?.ok === true) {
-                    if (typeof mail.markRead === 'function') {
-                        await mail.markRead(nextUnread.item.message_id, { read: true });
-                    }
-                    this.#bindSessionIntent(options.session_id, {
-                        ...intent,
-                        domain: 'mail',
-                        action: 'read_current',
-                        entities: {
-                            ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                            current_message_id: nextUnread.item.message_id,
-                            current_mailbox: nextUnread.item.mailbox || null
-                        }
-                    }, {
-                        phase: 'executed',
-                        message_id: nextUnread.item.message_id,
-                        read: true
-                    });
-                    return buildResponse({
-                        result: {
-                            item: nextUnread.item,
-                            readout
-                        },
-                        reply_text: readout.text
-                    });
-                }
-            }
-            const fallback = topList?.items?.[0];
-            if (fallback?.message_id && typeof mail.buildReadout === 'function') {
-                const readout = mail.buildReadout(fallback.message_id, {
-                    mode: 'summary'
-                });
-                if (readout?.ok === true) {
-                    return buildResponse({
-                        result: {
-                            item: fallback,
-                            readout
-                        },
-                        reply_text: readout.text
-                    });
-                }
-            }
-            return buildResponse({
-                ok: false,
-                executed: false,
-                error: 'mail_next_unread_not_found',
-                reply_text: english ? 'I do not see any mail to read right now.' : "Je ne vois pas de mail a lire pour le moment."
-            });
-        }
-
-        if (capabilities.includes('mail_summarize') || intent.action === 'summarize') {
-            const summary = typeof mail.summarize === 'function'
-                ? mail.summarize({
-                    unread_only: unreadOnly,
-                    limit: 10,
-                    ...(mailboxFilter ? { mailbox: mailboxFilter } : {}),
-                    ...(threadIdFilter ? { thread_id: threadIdFilter } : {}),
-                    ...(fromFilter ? { from: fromFilter } : {}),
-                    ...(notFromFilter ? { not_from: notFromFilter } : {})
-                })
-                : null;
-            if (summary?.ok === true) {
-                const itemsForAi = Array.isArray(summary?.items) && summary.items.length > 0
-                    ? summary.items
-                    : (Array.isArray(topList?.items) ? topList.items : []);
-                if (itemsForAi.length > 0 && typeof this.mailAiSummarizer === 'function') {
-                    const aiSummary = await this.mailAiSummarizer({
-                        items: itemsForAi,
-                        stats: summary?.stats || topList?.stats || null,
-                        locale
-                    });
-                    if (aiSummary?.ok === true && aiSummary?.text) {
-                        return buildResponse({
-                            result: {
-                                ...summary,
-                                ai_summary: aiSummary.text
-                            },
-                            reply_text: aiSummary.text
-                        });
-                    }
-                }
-                return buildResponse({
-                    result: summary,
-                    reply_text: summary.summary
-                });
-            }
-        }
-
-        if (capabilities.includes('mail_list') || intent.action === 'list') {
-            const listing = resolvedUnreadOnly ? unreadList : topList;
-            if (resolvedStatusOnly) {
-                const statusItems = ((resolvedUnreadOnly ? unreadList : listing)?.items || []);
-                const statusCount = statusItems.length;
-                const subjects = statusItems
-                    .slice(0, 3)
-                    .map((item) => normalizeSpeechSubject(item))
-                    .filter(Boolean);
-                const senderScope = describeMailSenderScope({
-                    locale,
-                    from: fromFilter,
-                    notFrom: notFromFilter
-                });
-                const replyText = statusCount <= 0
-                    ? (english
-                        ? (resolvedUnreadOnly
-                            ? `You do not have any unread mail${senderScope}.`
-                            : `You do not have any mail${senderScope}.`)
-                        : (resolvedUnreadOnly
-                            ? `Tu n'as pas de mail non lu${senderScope}.`
-                            : `Tu n'as pas de mail${senderScope}.`))
-                    : (subjects.length
-                        ? (english
-                            ? (resolvedUnreadOnly
-                                ? `You have ${statusCount} unread mail(s)${senderScope}: ${subjects.join(', ')}.`
-                                : `You have ${statusCount} mail(s)${senderScope}: ${subjects.join(', ')}.`)
-                            : (resolvedUnreadOnly
-                                ? `Tu as ${statusCount} mail(s) non lu(s)${senderScope}: ${subjects.join(', ')}.`
-                                : `Tu as ${statusCount} mail(s)${senderScope}: ${subjects.join(', ')}.`))
-                        : (english
-                            ? (resolvedUnreadOnly
-                                ? `You have ${statusCount} unread mail(s)${senderScope}.`
-                                : `You have ${statusCount} mail(s)${senderScope}.`)
-                            : (resolvedUnreadOnly
-                                ? `Tu as ${statusCount} mail(s) non lu(s)${senderScope}.`
-                                : `Tu as ${statusCount} mail(s)${senderScope}.`)));
-                const currentItem = statusItems[0] || null;
-                this.#bindSessionIntent(options.session_id, {
-                    ...intent,
-                    domain: 'mail',
-                    action: 'list',
-                    entities: {
-                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                        current_message_id: currentItem?.message_id || null,
-                        current_mailbox: currentItem?.mailbox || null,
-                        unread_only: resolvedUnreadOnly,
-                        status_only: true,
-                        ...(orderFilter ? { order: orderFilter } : {}),
-                        ...(fromFilter ? { from: cloneValue(fromFilter) } : {}),
-                        ...(notFromFilter ? { not_from: cloneValue(notFromFilter) } : {})
-                    },
-                    followups: {
-                        read_current: {
-                            intent_id: intent?.intent_id || null,
-                            type: 'connector_toolchain',
-                            domain: 'mail',
-                            action: 'read_current',
-                            status: 'pending_connector',
-                            requested_capabilities: ['mail_read', 'mail_mark_read'],
-                            entities: {
-                                current_message_id: currentItem?.message_id || null
-                            },
-                            execution: {
-                                target: 'pending_connector',
-                                confirmation_required: false,
-                                toolchain: [
-                                    buildPendingConnectorStep('mail_read', {
-                                        context: 'current',
-                                        current_message_id: currentItem?.message_id || null
-                                    }),
-                                    buildPendingConnectorStep('mail_mark_read', {
-                                        context: 'current',
-                                        current_message_id: currentItem?.message_id || null
-                                    })
-                                ]
-                            }
-                        }
-                    }
-                }, {
-                    phase: 'executed',
-                    message_id: currentItem?.message_id || null
-                });
-                return buildResponse({
-                    result: resolvedUnreadOnly ? unreadList : listing,
-                    reply_text: replyText
-                });
-            }
-            if (listing?.ok === true) {
-                const subjects = (listing.items || [])
-                    .slice(0, 3)
-                    .map((item) => normalizeSpeechSubject(item))
-                    .filter(Boolean);
-                const currentItem = (listing.items || [])[0] || null;
-                const senderScope = describeMailSenderScope({
-                    locale,
-                    from: fromFilter,
-                    notFrom: notFromFilter
-                });
-                const replyText = subjects.length
-                    ? (english
-                        ? (resolvedUnreadOnly
-                            ? `Here are the unread mails${senderScope}: ${subjects.join(', ')}.`
-                            : orderFilter === 'oldest'
-                                ? `Here is the oldest mail${senderScope}: ${subjects.join(', ')}.`
-                                : `Here are the latest mails${senderScope}: ${subjects.join(', ')}.`)
-                        : (resolvedUnreadOnly
-                            ? `Voici les mails non lus${senderScope}: ${subjects.join(', ')}.`
-                            : orderFilter === 'oldest'
-                                ? `Voici le mail le plus ancien${senderScope} : ${subjects.join(', ')}.`
-                                : `Voici les derniers mails${senderScope} : ${subjects.join(', ')}.`))
-                    : (english
-                        ? (resolvedUnreadOnly
-                            ? `I do not see any unread mail${senderScope} right now.`
-                            : `I do not see any mail${senderScope} right now.`)
-                        : (resolvedUnreadOnly
-                            ? `Je ne vois pas de mail non lu${senderScope} pour le moment.`
-                            : `Je ne vois pas de mail${senderScope} pour le moment.`));
-                this.#bindSessionIntent(options.session_id, {
-                    ...intent,
-                    domain: 'mail',
-                    action: 'list',
-                    entities: {
-                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                        current_message_id: currentItem?.message_id || null,
-                        current_mailbox: currentItem?.mailbox || null,
-                        unread_only: resolvedUnreadOnly,
-                        status_only: resolvedStatusOnly,
-                        ...(orderFilter ? { order: orderFilter } : {}),
-                        ...(fromFilter ? { from: cloneValue(fromFilter) } : {}),
-                        ...(notFromFilter ? { not_from: cloneValue(notFromFilter) } : {})
-                    },
-                    followups: {
-                        read_current: {
-                            intent_id: intent?.intent_id || null,
-                            type: 'connector_toolchain',
-                            domain: 'mail',
-                            action: 'read_current',
-                            status: 'pending_connector',
-                            requested_capabilities: ['mail_read', 'mail_mark_read'],
-                            entities: {
-                                current_message_id: currentItem?.message_id || null
-                            },
-                            execution: {
-                                target: 'pending_connector',
-                                confirmation_required: false,
-                                toolchain: [
-                                    buildPendingConnectorStep('mail_read', {
-                                        context: 'current',
-                                        current_message_id: currentItem?.message_id || null
-                                    }),
-                                    buildPendingConnectorStep('mail_mark_read', {
-                                        context: 'current',
-                                        current_message_id: currentItem?.message_id || null
-                                    })
-                                ]
-                            }
-                        }
-                    }
-                }, {
-                    phase: 'executed',
-                    message_id: currentItem?.message_id || null
-                });
-                return buildResponse({
-                    result: listing,
-                    reply_text: replyText
-                });
-            }
-        }
-
-        if (capabilities.includes('mail_search') || intent.action === 'search') {
-            const queryText = String(
-                intent?.entities?.query_text
-                || toolchain.find((step) => step?.capability === 'mail_search')?.input?.query
-                || ''
-            ).trim();
-            if (!queryText || typeof mail.search !== 'function') {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_search_query_missing',
-                    reply_text: english
-                        ? 'What should I search for in your mails?'
-                        : 'Que veux-tu que je cherche dans tes mails ?'
-                });
-            }
-            const results = mail.search(queryText, {
-                unread_only: resolvedUnreadOnly,
-                ...(mailboxFilter ? { mailbox: mailboxFilter } : {}),
-                ...(fromFilter ? { from: fromFilter } : {}),
-                ...(notFromFilter ? { not_from: notFromFilter } : {}),
-                limit: resolvedLimit
-            });
-            const subjects = (results?.items || []).slice(0, 3).map((item) => normalizeSpeechSubject(item)).filter(Boolean);
-            return buildResponse({
-                result: results,
-                reply_text: subjects.length
-                    ? (english
-                        ? `I found these mails for "${queryText}": ${subjects.join(', ')}.`
-                        : `J'ai trouve ces mails pour "${queryText}" : ${subjects.join(', ')}.`)
-                    : (english
-                        ? `I did not find any mail for "${queryText}".`
-                        : `Je n'ai trouve aucun mail pour "${queryText}".`)
-            });
-        }
-
-        if (capabilities.includes('mail_archive') || intent.action === 'archive_current') {
-            const targetId = currentMessageId || String(nextUnread?.item?.message_id || '').trim();
-            if (!targetId || typeof mail.archive !== 'function') {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_not_found',
-                    reply_text: english
-                        ? 'I do not see which mail to archive right now.'
-                        : "Je ne vois pas quel mail archiver pour le moment."
-                });
-            }
-            const archived = await mail.archive(targetId, {});
-            if (archived?.ok === true) {
-                return buildResponse({
-                    result: archived,
-                    reply_text: english ? 'The mail has been archived.' : 'Le mail a ete archive.'
-                });
-            }
-        }
-
-        if (capabilities.includes('mail_delete') || intent.action === 'delete_current') {
-            const targetId = currentMessageId || String(nextUnread?.item?.message_id || '').trim();
-            if (!targetId || typeof mail.delete !== 'function') {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_not_found',
-                    reply_text: english
-                        ? 'I do not see which mail to delete right now.'
-                        : "Je ne vois pas quel mail supprimer pour le moment."
-                });
-            }
-            const removed = await mail.delete(targetId, {});
-            if (removed?.ok === true) {
-                return buildResponse({
-                    result: removed,
-                    reply_text: english ? 'The mail has been deleted.' : 'Le mail a ete supprime.'
-                });
-            }
-        }
-
-        if (capabilities.includes('mail_reply_draft')) {
-            const replyStep = toolchain.find((step) => step?.capability === 'mail_reply_draft') || null;
-            const replyTarget = String(
-                replyStep?.input?.reply_target
-                || intent?.entities?.reply_target
-                || ''
-            ).trim();
-            const autoSend = (
-                replyStep?.input?.auto_send === true
-                || intent?.entities?.auto_send === true
-            );
-            const rawDraftText = String(
-                replyStep?.input?.draft_text
-                || intent?.entities?.draft_text
-                || ''
-            ).trim();
-            const draftText = rawDraftText;
-
-            if (!draftText) {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_reply_text_missing',
-                    reply_text: english
-                        ? 'What should I reply to this mail?'
-                        : 'Que veux-tu que je reponde a ce mail ?'
-                });
-            }
-
-            const candidates = collectMailCandidates(
-                topList?.items,
-                nextUnread?.ok === true ? [nextUnread.item] : []
-            );
-            const sourceItem = findMailByReplyTarget(candidates, replyTarget)
-                || (nextUnread?.ok === true ? nextUnread.item : null)
-                || candidates[0]
-                || null;
-
-            if (!sourceItem?.message_id || typeof mail.replyDraft !== 'function') {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_not_found',
-                    reply_text: english
-                        ? 'I do not see which mail to reply to right now.'
-                        : "Je ne vois pas encore a quel mail repondre."
-                });
-            }
-
-            const draftResult = mail.replyDraft(sourceItem.message_id, {
-                reply_text: draftText
-            });
-            if (draftResult?.ok === true && draftResult?.draft) {
-                const boundIntent = {
-                    ...intent,
-                    entities: {
-                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                        draft_text: draftText,
-                        auto_send: autoSend,
-                        last_draft_id: draftResult.draft.draft_id,
-                        last_source_message_id: sourceItem.message_id,
-                        ...(replyTarget ? { reply_target: replyTarget } : {})
-                    },
-                    followups: {
-                        send_current: {
-                            intent_id: intent?.intent_id || null,
-                            type: 'connector_tool',
-                            domain: 'mail',
-                            action: 'send',
-                            status: 'pending_connector',
-                            requested_capabilities: ['mail_send'],
-                            entities: {
-                                last_draft_id: draftResult.draft.draft_id
-                            },
-                            execution: {
-                                target: 'pending_connector',
-                                confirmation_required: false,
-                                toolchain: [buildPendingConnectorStep('mail_send', {
-                                    draft_id: draftResult.draft.draft_id
-                                })]
-                            }
-                        }
-                    }
-                };
-                this.#bindSessionIntent(options.session_id, {
-                    ...boundIntent
-                }, {
-                    phase: 'executed',
-                    draft_id: draftResult.draft.draft_id
-                });
-
-                if (autoSend && typeof mail.send === 'function') {
-                    const sendResult = await mail.send(draftResult.draft.draft_id, {
-                        confirmed: true
-                    });
-                    if (sendResult?.ok === true) {
-                        const recipient = String(
-                            sendResult?.draft?.to?.[0]?.name
-                            || sendResult?.draft?.to?.[0]?.address
-                            || sourceItem?.from?.name
-                            || sourceItem?.from?.address
-                            || ''
-                        ).trim();
-                        this.#bindSessionIntent(options.session_id, {
-                            ...boundIntent,
-                            entities: {
-                                ...boundIntent.entities,
-                                last_sent_draft_id: draftResult.draft.draft_id
-                            }
-                        }, {
-                            phase: 'executed',
-                            draft_id: draftResult.draft.draft_id,
-                            sent: true
-                        });
-                        return buildResponse({
-                            result: {
-                                ...sendResult,
-                                source_item: sourceItem
-                            },
-                            reply_text: buildMailSendAcknowledgement({
-                                locale,
-                                queued: sendResult?.queued === true,
-                                recipient
-                            })
-                        });
-                    }
-                    return buildResponse({
-                        ok: false,
-                        executed: false,
-                        error: sendResult?.error || 'mail_send_failed',
-                        result: {
-                            draft: draftResult.draft,
-                            send_result: sendResult,
-                            source_item: sourceItem
-                        },
-                        reply_text: english
-                            ? 'I prepared the reply, but I could not send it.'
-                            : "J'ai prepare la reponse, mais je n'ai pas pu l'envoyer."
-                    });
-                }
-
-                return buildResponse({
-                    result: {
-                        ...draftResult,
-                        source_item: sourceItem
-                    },
-                    reply_text: buildMailReplyAcknowledgement({
-                        draft: draftResult.draft,
-                        sourceItem,
-                        locale
-                    })
-                });
-            }
-            return buildResponse({
-                ok: false,
-                executed: false,
-                error: draftResult?.error || 'mail_reply_draft_failed',
-                result: draftResult || undefined,
-                reply_text: english
-                    ? 'I could not prepare the reply draft for this mail.'
-                    : "Je n'ai pas pu preparer le brouillon de reponse pour ce mail."
-            });
-        }
-
-        if (capabilities.includes('mail_send')) {
-            const sendStep = toolchain.find((step) => step?.capability === 'mail_send') || null;
-            const activeIntent = intent?.context?.active_intent || null;
-            const draftId = String(
-                sendStep?.input?.draft_id
-                || intent?.entities?.last_draft_id
-                || activeIntent?.entities?.last_draft_id
-                || ''
-            ).trim();
-            if (!draftId || typeof mail.send !== 'function') {
-                return buildResponse({
-                    ok: false,
-                    executed: false,
-                    error: 'mail_draft_not_found',
-                    reply_text: english
-                        ? 'I do not have any reply draft ready to send.'
-                        : "Je n'ai pas encore de brouillon pret a envoyer."
-                });
-            }
-            const sendResult = await mail.send(draftId, {
-                confirmed: true
-            });
-            if (sendResult?.ok === true) {
-                const recipient = String(
-                    sendResult?.draft?.to?.[0]?.name
-                    || sendResult?.draft?.to?.[0]?.address
-                    || ''
-                ).trim();
-                this.#bindSessionIntent(options.session_id, {
-                    ...intent,
-                    entities: {
-                        ...(intent?.entities && typeof intent.entities === 'object' ? cloneValue(intent.entities) : {}),
-                        last_draft_id: draftId,
-                        last_sent_draft_id: draftId
-                    }
-                }, {
-                    phase: 'executed',
-                    draft_id: draftId,
-                    sent: true
-                });
-                return buildResponse({
-                    result: sendResult,
-                    reply_text: buildMailSendAcknowledgement({
-                        locale,
-                        queued: sendResult?.queued === true,
-                        recipient
-                    })
-                });
-            }
-            return buildResponse({
-                ok: false,
-                executed: false,
-                error: sendResult?.error || 'mail_send_failed',
-                result: sendResult || undefined,
-                reply_text: english
-                    ? 'I could not send that mail.'
-                    : "Je n'ai pas pu envoyer ce mail."
-            });
-        }
-
-        if (capabilities.includes('mail_search')) {
             return null;
         }
 
-        return null;
+        try {
+            const structuredRequest = intentToStructuredRequest(intent, {
+                toolchain,
+                locale: intent?.locale || options?.locale
+            });
+            if (!structuredRequest || !structuredRequest.domain) return null;
+
+            this.#pushJournal('voice.tool_router.dispatch', {
+                domain: structuredRequest.domain,
+                operation: structuredRequest.operation,
+                hasFilters: !!(structuredRequest.filters && Object.keys(structuredRequest.filters).length)
+            });
+
+            const result = await this.toolRouter.execute(structuredRequest);
+            this.traceStore?.appendExecution?.(options.trace_id, {
+                tool_name: `${structuredRequest.domain}.${structuredRequest.operation}`,
+                domain: structuredRequest.domain,
+                ok: result?.ok !== false,
+                status: result?.queued === true ? 'QUEUED' : (result?.ok === false ? 'ERROR' : 'OK'),
+                error: result?.error || null
+            });
+            this.#pushJournal('voice.tool_router.result', {
+                domain: structuredRequest.domain,
+                ok: result?.ok,
+                error: result?.error || null,
+                itemCount: Array.isArray(result?.items) ? result.items.length : (result?.item ? 1 : 0),
+                hasReply: !!result?.reply_text
+            });
+
+            if (!result || result.ok === undefined) return null;
+
+            const normalizedError = (
+                structuredRequest.domain === 'mail'
+                && result?.ok === false
+                && String(result?.error || '').trim() === 'mail_connector_unavailable'
+            )
+                ? 'mail_credentials_missing'
+                : (result?.error || '');
+
+            let replyText = result.reply_text || '';
+            if (normalizedError === 'mail_credentials_missing') {
+                const english = String(intent?.locale || options?.locale || 'fr-FR').toLowerCase().startsWith('en');
+                replyText = english
+                    ? 'Mail is not configured yet. Check the mail settings first.'
+                    : 'La configuration mail est absente. Verifie les reglages mail d abord.';
+            }
+            const structuredResultPayload = {
+                ...(result.items ? { items: result.items, stats: result.stats } : {}),
+                ...(result.item ? { item: result.item } : {}),
+                ...(result.draft ? { draft: result.draft } : {})
+            };
+
+            if (
+                structuredRequest.operation === 'summarize'
+                && structuredRequest.domain === 'mail'
+                && typeof this.mailAiSummarizer === 'function'
+            ) {
+                const itemsForAi = Array.isArray(result?.items) && result.items.length > 0
+                    ? result.items
+                    : (result?.item ? [result.item] : []);
+                if (itemsForAi.length > 0) {
+                    try {
+                        const aiSummary = await this.mailAiSummarizer({
+                            items: itemsForAi,
+                            stats: result?.stats || null,
+                            locale: intent?.locale || options?.locale || 'fr-FR'
+                        });
+                        if (aiSummary?.ok === true && String(aiSummary.text || '').trim()) {
+                            replyText = String(aiSummary.text).trim();
+                        }
+                    } catch (_) {
+                        // Keep router reply text when AI mail summarization fails.
+                    }
+                }
+            }
+
+            this.#bindSessionIntent(options.session_id, intent, {
+                phase: 'executed',
+                via: 'tool_router'
+            });
+            return {
+                ok: result.ok,
+                executed: result.ok,
+                transport: `${result.domain || intent?.domain}_api`,
+                intent,
+                ...(normalizedError ? { error: normalizedError } : {}),
+                ...(Object.keys(structuredResultPayload).length ? { result: structuredResultPayload } : {}),
+                ...(replyText ? { reply_text: replyText, spoken_reply: replyText } : {})
+            };
+        } catch (routerErr) {
+            this.#pushJournal('voice.tool_router.error', {
+                domain: intent?.domain,
+                error: String(routerErr?.message || routerErr || '')
+            });
+            return null;
+        }
     }
 
     #buildContextualFollowupIntent({ sessionId, followup, activeIntent }) {
@@ -3655,13 +1646,47 @@ class VoiceOrchestrator {
             });
         }
 
-        if (followup === 'reply_current') {
-            if (baseIntent.domain === 'mail') {
+        const baseDomain = String(baseIntent?.domain || '').trim();
+        if (baseDomain === 'mail') {
+            if (followup === 'next_item') {
+                return normalizeVoiceIntent({
+                    ...baseIntent,
+                    action: 'next_item',
+                    status: 'ready',
+                    requested_capabilities: ['mail_next_unread'],
+                    context: {
+                        session_id: sessionId,
+                        followup_kind: followup
+                    },
+                    execution: {
+                        target: 'pending_connector',
+                        confirmation_required: false,
+                        toolchain: []
+                    }
+                });
+            }
+            if (followup === 'previous_item') {
+                return normalizeVoiceIntent({
+                    ...baseIntent,
+                    action: 'previous_item',
+                    status: 'ready',
+                    requested_capabilities: ['mail_list'],
+                    context: {
+                        session_id: sessionId,
+                        followup_kind: followup
+                    },
+                    execution: {
+                        target: 'pending_connector',
+                        confirmation_required: false,
+                        toolchain: []
+                    }
+                });
+            }
+            if (followup === 'reply_current') {
                 return normalizeVoiceIntent({
                     ...baseIntent,
                     action: 'reply_current',
-                    type: 'connector_tool',
-                    status: 'pending_connector',
+                    status: 'ready',
                     requested_capabilities: ['mail_reply_draft'],
                     context: {
                         session_id: sessionId,
@@ -3670,61 +1695,16 @@ class VoiceOrchestrator {
                     execution: {
                         target: 'pending_connector',
                         confirmation_required: false,
-                        toolchain: [buildPendingConnectorStep('mail_reply_draft', {
-                            context: 'current'
-                        })]
+                        toolchain: []
                     }
                 });
             }
-            return normalizeVoiceIntent({
-                ...baseIntent,
-                action: 'reply_current',
-                status: 'ambiguous',
-                context: {
-                    session_id: sessionId,
-                    followup_kind: followup
-                },
-                execution: {
-                    target: 'none',
-                    confirmation_required: false,
-                    toolchain: []
-                }
-            });
-        }
-
-        if (followup === 'summarize_current') {
-            const capability = baseIntent.domain === 'mail' ? 'mail_summarize' : 'voice_summarize_current';
-            return normalizeVoiceIntent({
-                ...baseIntent,
-                action: 'summarize_current',
-                type: 'connector_tool',
-                status: 'pending_connector',
-                requested_capabilities: [capability],
-                context: {
-                    session_id: sessionId,
-                    followup_kind: followup
-                },
-                execution: {
-                    target: 'pending_connector',
-                    confirmation_required: false,
-                    toolchain: [buildPendingConnectorStep(capability, {
-                        context: 'current',
-                        summary_mode: 'short'
-                    })]
-                }
-            });
-        }
-
-        if (followup === 'next_item' || followup === 'previous_item') {
-            const direction = followup === 'next_item' ? 'next' : 'previous';
-            if (baseIntent.domain === 'mail') {
-                const capability = direction === 'next' ? 'mail_next_unread' : 'mail_list';
+            if (followup === 'summarize_current') {
                 return normalizeVoiceIntent({
                     ...baseIntent,
-                    action: `${direction}_item`,
-                    type: 'connector_tool',
-                    status: 'pending_connector',
-                    requested_capabilities: [capability],
+                    action: 'summarize_current',
+                    status: 'ready',
+                    requested_capabilities: ['mail_summarize'],
                     context: {
                         session_id: sessionId,
                         followup_kind: followup
@@ -3732,35 +1712,7 @@ class VoiceOrchestrator {
                     execution: {
                         target: 'pending_connector',
                         confirmation_required: false,
-                        toolchain: [buildPendingConnectorStep(capability, {
-                            direction,
-                            context: 'current'
-                        })]
-                    }
-                });
-            }
-
-            if (baseIntent.domain === 'calendar') {
-                return normalizeVoiceIntent({
-                    ...baseIntent,
-                    action: `${direction}_item`,
-                    status: 'ready',
-                    context: {
-                        session_id: sessionId,
-                        followup_kind: followup
-                    },
-                    execution: {
-                        target: 'runtime_v2',
-                        confirmation_required: false,
-                        toolchain: [{
-                            source: 'runtime_v2',
-                            tool_id: 'calendar.list_events',
-                            action: 'pointer.click',
-                            input: {
-                                direction,
-                                context: 'current'
-                            }
-                        }]
+                        toolchain: []
                     }
                 });
             }

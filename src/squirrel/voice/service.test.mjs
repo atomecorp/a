@@ -137,7 +137,73 @@ const runtime = createVoiceSessionRuntime({
 
 const voice = createVoiceService({
     env,
-    sessionRuntime: runtime
+    sessionRuntime: runtime,
+    aiPlanner: {
+        async planUtterance(utterance, options = {}) {
+            const raw = String(utterance || '').trim();
+            if (/^lis mes mails$/i.test(raw)) {
+                return {
+                    intent_id: options.intent_id || 'voice_service_mail_llm',
+                    utterance: { raw },
+                    locale: options.locale || 'fr-FR',
+                    source: options.source,
+                    context: options.context,
+                    type: 'connector_tool',
+                    domain: 'mail',
+                    action: 'list',
+                    status: 'ready',
+                    execution: {
+                        target: 'pending_connector',
+                        confirmation_required: false,
+                        toolchain: []
+                    }
+                };
+            }
+            if (/^ouvre mtrack$/i.test(raw)) {
+                return {
+                    intent_id: options.intent_id || 'voice_service_runtime_llm',
+                    utterance: { raw },
+                    locale: options.locale || 'fr-FR',
+                    source: options.source,
+                    context: options.context,
+                    type: 'runtime_tool',
+                    domain: 'ui_navigation',
+                    action: 'open_tool',
+                    status: 'ready',
+                    execution: {
+                        target: 'runtime_v2',
+                        confirmation_required: false,
+                        toolchain: [{
+                            source: 'runtime_v2',
+                            tool_id: 'tool.main.mtrack',
+                            action: 'pointer.click',
+                            input: {}
+                        }]
+                    }
+                };
+            }
+            return {
+                intent_id: options.intent_id || 'voice_service_unknown_llm',
+                utterance: { raw },
+                locale: options.locale || 'fr-FR',
+                source: options.source,
+                context: {
+                    ...(options.context && typeof options.context === 'object' ? options.context : {}),
+                    ai_error: 'test_planner_unmatched'
+                },
+                type: 'ambiguous',
+                domain: 'unknown',
+                action: 'unknown',
+                status: 'failed',
+                assistant_reply: "Le planner IA n'a pas produit d'intent.",
+                execution: {
+                    target: 'none',
+                    confirmation_required: false,
+                    toolchain: []
+                }
+            };
+        }
+    }
 });
 assert.ok(voice.orchestrator, 'voice service should expose the shared voice orchestrator');
 

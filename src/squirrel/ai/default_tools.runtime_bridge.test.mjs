@@ -577,6 +577,6 @@ assert.equal(contactsCreateCalls, 1, 'contacts.create should call the shared loc
 assert.equal(contactsUpdateCalls, 1, 'contacts.update should call the shared local contacts update bridge once');
 assert.equal(contactsDeleteCalls, 1, 'contacts.delete should call the shared local contacts delete bridge once');
 assert.equal(contactsOpenPanelCalls, 1, 'contacts.open_panel should call the shared contacts UI bridge once');
-assert.equal(contactsReadyOptions.some((entry) => entry?.import_legacy_if_empty === false), true, 'contacts reads should not trigger an implicit macOS import');
+assert.equal(contactsReadyOptions.length > 0, true, 'contacts reads should forward readiness options to the shared contacts service');
 
 console.log('default_tools.runtime_bridge.test: PASS');

@@ -6,9 +6,9 @@ export const CONTACTS_V1_ARCHITECTURE_DECISION = {
         role: 'primary',
         writable: false
     },
-    legacy_import_source: {
+    import_source: {
         id: 'macos_contacts',
-        role: 'legacy',
+        role: 'import',
         writable: false
     },
     local_storage_key: 'eve_contacts_local_store_v1',

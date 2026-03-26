@@ -1024,7 +1024,6 @@ async function prepareContactsApi(options = {}) {
     if (typeof api.ensureReady === 'function') {
         const ready = await Promise.race([
             Promise.resolve().then(() => api.ensureReady({
-                import_legacy_if_empty: false,
                 ...options
             })),
             new Promise((resolve) => {
@@ -1581,7 +1580,7 @@ function normalizeRuntimeToolEntry(tool = {}) {
         tool_id: String(tool?.id || '').trim() || null,
         tool_key: String(tool?.tool_key || '').trim() || null,
         visibility: String(tool?.visibility || '').trim() || 'visible',
-        params_schema: null,
+        parameters: null,
         runtime: {
             execution_mode: String(tool?.runtime?.execution_mode || '').trim() || null,
             contexts,

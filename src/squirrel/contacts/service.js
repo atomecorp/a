@@ -7,6 +7,20 @@ const toText = (value) => String(value || '').trim();
 const normalizePhoneKey = (value) => toText(value).replace(/[^\d+]/g, '');
 const normalizeEmailKey = (value) => toText(value).toLowerCase();
 const hasFiniteLimit = (value) => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value));
+const buildPhoneSearchTokens = (value) => {
+    const normalized = normalizePhoneKey(value);
+    if (!normalized) return [];
+    const digitsOnly = normalized.replace(/[^\d]/g, '');
+    const tokens = new Set([normalized, digitsOnly]);
+    if (digitsOnly.startsWith('33') && digitsOnly.length >= 11) {
+        tokens.add(`0${digitsOnly.slice(2)}`);
+    }
+    if (digitsOnly.startsWith('0') && digitsOnly.length >= 10) {
+        tokens.add(`33${digitsOnly.slice(1)}`);
+        tokens.add(`+33${digitsOnly.slice(1)}`);
+    }
+    return Array.from(tokens).filter(Boolean);
+};
 
 const cloneSourceInfo = (source = {}) => ({
     source_id: toText(source.source_id),
@@ -54,6 +68,13 @@ const mergeContacts = (base = {}, incoming = {}) => ({
 const matchesQuery = (contact = {}, query = '') => {
     const needle = toText(query).toLowerCase();
     if (!needle) return true;
+    const queryPhoneTokens = buildPhoneSearchTokens(query);
+    const contactPhoneTokens = buildPhoneSearchTokens(contact.phone);
+    if (queryPhoneTokens.length && contactPhoneTokens.length && contactPhoneTokens.some((contactToken) => {
+        return queryPhoneTokens.some((queryToken) => contactToken.includes(queryToken) || queryToken.includes(contactToken));
+    })) {
+        return true;
+    }
     return [
         contact.name,
         contact.first_name,
@@ -95,7 +116,7 @@ export const createContactsService = ({
         const normalized = {
             ...source,
             source_id: sourceId,
-            role: toText(source.role || source.contract?.role || 'legacy') || 'legacy',
+            role: toText(source.role || source.contract?.role || 'import') || 'import',
             writable: source.writable === true,
             contract: source.contract || {}
         };
@@ -512,7 +533,7 @@ export const createContactsService = ({
             return importSource(sourceId, options);
         },
         importMacosContacts(options = {}) {
-            return importSource(CONTACTS_V1_ARCHITECTURE_DECISION.legacy_import_source.id, options);
+            return importSource(CONTACTS_V1_ARCHITECTURE_DECISION.import_source.id, options);
         },
         createLocalContact(contact = {}, options = {}) {
             return createLocalContact(contact, options);

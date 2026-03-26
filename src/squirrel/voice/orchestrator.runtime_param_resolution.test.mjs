@@ -2,103 +2,93 @@ import assert from 'node:assert/strict';
 
 import { createVoiceOrchestrator } from './orchestrator.js';
 import { createVoiceSessionRuntime } from './session_runtime.js';
-import { classifyVoiceIntent } from './intent_schema.js';
 
-const sessionRuntime = createVoiceSessionRuntime();
-
-const bridge = {
-    kind: 'runtime_v2',
-    async listRuntimeTools() {
-        return [
-            { tool_id: 'ui.circle', tool_key: 'circle' },
-            { tool_id: 'ui.couleur.apply', tool_key: 'couleur_apply' }
-        ];
-    },
-    async callRuntimeTool(payload = {}) {
-        if (payload.tool_id === 'ui.circle') {
+const calls = [];
+const env = {
+    async handleAtomeMCPRequestAsync(request = {}) {
+        if (request.method === 'runtime.tools.list') {
             return {
-                ok: true,
-                created: true,
-                atome_id: 'atome_runtime_circle_1'
+                jsonrpc: '2.0',
+                id: request.id,
+                result: {
+                    tools: [
+                        { tool_id: 'calendar.ensure_calendar', tool_key: 'calendar_ensure_calendar' },
+                        { tool_id: 'calendar.create_event', tool_key: 'calendar_create_event' }
+                    ]
+                }
             };
         }
-        if (payload.tool_id === 'ui.couleur.apply') {
+        if (request.method === 'runtime.tools.batch_call') {
+            calls.push(request.params.events);
             return {
-                ok: true,
-                atome_id: payload.input?.atome_id || null
+                jsonrpc: '2.0',
+                id: request.id,
+                result: {
+                    ok: true,
+                    results: request.params.events.map((entry) => ({ ok: true, tool_id: entry.tool_id, input: entry.input }))
+                }
             };
         }
-        return { ok: false, error: 'unexpected_tool' };
+        return { jsonrpc: '2.0', id: request.id, error: { message: 'unsupported' } };
     }
 };
 
 const orchestrator = createVoiceOrchestrator({
-    bridge,
-    sessionRuntime,
+    env,
+    sessionRuntime: createVoiceSessionRuntime(),
     aiPlanner: {
-        async planUtterance() {
+        async planUtterance(utterance, options = {}) {
             return {
-                locale: 'fr-FR',
-                domain: 'creative',
-                action: 'draw_circle',
+                intent_id: options.intent_id || 'voice_runtime_param_resolution_llm',
+                utterance: { raw: utterance },
+                locale: options.locale || 'fr-FR',
+                source: options.source,
+                context: options.context,
+                type: 'runtime_toolchain',
+                domain: 'calendar',
+                action: 'create_event',
                 status: 'ready',
-                assistant_reply: 'Je crée un cercle sur le projet courant.',
+                entities: {
+                    temporal_ref: 'tomorrow',
+                    time_hint: '15:00',
+                    participant_hint: 'Paul'
+                },
                 execution: {
                     target: 'runtime_v2',
                     confirmation_required: false,
-                    toolchain: [{
-                        source: 'runtime_v2',
-                        tool_id: 'ui.circle',
-                        action: 'pointer.click',
-                        input: {}
-                    }]
+                    toolchain: [
+                        {
+                            source: 'runtime_v2',
+                            tool_id: 'calendar.ensure_calendar',
+                            action: 'pointer.click',
+                            input: {}
+                        },
+                        {
+                            source: 'runtime_v2',
+                            tool_id: 'calendar.create_event',
+                            action: 'pointer.click',
+                            input: {
+                                temporal_ref: 'tomorrow',
+                                time_hint: '15:00',
+                                participant_hint: 'Paul'
+                            }
+                        }
+                    ]
                 }
             };
         }
     }
 });
 
-sessionRuntime.createSession({
-    session_id: 'voice_runtime_param_resolution',
-    locale: 'fr-FR'
-});
-
-const plannedCreate = await orchestrator.planUtterance('Peux tu me creer un cercle rouge sur le projet courant', {
+const result = await orchestrator.executeUtterance('Ajoute un rendez-vous demain a 15h avec Paul', {
     session_id: 'voice_runtime_param_resolution'
 });
 
-assert.equal(plannedCreate.execution.toolchain[0]?.tool_id, 'ui.circle');
-assert.equal(
-    plannedCreate.execution.toolchain[0]?.input?.color,
-    'red',
-    'runtime planning should preserve the requested circle color when the AI planner drops it'
-);
-
-const createResult = await orchestrator.executeIntent(plannedCreate, {
-    session_id: 'voice_runtime_param_resolution'
-});
-
-assert.equal(createResult.ok, true);
-assert.equal(createResult.result?.atome_id, 'atome_runtime_circle_1');
-assert.equal(
-    sessionRuntime.getActiveIntent('voice_runtime_param_resolution')?.meta?.atome_id,
-    'atome_runtime_circle_1',
-    'runtime execution should persist the created atome id for follow-up voice actions'
-);
-
-const followupIntent = classifyVoiceIntent('Mets le en violet', {
-    runtime_tools: await bridge.listRuntimeTools(),
-    context: {
-        active_intent: sessionRuntime.getActiveIntent('voice_runtime_param_resolution')
-    }
-});
-
-assert.equal(followupIntent.execution.toolchain[0]?.tool_id, 'ui.couleur.apply');
-assert.equal(followupIntent.execution.toolchain[0]?.input?.color, 'violet');
-assert.equal(
-    followupIntent.execution.toolchain[0]?.input?.atome_id,
-    'atome_runtime_circle_1',
-    'runtime follow-ups should target the last created atome when available'
-);
+assert.equal(result.ok, true);
+assert.equal(result.executed, true);
+assert.equal(calls.length, 1);
+assert.equal(calls[0][1].tool_id, 'calendar.create_event');
+assert.equal(calls[0][1].input.time_hint, '15:00');
+assert.equal(calls[0][1].input.participant_hint, 'Paul');
 
 console.log('orchestrator.runtime_param_resolution.test: PASS');

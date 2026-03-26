@@ -58,7 +58,7 @@ const service = createContactsService({
     sources: [
         createMemorySource({
             source_id: 'macos_contacts',
-            role: 'legacy',
+            role: 'import',
             items: [
                 {
                     source_contact_id: 'mac_1',
@@ -117,12 +117,16 @@ const search = service.contactsSearch('bob');
 assert.equal(search.items.length, 1, 'contacts service should filter contacts by query');
 assert.equal(search.items[0]?.id, 'user_bob', 'contacts search should return the matching contact');
 
+const phoneSearch = service.contactsSearch('0611111111');
+assert.equal(phoneSearch.items.length, 1, 'contacts service should normalize phone queries before matching');
+assert.equal(phoneSearch.items[0]?.id, 'user_bob', 'contacts service should match normalized phone queries to the correct contact');
+
 const read = service.contactsRead('mac_1');
 assert.equal(read.ok, true, 'contacts service should read a contact by native source identifier');
 assert.equal(read.contact?.name, 'Alice Martin', 'contacts read should expose the merged contact payload');
 
 const imported = await service.importMacosContacts();
-assert.equal(imported.ok, true, 'contacts service should import the legacy macOS source into the local primary store');
+assert.equal(imported.ok, true, 'contacts service should import the macOS source into the local primary store');
 assert.equal(imported.target_source_id, 'eve_contacts_local', 'contacts service should import into the local primary source');
 
 const localOnly = await service.syncInitial({ source_id: 'eve_contacts_local' });

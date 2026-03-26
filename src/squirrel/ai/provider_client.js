@@ -1,4 +1,5 @@
 import { loadUserProfile } from '../../application/eVe/APIS/login.js';
+import { buildLocalApiUrl, isTauri } from '../apis/serverUrls.js';
 import {
     AI_MODEL_PROVIDER_LIST,
     AI_MODEL_PROVIDER_REGISTRY
@@ -21,8 +22,20 @@ export const AI_PROVIDER_LIST = Object.freeze(AI_MODEL_PROVIDER_LIST.map((entry)
 })));
 
 const DEFAULT_TIMEOUT_MS = 20000;
+const LOCAL_AI_PROXY_PATH = '/api/eve/ai/provider-completion';
 
 const toText = (value) => String(value || '').trim();
+const containsAny = (haystack = '', needles = []) => needles.some((needle) => haystack.includes(needle));
+const normalizeUsage = (usage = {}) => ({
+    prompt_tokens: Number.isFinite(Number(usage?.prompt_tokens)) ? Number(usage.prompt_tokens) : 0,
+    completion_tokens: Number.isFinite(Number(usage?.completion_tokens)) ? Number(usage.completion_tokens) : 0,
+    total_tokens: Number.isFinite(Number(usage?.total_tokens))
+        ? Number(usage.total_tokens)
+        : (
+            (Number.isFinite(Number(usage?.prompt_tokens)) ? Number(usage.prompt_tokens) : 0)
+            + (Number.isFinite(Number(usage?.completion_tokens)) ? Number(usage.completion_tokens) : 0)
+        )
+});
 
 const createTimeoutController = (timeoutMs) => {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || typeof AbortController !== 'function') {
@@ -85,14 +98,14 @@ const withMergedSignal = ({ signal = null, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 };
 
 const readResponseError = async (response) => {
-    let rawText = '';
+    let rawBody = '';
     try {
-        rawText = await response.text();
+        rawBody = await response.text();
     } catch (_) {
-        rawText = '';
+        rawBody = '';
     }
 
-    const trimmed = toText(rawText);
+    const trimmed = toText(rawBody);
     let providerMessage = trimmed;
     let providerCode = '';
 
@@ -110,7 +123,72 @@ const readResponseError = async (response) => {
     const segments = [`HTTP_${response.status}`];
     if (providerCode) segments.push(providerCode);
     if (providerMessage) segments.push(providerMessage);
-    return segments.join(' ');
+    return {
+        display: segments.join(' '),
+        http_status: response.status,
+        provider_code: providerCode,
+        provider_message: providerMessage,
+        raw_body: rawBody
+    };
+};
+
+const createProviderHttpError = (info) => {
+    const error = new Error(info.display);
+    error.http_status = info.http_status;
+    error.provider_code = info.provider_code;
+    error.provider_message = info.provider_message;
+    error.raw_body = info.raw_body;
+    return error;
+};
+
+const shouldUseLocalAiProxy = ({ preferLocalProxy } = {}) => {
+    if (preferLocalProxy === false) return false;
+    if (preferLocalProxy === true) return true;
+    return isTauri();
+};
+
+const requestViaLocalAiProxy = async ({
+    provider,
+    model,
+    prompt,
+    apiKey,
+    systemPrompt = '',
+    fetchImpl,
+    signal,
+    timeoutMs = DEFAULT_TIMEOUT_MS
+} = {}) => {
+    const proxyUrl = buildLocalApiUrl(LOCAL_AI_PROXY_PATH);
+    if (!proxyUrl) {
+        throw new Error('provider_local_proxy_unavailable');
+    }
+
+    const response = await fetchImpl(proxyUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            provider_id: provider?.id || '',
+            provider_type: provider?.type || '',
+            completion_endpoint: provider?.endpoint || '',
+            model: toText(model) || provider?.models?.[0] || '',
+            prompt: String(prompt || ''),
+            system_prompt: String(systemPrompt || ''),
+            api_key: toText(apiKey),
+            timeout_ms: Number.isFinite(Number(timeoutMs)) ? Number(timeoutMs) : DEFAULT_TIMEOUT_MS
+        }),
+        ...(signal ? { signal } : {})
+    });
+
+    if (!response.ok) {
+        throw createProviderHttpError(await readResponseError(response));
+    }
+
+    const data = await response.json();
+    return {
+        text: toText(data?.text),
+        usage: normalizeUsage(data?.usage || {})
+    };
 };
 
 const requestOpenAiStyle = async ({
@@ -142,11 +220,14 @@ const requestOpenAiStyle = async ({
     });
 
     if (!response.ok) {
-        throw new Error(await readResponseError(response));
+        throw createProviderHttpError(await readResponseError(response));
     }
 
     const data = await response.json();
-    return toText(data?.choices?.[0]?.message?.content);
+    return {
+        text: toText(data?.choices?.[0]?.message?.content),
+        usage: normalizeUsage(data?.usage || {})
+    };
 };
 
 const requestAnthropic = async ({
@@ -177,12 +258,18 @@ const requestAnthropic = async ({
     });
 
     if (!response.ok) {
-        throw new Error(await readResponseError(response));
+        throw createProviderHttpError(await readResponseError(response));
     }
 
     const data = await response.json();
     const parts = Array.isArray(data?.content) ? data.content : [];
-    return toText(parts.map((part) => toText(part?.text)).filter(Boolean).join('\n'));
+    return {
+        text: toText(parts.map((part) => toText(part?.text)).filter(Boolean).join('\n')),
+        usage: normalizeUsage({
+            prompt_tokens: data?.usage?.input_tokens,
+            completion_tokens: data?.usage?.output_tokens
+        })
+    };
 };
 
 const requestGoogle = async ({
@@ -217,12 +304,19 @@ const requestGoogle = async ({
     });
 
     if (!response.ok) {
-        throw new Error(await readResponseError(response));
+        throw createProviderHttpError(await readResponseError(response));
     }
 
     const data = await response.json();
     const parts = Array.isArray(data?.candidates?.[0]?.content?.parts) ? data.candidates[0].content.parts : [];
-    return toText(parts.map((part) => toText(part?.text)).filter(Boolean).join('\n'));
+    return {
+        text: toText(parts.map((part) => toText(part?.text)).filter(Boolean).join('\n')),
+        usage: normalizeUsage({
+            prompt_tokens: data?.usageMetadata?.promptTokenCount,
+            completion_tokens: data?.usageMetadata?.candidatesTokenCount,
+            total_tokens: data?.usageMetadata?.totalTokenCount
+        })
+    };
 };
 
 export const extractJsonResponse = (text) => {
@@ -287,19 +381,106 @@ export const normalizeAiProviderError = (error) => {
     const raw = toText(error?.message || error);
     const lower = raw.toLowerCase();
 
+    // Structured data from createProviderHttpError, falls back to string parsing
+    const httpStatus = error?.http_status || null;
+    const providerCode = toText(error?.provider_code || '').toLowerCase();
+    const providerMessage = toText(error?.provider_message || '').toLowerCase();
+    const rawBody = toText(error?.raw_body || '');
+    const hasStructuredData = !!providerCode;
+
+    const isHttp429 = httpStatus === 429 || lower.includes('http_429') || lower.includes(' 429');
+    const isHttp402 = httpStatus === 402 || lower.includes('http_402') || lower.includes(' 402');
+
+    // Truly explicit hard-quota signals — use exact providerCode when structured,
+    // fall back to string scanning only when unstructured
+    const HARD_QUOTA_SIGNALS = [
+        'insufficient_quota',
+        'insufficient_balance',
+        'billing_hard_limit_reached',
+        'hard_limit_reached'
+    ];
+    const hasHardQuotaSignal = hasStructuredData
+        ? HARD_QUOTA_SIGNALS.includes(providerCode)
+        : HARD_QUOTA_SIGNALS.some((signal) => lower.includes(signal));
+
+    // Ambiguous quota signals — on a 429 these default to rate_limited
+    const SOFT_QUOTA_SIGNALS = [
+        'quota_exceeded',
+        'quota exceeded',
+        'credit balance too low',
+        'credit balance is too low',
+        'credits exhausted',
+        'credits are exhausted',
+        'usage limit reached',
+        'monthly budget exceeded'
+    ];
+    const hasSoftQuotaSignal = hasStructuredData
+        ? SOFT_QUOTA_SIGNALS.includes(providerCode)
+        : containsAny(lower, SOFT_QUOTA_SIGNALS);
+
+    const hasRateLimitSignal = containsAny(lower, [
+        'too many requests',
+        'rate limit',
+        'rate_limit',
+        'rate-limited',
+        'requests rate limit exceeded',
+        'resource_exhausted'
+    ]);
+
+    const hasBillingSignal = containsAny(lower, [
+        'payment required',
+        'plan inactive',
+        'billing_not_active',
+        'account_not_active'
+    ]);
+
+    const diagnostics = {
+        provider_code: toText(error?.provider_code || ''),
+        provider_message: toText(error?.provider_message || ''),
+        raw_body: rawBody
+    };
+
+    const classify = (code) => {
+        // Log raw provider data + final decision for debugging
+        if (typeof console?.warn === 'function') {
+            console.warn(
+                '[eVe:ai] normalizeAiProviderError',
+                JSON.stringify({
+                    classified_as: code,
+                    raw_message: raw,
+                    http_status: httpStatus,
+                    provider_code: providerCode,
+                    provider_message: providerMessage,
+                    has_structured_data: hasStructuredData,
+                    flags: {
+                        isHttp429,
+                        isHttp402,
+                        hasHardQuotaSignal,
+                        hasSoftQuotaSignal,
+                        hasRateLimitSignal,
+                        hasBillingSignal
+                    }
+                })
+            );
+        }
+        return code;
+    };
+
     if (!raw || lower === 'provider_timeout' || lower.includes('timeout') || lower.includes('aborted')) {
         return {
-            code: 'provider_timeout',
+            code: classify('provider_timeout'),
             message: raw || 'provider_timeout',
-            user_message: "L'IA ne repond pas."
+            user_message: "L'IA ne repond pas.",
+            ...diagnostics
         };
     }
 
     if (lower.includes('no_ai_key_configured') || lower.includes('no_keys') || lower.includes('no_profile')) {
         return {
-            code: 'no_ai_key_configured',
+            code: classify('no_ai_key_configured'),
             message: raw,
-            user_message: "Aucune cle IA n'est configuree."
+            user_message: "Aucune cle IA n'est configuree.",
+            ...diagnostics
         };
     }
 
@@ -312,52 +493,66 @@ export const normalizeAiProviderError = (error) => {
         || lower.includes('incorrect api key')
     ) {
         return {
-            code: 'provider_auth_failed',
+            code: classify('provider_auth_failed'),
             message: raw,
-            user_message: "L'IA ne repond pas."
+            user_message: "L'IA ne repond pas.",
+            ...diagnostics
         };
     }
 
-    if (
-        lower.includes('insufficient_quota')
-        || lower.includes('quota')
-        || lower.includes('billing')
-        || lower.includes('credits')
-        || lower.includes('credit balance')
-        || lower.includes('hard_limit')
-    ) {
+    // Hard quota signals — truly explicit, even on 429
+    if (hasHardQuotaSignal) {
         return {
-            code: 'provider_quota_exceeded',
+            code: classify('provider_quota_exceeded'),
             message: raw,
-            user_message: "L'IA a atteint sa limite de quota ou de credits."
+            user_message: "L'IA a atteint sa limite de quota ou de credits.",
+            ...diagnostics
         };
     }
 
-    if (
-        lower.includes('429')
-        || lower.includes('too many requests')
-        || lower.includes('rate limit')
-        || lower.includes('rate_limit')
-    ) {
+    // 429 or rate-limit signal — even if soft/ambiguous quota keywords appear
+    if (isHttp429 || hasRateLimitSignal) {
         return {
-            code: 'provider_rate_limited',
+            code: classify('provider_rate_limited'),
             message: raw,
-            user_message: "L'IA est temporairement limitee."
+            user_message: "L'IA est temporairement limitee.",
+            ...diagnostics
+        };
+    }
+
+    // Soft quota signals WITHOUT 429 — likely genuine quota exhaustion
+    if (hasSoftQuotaSignal) {
+        return {
+            code: classify('provider_quota_exceeded'),
+            message: raw,
+            user_message: "L'IA a atteint sa limite de quota ou de credits.",
+            ...diagnostics
+        };
+    }
+
+    if (isHttp402 || hasBillingSignal) {
+        return {
+            code: classify('provider_billing_issue'),
+            message: raw,
+            user_message: "L'acces API de l'IA est bloque par un probleme de facturation ou de configuration.",
+            ...diagnostics
         };
     }
 
     if (lower.includes('invalid_json')) {
         return {
-            code: 'provider_invalid_response',
+            code: classify('provider_invalid_response'),
             message: raw,
-            user_message: "L'IA ne repond pas."
+            user_message: "L'IA ne repond pas.",
+            ...diagnostics
         };
     }
 
     return {
-        code: 'provider_unreachable',
+        code: classify('provider_unreachable'),
         message: raw,
-        user_message: "L'IA ne repond pas."
+        user_message: "L'IA ne repond pas.",
+        ...diagnostics
     };
 };
 
@@ -369,7 +564,8 @@ export const requestProviderCompletion = async ({
     systemPrompt = '',
     fetchImpl = globalThis.fetch?.bind(globalThis),
     timeoutMs = DEFAULT_TIMEOUT_MS,
-    signal = null
+    signal = null,
+    preferLocalProxy
 } = {}) => {
     if (typeof fetchImpl !== 'function') {
         throw new Error('provider_fetch_unavailable');
@@ -382,6 +578,19 @@ export const requestProviderCompletion = async ({
 
     const merged = withMergedSignal({ signal, timeoutMs });
     try {
+        if (shouldUseLocalAiProxy({ preferLocalProxy })) {
+            return await requestViaLocalAiProxy({
+                provider,
+                model: toText(model) || provider.models?.[0] || '',
+                prompt,
+                apiKey: toText(apiKey),
+                systemPrompt,
+                fetchImpl,
+                signal: merged.signal,
+                timeoutMs
+            });
+        }
+
         if (provider.type === 'openai') {
             return await requestOpenAiStyle({
                 provider,
@@ -425,13 +634,15 @@ export const requestProviderCompletion = async ({
 };
 
 export const requestProviderJsonCompletion = async (options = {}) => {
-    const text = await requestProviderCompletion(options);
+    const completion = await requestProviderCompletion(options);
+    const text = toText(completion?.text);
     const parsed = extractJsonResponse(text);
     if (!parsed || typeof parsed !== 'object') {
         throw new Error('invalid_json_response');
     }
     return {
         text,
-        parsed
+        parsed,
+        usage: normalizeUsage(completion?.usage || {})
     };
 };

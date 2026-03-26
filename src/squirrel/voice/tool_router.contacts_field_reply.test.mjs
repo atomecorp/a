@@ -19,7 +19,8 @@ const contactsApi = {
         };
     },
     async search(query) {
-        if (String(query || '').toLowerCase().includes('regis')) {
+        const normalized = String(query || '').toLowerCase();
+        if (normalized.includes('regis')) {
             return {
                 ok: true,
                 query,
@@ -39,6 +40,13 @@ const contactsApi = {
                         updated_at: '2026-03-24T12:35:00.000Z'
                     }
                 ]
+            };
+        }
+        if (normalized.includes('0612345678') || normalized.includes('06 12 34 56 78')) {
+            return {
+                ok: true,
+                query,
+                items: []
             };
         }
         return {
@@ -133,5 +141,53 @@ const pluralEmailResult = await pluralRouter.execute(createStructuredRequest({
 assert.equal(pluralEmailResult.ok, true);
 assert.match(pluralEmailResult.reply_text || '', /regis\.one@example\.test/i, 'multi-contact follow-ups should answer with emails from the active contacts result set');
 assert.match(pluralEmailResult.reply_text || '', /regis\.two@example\.test/i, 'multi-contact follow-ups should include each matching contact value');
+
+const strictWorkingMemory = {
+    getCurrentItemId() {
+        return 'contact_field_1';
+    },
+    getResultSetItems() {
+        return [];
+    }
+};
+
+const strictReadRouter = createToolRouter({
+    connectors: {
+        contacts: {
+            ...contactsApi,
+            async read(contactId) {
+                if (String(contactId || '') === 'contact_field_1') {
+                    return {
+                        ok: true,
+                        contact: {
+                            source_contact_id: 'contact_field_1',
+                            name: 'Sylvain Godard',
+                            phone: '08 76 65 67',
+                            email: 'sylvain@example.test'
+                        }
+                    };
+                }
+                return { ok: false, error: 'contacts_not_found' };
+            }
+        }
+    },
+    workingMemory: strictWorkingMemory
+});
+
+const explicitPhoneReadResult = await strictReadRouter.execute(createStructuredRequest({
+    domain: 'contacts',
+    operation: 'read',
+    filters: {
+        query_text: '06 12 34 56 78'
+    },
+    source: {
+        locale: 'fr-FR',
+        utterance_raw: 'Qui a le numero 06 12 34 56 78 ?',
+        utterance_normalized: 'qui a le numero 06 12 34 56 78'
+    }
+}));
+
+assert.equal(explicitPhoneReadResult.ok, false, 'explicit contact phone reads should not silently fall back to the previous current contact when search misses');
+assert.match(explicitPhoneReadResult.reply_text || '', /Je ne sais pas quel contact lire|Je ne trouve pas ce contact/i, 'explicit contact phone read misses should surface a clear not-found reply');
 
 console.log('tool_router.contacts_field_reply.test: PASS');

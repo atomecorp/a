@@ -33,9 +33,9 @@ AgentGateway.registerTool({
 
 AgentGateway.registerTool({
     name: 'mail.list_spec_probe',
-    description: 'Legacy list probe',
-    risk_level: 'LOW',
-    params_schema: {
+    description: 'Canonical list probe',
+    risk_tier: 'LOW',
+    parameters: {
         type: 'object',
         properties: {
             unread_only: { type: 'boolean' }
@@ -55,8 +55,8 @@ assert.equal(contactTool?.domain, 'contacts', 'listTools should expose the canon
 assert.equal(contactTool?.risk_tier, 'moderate', 'listTools should expose canonical risk tiers');
 assert.equal(contactTool?.parameters?.required?.includes('contact_id'), true, 'listTools should expose canonical parameters');
 assert.equal(contactTool?.undoable, true, 'listTools should expose undo metadata');
-assert.equal(mailTool?.domain, 'mail', 'legacy tools should infer their domain from the tool name');
-assert.equal(mailTool?.risk_tier, 'low', 'legacy risk levels should be projected to canonical risk tiers');
+assert.equal(mailTool?.domain, 'mail', 'listTools should infer the domain from the tool name when omitted');
+assert.equal(mailTool?.risk_tier, 'low', 'uppercase canonical risk tiers should normalize to lowercase');
 
 const confirmation = await AgentGateway.callTool({
     tool_name: 'contacts.update_spec_probe',

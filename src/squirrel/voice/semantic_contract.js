@@ -27,6 +27,8 @@ export const MAIL_OPERATIONS = Object.freeze([
     'read',
     'summarize',
     'reply',
+    'reply_prompt',
+    'compose',
     'send',
     'archive',
     'delete',
@@ -156,6 +158,7 @@ export const createStructuredRequest = (raw = {}) => {
         id: ensureString(raw.target?.id)
     };
 
+    const rawOrder = raw.filters?.order;
     const filters = {
         read_state: ['read', 'unread', 'any'].includes(raw.filters?.read_state) ? raw.filters.read_state : 'any',
         from: ensureArray(raw.filters?.from),
@@ -163,7 +166,7 @@ export const createStructuredRequest = (raw = {}) => {
         mailbox: ensureString(raw.filters?.mailbox, 'inbox').toLowerCase(),
         thread_id: ensureString(raw.filters?.thread_id),
         query_text: ensureString(raw.filters?.query_text),
-        order: ['oldest', 'newest'].includes(raw.filters?.order) ? raw.filters.order : 'newest',
+        order: ['oldest', 'newest'].includes(rawOrder) ? rawOrder : null,
         limit: ensurePositiveInt(raw.filters?.limit, 10),
         temporal_ref: ensureString(raw.filters?.temporal_ref)
     };
@@ -185,6 +188,10 @@ export const createStructuredRequest = (raw = {}) => {
         confidence: Number.isFinite(Number(raw.source?.confidence)) ? Number(raw.source.confidence) : null
     };
 
+    const VALID_CONTACT_FIELDS = ['phone', 'email', 'organization', 'name', 'updated_at'];
+    const rawContactField = ensureString(raw.contact_field);
+    const contact_field = VALID_CONTACT_FIELDS.includes(rawContactField) ? rawContactField : null;
+
     const payload = ensureObject(raw.payload);
     const surfaces = domain === 'mail'
         ? normalizeCommunicationSurfaces(raw.surfaces, ['mail'])
@@ -199,6 +206,7 @@ export const createStructuredRequest = (raw = {}) => {
         draft,
         source,
         payload,
+        contact_field,
         surfaces,
         status_only: raw.status_only === true
     });
@@ -272,9 +280,7 @@ export const createStructuredResult = (raw = {}) => {
 // ---------------------------------------------------------------------------
 
 /**
- * Converts a legacy voice intent + context into a StructuredRequest.
- * This bridges the existing intent_schema / orchestrator code with the
- * new unified contract.
+ * Converts a normalized voice intent + context into a StructuredRequest.
  *
  * @param {object} intent - Normalized voice intent.
  * @param {object} context - Session working memory context.
@@ -302,7 +308,10 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
         summarize_current: 'summarize',
         summarize: 'summarize',
         reply_current: 'reply',
+        reply_prompt: 'reply_prompt',
         reply: 'reply',
+        compose: 'compose',
+        compose_mail: 'compose',
         send: 'send',
         archive_current: 'archive',
         archive: 'archive',
@@ -365,7 +374,7 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
             mailbox: ensureString(entities.mailbox || mergedToolParams.mailbox || activeEntities.mailbox, 'inbox').toLowerCase(),
             thread_id: ensureString(entities.thread_id || mergedToolParams.thread_id || activeEntities.thread_id),
             query_text: ensureString(entities.query_text || entities.query || mergedToolParams.query_text || mergedToolParams.query),
-            order: ensureString(entities.order || mergedToolParams.order || activeEntities.order, 'newest'),
+            order: ensureString(entities.order || mergedToolParams.order || activeEntities.order),
             limit: ensurePositiveInt(entities.limit || mergedToolParams.limit || activeEntities.limit, 10),
             temporal_ref: ensureString(entities.temporal_ref || mergedToolParams.temporal_ref)
         },
@@ -396,6 +405,7 @@ export const intentToStructuredRequest = (intent = {}, context = {}) => {
                 )
             )
         }),
+        contact_field: ensureString(entities.contact_field || mergedToolParams.contact_field),
         surfaces: normalizeCommunicationSurfaces(
             entities.communication_surfaces
             || mergedToolParams.communication_surfaces

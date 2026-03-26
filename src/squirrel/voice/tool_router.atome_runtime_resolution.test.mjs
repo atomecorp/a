@@ -59,6 +59,6 @@ const unresolved = await router.execute({
 });
 
 assert.equal(unresolved.ok, false, 'unsupported atome operations should fail explicitly');
-assert.equal(unresolved.error, 'atome_runtime_tool_unresolved', 'unsupported atome operations should not fall back to legacy tooling');
+assert.equal(unresolved.error, 'atome_runtime_tool_unresolved', 'unsupported atome operations should not fall back to alternate tooling');
 
 console.log('tool_router.atome_runtime_resolution.test: PASS');

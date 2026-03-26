@@ -454,7 +454,8 @@ window.console.error = (function (oldErr) {
 
     // ------------------------------------------------------------
     // Incoming messages entry point (Swift -> JS)
-    // Swift should call: window.SwiftBridge._receiveFromSwift(jsonPayload) (legacy alias window.AUv3API kept)
+    // Swift should call: window.SwiftBridge._receiveFromSwift(jsonPayload)
+    // Compatibility alias: window.AUv3API
     // ------------------------------------------------------------
     SwiftBridge._receiveFromSwift = function _receiveFromSwift(msg) {
         try {
@@ -542,7 +543,7 @@ window.console.error = (function (oldErr) {
 
     // Expose globally
     global.SwiftBridge = SwiftBridge;
-    global.AUv3API = SwiftBridge; // legacy alias for older callers
+    global.AUv3API = SwiftBridge;
 
 })(window);
 

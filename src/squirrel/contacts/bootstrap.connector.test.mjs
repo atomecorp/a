@@ -10,7 +10,7 @@ await security.storeToken('icloud_contacts_bootstrap_auth', {
     email: 'user@icloud.test',
     appPassword: 'contacts-password'
 }, {
-    provider: 'icloud_carddav_legacy'
+    provider: 'icloud_carddav'
 });
 const api = createGlobalContactsApi({ env });
 
@@ -80,16 +80,16 @@ const configured = await api.configureIcloudConnector({
 });
 
 assert.equal(configured.ok, true, 'contacts bootstrap should configure the iCloud contacts connector');
-assert.equal(configured.source, 'icloud_contacts_legacy', 'contacts bootstrap should register the iCloud legacy source with the canonical source id');
+assert.equal(configured.source, 'icloud_contacts', 'contacts bootstrap should register the iCloud source with the canonical source id');
 
 const imported = await api.importIcloudContacts({
-    source_id: 'icloud_contacts_legacy'
+    source_id: 'icloud_contacts'
 });
 assert.equal(imported.ok, true, 'contacts bootstrap should import iCloud contacts into the local store');
 assert.equal(api.list({ source_id: 'eve_contacts_local' }).items[0]?.source_provider, 'eve_contacts_local', 'contacts bootstrap should expose imported iCloud contacts through the local source');
 
 const delta = await api.syncIncremental({
-    source_id: 'icloud_contacts_legacy'
+    source_id: 'icloud_contacts'
 });
 assert.equal(delta.ok, true, 'contacts bootstrap should expose incremental sync for the direct iCloud contacts connector');
 
@@ -100,7 +100,7 @@ const pushGate = await api.pushContactToIcloud({
         phone: '+33 6 44 44 44 44',
         email: 'write@example.test'
     },
-    source_id: 'icloud_contacts_legacy'
+    source_id: 'icloud_contacts'
 });
 assert.equal(pushGate.ok, false, 'contacts bootstrap should expose a confirmation gate before direct iCloud contact write-back');
 assert.equal(pushGate.confirmation_required, true, 'contacts bootstrap should require explicit confirmation for direct iCloud contact write-back');
@@ -112,13 +112,13 @@ const pushed = await api.pushContactToIcloud({
         phone: '+33 6 44 44 44 44',
         email: 'write@example.test'
     },
-    source_id: 'icloud_contacts_legacy',
+    source_id: 'icloud_contacts',
     confirmed: true
 });
 assert.equal(pushed.ok, true, 'contacts bootstrap should expose explicit iCloud contact write-back once confirmed');
 
 const sources = api.sources();
-assert.equal(sources.items.some((entry) => entry.source_id === 'icloud_contacts_legacy'), true, 'contacts bootstrap should surface the configured iCloud source');
+assert.equal(sources.items.some((entry) => entry.source_id === 'icloud_contacts'), true, 'contacts bootstrap should surface the configured iCloud source');
 
 assert.deepEqual({ initialCalls, deltaCalls, pushCalls }, { initialCalls: 1, deltaCalls: 1, pushCalls: 1 }, 'contacts bootstrap should delegate initial import, delta sync and push to the configured iCloud connector');
 

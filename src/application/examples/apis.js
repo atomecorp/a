@@ -402,7 +402,7 @@
 
 //         const docId = doc?.atome_id || doc?.id;
 //         if (!docId) {
-//             console.log('⚠️ No document ID, skipping rest of legacy tests');
+//             console.log('⚠️ No document ID, skipping rest of the compatibility tests');
 //             return;
 //         }
 
@@ -573,7 +573,7 @@
 //         await adoleExample();
 //         await userDataExample();
 //         await syncExample();
-//         // await legacyApiExample(); // Uncomment to test legacy API
+//         // await compatibilityApiExample(); // Uncomment to test the compatibility API
 //         // createDocumentManagerUI(); // Uncomment to create UI
 
 //         console.log('\n═'.repeat(60));
@@ -593,7 +593,7 @@
 //     adoleExample,
 //     userDataExample,
 //     syncExample,
-//     legacyApiExample,
+//     compatibilityApiExample,
 //     createDocumentManagerUI,
 //     runAllExamples
 // };
@@ -606,7 +606,7 @@
 //         adole: adoleExample,
 //         userData: userDataExample,
 //         sync: syncExample,
-//         legacy: legacyApiExample,
+//         compatibility: compatibilityApiExample,
 //         ui: createDocumentManagerUI,
 //         runAll: runAllExamples
 //     };

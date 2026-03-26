@@ -184,6 +184,10 @@ const localizeExecutionError = (code = '', locale = 'fr-FR') => {
         return english
             ? 'The AI quota or credit balance is exhausted. Check billing or buy more credits.'
             : "Le quota ou les credits de l'IA sont epuises. Verifie la facturation ou recharge les credits.";
+    case 'provider_billing_issue':
+        return english
+            ? 'The AI API access is blocked by a billing or project configuration issue.'
+            : "L'acces API de l'IA est bloque par un probleme de facturation ou de configuration du projet.";
     case 'provider_rate_limited':
         return english
             ? 'The AI is temporarily rate-limited. Try again in a moment.'

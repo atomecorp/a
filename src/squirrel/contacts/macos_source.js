@@ -93,8 +93,8 @@ const matchesQuery = (contact = {}, query = '') => {
 };
 
 export const createMacosContactsSource = ({
-    source_id = CONTACTS_V1_ARCHITECTURE_DECISION.legacy_import_source.id,
-    role = CONTACTS_V1_ARCHITECTURE_DECISION.legacy_import_source.role,
+    source_id = CONTACTS_V1_ARCHITECTURE_DECISION.import_source.id,
+    role = CONTACTS_V1_ARCHITECTURE_DECISION.import_source.role,
     writable = false,
     commandRunner = null
 } = {}) => {

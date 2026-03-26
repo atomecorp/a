@@ -42,17 +42,29 @@ const orchestrator = createVoiceOrchestrator({
     sessionRuntime: createVoiceSessionRuntime(),
     aiPlanner: {
         async planUtterance(utterance, options = {}) {
+            const raw = String(utterance || '');
+            const normalized = raw.toLowerCase();
+            const entities = normalized.includes('mail')
+                ? {
+                    query_text: 'Regis',
+                    email: 'jeezs@jeezs.net'
+                }
+                : {
+                    query_text: 'Regis',
+                    phone: '0611223344'
+                };
             return {
-                intent_id: options.intent_id || 'voice_contacts_direct_update_free_reply',
+                intent_id: options.intent_id || 'voice_contacts_direct_update_llm',
                 utterance: { raw: utterance },
                 locale: options.locale || 'fr-FR',
-                type: 'ambiguous',
-                domain: 'unknown',
-                action: 'unknown',
+                type: 'connector_tool',
+                domain: 'contacts',
+                action: 'update',
                 status: 'ready',
-                assistant_reply: '',
+                assistant_reply: 'Je mets a jour le contact.',
+                entities,
                 execution: {
-                    target: 'none',
+                    target: 'pending_connector',
                     confirmation_required: false,
                     toolchain: []
                 }

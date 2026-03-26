@@ -47,7 +47,7 @@ const shouldKeepModel = (modelId, filter = {}) => {
     if (filter.exclude_preview !== false && (normalized.includes('preview') || normalized.includes('experimental'))) {
         return false;
     }
-    if (filter.exclude_deprecated !== false && (normalized.includes('deprecated') || normalized.includes('legacy') || normalized.includes('deprecation'))) {
+    if (filter.exclude_deprecated !== false && (normalized.includes('deprecated') || normalized.includes('deprecation'))) {
         return false;
     }
     const excludedModalities = Array.isArray(filter.exclude_modalities) ? filter.exclude_modalities : [];

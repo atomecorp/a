@@ -9,39 +9,14 @@ const planner = createVoiceAiPlanner({
     }
 });
 
-const degraded = await planner.planUtterance('Lis mes mails', {
-    locale: 'fr-FR',
-    heuristic_intent: {
-        domain: 'mail',
-        action: 'list',
-        type: 'connector_tool',
-        status: 'pending_connector',
-        execution: {
-            target: 'pending_connector',
-            confirmation_required: false,
-            toolchain: []
-        }
-    }
+const failed = await planner.planUtterance('Lis mes mails', {
+    locale: 'fr-FR'
 });
 
-assert.equal(degraded.status, 'ready', 'degraded mode should preserve safe heuristic intents as executable');
-assert.equal(degraded.execution.target, 'pending_connector', 'degraded mode should keep safe connector execution paths');
-assert.equal(degraded.context.ai_model_tier, 'degraded', 'degraded mode should expose the degraded tier in context');
-
-const unsafe = await planner.planUtterance('Supprime ce contact', {
-    locale: 'fr-FR',
-    heuristic_intent: {
-        domain: 'contacts',
-        action: 'delete',
-        execution: {
-            target: 'pending_connector',
-            confirmation_required: true,
-            toolchain: []
-        }
-    }
-});
-
-assert.equal(unsafe.status, 'failed', 'degraded mode should reject unsafe heuristic execution');
+assert.equal(failed.status, 'failed', 'planner should fail explicitly when no AI key is configured');
+assert.equal(failed.execution.target, 'none', 'planner should not synthesize a local fallback execution path');
+assert.equal(failed.context.ai_error, 'no_ai_key_configured', 'planner should expose the root cause');
+assert.match(failed.assistant_reply, /cle IA|IA/i, 'planner should expose a spoken failure');
 
 console.log('ai_planner.degraded_mode.test: PASS');
 process.exit(0);

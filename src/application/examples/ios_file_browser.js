@@ -775,7 +775,7 @@ async function file_type_decision(type, fileEntry, fullPath){
   try{
     // Ensure we have some context objects
     const audio = (window.Squirrel && Squirrel.av && Squirrel.av.audio) ? Squirrel.av.audio : null;
-    const AU = window.AUv3API || null;
+    const AU = window.SwiftBridge || window.AUv3API || null;
     const parent = (typeof parent_of === 'function') ? parent_of(fullPath||'') : '.';
 
     switch(type){
@@ -2186,4 +2186,3 @@ function display_files(target, listing, opts = {}) {
         boxShadow: '0 2px 4px rgba(0,0,0,1)',
     }
   });
-

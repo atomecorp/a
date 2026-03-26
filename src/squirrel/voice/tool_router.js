@@ -122,7 +122,7 @@ const buildMailListReply = (items, request) => {
     const locale = request.source?.locale || 'fr-FR';
     const en = isEnglish(locale);
     const unread = request.filters?.read_state === 'unread';
-    const order = String(request.filters?.order || 'newest').toLowerCase();
+    const order = request.filters?.order ? String(request.filters.order).toLowerCase() : null;
     const oldest = order === 'oldest';
     const count = items.length;
     const excludedSenders = Array.isArray(request.filters?.not_from)
@@ -170,11 +170,13 @@ const buildMailListReply = (items, request) => {
     if (en) {
         if (unread) return `Here are the unread mails: ${labels.join(', ')}.`;
         if (oldest) return `Here is the oldest mail: ${labels.join(', ')}.`;
-        return `Here are the latest mails: ${labels.join(', ')}.`;
+        if (order === 'newest') return `Here are the latest mails: ${labels.join(', ')}.`;
+        return `Here are the mails: ${labels.join(', ')}.`;
     }
     if (unread) return `Voici les mails non lus : ${labels.join(', ')}.`;
     if (oldest) return `Voici le mail le plus ancien : ${labels.join(', ')}.`;
-    return `Voici les derniers mails : ${labels.join(', ')}.`;
+    if (order === 'newest') return `Voici les derniers mails : ${labels.join(', ')}.`;
+    return `Voici les mails : ${labels.join(', ')}.`;
 };
 
 const buildMailReadReply = (item, locale, request = null) => {
@@ -301,14 +303,14 @@ const normalizeCommunicationItem = (item = {}, surface = 'mail') => {
     };
 };
 
-const sortCommunicationItems = (items = [], order = 'newest') => {
+const sortCommunicationItems = (items = [], order = null) => {
     const safeItems = Array.isArray(items) ? [...items] : [];
     safeItems.sort((left, right) => {
         const leftTime = Date.parse(String(left?.received_at || '')) || 0;
         const rightTime = Date.parse(String(right?.received_at || '')) || 0;
         return rightTime - leftTime;
     });
-    if (String(order || 'newest').trim().toLowerCase() === 'oldest') {
+    if (String(order || '').trim().toLowerCase() === 'oldest') {
         safeItems.reverse();
     }
     return safeItems;
@@ -602,7 +604,7 @@ const findExistingContactForMutation = async (contactsApi, payload = {}) => {
             const items = Array.isArray(result?.items) ? result.items : [];
             const matched = items.find((entry) => contactMatchesMutationPayload(entry, payload));
             if (matched) return matched;
-        } catch (_) {}
+        } catch (_) { }
     }
     return null;
 };
@@ -696,7 +698,7 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 if (workingMemory) {
                     workingMemory.setResultSet('mail', items, 'message_id');
                     workingMemory.setFilters('mail', { ...filters, communication_surfaces: requestedSurfaces });
-                    workingMemory.setOrder('mail', filters.order || 'newest');
+                    workingMemory.setOrder('mail', filters.order || null);
                     workingMemory.setLastOperation('mail', 'list');
                     const firstItem = items[0] || null;
                     const firstId = firstItem?.message_id || firstItem?.id || null;
@@ -715,7 +717,7 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
             if (workingMemory) {
                 workingMemory.setResultSet('mail', items, 'message_id');
                 workingMemory.setFilters('mail', filters);
-                workingMemory.setOrder('mail', filters.order || 'newest');
+                workingMemory.setOrder('mail', filters.order || null);
                 workingMemory.setLastOperation('mail', 'list');
                 const firstItem = items[0] || null;
                 const firstId = firstItem?.message_id || firstItem?.id || null;
@@ -853,6 +855,116 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 reply_text: buildMailListReply(items, request)
             });
         }
+
+        case 'compose': {
+            const composeText = request.draft?.reply_text;
+            if (!composeText) {
+                return createStructuredResult({
+                    ok: false, domain: 'mail', operation: 'compose', error: 'mail_compose_text_missing',
+                    reply_text: isEnglish(locale) ? 'What should I write in the mail?' : 'Que veux-tu que j ecrive dans le mail ?'
+                });
+            }
+            const composeTarget = String(request.draft?.reply_target || '').trim();
+            if (!composeTarget) {
+                return createStructuredResult({
+                    ok: false, domain: 'mail', operation: 'compose', error: 'mail_compose_no_recipient',
+                    reply_text: isEnglish(locale) ? 'Who should I send the mail to?' : 'A qui dois-je envoyer le mail ?'
+                });
+            }
+            let recipientEmail = null;
+            let recipientName = composeTarget;
+            const contactsApi = connectors.contacts;
+            if (contactsApi && typeof contactsApi.search === 'function') {
+                try {
+                    const contactResult = await contactsApi.search(composeTarget, { limit: 5 });
+                    const contacts = Array.isArray(contactResult?.items) ? contactResult.items : [];
+                    const match = contacts.find((c) => {
+                        const cName = String(c?.name || '').trim().toLowerCase();
+                        const target = composeTarget.toLowerCase();
+                        return cName && (cName.includes(target) || target.includes(cName));
+                    });
+                    if (match) {
+                        recipientEmail = match.email || null;
+                        recipientName = match.name || composeTarget;
+                    }
+                } catch (_) { /* contacts lookup failed, continue */ }
+            }
+            if (!recipientEmail) {
+                const emailPattern = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+                if (emailPattern.test(composeTarget)) {
+                    recipientEmail = composeTarget;
+                }
+            }
+            if (!recipientEmail) {
+                return createStructuredResult({
+                    ok: false, domain: 'mail', operation: 'compose', error: 'mail_compose_no_email',
+                    reply_text: isEnglish(locale)
+                        ? `I cannot find an email address for ${recipientName}.`
+                        : `Je ne trouve pas d adresse email pour ${recipientName}.`
+                });
+            }
+            const subject = request.draft?.subject || '';
+            if (typeof mailApi.composeDraft === 'function') {
+                const composeResult = mailApi.composeDraft({
+                    to: [{ name: recipientName, address: recipientEmail }],
+                    subject,
+                    body_text: composeText
+                });
+                if (composeResult?.ok === true) {
+                    if (request.draft?.auto_send && typeof mailApi.send === 'function') {
+                        const sendResult = await mailApi.send(composeResult.draft.draft_id, { confirmed: true });
+                        if (sendResult?.ok === true) {
+                            if (workingMemory) {
+                                workingMemory.setLastOperation('mail', 'compose_sent');
+                                workingMemory.setCurrentItem('mail_draft', null, null);
+                            }
+                            return createStructuredResult({
+                                ok: true, domain: 'mail', operation: 'compose',
+                                draft: sendResult?.draft || composeResult?.draft || null,
+                                reply_text: isEnglish(locale)
+                                    ? `Mail sent to ${recipientName}.`
+                                    : `Mail envoye a ${recipientName}.`
+                            });
+                        }
+                    }
+                    if (workingMemory) {
+                        const rawDraftId = String(composeResult.draft.draft_id || '').trim();
+                        const draftId = createCommunicationItemId('mail', rawDraftId);
+                        workingMemory.setCurrentItem('mail_draft', draftId, {
+                            ...(composeResult.draft || {}),
+                            draft_id: draftId,
+                            raw_draft_id: rawDraftId,
+                            comm_surface: 'mail'
+                        });
+                        workingMemory.setLastOperation('mail', 'compose_drafted');
+                    }
+                    return createStructuredResult({
+                        ok: true, domain: 'mail', operation: 'compose',
+                        draft: composeResult.draft || null,
+                        reply_text: isEnglish(locale)
+                            ? `Draft mail to ${recipientName} prepared. Say "send the mail" to send it.`
+                            : `Brouillon de mail a ${recipientName} prepare. Dis "envoie le mail" pour l'envoyer.`
+                    });
+                }
+                return createStructuredResult({
+                    ok: false, domain: 'mail', operation: 'compose', error: composeResult?.error || 'mail_compose_failed',
+                    reply_text: isEnglish(locale) ? 'I could not prepare the mail draft.' : 'Je n ai pas pu preparer le brouillon.'
+                });
+            }
+            return createStructuredResult({
+                ok: false, domain: 'mail', operation: 'compose', error: 'mail_compose_unavailable',
+                reply_text: isEnglish(locale) ? 'Mail composition is not available.' : 'La composition de mail n est pas disponible.'
+            });
+        }
+
+        case 'reply_prompt':
+            if (!request.draft?.reply_text) {
+                return createStructuredResult({
+                    ok: false, domain: 'mail', operation: 'reply_prompt', error: 'mail_reply_text_missing',
+                    reply_text: isEnglish(locale) ? 'What should I reply to this mail?' : 'Que veux-tu que je reponde a ce mail ?'
+                });
+            }
+        // fall through to reply when draft_text is available
 
         case 'reply': {
             const draftText = request.draft?.reply_text;
@@ -1270,6 +1382,7 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
                     items.length >= 1
                         ? buildContactsFieldReply(items, {
                             locale,
+                            contact_field: request.contact_field || null,
                             utteranceRaw: request.source?.utterance_raw || '',
                             utteranceNormalized: request.source?.utterance_normalized || ''
                         })
@@ -1288,6 +1401,7 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
             ) {
                 const multiFieldReply = buildContactsFieldReply(currentResultSet, {
                     locale,
+                    contact_field: request.contact_field || null,
                     utteranceRaw: request.source?.utterance_raw || '',
                     utteranceNormalized: request.source?.utterance_normalized || ''
                 });
@@ -1305,11 +1419,11 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
                 const lookup = await contactsApi.search(queryText, { limit: 5 });
                 const matched = Array.isArray(lookup?.items) ? lookup.items[0] : null;
                 targetId = matched?.source_contact_id || matched?.id || '';
-                if (matched && workingMemory && targetId) {
+                if (matched && workingMemory && typeof workingMemory.setCurrentItem === 'function' && targetId) {
                     workingMemory.setCurrentItem('contacts', targetId, matched);
                 }
             }
-            if (!targetId && workingMemory) {
+            if (!targetId && workingMemory && !queryText) {
                 targetId = workingMemory.getCurrentItemId('contacts');
             }
             if (!targetId || typeof contactsApi.read !== 'function') {
@@ -1320,8 +1434,10 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
             }
             const result = await contactsApi.read(targetId);
             if (result?.ok === true && result.contact) {
-                if (workingMemory) {
+                if (workingMemory && typeof workingMemory.setCurrentItem === 'function') {
                     workingMemory.setCurrentItem('contacts', targetId, result.contact);
+                }
+                if (workingMemory && typeof workingMemory.setLastOperation === 'function') {
                     workingMemory.setLastOperation('contacts', 'read');
                 }
                 const label = String(result.contact?.name || result.contact?.display_name || result.contact?.email || '').trim();
@@ -1330,6 +1446,7 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
                     item: result.contact,
                     reply_text: buildContactQueryReply(result.contact, {
                         locale,
+                        contact_field: request.contact_field || null,
                         utteranceRaw: request.source?.utterance_raw || '',
                         utteranceNormalized: request.source?.utterance_normalized || ''
                     }) || (label ? `Contact: ${label}.` : buildContactsReply([result.contact], locale))

@@ -503,8 +503,8 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             name: 'ui.create_boxes',
             description: 'Create selectable elements',
             capabilities: ['atome.write'],
-            risk_level: 'LOW',
-            params_schema: {
+            risk_tier: 'LOW',
+            parameters: {
                 properties: { count: { type: 'number' } }
             },
             handler: async ({ params }) => {
@@ -518,7 +518,7 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             name: 'ui.select_all',
             description: 'Select all elements',
             capabilities: ['atome.write'],
-            risk_level: 'LOW',
+            risk_tier: 'LOW',
             handler: async () => {
                 const ids = Array.from(runtime.items.keys());
                 setSelection(ids);
@@ -531,8 +531,8 @@ if (typeof window !== 'undefined' && typeof window.$ === 'function') {
             name: 'ui.move_selection',
             description: 'Move selection',
             capabilities: ['atome.write'],
-            risk_level: 'LOW',
-            params_schema: {
+            risk_tier: 'LOW',
+            parameters: {
                 properties: {
                     dx: { type: 'number' },
                     dy: { type: 'number' }

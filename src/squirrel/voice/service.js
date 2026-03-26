@@ -1108,6 +1108,12 @@ export const createVoiceService = ({
         listTraces(options = {}) {
             return typeof orchestrator.listTraces === 'function' ? orchestrator.listTraces(options) : [];
         },
+        queryTraces(options = {}) {
+            return typeof orchestrator.queryTraces === 'function' ? orchestrator.queryTraces(options) : [];
+        },
+        traceMetrics(options = {}) {
+            return typeof orchestrator.traceMetrics === 'function' ? orchestrator.traceMetrics(options) : {};
+        },
         listPendingMutations(options = {}) {
             return typeof orchestrator.listPendingMutations === 'function' ? orchestrator.listPendingMutations(options) : [];
         },

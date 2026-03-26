@@ -1,5 +1,5 @@
 // Record audio UI (icon + selectors)
-// - Positions match legacy layout
+// - Positions match the existing layout
 // - Backend: iPlug2 or WebAudio
 // - Source: mic or plugin output
 
@@ -425,7 +425,7 @@
 
         updateTitle(icon);
 
-        // Backend selector (same position as legacy)
+        // Backend selector
         try {
             const backendHolder = $('div', {
                 id: 'record-audio-backend-selector-holder',
@@ -470,7 +470,7 @@
             console.warn('[record_audio_UI] Failed to mount backend selector:', e && e.message ? e.message : e);
         }
 
-        // Source selector (same position as legacy)
+        // Source selector
         try {
             const sourceHolder = $('div', {
                 id: 'record-audio-source-selector-holder',
