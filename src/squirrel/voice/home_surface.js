@@ -150,16 +150,16 @@ const localizeVoiceError = (code = '', locale = 'fr-FR') => {
     case 'browser_speech_recognition_unavailable':
         return english
             ? 'Voice recognition is unavailable here. Do you want to continue by typing?'
-            : 'La reconnaissance vocale est indisponible ici. Veux-tu continuer par ecrit ?';
+            : 'La reconnaissance vocale est indisponible ici. Veux-tu continuer par écrit ?';
     case 'browser_speech_permission_check_failed':
     case 'browser_speech_service_not_allowed':
         return english
             ? 'Voice recognition permission checks failed here. Do you want to continue by typing?'
-            : 'La verification du service vocal a echoue ici. Veux-tu continuer par ecrit ?';
+            : 'La vérification du service vocal a échoué ici. Veux-tu continuer par écrit ?';
     case 'microphone_unavailable':
         return english
             ? 'Microphone access is unavailable.'
-            : 'L acces au micro est indisponible.';
+            : "L'accès au micro est indisponible.";
     case 'audio_context_unavailable':
         return english
             ? 'Audio visualization is unavailable here.'
@@ -171,7 +171,7 @@ const localizeVoiceError = (code = '', locale = 'fr-FR') => {
     default:
         return english
             ? 'Voice input is unavailable right now. Do you want to continue by typing?'
-            : 'L entree vocale est indisponible pour le moment. Veux-tu continuer par ecrit ?';
+            : "L'entrée vocale est indisponible pour le moment. Veux-tu continuer par écrit ?";
     }
 };
 
@@ -179,19 +179,19 @@ const localizeExecutionError = (code = '', locale = 'fr-FR') => {
     const english = isEnglish(locale);
     switch (toText(code)) {
     case 'no_ai_key_configured':
-        return english ? 'No AI key is configured.' : "Aucune cle IA n'est configuree.";
+        return english ? 'No AI key is configured.' : "Aucune clé IA n'est configurée.";
     case 'provider_quota_exceeded':
         return english
             ? 'The AI quota or credit balance is exhausted. Check billing or buy more credits.'
-            : "Le quota ou les credits de l'IA sont epuises. Verifie la facturation ou recharge les credits.";
+            : "Le quota ou les crédits de l'IA sont épuisés. Vérifie la facturation ou recharge les crédits.";
     case 'provider_billing_issue':
         return english
             ? 'The AI API access is blocked by a billing or project configuration issue.'
-            : "L'acces API de l'IA est bloque par un probleme de facturation ou de configuration du projet.";
+            : "L'accès API de l'IA est bloqué par un problème de facturation ou de configuration du projet.";
     case 'provider_rate_limited':
         return english
             ? 'The AI is temporarily rate-limited. Try again in a moment.'
-            : "L'IA est temporairement limitee. Reessaie dans un instant.";
+            : "L'IA est temporairement limitée. Réessaie dans un instant.";
     case 'provider_timeout':
     case 'provider_auth_failed':
     case 'provider_unreachable':
@@ -199,9 +199,9 @@ const localizeExecutionError = (code = '', locale = 'fr-FR') => {
     case 'voice_agent_bridge_unavailable':
     case 'voice_execution_bridge_unavailable':
     case 'voice_toolchain_empty':
-        return english ? 'The AI is not responding.' : "L'IA ne repond pas.";
+        return english ? 'The AI is not responding.' : "L'IA ne répond pas.";
     case 'mail_connector_unavailable':
-        return english ? 'I do not have access to your mail here yet.' : "Je n'ai pas encore acces a tes mails ici.";
+        return english ? 'I do not have access to your mail here yet.' : "Je n'ai pas encore accès à tes mails ici.";
     default:
         return '';
     }
@@ -219,12 +219,12 @@ const localizeDownloadProgress = ({ status = 'downloading', model = '', progress
     const modelName = toText(model);
     const suffix = Number.isFinite(Number(progress)) ? ` ${Math.max(0, Math.min(100, Math.round(Number(progress))))}%` : '';
     if (normalizedStatus === 'ready' || normalizedStatus === 'done' || normalizedStatus === 'completed') {
-        return english ? 'Voice model ready.' : 'Modele vocal pret.';
+        return english ? 'Voice model ready.' : 'Modèle vocal prêt.';
     }
     if (normalizedStatus === 'error' || normalizedStatus === 'failed') {
-        return english ? 'Voice model download failed.' : 'Le telechargement du modele vocal a echoue.';
+        return english ? 'Voice model download failed.' : 'Le téléchargement du modèle vocal a échoué.';
     }
-    const base = english ? 'Downloading voice model' : 'Telechargement du modele vocal';
+    const base = english ? 'Downloading voice model' : 'Téléchargement du modèle vocal';
     return `${base}${modelName ? ` ${modelName}` : ''}${suffix}`;
 };
 
@@ -251,7 +251,7 @@ const localizeReadyLine = (locale = 'fr-FR', userName = '') => {
     if (isEnglish(locale)) {
         return userName ? `Hi ${userName}, I'm listening.` : 'Hi, what do you want?';
     }
-    return userName ? `Salut ${userName}, je t ecoute.` : 'Salut, que veux-tu ?';
+    return userName ? `Salut ${userName}, je t'écoute.` : 'Salut, que veux-tu ?';
 };
 
 const localizeClosingLine = (locale = 'fr-FR') => (
@@ -264,25 +264,25 @@ const localizeTextOnlyReadyLine = (locale = 'fr-FR', userName = '') => {
     if (isEnglish(locale)) {
         return userName ? `Hi ${userName}, type what you want and I will answer out loud.` : 'Hi, type what you want and I will answer out loud.';
     }
-    return userName ? `Salut ${userName}, ecris-moi ce que tu veux et je te repondrai a voix haute.` : 'Salut, ecris-moi ce que tu veux et je te repondrai a voix haute.';
+    return userName ? `Salut ${userName}, écris-moi ce que tu veux et je te répondrai à voix haute.` : 'Salut, écris-moi ce que tu veux et je te répondrai à voix haute.';
 };
 
 const localizeTextOnlyInfo = (locale = 'fr-FR') => (
     isEnglish(locale)
         ? 'Text mode only. Type your request below.'
-        : 'Mode texte uniquement. Ecris ta demande ci-dessous.'
+        : 'Mode texte uniquement. Écris ta demande ci-dessous.'
 );
 
 const localizeDeclineLine = (locale = 'fr-FR') => (
     isEnglish(locale)
         ? "Okay, I will stop here."
-        : "D'accord, j'en reste la."
+        : "D'accord, j'en reste là."
 );
 
 const localizeNoResultLine = (locale = 'fr-FR') => (
     isEnglish(locale)
         ? 'I could not produce a usable answer for that request yet.'
-        : "Je n'ai pas encore pu produire une reponse exploitable pour cette demande."
+        : "Je n'ai pas encore pu produire une réponse exploitable pour cette demande."
 );
 
 const createElement = (doc, tag, style = {}, attrs = {}) => {
@@ -321,17 +321,17 @@ const saveHistory = (env, history) => {
 
 const createLabels = (locale) => ({
     title: 'eVe',
-    listening: isEnglish(locale) ? 'Listening' : 'J ecoute',
-    thinking: isEnglish(locale) ? 'Thinking' : 'Je reflechis',
+    listening: isEnglish(locale) ? 'Listening' : "J'écoute",
+    thinking: isEnglish(locale) ? 'Thinking' : 'Je réfléchis',
     speaking: isEnglish(locale) ? 'Speaking' : 'Je parle',
     idle: '',
     unavailable: isEnglish(locale) ? 'Voice unavailable' : 'Voix indisponible',
     stop: isEnglish(locale) ? 'Stop' : 'Stop',
-    resume: isEnglish(locale) ? 'Resume listening' : 'Reprendre l ecoute',
+    resume: isEnglish(locale) ? 'Resume listening' : "Reprendre l'écoute",
     send: isEnglish(locale) ? 'Send' : 'Envoyer',
     placeholder: isEnglish(locale) ? 'Type a message or speak...' : 'Tape un message ou parle...',
     transcriptLabel: isEnglish(locale) ? 'Transcript' : 'Transcription',
-    empty: isEnglish(locale) ? 'Start speaking to talk with eVe.' : 'Commence a parler pour discuter avec eVe.',
+    empty: isEnglish(locale) ? 'Start speaking to talk with eVe.' : 'Commence à parler pour discuter avec eVe.',
     user: isEnglish(locale) ? 'You' : 'Vous',
     assistant: 'eVe'
 });
@@ -358,7 +358,7 @@ const readAssistantText = (response = {}, locale = 'fr-FR') => {
     if (one && !looksLikeInternalToolSummary(one)) return one;
 
     if (response?.ok === true && response?.executed === true) {
-        return isEnglish(locale) ? 'Done.' : 'C est fait.';
+        return isEnglish(locale) ? 'Done.' : "C'est fait.";
     }
     return '';
 };

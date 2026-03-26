@@ -537,7 +537,7 @@ const buildMailSummaryPrompt = ({
     const payload = items.slice(0, 5).map((item, index) => ({
         rank: index + 1,
         subject: String(item?.subject || '').trim() || '(sans objet)',
-        from: String(item?.from?.name || item?.from?.address || '').trim() || '(expediteur inconnu)',
+        from: String(item?.from?.name || item?.from?.address || '').trim() || '(expéditeur inconnu)',
         unread: item?.unread === true,
         preview: truncateForAi(stripQuotedContent(item?.preview || item?.body_text || ''), 800),
         body_text: truncateForAi(stripQuotedContent(item?.body_text || ''), 1600)
@@ -556,14 +556,14 @@ const buildMailSummaryPrompt = ({
             'Do not say "message(s) out of". Do not produce raw counts only.'
         ]
         : [
-            'Tu es eVe, tu resumes des emails recents pour une reponse vocale.',
+            'Tu es eVe, tu résumes des emails récents pour une réponse vocale.',
             'Utilise uniquement les emails fournis.',
-            'Reponds en francais naturel, concis, adapte a l oral.',
-            'Mentionne les expediteurs importants, les sujets, et les actions evidentes si elles existent.',
-            'NE LIS JAMAIS les dates, les heures, les longs chiffres, les adresses email ou les en-tetes techniques.',
-            'NE CITE JAMAIS le contenu des reponses precedentes (lignes commencant par >).',
-            'Chaque mail doit etre resume en UNE SEULE phrase courte centree sur le point principal.',
-            "S'il n'y a aucun mail non lu mais qu'il y a des mails recents, resume quand meme les derniers mails.",
+            "Réponds en français naturel, concis, adapté à l'oral.",
+            'Mentionne les expéditeurs importants, les sujets, et les actions évidentes si elles existent.',
+            'NE LIS JAMAIS les dates, les heures, les longs chiffres, les adresses email ou les en-têtes techniques.',
+            'NE CITE JAMAIS le contenu des réponses précédentes (lignes commençant par >).',
+            'Chaque mail doit être résumé en UNE SEULE phrase courte centrée sur le point principal.',
+            "S'il n'y a aucun mail non lu mais qu'il y a des mails récents, résume quand même les derniers mails.",
             'Ne dis pas "message(s) out of". Ne renvoie pas seulement un compteur brut.'
         ];
 
