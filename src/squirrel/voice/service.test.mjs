@@ -302,21 +302,32 @@ FakeSpeechRecognition.latest.stop();
 const listened = await listenPromise;
 assert.equal(listened.text, 'Ou en est mon compte', 'voice.listen should resolve with the final browser STT transcript');
 
+const flushSpeech = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    synth.finishCurrent();
+};
+
 const mailSession = runtime.createSession({ locale: 'fr-FR' });
-const mailIntent = await voice.executeUtterance('Lis mes mails', {
+const mailIntentPromise = voice.executeUtterance('Lis mes mails', {
     session_id: mailSession.session_id
 });
+await flushSpeech();
+const mailIntent = await mailIntentPromise;
 assert.equal(mailIntent.transport, 'mail_api', 'voice service should expose utterance execution through the orchestrator');
 runtime.handleLocalCommand(mailSession.session_id, 'reponds');
 const replyPlan = voice.planFollowup(mailSession.session_id);
 assert.equal(replyPlan.action, 'reply_current', 'voice service should resolve contextual reply followups');
-const replyExecution = await voice.executeFollowup(mailSession.session_id);
+const replyExecutionPromise = voice.executeFollowup(mailSession.session_id);
+await flushSpeech();
+const replyExecution = await replyExecutionPromise;
 assert.equal(replyExecution.transport, 'mail_api', 'voice service should execute contextual followups through the orchestrator facade');
 
 const runtimeSession = runtime.createSession({ locale: 'fr-FR' });
-const runtimeExecution = await voice.executeUtterance('Ouvre Mtrack', {
+const runtimeExecutionPromise = voice.executeUtterance('Ouvre Mtrack', {
     session_id: runtimeSession.session_id
 });
+await flushSpeech();
+const runtimeExecution = await runtimeExecutionPromise;
 assert.equal(runtimeExecution.executed, true, 'voice service should execute runtime utterances through MCP/runtime when available');
 assert.equal(runtimeExecution.result.tool_id, 'tool.main.mtrack', 'voice service should preserve the runtime tool id in execution results');
 

@@ -106,7 +106,7 @@ assert.equal(startListeningCalls, 0, 'text-only mode should never start micropho
 assert.equal(executeUtteranceCalls, 1, 'text-only mode should still execute typed utterances');
 assert.equal(
     speaks[0],
-    'Salut Jean-Eric, ecris-moi ce que tu veux et je te repondrai a voix haute.',
+    'Salut Jean-Eric, écris-moi ce que tu veux et je te répondrai à voix haute.',
     'text-only mode should announce typed interaction mode on activation'
 );
 assert.equal(
@@ -126,7 +126,7 @@ assert.equal(
     'text-only mode should never leak internal tool summaries into assistant history'
 );
 assert.equal(
-    updatedState.history.some((entry) => entry.role === 'assistant' && entry.text === 'C est fait.'),
+    updatedState.history.some((entry) => entry.role === 'assistant' && entry.text === "C'est fait."),
     true,
     'text-only mode should fall back to a localized neutral completion when no user-facing reply is provided'
 );

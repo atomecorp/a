@@ -46,6 +46,11 @@ const voiceApi = {
     },
     async startListening() {
         calls.startListening += 1;
+        listeners.forEach((listener) => listener({
+            type: 'voice.stt.state',
+            session_id: `eve_session_${sessionCounter}`,
+            payload: { state: 'listening' }
+        }));
         if (calls.startListening === 2) {
             return {
                 session_id: `eve_session_${sessionCounter}`,
@@ -105,7 +110,7 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 
 const state = controller.getState();
 assert.equal(calls.startListening >= 1, true, 'home voice surface should auto-start listening when activated');
-assert.equal(calls.speak[0], 'Salut Jean-Eric, je t ecoute.', 'home voice surface should announce readiness when activated');
+assert.equal(calls.speak[0], "Salut Jean-Eric, je suis prêt à t'écouter.", 'home voice surface should announce readiness when activated');
 assert.equal(calls.executeUtterance, 1, 'home voice surface should execute the utterance once and ignore its own echoed reply');
 assert.equal(state.history.some((entry) => entry.role === 'user' && entry.text === 'Lis mes mails'), true, 'home voice surface should store the user question in history');
 assert.equal(state.history.some((entry) => entry.role === 'assistant' && entry.text === 'Reponse pour: Lis mes mails'), true, 'home voice surface should store the assistant reply in history');
@@ -113,7 +118,7 @@ assert.equal(state.history.some((entry) => entry.role === 'assistant' && entry.t
 const action = host.querySelector('[data-role="eve-voice-action"]');
 const input = host.querySelector('[data-role="eve-voice-input"]');
 const send = host.querySelector('[data-role="eve-voice-send"]');
-assert.equal(action.textContent, 'Reprendre l ecoute', 'home voice surface should wait before listening again after speaking to avoid hearing itself');
+assert.equal(action.textContent, "Reprendre l'écoute", 'home voice surface should wait before listening again after speaking to avoid hearing itself');
 input.value = 'Ouvre Mtrack';
 send.click();
 await new Promise((resolve) => setTimeout(resolve, 0));

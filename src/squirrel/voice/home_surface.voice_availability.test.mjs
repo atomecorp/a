@@ -63,7 +63,7 @@ assert.equal(
     'home voice surface should keep a visible STT failure message after a failed listen start'
 );
 assert.equal(
-    controller.getState().errorMessage.includes('continuer par ecrit') || controller.getState().errorMessage.includes('continue by typing'),
+    controller.getState().errorMessage.includes('continuer par écrit') || controller.getState().errorMessage.includes('continue by typing'),
     true,
     'home voice surface should propose a typed fallback path when voice recognition fails'
 );

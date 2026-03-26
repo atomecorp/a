@@ -98,7 +98,7 @@ const ensureDilasPanel = async ({
             return;
         }
         if (state.processing) {
-            headerVoiceText.textContent = 'Je reflechis';
+            headerVoiceText.textContent = 'Je réfléchis';
             return;
         }
         if (state.speaking) {
@@ -106,7 +106,7 @@ const ensureDilasPanel = async ({
             return;
         }
         if (state.listening) {
-            headerVoiceText.textContent = 'J ecoute';
+            headerVoiceText.textContent = "J'écoute";
             return;
         }
         headerVoiceText.textContent = '';
@@ -117,7 +117,7 @@ const ensureDilasPanel = async ({
         surfacePromise = mountHomeVoiceSurface({
             env,
             host,
-            textOnly: true
+            textOnly: false
         }).catch((error) => {
             surfacePromise = null;
             env.console?.warn?.('[voice.dilas_panel] Failed to mount Dilas surface:', error?.message || error);

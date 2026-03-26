@@ -249,9 +249,9 @@ const resolveUserFirstName = (env) => {
 
 const localizeReadyLine = (locale = 'fr-FR', userName = '') => {
     if (isEnglish(locale)) {
-        return userName ? `Hi ${userName}, I'm listening.` : 'Hi, what do you want?';
+        return userName ? `Hi ${userName}, I'm ready to listen.` : "I'm ready to listen.";
     }
-    return userName ? `Salut ${userName}, je t'écoute.` : 'Salut, que veux-tu ?';
+    return userName ? `Salut ${userName}, je suis prêt à t'écouter.` : "Je suis prêt à t'écouter.";
 };
 
 const localizeClosingLine = (locale = 'fr-FR') => (
@@ -404,7 +404,9 @@ export const mountHomeVoiceSurface = async ({
         bargeInArmAt: 0,
         pendingTranscriptPrefix: '',
         lastFailureNotice: '',
-        activationPromise: null
+        activationPromise: null,
+        pendingReadyAnnouncement: false,
+        readyAnnouncementTask: null
     };
 
     const locale = () => resolveLocale();
@@ -933,6 +935,28 @@ export const mountHomeVoiceSurface = async ({
         }
     };
 
+    const announceReadyAndRestartListening = async () => {
+        if (textOnly || !state.active) return;
+        if (state.readyAnnouncementTask) return state.readyAnnouncementTask;
+        state.pendingReadyAnnouncement = false;
+        state.readyAnnouncementTask = (async () => {
+            state.suppressAutoRestartOnce = true;
+            if (state.listening) {
+                await stopListeningLoop();
+            }
+            await speakAssistantLine(localizeReadyLine(locale(), resolveUserFirstName(env)), {
+                pushHistoryEntry: true,
+                rememberReply: true
+            });
+            if (state.active && !state.listening && !state.processing && !state.speaking) {
+                void startListeningLoop();
+            }
+        })().finally(() => {
+            state.readyAnnouncementTask = null;
+        });
+        return state.readyAnnouncementTask;
+    };
+
     const handleDecisionUtterance = async (text) => {
         const normalized = toText(text);
         const affirmative = isAffirmativeDecision(normalized);
@@ -1179,6 +1203,16 @@ export const mountHomeVoiceSurface = async ({
             if (!state.sessionId && event.session_id) {
                 state.sessionId = event.session_id;
             }
+            if (event.type === 'voice.stt.state') {
+                const next = toText(event.payload?.state);
+                debugVoice('voice.stt.state', {
+                    sessionId: event.session_id,
+                    state: next
+                });
+                if (next === 'listening' && state.pendingReadyAnnouncement) {
+                    void announceReadyAndRestartListening();
+                }
+            }
             if (event.type === 'voice.stt.partial' || event.type === 'voice.stt.final') {
                 state.transcriptDraft = toText(event.payload?.text);
                 debugVoice(event.type, {
@@ -1309,15 +1343,16 @@ export const mountHomeVoiceSurface = async ({
             state.active = true;
             state.activationPromise = (async () => {
                 await startVoiceMeter();
-                const readyLine = textOnly
-                    ? localizeTextOnlyReadyLine(locale(), resolveUserFirstName(env))
-                    : localizeReadyLine(locale(), resolveUserFirstName(env));
-                await speakAssistantLine(readyLine, {
-                    pushHistoryEntry: true,
-                    rememberReply: true
-                });
-                if (state.active && !textOnly) {
-                    await startListeningLoop();
+                if (textOnly) {
+                    await speakAssistantLine(localizeTextOnlyReadyLine(locale(), resolveUserFirstName(env)), {
+                        pushHistoryEntry: true,
+                        rememberReply: true
+                    });
+                    return;
+                }
+                if (state.active) {
+                    state.pendingReadyAnnouncement = true;
+                    void startListeningLoop();
                 }
             })().finally(() => {
                 state.activationPromise = null;

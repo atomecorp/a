@@ -290,11 +290,12 @@ export const createVoiceService = ({
             return response;
         }
         try {
-            await tts.speak(text, {
+            const started = await tts.speak(text, {
                 ...options,
                 session_id: options?.session_id,
                 lang: resolveResponseLocale(response, options)
             });
+            await (started?.promise || Promise.resolve(started));
         } catch (_) {
             // Keep the orchestration result even if the reply could not be spoken.
         }
