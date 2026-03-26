@@ -125,7 +125,7 @@ assert.equal(completed.usage.total_tokens, 18, 'provider client should expose pr
 
 const previousWindow = globalThis.window;
 globalThis.window = {
-    __TAURI_INTERNALS__: { invoke() {} },
+    __TAURI_INTERNALS__: { invoke() { } },
     location: { protocol: 'http:' },
     ATOME_LOCAL_HTTP_PORT: 3000
 };

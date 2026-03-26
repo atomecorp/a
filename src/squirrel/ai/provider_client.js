@@ -39,7 +39,7 @@ const normalizeUsage = (usage = {}) => ({
 
 const createTimeoutController = (timeoutMs) => {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || typeof AbortController !== 'function') {
-        return { controller: null, clear: () => {} };
+        return { controller: null, clear: () => { } };
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('provider_timeout'), timeoutMs);
@@ -68,7 +68,7 @@ const withMergedSignal = ({ signal = null, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
     if (!timeout.controller) {
         return {
             signal,
-            clear: () => {}
+            clear: () => { }
         };
     }
     if (typeof AbortController !== 'function') {
