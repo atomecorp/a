@@ -217,7 +217,15 @@ const resolveVoiceApi = (env, explicitApi = null) => explicitApi || env?.Squirre
 
 const resolveLocale = () => {
     const locale = toText(getEveLocale?.()) || toText(globalThis?.document?.documentElement?.lang) || 'fr-FR';
-    return locale || 'fr-FR';
+    if (!locale) return 'fr-FR';
+    const normalized = locale.replace('_', '-').toLowerCase();
+    if (normalized === 'fr') return 'fr-FR';
+    if (normalized === 'en') return 'en-US';
+    if (/^[a-z]{2}-[a-z]{2}$/.test(normalized)) {
+        const [language, region] = normalized.split('-');
+        return `${language}-${region.toUpperCase()}`;
+    }
+    return locale;
 };
 
 const isEnglish = (locale = '') => toText(locale).toLowerCase().startsWith('en');
@@ -707,7 +715,7 @@ export const mountHomeVoiceSurface = async ({
                 continuous: true,
                 silenceMs: interruptSttSilenceMs,
                 finalSilenceMs: interruptSttFinalSilenceMs,
-                maxAlternatives: 1
+                maxAlternatives: 3
             });
             const interruptPromise = started?.promise || Promise.resolve(null);
             state.interruptListeningPromise = interruptPromise;
@@ -1355,7 +1363,7 @@ export const mountHomeVoiceSurface = async ({
                 continuous: true,
                 silenceMs: sttSilenceMs,
                 finalSilenceMs: sttFinalSilenceMs,
-                maxAlternatives: 3
+                maxAlternatives: 5
             });
             state.listeningPromise = started?.promise || Promise.resolve(null);
             const result = await state.listeningPromise;

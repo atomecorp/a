@@ -541,7 +541,8 @@ export const mountVoicePanel = async ({
                 const started = await api.startListening({
                     session_id: sessionId,
                     lang: 'fr-FR',
-                    partial: true
+                    partial: true,
+                    maxAlternatives: 5
                 });
                 started?.promise
                     ?.then(async () => {

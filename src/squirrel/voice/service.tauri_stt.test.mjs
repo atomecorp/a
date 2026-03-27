@@ -71,7 +71,7 @@ const voice = createVoiceService({
 });
 
 const started = await voice.stt.start({
-    lang: 'fr-FR',
+    lang: 'fr',
     partial: true,
     silenceMs: 5
 });
@@ -79,6 +79,69 @@ const started = await voice.stt.start({
 const final = await started.promise;
 assert.equal(final.provider, 'tauri_plugin_stt', 'voice.stt.start should expose the native Tauri STT provider');
 assert.equal(final.text, 'Releve mes mails', 'voice.stt.start should resolve with the native final transcript');
+
+resetListeners();
+
+let tauriStartConfig = null;
+const correctedEnv = {
+    __TAURI__: {
+        stt: {
+            async checkPermission() {
+                return {
+                    microphone: 'granted',
+                    speechRecognition: 'granted'
+                };
+            },
+            async start(config = {}) {
+                tauriStartConfig = config;
+                emit('stateChange', { state: 'listening', config });
+                setTimeout(() => {
+                    emit('result', {
+                        transcript: 'ouvre m track',
+                        isFinal: true,
+                        confidence: 0.77
+                    });
+                }, 0);
+            },
+            async stop() {
+                setTimeout(() => {
+                    emit('stateChange', { state: 'idle' });
+                }, 0);
+                return true;
+            },
+            async onResult(handler) {
+                listeners.result.add(handler);
+                return () => listeners.result.delete(handler);
+            },
+            async onStateChange(handler) {
+                listeners.stateChange.add(handler);
+                return () => listeners.stateChange.delete(handler);
+            },
+            async onError(handler) {
+                listeners.error.add(handler);
+                return () => listeners.error.delete(handler);
+            }
+        }
+    }
+};
+
+const correctedRuntime = createVoiceSessionRuntime();
+const correctedVoice = createVoiceService({
+    env: correctedEnv,
+    sessionRuntime: correctedRuntime,
+    aiPlanner: { async plan() { return null; } }
+});
+
+const correctedStarted = await correctedVoice.stt.start({
+    lang: 'fr',
+    partial: true,
+    speechHints: ['Mtrack'],
+    silenceMs: 5
+});
+const correctedFinal = await correctedStarted.promise;
+assert.equal(tauriStartConfig?.language, 'fr-FR', 'native desktop STT should normalize short French locales to fr-FR');
+assert.equal(tauriStartConfig?.maxAlternatives, 5, 'native desktop STT should request more alternatives by default');
+assert.equal(correctedFinal.text, 'ouvre Mtrack', 'native desktop STT should normalize domain-specific product names in the final transcript');
 
 const snapshot = runtime.getSession(started.session_id);
 assert.equal(snapshot.transcript.final, 'Releve mes mails', 'native Tauri STT should finalize the runtime transcript');

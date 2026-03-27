@@ -10,6 +10,15 @@ import {
 const makeResult = (text, { isFinal = false, confidence = 0.9 } = {}) =>
     Object.assign([{ transcript: text, confidence }], { isFinal, length: 1 });
 
+const makeAlternativesResult = (alternatives = [], { isFinal = false } = {}) =>
+    Object.assign(
+        alternatives.map((entry) => ({
+            transcript: entry?.transcript || '',
+            confidence: Number.isFinite(entry?.confidence) ? entry.confidence : 0
+        })),
+        { isFinal, length: alternatives.length }
+    );
+
 class FakeSpeechRecognition {
     static latest = null;
 
@@ -216,7 +225,7 @@ const hybridProviders = resolveVoiceProviders({
         }
     }
 });
-assert.equal(hybridProviders.stt.selected, 'tauri_plugin_stt', 'native Tauri STT should win over browser STT when both are available inside the desktop runtime');
+assert.equal(hybridProviders.stt.selected, 'tauri_plugin_stt', 'native Tauri STT should win by default when both browser and native desktop STT are available inside the desktop runtime');
 
 const forcedBrowserProviders = resolveVoiceProviders({
     ...env,
@@ -230,12 +239,26 @@ const forcedBrowserProviders = resolveVoiceProviders({
 });
 assert.equal(forcedBrowserProviders.stt.selected, 'browser_web_speech', 'an explicit browser override should still force browser STT when requested');
 
+const forcedTauriProviders = resolveVoiceProviders({
+    ...env,
+    SQUIRREL_STT_PROVIDER: 'tauri',
+    __TAURI__: {
+        stt: {
+            async start() {},
+            async stop() {}
+        }
+    }
+});
+assert.equal(forcedTauriProviders.stt.selected, 'tauri_plugin_stt', 'an explicit native override should still force the desktop STT backend when requested');
+
 const started = await voice.stt.start({
-    lang: 'fr-FR',
+    lang: 'fr',
     partial: true
 });
 assert.equal(started.provider, 'browser_web_speech', 'voice.stt.start should expose the selected browser STT provider');
 assert.equal(FakeSpeechRecognition.latest.started, true, 'speech recognition should start immediately');
+assert.equal(FakeSpeechRecognition.latest.lang, 'fr-FR', 'speech recognition should normalize short French locales to fr-FR');
+assert.equal(FakeSpeechRecognition.latest.maxAlternatives, 5, 'speech recognition should request more STT alternatives for reranking');
 FakeSpeechRecognition.latest.emitResult([makeResult('Lis', { isFinal: false, confidence: 0.75 })]);
 let snapshot = runtime.getSession(started.session_id);
 assert.equal(snapshot.phase, 'listening', 'interim STT should keep the session in listening');
@@ -249,6 +272,20 @@ assert.equal(snapshot.transcript.final, 'Lis le mail suivant', 'the session runt
 let telemetry = voice.telemetry.snapshot(started.session_id);
 assert.equal(telemetry.metrics.stt_first_partial_ms > 0, true, 'voice telemetry should measure time to first STT partial');
 assert.equal(telemetry.metrics.stt_final_ms > 0, true, 'voice telemetry should measure time to final STT result');
+
+const rerankStarted = await voice.stt.start({
+    lang: 'fr',
+    partial: true,
+    speechHints: ['Mtrack']
+});
+FakeSpeechRecognition.latest.emitResult([
+    makeAlternativesResult([
+        { transcript: 'ouvre mes tracks', confidence: 0.93 },
+        { transcript: 'ouvre m track', confidence: 0.61 }
+    ], { isFinal: true })
+]);
+const rerankedFinal = await voice.stt.stop(rerankStarted.session_id);
+assert.equal(rerankedFinal.text, 'ouvre Mtrack', 'browser STT should rerank alternatives using speech hints and normalize product names');
 
 const speaking = await voice.tts.speak('Je lis le prochain mail.', {
     session_id: started.session_id,

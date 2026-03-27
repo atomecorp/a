@@ -9,6 +9,7 @@ import { createToolRouter } from './tool_router.js';
 import { resolveIdentityContext } from './identity_resolver.js';
 import { createPersistentMemoryStore } from '../ai/persistent_memory.js';
 import { createAiTraceStore } from '../ai/trace_store.js';
+import { collectProjectSceneContext, pushMutation, pushError } from './project_scene_collector.js';
 
 export const VOICE_ORCHESTRATOR_EVENT_NAME = 'squirrel:voice:orchestrator';
 
@@ -344,6 +345,7 @@ const pickFirstArray = (value, depth = 0) => {
     if (Array.isArray(value.items)) return value.items;
     if (Array.isArray(value.events)) return value.events;
     if (Array.isArray(value.contacts)) return value.contacts;
+    if (Array.isArray(value.atomes)) return value.atomes;
     if (Array.isArray(value.results)) {
         for (const entry of value.results) {
             const nested = pickFirstArray(entry, depth + 1);
@@ -489,6 +491,96 @@ const buildStructuredReplyFromPayload = (payload, intent = {}, options = {}) => 
 
     if (resolved?.elementId || resolved?.atome_id || resolved?.created === true) {
         return english ? 'The object has been created.' : "L'objet a ete cree.";
+    }
+
+    if (domain === 'project' || domain === 'atome' || action.includes('list_atomes') || action.includes('check_atome') || action.includes('alter_atome')) {
+        const SYSTEM_TYPES = new Set([
+            'tool', 'code', 'user', 'project', 'folder', 'organization',
+            'share_request', 'share_link', 'share_policy'
+        ]);
+        const items = pickFirstArray(resolved).filter((entry) => entry && typeof entry === 'object');
+        const userItems = items.filter((a) => !SYSTEM_TYPES.has(String(a?.type || a?.atome_type || '').toLowerCase()));
+        const systemCount = items.length - userItems.length;
+
+        const formatContentLabel = (a) => {
+            const props = a?.properties || a?.data || {};
+            const name = String(props?.name || props?.['meta.name'] || a?.name || '').trim();
+            const type = String(a?.type || a?.atome_type || '').trim();
+            const color = String(props?.color || props?.fill || props?.backgroundColor || '').trim();
+            const shape = String(props?.shape || '').trim();
+            const parts = [];
+            if (name) { parts.push(name); }
+            else {
+                if (color) parts.push(color);
+                if (shape) parts.push(shape);
+                if (!parts.length && type) parts.push(type);
+            }
+            if (type && type !== name && type !== shape) parts.push(`(${type})`);
+            return parts.join(' ') || String(a?.id || a?.atome_id || '').slice(0, 8);
+        };
+
+        if (action.includes('alter_atome') || action.includes('alter')) {
+            if (resolved?.ok === true || resolved?.status === 'OK' || resolved?.altered || resolved?.updated) {
+                return english ? 'Done.' : 'Fait.';
+            }
+        }
+
+        if (action.includes('check_atome') || action.includes('find_atome') || action.includes('search_atome')) {
+            const queryText = String(intent?.query_text || intent?.actions?.[0]?.params?.query_text || '').toLowerCase().trim();
+            const queryTerms = queryText.split(/\s+/).filter(Boolean);
+            if (queryTerms.length && userItems.length) {
+                const matches = userItems.filter((a) => {
+                    const props = a?.properties || a?.data || {};
+                    const haystack = [
+                        String(props?.name || props?.['meta.name'] || a?.name || ''),
+                        String(a?.type || a?.atome_type || ''),
+                        String(props?.color || ''),
+                        String(props?.fill || ''),
+                        String(props?.backgroundColor || ''),
+                        String(props?.shape || '')
+                    ].join(' ').toLowerCase();
+                    return queryTerms.every((term) => haystack.includes(term));
+                });
+                if (matches.length) {
+                    const labels = matches.map(formatContentLabel).filter(Boolean).slice(0, 5);
+                    return english
+                        ? `Yes, I found ${matches.length}: ${labels.join(', ')}.`
+                        : `Oui, j'ai trouve ${matches.length}: ${labels.join(', ')}.`;
+                }
+                return english
+                    ? `No, I do not see any "${queryText}" in the project.`
+                    : `Non, je ne vois pas de "${queryText}" dans le projet.`;
+            }
+            if (!userItems.length) {
+                return english
+                    ? 'The project has no user-created content.'
+                    : "Le projet ne contient aucun contenu cree par l'utilisateur.";
+            }
+        }
+
+        if (userItems.length) {
+            const labels = userItems.map(formatContentLabel).filter(Boolean).slice(0, 10);
+            const count = userItems.length;
+            const sys = systemCount > 0
+                ? (english ? ` (plus ${systemCount} system objects)` : ` (plus ${systemCount} objets systeme)`)
+                : '';
+            if (labels.length) {
+                return english
+                    ? `The project has ${count} user object(s): ${labels.join(', ')}.${sys}`
+                    : `Le projet contient ${count} objet(s) utilisateur: ${labels.join(', ')}.${sys}`;
+            }
+            return english
+                ? `The project has ${count} user object(s).${sys}`
+                : `Le projet contient ${count} objet(s) utilisateur.${sys}`;
+        }
+        if (items.length && !userItems.length) {
+            return english
+                ? `The project has ${items.length} system object(s) but no user-created content.`
+                : `Le projet contient ${items.length} objet(s) systeme mais aucun contenu cree par l'utilisateur.`;
+        }
+        if (resolved?.ok === true || resolved?.tauri || resolved?.fastify) {
+            return english ? 'The project has no atomes.' : "Le projet ne contient aucun atome.";
+        }
     }
 
     return '';
@@ -1049,8 +1141,9 @@ class VoiceOrchestrator {
                 error: result?.error || null
             });
             const executionOk = result?.ok !== false;
+            const structuredReply = executionOk ? buildStructuredReplyFromPayload(result, normalizedIntent, options) : '';
             const fallbackReply = executionOk
-                ? (replyText || buildStructuredReplyFromPayload(result, normalizedIntent, options))
+                ? (structuredReply || replyText)
                 : buildRuntimeFailureReply(result, normalizedIntent, options);
             this.#bindSessionIntent(options.session_id, normalizedIntent, buildRuntimeIntentMeta(result, {
                 phase: 'executed',
@@ -1082,8 +1175,9 @@ class VoiceOrchestrator {
             });
         });
         const executionOk = result?.ok !== false;
+        const structuredReply = executionOk ? buildStructuredReplyFromPayload(result, normalizedIntent, options) : '';
         const fallbackReply = executionOk
-            ? (replyText || buildStructuredReplyFromPayload(result, normalizedIntent, options))
+            ? (structuredReply || replyText)
             : buildRuntimeFailureReply(result, normalizedIntent, options);
         this.#bindSessionIntent(options.session_id, normalizedIntent, buildRuntimeIntentMeta(result, {
             phase: 'executed',
@@ -1246,6 +1340,15 @@ class VoiceOrchestrator {
         } catch (_) {
             // Ignore history extraction errors.
         }
+        // SOURCE 4: Project, scene, selection, user, mtrack, recent mutations/errors.
+        try {
+            const sceneContext = collectProjectSceneContext();
+            if (sceneContext && !context.project_scene) {
+                context.project_scene = sceneContext;
+            }
+        } catch (_) {
+            // Ignore scene context extraction failures.
+        }
         return context;
     }
 
@@ -1405,10 +1508,10 @@ class VoiceOrchestrator {
                 transport: 'atome_ai',
                 intent,
                 result: toolchainResult?.result || toolchainResult,
-                ...((intent.assistant_reply || fallbackReply)
+                ...((fallbackReply || intent.assistant_reply)
                     ? {
-                        reply_text: intent.assistant_reply || fallbackReply,
-                        spoken_reply: intent.assistant_reply || fallbackReply
+                        reply_text: fallbackReply || intent.assistant_reply,
+                        spoken_reply: fallbackReply || intent.assistant_reply
                     }
                     : {})
             };
@@ -1457,10 +1560,10 @@ class VoiceOrchestrator {
             transport: 'atome_ai',
             intent,
             result: { results },
-            ...((intent.assistant_reply || fallbackReply)
+            ...((fallbackReply || intent.assistant_reply)
                 ? {
-                    reply_text: intent.assistant_reply || fallbackReply,
-                    spoken_reply: intent.assistant_reply || fallbackReply
+                    reply_text: fallbackReply || intent.assistant_reply,
+                    spoken_reply: fallbackReply || intent.assistant_reply
                 }
                 : {})
         };
@@ -1762,6 +1865,24 @@ class VoiceOrchestrator {
         this.journal.push(entry);
         if (this.journal.length > 200) {
             this.journal.splice(0, this.journal.length - 200);
+        }
+        // Feed recent mutations/errors into the project scene collector.
+        if (type === 'voice.intent.executed') {
+            const intent = payload?.intent;
+            if (payload?.ok === false) {
+                pushError({
+                    code: payload?.error || 'execution_failed',
+                    message: payload?.reply_text || null,
+                    domain: intent?.domain || null
+                });
+            } else if (payload?.executed) {
+                pushMutation({
+                    action: intent?.action || null,
+                    domain: intent?.domain || null,
+                    atome_id: intent?.entities?.atome_id || null,
+                    summary: payload?.reply_text || null
+                });
+            }
         }
         for (const listener of this.listeners) {
             listener(entry);

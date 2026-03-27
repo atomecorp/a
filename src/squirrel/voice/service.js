@@ -13,6 +13,13 @@ import { createProactiveStateStore } from '../ai/proactive_state_store.js';
 const DEFAULT_LANG = 'fr-FR';
 const DEFAULT_STT_SILENCE_MS = 8000;
 const DEFAULT_STT_FINAL_SILENCE_MS = 2400;
+const DEFAULT_STT_MAX_ALTERNATIVES = 5;
+const COMMON_SPEECH_HINTS = Object.freeze([
+    'Atome',
+    'eVe',
+    'Mtrack',
+    'Jean-Eric'
+]);
 
 const toDebugPayload = (value) => {
     try {
@@ -64,6 +71,185 @@ const getSpeechSynthesisUtteranceCtor = (env) => readEnv(env, 'SpeechSynthesisUt
 const getSpeechSynthesis = (env) => readEnv(env, 'speechSynthesis') || null;
 
 const normalizeVoiceLocale = (value = '') => String(value || '').trim().replace('_', '-').toLowerCase();
+
+const stripDiacritics = (value = '') => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const normalizeSpeechText = (value = '') => stripDiacritics(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const compactSpeechText = (value = '') => normalizeSpeechText(value)
+    .replace(/[\s'-]+/g, '')
+    .trim();
+
+const escapeRegExp = (value = '') => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const resolveSpeechLocale = (value = '') => {
+    const normalized = normalizeVoiceLocale(value);
+    if (!normalized) return DEFAULT_LANG;
+    if (normalized === 'fr') return 'fr-FR';
+    if (normalized === 'en') return 'en-US';
+    const [language = '', region = ''] = normalized.split('-');
+    if (!language) return DEFAULT_LANG;
+    if (!region) {
+        if (language === 'fr') return 'fr-FR';
+        if (language === 'en') return 'en-US';
+        return language;
+    }
+    return `${language}-${region.toUpperCase()}`;
+};
+
+const appendSpeechHintsFromValue = (target, value, depth = 0) => {
+    if (depth > 2 || value == null) return;
+    if (typeof value === 'string' || typeof value === 'number') {
+        const text = String(value || '').trim();
+        if (text.length >= 2 && text.length <= 80) {
+            target.add(text);
+        }
+        return;
+    }
+    if (Array.isArray(value)) {
+        value.slice(0, 10).forEach((entry) => appendSpeechHintsFromValue(target, entry, depth + 1));
+        return;
+    }
+    if (typeof value === 'object') {
+        const preferredKeys = [
+            'name', 'title', 'label', 'subject', 'organization', 'project', 'project_name',
+            'query_text', 'reply_target', 'participant_hint', 'tool_name', 'tool_id', 'atome_id'
+        ];
+        preferredKeys.forEach((key) => {
+            if (key in value) appendSpeechHintsFromValue(target, value[key], depth + 1);
+        });
+    }
+};
+
+const collectSpeechHints = (env, sessionRuntime, sessionId, options = {}) => {
+    const hints = new Set(COMMON_SPEECH_HINTS);
+    appendSpeechHintsFromValue(hints, options?.speechHints);
+    appendSpeechHintsFromValue(hints, readEnv(env, '__EVE_VOICE_SPEECH_HINTS'));
+    appendSpeechHintsFromValue(hints, readEnv(env, '__currentUser')?.name || readEnv(env, '__currentUser')?.first_name);
+
+    const workingMemory = sessionRuntime?.workingMemory || null;
+    if (workingMemory) {
+        try {
+            appendSpeechHintsFromValue(hints, workingMemory.getSessionPreferences?.());
+        } catch (_) { }
+        try {
+            appendSpeechHintsFromValue(hints, workingMemory.listActiveEntities?.());
+        } catch (_) { }
+        for (const domain of ['atome', 'mail', 'contacts', 'calendar']) {
+            try {
+                appendSpeechHintsFromValue(hints, workingMemory.getCurrentItem?.(domain));
+            } catch (_) { }
+        }
+    }
+
+    if (sessionRuntime && sessionId) {
+        try {
+            const snapshot = sessionRuntime.getSession(sessionId);
+            appendSpeechHintsFromValue(hints, snapshot?.conversation?.active_intent);
+            appendSpeechHintsFromValue(hints, snapshot?.conversation?.last_user_text);
+        } catch (_) { }
+    }
+
+    return Array.from(hints)
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean)
+        .slice(0, 64);
+};
+
+const applyHintedSpeechCorrections = (value = '', hints = []) => {
+    let text = String(value || '').trim();
+    if (!text) return text;
+
+    const normalizedHints = Array.isArray(hints) ? hints : [];
+    for (const hint of normalizedHints) {
+        const canonical = String(hint || '').trim();
+        if (!canonical) continue;
+        const hintNormalized = normalizeSpeechText(canonical);
+        if (hintNormalized === 'mtrack') {
+            text = text.replace(/\bm[\s'-]*track\b/gi, canonical);
+            continue;
+        }
+        if (hintNormalized === 'atome') {
+            text = text.replace(/\batom(?:e)?\b/gi, canonical);
+            continue;
+        }
+        if (hintNormalized === 'eve') {
+            text = text.replace(/\beve\b/gi, canonical);
+            continue;
+        }
+        const tokens = canonical.split(/[\s'-]+/).map((entry) => entry.trim()).filter(Boolean);
+        if (tokens.length >= 2 || /[-']/.test(canonical)) {
+            const pattern = new RegExp(`\\b${tokens.map((entry) => escapeRegExp(entry)).join("[\\s'’_\\-]*")}\\b`, 'gi');
+            text = text.replace(pattern, canonical);
+        }
+    }
+    return text.replace(/\s+/g, ' ').trim();
+};
+
+const scoreSpeechCandidate = (candidate = {}, hints = []) => {
+    const text = String(candidate?.text || '').trim();
+    if (!text) return Number.NEGATIVE_INFINITY;
+    const normalized = normalizeSpeechText(text);
+    const compact = compactSpeechText(text);
+    let score = Number.isFinite(candidate?.confidence) ? Number(candidate.confidence) : 0;
+    let matchedHints = 0;
+    for (const hint of Array.isArray(hints) ? hints : []) {
+        const hintText = String(hint || '').trim();
+        if (!hintText) continue;
+        const hintNormalized = normalizeSpeechText(hintText);
+        const hintCompact = compactSpeechText(hintText);
+        if (!hintNormalized) continue;
+        if (normalized === hintNormalized || compact === hintCompact) {
+            score += 0.85;
+            matchedHints += 1;
+            continue;
+        }
+        if (normalized.includes(hintNormalized) || hintNormalized.includes(normalized)) {
+            score += 0.5;
+            matchedHints += 1;
+            continue;
+        }
+        if (hintCompact && (compact.includes(hintCompact) || hintCompact.includes(compact))) {
+            score += 0.34;
+            matchedHints += 1;
+        }
+    }
+    if (matchedHints > 1) score += Math.min(0.3, matchedHints * 0.08);
+    return score;
+};
+
+const selectBestSpeechCandidate = (candidates = [], hints = []) => {
+    const normalizedCandidates = Array.isArray(candidates)
+        ? candidates
+            .map((entry) => ({
+                text: applyHintedSpeechCorrections(entry?.text || '', hints),
+                confidence: Number.isFinite(entry?.confidence) ? Number(entry.confidence) : null
+            }))
+            .filter((entry) => entry.text)
+        : [];
+    if (!normalizedCandidates.length) {
+        return {
+            text: '',
+            confidence: null
+        };
+    }
+    let best = normalizedCandidates[0];
+    let bestScore = scoreSpeechCandidate(best, hints);
+    for (const candidate of normalizedCandidates.slice(1)) {
+        const score = scoreSpeechCandidate(candidate, hints);
+        if (score > bestScore) {
+            best = candidate;
+            bestScore = score;
+        }
+    }
+    return best;
+};
 
 const resolvePreferredSpeechVoice = (synth, {
     lang = DEFAULT_LANG,
@@ -275,14 +461,14 @@ export const createVoiceService = ({
     }
 
     const resolveResponseLocale = (response = {}, options = {}) => {
-        const locale = String(
+        const locale = resolveSpeechLocale(
             options?.lang
             || options?.locale
             || response?.intent?.locale
             || env?.eveI18n?.getLocale?.()
             || env?.document?.documentElement?.lang
             || DEFAULT_LANG
-        ).trim();
+        );
         return locale || DEFAULT_LANG;
     };
 
@@ -310,7 +496,7 @@ export const createVoiceService = ({
             return sessionRuntime.getSession(sessionId);
         }
         return sessionRuntime.createSession({
-            locale: options.lang || options.locale || DEFAULT_LANG,
+            locale: resolveSpeechLocale(options.lang || options.locale || DEFAULT_LANG),
             actor: options.actor || {},
             source_layer: options.source_layer || 'voice_session_service'
         });
@@ -370,6 +556,11 @@ export const createVoiceService = ({
 
         const recognition = new RecognitionCtor();
         const deferred = createDeferred();
+        const speechHints = collectSpeechHints(env, sessionRuntime, sessionId, options);
+        const resolvedLang = resolveSpeechLocale(options.lang || options.locale || DEFAULT_LANG);
+        const maxAlternatives = Number.isFinite(Number(options.maxAlternatives))
+            ? Math.max(1, Number(options.maxAlternatives))
+            : DEFAULT_STT_MAX_ALTERNATIVES;
         const state = {
             session_id: sessionId,
             recognition,
@@ -378,12 +569,14 @@ export const createVoiceService = ({
             cancelled: false,
             final_texts: [],
             segments: [],
-            confidence: null
+            confidence: null,
+            speechHints
         };
 
-        recognition.lang = options.lang || DEFAULT_LANG;
+        recognition.lang = resolvedLang;
         recognition.interimResults = options.partial !== false;
         recognition.continuous = options.continuous === true;
+        recognition.maxAlternatives = maxAlternatives;
 
         recognition.onstart = () => {
             sessionRuntime.startListening(sessionId, {
@@ -399,10 +592,16 @@ export const createVoiceService = ({
             const startIndex = Number.isFinite(event?.resultIndex) ? event.resultIndex : 0;
             for (let index = startIndex; index < results.length; index += 1) {
                 const result = results[index];
-                const alternative = result?.[0];
-                const text = String(alternative?.transcript || '').trim();
+                const alternatives = Array.from(result || [])
+                    .map((alternative) => ({
+                        text: String(alternative?.transcript || '').trim(),
+                        confidence: Number.isFinite(alternative?.confidence) ? alternative.confidence : null
+                    }))
+                    .filter((entry) => entry.text);
+                const selected = selectBestSpeechCandidate(alternatives, state.speechHints);
+                const text = String(selected?.text || '').trim();
                 if (!text) continue;
-                const confidence = Number.isFinite(alternative?.confidence) ? alternative.confidence : null;
+                const confidence = Number.isFinite(selected?.confidence) ? selected.confidence : null;
                 if (result?.isFinal) {
                     state.final_texts.push(text);
                     state.segments.push(createSegment(text, confidence));
@@ -444,10 +643,13 @@ export const createVoiceService = ({
                 return;
             }
             const snapshot = sessionRuntime.getSession(sessionId);
-            const finalText = state.final_texts.join(' ').trim()
+            const finalText = applyHintedSpeechCorrections(
+                state.final_texts.join(' ').trim()
                 || snapshot.transcript.partial
                 || snapshot.transcript.final
-                || '';
+                || '',
+                state.speechHints
+            );
             const result = {
                 text: finalText,
                 confidence: state.confidence,
@@ -513,6 +715,11 @@ export const createVoiceService = ({
         }
 
         const deferred = createDeferred();
+        const speechHints = collectSpeechHints(env, sessionRuntime, sessionId, options);
+        const resolvedLang = resolveSpeechLocale(options.lang || options.locale || DEFAULT_LANG);
+        const maxAlternatives = Number.isFinite(Number(options.maxAlternatives))
+            ? Math.max(1, Number(options.maxAlternatives))
+            : DEFAULT_STT_MAX_ALTERNATIVES;
         const silenceMs = Number.isFinite(options.silenceMs) && options.silenceMs >= 0
             ? Number(options.silenceMs)
             : DEFAULT_STT_SILENCE_MS;
@@ -533,7 +740,8 @@ export const createVoiceService = ({
             segments: [],
             confidence: null,
             latest_text: '',
-            inactivityTimer: null
+            inactivityTimer: null,
+            speechHints
         };
 
         const clearInactivityTimer = () => {
@@ -580,11 +788,11 @@ export const createVoiceService = ({
         const startBridgeWithRecovery = async () => {
             try {
                 await bridge.start({
-                    language: options.lang || DEFAULT_LANG,
+                    language: resolvedLang,
                     interimResults: options.partial !== false,
                     continuous: options.continuous !== false,
                     maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
-                    maxAlternatives: Number.isFinite(options.maxAlternatives) ? options.maxAlternatives : 3,
+                    maxAlternatives,
                     onDevice: options.onDevice === true
                 });
             } catch (error) {
@@ -605,11 +813,11 @@ export const createVoiceService = ({
                 }
                 await wait(80);
                 await bridge.start({
-                    language: options.lang || DEFAULT_LANG,
+                    language: resolvedLang,
                     interimResults: options.partial !== false,
                     continuous: options.continuous !== false,
                     maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
-                    maxAlternatives: Number.isFinite(options.maxAlternatives) ? options.maxAlternatives : 3,
+                    maxAlternatives,
                     onDevice: options.onDevice === true
                 });
                 state.recoveringStart = false;
@@ -674,7 +882,7 @@ export const createVoiceService = ({
             });
             if (next === 'listening') {
                 sessionRuntime.startListening(sessionId, {
-                    lang: options.lang || DEFAULT_LANG,
+                    lang: resolvedLang,
                     partial: options.partial !== false,
                     provider
                 });
@@ -722,7 +930,7 @@ export const createVoiceService = ({
         }));
 
         state.cleanup.push(await bridge.onResult((result = {}) => {
-            const text = String(result?.transcript || '').trim();
+            const text = applyHintedSpeechCorrections(String(result?.transcript || '').trim(), state.speechHints);
             if (!text) return;
             state.latest_text = text;
             const confidence = Number.isFinite(result?.confidence) ? result.confidence : null;

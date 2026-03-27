@@ -179,7 +179,7 @@ const registerDefaultTools = () => {
     const Agent = globalThis.AtomeAI;
     if (!Agent || typeof Agent.registerTool !== 'function') return;
 
-    const AdoleAPI = globalThis.AdoleAPI;
+    const getAdoleAPI = () => globalThis.AdoleAPI;
 
     Agent.registerTool({
         name: 'adole.auth.current',
@@ -187,7 +187,7 @@ const registerDefaultTools = () => {
         capabilities: ['auth.read'],
         risk_tier: 'LOW',
         handler: async () => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.auth?.current;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.auth.current is not available');
             return fn();
@@ -207,7 +207,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.atomes?.get;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.atomes.get is not available');
             const id = safeString(params?.id);
@@ -233,7 +233,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.atomes?.list;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.atomes.list is not available');
 
@@ -268,7 +268,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.atomes?.create;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.atomes.create is not available');
 
@@ -301,7 +301,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.atomes?.alter;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.atomes.alter is not available');
             const id = safeString(params?.id);
@@ -1343,7 +1343,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.share?.shareAtome || api?.share?.share_atome;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.share.share_atome is not available');
 
@@ -1380,7 +1380,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.share?.grantSharePermission || api?.share?.grant_share_permission;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.share.grant_share_permission is not available');
 
@@ -1411,7 +1411,7 @@ const registerDefaultTools = () => {
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', AdoleAPI);
+            const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.share?.publish || api?.share?.share_publish;
             if (typeof fn !== 'function') throw new Error('AdoleAPI.share.publish is not available');
             return fn(params?.payload || {});
