@@ -2,6 +2,19 @@ const toText = (value) => String(value || '').trim();
 
 const resolveMediaDevices = (env) => env?.navigator?.mediaDevices || null;
 
+const resolveAudioConstraints = (env) => {
+    const override = env?.__EVE_VOICE_METER_AUDIO_CONSTRAINTS;
+    if (override && typeof override === 'object') {
+        return override;
+    }
+    return {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1
+    };
+};
+
 const getCanvasContext = (canvas) => {
     try {
         return canvas.getContext('2d');
@@ -121,7 +134,9 @@ export const mountVoiceMeter = ({
             throw new Error('microphone_unavailable');
         }
         await stop();
-        stream = await mediaDevices.getUserMedia({ audio: true });
+        stream = await mediaDevices.getUserMedia({
+            audio: resolveAudioConstraints(env)
+        });
         const AudioCtx = env.AudioContext || env.webkitAudioContext;
         if (typeof AudioCtx !== 'function') {
             throw new Error('audio_context_unavailable');

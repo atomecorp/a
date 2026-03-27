@@ -121,6 +121,12 @@ listeners.forEach((listener) => listener({
 }));
 
 listeners.forEach((listener) => listener({
+    type: 'voice.processing.state',
+    session_id: 'interrupt_session_1',
+    payload: { state: 'processing' }
+}));
+
+listeners.forEach((listener) => listener({
     type: 'voice.tts.state',
     session_id: 'interrupt_session_1',
     payload: { state: 'speaking' }

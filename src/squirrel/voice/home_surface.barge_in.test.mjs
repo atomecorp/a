@@ -81,6 +81,12 @@ listeners.forEach((listener) => listener({
 
 listeners.forEach((listener) => listener({
     session_id: 'barge_session_1',
+    type: 'voice.processing.state',
+    payload: { state: 'processing' }
+}));
+
+listeners.forEach((listener) => listener({
+    session_id: 'barge_session_1',
     type: 'voice.tts.state',
     payload: { state: 'speaking' }
 }));

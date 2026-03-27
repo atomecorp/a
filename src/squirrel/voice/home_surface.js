@@ -7,7 +7,11 @@ const HISTORY_STORAGE_KEY = 'eve_voice_history_v1';
 const LEGACY_HISTORY_STORAGE_KEY = 'eve_dilas_voice_history_v1';
 const MAX_HISTORY_ITEMS = 80;
 const DEFAULT_ECHO_COOLDOWN_MS = 1200;
-const DEFAULT_BARGE_ARM_DELAY_MS = 700;
+const DEFAULT_BARGE_ARM_DELAY_MS = 180;
+const DEFAULT_BARGE_RESTART_DELAY_MS = 24;
+const DEFAULT_BARGE_VAD_THRESHOLD = 0.045;
+const DEFAULT_BARGE_VAD_MIN_SPEECH_FRAMES = 2;
+const DEFAULT_BARGE_VAD_RELEASE_FRAMES = 4;
 const DEFAULT_FAST_COMMIT_MS = 1200;
 const DEFAULT_PAUSE_COMMIT_MS = 4200;
 const DEFAULT_FORCE_COMMIT_MS = 6500;
@@ -509,6 +513,18 @@ export const mountHomeVoiceSurface = async ({
     const bargeArmDelayMs = Number.isFinite(Number(env?.__EVE_VOICE_BARGE_ARM_DELAY_MS))
         ? Math.max(0, Number(env.__EVE_VOICE_BARGE_ARM_DELAY_MS))
         : DEFAULT_BARGE_ARM_DELAY_MS;
+    const bargeRestartDelayMs = Number.isFinite(Number(env?.__EVE_VOICE_BARGE_RESTART_DELAY_MS))
+        ? Math.max(0, Number(env.__EVE_VOICE_BARGE_RESTART_DELAY_MS))
+        : DEFAULT_BARGE_RESTART_DELAY_MS;
+    const bargeVadThreshold = Number.isFinite(Number(env?.__EVE_VOICE_BARGE_VAD_THRESHOLD))
+        ? Math.max(0.005, Number(env.__EVE_VOICE_BARGE_VAD_THRESHOLD))
+        : DEFAULT_BARGE_VAD_THRESHOLD;
+    const bargeVadMinSpeechFrames = Number.isFinite(Number(env?.__EVE_VOICE_BARGE_VAD_MIN_FRAMES))
+        ? Math.max(1, Number(env.__EVE_VOICE_BARGE_VAD_MIN_FRAMES))
+        : DEFAULT_BARGE_VAD_MIN_SPEECH_FRAMES;
+    const bargeVadReleaseFrames = Number.isFinite(Number(env?.__EVE_VOICE_BARGE_VAD_RELEASE_FRAMES))
+        ? Math.max(1, Number(env.__EVE_VOICE_BARGE_VAD_RELEASE_FRAMES))
+        : DEFAULT_BARGE_VAD_RELEASE_FRAMES;
     const fastCommitMs = Number.isFinite(Number(env?.__EVE_VOICE_FAST_COMMIT_MS))
         ? Math.max(0, Number(env.__EVE_VOICE_FAST_COMMIT_MS))
         : DEFAULT_FAST_COMMIT_MS;
@@ -607,7 +623,7 @@ export const mountHomeVoiceSurface = async ({
 
     const scheduleInterruptListeningRestart = (delayMs = 120) => {
         clearInterruptRestartTimer();
-        if (textOnly || !state.active || !state.speaking || state.listening || state.processing || state.interruptListening) return;
+        if (textOnly || !state.active || !state.speaking || state.listening || state.interruptListening) return;
         state.interruptRestartTimer = env.setTimeout?.(() => {
             state.interruptRestartTimer = null;
             void startInterruptListening();
@@ -633,7 +649,7 @@ export const mountHomeVoiceSurface = async ({
         }
     };
 
-    const restartListeningAfterInterruption = (delayMs = 80) => {
+    const restartListeningAfterInterruption = (delayMs = bargeRestartDelayMs) => {
         clearRestartTimer();
         if (!state.active || state.listening || state.processing || state.speaking) return;
         state.restartTimer = env.setTimeout?.(() => {
@@ -672,13 +688,13 @@ export const mountHomeVoiceSurface = async ({
             state.processing = false;
             state.interruptCommandPending = false;
             updateControls();
-            restartListeningAfterInterruption(80);
+            restartListeningAfterInterruption();
         }
         return true;
     };
 
     const startInterruptListening = async () => {
-        if (textOnly || !state.active || state.listening || state.processing || !state.speaking || state.interruptListening) return;
+        if (textOnly || !state.active || state.listening || !state.speaking || state.interruptListening) return;
         const sessionId = await ensureSession();
         clearInterruptRestartTimer();
         state.interruptListening = true;
@@ -701,7 +717,7 @@ export const mountHomeVoiceSurface = async ({
             state.interruptListeningPromise = null;
             const finalText = toText(result?.text);
             if (await handleInterruptTranscript(finalText)) return;
-            if (state.active && state.speaking && !state.listening && !state.processing) {
+            if (state.active && state.speaking && !state.listening) {
                 scheduleInterruptListeningRestart(120);
             }
         } catch (error) {
@@ -711,7 +727,7 @@ export const mountHomeVoiceSurface = async ({
                 sessionId,
                 error: error?.message || String(error)
             });
-            if (state.active && state.speaking && !state.listening && !state.processing) {
+            if (state.active && state.speaking && !state.listening) {
                 scheduleInterruptListeningRestart(240);
             }
         }
@@ -735,7 +751,7 @@ export const mountHomeVoiceSurface = async ({
             state.speaking = false;
             updateControls();
             resetBargeInDetector();
-            restartListeningAfterInterruption(80);
+            restartListeningAfterInterruption();
         }
     };
 
@@ -1075,7 +1091,7 @@ export const mountHomeVoiceSurface = async ({
                 canvas: meterCanvas,
                 onFrame: (frame) => {
                     if (!state.bargeInDetector) return;
-                    if (!state.active || !state.speaking || state.listening || state.processing) {
+                    if (!state.active || !state.speaking || state.listening) {
                         state.bargeInDetector.reset();
                         return;
                     }
@@ -1090,9 +1106,9 @@ export const mountHomeVoiceSurface = async ({
         if (!state.voiceMeter?.start || state.meterRunning) return;
         if (!state.bargeInDetector) {
             state.bargeInDetector = createVoiceActivityDetector({
-                threshold: 0.08,
-                minSpeechFrames: 4,
-                releaseFrames: 5
+                threshold: bargeVadThreshold,
+                minSpeechFrames: bargeVadMinSpeechFrames,
+                releaseFrames: bargeVadReleaseFrames
             });
         }
         try {
