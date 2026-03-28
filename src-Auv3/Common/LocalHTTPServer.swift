@@ -289,7 +289,7 @@ final class LocalHTTPServer {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
             return
         }
-        if method != "GET" {
+        if method != "GET" && method != "HEAD" {
             sendSimple(status: 405, reason: "Method Not Allowed", body: "Method Not Allowed", on: connection)
             return
         }
@@ -685,6 +685,8 @@ final class LocalHTTPServer {
             case "mp3": return "audio/mpeg"
             case "wav": return "audio/wav"
             case "mp4", "m4v": return "video/mp4"
+            case "mov": return "video/quicktime"
+            case "webm": return "video/webm"
             case "pdf": return "application/pdf"
             case "woff": return "font/woff"
             case "woff2": return "font/woff2"
@@ -693,12 +695,72 @@ final class LocalHTTPServer {
             default: return "application/octet-stream"
             }
         }()
+        // Video/audio types need Range request support for <video>/<audio> tags
+        let needsRange = mime.hasPrefix("video/") || mime.hasPrefix("audio/")
+        if needsRange {
+            serveFileWithRange(url: url, mime: mime, rangeHeader: rangeHeader, on: connection)
+        } else {
+            do {
+                let data = try Data(contentsOf: url)
+                sendRaw(status: 200, reason: "OK", headers: ["Content-Type": mime], body: data, on: connection)
+                print("🗂 Served unified file: \(url.lastPathComponent) bytes=\(data.count) mime=\(mime)")
+            } catch {
+                sendSimple(status: 500, reason: "Internal Server Error", body: "read fail", on: connection)
+            }
+        }
+    }
+
+    /// Serve a file with HTTP Range support (206 Partial Content) for video/audio tags
+    private func serveFileWithRange(url: URL, mime: String, rangeHeader: String?, on connection: NWConnection) {
+        let fileHandle: FileHandle
+        do { fileHandle = try FileHandle(forReadingFrom: url) } catch {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "Open failed", on: connection); return
+        }
+        defer { try? fileHandle.close() }
+        let totalLen: UInt64
         do {
-            let data = try Data(contentsOf: url)
-            sendRaw(status: 200, reason: "OK", headers: ["Content-Type": mime], body: data, on: connection)
-            print("🗂 Served unified file: \(url.lastPathComponent) bytes=\(data.count) mime=\(mime)")
+            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+            totalLen = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+        } catch { totalLen = 0 }
+        if totalLen == 0 { sendSimple(status: 500, reason: "Internal Server Error", body: "Empty file", on: connection); return }
+
+        var rangeStart: UInt64 = 0
+        var rangeEnd: UInt64 = totalLen - 1
+        var isPartial = false
+        if let rh = rangeHeader?.lowercased(), rh.hasPrefix("bytes=") {
+            let spec = rh.dropFirst("bytes=".count)
+            let comps = spec.split(separator: "-")
+            if let first = comps.first, let start = UInt64(first) { rangeStart = start }
+            if comps.count > 1, let lastStr = comps.last, !lastStr.isEmpty, let last = UInt64(lastStr) { rangeEnd = min(last, totalLen - 1) }
+            if rangeStart >= totalLen { rangeStart = 0 }
+            if !(rangeStart == 0 && rangeEnd == totalLen - 1) { isPartial = true }
+        }
+        let readLen = Int(rangeEnd - rangeStart + 1)
+        do {
+            try fileHandle.seek(toOffset: rangeStart)
+            let chunk = fileHandle.readData(ofLength: readLen)
+            var headers: [String] = []
+            let statusLine: String
+            if isPartial {
+                statusLine = "HTTP/1.1 206 Partial Content"
+                headers.append("Content-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalLen)")
+            } else {
+                statusLine = "HTTP/1.1 200 OK"
+            }
+            headers.append("Content-Type: \(mime)")
+            headers.append("Accept-Ranges: bytes")
+            headers.append("Content-Length: \(chunk.count)")
+            headers.append("Access-Control-Allow-Origin: *")
+            headers.append("Access-Control-Allow-Headers: *")
+            headers.append("Access-Control-Expose-Headers: Content-Range, Accept-Ranges, Content-Length")
+            headers.append("Connection: close")
+            let headerStr = statusLine + "\r\n" + headers.joined(separator: "\r\n") + "\r\n\r\n"
+            var response = Data(headerStr.utf8)
+            response.append(chunk)
+            connection.send(content: response, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
+            print("🎬 Served media: \(url.lastPathComponent) [\(rangeStart)-\(rangeEnd)]/\(totalLen) partial=\(isPartial) mime=\(mime)")
         } catch {
-            sendSimple(status: 500, reason: "Internal Server Error", body: "read fail", on: connection)
+            sendSimple(status: 500, reason: "Internal Server Error", body: "Read failed", on: connection)
         }
     }
 
@@ -1254,6 +1316,8 @@ final class LocalHTTPServer {
         case "wav": return "audio/wav"
         case "m4a": return "audio/mp4"
         case "mp4", "m4v": return "video/mp4"
+        case "mov": return "video/quicktime"
+        case "webm": return "video/webm"
         case "pdf": return "application/pdf"
         default: return "application/octet-stream"
         }
