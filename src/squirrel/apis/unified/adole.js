@@ -283,7 +283,7 @@ function resolveBackendSource(kind) {
     const configDefault = CONFIG[`${key.toUpperCase()}_SOURCE`];
     const explicit = normalizeSource(globalValue || configValue || configDefault);
     if (explicit && explicit !== 'auto') return explicit;
-    if ((key === 'auth' || key === 'profile') && isEmbeddedIOSRuntime()) {
+    if (isEmbeddedIOSRuntime()) {
         return 'tauri';
     }
     return isInTauri() ? 'tauri' : 'fastify';
@@ -766,16 +766,20 @@ class TauriWebSocket {
             this.isConnecting = true;
 
             try {
+                const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[WS-DIAG] ' + msg); } catch (_) { } console.log('[WS-DIAG]', msg); };
+                _xlog('Creating WebSocket to ' + this.url);
                 this.socket = new WebSocket(this.url);
 
                 this.socket.onopen = () => {
+                    _xlog('onopen fired, readyState=' + this.socket.readyState);
                     this.isConnecting = false;
                     this.isConnected = true;
                     this.startPing();
                     resolve(true);
                 };
 
-                this.socket.onclose = () => {
+                this.socket.onclose = (evt) => {
+                    _xlog('onclose fired, code=' + evt.code + ' reason=' + evt.reason + ' wasClean=' + evt.wasClean);
                     // Don't trigger handleDisconnect on normal close
                     // Only schedule silent reconnect
                     this.isConnected = false;
@@ -784,13 +788,15 @@ class TauriWebSocket {
                     resolve(false);
                 };
 
-                this.socket.onerror = () => {
+                this.socket.onerror = (evt) => {
+                    _xlog('onerror fired: ' + String(evt?.message || evt?.type || 'unknown'));
                     // Silent - don't call handleDisconnect to avoid cascading reconnects
                     this.isConnecting = false;
                     resolve(false);
                 };
 
                 this.socket.onmessage = (event) => {
+                    _xlog('onmessage: ' + String(event.data).substring(0, 120));
                     this.handleMessage(event.data);
                 };
 

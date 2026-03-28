@@ -6,6 +6,8 @@ import Foundation
 
 final class FileSyncCoordinator {
     static let shared = FileSyncCoordinator()
+    private let allowedTopLevelEntries: Set<String> = ["Projects", "Exports", "Recordings", "Templates", "Downloads", "data", "README.txt"]
+    private let leakedInternalTopLevelEntries: Set<String> = ["src"]
     private static let runningInExtension: Bool = {
         let path = Bundle.main.bundlePath
         if path.hasSuffix(".appex") { return true }
@@ -297,6 +299,7 @@ final class FileSyncCoordinator {
         loadInventoryIfNeeded()
         let roots = availableRoots()
         if roots.isEmpty { return }
+        cleanupLeakedInternalContent(in: roots)
     // Paramètres (faciles à ajuster)
     let deletionObservationWindow: TimeInterval = 3.0
         // Determine canonical root (App Group prioritized)
@@ -481,6 +484,14 @@ final class FileSyncCoordinator {
 
     private struct FileMeta { let isDir: Bool; let size: UInt64; let modDate: Date }
 
+    private func shouldSyncRelativePath(_ rel: String) -> Bool {
+        let trimmed = rel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if trimmed.hasPrefix(".") { return false }
+        let firstComponent = trimmed.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? trimmed
+        return allowedTopLevelEntries.contains(firstComponent)
+    }
+
     private func buildInventory(root: URL) -> [String: FileMeta] {
         var map: [String: FileMeta] = [:]
         guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey], options: [.skipsHiddenFiles]) else { return map }
@@ -490,6 +501,7 @@ final class FileSyncCoordinator {
             guard itemPath.hasPrefix(rootPath + "/") else { continue }
             let rel = String(itemPath.dropFirst(rootPath.count + 1))
             if rel.isEmpty { continue }
+            if !shouldSyncRelativePath(rel) { continue }
             if rel.contains("/var/mobile/Containers/Data") { continue }
             do {
                 let res = try url.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey])
@@ -529,6 +541,21 @@ final class FileSyncCoordinator {
     if let ubiq = fm.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents", isDirectory: true) { roots.append(ubiq) }
         var seen: Set<String> = []
         return roots.filter { r in let k = r.path; if seen.contains(k) { return false }; seen.insert(k); return true }
+    }
+
+    private func cleanupLeakedInternalContent(in roots: [URL]) {
+        for root in roots {
+            for name in leakedInternalTopLevelEntries {
+                let leakedURL = root.appendingPathComponent(name, isDirectory: true)
+                guard fm.fileExists(atPath: leakedURL.path) else { continue }
+                do {
+                    try fm.removeItem(at: leakedURL)
+                    print("🧹 Removed leaked internal folder \(name)")
+                } catch {
+                    print("⚠️ Failed to remove leaked internal folder \(name): \(error)")
+                }
+            }
+        }
     }
 
     // MARK: - Cleanup of spurious duplicated private* folders and nested canonical dirs

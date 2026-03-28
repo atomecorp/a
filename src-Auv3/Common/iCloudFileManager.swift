@@ -179,7 +179,7 @@ public class iCloudFileManager: ObservableObject {
             makeDirectoryVisibleInFiles(baseURL)
             
             // Create subdirectories directement dans Documents
-            let subdirectories = ["Projects", "Exports", "Recordings", "Templates"]
+            let subdirectories = ["Projects", "Exports", "Recordings", "Templates", "Downloads"]
             for subdirectory in subdirectories {
                 let subdirectoryURL = baseURL.appendingPathComponent(subdirectory, isDirectory: true)
                 if !fileManager.fileExists(atPath: subdirectoryURL.path) {
@@ -193,6 +193,20 @@ public class iCloudFileManager: ObservableObject {
                     if !isLocal {
                         try fileManager.startDownloadingUbiquitousItem(at: subdirectoryURL)
                     }
+                }
+            }
+
+            let dataUsersURL = baseURL.appendingPathComponent("data/users", isDirectory: true)
+            if !fileManager.fileExists(atPath: dataUsersURL.path) {
+                try fileManager.createDirectory(
+                    at: dataUsersURL,
+                    withIntermediateDirectories: true,
+                    attributes: [FileAttributeKey.posixPermissions: 0o755]
+                )
+                makeDirectoryVisibleInFiles(dataUsersURL)
+
+                if !isLocal {
+                    try fileManager.startDownloadingUbiquitousItem(at: dataUsersURL)
                 }
             }
             
@@ -224,6 +238,8 @@ public class iCloudFileManager: ObservableObject {
         - Exports: Trouvez vos fichiers exportés
         - Recordings: Accédez à vos enregistrements audio
         - Templates: Modèles et présets
+        - Downloads: Fichiers importés et uploads locaux
+        - data/users: Données locales par utilisateur
         
         Créé le: \(Date())
         Type de stockage: \(isLocal ? "Local" : "iCloud")
@@ -716,7 +732,7 @@ public class iCloudFileManager: ObservableObject {
         
         do {
             let fileManager = FileManager.default
-            let folders = ["Projects", "Exports", "Recordings", "Templates"]
+            let folders = ["Projects", "Exports", "Recordings", "Templates", "Downloads", "data"]
             
             for folder in folders {
                 let sourceFolder = appGroupDocuments.appendingPathComponent(folder)
@@ -765,7 +781,7 @@ public class iCloudFileManager: ObservableObject {
 
         do {
             let fm = FileManager.default
-            let folders = ["Projects", "Exports", "Recordings", "Templates"]
+            let folders = ["Projects", "Exports", "Recordings", "Templates", "Downloads", "data"]
             // Créer racine Documents si nécessaire côté App Group
             try fm.createDirectory(at: appGroupDocuments, withIntermediateDirectories: true)
             for folder in folders {

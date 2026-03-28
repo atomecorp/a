@@ -788,6 +788,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 window.ATOME_LOCAL_HTTP_PORT=\(p);
                 window.__LOCAL_HTTP_PORT=\(p);
                 window.__SQUIRREL_TAURI_LOCAL_PORT__=\(p);
+                try { window.dispatchEvent(new CustomEvent('local-server-ready')); } catch(e) {}
                 """
                 webView.evaluateJavaScript(js, completionHandler: nil)
                 print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")

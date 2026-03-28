@@ -798,6 +798,8 @@ function create_unauthenticated_result(errorMessage) {
 }
 
 async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } = {}) {
+    const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[ANON-DIAG] ' + msg); } catch (_) { } console.log('[ANON-DIAG]', msg); };
+    _xlog('ensure_anonymous_user called, reason=' + reason + ' currentUserId=' + _currentUserId);
     if (_currentUserId && !is_anonymous_mode()) {
         return { ok: false, reason: 'authenticated_user_present', user: get_authenticated_user() };
     }
@@ -859,14 +861,18 @@ async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } =
 
         let loginResult = null;
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            _xlog('attempt ' + attempt + '/' + maxAttempts + ' tryLogin phone=' + identity.phone);
             loginResult = await tryLogin();
+            _xlog('tryLogin result: ok=' + loginResult?.ok + ' success=' + loginResult?.success + ' error=' + loginResult?.error);
             noteError('login_ws', loginResult);
             if (loginResult?.ok || loginResult?.success) {
                 lastError = null;
                 break;
             }
 
+            _xlog('tryRegister phone=' + identity.phone);
             const registerResult = await tryRegister();
+            _xlog('tryRegister result: ok=' + registerResult?.ok + ' success=' + registerResult?.success + ' error=' + registerResult?.error);
             noteError('register_ws', registerResult);
             if (registerResult?.ok || registerResult?.success || is_already_exists_error(registerResult)) {
                 loginResult = await tryLogin();
@@ -892,6 +898,18 @@ async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } =
                     if (loginErr.includes('invalid') || httpRegister?.alreadyExists) {
                         identity = { ...identity, phone: rotate_anonymous_phone() };
                     }
+                }
+            }
+
+            if (is_tauri_runtime()) {
+                _xlog('WS auth failed, trying local HTTP auth fallback');
+                const localHttpResult = await local_http_auth(identity);
+                _xlog('local_http_auth result: ok=' + localHttpResult?.ok + ' error=' + localHttpResult?.error);
+                noteError('local_http_auth', localHttpResult);
+                if (localHttpResult?.ok) {
+                    loginResult = localHttpResult;
+                    lastError = null;
+                    break;
                 }
             }
 
@@ -1205,6 +1223,8 @@ function is_tauri_runtime() {
         if (host === 'tauri.localhost') return true;
         const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
         if (hasTauriInvoke) return true;
+        const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
+        if (port) return true;
         const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
         if (!hasTauriObjects) return false;
         const ua = (typeof navigator !== 'undefined') ? String(navigator.userAgent || '') : '';
@@ -1550,6 +1570,86 @@ async function fastify_http_register(phone, password, username) {
         console.warn('[Auth] Fastify HTTP registration threw:', e?.message || e);
         return { success: false, data: null, error: e?.message || String(e), alreadyExists: false };
     }
+}
+
+/**
+ * Local HTTP auth fallback for iOS/Tauri embedded server.
+ * Tries register then login via HTTP POST to the local embedded server.
+ * Used when WebSocket auth fails but the local HTTP server is reachable.
+ */
+async function local_http_auth(identity) {
+    if (!is_tauri_runtime()) return { ok: false, error: 'not_tauri' };
+    const port = (typeof window !== 'undefined')
+        ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || 3000)
+        : 3000;
+    const base = `http://127.0.0.1:${port}`;
+    const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[LOCAL-HTTP-AUTH] ' + msg); } catch (_) { } console.log('[LOCAL-HTTP-AUTH]', msg); };
+
+    const doFetch = async (url, body) => {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const tid = controller ? setTimeout(() => controller.abort(), 3000) : null;
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+                credentials: 'omit',
+                signal: controller?.signal
+            });
+            if (tid) clearTimeout(tid);
+            const data = await res.json().catch(() => null);
+            return { status: res.status, ok: res.ok, data };
+        } catch (e) {
+            if (tid) clearTimeout(tid);
+            return { status: 0, ok: false, data: null, error: e?.message || String(e) };
+        }
+    };
+
+    _xlog('register phone=' + identity.phone);
+    const regResult = await doFetch(`${base}/api/auth/register`, {
+        phone: identity.phone,
+        password: identity.password,
+        username: identity.username,
+        visibility: identity.visibility || 'public'
+    });
+    _xlog('register result: status=' + regResult.status + ' ok=' + regResult.ok);
+    const regOk = regResult.ok
+        || regResult.status === 409
+        || regResult.data?.alreadyExists === true
+        || (regResult.data?.success === true)
+        || (regResult.data?.error && String(regResult.data.error).toLowerCase().includes('already'));
+
+    if (!regOk) {
+        return { ok: false, error: regResult.data?.error || regResult.error || 'register_failed' };
+    }
+
+    _xlog('login phone=' + identity.phone);
+    const loginResult = await doFetch(`${base}/api/auth/login`, {
+        phone: identity.phone,
+        password: identity.password
+    });
+    _xlog('login result: status=' + loginResult.status + ' ok=' + loginResult.ok);
+
+    if (!loginResult.ok || !loginResult.data) {
+        return { ok: false, error: loginResult.data?.error || loginResult.error || 'login_failed' };
+    }
+
+    const data = loginResult.data;
+    const token = data.token || null;
+    const user = data.user || null;
+    const success = !!(data.ok || data.success || token);
+    if (success && token) {
+        _xlog('setting local token len=' + token.length);
+        try { TauriAdapter.setToken?.(token); } catch (_) { }
+        try { if (typeof localStorage !== 'undefined') localStorage.setItem('local_auth_token', token); } catch (_) { }
+    }
+    return {
+        ok: success,
+        success,
+        user,
+        token,
+        error: success ? null : (data.error || 'login_failed')
+    };
 }
 
 async function validate_fastify_token({ clearStored = true } = {}) {
@@ -4235,6 +4335,8 @@ try {
             // Use squirrel:ready event which fires reliably after DOM is ready
             window.addEventListener('squirrel:ready', async function onSquirrelReadyAuthCheck() {
                 window.removeEventListener('squirrel:ready', onSquirrelReadyAuthCheck);
+                const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[AUTH-DIAG] ' + msg); } catch (_) { } console.log('[AUTH-DIAG]', msg); };
+                _xlog('squirrel:ready fired, starting auth check');
 
                 const savedSession = load_user_session();
                 const authSource = resolveAuthSource();
@@ -4242,6 +4344,7 @@ try {
                     ? FastifyAdapter.getToken?.()
                     : TauriAdapter.getToken?.();
                 const hasFastifyToken = !!FastifyAdapter.getToken?.();
+                _xlog('authSource=' + authSource + ' hasToken=' + !!token + ' hasFastifyToken=' + hasFastifyToken + ' savedSession=' + JSON.stringify(savedSession));
 
                 // === DETAILED STARTUP STATE LOG ===
                 if (savedSession) {
@@ -4256,9 +4359,11 @@ try {
                 }
 
                 const fallbackToAnonymous = async () => {
+                    _xlog('fallbackToAnonymous called');
                     clear_user_session();
                     clear_ui_on_logout({ preserveLocalData: true });
                     const anon = await ensure_anonymous_user({ reason: 'startup' });
+                    _xlog('ensure_anonymous_user result: ok=' + anon?.ok + ' user=' + JSON.stringify(anon?.user || null));
                     if (anon?.ok && anon.user) {
                         const anonId = anon.user.user_id || anon.user.id || null;
                         signal_auth_check_complete(true, anonId);
@@ -4358,6 +4463,7 @@ try {
                 // If we have a persisted anonymous session but no token yet,
                 // restore it immediately to keep local workspace stable.
                 if (savedSession?.userId && isSavedAnon && !anonScopeMismatch && !token) {
+                    _xlog('branch: persisted anon session, no token -> restore + ensure_anon');
                     set_current_user_state(savedSession.userId, savedSession.userName, savedSession.userPhone);
                     signal_auth_check_complete(true, savedSession.userId);
                     try { await ensure_anonymous_user({ reason: 'startup' }); } catch { }
@@ -4365,6 +4471,7 @@ try {
                 }
 
                 if (!savedSession || !savedSession.userId || !token || anonScopeMismatch) {
+                    _xlog('branch: no session/token -> fallbackToAnonymous (savedSession=' + !!savedSession + ' userId=' + savedSession?.userId + ' token=' + !!token + ')');
                     // Check if we have a token but no session (legacy login before session persistence was added)
                     if (token && (!savedSession || !savedSession.userId)) {
                         current_user().then(function (currentResult) {
@@ -6017,62 +6124,62 @@ async function get_atome(atomeId, callback) {
  */
 
 export {
-  ANONYMOUS_USERNAME,
-  resolve_anonymous_phone,
-  is_anonymous_mode,
-  is_tauri_runtime,
-  normalize_phone_input,
-  normalizeAtomeRecord,
-  resolveAtomePropertiesInput,
-  resolveAtomePropertiesPayload,
-  extract_atome_properties,
-  normalize_ref_id,
-  resolve_owner_for_sync,
-  resolve_parent_for_sync,
-  extract_created_atome_id,
-  resolve_backend_plan,
-  resolve_sync_policy,
-  ensure_user_for_operation,
-  ensure_secondary_user_match,
-  ensure_fastify_token,
-  ensure_fastify_ws_auth,
-  get_authenticated_user,
-  require_authenticated_user,
-  create_unauthenticated_result,
-  current_user,
-  create_user,
-  log_user,
-  unlog_user,
-  delete_user,
-  change_password,
-  delete_account,
-  refresh_token,
-  set_user_visibility,
-  user_list,
-  lookup_user_by_phone,
-  get_atome,
-  get_current_user_info,
-  set_current_user_state,
-  migrate_anonymous_workspace,
-  try_auto_login,
-  get_current_project_id,
-  get_current_project,
-  set_current_project,
-  load_saved_current_project,
-  clear_ui_on_logout,
-  wait_for_auth_check,
-  signal_auth_check_complete,
-  ensure_anonymous_user,
-  get_anonymous_user_id,
-  sync_atomes,
-  list_unsynced_atomes,
-  maybe_sync_atomes,
-  request_sync,
-  queue_pending_delete,
-  process_pending_deletes,
-  get_pending_delete_ids,
-  is_already_exists_error,
-  get_current_machine,
-  register_machine,
-  get_machine_last_user
+    ANONYMOUS_USERNAME,
+    resolve_anonymous_phone,
+    is_anonymous_mode,
+    is_tauri_runtime,
+    normalize_phone_input,
+    normalizeAtomeRecord,
+    resolveAtomePropertiesInput,
+    resolveAtomePropertiesPayload,
+    extract_atome_properties,
+    normalize_ref_id,
+    resolve_owner_for_sync,
+    resolve_parent_for_sync,
+    extract_created_atome_id,
+    resolve_backend_plan,
+    resolve_sync_policy,
+    ensure_user_for_operation,
+    ensure_secondary_user_match,
+    ensure_fastify_token,
+    ensure_fastify_ws_auth,
+    get_authenticated_user,
+    require_authenticated_user,
+    create_unauthenticated_result,
+    current_user,
+    create_user,
+    log_user,
+    unlog_user,
+    delete_user,
+    change_password,
+    delete_account,
+    refresh_token,
+    set_user_visibility,
+    user_list,
+    lookup_user_by_phone,
+    get_atome,
+    get_current_user_info,
+    set_current_user_state,
+    migrate_anonymous_workspace,
+    try_auto_login,
+    get_current_project_id,
+    get_current_project,
+    set_current_project,
+    load_saved_current_project,
+    clear_ui_on_logout,
+    wait_for_auth_check,
+    signal_auth_check_complete,
+    ensure_anonymous_user,
+    get_anonymous_user_id,
+    sync_atomes,
+    list_unsynced_atomes,
+    maybe_sync_atomes,
+    request_sync,
+    queue_pending_delete,
+    process_pending_deletes,
+    get_pending_delete_ids,
+    is_already_exists_error,
+    get_current_machine,
+    register_machine,
+    get_machine_last_user
 };

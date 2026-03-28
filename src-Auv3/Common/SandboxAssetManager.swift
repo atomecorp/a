@@ -8,6 +8,7 @@ final class SandboxAssetManager {
 
     private let fm = FileManager.default
     private let copyQueue = DispatchQueue(label: "sandbox.asset.manager")
+    private let disallowedMaterializedExtensions: Set<String> = ["js", "mjs", "css", "html", "htm", "map"]
 
     private init() {}
 
@@ -25,6 +26,13 @@ final class SandboxAssetManager {
 
         // 1. Locate source in bundle first
         let source = locateBundleAsset(for: relativePath)
+
+        if !shouldMaterializeInSandbox(relativePath: sanitized) {
+            if let source {
+                return source
+            }
+            return fm.fileExists(atPath: destination.path) ? destination : nil
+        }
 
         // 2. If no source in bundle, fall back to existing destination
         if source == nil {
@@ -64,6 +72,18 @@ final class SandboxAssetManager {
             }
         }
         return fm.fileExists(atPath: destination.path) ? destination : nil
+    }
+
+    private func shouldMaterializeInSandbox(relativePath: String) -> Bool {
+        let normalized = relativePath.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.hasPrefix("src/") {
+            return false
+        }
+        let ext = URL(fileURLWithPath: normalized).pathExtension.lowercased()
+        if disallowedMaterializedExtensions.contains(ext) {
+            return false
+        }
+        return true
     }
 
     private func setDefaultPermissions(at url: URL) {

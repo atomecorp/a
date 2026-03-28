@@ -34,10 +34,16 @@ final class LocalHTTPServer {
     private var cancelledConnections: Set<ObjectIdentifier> = []
     private var wsConnections: [ObjectIdentifier: NWConnection] = [:]
     private var wsStates: [ObjectIdentifier: WebSocketState] = [:]
+    private var httpStates: [ObjectIdentifier: HTTPRequestState] = [:]
 
     private struct WebSocketState {
         var buffer = Data()
         var clientId: String
+    }
+
+    private struct HTTPRequestState {
+        var buffer = Data()
+        var expectedLength: Int?
     }
 
     func start(preferredPort: UInt16? = nil) {
@@ -106,29 +112,60 @@ final class LocalHTTPServer {
     private func receive(on connection: NWConnection) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 32 * 1024) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
+            let isWs = self.isWebSocketConnection(connection)
             if let data = data, !data.isEmpty {
-                if self.isWebSocketConnection(connection) {
+                if isWs {
+                    print("🔌 WS recv: \(data.count) bytes on connection")
                     self.processWebSocketData(data, on: connection)
                 } else {
-                    self.processRequest(data, on: connection)
+                    self.processRequestChunk(data, on: connection)
                 }
+            } else if isWs {
+                print("🔌 WS recv: empty/nil data, isComplete=\(isComplete), error=\(String(describing: error))")
             }
-            if error != nil {
+            if let error = error {
+                if isWs { print("🔌 WS recv error: \(error)") }
                 // Peer already closed/reset the socket: avoid extra cancel() noise.
                 self.clearConnectionState(connection)
                 return
             }
-            if isComplete {
+            // Do not close WebSocket connections on isComplete; the HTTP request
+            // may be "complete" while the upgraded WS connection must stay alive.
+            if isComplete && !isWs {
                 self.requestCancel(connection)
                 return
+            }
+            if isComplete && isWs {
+                print("🔌 WS recv: isComplete=true on WS connection — continuing receive loop")
             }
             self.receive(on: connection) // keep reading pipelined data (simple)
         }
     }
 
+    private func processRequestChunk(_ data: Data, on connection: NWConnection) {
+        let id = ObjectIdentifier(connection)
+        var state = httpStates[id] ?? HTTPRequestState()
+        state.buffer.append(data)
+        if state.expectedLength == nil,
+           let headerEnd = state.buffer.range(of: Data("\r\n\r\n".utf8))?.upperBound,
+           let headerString = String(data: state.buffer.prefix(headerEnd), encoding: .utf8) {
+            state.expectedLength = headerEnd + httpContentLength(from: headerString)
+        }
+        httpStates[id] = state
+        guard let expectedLength = state.expectedLength, state.buffer.count >= expectedLength else {
+            return
+        }
+
+        let requestData = Data(state.buffer.prefix(expectedLength))
+        httpStates.removeValue(forKey: id)
+        processRequest(requestData, on: connection)
+    }
+
     private func processRequest(_ data: Data, on connection: NWConnection) {
-        guard let request = String(data: data, encoding: .utf8) else { requestCancel(connection); return }
-        // Very small parser
+        guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)) else { requestCancel(connection); return }
+        let headerData = Data(data[..<headerRange.lowerBound])
+        let bodyData = Data(data[headerRange.upperBound...])
+        guard let request = String(data: headerData, encoding: .utf8) else { requestCancel(connection); return }
         let lines = request.split(separator: "\r\n", omittingEmptySubsequences: false)
         guard let requestLine = lines.first else { requestCancel(connection); return }
         let parts = requestLine.split(separator: " ")
@@ -153,9 +190,14 @@ final class LocalHTTPServer {
         }
         if let rh = rangeHeader { print("   ↪︎ Range hdr: \(rh)") }
         if !headers.isEmpty { print("   ↪︎ Headers count=\(headers.count)") }
+        if routePath == "/ws/sync" || routePath == "/ws/api" {
+            print("   ↪︎ WS upgrade check: upgrade='\(headers["upgrade"] ?? "<nil>")' connection='\(headers["connection"] ?? "<nil>")' sec-websocket-key='\(headers["sec-websocket-key"] ?? "<nil>")'")
+        }
         if method == "OPTIONS" {
             sendRaw(status: 204, reason: "No Content", headers: [
-                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Filename, X-Atome-Id, X-Atome-Type, X-Mime-Type, X-Original-Name, X-User-Id, X-Username, X-Phone, X-File-Path, X-File-Name",
                 "Access-Control-Max-Age": "86400"
             ], body: Data(), on: connection)
             return
@@ -164,9 +206,19 @@ final class LocalHTTPServer {
             handleWebSocketUpgrade(connection, headers: headers)
             return
         }
+        if (routePath == "/ws/sync" || routePath == "/ws/api") && !isWebSocketUpgrade(headers: headers) {
+            print("⚠️ WS path requested but upgrade headers missing; attempting upgrade anyway")
+            // WKWebView may strip standard upgrade headers; try upgrading if sec-websocket-key is present
+            if headers["sec-websocket-key"] != nil {
+                handleWebSocketUpgrade(connection, headers: headers)
+                return
+            }
+            sendSimple(status: 400, reason: "Bad Request", body: "WebSocket upgrade headers missing", on: connection)
+            return
+        }
         if method == "POST" {
             if routePath == "/api/events/commit",
-               let body = parseJsonObjectBody(from: request) {
+               let body = parseJsonObjectBody(from: bodyData) {
                 var message = body
                 message["type"] = "events"
                 message["action"] = "commit"
@@ -177,7 +229,7 @@ final class LocalHTTPServer {
                 return
             }
             if routePath == "/api/events/commit-batch",
-               let body = parseJsonObjectBody(from: request) {
+               let body = parseJsonObjectBody(from: bodyData) {
                 var message = body
                 message["type"] = "events"
                 message["action"] = "commit-batch"
@@ -187,13 +239,51 @@ final class LocalHTTPServer {
                 return
             }
             if routePath == "/api/snapshots",
-               let body = parseJsonObjectBody(from: request) {
+               let body = parseJsonObjectBody(from: bodyData) {
                 var message = body
                 message["type"] = "snapshot"
                 message["action"] = "create"
                 if let token = bearerToken(from: headers) { message["token"] = token }
                 let response = AiSRuntime.handleSnapshotMessage(message)
                 sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
+                return
+            }
+            if routePath == "/api/uploads" {
+                print("[UPLOAD] ── POST /api/uploads received ── bodySize=\(bodyData.count)")
+                handleUploadsPost(headers: headers, body: bodyData, on: connection)
+                return
+            }
+            if routePath == "/api/user-recordings" {
+                handleUserRecordingsPost(headers: headers, body: bodyData, on: connection)
+                return
+            }
+            if (routePath == "/api/auth/login" || routePath == "/api/auth/register" || routePath == "/api/auth/bootstrap"),
+               let body = parseJsonObjectBody(from: bodyData) {
+                var message = body
+                message["type"] = "auth"
+                let action: String
+                if routePath == "/api/auth/register" {
+                    action = "register"
+                } else if routePath == "/api/auth/bootstrap" {
+                    action = "bootstrap"
+                } else {
+                    action = "login"
+                }
+                message["action"] = action
+                print("[AUTH-HTTP] POST \(routePath) action=\(action)")
+                let response = AiSRuntime.handleAuthMessage(message)
+                let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
+                print("[AUTH-HTTP] result success=\(success) userId=\(response["user_id"] ?? response["userId"] ?? "nil")")
+                sendJsonResponse(response, status: success ? 200 : 401, on: connection)
+                return
+            }
+            if routePath == "/api/auth/me" {
+                let token = bearerToken(from: headers)
+                var message: [String: Any] = ["type": "auth", "action": "me"]
+                if let token { message["token"] = token }
+                let response = AiSRuntime.handleAuthMessage(message)
+                let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
+                sendJsonResponse(response, status: success ? 200 : 401, on: connection)
                 return
             }
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
@@ -261,17 +351,35 @@ final class LocalHTTPServer {
             if let token = bearerToken(from: headers) { message["token"] = token }
             let response = AiSRuntime.handleEventsMessage(message)
             sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
+        } else if routePath == "/api/uploads" {
+            handleUploadsList(headers: headers, on: connection)
+        } else if routePath.hasPrefix("/api/uploads/") {
+            let raw = String(routePath.dropFirst("/api/uploads/".count))
+            let fileName = raw.removingPercentEncoding ?? raw
+            handleUploadsGet(fileName: fileName, headers: headers, on: connection)
+        } else if routePath.hasPrefix("/api/recordings/") {
+            let raw = String(routePath.dropFirst("/api/recordings/".count))
+            let fileName = raw.removingPercentEncoding ?? raw
+            handleRecordingGet(fileName: fileName, headers: headers, on: connection)
+        } else if routePath == "/api/auth/me" {
+            var message: [String: Any] = ["type": "auth", "action": "me"]
+            if let token = bearerToken(from: headers) { message["token"] = token }
+            let response = AiSRuntime.handleAuthMessage(message)
+            let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
+            sendJsonResponse(response, status: success ? 200 : 401, on: connection)
         } else {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
         }
     }
 
-    // MARK: - WebSocket (/ws/sync)
-
     private func isWebSocketUpgrade(headers: [String: String]) -> Bool {
         let upgrade = headers["upgrade"]?.lowercased() ?? ""
         let connection = headers["connection"]?.lowercased() ?? ""
-        return upgrade == "websocket" && connection.contains("upgrade")
+        let hasUpgradeHeader = upgrade.contains("websocket")
+        let hasConnectionUpgrade = connection.contains("upgrade")
+        let hasWebSocketKey = headers["sec-websocket-key"] != nil
+        // Some WebKit builds omit Connection: Upgrade but still send sec-websocket-key
+        return (hasUpgradeHeader && hasConnectionUpgrade) || (hasUpgradeHeader && hasWebSocketKey)
     }
 
     private func isWebSocketConnection(_ connection: NWConnection) -> Bool {
@@ -287,9 +395,11 @@ final class LocalHTTPServer {
 
     private func handleWebSocketUpgrade(_ connection: NWConnection, headers: [String: String]) {
         guard let key = headers["sec-websocket-key"], let accept = websocketAcceptKey(key) else {
+            print("❌ WS upgrade: missing sec-websocket-key")
             sendSimple(status: 400, reason: "Bad Request", body: "missing websocket key", on: connection)
             return
         }
+        print("🔌 WS upgrade: sec-websocket-key found, generating accept key")
 
         let response = [
             "HTTP/1.1 101 Switching Protocols",
@@ -303,6 +413,7 @@ final class LocalHTTPServer {
         let id = ObjectIdentifier(connection)
         wsConnections[id] = connection
         wsStates[id] = WebSocketState(buffer: Data(), clientId: clientId)
+        print("🔌 WS upgrade: connection registered, clientId=\(clientId)")
 
         let payload: [String: Any] = [
             "type": "welcome",
@@ -313,8 +424,13 @@ final class LocalHTTPServer {
             "timestamp": ISO8601DateFormatter().string(from: Date())
         ]
 
-        connection.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] _ in
+        connection.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] error in
             guard let self = self else { return }
+            if let error = error {
+                print("❌ WS upgrade: 101 send failed: \(error)")
+                return
+            }
+            print("🔌 WS upgrade: 101 sent OK, sending welcome")
             self.sendWebSocketJson(payload, on: connection)
             FastifySyncRelay.shared.connectIfConfigured()
         })
@@ -386,10 +502,12 @@ final class LocalHTTPServer {
     }
 
     private func handleWebSocketText(_ text: String, on connection: NWConnection) {
-        guard let data = text.data(using: .utf8) else { return }
+        print("🔌 WS text received: \(text.prefix(200))")
+        guard let data = text.data(using: .utf8) else { print("❌ WS text: invalid UTF-8"); return }
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
-              let payload = obj as? [String: Any] else { return }
+              let payload = obj as? [String: Any] else { print("❌ WS text: invalid JSON"); return }
         let type = (payload["type"] as? String) ?? ""
+        print("🔌 WS message type: \(type)")
         if type == "register" {
             if let provided = payload["clientId"] as? String {
                 let id = ObjectIdentifier(connection)
@@ -838,11 +956,16 @@ final class LocalHTTPServer {
         var headerLines: [String] = []
         var hasCT = false
         var hasCL = false
+        var hasACOrigin = false
+        var hasACHeaders = false
+        let lowerKeys = Set(headers.keys.map { $0.lowercased() })
+        if lowerKeys.contains("access-control-allow-origin") { hasACOrigin = true }
+        if lowerKeys.contains("access-control-allow-headers") { hasACHeaders = true }
         for (k,v) in headers { headerLines.append("\(k): \(v)"); if k.lowercased()=="content-type" { hasCT=true }; if k.lowercased()=="content-length" { hasCL=true } }
         if !hasCT { headerLines.append("Content-Type: application/octet-stream") }
         if !hasCL { headerLines.append("Content-Length: \(body.count)") }
-        headerLines.append("Access-Control-Allow-Origin: *")
-        headerLines.append("Access-Control-Allow-Headers: *")
+        if !hasACOrigin { headerLines.append("Access-Control-Allow-Origin: *") }
+        if !hasACHeaders { headerLines.append("Access-Control-Allow-Headers: *") }
         headerLines.append("Connection: close")
         let head = "HTTP/1.1 \(status) \(reason)\r\n" + headerLines.joined(separator: "\r\n") + "\r\n\r\n"
         var out = Data(head.utf8); out.append(body)
@@ -861,14 +984,25 @@ final class LocalHTTPServer {
         ], body: data, on: connection)
     }
 
-    private func parseJsonObjectBody(from request: String) -> [String: Any]? {
-        guard let body = request.components(separatedBy: "\r\n\r\n").dropFirst().joined(separator: "\r\n\r\n").data(using: .utf8),
-              !body.isEmpty,
+    private func parseJsonObjectBody(from body: Data) -> [String: Any]? {
+        guard !body.isEmpty,
               let value = try? JSONSerialization.jsonObject(with: body, options: []),
               let object = value as? [String: Any] else {
             return nil
         }
         return object
+    }
+
+    private func httpContentLength(from requestHeaders: String) -> Int {
+        let lines = requestHeaders.split(separator: "\r\n", omittingEmptySubsequences: false)
+        for line in lines.dropFirst() {
+            guard let idx = line.firstIndex(of: ":") else { continue }
+            let key = String(line[..<idx]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if key != "content-length" { continue }
+            let value = String(line[line.index(after: idx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return max(0, Int(value) ?? 0)
+        }
+        return 0
     }
 
     private func bearerToken(from headers: [String: String]) -> String? {
@@ -891,6 +1025,238 @@ final class LocalHTTPServer {
         if let success = payload["success"] as? Bool { return success }
         if let ok = payload["ok"] as? Bool { return ok }
         return true
+    }
+
+    private func handleUploadsPost(headers: [String: String], body: Data, on connection: NWConnection) {
+        handleBinaryUpload(headers: headers, body: body, preferredFolder: nil, on: connection)
+    }
+
+    private func handleUserRecordingsPost(headers: [String: String], body: Data, on connection: NWConnection) {
+        handleBinaryUpload(headers: headers, body: body, preferredFolder: "Recordings", on: connection)
+    }
+
+    private func handleBinaryUpload(headers: [String: String], body: Data, preferredFolder: String?, on connection: NWConnection) {
+        print("[UPLOAD] ── handleBinaryUpload START ──")
+        print("[UPLOAD] body.count=\(body.count) preferredFolder=\(preferredFolder ?? "nil")")
+        print("[UPLOAD] headers: \(headers.filter { ["x-filename","x-original-name","x-atome-type","x-mime-type","x-file-path","x-user-id","x-phone","authorization","content-type"].contains($0.key.lowercased()) })")
+        guard !body.isEmpty else {
+            print("[UPLOAD] ❌ Empty body → 400")
+            sendJsonResponse(["success": false, "error": "Empty upload body"], status: 400, on: connection)
+            return
+        }
+        guard let userId = resolveUploadUserId(from: headers) else {
+            print("[UPLOAD] ❌ resolveUploadUserId returned nil → 401 (token=\(headers["authorization"]?.prefix(20) ?? "nil") x-user-id=\(headers["x-user-id"] ?? "nil") x-phone=\(headers["x-phone"] ?? "nil"))")
+            sendJsonResponse(["success": false, "error": "Access denied"], status: 401, on: connection)
+            return
+        }
+        print("[UPLOAD] ✅ userId resolved: \(userId)")
+        let rawName = headers["x-filename"] ?? headers["x-original-name"] ?? ""
+        let decodedName = (rawName.removingPercentEncoding ?? rawName).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pathHeader = (headers["x-file-path"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let atomeType = (headers["x-atome-type"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let mimeType = (headers["x-mime-type"] ?? headers["content-type"] ?? "application/octet-stream").trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[UPLOAD] decodedName=\(decodedName) pathHeader=\(pathHeader) atomeType=\(atomeType) mimeType=\(mimeType)")
+
+        let relativePath = resolveUploadRelativePath(
+            userId: userId,
+            fileName: decodedName,
+            pathHeader: pathHeader,
+            atomeType: atomeType,
+            preferredFolder: preferredFolder
+        )
+        print("[UPLOAD] relativePath=\(relativePath ?? "nil")")
+        guard let safeRelativePath = relativePath,
+              let root = iCloudFileManager.shared.getCurrentStorageURL() else {
+            print("[UPLOAD] ❌ path or root nil → 400 (relativePath=\(relativePath ?? "nil"), root=\(iCloudFileManager.shared.getCurrentStorageURL()?.path ?? "nil"))")
+            sendJsonResponse(["success": false, "error": "Invalid upload path"], status: 400, on: connection)
+            return
+        }
+        let fileURL = root.appendingPathComponent(safeRelativePath)
+        print("[UPLOAD] storageRoot=\(root.path)")
+        print("[UPLOAD] fileURL=\(fileURL.path)")
+        print("[UPLOAD] parentDir=\(fileURL.deletingLastPathComponent().path)")
+        do {
+            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            print("[UPLOAD] ✅ directory created/exists")
+            try body.write(to: fileURL, options: .atomic)
+            print("[UPLOAD] ✅ file written (\(body.count) bytes)")
+            let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
+            print("[UPLOAD] fileExists after write: \(fileExists)")
+            FileSyncCoordinator.shared.syncAll(force: true)
+            let response: [String: Any] = [
+                "success": true,
+                "file": fileURL.lastPathComponent,
+                "file_name": fileURL.lastPathComponent,
+                "owner_id": userId,
+                "path": safeRelativePath,
+                "file_path": safeRelativePath,
+                "mime_type": mimeType,
+                "size": body.count
+            ]
+            print("[UPLOAD] ── handleBinaryUpload SUCCESS ── response=\(response)")
+            sendJsonResponse(response, status: 200, on: connection)
+        } catch {
+            print("[UPLOAD] ❌ write error: \(error)")
+            sendJsonResponse(["success": false, "error": error.localizedDescription], status: 500, on: connection)
+        }
+    }
+
+    private func handleUploadsList(headers: [String: String], on connection: NWConnection) {
+        guard let userId = resolveUploadUserId(from: headers) else {
+            sendJsonResponse(["success": false, "error": "Access denied"], status: 401, on: connection)
+            return
+        }
+        guard let root = iCloudFileManager.shared.getCurrentStorageURL() else {
+            sendJsonResponse(["success": false, "error": "Storage unavailable"], status: 500, on: connection)
+            return
+        }
+        let downloadsURL = root.appendingPathComponent("data/users/\(userId)/Downloads", isDirectory: true)
+        do {
+            let files = try listUploadEntries(in: downloadsURL, userId: userId)
+            sendJsonResponse(["success": true, "files": files], status: 200, on: connection)
+        } catch {
+            sendJsonResponse(["success": false, "error": error.localizedDescription], status: 500, on: connection)
+        }
+    }
+
+    private func handleUploadsGet(fileName: String, headers: [String: String], on connection: NWConnection) {
+        let userId = resolveUploadUserId(from: headers)
+        guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: ["Downloads", "Recordings"]) else {
+            sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
+            return
+        }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            sendRaw(status: 200, reason: "OK", headers: [
+                "Content-Type": mimeType(for: fileURL.lastPathComponent)
+            ], body: data, on: connection)
+        } catch {
+            sendJsonResponse(["success": false, "error": error.localizedDescription], status: 500, on: connection)
+        }
+    }
+
+    private func handleRecordingGet(fileName: String, headers: [String: String], on connection: NWConnection) {
+        let userId = resolveUploadUserId(from: headers)
+        guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: ["Recordings", "Downloads"]) else {
+            sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
+            return
+        }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            sendRaw(status: 200, reason: "OK", headers: [
+                "Content-Type": mimeType(for: fileURL.lastPathComponent)
+            ], body: data, on: connection)
+        } catch {
+            sendJsonResponse(["success": false, "error": error.localizedDescription], status: 500, on: connection)
+        }
+    }
+
+    private func resolveUploadUserId(from headers: [String: String]) -> String? {
+        let token = bearerToken(from: headers)
+        let userIdHint = headers["x-user-id"]
+        let phoneHint = headers["x-phone"]
+        print("[UPLOAD] resolveUploadUserId: token=\(token?.prefix(20) ?? "nil") userIdHint=\(userIdHint ?? "nil") phoneHint=\(phoneHint ?? "nil")")
+        let result = AiSRuntime.resolveAuthenticatedUserId(token: token, userIdHint: userIdHint, phoneHint: phoneHint)
+        print("[UPLOAD] resolveUploadUserId → \(result ?? "nil")")
+        return result
+    }
+
+    private func resolveUploadRelativePath(userId: String, fileName: String, pathHeader: String, atomeType: String, preferredFolder: String?) -> String? {
+        let baseName = sanitizeUploadFileName(fileName.isEmpty ? "upload.bin" : fileName)
+        let folderName = preferredFolder ?? ((atomeType == "sound" && baseName.lowercased().hasSuffix(".m4a")) ? "Recordings" : "Downloads")
+        print("[UPLOAD] resolveUploadRelativePath: baseName=\(baseName) folderName=\(folderName) pathHeader=\(pathHeader)")
+        if !pathHeader.isEmpty,
+           let sanitized = SandboxPathValidator.sanitizedRelativePath(pathHeader),
+           !sanitized.isEmpty {
+            if sanitized.hasSuffix("/") {
+                return "data/users/\(userId)/\(sanitized)\(baseName)"
+            }
+            let looksLikeFile = sanitized.split(separator: "/").last.map { String($0).contains(".") } ?? false
+            if looksLikeFile {
+                return "data/users/\(userId)/\(sanitized)"
+            }
+            return "data/users/\(userId)/\(sanitized)/\(baseName)"
+        }
+        return "data/users/\(userId)/\(folderName)/\(baseName)"
+    }
+
+    private func resolveUploadFileURL(fileName: String, userId: String?, folderHints: [String]) -> URL? {
+        let safeName = sanitizeUploadFileName(fileName)
+        guard !safeName.isEmpty, let root = iCloudFileManager.shared.getCurrentStorageURL() else { return nil }
+        var candidates: [URL] = []
+        if let userId, !userId.isEmpty {
+            for folder in folderHints {
+                candidates.append(root.appendingPathComponent("data/users/\(userId)/\(folder)/\(safeName)"))
+            }
+        }
+        if let usersRoot = SandboxPathValidator.sanitizedRelativePath("data/users") {
+            let usersURL = root.appendingPathComponent(usersRoot, isDirectory: true)
+            if let directories = try? FileManager.default.contentsOfDirectory(at: usersURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+                for directory in directories {
+                    for folder in folderHints {
+                        candidates.append(directory.appendingPathComponent("\(folder)/\(safeName)"))
+                    }
+                }
+            }
+        }
+        return candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    private func listUploadEntries(in folderURL: URL, userId: String) throws -> [[String: Any]] {
+        guard FileManager.default.fileExists(atPath: folderURL.path) else { return [] }
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: folderURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+        return urls.compactMap { url in
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+                return nil
+            }
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            return [
+                "name": url.lastPathComponent,
+                "file_name": url.lastPathComponent,
+                "file_path": "data/users/\(userId)/Downloads/\(url.lastPathComponent)",
+                "mime_type": mimeType(for: url.lastPathComponent),
+                "size": values?.fileSize ?? 0,
+                "updated_at": ISO8601DateFormatter().string(from: values?.contentModificationDate ?? Date())
+            ]
+        }.sorted {
+            String(describing: $0["updated_at"] ?? "") > String(describing: $1["updated_at"] ?? "")
+        }
+    }
+
+    private func sanitizeUploadFileName(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseName = URL(fileURLWithPath: trimmed).lastPathComponent
+        let mapped = baseName.map { character -> Character in
+            if character.isLetter || character.isNumber || character == "." || character == "_" || character == "-" {
+                return character
+            }
+            return "_"
+        }
+        let sanitized = String(mapped).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return sanitized.isEmpty ? "upload.bin" : sanitized
+    }
+
+    private func mimeType(for fileName: String) -> String {
+        switch URL(fileURLWithPath: fileName).pathExtension.lowercased() {
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "svg": return "image/svg+xml"
+        case "json": return "application/json"
+        case "txt", "md", "markdown", "csv", "tsv", "log": return "text/plain; charset=utf-8"
+        case "mp3": return "audio/mpeg"
+        case "wav": return "audio/wav"
+        case "m4a": return "audio/mp4"
+        case "mp4", "m4v": return "video/mp4"
+        case "pdf": return "application/pdf"
+        default: return "application/octet-stream"
+        }
     }
 
     // MARK: - Health & Tree Endpoints
@@ -998,6 +1364,7 @@ final class LocalHTTPServer {
         cancelledConnections.remove(id)
         wsConnections.removeValue(forKey: id)
         wsStates.removeValue(forKey: id)
+        httpStates.removeValue(forKey: id)
     }
 
     private func shouldLogConnectionFailure(_ error: NWError) -> Bool {
@@ -1412,6 +1779,8 @@ fileprivate enum AiSRuntime {
                 let db = try openDatabase()
                 let response: [String: Any]
                 switch action {
+                case "create":
+                    response = try handleAtomeCreate(message, db: db, requestId: requestId)
                 case "list":
                     response = try handleAtomeList(message, db: db, requestId: requestId)
                 case "get":
@@ -1493,6 +1862,30 @@ fileprivate enum AiSRuntime {
             } catch {
                 return snapshotResponse(requestId: requestId, success: false, error: error.localizedDescription)
             }
+        }
+    }
+
+    static func resolveAuthenticatedUserId(token: String?, userIdHint: String?, phoneHint: String?) -> String? {
+        queue.sync {
+            guard let db = try? openDatabase() else { return nil }
+            if let token,
+               !token.isEmpty,
+               let claims = try? verifyToken(token),
+               let userId = normalizedOptionalString(claims["sub"]),
+               (try? findUserRecordById(db, userId)) != nil {
+                return userId
+            }
+            if let userIdHint = normalizedOptionalString(userIdHint),
+               (try? findUserRecordById(db, userIdHint)) != nil {
+                return userIdHint
+            }
+            if let phoneHint = normalizedOptionalString(phoneHint) {
+                let normalizedPhone = normalizePhone(phoneHint)
+                if let record = try? findUserRecordByPhone(db, normalizedPhone) {
+                    return record.userId
+                }
+            }
+            return nil
         }
     }
 
@@ -1633,6 +2026,61 @@ fileprivate enum AiSRuntime {
         try execute(db, "UPDATE atomes SET deleted_at = ?, updated_at = ? WHERE atome_id = ?", [.text(now), .text(now), .text(userId)])
         try execute(db, "DELETE FROM state_current WHERE atome_id = ?", [.text(userId)])
         return authResponse(requestId: requestId, success: true)
+    }
+
+    private static func handleAtomeCreate(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let atomeId = stringValue(message["atome_id"] ?? message["id"])
+        if atomeId.isEmpty {
+            return atomeResponse(requestId: requestId, success: false, error: "Missing atome_id")
+        }
+        let token = stringValue(message["token"])
+        let claims = try verifyToken(token)
+        let userId = claims != nil ? stringValue(claims!["sub"]) : stringValue(message["owner_id"] ?? message["ownerId"])
+        if userId.isEmpty {
+            return atomeResponse(requestId: requestId, success: false, error: "Missing owner_id or token")
+        }
+        let atomeType = stringValue(message["atome_type"] ?? message["type"])
+        let parentId = normalizedOptionalString(message["parent_id"] ?? message["parentId"])
+        let now = isoNow()
+
+        // If atome already exists (idempotent), update instead
+        if let existing = try findAnyAtomeMeta(db, atomeId: atomeId) {
+            if existing.ownerId == userId || existing.creatorId == userId {
+                let particles = message["particles"] as? [String: Any] ?? message["properties"] as? [String: Any] ?? [:]
+                try execute(db, "UPDATE atomes SET deleted_at = NULL, updated_at = ?, sync_status = 'local' WHERE atome_id = ?", [.text(now), .text(atomeId)])
+                for (key, value) in particles {
+                    try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: userId, now: now)
+                }
+                try upsertStateCurrent(db, atomeId: atomeId, ownerId: userId, properties: try loadParticles(db, atomeId: atomeId), now: now)
+                return atomeResponse(requestId: requestId, success: true, data: try serializeAtome(db, atomeId: atomeId))
+            }
+            return atomeResponse(requestId: requestId, success: false, error: "Atome already exists")
+        }
+
+        // Insert new atome
+        try execute(db, """
+            INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ais', 'local')
+            """, [
+                .text(atomeId),
+                .text(atomeType.isEmpty ? "raw" : atomeType),
+                parentId != nil ? .text(parentId!) : .null,
+                .text(userId),
+                .text(userId),
+                .text(now),
+                .text(now)
+            ])
+
+        // Insert particles/properties
+        let particles = message["particles"] as? [String: Any] ?? message["properties"] as? [String: Any] ?? [:]
+        for (key, value) in particles {
+            try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: userId, now: now)
+        }
+
+        // Update state_current
+        try upsertStateCurrent(db, atomeId: atomeId, ownerId: userId, properties: try loadParticles(db, atomeId: atomeId), now: now)
+
+        return atomeResponse(requestId: requestId, success: true, data: try serializeAtome(db, atomeId: atomeId))
     }
 
     private static func handleAtomeList(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {

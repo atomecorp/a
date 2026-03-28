@@ -445,7 +445,10 @@ function normalizeApiBase(value) {
 
 function isTauriRuntime() {
     if (typeof window === 'undefined') return false;
-    return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+    const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
+    if (port) return true;
+    return false;
 }
 
 function resolveLocalApiBase() {
