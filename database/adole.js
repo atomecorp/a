@@ -951,8 +951,27 @@ export async function deleteAtome(id) {
  * List atomes for a user with full data
  */
 export async function listAtomes(ownerId, options = {}) {
-    // For multi-user sharing, listing must include atomes shared with the user.
-    const atomes = await getAtomesAccessibleToUser(ownerId, options);
+    const normalizedType = String(options.type || options.atome_type || '').trim().toLowerCase();
+    const limit = Number(options.limit) || 100;
+    const offset = Number(options.offset) || 0;
+    const includeDeleted = options.includeDeleted === true || options.include_deleted === true;
+    const globalUserListing = normalizedType === 'user'
+        && (options.skipOwner === true || options.skip_owner === true || ownerId === '*');
+    let atomes;
+
+    if (globalUserListing) {
+        let sql = 'SELECT * FROM atomes WHERE atome_type = ?';
+        const params = ['user'];
+        if (!includeDeleted) {
+            sql += ' AND deleted_at IS NULL';
+        }
+        sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        params.push(limit, offset);
+        atomes = await query('all', sql, params);
+    } else {
+        // For multi-user sharing, listing must include atomes shared with the user.
+        atomes = await getAtomesAccessibleToUser(ownerId, options);
+    }
 
     // Load particles for each atome
     const result = [];

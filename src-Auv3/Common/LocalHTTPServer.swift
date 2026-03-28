@@ -12,6 +12,7 @@ import Foundation
 import Network
 import AVFoundation
 import CryptoKit
+import SQLite3
 
 final class LocalHTTPServer {
     static let shared = LocalHTTPServer()
@@ -132,9 +133,13 @@ final class LocalHTTPServer {
         guard let requestLine = lines.first else { requestCancel(connection); return }
         let parts = requestLine.split(separator: " ")
         guard parts.count >= 2 else { requestCancel(connection); return }
-        let method = parts[0]
-        let path = String(parts[1])
-        print("📥 HTTP req: \(method) \(path)")
+        let method = String(parts[0]).uppercased()
+        let rawPath = String(parts[1])
+        let routePath = URLComponents(string: "http://127.0.0.1\(rawPath)")?.path
+            ?? rawPath.split(separator: "?", maxSplits: 1).first.map(String.init)
+            ?? rawPath
+        let queryItems = httpQueryItems(from: rawPath)
+        print("📥 HTTP req: \(method) \(rawPath)")
         var headers: [String: String] = [:]
         var rangeHeader: String? = nil
         for line in lines.dropFirst() {
@@ -148,44 +153,114 @@ final class LocalHTTPServer {
         }
         if let rh = rangeHeader { print("   ↪︎ Range hdr: \(rh)") }
         if !headers.isEmpty { print("   ↪︎ Headers count=\(headers.count)") }
-        if method != "GET" {
-            sendSimple(status: 405, reason: "Method Not Allowed", body: "Method Not Allowed", on: connection)
+        if method == "OPTIONS" {
+            sendRaw(status: 204, reason: "No Content", headers: [
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Max-Age": "86400"
+            ], body: Data(), on: connection)
             return
         }
-        if path == "/ws/sync" && isWebSocketUpgrade(headers: headers) {
+        if (routePath == "/ws/sync" || routePath == "/ws/api") && isWebSocketUpgrade(headers: headers) {
             handleWebSocketUpgrade(connection, headers: headers)
+            return
+        }
+        if method == "POST" {
+            if routePath == "/api/events/commit",
+               let body = parseJsonObjectBody(from: request) {
+                var message = body
+                message["type"] = "events"
+                message["action"] = "commit"
+                message["event"] = body
+                if let token = bearerToken(from: headers) { message["token"] = token }
+                let response = AiSRuntime.handleEventsMessage(message)
+                sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
+                return
+            }
+            if routePath == "/api/events/commit-batch",
+               let body = parseJsonObjectBody(from: request) {
+                var message = body
+                message["type"] = "events"
+                message["action"] = "commit-batch"
+                if let token = bearerToken(from: headers) { message["token"] = token }
+                let response = AiSRuntime.handleEventsMessage(message)
+                sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
+                return
+            }
+            if routePath == "/api/snapshots",
+               let body = parseJsonObjectBody(from: request) {
+                var message = body
+                message["type"] = "snapshot"
+                message["action"] = "create"
+                if let token = bearerToken(from: headers) { message["token"] = token }
+                let response = AiSRuntime.handleSnapshotMessage(message)
+                sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
+                return
+            }
+            sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
+            return
+        }
+        if method != "GET" {
+            sendSimple(status: 405, reason: "Method Not Allowed", body: "Method Not Allowed", on: connection)
             return
         }
     // Opportunistic sync trigger (throttled inside coordinator)
     FileSyncCoordinator.shared.syncAll()
 
-    if path.hasPrefix("/text/") {
-            let name = String(path.dropFirst("/text/".count))
+    if routePath.hasPrefix("/text/") {
+            let name = String(routePath.dropFirst("/text/".count))
             serveText(named: name, on: connection)
-        } else if path.hasPrefix("/audio_meta/") {
-            let name = String(path.dropFirst("/audio_meta/".count))
+        } else if routePath.hasPrefix("/audio_meta/") {
+            let name = String(routePath.dropFirst("/audio_meta/".count))
             serveMetadata(named: name, on: connection)
-        } else if path.hasPrefix("/audio_head/") {
-            let name = String(path.dropFirst("/audio_head/".count))
+        } else if routePath.hasPrefix("/audio_head/") {
+            let name = String(routePath.dropFirst("/audio_head/".count))
             serveAudioHead(named: name, on: connection)
-        } else if path.hasPrefix("/audio/") {
-            let rawName = String(path.dropFirst("/audio/".count))
+        } else if routePath.hasPrefix("/audio/") {
+            let rawName = String(routePath.dropFirst("/audio/".count))
             // Decode any percent-encoded characters (spaces etc.) so underlying file with plain spaces is found
             let decodedName = rawName.removingPercentEncoding ?? rawName
             if rawName != decodedName { print("🧪 Decoded audio name raw=\(rawName) decoded=\(decodedName)") }
             serveAudio(named: decodedName, rangeHeader: rangeHeader, on: connection)
-        } else if path.hasPrefix("/file/") {
-            let raw = String(path.dropFirst("/file/".count))
+        } else if routePath.hasPrefix("/file/") {
+            let raw = String(routePath.dropFirst("/file/".count))
             let decoded = raw.removingPercentEncoding ?? raw
             serveUnified(named: decoded, rangeHeader: rangeHeader, on: connection)
-        } else if path == "/health" {
+        } else if routePath == "/health" {
             serveHealth(on: connection)
-        } else if path == "/tree" {
+        } else if routePath == "/tree" {
             serveTree(on: connection)
-        } else if path == "/sync_now" {
+        } else if routePath == "/sync_now" {
             serveSyncNow(on: connection)
-        } else if path == "/api/server-info" {
+        } else if routePath == "/api/server-info" {
             serveServerInfo(on: connection)
+        } else if routePath.hasPrefix("/api/state_current/") {
+            let atomeId = String(routePath.dropFirst("/api/state_current/".count)).removingPercentEncoding ?? String(routePath.dropFirst("/api/state_current/".count))
+            var message: [String: Any] = [
+                "type": "state-current",
+                "action": "get",
+                "atome_id": atomeId
+            ]
+            if let token = bearerToken(from: headers) { message["token"] = token }
+            let response = AiSRuntime.handleStateCurrentMessage(message)
+            sendJsonResponse(response, status: responseSuccess(response) ? 200 : 404, on: connection)
+        } else if routePath == "/api/state_current" {
+            var message: [String: Any] = [
+                "type": "state-current",
+                "action": "list"
+            ]
+            for (key, value) in queryItems { message[key] = value }
+            if let token = bearerToken(from: headers) { message["token"] = token }
+            let response = AiSRuntime.handleStateCurrentMessage(message)
+            sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
+        } else if routePath == "/api/events" {
+            var message: [String: Any] = [
+                "type": "events",
+                "action": "list"
+            ]
+            for (key, value) in queryItems { message[key] = value }
+            if let token = bearerToken(from: headers) { message["token"] = token }
+            let response = AiSRuntime.handleEventsMessage(message)
+            sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
         } else {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
         }
@@ -313,10 +388,7 @@ final class LocalHTTPServer {
     private func handleWebSocketText(_ text: String, on connection: NWConnection) {
         guard let data = text.data(using: .utf8) else { return }
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
-              let payload = obj as? [String: Any] else {
-            return
-        }
-
+              let payload = obj as? [String: Any] else { return }
         let type = (payload["type"] as? String) ?? ""
         if type == "register" {
             if let provided = payload["clientId"] as? String {
@@ -348,6 +420,36 @@ final class LocalHTTPServer {
             return
         }
 
+        if type == "auth" {
+            let response = AiSRuntime.handleAuthMessage(payload)
+            sendWebSocketJson(response, on: connection)
+            return
+        }
+
+        if type == "atome" {
+            let response = AiSRuntime.handleAtomeMessage(payload)
+            sendWebSocketJson(response, on: connection)
+            return
+        }
+
+        if type == "events" {
+            let response = AiSRuntime.handleEventsMessage(payload)
+            sendWebSocketJson(response, on: connection)
+            return
+        }
+
+        if type == "state-current" {
+            let response = AiSRuntime.handleStateCurrentMessage(payload)
+            sendWebSocketJson(response, on: connection)
+            return
+        }
+
+        if type == "snapshot" {
+            let response = AiSRuntime.handleSnapshotMessage(payload)
+            sendWebSocketJson(response, on: connection)
+            return
+        }
+
         if type == "sync_request" {
             FileSyncCoordinator.shared.syncAll(force: true)
             let response: [String: Any] = [
@@ -376,6 +478,7 @@ final class LocalHTTPServer {
     }
 
     private func sendWebSocketJson(_ payload: [String: Any], on connection: NWConnection) {
+        guard JSONSerialization.isValidJSONObject(payload) else { return }
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []) else { return }
         sendWebSocketText(String(decoding: data, as: UTF8.self), on: connection)
     }
@@ -744,6 +847,50 @@ final class LocalHTTPServer {
         let head = "HTTP/1.1 \(status) \(reason)\r\n" + headerLines.joined(separator: "\r\n") + "\r\n\r\n"
         var out = Data(head.utf8); out.append(body)
         connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
+    }
+
+    private func sendJsonResponse(_ payload: [String: Any], status: Int = 200, on connection: NWConnection) {
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: []) else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "JSON encode failed", on: connection)
+            return
+        }
+        sendRaw(status: status, reason: status == 200 ? "OK" : "Error", headers: [
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        ], body: data, on: connection)
+    }
+
+    private func parseJsonObjectBody(from request: String) -> [String: Any]? {
+        guard let body = request.components(separatedBy: "\r\n\r\n").dropFirst().joined(separator: "\r\n\r\n").data(using: .utf8),
+              !body.isEmpty,
+              let value = try? JSONSerialization.jsonObject(with: body, options: []),
+              let object = value as? [String: Any] else {
+            return nil
+        }
+        return object
+    }
+
+    private func bearerToken(from headers: [String: String]) -> String? {
+        let raw = headers["authorization"] ?? headers["Authorization"] ?? ""
+        guard raw.lowercased().hasPrefix("bearer ") else { return nil }
+        let token = String(raw.dropFirst("Bearer ".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
+    }
+
+    private func httpQueryItems(from rawPath: String) -> [String: String] {
+        guard let components = URLComponents(string: "http://127.0.0.1\(rawPath)") else { return [:] }
+        var out: [String: String] = [:]
+        for item in components.queryItems ?? [] {
+            out[item.name] = item.value ?? ""
+        }
+        return out
+    }
+
+    private func responseSuccess(_ payload: [String: Any]) -> Bool {
+        if let success = payload["success"] as? Bool { return success }
+        if let ok = payload["ok"] as? Bool { return ok }
+        return true
     }
 
     // MARK: - Health & Tree Endpoints
@@ -1128,3 +1275,1548 @@ extension LocalHTTPServer {
 }
 
 // (Helper async supprimé; utilisation d'attente sémaphore pour compat non-async)
+
+fileprivate enum AiSRuntime {
+    private static let queue = DispatchQueue(label: "ais.runtime.queue")
+    private static var db: OpaquePointer?
+    private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    private static let tokenSecret = "ais-local-auth-v1"
+    private static let userNamespace: [UInt8] = [
+        0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
+        0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+    ]
+    private static let reservedUserParticleKeys: Set<String> = [
+        "id", "atome_id", "user_id", "type", "kind", "owner_id", "creator_id",
+        "created_at", "updated_at", "deleted_at", "sync_status", "last_sync",
+        "password_hash", "phone", "username", "visibility", "access"
+    ]
+    private static let schemaSQL = """
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE IF NOT EXISTS atomes (
+        atome_id TEXT PRIMARY KEY,
+        atome_type TEXT NOT NULL,
+        parent_id TEXT,
+        owner_id TEXT,
+        creator_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        deleted_at TEXT,
+        last_sync TEXT,
+        created_source TEXT DEFAULT 'ais',
+        sync_status TEXT DEFAULT 'local'
+    );
+    CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type);
+    CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id);
+    CREATE TABLE IF NOT EXISTS particles (
+        particle_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atome_id TEXT NOT NULL,
+        particle_key TEXT NOT NULL,
+        particle_value TEXT,
+        value_type TEXT DEFAULT 'string',
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(atome_id, particle_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_particles_atome ON particles(atome_id);
+    CREATE INDEX IF NOT EXISTS idx_particles_key ON particles(particle_key);
+    CREATE TABLE IF NOT EXISTS particles_versions (
+        version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        particle_id INTEGER NOT NULL,
+        atome_id TEXT NOT NULL,
+        particle_key TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        old_value TEXT,
+        new_value TEXT,
+        changed_by TEXT,
+        changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS state_current (
+        atome_id TEXT PRIMARY KEY,
+        owner_id TEXT,
+        project_id TEXT,
+        properties TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        version INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id);
+    CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id);
+    CREATE TABLE IF NOT EXISTS events (
+        id TEXT PRIMARY KEY,
+        ts TEXT NOT NULL,
+        atome_id TEXT,
+        project_id TEXT,
+        kind TEXT NOT NULL,
+        payload TEXT,
+        actor TEXT,
+        tx_id TEXT,
+        gesture_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+    CREATE INDEX IF NOT EXISTS idx_events_atome ON events(atome_id);
+    CREATE INDEX IF NOT EXISTS idx_events_project ON events(project_id);
+    CREATE TABLE IF NOT EXISTS snapshots (
+        snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atome_id TEXT,
+        project_id TEXT,
+        snapshot_data TEXT,
+        state_blob TEXT,
+        label TEXT,
+        snapshot_type TEXT DEFAULT 'manual',
+        actor TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    """
+
+    static func handleAuthMessage(_ message: [String: Any]) -> [String: Any] {
+        queue.sync {
+            let requestId = stringValue(message["requestId"])
+            let action = stringValue(message["action"])
+            do {
+                let db = try openDatabase()
+                let response: [String: Any]
+                switch action {
+                case "register":
+                    response = try handleRegister(message, db: db, requestId: requestId)
+                case "bootstrap":
+                    response = try handleBootstrap(message, db: db, requestId: requestId)
+                case "login":
+                    response = try handleLogin(message, db: db, requestId: requestId)
+                case "me":
+                    response = try handleMe(message, db: db, requestId: requestId)
+                case "lookup-phone":
+                    response = try handleLookupPhone(message, db: db, requestId: requestId)
+                case "logout":
+                    response = authResponse(requestId: requestId, success: true)
+                case "change-password":
+                    response = try handleChangePassword(message, db: db, requestId: requestId)
+                case "delete":
+                    response = try handleDeleteAccount(message, db: db, requestId: requestId)
+                default:
+                    response = authResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
+                }
+                return response
+            } catch {
+                return authResponse(requestId: requestId, success: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    static func handleAtomeMessage(_ message: [String: Any]) -> [String: Any] {
+        queue.sync {
+            let requestId = stringValue(message["requestId"])
+            let action = stringValue(message["action"])
+            do {
+                let db = try openDatabase()
+                let response: [String: Any]
+                switch action {
+                case "list":
+                    response = try handleAtomeList(message, db: db, requestId: requestId)
+                case "get":
+                    response = try handleAtomeGet(message, db: db, requestId: requestId)
+                case "alter":
+                    response = try handleAtomeAlter(message, db: db, requestId: requestId)
+                case "delete", "soft-delete":
+                    response = try handleAtomeDelete(message, db: db, requestId: requestId)
+                default:
+                    response = atomeResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
+                }
+                return response
+            } catch {
+                return atomeResponse(requestId: requestId, success: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    static func handleEventsMessage(_ message: [String: Any]) -> [String: Any] {
+        queue.sync {
+            let requestId = stringValue(message["requestId"])
+            let action = stringValue(message["action"])
+            do {
+                let db = try openDatabase()
+                let response: [String: Any]
+                switch action {
+                case "commit":
+                    response = try handleEventCommit(message, db: db, requestId: requestId)
+                case "commit-batch":
+                    response = try handleEventCommitBatch(message, db: db, requestId: requestId)
+                case "list":
+                    response = try handleEventList(message, db: db, requestId: requestId)
+                default:
+                    response = eventsResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
+                }
+                return response
+            } catch {
+                return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    static func handleStateCurrentMessage(_ message: [String: Any]) -> [String: Any] {
+        queue.sync {
+            let requestId = stringValue(message["requestId"])
+            let action = stringValue(message["action"])
+            do {
+                let db = try openDatabase()
+                let response: [String: Any]
+                switch action {
+                case "get":
+                    response = try handleStateCurrentGet(message, db: db, requestId: requestId)
+                case "list":
+                    response = try handleStateCurrentList(message, db: db, requestId: requestId)
+                default:
+                    response = stateCurrentResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
+                }
+                return response
+            } catch {
+                return stateCurrentResponse(requestId: requestId, success: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    static func handleSnapshotMessage(_ message: [String: Any]) -> [String: Any] {
+        queue.sync {
+            let requestId = stringValue(message["requestId"])
+            let action = stringValue(message["action"])
+            do {
+                let db = try openDatabase()
+                let response: [String: Any]
+                switch action {
+                case "create":
+                    response = try handleSnapshotCreate(message, db: db, requestId: requestId)
+                default:
+                    response = snapshotResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
+                }
+                return response
+            } catch {
+                return snapshotResponse(requestId: requestId, success: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    private static func handleRegister(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let username = stringValue(message["username"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if username.count < 2 {
+            return authResponse(requestId: requestId, success: false, error: "Username must be at least 2 characters")
+        }
+        return try registerUser(message, db: db, requestId: requestId, username: username)
+    }
+
+    private static func handleBootstrap(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let username = stringValue(message["username"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedUsername = username.count >= 2 ? username : "user"
+        return try registerUser(message, db: db, requestId: requestId, username: resolvedUsername)
+    }
+
+    private static func registerUser(_ message: [String: Any], db: OpaquePointer?, requestId: String?, username: String) throws -> [String: Any] {
+        let phone = normalizePhone(stringValue(message["phone"]))
+        if phone.count < 6 {
+            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
+        }
+        let password = stringValue(message["password"])
+        if password.count < 8 {
+            return authResponse(requestId: requestId, success: false, error: "Password must be at least 8 characters")
+        }
+        let visibility = normalizeVisibility(stringValue(message["visibility"]))
+        let optional = normalizeUserOptional(message["optional"] as? [String: Any] ?? [:])
+        let userId = generateDeterministicUserId(phone)
+        let now = isoNow()
+        let passwordHash = hashPassword(password)
+
+        if let existing = try findUserRecordByPhone(db, phone) ?? findUserRecordById(db, userId) {
+            if existing.deletedAt != nil {
+                try execute(db, """
+                    UPDATE atomes
+                    SET atome_type = 'user', deleted_at = NULL, updated_at = ?, sync_status = 'local'
+                    WHERE atome_id = ?
+                    """, [.text(now), .text(existing.userId)])
+                try upsertRequiredUserParticles(db, atomeId: existing.userId, username: username, phone: phone, passwordHash: passwordHash, visibility: visibility, now: now)
+                try upsertOptionalParticles(db, atomeId: existing.userId, values: optional, changedBy: existing.userId, now: now)
+                try upsertStateCurrent(db, atomeId: existing.userId, ownerId: existing.userId, properties: try loadParticles(db, atomeId: existing.userId), now: now)
+                let user = try loadUserInfo(db, userId: existing.userId)
+                let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username, phone: user["phone"] as? String ?? phone)
+                return authResponse(requestId: requestId, success: true, user: user, token: token)
+            }
+            let user = try loadUserInfo(db, userId: existing.userId)
+            return authResponse(requestId: requestId, success: true, user: user, alreadyExists: true)
+        }
+
+        try execute(db, """
+            INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, created_source, sync_status)
+            VALUES (?, 'user', ?, ?, ?, ?, 'ais', 'local')
+            """, [.text(userId), .text(userId), .text(userId), .text(now), .text(now)])
+        try upsertRequiredUserParticles(db, atomeId: userId, username: username, phone: phone, passwordHash: passwordHash, visibility: visibility, now: now)
+        try upsertOptionalParticles(db, atomeId: userId, values: optional, changedBy: userId, now: now)
+        try upsertStateCurrent(db, atomeId: userId, ownerId: userId, properties: try loadParticles(db, atomeId: userId), now: now)
+        let token = try createToken(userId: userId, username: username, phone: phone)
+        let user = try loadUserInfo(db, userId: userId)
+        return authResponse(requestId: requestId, success: true, user: user, token: token)
+    }
+
+    private static func handleLogin(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let phone = normalizePhone(stringValue(message["phone"]))
+        let password = stringValue(message["password"])
+        if phone.isEmpty || password.isEmpty {
+            return authResponse(requestId: requestId, success: false, error: "Phone and password are required")
+        }
+        guard let existing = try findUserRecordByPhone(db, phone) ?? findUserRecordById(db, generateDeterministicUserId(phone)) else {
+            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
+        }
+        let storedHash = try loadParticleString(db, atomeId: existing.userId, key: "password_hash") ?? ""
+        if !verifyPassword(password, storedHash: storedHash) {
+            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
+        }
+        let user = try loadUserInfo(db, userId: existing.userId)
+        let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? "", phone: user["phone"] as? String ?? phone)
+        return authResponse(requestId: requestId, success: true, user: user, token: token)
+    }
+
+    private static func handleMe(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return authResponse(requestId: requestId, success: false, error: "Token is required")
+        }
+        let userId = stringValue(claims["sub"])
+        guard let _ = try findUserRecordById(db, userId) else {
+            return authResponse(requestId: requestId, success: false, error: "User not found")
+        }
+        let user = try loadUserInfo(db, userId: userId)
+        return authResponse(requestId: requestId, success: true, user: user)
+    }
+
+    private static func handleLookupPhone(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let phone = normalizePhone(stringValue(message["phone"]))
+        if phone.count < 6 {
+            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
+        }
+        guard let existing = try findUserRecordByPhone(db, phone) else {
+            return authResponse(requestId: requestId, success: false, error: "User not found")
+        }
+        let user = try loadUserInfo(db, userId: existing.userId)
+        return authResponse(requestId: requestId, success: true, user: user)
+    }
+
+    private static func handleChangePassword(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return authResponse(requestId: requestId, success: false, error: "Token is required")
+        }
+        let userId = stringValue(claims["sub"])
+        let currentPassword = stringValue(message["currentPassword"])
+        let newPassword = stringValue(message["newPassword"])
+        if newPassword.count < 8 {
+            return authResponse(requestId: requestId, success: false, error: "Password must be at least 8 characters")
+        }
+        let storedHash = try loadParticleString(db, atomeId: userId, key: "password_hash") ?? ""
+        if !verifyPassword(currentPassword, storedHash: storedHash) {
+            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
+        }
+        let now = isoNow()
+        try upsertParticle(db, atomeId: userId, key: "password_hash", value: hashPassword(newPassword), changedBy: userId, now: now)
+        return authResponse(requestId: requestId, success: true)
+    }
+
+    private static func handleDeleteAccount(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return authResponse(requestId: requestId, success: false, error: "Token is required")
+        }
+        let userId = stringValue(claims["sub"])
+        let password = stringValue(message["password"])
+        let storedHash = try loadParticleString(db, atomeId: userId, key: "password_hash") ?? ""
+        if !verifyPassword(password, storedHash: storedHash) {
+            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
+        }
+        let now = isoNow()
+        try execute(db, "UPDATE atomes SET deleted_at = ?, updated_at = ? WHERE atome_id = ?", [.text(now), .text(now), .text(userId)])
+        try execute(db, "DELETE FROM state_current WHERE atome_id = ?", [.text(userId)])
+        return authResponse(requestId: requestId, success: true)
+    }
+
+    private static func handleAtomeList(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let atomeType = stringValue(message["atome_type"])
+        let ownerId = stringValue(message["owner_id"])
+        let parentId = stringValue(message["parent_id"])
+        let limit = intValue(message["limit"], defaultValue: 500)
+        let offset = intValue(message["offset"], defaultValue: 0)
+        var sql = "SELECT atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status FROM atomes WHERE deleted_at IS NULL"
+        var bindings: [SQLiteBinding] = []
+        if !atomeType.isEmpty {
+            sql += " AND atome_type = ?"
+            bindings.append(.text(atomeType))
+        }
+        if !ownerId.isEmpty && ownerId != "*" {
+            sql += " AND owner_id = ?"
+            bindings.append(.text(ownerId))
+        }
+        if !parentId.isEmpty {
+            sql += " AND parent_id = ?"
+            bindings.append(.text(parentId))
+        }
+        sql += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        bindings.append(.int(limit))
+        bindings.append(.int(offset))
+        let rows = try query(db, sql, bindings)
+        let atomes = try rows.map { row in
+            let atomeId = stringValue(rowValue(row, "atome_id"))
+            return try serializeAtome(db, atomeId: atomeId)
+        }
+        return atomeResponse(requestId: requestId, success: true, atomes: atomes, count: Int64(atomes.count))
+    }
+
+    private static func handleAtomeGet(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let atomeId = stringValue(message["atome_id"] ?? message["id"])
+        if atomeId.isEmpty {
+            return atomeResponse(requestId: requestId, success: false, error: "Missing atome_id")
+        }
+        let atome = try serializeAtome(db, atomeId: atomeId)
+        return atomeResponse(requestId: requestId, success: true, data: atome)
+    }
+
+    private static func handleAtomeAlter(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let atomeId = stringValue(message["atome_id"] ?? message["id"])
+        if atomeId.isEmpty {
+            return atomeResponse(requestId: requestId, success: false, error: "Missing atome_id")
+        }
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let userId = stringValue(claims["sub"])
+        guard let record = try findAtomeMeta(db, atomeId: atomeId) else {
+            return atomeResponse(requestId: requestId, success: false, error: "Atome not found")
+        }
+        if !canWrite(record: record, userId: userId) {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let particles = message["particles"] as? [String: Any] ?? [:]
+        let now = isoNow()
+        try execute(db, "UPDATE atomes SET updated_at = ?, sync_status = 'pending' WHERE atome_id = ?", [.text(now), .text(atomeId)])
+        for (key, value) in particles {
+            try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: userId, now: now)
+        }
+        try upsertStateCurrent(db, atomeId: atomeId, ownerId: record.ownerId, properties: try loadParticles(db, atomeId: atomeId), now: now)
+        return atomeResponse(requestId: requestId, success: true, data: try serializeAtome(db, atomeId: atomeId))
+    }
+
+    private static func handleAtomeDelete(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let atomeId = stringValue(message["atome_id"] ?? message["id"])
+        if atomeId.isEmpty {
+            return atomeResponse(requestId: requestId, success: false, error: "Missing atome_id")
+        }
+        guard let claims = try verifyToken(stringValue(message["token"])) else {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let userId = stringValue(claims["sub"])
+        guard let record = try findAtomeMeta(db, atomeId: atomeId) else {
+            return atomeResponse(requestId: requestId, success: false, error: "Atome not found")
+        }
+        if !canWrite(record: record, userId: userId) {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let now = isoNow()
+        try execute(db, "UPDATE atomes SET deleted_at = ?, updated_at = ?, sync_status = 'pending' WHERE atome_id = ?", [.text(now), .text(now), .text(atomeId)])
+        try execute(db, "DELETE FROM state_current WHERE atome_id = ?", [.text(atomeId)])
+        return atomeResponse(requestId: requestId, success: true)
+    }
+
+    private static func handleEventCommit(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        guard let rawEvent = message["event"] as? [String: Any] else {
+            return eventsResponse(requestId: requestId, success: false, error: "Invalid event payload")
+        }
+        let event = try normalizeEventInput(rawEvent, defaultActorId: stringValue(claims["sub"]))
+        try appendEvent(db, event: event)
+        return eventsResponse(requestId: requestId, success: true, event: event)
+    }
+
+    private static func handleEventCommitBatch(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let defaultActorId = stringValue(claims["sub"])
+        let txId = stringValue(message["tx_id"] ?? message["txId"])
+        guard let rawEvents = message["events"] as? [[String: Any]] else {
+            return eventsResponse(requestId: requestId, success: false, error: "Missing events array")
+        }
+        let events = try rawEvents.map { raw -> [String: Any] in
+            var event = raw
+            if !txId.isEmpty, event["tx_id"] == nil, event["txId"] == nil {
+                event["tx_id"] = txId
+            }
+            return try normalizeEventInput(event, defaultActorId: defaultActorId)
+        }
+        try appendEvents(db, events: events)
+        return eventsResponse(requestId: requestId, success: true, events: events)
+    }
+
+    private static func handleEventList(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard (try verifyToken(token)) != nil else {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let events = try listEvents(
+            db,
+            projectId: normalizedOptionalString(message["project_id"] ?? message["projectId"]),
+            atomeId: normalizedOptionalString(message["atome_id"] ?? message["atomeId"]),
+            txId: normalizedOptionalString(message["tx_id"] ?? message["txId"]),
+            gestureId: normalizedOptionalString(message["gesture_id"] ?? message["gestureId"]),
+            since: normalizedOptionalString(message["since"]),
+            until: normalizedOptionalString(message["until"]),
+            limit: intValue(message["limit"], defaultValue: 1000),
+            offset: intValue(message["offset"], defaultValue: 0),
+            order: normalizedOptionalString(message["order"]) ?? "asc"
+        )
+        return eventsResponse(requestId: requestId, success: true, events: events)
+    }
+
+    private static func handleStateCurrentGet(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return stateCurrentResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let atomeId = stringValue(message["atome_id"] ?? message["id"])
+        if atomeId.isEmpty {
+            return stateCurrentResponse(requestId: requestId, success: false, error: "Missing atome_id")
+        }
+        guard let state = try getStateCurrent(db, atomeId: atomeId) else {
+            return stateCurrentResponse(requestId: requestId, success: false, error: "State not found")
+        }
+        let userId = stringValue(claims["sub"])
+        guard canReadState(state: state, userId: userId) else {
+            return stateCurrentResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        return stateCurrentResponse(requestId: requestId, success: true, state: state)
+    }
+
+    private static func handleStateCurrentList(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return stateCurrentResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let states = try listStateCurrent(
+            db,
+            projectId: normalizedOptionalString(message["project_id"] ?? message["projectId"]),
+            ownerId: stringValue(claims["sub"]),
+            limit: intValue(message["limit"], defaultValue: 1000),
+            offset: intValue(message["offset"], defaultValue: 0)
+        )
+        return stateCurrentResponse(requestId: requestId, success: true, states: states)
+    }
+
+    private static func handleSnapshotCreate(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let token = stringValue(message["token"])
+        guard let claims = try verifyToken(token) else {
+            return snapshotResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let projectId = normalizedOptionalString(message["project_id"] ?? message["projectId"])
+        let atomeId = normalizedOptionalString(message["atome_id"] ?? message["atomeId"])
+        if projectId == nil && atomeId == nil {
+            return snapshotResponse(requestId: requestId, success: false, error: "Missing project_id or atome_id")
+        }
+        let actor = (message["actor"] as? [String: Any]) ?? [
+            "type": "user",
+            "id": stringValue(claims["sub"])
+        ]
+        let snapshotId = try createStateSnapshot(
+            db,
+            projectId: projectId,
+            atomeId: atomeId,
+            label: normalizedOptionalString(message["label"]),
+            actor: actor,
+            state: message["state"] ?? message["state_blob"] ?? message["stateBlob"],
+            snapshotType: normalizedOptionalString(message["snapshot_type"] ?? message["snapshotType"]) ?? "manual",
+            createdBy: stringValue(claims["sub"])
+        )
+        return snapshotResponse(requestId: requestId, success: true, snapshotId: snapshotId)
+    }
+
+    private static func openDatabase() throws -> OpaquePointer? {
+        if let existing = db {
+            return existing
+        }
+        guard let root = SandboxPathValidator.primaryRoot() ?? SandboxPathValidator.pluginContainerRoot() else {
+            throw AiSError("AiS storage root unavailable")
+        }
+        let databaseURL = root.appendingPathComponent("adole.db", isDirectory: false)
+        var handle: OpaquePointer?
+        let rc = sqlite3_open_v2(databaseURL.path, &handle, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil)
+        guard rc == SQLITE_OK, let opened = handle else {
+            throw AiSError("Unable to open AiS database")
+        }
+        sqlite3_busy_timeout(opened, 2000)
+        guard sqlite3_exec(opened, schemaSQL, nil, nil, nil) == SQLITE_OK else {
+            let message = String(cString: sqlite3_errmsg(opened))
+            sqlite3_close(opened)
+            throw AiSError(message)
+        }
+        db = opened
+        return opened
+    }
+
+    private static func serializeAtome(_ db: OpaquePointer?, atomeId: String) throws -> [String: Any] {
+        guard let meta = try findAtomeMeta(db, atomeId: atomeId) else {
+            throw AiSError("Atome not found")
+        }
+        let particles = try loadParticles(db, atomeId: atomeId)
+        var payload: [String: Any] = [
+            "atome_id": meta.atomeId,
+            "id": meta.atomeId,
+            "atome_type": meta.atomeType,
+            "owner_id": meta.ownerId,
+            "creator_id": meta.creatorId,
+            "created_at": meta.createdAt,
+            "updated_at": meta.updatedAt,
+            "created_source": meta.createdSource,
+            "sync_status": meta.syncStatus,
+            "data": particles,
+            "particles": particles
+        ]
+        payload["parent_id"] = meta.parentId ?? NSNull()
+        return payload
+    }
+
+    private static func loadUserInfo(_ db: OpaquePointer?, userId: String) throws -> [String: Any] {
+        let username = try loadParticleString(db, atomeId: userId, key: "username") ?? ""
+        let phone = try loadParticleString(db, atomeId: userId, key: "phone") ?? ""
+        let rows = try query(db, "SELECT created_at FROM atomes WHERE atome_id = ? LIMIT 1", [.text(userId)])
+        let createdAt = rowString(rows.first, "created_at") ?? isoNow()
+        return [
+            "user_id": userId,
+            "id": userId,
+            "username": username,
+            "phone": phone,
+            "created_at": createdAt
+        ]
+    }
+
+    private static func findUserRecordByPhone(_ db: OpaquePointer?, _ phone: String) throws -> UserRecord? {
+        let rows = try query(db, """
+            SELECT a.atome_id, a.atome_type, a.deleted_at
+            FROM atomes a
+            JOIN particles p ON p.atome_id = a.atome_id AND p.particle_key = 'phone'
+            WHERE p.particle_value = ?
+            ORDER BY a.updated_at DESC
+            LIMIT 1
+            """, [.text(try jsonString(phone))])
+        guard let row = rows.first else { return nil }
+        return UserRecord(
+            userId: stringValue(rowValue(row, "atome_id")),
+            atomeType: stringValue(rowValue(row, "atome_type")),
+            deletedAt: rowString(row, "deleted_at")
+        )
+    }
+
+    private static func findUserRecordById(_ db: OpaquePointer?, _ userId: String) throws -> UserRecord? {
+        let rows = try query(db, "SELECT atome_id, atome_type, deleted_at FROM atomes WHERE atome_id = ? LIMIT 1", [.text(userId)])
+        guard let row = rows.first else { return nil }
+        return UserRecord(
+            userId: stringValue(rowValue(row, "atome_id")),
+            atomeType: stringValue(rowValue(row, "atome_type")),
+            deletedAt: rowString(row, "deleted_at")
+        )
+    }
+
+    private static func findAtomeMeta(_ db: OpaquePointer?, atomeId: String) throws -> AtomeMeta? {
+        let rows = try query(db, """
+            SELECT atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status
+            FROM atomes
+            WHERE atome_id = ? AND deleted_at IS NULL
+            LIMIT 1
+            """, [.text(atomeId)])
+        guard let row = rows.first else { return nil }
+        return AtomeMeta(
+            atomeId: stringValue(rowValue(row, "atome_id")),
+            atomeType: stringValue(rowValue(row, "atome_type")),
+            parentId: rowString(row, "parent_id"),
+            ownerId: stringValue(rowValue(row, "owner_id")),
+            creatorId: stringValue(rowValue(row, "creator_id")),
+            createdAt: stringValue(rowValue(row, "created_at")),
+            updatedAt: stringValue(rowValue(row, "updated_at")),
+            createdSource: stringValue(rowValue(row, "created_source")),
+            syncStatus: stringValue(rowValue(row, "sync_status"))
+        )
+    }
+
+    private static func findAnyAtomeMeta(_ db: OpaquePointer?, atomeId: String) throws -> AtomeMeta? {
+        let rows = try query(db, """
+            SELECT atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status
+            FROM atomes
+            WHERE atome_id = ?
+            LIMIT 1
+            """, [.text(atomeId)])
+        guard let row = rows.first else { return nil }
+        return AtomeMeta(
+            atomeId: stringValue(rowValue(row, "atome_id")),
+            atomeType: stringValue(rowValue(row, "atome_type")),
+            parentId: rowString(row, "parent_id"),
+            ownerId: stringValue(rowValue(row, "owner_id")),
+            creatorId: stringValue(rowValue(row, "creator_id")),
+            createdAt: stringValue(rowValue(row, "created_at")),
+            updatedAt: stringValue(rowValue(row, "updated_at")),
+            createdSource: stringValue(rowValue(row, "created_source")),
+            syncStatus: stringValue(rowValue(row, "sync_status"))
+        )
+    }
+
+    private static func canWrite(record: AtomeMeta, userId: String) -> Bool {
+        if record.ownerId == userId { return true }
+        if record.creatorId == userId { return true }
+        return false
+    }
+
+    private static func upsertRequiredUserParticles(_ db: OpaquePointer?, atomeId: String, username: String, phone: String, passwordHash: String, visibility: String, now: String) throws {
+        try upsertParticle(db, atomeId: atomeId, key: "username", value: username, changedBy: atomeId, now: now)
+        try upsertParticle(db, atomeId: atomeId, key: "phone", value: phone, changedBy: atomeId, now: now)
+        try upsertParticle(db, atomeId: atomeId, key: "password_hash", value: passwordHash, changedBy: atomeId, now: now)
+        try upsertParticle(db, atomeId: atomeId, key: "visibility", value: visibility, changedBy: atomeId, now: now)
+        try upsertParticle(db, atomeId: atomeId, key: "access", value: visibility, changedBy: atomeId, now: now)
+    }
+
+    private static func upsertOptionalParticles(_ db: OpaquePointer?, atomeId: String, values: [String: Any], changedBy: String, now: String) throws {
+        for (key, value) in values {
+            try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: changedBy, now: now)
+        }
+    }
+
+    private static func upsertParticle(_ db: OpaquePointer?, atomeId: String, key: String, value: Any, changedBy: String, now: String) throws {
+        let newValue = try jsonString(value)
+        let previousRows = try query(db, "SELECT particle_id, particle_value, version FROM particles WHERE atome_id = ? AND particle_key = ? LIMIT 1", [.text(atomeId), .text(key)])
+        let oldValue = previousRows.first?["particle_value"] as? String
+        let particleId = previousRows.first?["particle_id"] as? Int64 ?? 0
+        let version = previousRows.first?["version"] as? Int64 ?? 0
+        let valueType = sqliteValueType(value)
+        try execute(db, """
+            INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                particle_value = excluded.particle_value,
+                value_type = excluded.value_type,
+                version = particles.version + 1,
+                updated_at = excluded.updated_at
+            """, [.text(atomeId), .text(key), .text(newValue), .text(valueType), .text(now), .text(now)])
+        if let oldValue, oldValue != newValue {
+            let latestParticleRows = try query(db, "SELECT particle_id, version FROM particles WHERE atome_id = ? AND particle_key = ? LIMIT 1", [.text(atomeId), .text(key)])
+            let latestParticleId = latestParticleRows.first?["particle_id"] as? Int64 ?? particleId
+            let latestVersion = latestParticleRows.first?["version"] as? Int64 ?? (version + 1)
+            try execute(db, """
+                INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, [.int(latestParticleId), .text(atomeId), .text(key), .int(latestVersion), .text(oldValue), .text(newValue), .text(changedBy), .text(now)])
+        }
+    }
+
+    private static func loadParticles(_ db: OpaquePointer?, atomeId: String) throws -> [String: Any] {
+        let rows = try query(db, "SELECT particle_key, particle_value FROM particles WHERE atome_id = ?", [.text(atomeId)])
+        var out: [String: Any] = [:]
+        for row in rows {
+            let key = stringValue(row["particle_key"])
+            guard !key.isEmpty else { continue }
+            if let raw = row["particle_value"] as? String {
+                out[key] = parseJSONValue(raw)
+            }
+        }
+        return out
+    }
+
+    private static func loadParticleString(_ db: OpaquePointer?, atomeId: String, key: String) throws -> String? {
+        let rows = try query(db, "SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ? LIMIT 1", [.text(atomeId), .text(key)])
+        guard let raw = rows.first?["particle_value"] as? String else { return nil }
+        return stringValue(parseJSONValue(raw))
+    }
+
+    private static func upsertStateCurrent(_ db: OpaquePointer?, atomeId: String, ownerId: String, projectId: String? = nil, properties: [String: Any], now: String) throws {
+        let encoded = try jsonString(properties)
+        try execute(db, """
+            INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, 1)
+            ON CONFLICT(atome_id) DO UPDATE SET
+                owner_id = excluded.owner_id,
+                project_id = COALESCE(excluded.project_id, state_current.project_id),
+                properties = excluded.properties,
+                updated_at = excluded.updated_at,
+                version = state_current.version + 1
+            """, [.text(atomeId), .text(ownerId), projectId.map(SQLiteBinding.text) ?? .null, .text(encoded), .text(now)])
+    }
+
+    private static func normalizeEventInput(_ event: [String: Any], defaultActorId: String?) throws -> [String: Any] {
+        let kind = normalizedOptionalString(event["kind"] ?? event["event"]) ?? ""
+        if kind.isEmpty {
+            throw AiSError("Missing event kind")
+        }
+        let atomeId = normalizedOptionalString(event["atome_id"] ?? event["atomeId"] ?? event["id"])
+        if kind != "snapshot" && (atomeId == nil || atomeId == "") {
+            throw AiSError("Missing event atome_id")
+        }
+        var normalized: [String: Any] = [
+            "id": normalizedOptionalString(event["id"] ?? event["event_id"] ?? event["eventId"]) ?? UUID().uuidString.lowercased(),
+            "ts": normalizedOptionalString(event["ts"] ?? event["timestamp"]) ?? isoNow(),
+            "kind": kind
+        ]
+        if let atomeId { normalized["atome_id"] = atomeId }
+        if let projectId = normalizedOptionalString(event["project_id"] ?? event["projectId"]) { normalized["project_id"] = projectId }
+        if let payload = resolveEventPayload(event) { normalized["payload"] = payload }
+        if let txId = normalizedOptionalString(event["tx_id"] ?? event["txId"]) { normalized["tx_id"] = txId }
+        if let gestureId = normalizedOptionalString(event["gesture_id"] ?? event["gestureId"]) { normalized["gesture_id"] = gestureId }
+        if let ownerId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"] ?? event["owner"]) { normalized["owner_id"] = ownerId }
+        if let actor = event["actor"] {
+            normalized["actor"] = actor
+        } else if let defaultActorId, !defaultActorId.isEmpty {
+            normalized["actor"] = ["type": "user", "id": defaultActorId]
+        }
+        return normalized
+    }
+
+    private static func resolveEventPayload(_ event: [String: Any]) -> Any? {
+        if let payload = event["payload"] { return payload }
+        if let props = event["props"] as? [String: Any] { return ["props": props] }
+        if let props = event["properties"] as? [String: Any] { return ["props": props] }
+        if let patch = event["patch"] as? [String: Any] { return ["props": patch] }
+        if let delta = event["delta"] as? [String: Any] { return ["props": delta] }
+        return nil
+    }
+
+    private static func extractEventPatch(kind: String, payload: Any?, ts: String) -> [String: Any]? {
+        if kind == "delete" {
+            return ["__deleted": true, "deleted_at": ts]
+        }
+        guard let payloadObj = payload as? [String: Any] else { return nil }
+        if let patch = payloadObj["props"] as? [String: Any] { return patch }
+        if let patch = payloadObj["properties"] as? [String: Any] { return patch }
+        if let patch = payloadObj["patch"] as? [String: Any] { return patch }
+        if let patch = payloadObj["delta"] as? [String: Any] { return patch }
+        return nil
+    }
+
+    private static let eventMetaParticleKeys: Set<String> = [
+        "type", "atome_type", "kind",
+        "parent_id", "parentId",
+        "project_id", "projectId",
+        "__deleted", "deleted_at"
+    ]
+
+    private static func resolveActorId(_ actor: Any?) -> String? {
+        guard let actor = actor as? [String: Any] else { return nil }
+        return normalizedOptionalString(actor["id"] ?? actor["user_id"] ?? actor["userId"])
+    }
+
+    private static func resolveEventType(_ patch: [String: Any]) -> String? {
+        normalizedOptionalString(patch["type"] ?? patch["atome_type"] ?? patch["kind"])
+    }
+
+    private static func resolveEventParentId(_ patch: [String: Any]) -> String? {
+        normalizedOptionalString(patch["parent_id"] ?? patch["parentId"] ?? patch["project_id"] ?? patch["projectId"])
+    }
+
+    private static func stripEventMetaPatch(_ patch: [String: Any]) -> [String: Any] {
+        var filtered: [String: Any] = [:]
+        for (key, value) in patch where !eventMetaParticleKeys.contains(key) {
+            filtered[key] = value
+        }
+        return filtered
+    }
+
+    private static func appendEvent(_ db: OpaquePointer?, event: [String: Any]) throws {
+        let eventId = stringValue(event["id"])
+        let existing = try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])
+        if !existing.isEmpty { return }
+        let payloadString = try jsonString(event["payload"] ?? NSNull())
+        let actorString = try jsonString(event["actor"] ?? NSNull())
+        try execute(db, """
+            INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+            .text(eventId),
+            .text(stringValue(event["ts"])),
+            normalizedOptionalString(event["atome_id"]).map(SQLiteBinding.text) ?? .null,
+            normalizedOptionalString(event["project_id"]).map(SQLiteBinding.text) ?? .null,
+            .text(stringValue(event["kind"])),
+            .text(payloadString),
+            .text(actorString),
+            normalizedOptionalString(event["tx_id"]).map(SQLiteBinding.text) ?? .null,
+            normalizedOptionalString(event["gesture_id"]).map(SQLiteBinding.text) ?? .null
+        ])
+        _ = try applyEventToStateCurrent(db, event: event)
+    }
+
+    private static func appendEvents(_ db: OpaquePointer?, events: [[String: Any]]) throws {
+        for event in events {
+            try appendEvent(db, event: event)
+        }
+    }
+
+    private static func applyEventToStateCurrent(_ db: OpaquePointer?, event: [String: Any]) throws -> [String: Any]? {
+        let atomeId = stringValue(event["atome_id"])
+        if atomeId.isEmpty { return nil }
+        let ts = normalizedOptionalString(event["ts"]) ?? isoNow()
+        let kind = stringValue(event["kind"])
+        guard let patch = extractEventPatch(kind: kind, payload: event["payload"], ts: ts) else { return nil }
+
+        let actorId = resolveActorId(event["actor"])
+        let patchOwnerId = normalizedOptionalString(patch["owner_id"] ?? patch["ownerId"] ?? patch["owner"])
+        let eventOwnerId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"] ?? event["owner"])
+        let patchType = resolveEventType(patch)
+        let patchParentId = resolveEventParentId(patch)
+        let deleted = boolValue(patch["__deleted"])
+        let particlePatch = stripEventMetaPatch(patch)
+        let existingMeta = try findAnyAtomeMeta(db, atomeId: atomeId)
+
+        let resolvedOwnerId = firstNonEmptyString([
+            eventOwnerId,
+            patchOwnerId,
+            actorId,
+            existingMeta?.ownerId
+        ]) ?? atomeId
+        try upsertAtomeFromEvent(
+            db,
+            atomeId: atomeId,
+            atomeType: patchType,
+            parentId: patchParentId,
+            ownerId: resolvedOwnerId,
+            creatorId: existingMeta?.creatorId ?? resolvedOwnerId,
+            deleted: deleted,
+            now: ts
+        )
+
+        let changedBy = firstNonEmptyString([actorId, resolvedOwnerId]) ?? atomeId
+        for (key, value) in particlePatch {
+            try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: changedBy, now: ts)
+        }
+
+        let existingState = try loadStateCurrentEntry(db, atomeId: atomeId)
+        var nextProps = existingState?.properties ?? [:]
+        for (key, value) in patch { nextProps[key] = value }
+        if nextProps["type"] == nil, let patchType { nextProps["type"] = patchType }
+        if nextProps["type"] == nil, let existingType = existingMeta?.atomeType, !existingType.isEmpty { nextProps["type"] = existingType }
+        if let parentId = patchParentId ?? existingMeta?.parentId {
+            if nextProps["parent_id"] == nil { nextProps["parent_id"] = parentId }
+            if nextProps["parentId"] == nil { nextProps["parentId"] = parentId }
+        }
+        let projectId = firstNonEmptyString([
+            normalizedOptionalString(event["project_id"] ?? event["projectId"]),
+            normalizedOptionalString(patch["project_id"] ?? patch["projectId"]),
+            existingState?.projectId
+        ])
+        if let projectId {
+            if nextProps["project_id"] == nil { nextProps["project_id"] = projectId }
+            if nextProps["projectId"] == nil { nextProps["projectId"] = projectId }
+        }
+        let stateOwnerId = firstNonEmptyString([
+            eventOwnerId,
+            patchOwnerId,
+            existingState?.ownerId,
+            resolvedOwnerId
+        ]) ?? resolvedOwnerId
+        try upsertStateCurrent(db, atomeId: atomeId, ownerId: stateOwnerId, projectId: projectId, properties: nextProps, now: ts)
+        return try getStateCurrent(db, atomeId: atomeId)
+    }
+
+    private static func upsertAtomeFromEvent(_ db: OpaquePointer?, atomeId: String, atomeType: String?, parentId: String?, ownerId: String?, creatorId: String?, deleted: Bool, now: String) throws {
+        let existing = try findAnyAtomeMeta(db, atomeId: atomeId)
+        if existing == nil {
+            try execute(db, """
+                INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, deleted_at, created_source, sync_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ais', 'local')
+                """, [
+                .text(atomeId),
+                .text(atomeType ?? "generic"),
+                parentId.map(SQLiteBinding.text) ?? .null,
+                ownerId.map(SQLiteBinding.text) ?? .null,
+                (creatorId ?? ownerId).map(SQLiteBinding.text) ?? .null,
+                .text(now),
+                .text(now),
+                deleted ? .text(now) : .null
+            ])
+            return
+        }
+
+        var updates: [String] = ["updated_at = ?", "deleted_at = ?", "sync_status = 'local'"]
+        var bindings: [SQLiteBinding] = [.text(now), deleted ? .text(now) : .null]
+        if let atomeType, !atomeType.isEmpty {
+            updates.append("atome_type = ?")
+            bindings.append(.text(atomeType))
+        }
+        if let parentId, !parentId.isEmpty {
+            updates.append("parent_id = ?")
+            bindings.append(.text(parentId))
+        }
+        if let ownerId, !ownerId.isEmpty {
+            updates.append("owner_id = ?")
+            bindings.append(.text(ownerId))
+        }
+        if let creatorId, !creatorId.isEmpty {
+            updates.append("creator_id = COALESCE(creator_id, ?)")
+            bindings.append(.text(creatorId))
+        }
+        bindings.append(.text(atomeId))
+        try execute(db, "UPDATE atomes SET \(updates.joined(separator: ", ")) WHERE atome_id = ?", bindings)
+    }
+
+    private static func getStateCurrent(_ db: OpaquePointer?, atomeId: String) throws -> [String: Any]? {
+        let rows = try query(db, """
+            SELECT atome_id, owner_id, project_id, properties, updated_at, version
+            FROM state_current
+            WHERE atome_id = ?
+            LIMIT 1
+            """, [.text(atomeId)])
+        guard let row = rows.first else { return nil }
+        return try serializeStateCurrentRow(db, row: row)
+    }
+
+    private static func listStateCurrent(_ db: OpaquePointer?, projectId: String?, ownerId: String?, limit: Int64, offset: Int64) throws -> [[String: Any]] {
+        var sql = """
+            SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version
+            FROM state_current sc
+            LEFT JOIN atomes a ON a.atome_id = sc.atome_id
+            """
+        var conditions: [String] = []
+        var bindings: [SQLiteBinding] = []
+        if let projectId, !projectId.isEmpty {
+            conditions.append("sc.project_id = ?")
+            bindings.append(.text(projectId))
+        }
+        if let ownerId, !ownerId.isEmpty {
+            conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)")
+            bindings.append(.text(ownerId))
+        }
+        if !conditions.isEmpty {
+            sql += " WHERE " + conditions.joined(separator: " AND ")
+        }
+        sql += " ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?"
+        bindings.append(.int(limit))
+        bindings.append(.int(offset))
+        let rows = try query(db, sql, bindings)
+        return try rows.map { try serializeStateCurrentRow(db, row: $0) }
+    }
+
+    private static func loadStateCurrentEntry(_ db: OpaquePointer?, atomeId: String) throws -> StateCurrentEntry? {
+        let rows = try query(db, """
+            SELECT atome_id, owner_id, project_id, properties, updated_at, version
+            FROM state_current
+            WHERE atome_id = ?
+            LIMIT 1
+            """, [.text(atomeId)])
+        guard let row = rows.first else { return nil }
+        let properties = (row["properties"] as? String).flatMap { parseJSONValue($0) as? [String: Any] } ?? [:]
+        return StateCurrentEntry(
+            atomeId: stringValue(row["atome_id"]),
+            ownerId: normalizedOptionalString(row["owner_id"]),
+            projectId: normalizedOptionalString(row["project_id"]),
+            properties: properties,
+            updatedAt: stringValue(row["updated_at"]),
+            version: intValue(row["version"], defaultValue: 0)
+        )
+    }
+
+    private static func serializeStateCurrentRow(_ db: OpaquePointer?, row: [String: Any]) throws -> [String: Any] {
+        let atomeId = stringValue(row["atome_id"])
+        let meta = try findAnyAtomeMeta(db, atomeId: atomeId)
+        var properties = (row["properties"] as? String).flatMap { parseJSONValue($0) as? [String: Any] } ?? [:]
+        if properties["type"] == nil, let metaType = meta?.atomeType, !metaType.isEmpty {
+            properties["type"] = metaType
+        }
+        if let parentId = meta?.parentId, !parentId.isEmpty {
+            if properties["parent_id"] == nil { properties["parent_id"] = parentId }
+            if properties["parentId"] == nil { properties["parentId"] = parentId }
+        }
+        let projectId = normalizedOptionalString(row["project_id"]) ?? normalizedOptionalString(properties["project_id"] ?? properties["projectId"])
+        if let projectId {
+            if properties["project_id"] == nil { properties["project_id"] = projectId }
+            if properties["projectId"] == nil { properties["projectId"] = projectId }
+        }
+        var state: [String: Any] = [
+            "atome_id": atomeId,
+            "id": atomeId,
+            "properties": properties,
+            "particles": properties,
+            "data": properties,
+            "updated_at": stringValue(row["updated_at"]),
+            "version": intValue(row["version"], defaultValue: 0)
+        ]
+        if let ownerId = normalizedOptionalString(row["owner_id"]) ?? meta?.ownerId {
+            state["owner_id"] = ownerId
+        }
+        if let projectId { state["project_id"] = projectId }
+        if let meta {
+            state["atome_type"] = meta.atomeType
+            state["type"] = meta.atomeType
+            if let parentId = meta.parentId { state["parent_id"] = parentId }
+        }
+        return state
+    }
+
+    private static func canReadState(state: [String: Any], userId: String) -> Bool {
+        let ownerId = normalizedOptionalString(state["owner_id"] ?? state["ownerId"])
+        return ownerId == nil || ownerId == userId
+    }
+
+    private static func listEvents(_ db: OpaquePointer?, projectId: String?, atomeId: String?, txId: String?, gestureId: String?, since: String?, until: String?, limit: Int64, offset: Int64, order: String) throws -> [[String: Any]] {
+        var sql = "SELECT id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id FROM events"
+        var conditions: [String] = []
+        var bindings: [SQLiteBinding] = []
+        if let projectId, !projectId.isEmpty {
+            conditions.append("project_id = ?")
+            bindings.append(.text(projectId))
+        }
+        if let atomeId, !atomeId.isEmpty {
+            conditions.append("atome_id = ?")
+            bindings.append(.text(atomeId))
+        }
+        if let txId, !txId.isEmpty {
+            conditions.append("tx_id = ?")
+            bindings.append(.text(txId))
+        }
+        if let gestureId, !gestureId.isEmpty {
+            conditions.append("gesture_id = ?")
+            bindings.append(.text(gestureId))
+        }
+        if let since, !since.isEmpty {
+            conditions.append("ts >= ?")
+            bindings.append(.text(since))
+        }
+        if let until, !until.isEmpty {
+            conditions.append("ts <= ?")
+            bindings.append(.text(until))
+        }
+        if !conditions.isEmpty {
+            sql += " WHERE " + conditions.joined(separator: " AND ")
+        }
+        sql += " ORDER BY ts " + (order.lowercased() == "desc" ? "DESC" : "ASC") + " LIMIT ? OFFSET ?"
+        bindings.append(.int(limit))
+        bindings.append(.int(offset))
+        let rows = try query(db, sql, bindings)
+        return rows.map { row in
+            var event: [String: Any] = [
+                "id": stringValue(row["id"]),
+                "ts": stringValue(row["ts"]),
+                "kind": stringValue(row["kind"])
+            ]
+            if let atomeId = normalizedOptionalString(row["atome_id"]) { event["atome_id"] = atomeId }
+            if let projectId = normalizedOptionalString(row["project_id"]) { event["project_id"] = projectId }
+            if let txId = normalizedOptionalString(row["tx_id"]) { event["tx_id"] = txId }
+            if let gestureId = normalizedOptionalString(row["gesture_id"]) { event["gesture_id"] = gestureId }
+            if let payload = row["payload"] as? String {
+                event["payload"] = parseJSONValue(payload)
+            }
+            if let actor = row["actor"] as? String {
+                event["actor"] = parseJSONValue(actor)
+            }
+            return event
+        }
+    }
+
+    private static func createStateSnapshot(_ db: OpaquePointer?, projectId: String?, atomeId: String?, label: String?, actor: [String: Any], state: Any?, snapshotType: String, createdBy: String) throws -> Int64 {
+        let snapshotAtomeId = firstNonEmptyString([atomeId, projectId]) ?? ""
+        let now = isoNow()
+        let actorString = try jsonString(actor)
+        let statePayload: Any
+        if let state {
+            statePayload = state
+        } else if let projectId, !projectId.isEmpty {
+            statePayload = try listStateCurrent(db, projectId: projectId, ownerId: createdBy, limit: 5000, offset: 0)
+        } else if let atomeId, !atomeId.isEmpty {
+            statePayload = try getStateCurrent(db, atomeId: atomeId) ?? [:]
+        } else {
+            statePayload = [:]
+        }
+        let blob = try jsonString(statePayload)
+        try execute(db, """
+            INSERT INTO snapshots (atome_id, project_id, snapshot_data, state_blob, label, snapshot_type, actor, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+            .text(snapshotAtomeId),
+            projectId.map(SQLiteBinding.text) ?? .null,
+            .text(blob),
+            .text(blob),
+            label.map(SQLiteBinding.text) ?? .null,
+            .text(snapshotType),
+            .text(actorString),
+            .text(createdBy),
+            .text(now)
+        ])
+        let rows = try query(db, "SELECT snapshot_id FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT 1", [.text(snapshotAtomeId)])
+        return rows.first?["snapshot_id"] as? Int64 ?? 0
+    }
+
+    private static func execute(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw AiSError(lastError(db))
+        }
+        defer { sqlite3_finalize(statement) }
+        try bind(bindings, to: statement)
+        let rc = sqlite3_step(statement)
+        guard rc == SQLITE_DONE else {
+            throw AiSError(lastError(db))
+        }
+    }
+
+    private static func query(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws -> [[String: Any]] {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw AiSError(lastError(db))
+        }
+        defer { sqlite3_finalize(statement) }
+        try bind(bindings, to: statement)
+        var rows: [[String: Any]] = []
+        while true {
+            let rc = sqlite3_step(statement)
+            if rc == SQLITE_DONE { break }
+            if rc != SQLITE_ROW {
+                throw AiSError(lastError(db))
+            }
+            var row: [String: Any] = [:]
+            let count = sqlite3_column_count(statement)
+            for index in 0..<count {
+                let name = String(cString: sqlite3_column_name(statement, index))
+                switch sqlite3_column_type(statement, index) {
+                case SQLITE_INTEGER:
+                    row[name] = sqlite3_column_int64(statement, index)
+                case SQLITE_FLOAT:
+                    row[name] = sqlite3_column_double(statement, index)
+                case SQLITE_TEXT:
+                    row[name] = String(cString: sqlite3_column_text(statement, index))
+                case SQLITE_NULL:
+                    row[name] = NSNull()
+                default:
+                    row[name] = NSNull()
+                }
+            }
+            rows.append(row)
+        }
+        return rows
+    }
+
+    private static func bind(_ bindings: [SQLiteBinding], to statement: OpaquePointer?) throws {
+        for (index, binding) in bindings.enumerated() {
+            let position = Int32(index + 1)
+            let rc: Int32
+            switch binding {
+            case .text(let value):
+                rc = sqlite3_bind_text(statement, position, value, -1, sqliteTransient)
+            case .int(let value):
+                rc = sqlite3_bind_int64(statement, position, value)
+            case .null:
+                rc = sqlite3_bind_null(statement, position)
+            }
+            if rc != SQLITE_OK {
+                throw AiSError("SQLite bind failed")
+            }
+        }
+    }
+
+    private static func authResponse(requestId: String?, success: Bool, error: String? = nil, user: [String: Any]? = nil, token: String? = nil, alreadyExists: Bool? = nil) -> [String: Any] {
+        var response: [String: Any] = [
+            "type": "auth-response",
+            "success": success
+        ]
+        if let requestId { response["request_id"] = requestId }
+        if let error { response["error"] = error }
+        if let user { response["user"] = user }
+        if let token { response["token"] = token }
+        if let alreadyExists { response["already_exists"] = alreadyExists }
+        return response
+    }
+
+    private static func atomeResponse(requestId: String?, success: Bool, error: String? = nil, data: [String: Any]? = nil, atomes: [[String: Any]]? = nil, count: Int64? = nil) -> [String: Any] {
+        var response: [String: Any] = [
+            "type": "atome-response",
+            "success": success
+        ]
+        if let requestId { response["request_id"] = requestId }
+        if let error { response["error"] = error }
+        if let data { response["data"] = data }
+        if let atomes { response["atomes"] = atomes }
+        if let count { response["count"] = count }
+        return response
+    }
+
+    private static func eventsResponse(requestId: String?, success: Bool, error: String? = nil, event: [String: Any]? = nil, events: [[String: Any]]? = nil) -> [String: Any] {
+        var response: [String: Any] = [
+            "type": "events-response",
+            "success": success
+        ]
+        if let requestId { response["request_id"] = requestId }
+        if let error { response["error"] = error }
+        if let event { response["event"] = event }
+        if let events { response["events"] = events }
+        return response
+    }
+
+    private static func stateCurrentResponse(requestId: String?, success: Bool, error: String? = nil, state: [String: Any]? = nil, states: [[String: Any]]? = nil) -> [String: Any] {
+        var response: [String: Any] = [
+            "type": "state-current-response",
+            "success": success
+        ]
+        if let requestId { response["request_id"] = requestId }
+        if let error { response["error"] = error }
+        if let state { response["state"] = state }
+        if let states { response["states"] = states }
+        return response
+    }
+
+    private static func snapshotResponse(requestId: String?, success: Bool, error: String? = nil, snapshotId: Int64? = nil) -> [String: Any] {
+        var response: [String: Any] = [
+            "type": "snapshot-response",
+            "success": success
+        ]
+        if let requestId { response["request_id"] = requestId }
+        if let error { response["error"] = error }
+        if let snapshotId { response["snapshot_id"] = snapshotId }
+        return response
+    }
+
+    private static func normalizePhone(_ phone: String) -> String {
+        let trimmed = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "" }
+        let cleaned = trimmed.filter { $0.isNumber || $0 == "+" }
+        if cleaned.isEmpty { return "" }
+        if cleaned.hasPrefix("+") {
+            return "+" + cleaned.dropFirst().replacingOccurrences(of: "+", with: "")
+        }
+        return cleaned.replacingOccurrences(of: "+", with: "")
+    }
+
+    private static func normalizeVisibility(_ value: String) -> String {
+        value.lowercased() == "public" ? "public" : "private"
+    }
+
+    private static func normalizeUserOptional(_ values: [String: Any]) -> [String: Any] {
+        var cleaned: [String: Any] = [:]
+        for (key, value) in values {
+            let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed.hasPrefix("_") || reservedUserParticleKeys.contains(trimmed) { continue }
+            cleaned[trimmed] = value
+        }
+        return cleaned
+    }
+
+    private static func hashPassword(_ password: String) -> String {
+        let salt = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let digest = SHA256.hash(data: Data("\(salt):\(password)".utf8))
+        return "sha256$\(salt)$\(hex(digest))"
+    }
+
+    private static func verifyPassword(_ password: String, storedHash: String) -> Bool {
+        let parts = storedHash.split(separator: "$")
+        guard parts.count == 3, parts[0] == "sha256" else { return false }
+        let salt = String(parts[1])
+        let expected = String(parts[2])
+        let digest = SHA256.hash(data: Data("\(salt):\(password)".utf8))
+        return hex(digest) == expected
+    }
+
+    private static func createToken(userId: String, username: String, phone: String) throws -> String {
+        let header = try base64urlEncoded(["alg": "HS256", "typ": "JWT"])
+        let now = Int(Date().timeIntervalSince1970)
+        let payload = try base64urlEncoded([
+            "sub": userId,
+            "username": username,
+            "phone": phone,
+            "iat": now,
+            "exp": now + (7 * 24 * 60 * 60)
+        ])
+        let message = "\(header).\(payload)"
+        let signature = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: SymmetricKey(data: Data(tokenSecret.utf8)))
+        return "\(message).\(base64url(Data(signature)))"
+    }
+
+    private static func verifyToken(_ token: String) throws -> [String: Any]? {
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+        let signed = "\(parts[0]).\(parts[1])"
+        let expected = HMAC<SHA256>.authenticationCode(for: Data(signed.utf8), using: SymmetricKey(data: Data(tokenSecret.utf8)))
+        guard base64url(Data(expected)) == String(parts[2]) else { return nil }
+        guard let payloadData = base64urlDecode(String(parts[1])),
+              let payload = try JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else {
+            return nil
+        }
+        let exp = intValue(payload["exp"], defaultValue: 0)
+        if exp > 0 && exp < Int64(Date().timeIntervalSince1970) {
+            return nil
+        }
+        return payload
+    }
+
+    private static func generateDeterministicUserId(_ phone: String) -> String {
+        let normalized = normalizePhone(phone).lowercased()
+        let digest = Insecure.SHA1.hash(data: Data(userNamespace + Array(normalized.utf8)))
+        var bytes = Array(digest.prefix(16))
+        bytes[6] = (bytes[6] & 0x0f) | 0x50
+        bytes[8] = (bytes[8] & 0x3f) | 0x80
+        let hex = bytes.map { String(format: "%02x", $0) }.joined()
+        return [
+            String(hex.prefix(8)),
+            String(hex.dropFirst(8).prefix(4)),
+            String(hex.dropFirst(12).prefix(4)),
+            String(hex.dropFirst(16).prefix(4)),
+            String(hex.dropFirst(20).prefix(12))
+        ].joined(separator: "-")
+    }
+
+    private static func base64urlEncoded(_ object: [String: Any]) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: object, options: [])
+        return base64url(data)
+    }
+
+    private static func base64url(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    private static func base64urlDecode(_ value: String) -> Data? {
+        var base = value.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        let padding = 4 - (base.count % 4)
+        if padding < 4 {
+            base += String(repeating: "=", count: padding)
+        }
+        return Data(base64Encoded: base)
+    }
+
+    private static func parseJSONValue(_ raw: String) -> Any {
+        guard let data = raw.data(using: .utf8) else { return raw }
+        if let value = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
+            return value
+        }
+        return raw
+    }
+
+    private static func rowValue(_ row: [String: Any]?, _ key: String) -> Any? {
+        guard let raw = row?[key], !(raw is NSNull) else { return nil }
+        return raw
+    }
+
+    private static func rowString(_ row: [String: Any]?, _ key: String) -> String? {
+        guard let value = rowValue(row, key) else { return nil }
+        return value as? String
+    }
+
+    private static func jsonString(_ value: Any) throws -> String {
+        guard JSONSerialization.isValidJSONObject(["value": value]) else {
+            if let string = value as? String {
+                let data = try JSONSerialization.data(withJSONObject: string, options: [.fragmentsAllowed])
+                return String(decoding: data, as: UTF8.self)
+            }
+            if let number = value as? NSNumber {
+                let data = try JSONSerialization.data(withJSONObject: number, options: [.fragmentsAllowed])
+                return String(decoding: data, as: UTF8.self)
+            }
+            if let bool = value as? Bool {
+                let data = try JSONSerialization.data(withJSONObject: bool, options: [.fragmentsAllowed])
+                return String(decoding: data, as: UTF8.self)
+            }
+            throw AiSError("Unsupported JSON value")
+        }
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func sqliteValueType(_ value: Any) -> String {
+        switch value {
+        case is NSNumber:
+            if CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID() { return "boolean" }
+            return "number"
+        case is Bool:
+            return "boolean"
+        case is [Any], is [String: Any]:
+            return "json"
+        default:
+            return "string"
+        }
+    }
+
+    private static func stringValue(_ value: Any?) -> String {
+        if let value = value as? String { return value }
+        if let value = value as? NSString { return value as String }
+        if let value = value as? NSNumber { return value.stringValue }
+        return ""
+    }
+
+    private static func normalizedOptionalString(_ value: Any?) -> String? {
+        let resolved = stringValue(value).trimmingCharacters(in: .whitespacesAndNewlines)
+        return resolved.isEmpty ? nil : resolved
+    }
+
+    private static func firstNonEmptyString(_ values: [String?]) -> String? {
+        for value in values {
+            if let value, !value.isEmpty { return value }
+        }
+        return nil
+    }
+
+    private static func intValue(_ value: Any?, defaultValue: Int64) -> Int64 {
+        if let value = value as? Int64 { return value }
+        if let value = value as? Int { return Int64(value) }
+        if let value = value as? NSNumber { return value.int64Value }
+        if let value = value as? String, let parsed = Int64(value) { return parsed }
+        return defaultValue
+    }
+
+    private static func isoNow() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
+
+    private static func hex<D: Digest>(_ digest: D) -> String {
+        digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func lastError(_ db: OpaquePointer?) -> String {
+        guard let db else { return "SQLite error" }
+        return String(cString: sqlite3_errmsg(db))
+    }
+
+    private static func boolValue(_ value: Any?) -> Bool {
+        if let value = value as? Bool { return value }
+        if let value = value as? NSNumber { return value.boolValue }
+        if let value = value as? String { return value == "true" || value == "1" }
+        return false
+    }
+
+}
+
+fileprivate struct UserRecord {
+    let userId: String
+    let atomeType: String
+    let deletedAt: String?
+}
+
+fileprivate struct AtomeMeta {
+    let atomeId: String
+    let atomeType: String
+    let parentId: String?
+    let ownerId: String
+    let creatorId: String
+    let createdAt: String
+    let updatedAt: String
+    let createdSource: String
+    let syncStatus: String
+}
+
+fileprivate struct StateCurrentEntry {
+    let atomeId: String
+    let ownerId: String?
+    let projectId: String?
+    let properties: [String: Any]
+    let updatedAt: String
+    let version: Int64
+}
+
+fileprivate enum SQLiteBinding {
+    case text(String)
+    case int(Int64)
+    case null
+}
+
+fileprivate struct AiSError: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
+}

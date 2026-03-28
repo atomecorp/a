@@ -105,7 +105,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         pageReady = true
     }
     WebViewManager.shared.log.info("Setup webview; mode=\(execMode, privacy: .public)")
-
         // Start lightweight embedded HTTP server (once) to serve audio via standard stack
         if FeatureFlags.startLocalHTTPServer {
             if LocalHTTPServer.shared.port == nil {
@@ -120,6 +119,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             webView.scrollView.backgroundColor = .black
         }
 
+        let startupLocalPort = FeatureFlags.startLocalHTTPServer ? (LocalHTTPServer.shared.port ?? 0) : 0
+        let localPortBootstrap = startupLocalPort > 0
+            ? """
+                try {
+                    window.__ATOME_LOCAL_HTTP_PORT__ = \(startupLocalPort);
+                    window.ATOME_LOCAL_HTTP_PORT = \(startupLocalPort);
+                    window.__LOCAL_HTTP_PORT = \(startupLocalPort);
+                    window.__SQUIRREL_TAURI_LOCAL_PORT__ = \(startupLocalPort);
+                } catch(e) { }
+                """
+            : ""
         let scriptSource = """
                 // Pre-paint background black ASAP to avoid white flash (especially on app launch)
                 (function(){try{document.documentElement.style.background='#000';}catch(e){}; try{if(document.body){document.body.style.background='#000';}}catch(e){}})();
@@ -140,7 +150,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 })();
                 // Inject host environment flag early for UI logic
                 try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
-
+                \(localPortBootstrap)
                 window.onerror = function(m, s, l, c, e) {
             var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
             try {
@@ -773,7 +783,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         // Simplified initialization
         if FeatureFlags.startLocalHTTPServer {
             if let p = LocalHTTPServer.shared.port {
-                let js = "window.__ATOME_LOCAL_HTTP_PORT__=" + String(p) + ";"
+                let js = """
+                window.__ATOME_LOCAL_HTTP_PORT__=\(p);
+                window.ATOME_LOCAL_HTTP_PORT=\(p);
+                window.__LOCAL_HTTP_PORT=\(p);
+                window.__SQUIRREL_TAURI_LOCAL_PORT__=\(p);
+                """
                 webView.evaluateJavaScript(js, completionHandler: nil)
                 print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")
             }

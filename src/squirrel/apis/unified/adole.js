@@ -160,6 +160,15 @@ function isInTauri() {
     return /tauri/i.test(userAgent);
 }
 
+function isEmbeddedIOSRuntime() {
+    if (typeof window === 'undefined') return false;
+    const protocol = String(window.location?.protocol || '').toLowerCase();
+    if (protocol === 'atome:') return true;
+    if (window.__AUV3_MODE__ === true) return true;
+    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
+    return hostEnv === 'app' || hostEnv === 'auv3';
+}
+
 function readLocalTauriHttpPort() {
     if (typeof window === 'undefined') return null;
     const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
@@ -171,6 +180,10 @@ function readLocalTauriHttpPort() {
     const value = Number(raw);
     if (Number.isFinite(value) && value > 0) return value;
     return isInTauri() ? 3000 : null;
+}
+
+function hasInjectedLocalTauriPort() {
+    return !!readLocalTauriHttpPort();
 }
 
 function isLoopbackHostname(hostname) {
@@ -270,6 +283,9 @@ function resolveBackendSource(kind) {
     const configDefault = CONFIG[`${key.toUpperCase()}_SOURCE`];
     const explicit = normalizeSource(globalValue || configValue || configDefault);
     if (explicit && explicit !== 'auto') return explicit;
+    if ((key === 'auth' || key === 'profile') && isEmbeddedIOSRuntime()) {
+        return 'tauri';
+    }
     return isInTauri() ? 'tauri' : 'fastify';
 }
 
@@ -442,8 +458,9 @@ export async function checkConnection(backend) {
     // TAURI: Only consider Tauri available inside a real Tauri runtime.
     // Browser/production must never assume localhost Tauri exists.
     if (backend === 'tauri') {
-        if (isInTauri()) {
-            // In Tauri app, assume Tauri server is available
+        const hasLocalRuntime = hasInjectedLocalTauriPort();
+        if (isInTauri() || hasLocalRuntime) {
+            // In Tauri app, or embedded iOS with injected local AiS port, assume local server is available
             state.online = true;
             state.lastCheck = now;
             return true;
@@ -1038,6 +1055,17 @@ class TauriWebSocket {
 
             // Handle auth-response
             if (message.type === 'auth-response' && (message.request_id || message.requestId)) {
+                try {
+                    console.log('[AdoleWS][auth] response', {
+                        backend: this.backend,
+                        url: this.url,
+                        requestId: message.request_id || message.requestId,
+                        ok: message.success === true,
+                        error: message.error || null,
+                        hasUser: !!message.user,
+                        hasToken: !!message.token
+                    });
+                } catch (_) { }
                 const pending = this.pendingRequests.get(message.request_id || message.requestId);
                 if (pending) {
                     this.pendingRequests.delete(message.request_id || message.requestId);
@@ -1187,8 +1215,28 @@ class TauriWebSocket {
     }
 
     async send(message) {
+        const isAuthMessage = message?.type === 'auth';
+        if (isAuthMessage) {
+            try {
+                console.log('[AdoleWS][auth] send:start', {
+                    backend: this.backend,
+                    action: message?.action || null,
+                    url: this.url,
+                    hasToken: !!message?.token
+                });
+            } catch (_) { }
+        }
         const connected = await this.connect();
         if (!connected) {
+            if (isAuthMessage) {
+                try {
+                    console.log('[AdoleWS][auth] send:connect-failed', {
+                        backend: this.backend,
+                        action: message?.action || null,
+                        url: this.url
+                    });
+                } catch (_) { }
+            }
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
         }
 
@@ -1198,6 +1246,16 @@ class TauriWebSocket {
 
             const timeout = setTimeout(() => {
                 this.pendingRequests.delete(requestId);
+                if (isAuthMessage) {
+                    try {
+                        console.log('[AdoleWS][auth] send:timeout', {
+                            backend: this.backend,
+                            action: message?.action || null,
+                            url: this.url,
+                            requestId
+                        });
+                    } catch (_) { }
+                }
                 resolve({ ok: false, success: false, error: 'Request timeout', status: 0 });
             }, 10000);
 
@@ -1208,6 +1266,17 @@ class TauriWebSocket {
             } catch (e) {
                 this.pendingRequests.delete(requestId);
                 clearTimeout(timeout);
+                if (isAuthMessage) {
+                    try {
+                        console.log('[AdoleWS][auth] send:error', {
+                            backend: this.backend,
+                            action: message?.action || null,
+                            url: this.url,
+                            requestId,
+                            error: e?.message || String(e)
+                        });
+                    } catch (_) { }
+                }
                 resolve({ ok: false, success: false, error: e.message, status: 0 });
             }
         });
@@ -1284,7 +1353,9 @@ const _noFastifyWs = {
 };
 
 function getTauriWs() {
-    if (!isInTauri()) {
+    const localPort = readLocalTauriHttpPort();
+    const hasLocalRuntime = !!localPort;
+    if (!isInTauri() && !hasLocalRuntime) {
         return _noTauriWs;
     }
 

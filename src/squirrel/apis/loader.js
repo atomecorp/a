@@ -41,7 +41,8 @@ import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
   };
   const isEmbeddedIosRuntime = () => {
     const protocol = String(window.location?.protocol || '').toLowerCase();
-    return protocol === 'atome:' || window.__AUV3_MODE__ === true;
+    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
+    return protocol === 'atome:' || window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3';
   };
 
   // Contract:

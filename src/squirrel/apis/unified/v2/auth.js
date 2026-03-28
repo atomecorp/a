@@ -1,4 +1,4 @@
-import { TauriAdapter, FastifyAdapter, checkBackends } from '../adole.js';
+import { TauriAdapter, FastifyAdapter, checkBackends, resolveAuthSource } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
 import { syncLocalProjectsToFastify } from './atomes.js';
 import {
@@ -30,6 +30,20 @@ const normalizePhone = (phone) => {
     return cleaned.replace(/\+/g, '');
 };
 const normalizeUsername = (name) => String(name || '').trim();
+
+const maskPhoneForLog = (phone) => {
+    const normalized = normalizePhone(phone || '');
+    if (!normalized) return '<empty>';
+    if (normalized.length <= 4) return `${normalized}***`;
+    return `${normalized.slice(0, 4)}***${normalized.slice(-2)}`;
+};
+
+const summarizeBackendAttempt = (result) => ({
+    ok: !!result?.ok,
+    error: result?.error || null,
+    hasUser: !!result?.user?.id,
+    hasToken: !!result?.token
+});
 
 const normalizePhoneForCompare = (phone) => normalizePhone(phone || '').toLowerCase();
 
@@ -68,8 +82,9 @@ const normalizeUser = (user) => {
     };
 };
 
-const getPrimaryBackend = () => (isTauriRuntime() ? 'tauri' : 'fastify');
-const getSecondaryBackend = () => (isTauriRuntime() ? 'fastify' : 'tauri');
+const normalizeBackend = (value) => (value === 'tauri' || value === 'fastify' ? value : null);
+const getPrimaryBackend = () => normalizeBackend(resolveAuthSource()) || (isTauriRuntime() ? 'tauri' : 'fastify');
+const getSecondaryBackend = () => (getPrimaryBackend() === 'tauri' ? 'fastify' : 'tauri');
 
 const hasToken = (backend) => !!adapters[backend]?.getToken?.();
 
@@ -334,6 +349,16 @@ export const auth = {
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
 
+        try {
+            console.log('[Auth][register] start', {
+                phone: maskPhoneForLog(cleanPhone),
+                primary,
+                secondary,
+                visibility,
+                availability
+            });
+        } catch (_) { }
+
         const prevSession = getSessionState();
         const prevAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
 
@@ -343,6 +368,12 @@ export const auth = {
             username: cleanName,
             visibility
         });
+        try {
+            console.log('[Auth][register] primary-result', {
+                backend: primary,
+                ...summarizeBackendAttempt(primaryResult)
+            });
+        } catch (_) { }
         let fallbackResult = null;
         let activeBackend = primary;
 
@@ -371,6 +402,12 @@ export const auth = {
                 username: cleanName,
                 visibility
             });
+            try {
+                console.log('[Auth][register] secondary-result', {
+                    backend: secondary,
+                    ...summarizeBackendAttempt(fallbackResult)
+                });
+            } catch (_) { }
             response[secondary] = {
                 success: fallbackResult.ok,
                 data: fallbackResult.raw,
@@ -394,6 +431,12 @@ export const auth = {
                 username: cleanName,
                 visibility
             });
+            try {
+                console.log('[Auth][register] mirror-result', {
+                    backend: secondary,
+                    ...summarizeBackendAttempt(secondaryResult)
+                });
+            } catch (_) { }
             response[secondary] = {
                 success: secondaryResult.ok || secondaryResult.error === 'user_exists',
                 data: secondaryResult.raw,
@@ -418,6 +461,16 @@ export const auth = {
                 syncLocalProjectsToFastify({ reason: 'register' }).catch(() => { });
             } catch (_) { }
         }
+
+        try {
+            console.log('[Auth][register] done', {
+                phone: maskPhoneForLog(cleanPhone),
+                activeBackend,
+                active: summarizeBackendAttempt(activeResult),
+                sessionMode: getSessionState()?.mode || null,
+                sessionUserId: getSessionState()?.user?.id || null
+            });
+        } catch (_) { }
 
         return response;
     },

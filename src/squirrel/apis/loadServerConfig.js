@@ -50,8 +50,9 @@ function isInTauriRuntime() {
 
 function isEmbeddedIOSRuntime() {
     if (typeof window === 'undefined') return false;
-    const protocol = window.location?.protocol || '';
-    return protocol === 'atome:' || window.__AUV3_MODE__ === true;
+    const protocol = String(window.location?.protocol || '').toLowerCase();
+    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
+    return protocol === 'atome:' || window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3';
 }
 
 function isTauriProdWebview() {
