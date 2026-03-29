@@ -219,11 +219,3 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
         channels: session.channels,
     })
 }
-
-pub fn is_recording(session_id: &str) -> bool {
-    if let Ok(sessions) = SESSIONS.lock() {
-        sessions.contains_key(session_id)
-    } else {
-        false
-    }
-}

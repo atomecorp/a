@@ -17,6 +17,7 @@ mod macos {
 
         fn squirrel_recorder_stop(err_out: *mut *mut c_char, out_duration_sec: *mut f64) -> bool;
 
+        #[allow(dead_code)] // Used by the Tauri audio debug loopback command on macOS.
         fn squirrel_recorder_debug_render_interleaved(
             abs_wav_path: *const c_char,
             sample_rate: u32,
@@ -74,6 +75,7 @@ mod macos {
         }
     }
 
+    #[allow(dead_code)] // Invoked through the cross-platform wrapper below.
     pub fn debug_render_interleaved(
         abs_wav_path: &str,
         sample_rate: u32,
@@ -134,6 +136,7 @@ pub fn stop() -> Result<f64, String> {
     }
 }
 
+#[allow(dead_code)] // Exposed for audio debug tooling via Tauri command handlers.
 pub fn debug_render_interleaved(
     abs_wav_path: &str,
     sample_rate: u32,

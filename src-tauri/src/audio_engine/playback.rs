@@ -2,9 +2,7 @@
 // Manages AudioManager, clips, mixer tracks, and effects.
 
 use kira::backend::cpal::CpalBackend;
-use kira::effect::filter::FilterBuilder;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle};
-use kira::track::{TrackBuilder, TrackHandle};
 use kira::{AudioManager, AudioManagerSettings, Decibels, PlaybackRate, Tween};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -18,7 +16,6 @@ struct ClipEntry {
 pub struct PlaybackEngine {
     manager: AudioManager<CpalBackend>,
     clips: HashMap<String, ClipEntry>,
-    tracks: HashMap<String, TrackHandle>,
 }
 
 static ENGINE: once_cell::sync::Lazy<Mutex<Option<PlaybackEngine>>> =
@@ -34,7 +31,6 @@ pub fn init() -> Result<(), String> {
     *guard = Some(PlaybackEngine {
         manager,
         clips: HashMap::new(),
-        tracks: HashMap::new(),
     });
     Ok(())
 }
@@ -140,33 +136,6 @@ pub fn destroy_clip(id: &str) -> Result<(), String> {
             handle.stop(Tween::default());
         }
     }
-    Ok(())
-}
-
-pub fn add_sub_track(track_id: &str) -> Result<(), String> {
-    let mut guard = ENGINE.lock().map_err(|e| format!("Lock error: {e}"))?;
-    let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let track = engine
-        .manager
-        .add_sub_track(TrackBuilder::new())
-        .map_err(|e| format!("Failed to create track '{track_id}': {e}"))?;
-    engine.tracks.insert(track_id.to_string(), track);
-    Ok(())
-}
-
-pub fn add_filter_to_track(track_id: &str, cutoff: f64) -> Result<(), String> {
-    let mut guard = ENGINE.lock().map_err(|e| format!("Lock error: {e}"))?;
-    let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    // Re-create the track with the filter
-    let track = engine
-        .manager
-        .add_sub_track({
-            let mut builder = TrackBuilder::new();
-            builder.add_effect(FilterBuilder::new().cutoff(cutoff));
-            builder
-        })
-        .map_err(|e| format!("Failed to add filter to track '{track_id}': {e}"))?;
-    engine.tracks.insert(track_id.to_string(), track);
     Ok(())
 }
 

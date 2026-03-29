@@ -48,6 +48,7 @@ fn resolve_debug_audio_output_path(project_root: &Path, file_name: &str) -> Resu
     Ok(project_root.join("tmp").join("audio_debug").join(safe_name))
 }
 
+#[allow(dead_code)] // Reached via the Tauri audio debug capture command.
 fn decode_wav_to_interleaved_f32(bytes: &[u8]) -> Result<(u32, u16, Vec<f32>), String> {
     let cursor = Cursor::new(bytes);
     let mut reader = hound::WavReader::new(cursor)
@@ -197,6 +198,7 @@ pub fn audio_debug_write_file(
 }
 
 #[tauri::command]
+#[allow(dead_code)] // Registered through tauri::generate_handler!, which dead_code does not see reliably.
 pub fn audio_debug_capture_loopback(
     paths: tauri::State<crate::ProjectPaths>,
     file_name: String,

@@ -21,6 +21,7 @@ const CONFIG = {
         repo: 'a',
         branch: 'main'
     },
+    rateLimitBackoffMs: Math.max(60000, Number(process.env.GITHUB_RATE_LIMIT_BACKOFF_MS || 900000)),
     pollIntervalMs: 60000, // 1 minute
     versionFilePath: path.join(PROJECT_ROOT, 'src', 'version.json')
 };
@@ -31,6 +32,24 @@ let pollIntervalId = null;
 let githubToken = null;
 let connectedClients = new Map(); // clientId -> { ws, type: 'tauri'|'browser', lastSeen }
 let syncInProgress = false;
+let githubRateLimitUntil = 0;
+let githubRateLimitLoggedAt = 0;
+
+function getGitHubRateLimitRemainingMs() {
+    return Math.max(0, githubRateLimitUntil - Date.now());
+}
+
+function clearGitHubRateLimitBackoff() {
+    githubRateLimitUntil = 0;
+    githubRateLimitLoggedAt = 0;
+}
+
+function scheduleGitHubRateLimitBackoff() {
+    githubRateLimitUntil = Date.now() + CONFIG.rateLimitBackoffMs;
+    githubRateLimitLoggedAt = Date.now();
+    const retryAt = new Date(githubRateLimitUntil).toISOString();
+    console.warn(`⚠️  GitHub API rate limit reached, polling paused until ${retryAt}`);
+}
 
 /**
  * Initialize GitHub token from environment
@@ -51,6 +70,10 @@ async function getLatestCommitSha() {
     const { owner, repo, branch } = CONFIG.github;
     const url = `https://api.github.com/repos/${owner}/${repo}/commits/${branch}`;
 
+    if (getGitHubRateLimitRemainingMs() > 0) {
+        return null;
+    }
+
     const headers = {
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'Squirrel-Framework'
@@ -65,14 +88,21 @@ async function getLatestCommitSha() {
 
         if (!response.ok) {
             if (response.status === 403) {
-                console.warn('⚠️  GitHub API rate limit reached');
+                if (getGitHubRateLimitRemainingMs() === 0 || githubRateLimitLoggedAt === 0) {
+                    scheduleGitHubRateLimitBackoff();
+                }
+                return null;
             }
             throw new Error(`GitHub API error: ${response.status}`);
         }
 
         const data = await response.json();
+        clearGitHubRateLimitBackoff();
         return data.sha;
     } catch (error) {
+        if (getGitHubRateLimitRemainingMs() > 0) {
+            return null;
+        }
         console.error('❌ Failed to fetch commit SHA:', error.message);
         return null;
     }
