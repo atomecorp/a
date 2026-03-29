@@ -13,9 +13,11 @@ It replaces the previous fragmented system (Obj-C AVAudioEngine for macOS, Swift
 |--------|---------|----------|-----------|-------|
 | macOS (Tauri) | CoreAudio | native | native | `cargo build` |
 | iOS (Tauri) | CoreAudio | native | native | `cargo build --target aarch64-apple-ios` |
+| Android (Tauri) | AAudio / OpenSL ES | native | native | `cargo build --target aarch64-linux-android` |
 | Web (browser) | Web Audio API | WASM | WASM | `wasm-pack build` |
 | Windows | WASAPI | native | native | `cargo build` |
 | Linux | ALSA/PipeWire | native | native | `cargo build` |
+| FreeBSD | JACK (required) | native | native | `cargo build` |
 
 ## Architecture
 
