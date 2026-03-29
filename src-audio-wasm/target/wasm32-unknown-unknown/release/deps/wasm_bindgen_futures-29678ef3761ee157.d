@@ -1,0 +1,9 @@
+/Users/jean-ericgodard/RubymineProjects/a/src-audio-wasm/target/wasm32-unknown-unknown/release/deps/libwasm_bindgen_futures-29678ef3761ee157.rmeta: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/queue.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/task/singlethread.rs
+
+/Users/jean-ericgodard/RubymineProjects/a/src-audio-wasm/target/wasm32-unknown-unknown/release/deps/libwasm_bindgen_futures-29678ef3761ee157.rlib: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/queue.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/task/singlethread.rs
+
+/Users/jean-ericgodard/RubymineProjects/a/src-audio-wasm/target/wasm32-unknown-unknown/release/deps/wasm_bindgen_futures-29678ef3761ee157.d: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/queue.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/task/singlethread.rs
+
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/lib.rs:
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/queue.rs:
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.50/src/task/singlethread.rs:

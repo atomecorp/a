@@ -190,23 +190,7 @@ const detectInterruptCommand = (value = '') => {
     return null;
 };
 
-const toDebugPayload = (value) => {
-    try {
-        return JSON.stringify(value);
-    } catch (_) {
-        return String(value);
-    }
-};
-
-const debugVoice = (...args) => {
-    try {
-        globalThis?.console?.log?.('[eVe:voice]', ...args.map((entry) => (
-            typeof entry === 'string' ? entry : toDebugPayload(entry)
-        )));
-    } catch (_) {
-        // Ignore logging failures.
-    }
-};
+const debugVoice = () => {};
 
 const cloneValue = (value) => {
     if (typeof structuredClone === 'function') return structuredClone(value);
