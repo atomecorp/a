@@ -60,19 +60,15 @@ mod audio_engine_tests {
 
         crate::audio_engine::playback::init().expect("init failed");
 
-        crate::audio_engine::playback::load_clip("test_sine", wav_str)
-            .expect("load_clip failed");
+        crate::audio_engine::playback::load_clip("test_sine", wav_str).expect("load_clip failed");
 
-        crate::audio_engine::playback::play("test_sine")
-            .expect("play failed");
+        crate::audio_engine::playback::play("test_sine").expect("play failed");
 
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        crate::audio_engine::playback::stop("test_sine")
-            .expect("stop failed");
+        crate::audio_engine::playback::stop("test_sine").expect("stop failed");
 
-        crate::audio_engine::playback::destroy_clip("test_sine")
-            .expect("destroy_clip failed");
+        crate::audio_engine::playback::destroy_clip("test_sine").expect("destroy_clip failed");
 
         crate::audio_engine::playback::shutdown().expect("shutdown failed");
 
@@ -93,8 +89,7 @@ mod audio_engine_tests {
         crate::audio_engine::playback::init().expect("init failed");
         crate::audio_engine::playback::load_clip_from_bytes("test_bytes", &bytes)
             .expect("load_clip_from_bytes failed");
-        crate::audio_engine::playback::play("test_bytes")
-            .expect("play failed");
+        crate::audio_engine::playback::play("test_bytes").expect("play failed");
 
         std::thread::sleep(std::time::Duration::from_millis(300));
 
@@ -123,24 +118,33 @@ mod audio_engine_tests {
 
         std::thread::sleep(std::time::Duration::from_secs(2));
 
-        let rec_result = crate::audio_engine::recorder::stop("test_rec")
-            .expect("record stop failed");
+        let rec_result =
+            crate::audio_engine::recorder::stop("test_rec").expect("record stop failed");
 
         println!("Recording result: {:?}", rec_result);
-        assert!(rec_result.duration_sec > 1.0, "Recording should be > 1 second");
-        assert!(std::path::Path::new(&rec_result.file_path).exists(), "WAV file should exist");
+        assert!(
+            rec_result.duration_sec > 1.0,
+            "Recording should be > 1 second"
+        );
+        assert!(
+            std::path::Path::new(&rec_result.file_path).exists(),
+            "WAV file should exist"
+        );
 
         let reader = hound::WavReader::open(&rec_result.file_path).unwrap();
         let spec = reader.spec();
-        println!("Recorded WAV: {} Hz, {} channels, {} samples",
-            spec.sample_rate, spec.channels, reader.len());
+        println!(
+            "Recorded WAV: {} Hz, {} channels, {} samples",
+            spec.sample_rate,
+            spec.channels,
+            reader.len()
+        );
         assert!(reader.len() > 0, "WAV should have samples");
 
         crate::audio_engine::playback::init().expect("init failed");
         crate::audio_engine::playback::load_clip("recorded", &rec_result.file_path)
             .expect("load recorded clip failed");
-        crate::audio_engine::playback::play("recorded")
-            .expect("play recorded clip failed");
+        crate::audio_engine::playback::play("recorded").expect("play recorded clip failed");
 
         std::thread::sleep(std::time::Duration::from_secs(2));
 
@@ -166,8 +170,10 @@ mod audio_engine_tests {
         crate::audio_engine::metering::push_samples(&samples);
 
         let levels = crate::audio_engine::metering::get_levels();
-        println!("Levels: RMS={:.4} ({:.1} dB), Peak={:.4} ({:.1} dB)",
-            levels.rms, levels.rms_db, levels.peak, levels.peak_db);
+        println!(
+            "Levels: RMS={:.4} ({:.1} dB), Peak={:.4} ({:.1} dB)",
+            levels.rms, levels.rms_db, levels.peak, levels.peak_db
+        );
         assert!(levels.rms > 0.0, "RMS should be positive");
         assert!(levels.peak > 0.0, "Peak should be positive");
         assert!(levels.peak <= 0.5 + 0.01, "Peak should be <= 0.5");
