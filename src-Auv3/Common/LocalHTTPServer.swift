@@ -67,11 +67,10 @@ final class LocalHTTPServer {
                     switch state {
                     case .ready:
                         if let port = self.listener?.port?.rawValue { self.port = port }
-                        print("🌐 LocalHTTPServer ready on 127.0.0.1:\(self.port ?? 0)")
                     case .failed(let error):
                         print("❌ LocalHTTPServer failed: \(error)")
                     case .cancelled:
-                        print("ℹ️ LocalHTTPServer cancelled")
+                        break
                     default: break
                     }
                 }
@@ -115,16 +114,13 @@ final class LocalHTTPServer {
             let isWs = self.isWebSocketConnection(connection)
             if let data = data, !data.isEmpty {
                 if isWs {
-                    print("🔌 WS recv: \(data.count) bytes on connection")
                     self.processWebSocketData(data, on: connection)
                 } else {
                     self.processRequestChunk(data, on: connection)
                 }
-            } else if isWs {
-                print("🔌 WS recv: empty/nil data, isComplete=\(isComplete), error=\(String(describing: error))")
             }
             if let error = error {
-                if isWs { print("🔌 WS recv error: \(error)") }
+                if isWs { print("⚠️ WS recv error: \(error)") }
                 // Peer already closed/reset the socket: avoid extra cancel() noise.
                 self.clearConnectionState(connection)
                 return
@@ -134,9 +130,6 @@ final class LocalHTTPServer {
             if isComplete && !isWs {
                 self.requestCancel(connection)
                 return
-            }
-            if isComplete && isWs {
-                print("🔌 WS recv: isComplete=true on WS connection — continuing receive loop")
             }
             self.receive(on: connection) // keep reading pipelined data (simple)
         }
@@ -176,7 +169,6 @@ final class LocalHTTPServer {
             ?? rawPath.split(separator: "?", maxSplits: 1).first.map(String.init)
             ?? rawPath
         let queryItems = httpQueryItems(from: rawPath)
-        print("📥 HTTP req: \(method) \(rawPath)")
         var headers: [String: String] = [:]
         var rangeHeader: String? = nil
         for line in lines.dropFirst() {
@@ -188,11 +180,7 @@ final class LocalHTTPServer {
                 if key == "range" { rangeHeader = value }
             }
         }
-        if let rh = rangeHeader { print("   ↪︎ Range hdr: \(rh)") }
-        if !headers.isEmpty { print("   ↪︎ Headers count=\(headers.count)") }
-        if routePath == "/ws/sync" || routePath == "/ws/api" {
-            print("   ↪︎ WS upgrade check: upgrade='\(headers["upgrade"] ?? "<nil>")' connection='\(headers["connection"] ?? "<nil>")' sec-websocket-key='\(headers["sec-websocket-key"] ?? "<nil>")'")
-        }
+        _ = rangeHeader
         if method == "OPTIONS" {
             sendRaw(status: 204, reason: "No Content", headers: [
                 "Access-Control-Allow-Origin": "*",
@@ -249,7 +237,6 @@ final class LocalHTTPServer {
                 return
             }
             if routePath == "/api/uploads" {
-                print("[UPLOAD] ── POST /api/uploads received ── bodySize=\(bodyData.count)")
                 handleUploadsPost(headers: headers, body: bodyData, on: connection)
                 return
             }
@@ -270,10 +257,8 @@ final class LocalHTTPServer {
                     action = "login"
                 }
                 message["action"] = action
-                print("[AUTH-HTTP] POST \(routePath) action=\(action)")
                 let response = AiSRuntime.handleAuthMessage(message)
                 let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
-                print("[AUTH-HTTP] result success=\(success) userId=\(response["user_id"] ?? response["userId"] ?? "nil")")
                 sendJsonResponse(response, status: success ? 200 : 401, on: connection)
                 return
             }
@@ -309,7 +294,6 @@ final class LocalHTTPServer {
             let rawName = String(routePath.dropFirst("/audio/".count))
             // Decode any percent-encoded characters (spaces etc.) so underlying file with plain spaces is found
             let decodedName = rawName.removingPercentEncoding ?? rawName
-            if rawName != decodedName { print("🧪 Decoded audio name raw=\(rawName) decoded=\(decodedName)") }
             serveAudio(named: decodedName, rangeHeader: rangeHeader, on: connection)
         } else if routePath.hasPrefix("/file/") {
             let raw = String(routePath.dropFirst("/file/".count))
@@ -399,7 +383,6 @@ final class LocalHTTPServer {
             sendSimple(status: 400, reason: "Bad Request", body: "missing websocket key", on: connection)
             return
         }
-        print("🔌 WS upgrade: sec-websocket-key found, generating accept key")
 
         let response = [
             "HTTP/1.1 101 Switching Protocols",
@@ -413,7 +396,6 @@ final class LocalHTTPServer {
         let id = ObjectIdentifier(connection)
         wsConnections[id] = connection
         wsStates[id] = WebSocketState(buffer: Data(), clientId: clientId)
-        print("🔌 WS upgrade: connection registered, clientId=\(clientId)")
 
         let payload: [String: Any] = [
             "type": "welcome",
@@ -430,7 +412,6 @@ final class LocalHTTPServer {
                 print("❌ WS upgrade: 101 send failed: \(error)")
                 return
             }
-            print("🔌 WS upgrade: 101 sent OK, sending welcome")
             self.sendWebSocketJson(payload, on: connection)
             FastifySyncRelay.shared.connectIfConfigured()
         })
@@ -502,12 +483,10 @@ final class LocalHTTPServer {
     }
 
     private func handleWebSocketText(_ text: String, on connection: NWConnection) {
-        print("🔌 WS text received: \(text.prefix(200))")
         guard let data = text.data(using: .utf8) else { print("❌ WS text: invalid UTF-8"); return }
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
               let payload = obj as? [String: Any] else { print("❌ WS text: invalid JSON"); return }
         let type = (payload["type"] as? String) ?? ""
-        print("🔌 WS message type: \(type)")
         if type == "register" {
             if let provided = payload["clientId"] as? String {
                 let id = ObjectIdentifier(connection)
@@ -703,7 +682,6 @@ final class LocalHTTPServer {
             do {
                 let data = try Data(contentsOf: url)
                 sendRaw(status: 200, reason: "OK", headers: ["Content-Type": mime], body: data, on: connection)
-                print("🗂 Served unified file: \(url.lastPathComponent) bytes=\(data.count) mime=\(mime)")
             } catch {
                 sendSimple(status: 500, reason: "Internal Server Error", body: "read fail", on: connection)
             }
@@ -758,7 +736,6 @@ final class LocalHTTPServer {
             var response = Data(headerStr.utf8)
             response.append(chunk)
             connection.send(content: response, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
-            print("🎬 Served media: \(url.lastPathComponent) [\(rangeStart)-\(rangeEnd)]/\(totalLen) partial=\(isPartial) mime=\(mime)")
         } catch {
             sendSimple(status: 500, reason: "Internal Server Error", body: "Read failed", on: connection)
         }
@@ -824,10 +801,7 @@ final class LocalHTTPServer {
         let effectiveURL = ensureLocalReadableCopy(for: fileURL)
         // Header diagnostics
         if let headData = try? Data(contentsOf: effectiveURL, options: [.mappedIfSafe]) {
-            let prefix = headData.prefix(64)
-            let hex = prefix.map { String(format: "%02x", $0) }.joined(separator: " ")
-            if let ftypRange = headData.range(of: Data("ftyp".utf8)) { print("🔍 ftyp at offset \(ftypRange.lowerBound)") } else { print("⚠️ ftyp not found in first bytes") }
-            print("🧾 Header[0..63] hex=\(hex)")
+            _ = headData
         }
         // Faststart async: serve original immediately; schedule optimization if needed
         let optimizedURL: URL = {
@@ -846,7 +820,6 @@ final class LocalHTTPServer {
                         guard let self = self else { return }
                         if let final = finalURL {
                             self.faststartCache[effectiveURL.path] = final
-                            print("✅ Faststart (async) ready: \(final.lastPathComponent)")
                         } else {
                             self.faststartFailed.insert(effectiveURL.path)
                             print("⚠️ Faststart (async) failed: \(effectiveURL.lastPathComponent)")
@@ -859,12 +832,6 @@ final class LocalHTTPServer {
             }
             return effectiveURL
         }()
-        let servingOriginal = (optimizedURL.path == fileURL.path)
-        if servingOriginal {
-            print("🎧 Serving original file: \(fileURL.lastPathComponent)")
-        } else {
-            print("🎧 Serving faststart optimized file: \(optimizedURL.lastPathComponent) (from \(fileURL.lastPathComponent))")
-        }
         let path = optimizedURL.path
         let fileHandle: FileHandle
         do { fileHandle = try FileHandle(forReadingFrom: optimizedURL) } catch {
@@ -901,7 +868,6 @@ final class LocalHTTPServer {
             try fileHandle.seek(toOffset: rangeStart)
             let chunk = fileHandle.readData(ofLength: readLen)
             sendAudioResponse(data: chunk, totalLength: totalLen, start: rangeStart, end: rangeEnd, partial: isPartial, on: connection)
-            print("📤 Sent bytes [\(rangeStart)-\(rangeEnd)]/\(totalLen) partial=\(isPartial) file=\(optimizedURL.lastPathComponent)")
         } catch {
             sendSimple(status: 500, reason: "Internal Server Error", body: "Read failed", on: connection)
         }
@@ -959,7 +925,7 @@ final class LocalHTTPServer {
         guard let docs = SandboxPathValidator.allowedRoots().last else { return url }
         let target = docs.appendingPathComponent(url.lastPathComponent)
         if FileManager.default.fileExists(atPath: target.path) { return target }
-        do { try FileManager.default.copyItem(at: url, to: target); print("📄 Copied bundle resource to Documents: \(target.lastPathComponent)") } catch { print("⚠️ Copy failed: \(error)") }
+        do { try FileManager.default.copyItem(at: url, to: target) } catch { print("⚠️ Copy failed: \(error)") }
         return target
     }
 
@@ -1098,26 +1064,20 @@ final class LocalHTTPServer {
     }
 
     private func handleBinaryUpload(headers: [String: String], body: Data, preferredFolder: String?, on connection: NWConnection) {
-        print("[UPLOAD] ── handleBinaryUpload START ──")
-        print("[UPLOAD] body.count=\(body.count) preferredFolder=\(preferredFolder ?? "nil")")
-        print("[UPLOAD] headers: \(headers.filter { ["x-filename","x-original-name","x-atome-type","x-mime-type","x-file-path","x-user-id","x-phone","authorization","content-type"].contains($0.key.lowercased()) })")
         guard !body.isEmpty else {
-            print("[UPLOAD] ❌ Empty body → 400")
             sendJsonResponse(["success": false, "error": "Empty upload body"], status: 400, on: connection)
             return
         }
         guard let userId = resolveUploadUserId(from: headers) else {
-            print("[UPLOAD] ❌ resolveUploadUserId returned nil → 401 (token=\(headers["authorization"]?.prefix(20) ?? "nil") x-user-id=\(headers["x-user-id"] ?? "nil") x-phone=\(headers["x-phone"] ?? "nil"))")
+            print("[UPLOAD] ❌ resolveUploadUserId returned nil")
             sendJsonResponse(["success": false, "error": "Access denied"], status: 401, on: connection)
             return
         }
-        print("[UPLOAD] ✅ userId resolved: \(userId)")
         let rawName = headers["x-filename"] ?? headers["x-original-name"] ?? ""
         let decodedName = (rawName.removingPercentEncoding ?? rawName).trimmingCharacters(in: .whitespacesAndNewlines)
         let pathHeader = (headers["x-file-path"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let atomeType = (headers["x-atome-type"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let mimeType = (headers["x-mime-type"] ?? headers["content-type"] ?? "application/octet-stream").trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[UPLOAD] decodedName=\(decodedName) pathHeader=\(pathHeader) atomeType=\(atomeType) mimeType=\(mimeType)")
 
         let relativePath = resolveUploadRelativePath(
             userId: userId,
@@ -1126,24 +1086,16 @@ final class LocalHTTPServer {
             atomeType: atomeType,
             preferredFolder: preferredFolder
         )
-        print("[UPLOAD] relativePath=\(relativePath ?? "nil")")
         guard let safeRelativePath = relativePath,
               let root = iCloudFileManager.shared.getCurrentStorageURL() else {
-            print("[UPLOAD] ❌ path or root nil → 400 (relativePath=\(relativePath ?? "nil"), root=\(iCloudFileManager.shared.getCurrentStorageURL()?.path ?? "nil"))")
+            print("[UPLOAD] ❌ invalid upload path")
             sendJsonResponse(["success": false, "error": "Invalid upload path"], status: 400, on: connection)
             return
         }
         let fileURL = root.appendingPathComponent(safeRelativePath)
-        print("[UPLOAD] storageRoot=\(root.path)")
-        print("[UPLOAD] fileURL=\(fileURL.path)")
-        print("[UPLOAD] parentDir=\(fileURL.deletingLastPathComponent().path)")
         do {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            print("[UPLOAD] ✅ directory created/exists")
             try body.write(to: fileURL, options: .atomic)
-            print("[UPLOAD] ✅ file written (\(body.count) bytes)")
-            let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
-            print("[UPLOAD] fileExists after write: \(fileExists)")
             FileSyncCoordinator.shared.syncAll(force: true)
             let response: [String: Any] = [
                 "success": true,
@@ -1155,7 +1107,6 @@ final class LocalHTTPServer {
                 "mime_type": mimeType,
                 "size": body.count
             ]
-            print("[UPLOAD] ── handleBinaryUpload SUCCESS ── response=\(response)")
             sendJsonResponse(response, status: 200, on: connection)
         } catch {
             print("[UPLOAD] ❌ write error: \(error)")
@@ -1217,16 +1168,12 @@ final class LocalHTTPServer {
         let token = bearerToken(from: headers)
         let userIdHint = headers["x-user-id"]
         let phoneHint = headers["x-phone"]
-        print("[UPLOAD] resolveUploadUserId: token=\(token?.prefix(20) ?? "nil") userIdHint=\(userIdHint ?? "nil") phoneHint=\(phoneHint ?? "nil")")
-        let result = AiSRuntime.resolveAuthenticatedUserId(token: token, userIdHint: userIdHint, phoneHint: phoneHint)
-        print("[UPLOAD] resolveUploadUserId → \(result ?? "nil")")
-        return result
+        return AiSRuntime.resolveAuthenticatedUserId(token: token, userIdHint: userIdHint, phoneHint: phoneHint)
     }
 
     private func resolveUploadRelativePath(userId: String, fileName: String, pathHeader: String, atomeType: String, preferredFolder: String?) -> String? {
         let baseName = sanitizeUploadFileName(fileName.isEmpty ? "upload.bin" : fileName)
         let folderName = preferredFolder ?? ((atomeType == "sound" && baseName.lowercased().hasSuffix(".m4a")) ? "Recordings" : "Downloads")
-        print("[UPLOAD] resolveUploadRelativePath: baseName=\(baseName) folderName=\(folderName) pathHeader=\(pathHeader)")
         if !pathHeader.isEmpty,
            let sanitized = SandboxPathValidator.sanitizedRelativePath(pathHeader),
            !sanitized.isEmpty {
@@ -1444,9 +1391,6 @@ final class LocalHTTPServer {
     // MARK: - Text file serving
     private func serveText(named name: String, on connection: NWConnection) {
     let candidates = candidateFileURLs(for: name)
-    #if DEBUG
-    print("🔍 Text lookup for \(name) candidates=\n" + candidates.map { "  • " + $0.path }.joined(separator: "\n"))
-    #endif
     guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
             sendSimple(status: 404, reason: "Not Found", body: "text file missing", on: connection)
             return
@@ -1456,7 +1400,6 @@ final class LocalHTTPServer {
             let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(data.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n"
             var out = Data(head.utf8); out.append(data)
             connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
-            print("🗎 Served text file: \(url.lastPathComponent) bytes=\(data.count)")
         } catch {
             sendSimple(status: 500, reason: "Internal Server Error", body: "read fail", on: connection)
         }
@@ -1480,7 +1423,6 @@ final class LocalHTTPServer {
     }
 
     private func performFaststartRemux(original: URL) -> URL? {
-        print("🚀 Faststart remux begin: \(original.lastPathComponent)")
         let asset = AVURLAsset(url: original)
         if #available(iOS 16.0, *) {
             let semaphoreKeys = DispatchSemaphore(value: 0)
@@ -1515,7 +1457,6 @@ final class LocalHTTPServer {
         }
         switch export.status {
         case .completed:
-            print("✅ Faststart remux success: \(outURL.lastPathComponent)")
             return outURL
         case .failed, .cancelled:
             print("❌ Faststart remux failed: status=\(export.status) error=\(export.error?.localizedDescription ?? "unknown")")
@@ -1528,7 +1469,6 @@ final class LocalHTTPServer {
 
     // Fallback re-encode via AVAssetReader/Writer (AAC) if remux fails
     private func reencodeM4A(original: URL) -> URL? {
-        print("🛠 Re-encode attempt: \(original.lastPathComponent)")
         let asset = AVURLAsset(url: original)
     // Obtain first audio track (deprecated API acceptable as fallback inside extension)
         var audioTrack: AVAssetTrack?
@@ -1570,7 +1510,7 @@ final class LocalHTTPServer {
         }
         if semaphore.wait(timeout: .now() + 15) == .timedOut { print("❌ Re-encode timeout"); reader.cancelReading(); writer.cancelWriting(); return nil }
         writer.finishWriting { }
-        if writer.status == .completed { print("✅ Re-encode success: \(outURL.lastPathComponent)") ; return outURL }
+        if writer.status == .completed { return outURL }
         print("❌ Re-encode failed: status=\(writer.status) error=\(writer.error?.localizedDescription ?? "unknown")")
         return nil
     }

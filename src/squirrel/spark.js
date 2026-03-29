@@ -266,7 +266,6 @@ import('./kickstart.js').then(async () => {
   function __importAppOnce() {
     if (__appImported) return;
     __appImported = true;
-    try { window.webkit?.messageHandlers?.console?.postMessage('[SPARK-DIAG] importing application/index.js'); } catch (_) { }
     import('../application/index.js').catch(err => {
       console.error('[Squirrel] Application import error:', err);
       try { window.webkit?.messageHandlers?.console?.postMessage('[SPARK-DIAG] Application import ERROR: ' + String(err?.message || err)); } catch (_) { }

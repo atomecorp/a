@@ -40,7 +40,7 @@ struct atomeApp: App {
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .active:
-                print("🟢 SwiftUI scenePhase active (inbox disabled)")
+                break
             case .background, .inactive:
                 ActiveScenePoller.shared.stop()
             @unknown default:
@@ -55,4 +55,3 @@ struct ContentView: View {
     WebViewContainer()
     }
 }
-

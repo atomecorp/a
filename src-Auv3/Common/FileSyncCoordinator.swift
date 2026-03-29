@@ -148,7 +148,6 @@ final class FileSyncCoordinator {
             t.setEventHandler { [weak self] in self?.syncAll() }
             t.resume()
             self.timer = t
-            print("⏱️ FileSyncCoordinator auto-sync started interval=\(effectiveInterval)s")
         }
     }
 
@@ -160,9 +159,7 @@ final class FileSyncCoordinator {
 
     private func stopAutoSyncLocked(log: Bool) {
         timer?.cancel(); timer = nil
-        if log {
-            print("⏹️ FileSyncCoordinator auto-sync stopped")
-        }
+        _ = log
     }
 
     func setWebViewReady(_ ready: Bool) {
@@ -238,7 +235,6 @@ final class FileSyncCoordinator {
             rec.deletedAt = now
             self.inventory[rel] = rec
             self.inventoryDirty = true
-            print("\u{26B0}\u{FE0F} Mark tombstone rel=\(rel)")
         }
     }
 
@@ -277,7 +273,6 @@ final class FileSyncCoordinator {
                 if self.inventory[rel] != nil {
                     self.inventory.removeValue(forKey: rel)
                     self.inventoryDirty = true
-                    print("🔁 Record move: removed old rel=\(rel)")
                 }
             }
 
@@ -287,7 +282,6 @@ final class FileSyncCoordinator {
                     let rec = InventoryRecord(lastModified: mod.timeIntervalSince1970, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil, lastSeenVisibleRoot: nil)
                     self.inventory[newRel] = rec
                     self.inventoryDirty = true
-                    print("🔁 Record move: added new rel=\(newRel) mtime=\(mod.timeIntervalSince1970)")
                 }
             }
             self.persistInventoryIfNeeded()
@@ -331,7 +325,6 @@ final class FileSyncCoordinator {
                 updated.deletedAt = now
                 inventory[path] = updated
                 inventoryDirty = true
-        print("🕳️ Mark deletion (missing everywhere) path=\(path)")
             }
         }
 
@@ -366,21 +359,17 @@ final class FileSyncCoordinator {
                     existing.deletedAt = nil
                     existing.lastModified = max(existing.lastModified, newestMTime, deletedAt + 0.001)
                     inventory[rel] = existing; inventoryDirty = true
-                    print("♻️ Resurrect rel=\(rel) mtime=\(newestMTime) deletedAt=\(deletedAt) presentVisible=\(presentInVisible)")
                 } else {
                     // Enforce deletion: remove surviving copies
-                    print("✂️ Enforce tombstone rel=\(rel) keep deletedAt=\(deletedAt) metas=\(metas.count)")
                     for m in metas { deleteItemIfExists(m.root.appendingPathComponent(rel)) }
                     continue
                 }
             } else if rec == nil {
                 inventory[rel] = InventoryRecord(lastModified: newestMTime, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil); inventoryDirty = true
-                print("➕ Track new rel=\(rel) mtime=\(newestMTime)")
             } else {
                 // update lastModified if advanced
                 if let existing = rec, newestMTime > existing.lastModified + 0.5 {
                     inventory[rel]?.lastModified = newestMTime; inventoryDirty = true
-                    print("🕓 Advance mtime rel=\(rel) -> \(newestMTime)")
                 }
             }
 
@@ -406,19 +395,13 @@ final class FileSyncCoordinator {
                     if existing.missingVisibleSince == nil {
                         existing.missingVisibleSince = nowTs
                         inventory[rel] = existing; inventoryDirty = true
-                        print("⏳ Start missing window rel=\(rel) (root match)")
                     } else {
                         let elapsed = nowTs - (existing.missingVisibleSince ?? nowTs)
                         if elapsed > deletionObservationWindow {
                             var updated = existing; updated.deletedAt = nowTs; updated.missingVisibleSince = nil
                             inventory[rel] = updated; inventoryDirty = true
-                            let e = String(format: "%.2f", elapsed)
-                            print("🗑️ Confirm deletion rel=\(rel) elapsed=\(e)s (root match)")
                             for m in metas { deleteItemIfExists(m.root.appendingPathComponent(rel)) }
                             continue
-                        } else {
-                            let e2 = String(format: "%.2f", elapsed)
-                            print("… waiting deletion window rel=\(rel) elapsed=\(e2)s / \(deletionObservationWindow)s (root match)")
                         }
                     }
                 } else {
@@ -426,7 +409,6 @@ final class FileSyncCoordinator {
                     if existing.missingVisibleSince != nil {
                         existing.missingVisibleSince = nil
                         inventory[rel] = existing; inventoryDirty = true
-                        print("� Ignore missing (root mismatch) rel=\(rel)")
                     }
                 }
             }
@@ -451,8 +433,6 @@ final class FileSyncCoordinator {
                 let elapsed = now - (rec2.missingVisibleSince ?? now)
                 if elapsed < deletionObservationWindow {
                     skipVisibleCopy = true
-                    let e3 = String(format: "%.2f", elapsed)
-                    print("🚫 Skip recreate during pending deletion rel=\(rel) elapsed=\(e3)s")
                 }
             }
         // END pending deletion guard
@@ -469,9 +449,7 @@ final class FileSyncCoordinator {
                 }
             } // end for rel
         }
-        print("🔄 FileSyncCoordinator sync complete roots=")
-        for r in roots { print("   • \(r.path)") }
-    cleanupSpuriousArtifacts(in: roots)
+        cleanupSpuriousArtifacts(in: roots)
         persistInventoryIfNeeded()
     }
 
@@ -523,13 +501,12 @@ final class FileSyncCoordinator {
             if let attrs = try? fm.attributesOfItem(atPath: from.path), let mod = attrs[.modificationDate] as? Date {
                 try? fm.setAttributes([.modificationDate: mod], ofItemAtPath: to.path)
             }
-            print("📄 Sync copy \(from.lastPathComponent) -> \(to.deletingLastPathComponent().lastPathComponent)")
         } catch { print("⚠️ Sync copy failed: \(error)") }
     }
 
     private func deleteItemIfExists(_ url: URL) {
         if fm.fileExists(atPath: url.path) {
-            do { try fm.removeItem(at: url); print("🗑️ Deleted \(url.lastPathComponent)") } catch { print("⚠️ Delete failed: \(error)") }
+            do { try fm.removeItem(at: url) } catch { print("⚠️ Delete failed: \(error)") }
         }
     }
 
@@ -550,7 +527,6 @@ final class FileSyncCoordinator {
                 guard fm.fileExists(atPath: leakedURL.path) else { continue }
                 do {
                     try fm.removeItem(at: leakedURL)
-                    print("🧹 Removed leaked internal folder \(name)")
                 } catch {
                     print("⚠️ Failed to remove leaked internal folder \(name): \(error)")
                 }
@@ -577,10 +553,10 @@ final class FileSyncCoordinator {
                                 for f in files {
                                     let dest = target.appendingPathComponent(f.lastPathComponent)
                                     if fm.fileExists(atPath: dest.path) { continue }
-                                    do { try fm.moveItem(at: f, to: dest); print("🧹 Moved \(f.lastPathComponent) -> \(match)") } catch { print("⚠️ Cleanup move failed: \(error)") }
+                                    do { try fm.moveItem(at: f, to: dest) } catch { print("⚠️ Cleanup move failed: \(error)") }
                                 }
                             }
-                            do { try fm.removeItem(at: dir); print("🧹 Removed spurious folder \(name)") } catch { print("⚠️ Cleanup remove failed: \(error)") }
+                            do { try fm.removeItem(at: dir) } catch { print("⚠️ Cleanup remove failed: \(error)") }
                         }
                     }
                 }
@@ -597,7 +573,7 @@ final class FileSyncCoordinator {
                             for f in files {
                                 let dest = top.appendingPathComponent(f.lastPathComponent)
                                 if fm.fileExists(atPath: dest.path) { continue }
-                                do { try fm.moveItem(at: f, to: dest); print("🧹 Flattened \(sub) item -> top-level") } catch { print("⚠️ Flatten move failed: \(error)") }
+                                do { try fm.moveItem(at: f, to: dest) } catch { print("⚠️ Flatten move failed: \(error)") }
                             }
                         }
                         try? fm.removeItem(at: nested)

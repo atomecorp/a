@@ -96,15 +96,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             return false
         }()
     WebViewManager.runningInExtension = isExtension
-    let execMode = isExtension ? "AUv3" : "APP"
-    print("[Startup] exec mode: \(execMode)")
     if isExtension {
         markPageLoading()
         FileSyncCoordinator.shared.setWebViewReady(false)
     } else {
         pageReady = true
     }
-    WebViewManager.shared.log.info("Setup webview; mode=\(execMode, privacy: .public)")
         // Start lightweight embedded HTTP server (once) to serve audio via standard stack
         if FeatureFlags.startLocalHTTPServer {
             if LocalHTTPServer.shared.port == nil {
@@ -391,7 +388,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 }()
                 if isExtension {
                     // AUv3 path: leave handling to AudioUnitViewController which has the extensionContext.
-                    print("ℹ️ squirrel.openURL received in extension; handling is registered in AUv3 controller")
                 } else {
                     // App path: call AppURLOpener via Objective-C runtime to avoid static dependency in the AUv3 target
                     var runtimeClass: AnyObject? = NSClassFromString("AppURLOpener")
@@ -467,6 +463,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                 au.recordStop(sessionId: sessionId)
                             }
                         }
+                        return
+                    }
+                    if action == "stopJavaScriptAudio" {
+                        WebViewManager.audioController?.stopJavaScriptAudio()
                         return
                     }
                     if action == "loadLocalPath" || (body["type"] as? String) == "iplug" {
@@ -598,7 +598,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             return
         case "log":
             if let message = data as? String {
-                print("JS Log: \(message)")
+                WebViewManager.shared.log.debug("JS Log: \(message, privacy: .public)")
             }
             
         case "toggleMute":
@@ -650,19 +650,16 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             if let frequency = data["frequency"] as? Double,
                let note = data["note"] as? String,
                let amplitude = data["amplitude"] as? Double {
-                print("🎵 JS->Swift: playNote \(note) at \(frequency)Hz")
                 WebViewManager.audioController?.playNote(frequency: frequency, note: note, amplitude: Float(amplitude))
            
             }
             
         case "stopNote":
             if let note = data["note"] as? String {
-                print("🎵 JS->Swift: stopNote \(note)")
                 WebViewManager.audioController?.stopNote(note: note)
             }
             
         case "stopAll":
-            print("🎵 JS->Swift: stopAll")
             WebViewManager.audioController?.stopAllAudio()
             
         default:
@@ -671,18 +668,22 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     private func handleAudioBuffer(data: [String: Any]) {
-      guard let _ = data["frequency"] as? Double,
-          let sampleRate = data["sampleRate"] as? Double,
-              let duration = data["duration"] as? Double,
-              let audioDataArray = data["audioData"] as? [Double] else {
+        guard let sampleRate = data["sampleRate"] as? Double,
+              let duration = data["duration"] as? Double else {
             return
         }
-        // Convert [Double] to [Float] pour audio processing
-        let audioData = audioDataArray.map { Float($0) }
-        // Injection asynchrone pour ne jamais bloquer le thread principal
-        DispatchQueue.global(qos: .userInitiated).async {
-            WebViewManager.audioController?.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)
+        let audioDataArray: [Float]
+        if let doubles = data["audioData"] as? [Double] {
+            audioDataArray = doubles.map { Float($0) }
+        } else if let numbers = data["audioData"] as? [NSNumber] {
+            audioDataArray = numbers.map { $0.floatValue }
+        } else {
+            return
         }
+        let expectedPeakFrame = (data["expectedPeakFrame"] as? NSNumber)?.intValue
+            ?? (data["expected_peak_frame"] as? NSNumber)?.intValue
+        WebViewManager.audioController?.setAudioDebugExpectedPeakFrame(expectedPeakFrame)
+        WebViewManager.audioController?.injectJavaScriptAudio(audioDataArray, sampleRate: sampleRate, duration: duration)
     }
     
     private func handleAudioChord(data: [String: Any]) {
@@ -691,12 +692,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             case "playChord":
                 if let frequencies = data["frequencies"] as? [Double],
                    let amplitude = data["amplitude"] as? Double {
-                    print("🎼 JS->Swift: playChord \(frequencies)")
                     WebViewManager.audioController?.playChord(frequencies: frequencies, amplitude: Float(amplitude))
                 }
                 
             case "stopChord":
-                print("🎼 JS->Swift: stopChord")
                 WebViewManager.audioController?.stopChord()
                 
             default:
@@ -804,8 +803,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // Only run full initialization on the real app page (ignore placeholder page)
     guard let last = webView.url?.lastPathComponent, last == "index.html" else { return }
     WebViewManager.markPageReady()
-    // Log geometry to detect external monitor stage/scene issues
-    print("[WK] didFinish; webView.frame=\(webView.frame) bounds=\(webView.bounds)")
     log.debug("didFinish; frame=\(String(describing: webView.frame.debugDescription)) bounds=\(String(describing: webView.bounds.debugDescription))")
         // Silent page loading for performance
         WebViewManager.sendToJS("test", "creerDivRouge")
@@ -820,7 +817,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 try { window.dispatchEvent(new CustomEvent('local-server-ready')); } catch(e) {}
                 """
                 webView.evaluateJavaScript(js, completionHandler: nil)
-                print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")
             }
         }
     // Inject AUv3 / App context flag early for JS platform detection
@@ -835,7 +831,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         let hasNotch = UIDevice.current.userInterfaceIdiom == .phone && topInset >= 44
         let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
         webView.evaluateJavaScript(notchJS, completionHandler: nil)
-        print("notch info: hasNotch=\(hasNotch) topInset=\(topInset)")
         // Auto-restore entitlements to sync JS UI after load (App only; AUv3 can't present auth UI)
         if FeatureFlags.sendPurchaseRestoreOnDidFinish && !isExtension {
             if #available(iOS 15.0, *) {
@@ -888,11 +883,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - File System API
     
     private static func addFileSystemAPI(to webView: WKWebView) {
-        print("🔥 SWIFT: addFileSystemAPI appelée")
         fileSystemBridge = FileSystemBridge()
-        print("🔥 SWIFT: FileSystemBridge créé: \(fileSystemBridge != nil)")
         fileSystemBridge?.addFileSystemAPI(to: webView)
-        print("🔧 FileSystemBridge créé et API ajoutée au WebView")
     }
     
     // MARK: - Bridge JSON helper

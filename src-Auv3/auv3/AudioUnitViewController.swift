@@ -238,14 +238,25 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     // MARK: - JavaScript Audio Injection
     
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
-        print("🎵 AUv3: Received JS audio - \(audioData.count) samples at \(sampleRate)Hz for \(duration)s")
-        
         // Route JavaScript audio to our AUv3 for direct playback
         if let au = audioUnit as? auv3Utils {
             au.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)
-            print("🔊 AUv3: JavaScript audio injected into audio pipeline")
         } else {
             print("❌ AUv3: Failed to inject JS audio - no audio unit available")
+        }
+    }
+
+    public func stopJavaScriptAudio() {
+        if let au = audioUnit as? auv3Utils {
+            au.stopJavaScriptAudio()
+        } else {
+            print("❌ AUv3: Failed to stop JS audio - no audio unit available")
+        }
+    }
+
+    public func setAudioDebugExpectedPeakFrame(_ frame: Int?) {
+        if let au = audioUnit as? auv3Utils {
+            au.setAudioDebugExpectedPeakFrame(frame)
         }
     }
     

@@ -72,45 +72,20 @@ final class FullscreenWebViewController: UIViewController {
         // Delay setup to next runloop so placeholder paint is committed first
         DispatchQueue.main.async { WebViewManager.setupWebView(for: self.webView) }
         injectFullscreenFixJS()
-        logWindowMetrics(stage: "viewDidLoad")
     }
     override var prefersStatusBarHidden: Bool { true }
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [.bottom, .left, .right, .top] }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-    // AutoLayout drives sizing; no manual frame override
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.logWindowMetrics(stage: "viewDidAppear+50ms") }
-        logWindowMetrics(stage: "viewDidAppear")
     }
 
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
-    // Use default safe area; no forced zeroing
-        debugLogInsets(stage: "viewSafeAreaInsetsDidChange")
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-    // AutoLayout manages frame; avoid manual overrides
-    logWindowMetrics(stage: "viewDidLayoutSubviews")
-    }
-
-    private func debugLogInsets(stage: String) {
-        #if DEBUG
-        let i = view.safeAreaInsets
-        print("📐 WebView Insets [\(stage)]: top=\(i.top) left=\(i.left) bottom=\(i.bottom) right=\(i.right) frame=\(view.frame) bounds=\(view.bounds)")
-        #endif
-    }
-
-    private func logWindowMetrics(stage: String) {
-#if DEBUG
-        if let win = view.window {
-            print("🪟 WindowMetrics [\(stage)]: windowFrame=\(win.frame) screenBounds=\(UIScreen.main.bounds) webViewFrame=\(webView.frame)")
-        } else {
-            print("🪟 WindowMetrics [\(stage)]: window=nil screen=\(UIScreen.main.bounds) webViewFrame=\(webView.frame)")
-        }
-#endif
     }
 
     private func injectFullscreenFixJS() {
@@ -133,6 +108,5 @@ struct WebViewContainer: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> FullscreenWebViewController { FullscreenWebViewController() }
     func updateUIViewController(_ controller: FullscreenWebViewController, context: Context) {}
 }
-
 
 

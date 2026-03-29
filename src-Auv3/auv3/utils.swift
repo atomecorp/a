@@ -109,6 +109,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var jsAudioSampleRate: Double = 48000
     private var jsAudioActive: Bool = false
     private var jsAudioLock = os_unfair_lock() // Low-overhead lock for JS audio injection
+    private var audioDebugExpectedPeakFrame: Int? = nil
+    private var audioDebugRenderFrameCursor: Int64 = 0
+    private var audioDebugPlaybackStartFrame: Int64? = nil
+    private var audioDebugRecordingStartFrame: Int64? = nil
     // File playback (placeholder for iPlug core integration)
     private var loadedFilePath: String? = nil
     // Decoded audio buffers (non-interleaved float32, stereo)
@@ -195,6 +199,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             }
 
             let bufferList = AudioBufferListWrapper(ptr: outputData)
+            let renderStartFrame = strongSelf.audioDebugRenderFrameCursor
             // Determine output layout
             let outFormat = strongSelf._outputBusArray?[0].format
             let outChannels = Int(outFormat?.channelCount ?? 2)
@@ -465,7 +470,11 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             }
 
             // NOUVEAU: Mix JavaScript audio into the output
-            if strongSelf.jsAudioActive { strongSelf.mixJavaScriptAudio(bufferList: bufferList, frameCount: frameCount) }
+            if strongSelf.jsAudioActive {
+                strongSelf.mixJavaScriptAudio(bufferList: bufferList,
+                                              frameCount: frameCount,
+                                              renderStartFrame: renderStartFrame)
+            }
 
             // Optional debug capture of ch0 (mix) at low cost
             if strongSelf.dbgCaptureEnabled, bufferList.numberOfBuffers > 0 {
@@ -485,6 +494,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
             if strongSelf.recordingState == .recording {
                 if strongSelf.recordingSource == "plugin" {
+                    if strongSelf.audioDebugRecordingStartFrame == nil {
+                        strongSelf.audioDebugRecordingStartFrame = renderStartFrame
+                    }
                     strongSelf.captureRecordingOutput(bufferList: bufferList,
                                                       channels: outChannels,
                                                       frames: frameCount,
@@ -514,6 +526,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
                 strongSelf.lastTransportCheck = currentTime
             }
+
+            strongSelf.audioDebugRenderFrameCursor += Int64(frameCount)
 
             return noErr
         }
@@ -550,6 +564,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     }
     public func setTestToneActive(_ on: Bool) { self.isTestToneActive = on }
     public func setDebugCaptureEnabled(_ on: Bool) { self.dbgCaptureEnabled = on }
+    public func setAudioDebugExpectedPeakFrame(_ frame: Int?) { self.audioDebugExpectedPeakFrame = frame }
     public func dumpDebugCapture() {
         DispatchQueue.global(qos: .utility).async {
             let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -678,6 +693,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         recordingSampleRate = sr
         recordingChannels = UInt32(ch)
         recordingPath = url.path
+        audioDebugRecordingStartFrame = nil
 
         if normalizedSource == "mic" {
             if let format = inputFormat {
@@ -739,6 +755,25 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 "file_name": activeFileName
             ])
         } else {
+            let analysis = analyzeRecordedFile(at: URL(fileURLWithPath: activePath))
+            let playbackStartFrameValue = audioDebugPlaybackStartFrame.map(Int.init)
+            let recordingStartFrameValue = audioDebugRecordingStartFrame.map(Int.init)
+            let expectedPeakFrameValue = audioDebugExpectedPeakFrame
+            let computedFirstPeakFrame: Int? = {
+                if activeSource == "plugin",
+                   let playbackStart = audioDebugPlaybackStartFrame,
+                   let recordingStart = audioDebugRecordingStartFrame,
+                   let expectedPeak = audioDebugExpectedPeakFrame {
+                    let relativeStart = max(0, Int(playbackStart - recordingStart))
+                    return relativeStart + expectedPeak
+                }
+                return analysis?["first_peak_frame"] as? Int
+            }()
+            let peakValue: Any = analysis?["peak"] ?? NSNull()
+            let firstPeakValue: Any = computedFirstPeakFrame ?? NSNull()
+            let playbackFramePayload: Any = playbackStartFrameValue ?? NSNull()
+            let recordingFramePayload: Any = recordingStartFrameValue ?? NSNull()
+            let expectedPeakPayload: Any = expectedPeakFrameValue ?? NSNull()
             emitRecordingEvent(type: "record_done", payload: [
                 "session_id": activeSessionId,
                 "file_name": activeFileName,
@@ -746,7 +781,12 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 "source": activeSource,
                 "sample_rate": activeSampleRate,
                 "channels": activeChannels,
-                "duration_sec": duration
+                "duration_sec": duration,
+                "peak": peakValue,
+                "first_peak_frame": firstPeakValue,
+                "playback_start_frame": playbackFramePayload,
+                "recording_start_frame": recordingFramePayload,
+                "expected_peak_frame": expectedPeakPayload
             ])
         }
 
@@ -756,6 +796,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         recordingSampleRate = 0
         recordingChannels = 0
         recordingPath = ""
+        audioDebugRecordingStartFrame = nil
         recordingInputBuffer = nil
     }
 
@@ -790,6 +831,136 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             return nil
         }
         return recordingsDir.appendingPathComponent(fileName)
+    }
+
+    private func analyzeRecordedFile(at url: URL) -> [String: Any]? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: url)
+            guard data.count >= 44 else { return nil }
+
+            func readUInt16(_ offset: Int) -> UInt16? {
+                guard offset + 2 <= data.count else { return nil }
+                return data.subdata(in: offset..<(offset + 2)).withUnsafeBytes { raw in
+                    raw.load(as: UInt16.self).littleEndian
+                }
+            }
+            func readUInt32(_ offset: Int) -> UInt32? {
+                guard offset + 4 <= data.count else { return nil }
+                return data.subdata(in: offset..<(offset + 4)).withUnsafeBytes { raw in
+                    raw.load(as: UInt32.self).littleEndian
+                }
+            }
+            func readInt16(_ offset: Int) -> Int16? {
+                guard offset + 2 <= data.count else { return nil }
+                return data.subdata(in: offset..<(offset + 2)).withUnsafeBytes { raw in
+                    Int16(bitPattern: raw.load(as: UInt16.self).littleEndian)
+                }
+            }
+            func readInt32(_ offset: Int) -> Int32? {
+                guard offset + 4 <= data.count else { return nil }
+                return data.subdata(in: offset..<(offset + 4)).withUnsafeBytes { raw in
+                    Int32(bitPattern: raw.load(as: UInt32.self).littleEndian)
+                }
+            }
+            func readFloat32(_ offset: Int) -> Float32? {
+                guard let bits = readUInt32(offset) else { return nil }
+                return Float32(bitPattern: bits)
+            }
+
+            guard String(data: data.prefix(4), encoding: .ascii) == "RIFF",
+                  String(data: data.subdata(in: 8..<12), encoding: .ascii) == "WAVE" else {
+                return nil
+            }
+
+            var offset = 12
+            var audioFormat: UInt16 = 0
+            var channels: Int = 0
+            var sampleRate: Double = 0
+            var bitsPerSample: Int = 0
+            var dataOffset: Int = 0
+            var dataSize: Int = 0
+
+            while offset + 8 <= data.count {
+                let chunkId = String(data: data.subdata(in: offset..<(offset + 4)), encoding: .ascii) ?? ""
+                let chunkSize = Int(readUInt32(offset + 4) ?? 0)
+                let chunkDataOffset = offset + 8
+                if chunkDataOffset + chunkSize > data.count { break }
+                if chunkId == "fmt " {
+                    audioFormat = readUInt16(chunkDataOffset) ?? 0
+                    channels = Int(readUInt16(chunkDataOffset + 2) ?? 0)
+                    sampleRate = Double(readUInt32(chunkDataOffset + 4) ?? 0)
+                    bitsPerSample = Int(readUInt16(chunkDataOffset + 14) ?? 0)
+                } else if chunkId == "data" {
+                    dataOffset = chunkDataOffset
+                    dataSize = chunkSize
+                    break
+                }
+                offset = chunkDataOffset + chunkSize + (chunkSize % 2)
+            }
+
+            guard channels > 0, sampleRate > 0, bitsPerSample > 0, dataOffset > 0, dataSize > 0 else {
+                return nil
+            }
+
+            let bytesPerSample = max(1, bitsPerSample / 8)
+            let blockAlign = bytesPerSample * channels
+            guard blockAlign > 0 else { return nil }
+            let frameCount = dataSize / blockAlign
+            guard frameCount > 0 else { return nil }
+
+            func sampleValue(frame: Int, channel: Int) -> Float {
+                let sampleOffset = dataOffset + ((frame * channels + channel) * bytesPerSample)
+                switch (audioFormat, bitsPerSample) {
+                case (3, 32):
+                    return readFloat32(sampleOffset) ?? 0
+                case (_, 16):
+                    guard let value = readInt16(sampleOffset) else { return 0 }
+                    return Float(value) / 32768.0
+                case (_, 32):
+                    if audioFormat == 3 {
+                        return readFloat32(sampleOffset) ?? 0
+                    }
+                    guard let value = readInt32(sampleOffset) else { return 0 }
+                    return Float(value) / 2147483648.0
+                case (_, 8):
+                    guard sampleOffset < data.count else { return 0 }
+                    return (Float(data[sampleOffset]) - 128.0) / 128.0
+                default:
+                    return 0
+                }
+            }
+
+            var peak: Float = 0
+            for frame in 0..<frameCount {
+                var framePeak: Float = 0
+                for channel in 0..<channels {
+                    framePeak = max(framePeak, abs(sampleValue(frame: frame, channel: channel)))
+                }
+                peak = max(peak, framePeak)
+            }
+
+            let adaptiveThreshold = max(0.05, peak * 0.5)
+            var firstPeakFrame: Int? = nil
+            for frame in 0..<frameCount {
+                var framePeak: Float = 0
+                for channel in 0..<channels {
+                    framePeak = max(framePeak, abs(sampleValue(frame: frame, channel: channel)))
+                }
+                if framePeak >= adaptiveThreshold {
+                    firstPeakFrame = frame
+                    break
+                }
+            }
+
+            return [
+                "peak": peak,
+                "first_peak_frame": firstPeakFrame as Any
+            ]
+        } catch {
+            print("⚠️ AUv3: failed to analyze recorded file at \(url.path): \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private func emitRecordingEvent(type: String, payload: [String: Any]) {
@@ -1003,6 +1174,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
     os_unfair_lock_lock(&jsAudioLock)
     defer { os_unfair_lock_unlock(&jsAudioLock) }
+        audioDebugPlaybackStartFrame = nil
 
         // 1) Detect host sample rate
         let hostSampleRate = getSampleRate() ?? 44100.0
@@ -1051,14 +1223,17 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         jsAudioActive = false
         jsAudioBuffer.removeAll()
         jsAudioPlaybackIndex = 0
-        
-        print("⏹️ AUv3: JS audio stopped")
+        audioDebugPlaybackStartFrame = nil
     }
     
     /// Mix JavaScript audio into the output buffer (called from render thread)
-    private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount) {
+    private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount, renderStartFrame: Int64) {
     guard jsAudioActive, !jsAudioBuffer.isEmpty, os_unfair_lock_trylock(&jsAudioLock) else { return }
     defer { os_unfair_lock_unlock(&jsAudioLock) }
+
+        if jsAudioPlaybackIndex == 0 && audioDebugPlaybackStartFrame == nil {
+            audioDebugPlaybackStartFrame = renderStartFrame
+        }
 
         let gain: Float = 0.4 // Conservative mix gain
         let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
@@ -1078,10 +1253,6 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             jsAudioActive = false
             jsAudioBuffer.removeAll()
             jsAudioPlaybackIndex = 0
-            // print("🎵 AUv3: JS audio playback completed")
-// File d'attente circulaire pour messages JS (évite blocage thread principal)
-
-// File d'attente circulaire pour messages JS (évite blocage thread principal)
         }
     }
 
