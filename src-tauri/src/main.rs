@@ -138,6 +138,7 @@ fn main() {
             native_contacts::macos_contacts_snapshot,
             audio_engine::bridge::audio_init,
             audio_engine::bridge::audio_load_clip,
+            audio_engine::bridge::audio_load_clip_from_bytes,
             audio_engine::bridge::audio_play,
             audio_engine::bridge::audio_stop,
             audio_engine::bridge::audio_destroy_clip,

@@ -17,6 +17,13 @@ pub fn audio_load_clip(id: String, path: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub fn audio_load_clip_from_bytes(id: String, bytes: Vec<u8>) -> Result<Value, String> {
+    let byte_len = bytes.len();
+    playback::load_clip_from_bytes(&id, &bytes)?;
+    Ok(json!({ "success": true, "id": id, "bytes_len": byte_len }))
+}
+
+#[tauri::command]
 pub fn audio_play(id: String) -> Result<Value, String> {
     playback::play(&id)?;
     Ok(json!({ "success": true, "id": id }))
