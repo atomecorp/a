@@ -17,6 +17,12 @@ In parallel, AUv3 and iOS now expose the same unified playback/record/debug cont
 - plugin-output recording
 - metering / debug / validation
 
+This target must be true in the following runtime contexts:
+
+- browser mode when Atome/eVe is served by Fastify on FreeBSD
+- app / Tauri mode
+- AUv3 mode
+
 The rule going forward is simple:
 
 > Every feature that emits or records audio must converge on the unified native audio engine, even if the UI layer, transport layer, or media decoding layer differs by runtime.
@@ -28,6 +34,8 @@ The rule going forward is simple:
 | macOS (Tauri) | Rust `CPAL + Kira` | native | native | existing foundation |
 | iOS app (Tauri shell) | native bridge / unified playback contract | native | native | aligned with new runtime contract |
 | iOS AUv3 | Swift native render + recorder bridge | native | native | sample-accurate validation now passing |
+| Web served by Fastify (FreeBSD) | WASM / Web capture fallback | WASM | Web-native capture adapter | required compatibility target |
+| FreeBSD / Tauri native host | native backend with system audio dependencies | native | native | runtime prerequisites must be provisioned |
 | Android (Tauri) | CPAL / native backend | native | native | planned through Rust path |
 | Web (browser) | WASM / Web Audio fallback | WASM | WASM | fallback / compatibility path |
 | Windows | WASAPI | native | native | Rust path |
@@ -90,6 +98,11 @@ The new direction is:
 2. drive one native audio engine per runtime
 3. make sample-accurate verification part of the engine contract
 4. route both audio clips and video soundtrack playback through the same engine
+
+An important consequence is that "web mode" must be treated explicitly as two different concerns:
+
+- browser playback / routing through the unified engine contract
+- browser capture fallback, potentially still using `getUserMedia` + `AudioWorklet`, when the app is running through Fastify / FreeBSD in a real browser
 
 ## Files
 
@@ -221,6 +234,34 @@ cpal = "0.15"
 hound = "3"
 ```
 
+## Runtime System Dependencies
+
+Rust crate dependencies are not sufficient on their own. Some runtimes also require system-level audio dependencies.
+
+### FreeBSD / Tauri
+
+For FreeBSD / Tauri, runtime provisioning must be treated as part of the migration scope.
+
+Current assumption to confirm in the codebase and deployment environment:
+
+- native audio on FreeBSD requires at least `JACK`
+
+This matters because the migration is not actually complete if:
+
+- the new engine is correct in code
+- but the target FreeBSD / Tauri environment cannot run it due to missing system audio dependencies
+
+Therefore, FreeBSD / Tauri must be validated on two levels:
+
+1. code path ownership and routing
+2. system dependency provisioning
+
+At minimum, the migration output should document:
+
+- which FreeBSD packages/services are required
+- whether each dependency is needed for playback, recording, or both
+- whether the dependency is production-required or test-only
+
 ## Sample-Accurate Validation
 
 One of the major additions of the new engine is that AUv3 is no longer validated only by "did audio play?" or "did recording finish?". It is now validated by sample-accurate measurements derived from the native render timeline.
@@ -315,6 +356,37 @@ That means:
 - the app runtime should converge on the same transport and playback semantics
 - sample-accuracy and routing rules defined for AUv3 should also drive app-level integration
 - AUv3 is currently the strictest native validation target and therefore acts as the reference implementation for Apple-native timing behavior
+
+## Browser Runtime Served by Fastify / FreeBSD
+
+This runtime needs to be named explicitly because it is not the same thing as a purely theoretical "web fallback".
+
+When Atome/eVe is served by Fastify on FreeBSD and runs inside a browser:
+
+- playback must still obey the unified engine contract
+- audio clip ownership must still converge through the same public facade
+- video soundtrack ownership must still converge through the same transport rules
+- recording may still require a browser-native capture path
+
+Current working assumption:
+
+- browser capture may still need `getUserMedia` + `AudioWorklet`
+- if that assumption remains true, this path must stay minimal and recording-only
+- it must not survive as a parallel production playback engine
+
+This point is important because otherwise the migration could accidentally end in a split architecture:
+
+- one "real" engine for native runtimes
+- one semi-legacy engine for browser mode
+
+That outcome is explicitly out of scope. Browser mode served by Fastify / FreeBSD is part of the migration target, not an excuse to preserve the old playback architecture.
+
+This browser target must also be distinguished from FreeBSD / Tauri native hosting:
+
+- browser + Fastify / FreeBSD is the browser runtime target
+- FreeBSD / Tauri native hosting is the native runtime target
+
+They may share the same machine or deployment family, but they do not have the same runtime constraints. In particular, system audio dependencies such as `JACK` matter for the native FreeBSD / Tauri host, not necessarily for browser playback itself.
 
 ## Integration Goal: One Engine Everywhere
 
@@ -583,6 +655,7 @@ If a video is audible both through a DOM/native video element and through the un
 - Rust `CPAL + Kira` remains the primary native engine
 - feature code must call the JS facade or canonical media APIs, not runtime-specific internals
 - old HTML/Tone branches must remain fallback-only until removed
+- on FreeBSD / Tauri, required system audio dependencies must be provisioned explicitly; at minimum, `JACK` must be confirmed or rejected as a real prerequisite
 
 ### iOS App
 
@@ -601,6 +674,8 @@ If a video is audible both through a DOM/native video element and through the un
 - web may keep fallback behavior longer than native runtimes
 - however, the JS public contract must remain identical
 - the fallback path must not redefine media semantics differently from the native engine
+- for browser mode served by Fastify / FreeBSD, playback ownership must still converge to the unified contract
+- if `AudioWorklet` remains necessary, it must be limited to browser recording and not retained as a general playback engine
 
 ## Cutover Plan by Subsystem
 
@@ -666,6 +741,8 @@ The framework migration can be called complete only when all of the following ar
 5. No production feature depends on direct `HTMLAudioElement` or `HTMLVideoElement` audio output when a unified native backend is available.
 6. AUv3 sample-accuracy validation remains green.
 7. Fallback backends are compatibility-only, not first-class production paths.
+8. Browser mode served by Fastify / FreeBSD follows the same ownership rules and only keeps the minimal browser-specific capture exception, if still required.
+9. Native FreeBSD / Tauri runtime prerequisites are documented and provisioned, including `JACK` if confirmed necessary for audio operation.
 
 ## Execution Appendix: Migration Matrix
 
