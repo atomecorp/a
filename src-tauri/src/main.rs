@@ -233,18 +233,18 @@ fn main() {
             {
                 let handle = app.handle();
                 if let Some(win) = handle.get_webview_window("main") {
-                    let _ = win.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000; console.log('[tauri] port exposed 3000');");
+                    let _ = win.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
                     let root_js = format!(
-                        "window.__ATOME_PROJECT_ROOT__={:?}; console.log('[tauri] project root exposed');",
+                        "window.__ATOME_PROJECT_ROOT__={:?};",
                         project_root.to_string_lossy()
                     );
                     let _ = win.eval(&root_js);
                 } else {
                     // Fallback: essaye toute fenêtre disponible
                     for (_, w) in app.webview_windows() {
-                        let _ = w.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000; console.log('[tauri] port exposed 3000 (fallback)');");
+                        let _ = w.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
                         let root_js = format!(
-                            "window.__ATOME_PROJECT_ROOT__={:?}; console.log('[tauri] project root exposed (fallback)');",
+                            "window.__ATOME_PROJECT_ROOT__={:?};",
                             project_root.to_string_lossy()
                         );
                         let _ = w.eval(&root_js);

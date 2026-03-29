@@ -766,7 +766,7 @@ class TauriWebSocket {
             this.isConnecting = true;
 
             try {
-                const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[WS-DIAG] ' + msg); } catch (_) { } console.log('[WS-DIAG]', msg); };
+                const _xlog = (msg) => { void msg; };
                 _xlog('Creating WebSocket to ' + this.url);
                 this.socket = new WebSocket(this.url);
 
@@ -1061,17 +1061,6 @@ class TauriWebSocket {
 
             // Handle auth-response
             if (message.type === 'auth-response' && (message.request_id || message.requestId)) {
-                try {
-                    console.log('[AdoleWS][auth] response', {
-                        backend: this.backend,
-                        url: this.url,
-                        requestId: message.request_id || message.requestId,
-                        ok: message.success === true,
-                        error: message.error || null,
-                        hasUser: !!message.user,
-                        hasToken: !!message.token
-                    });
-                } catch (_) { }
                 const pending = this.pendingRequests.get(message.request_id || message.requestId);
                 if (pending) {
                     this.pendingRequests.delete(message.request_id || message.requestId);
@@ -1222,27 +1211,9 @@ class TauriWebSocket {
 
     async send(message) {
         const isAuthMessage = message?.type === 'auth';
-        if (isAuthMessage) {
-            try {
-                console.log('[AdoleWS][auth] send:start', {
-                    backend: this.backend,
-                    action: message?.action || null,
-                    url: this.url,
-                    hasToken: !!message?.token
-                });
-            } catch (_) { }
-        }
+        void isAuthMessage;
         const connected = await this.connect();
         if (!connected) {
-            if (isAuthMessage) {
-                try {
-                    console.log('[AdoleWS][auth] send:connect-failed', {
-                        backend: this.backend,
-                        action: message?.action || null,
-                        url: this.url
-                    });
-                } catch (_) { }
-            }
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
         }
 
@@ -1252,16 +1223,6 @@ class TauriWebSocket {
 
             const timeout = setTimeout(() => {
                 this.pendingRequests.delete(requestId);
-                if (isAuthMessage) {
-                    try {
-                        console.log('[AdoleWS][auth] send:timeout', {
-                            backend: this.backend,
-                            action: message?.action || null,
-                            url: this.url,
-                            requestId
-                        });
-                    } catch (_) { }
-                }
                 resolve({ ok: false, success: false, error: 'Request timeout', status: 0 });
             }, 10000);
 
@@ -1272,17 +1233,6 @@ class TauriWebSocket {
             } catch (e) {
                 this.pendingRequests.delete(requestId);
                 clearTimeout(timeout);
-                if (isAuthMessage) {
-                    try {
-                        console.log('[AdoleWS][auth] send:error', {
-                            backend: this.backend,
-                            action: message?.action || null,
-                            url: this.url,
-                            requestId,
-                            error: e?.message || String(e)
-                        });
-                    } catch (_) { }
-                }
                 resolve({ ok: false, success: false, error: e.message, status: 0 });
             }
         });

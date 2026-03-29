@@ -14,13 +14,7 @@ const toDebugPayload = (value) => {
 };
 
 const debugVoiceBootstrap = (...args) => {
-    try {
-        globalThis?.console?.log?.('[eVe:voice:bootstrap]', ...args.map((entry) => (
-            typeof entry === 'string' ? entry : toDebugPayload(entry)
-        )));
-    } catch (_) {
-        // Ignore logging failures.
-    }
+    void args;
 };
 
 const readEnv = (env, key) => {

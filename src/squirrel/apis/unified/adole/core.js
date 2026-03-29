@@ -798,7 +798,7 @@ function create_unauthenticated_result(errorMessage) {
 }
 
 async function ensure_anonymous_user({ reason = 'anonymous', maxAttempts = 3 } = {}) {
-    const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[ANON-DIAG] ' + msg); } catch (_) { } console.log('[ANON-DIAG]', msg); };
+    const _xlog = (msg) => { void msg; };
     _xlog('ensure_anonymous_user called, reason=' + reason + ' currentUserId=' + _currentUserId);
     if (_currentUserId && !is_anonymous_mode()) {
         return { ok: false, reason: 'authenticated_user_present', user: get_authenticated_user() };
@@ -1583,7 +1583,7 @@ async function local_http_auth(identity) {
         ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || 3000)
         : 3000;
     const base = `http://127.0.0.1:${port}`;
-    const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[LOCAL-HTTP-AUTH] ' + msg); } catch (_) { } console.log('[LOCAL-HTTP-AUTH]', msg); };
+    const _xlog = (msg) => { void msg; };
 
     const doFetch = async (url, body) => {
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -4335,7 +4335,7 @@ try {
             // Use squirrel:ready event which fires reliably after DOM is ready
             window.addEventListener('squirrel:ready', async function onSquirrelReadyAuthCheck() {
                 window.removeEventListener('squirrel:ready', onSquirrelReadyAuthCheck);
-                const _xlog = (msg) => { try { window.webkit?.messageHandlers?.console?.postMessage('[AUTH-DIAG] ' + msg); } catch (_) { } console.log('[AUTH-DIAG]', msg); };
+                const _xlog = (msg) => { void msg; };
                 _xlog('squirrel:ready fired, starting auth check');
 
                 const savedSession = load_user_session();

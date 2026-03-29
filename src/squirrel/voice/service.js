@@ -30,13 +30,7 @@ const toDebugPayload = (value) => {
 };
 
 const debugVoiceService = (...args) => {
-    try {
-        globalThis?.console?.log?.('[eVe:voice:service]', ...args.map((entry) => (
-            typeof entry === 'string' ? entry : toDebugPayload(entry)
-        )));
-    } catch (_) {
-        // Ignore logging failures.
-    }
+    void args;
 };
 
 export const VOICE_V1_PROVIDER_DECISION = Object.freeze({
