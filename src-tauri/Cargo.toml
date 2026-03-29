@@ -36,6 +36,9 @@ futures-util = "0.3"
 base64 = "0.22"
 cpal = "0.15"
 hound = "3"
+kira = { version = "0.12", features = ["cpal", "wav", "mp3", "ogg", "flac"] }
+ringbuf = "0.4"
+once_cell = "1"
 
 # Local authentication dependencies
 rusqlite = { version = "0.31", features = ["bundled"] }

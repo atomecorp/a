@@ -7,6 +7,7 @@ mod dev_logging;
 mod iplug_bridge;
 mod native_contacts;
 mod native_recorder;
+mod audio_engine;
 mod server;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -135,6 +136,17 @@ fn main() {
             iplug_bridge::iplug_send,
             iplug_bridge::iplug_poll_events,
             native_contacts::macos_contacts_snapshot,
+            audio_engine::bridge::audio_init,
+            audio_engine::bridge::audio_load_clip,
+            audio_engine::bridge::audio_play,
+            audio_engine::bridge::audio_stop,
+            audio_engine::bridge::audio_destroy_clip,
+            audio_engine::bridge::audio_set_volume,
+            audio_engine::bridge::audio_set_playback_rate,
+            audio_engine::bridge::audio_record_start,
+            audio_engine::bridge::audio_record_stop,
+            audio_engine::bridge::audio_get_levels,
+            audio_engine::bridge::audio_shutdown,
             project_root
         ])
         .setup(|app| {

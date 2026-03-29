@@ -6,22 +6,22 @@
 // - UI->DSP batching per frame (<= 60 Hz)
 // Notes: Keep JS allocs out of the audio thread; backends talk to native or WebAudio.
 
-(function(){
+(function () {
   const ns = (window.Squirrel = window.Squirrel || {});
   const av = (ns.av = ns.av || {});
   const audio = (av.audio = av.audio || {});
 
   // Event bus
   const listeners = new Map(); // type -> Set(fn)
-  function emit(type, payload){
+  function emit(type, payload) {
     const set = listeners.get(type);
-    if(set){ for(const fn of set){ try{ fn(payload); }catch(e){ console.warn(e);} } }
+    if (set) { for (const fn of set) { try { fn(payload); } catch (e) { console.warn(e); } } }
   }
-  audio.on = (type, fn)=>{
-    if(!listeners.has(type)) listeners.set(type, new Set());
+  audio.on = (type, fn) => {
+    if (!listeners.has(type)) listeners.set(type, new Set());
     listeners.get(type).add(fn);
   };
-  audio.off = (type, fn)=>{ const s=listeners.get(type); if(s) s.delete(fn); };
+  audio.off = (type, fn) => { const s = listeners.get(type); if (s) s.delete(fn); };
 
   // Backend registry
   const backends = Object.create(null);
@@ -30,27 +30,27 @@
   // Frame-batched command queue (UI -> backend)
   const q = [];
   let rafId = 0;
-  function pump(){
+  function pump() {
     rafId = 0;
-    if(!active) return;
-    if(q.length === 0) return;
+    if (!active) return;
+    if (q.length === 0) return;
     const batch = q.splice(0, q.length);
-    try{ backends[active].dispatch_batch(batch); }catch(e){ console.warn('dispatch_batch error', e); }
+    try { backends[active].dispatch_batch(batch); } catch (e) { console.warn('dispatch_batch error', e); }
   }
-  function enqueue(cmd){
+  function enqueue(cmd) {
     q.push(cmd);
-    if(!rafId){ rafId = requestAnimationFrame(pump); }
+    if (!rafId) { rafId = requestAnimationFrame(pump); }
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['play','jump','set_param']);
-  const proxyCall = (name) => (arg)=>{
-    if(!active || !backends[active] || typeof backends[active][name] !== 'function'){
+  const immediateNames = new Set(['play', 'jump', 'set_param']);
+  const proxyCall = (name) => (arg) => {
+    if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       console.warn('No backend for', name); return false;
     }
     // low-latency calls go immediately
     if (immediateNames.has(name)) {
-      try { backends[active][name](arg); } catch(e){ console.warn('immediate call failed', e); }
+      try { backends[active][name](arg); } catch (e) { console.warn('immediate call failed', e); }
       return true;
     }
     // batch others UI->DSP calls
@@ -59,16 +59,17 @@
     return true;
   };
 
-  audio.set_backend = (name)=>{
-    if(!backends[name]) return false;
-    active = name; emit('backend_changed', { backend:name }); return true;
+  audio.set_backend = (name) => {
+    if (!backends[name]) return false;
+    active = name; emit('backend_changed', { backend: name }); return true;
   };
 
-  audio.detect_and_set_backend = (order=['iplug','html'])=>{
+  audio.detect_and_set_backend = (order = ['kira', 'iplug', 'html']) => {
     const available = [];
+    if (backends['kira']) available.push('kira');
     if ((window.__toDSP && window.__fromDSP) || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge)) available.push('iplug');
     if (window.AudioContext || window.webkitAudioContext) available.push('html');
-    for(const pref of order){ if(available.includes(pref)) { audio.set_backend(pref); return pref; } }
+    for (const pref of order) { if (available.includes(pref)) { audio.set_backend(pref); return pref; } }
     return null;
   };
 
@@ -88,11 +89,11 @@
   audio.query_clip = proxyCall('query_clip');
 
   // Backend registration hooks
-  audio.__register_backend = (name, api)=>{ backends[name] = api; };
+  audio.__register_backend = (name, api) => { backends[name] = api; };
   audio.__emit = emit; // allow backends to emit on the facade bus
 
   // Auto detect backend
-  audio.detect_and_set_backend(['iplug','html']);
+  audio.detect_and_set_backend(['iplug', 'html']);
 
   // usage
   // Squirrel.av.audio.on('backend_changed', ({backend})=>console.log('backend:', backend));
