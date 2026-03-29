@@ -333,23 +333,52 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         _ = attemptMainPageLoad(isExtension: isExtension, mainURL: storedMainURL)
     }
 
+    private static func stringifyConsolePayload(_ value: Any) -> String {
+        if let stringValue = value as? String {
+            return stringValue
+        }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+           let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        return String(describing: value)
+    }
+
+    private static func formatConsoleMessage(_ body: Any) -> String {
+        let scope = runningInExtension ? "AUv3" : "APP"
+        if let payload = body as? [String: Any] {
+            let component = String(describing: payload["component"] ?? payload["source"] ?? "console")
+            let level = String(describing: payload["level"] ?? "info").uppercased()
+            let message = String(describing: payload["message"] ?? payload["event"] ?? "event")
+            let sessionId = payload["session_id"] ?? payload["run_id"] ?? payload["suite_id"]
+            let data = payload["data"] ?? payload["payload"]
+            var output = "[\(scope)][\(component)][\(level)] \(message)"
+            if let sessionId, !(String(describing: sessionId).isEmpty) {
+                output += " session=\(sessionId)"
+            }
+            if let data {
+                output += " data=\(stringifyConsolePayload(data))"
+            }
+            return output
+        }
+        if let payload = body as? [Any] {
+            return "[\(scope)][console] \(stringifyConsolePayload(payload))"
+        }
+        let text = stringifyConsolePayload(body)
+        if text.contains("[audio_debug]") {
+            return "[\(scope)] \(text)"
+        }
+        return "[\(scope)][console] \(text)"
+    }
+
     // MARK: - WKScriptMessageHandler
 
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         WebViewManager.recordInboundMessage(source: message.name)
         switch message.name {
         case "console":
-            if WebViewManager.runningInExtension {
-                return
-            }
-            // Forward JS console messages to Xcode console
-            if let s = message.body as? String {
-                print(s)
-            } else if let dict = message.body as? [String: Any] {
-                print("[console]", dict)
-            } else {
-                print("[console] \(message.body)")
-            }
+            print(WebViewManager.formatConsoleMessage(message.body))
             break
         case "squirrel.openURL":
             if let body = message.body as? [String: Any], let urlString = body["url"] as? String {

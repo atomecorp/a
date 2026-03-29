@@ -3,6 +3,49 @@
 
 use serde_json::{json, Value};
 use super::{playback, recorder, metering};
+use std::path::{Path, PathBuf};
+
+fn resolve_debug_audio_path(project_root: &Path, file_path: &str) -> Result<PathBuf, String> {
+    let raw = String::from(file_path).trim().to_string();
+    if raw.is_empty() {
+        return Err("Missing file path".to_string());
+    }
+    let candidate = if Path::new(&raw).is_absolute() {
+        PathBuf::from(&raw)
+    } else {
+        project_root.join(&raw)
+    };
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|e| format!("Unable to resolve debug audio path: {e}"))?;
+    let canonical_root = project_root
+        .canonicalize()
+        .map_err(|e| format!("Unable to resolve project root: {e}"))?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err("Debug audio path is outside the project root".to_string());
+    }
+    Ok(canonical)
+}
+
+fn resolve_debug_audio_output_path(project_root: &Path, file_name: &str) -> Result<PathBuf, String> {
+    let raw = String::from(file_name).trim().to_string();
+    if raw.is_empty() {
+        return Err("Missing file name".to_string());
+    }
+    let sanitized: String = raw
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-' => ch,
+            _ => '_',
+        })
+        .collect();
+    let safe_name = if sanitized.trim().is_empty() {
+        "audio_debug.wav".to_string()
+    } else {
+        sanitized
+    };
+    Ok(project_root.join("tmp").join("audio_debug").join(safe_name))
+}
 
 #[tauri::command]
 pub fn audio_init() -> Result<Value, String> {
@@ -87,6 +130,35 @@ pub fn audio_record_stop(session_id: String) -> Result<Value, String> {
         "duration_sec": result.duration_sec,
         "sample_rate": result.sample_rate,
         "channels": result.channels
+    }))
+}
+
+#[tauri::command]
+pub fn audio_debug_read_file(
+    paths: tauri::State<crate::ProjectPaths>,
+    file_path: String,
+) -> Result<Vec<u8>, String> {
+    let resolved = resolve_debug_audio_path(&paths.project_root, &file_path)?;
+    std::fs::read(&resolved).map_err(|e| format!("Unable to read debug audio file {}: {e}", resolved.display()))
+}
+
+#[tauri::command]
+pub fn audio_debug_write_file(
+    paths: tauri::State<crate::ProjectPaths>,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> Result<Value, String> {
+    let target = resolve_debug_audio_output_path(&paths.project_root, &file_name)?;
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Unable to create debug audio directory {}: {e}", parent.display()))?;
+    }
+    std::fs::write(&target, &bytes)
+        .map_err(|e| format!("Unable to write debug audio file {}: {e}", target.display()))?;
+    Ok(json!({
+        "success": true,
+        "path": target.to_string_lossy().to_string(),
+        "bytes_len": bytes.len()
     }))
 }
 
