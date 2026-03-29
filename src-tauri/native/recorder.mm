@@ -263,3 +263,49 @@ bool squirrel_recorder_stop(char **err_out, double *out_duration_sec) {
 
   return ok ? true : false;
 }
+
+bool squirrel_recorder_debug_render_interleaved(const char *abs_wav_path,
+                                                uint32_t sample_rate,
+                                                uint16_t channels,
+                                                const float *data,
+                                                uint32_t frames,
+                                                char **err_out,
+                                                double *out_duration_sec) {
+  if (err_out) *err_out = nullptr;
+  if (out_duration_sec) *out_duration_sec = 0.0;
+  if (!abs_wav_path || !*abs_wav_path) {
+    if (err_out) *err_out = dup_cstr(@"Missing output path");
+    return false;
+  }
+  if (!data || frames == 0 || channels == 0) {
+    if (err_out) *err_out = dup_cstr(@"Missing loopback audio data");
+    return false;
+  }
+
+  char *coreErr = nullptr;
+  if (!squirrel_recorder_core_start(abs_wav_path, sample_rate, channels, "plugin", &coreErr)) {
+    if (err_out) {
+      *err_out = coreErr ? coreErr : dup_cstr(@"Internal loopback start failed");
+    } else if (coreErr) {
+      squirrel_string_free(coreErr);
+    }
+    return false;
+  }
+
+  squirrel_recorder_core_push_interleaved(data, channels, frames);
+
+  double duration = 0.0;
+  if (!squirrel_recorder_core_stop(&coreErr, &duration)) {
+    if (err_out) {
+      *err_out = coreErr ? coreErr : dup_cstr(@"Internal loopback stop failed");
+    } else if (coreErr) {
+      squirrel_string_free(coreErr);
+    }
+    return false;
+  }
+
+  if (out_duration_sec) {
+    *out_duration_sec = duration;
+  }
+  return true;
+}

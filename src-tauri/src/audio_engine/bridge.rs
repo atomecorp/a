@@ -4,6 +4,7 @@
 use serde_json::{json, Value};
 use super::{playback, recorder, metering};
 use std::path::{Path, PathBuf};
+use std::io::Cursor;
 
 fn resolve_debug_audio_path(project_root: &Path, file_path: &str) -> Result<PathBuf, String> {
     let raw = String::from(file_path).trim().to_string();
@@ -45,6 +46,39 @@ fn resolve_debug_audio_output_path(project_root: &Path, file_name: &str) -> Resu
         sanitized
     };
     Ok(project_root.join("tmp").join("audio_debug").join(safe_name))
+}
+
+fn decode_wav_to_interleaved_f32(bytes: &[u8]) -> Result<(u32, u16, Vec<f32>), String> {
+    let cursor = Cursor::new(bytes);
+    let mut reader = hound::WavReader::new(cursor)
+        .map_err(|e| format!("Unable to decode loopback WAV bytes: {e}"))?;
+    let spec = reader.spec();
+    if spec.channels == 0 {
+        return Err("Loopback WAV has no channels".to_string());
+    }
+    let sample_rate = spec.sample_rate;
+    let channels = spec.channels;
+    let samples = match (spec.sample_format, spec.bits_per_sample) {
+        (hound::SampleFormat::Int, 16) => reader
+            .samples::<i16>()
+            .map(|sample| {
+                sample
+                    .map(|value| value as f32 / 32768.0)
+                    .map_err(|e| format!("Unable to read loopback WAV sample: {e}"))
+            })
+            .collect::<Result<Vec<f32>, String>>()?,
+        (hound::SampleFormat::Float, 32) => reader
+            .samples::<f32>()
+            .map(|sample| sample.map_err(|e| format!("Unable to read loopback WAV sample: {e}")))
+            .collect::<Result<Vec<f32>, String>>()?,
+        _ => {
+            return Err(format!(
+                "Unsupported loopback WAV format: {:?} {} bits",
+                spec.sample_format, spec.bits_per_sample
+            ));
+        }
+    };
+    Ok((sample_rate, channels, samples))
 }
 
 #[tauri::command]
@@ -159,6 +193,37 @@ pub fn audio_debug_write_file(
         "success": true,
         "path": target.to_string_lossy().to_string(),
         "bytes_len": bytes.len()
+    }))
+}
+
+#[tauri::command]
+pub fn audio_debug_capture_loopback(
+    paths: tauri::State<crate::ProjectPaths>,
+    file_name: String,
+    wav_bytes: Vec<u8>,
+) -> Result<Value, String> {
+    let target = resolve_debug_audio_output_path(&paths.project_root, &file_name)?;
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Unable to create debug audio directory {}: {e}", parent.display()))?;
+    }
+    let (sample_rate, channels, interleaved) = decode_wav_to_interleaved_f32(&wav_bytes)?;
+    let duration_sec = crate::native_recorder::debug_render_interleaved(
+        target
+            .to_str()
+            .ok_or_else(|| "Loopback output path contains invalid UTF-8".to_string())?,
+        sample_rate,
+        channels,
+        &interleaved,
+    )?;
+    Ok(json!({
+        "success": true,
+        "path": target.to_string_lossy().to_string(),
+        "bytes_len": wav_bytes.len(),
+        "sample_rate": sample_rate,
+        "channels": channels,
+        "duration_sec": duration_sec,
+        "frame_count": interleaved.len() / usize::from(channels)
     }))
 }
 

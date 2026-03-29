@@ -17,6 +17,16 @@ mod macos {
 
         fn squirrel_recorder_stop(err_out: *mut *mut c_char, out_duration_sec: *mut f64) -> bool;
 
+        fn squirrel_recorder_debug_render_interleaved(
+            abs_wav_path: *const c_char,
+            sample_rate: u32,
+            channels: u16,
+            data: *const f32,
+            frames: u32,
+            err_out: *mut *mut c_char,
+            out_duration_sec: *mut f64,
+        ) -> bool;
+
         fn squirrel_string_free(s: *mut c_char);
     }
 
@@ -63,6 +73,40 @@ mod macos {
             Err(take_error(err_out))
         }
     }
+
+    pub fn debug_render_interleaved(
+        abs_wav_path: &str,
+        sample_rate: u32,
+        channels: u16,
+        interleaved: &[f32],
+    ) -> Result<f64, String> {
+        if channels == 0 {
+            return Err("Invalid channel count".to_string());
+        }
+        let frame_count = interleaved.len() / usize::from(channels);
+        if frame_count == 0 {
+            return Err("Missing loopback frames".to_string());
+        }
+        let path_c = CString::new(abs_wav_path).map_err(|_| "Invalid output path".to_string())?;
+        let mut err_out: *mut c_char = std::ptr::null_mut();
+        let mut duration_sec: f64 = 0.0;
+        let ok = unsafe {
+            squirrel_recorder_debug_render_interleaved(
+                path_c.as_ptr(),
+                sample_rate,
+                channels,
+                interleaved.as_ptr(),
+                frame_count as u32,
+                &mut err_out as *mut *mut c_char,
+                &mut duration_sec as *mut f64,
+            )
+        };
+        if ok {
+            Ok(duration_sec)
+        } else {
+            Err(take_error(err_out))
+        }
+    }
 }
 
 pub fn start(abs_wav_path: &str, sample_rate: u32, channels: u16, source: &str) -> Result<(), String> {
@@ -87,5 +131,23 @@ pub fn stop() -> Result<f64, String> {
     #[cfg(not(target_os = "macos"))]
     {
         Err("Native recorder is only implemented on macOS in this build".to_string())
+    }
+}
+
+pub fn debug_render_interleaved(
+    abs_wav_path: &str,
+    sample_rate: u32,
+    channels: u16,
+    interleaved: &[f32],
+) -> Result<f64, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return macos::debug_render_interleaved(abs_wav_path, sample_rate, channels, interleaved);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (abs_wav_path, sample_rate, channels, interleaved);
+        Err("Internal loopback debug render is only implemented on macOS in this build".to_string())
     }
 }

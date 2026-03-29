@@ -148,6 +148,7 @@ fn main() {
             audio_engine::bridge::audio_record_stop,
             audio_engine::bridge::audio_debug_read_file,
             audio_engine::bridge::audio_debug_write_file,
+            audio_engine::bridge::audio_debug_capture_loopback,
             audio_engine::bridge::audio_get_levels,
             audio_engine::bridge::audio_shutdown,
             project_root
