@@ -885,10 +885,15 @@ async function startServer() {
     // Register CORS first so all routes share the same behavior.
     await server.register(fastifyCors, {
       origin: (origin, callback) => {
-        if (isAllowedCorsOrigin(origin)) {
-          callback(null, true);
+        // Pass the origin STRING (not boolean true) so @fastify/cors never
+        // falls back to Access-Control-Allow-Origin: * which is forbidden
+        // when credentials: true.
+        if (origin && isAllowedCorsOrigin(origin)) {
+          callback(null, origin);
           return;
         }
+        // No Origin header → same-origin or non-browser.  Skip CORS headers
+        // entirely to avoid the wildcard + credentials conflict.
         callback(null, false);
       },
       credentials: true,
@@ -2067,7 +2072,6 @@ async function startServer() {
         reply.header('Content-Type', mimeType);
         reply.header('Accept-Ranges', 'bytes');
         reply.header('Content-Disposition', `inline; filename="${target.downloadName}"`);
-        reply.header('Access-Control-Allow-Origin', '*');
         reply.header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
 
         // HTTP Range support for media seeking
@@ -2156,7 +2160,6 @@ async function startServer() {
         reply.header('Content-Type', 'audio/mp4');
         reply.header('Content-Length', stat.size);
         reply.header('Accept-Ranges', 'bytes');
-        reply.header('Access-Control-Allow-Origin', '*');
         return reply.send(createReadStream(cachedAudio));
       } catch (error) {
         request.log.error({ err: error }, 'Audio extraction failed');
