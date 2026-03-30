@@ -111,7 +111,7 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
 
     destroy_clip(arg) {
       var id = resolveClipId(arg);
-      if (id) invoke('audio_destroy_clip', { id: id }).catch(function () {});
+      if (id) invoke('audio_destroy_clip', { id: id }).catch(function () { });
     },
 
     play(arg) {
@@ -141,18 +141,18 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
       var id = resolveClipId(arg);
       if (!id) return;
       if (arg.paramId === 'volume' || arg.paramId === 'gain') {
-        invoke('audio_set_volume', { id: id, db: arg.value || 0 }).catch(function () {});
+        invoke('audio_set_volume', { id: id, db: arg.value || 0 }).catch(function () { });
       } else if (arg.paramId === 'playback_rate' || arg.paramId === 'speed') {
-        invoke('audio_set_playback_rate', { id: id, rate: arg.value || 1 }).catch(function () {});
+        invoke('audio_set_playback_rate', { id: id, rate: arg.value || 1 }).catch(function () { });
       }
     },
 
-    map_midi() {},
-    add_marker() {},
-    remove_marker() {},
-    set_marker_follow_actions() {},
-    clear_marker_follow_actions() {},
-    query_clip() {},
+    map_midi() { },
+    add_marker() { },
+    remove_marker() { },
+    set_marker_follow_actions() { },
+    clear_marker_follow_actions() { },
+    query_clip() { },
 
     dispatch_batch(batch) {
       for (var i = 0; i < batch.length; i++) {

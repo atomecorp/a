@@ -232,7 +232,7 @@ export const auv3PlayMedia = (node, env = globalThis) => {
     // For video elements: play muted in WebView for visual display
     if (tagName === 'video') {
         try { node.muted = true; } catch (_) { }
-        try { node.play().catch(() => {}); } catch (_) { }
+        try { node.play().catch(() => { }); } catch (_) { }
     } else {
         // For audio elements: mute the HTML element entirely
         try { node.muted = true; } catch (_) { }
