@@ -236,8 +236,12 @@ export const auv3PlayMedia = (node, env = globalThis) => {
         try { node.muted = true; } catch (_) { }
         try { node.play().catch(() => { }); } catch (_) { }
     } else {
-        // For audio elements: mute the HTML element entirely
+        // For audio elements: mute and play silently so that
+        // clip.media.paused becomes false (prevents repeated
+        // requestClipMediaPlay / loadAndPlay calls each frame).
         try { node.muted = true; } catch (_) { }
+        try { node.volume = 0; } catch (_) { }
+        try { node.play().catch(() => { }); } catch (_) { }
     }
 
     if (relativePath) {
@@ -259,6 +263,20 @@ export const auv3StopMedia = (env = globalThis) => {
     const bridge = _getAuv3Bridge(env);
     if (!bridge) return false;
     bridge.postMessage({ type: 'param', id: 'play', value: 0 });
+    return true;
+};
+
+export const auv3StopSlot = (slotId, env = globalThis) => {
+    const bridge = _getAuv3Bridge(env);
+    if (!bridge || !slotId) return false;
+    bridge.postMessage({ action: 'stopSlot', slotId: String(slotId) });
+    return true;
+};
+
+export const auv3ClearAuxSlots = (env = globalThis) => {
+    const bridge = _getAuv3Bridge(env);
+    if (!bridge) return false;
+    bridge.postMessage({ action: 'clearAuxSlots' });
     return true;
 };
 

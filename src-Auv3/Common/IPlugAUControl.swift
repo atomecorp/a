@@ -12,4 +12,8 @@ public protocol IPlugAUControl: AnyObject {
     func setPlaybackPositionNormalized(_ pos: Float)
     func recordStart(sessionId: String, fileName: String, source: String, sampleRate: Double?, channels: UInt32?)
     func recordStop(sessionId: String)
+    /// Stop a specific audio slot by its ID (removes aux slot or stops main if matching)
+    func stopAudioSlot(_ slotId: String)
+    /// Remove all auxiliary audio slots (keeps main slot)
+    func clearAuxSlots()
 }

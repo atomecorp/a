@@ -135,6 +135,20 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var playWhenDecoded: Bool = false
     private var didEmitReadyForPath: Set<String> = []
     private var currentDecodeGen: Int = 0
+    // Multi-slot: auxiliary audio slots for concurrent playback.
+    // When a new file loads while another is playing, the current audio
+    // is moved to an aux slot so both play simultaneously.
+    private class AuxAudioSlot {
+        var audioL: [Float] = []
+        var audioR: [Float] = []
+        var frameIndex: Int = 0
+        var loaded: Bool = false
+        var slotId: String = ""
+        var fadeInRemaining: Int = 0
+        var fadeInTotal: Int = 0
+    }
+    private var auxSlots: [AuxAudioSlot] = []
+    private static let maxAuxSlots = 7
     
     // Emit 'clip_ready' into JS when first PCM chunk is ready
     private func emitClipReady(path: String) {
@@ -219,7 +233,11 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             }
             
             // File playback path (render decoded PCM if available)
-            if strongSelf.playActive && strongSelf.fileLoaded {
+            let hasAuxAudio = !strongSelf.auxSlots.isEmpty
+            let renderMainSlot = strongSelf.playActive && strongSelf.fileLoaded
+            let renderAuxOnly = strongSelf.playActive && hasAuxAudio && !renderMainSlot
+
+            if renderMainSlot {
                 let channels = outChannels
                 let framesToWrite = Int(frameCount)
                 // Snapshot state once per render to avoid per-sample locking
@@ -371,16 +389,25 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 idx &+= framesToWrite
                 if idx >= min(localL.count, localR.count) {
                     idx = min(localL.count, localR.count) // clamp to EOF
-                    // Auto stop at end and prepare clean restart
-                    strongSelf.playActive = false
+                    // Only auto-stop if no aux slots still have audio
+                    let auxActive = strongSelf.auxSlots.contains { slot in
+                        slot.loaded && slot.frameIndex < min(slot.audioL.count, slot.audioR.count)
+                    }
+                    if !auxActive {
+                        strongSelf.playActive = false
+                    }
                     strongSelf.fadeInSamplesRemaining = 0
                 }
                 strongSelf.fileFrameIndex = idx
                 strongSelf.fadeInSamplesRemaining = max(0, fadeRem)
                 os_unfair_lock_unlock(&strongSelf.fileLock)
-            }
-            // Generate test tone if active (lightweight math)
-                else if strongSelf.isTestToneActive {
+            } else if renderAuxOnly {
+                // No main slot data but aux slots need to play — zero output first
+                for i in 0..<bufferList.numberOfBuffers {
+                    let buffer = bufferList.buffer(at: i)
+                    if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
+                }
+            } else if strongSelf.isTestToneActive {
                     let sampleRate = strongSelf.getSampleRate() ?? 44100.0
                     let ch = max(1, outChannels)
                     if outInterleaved || bufferList.numberOfBuffers == 1 {
@@ -437,6 +464,65 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                         let buffer = bufferList.buffer(at: i)
                         if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
                     }
+                }
+            }
+
+            // Mix in auxiliary audio slots (concurrent playback)
+            // Runs after main slot or aux-only zero-fill; ADDs samples on top.
+            if (renderMainSlot || renderAuxOnly) && hasAuxAudio {
+                os_unfair_lock_lock(&strongSelf.fileLock)
+                let auxCopy = strongSelf.auxSlots
+                os_unfair_lock_unlock(&strongSelf.fileLock)
+                let framesToMix = Int(frameCount)
+                let channels = outChannels
+                for auxSlot in auxCopy where auxSlot.loaded {
+                    let auxTotal = min(auxSlot.audioL.count, auxSlot.audioR.count)
+                    let auxIdx = auxSlot.frameIndex
+                    if auxIdx >= auxTotal { continue }
+                    let mixFrames = min(framesToMix, auxTotal - auxIdx)
+                    if outInterleaved || bufferList.numberOfBuffers == 1 {
+                        let buffer = bufferList.buffer(at: 0)
+                        if let mData = buffer.mData {
+                            if outIsFloat32 {
+                                let out = mData.assumingMemoryBound(to: Float.self)
+                                for f in 0..<mixFrames {
+                                    let sL = auxSlot.audioL[auxIdx + f] * strongSelf.masterGain
+                                    let sR = (channels > 1 ? auxSlot.audioR[auxIdx + f] : auxSlot.audioL[auxIdx + f]) * strongSelf.masterGain
+                                    if channels == 1 { out[f] += sL }
+                                    else { out[f*channels + 0] += sL; out[f*channels + 1] += sR }
+                                }
+                            } else {
+                                let out = mData.assumingMemoryBound(to: Int16.self)
+                                for f in 0..<mixFrames {
+                                    let sL = auxSlot.audioL[auxIdx + f] * strongSelf.masterGain
+                                    let sR = (channels > 1 ? auxSlot.audioR[auxIdx + f] : auxSlot.audioL[auxIdx + f]) * strongSelf.masterGain
+                                    if channels == 1 {
+                                        let cur = Float(out[f]) / 32767.0
+                                        out[f] = Int16(max(-1.0, min(1.0, cur + sL)) * 32767.0)
+                                    } else {
+                                        let curL = Float(out[f*channels + 0]) / 32767.0
+                                        let curR = Float(out[f*channels + 1]) / 32767.0
+                                        out[f*channels + 0] = Int16(max(-1.0, min(1.0, curL + sL)) * 32767.0)
+                                        out[f*channels + 1] = Int16(max(-1.0, min(1.0, curR + sR)) * 32767.0)
+                                    }
+                                }
+                            }
+                        }
+                    } else if outIsFloat32 {
+                        if bufferList.numberOfBuffers > 0, let mData = bufferList.buffer(at: 0).mData {
+                            let dst = mData.assumingMemoryBound(to: Float.self)
+                            for f in 0..<mixFrames {
+                                dst[f] += auxSlot.audioL[auxIdx + f] * strongSelf.masterGain
+                            }
+                        }
+                        if channels > 1, bufferList.numberOfBuffers > 1, let mData1 = bufferList.buffer(at: 1).mData {
+                            let dst1 = mData1.assumingMemoryBound(to: Float.self)
+                            for f in 0..<mixFrames {
+                                dst1[f] += auxSlot.audioR[auxIdx + f] * strongSelf.masterGain
+                            }
+                        }
+                    }
+                    auxSlot.frameIndex += framesToMix
                 }
             }
 
@@ -554,14 +640,19 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         // Prefer file playback when a file is loaded; fallback to test tone otherwise
     os_unfair_lock_lock(&fileLock)
         let hasFile = fileLoaded
+        let hasAux = !auxSlots.isEmpty
         if on && hasFile {
             // If we reached EOF previously, reset to the start so replay works without needing a jump
             let total = min(fileAudioL.count, fileAudioR.count)
             if fileFrameIndex >= total { fileFrameIndex = 0 }
         }
+        if !on {
+            // Stopping playback clears aux slots
+            auxSlots.removeAll()
+        }
     os_unfair_lock_unlock(&fileLock)
         // Do not enable tone while we are decoding a file (reduces perceived latency/beeps)
-        self.isTestToneActive = on && !hasFile && !isDecodingFile
+        self.isTestToneActive = on && !hasFile && !hasAux && !isDecodingFile
         if on && hasFile {
             let sr = Int(getSampleRate() ?? 44100.0)
             fadeInTotal = max(128, min(sr / 100, 1024)) // ~10ms, clamped
@@ -569,6 +660,20 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         }
     }
     public func setTestToneActive(_ on: Bool) { self.isTestToneActive = on }
+    public func stopAudioSlot(_ slotId: String) {
+        os_unfair_lock_lock(&fileLock)
+        auxSlots.removeAll { $0.slotId == slotId }
+        // Also stop main slot if it matches
+        if loadedFilePath == slotId || (loadedFilePath?.hasSuffix(slotId) == true) {
+            fileFrameIndex = min(fileAudioL.count, fileAudioR.count)
+        }
+        os_unfair_lock_unlock(&fileLock)
+    }
+    public func clearAuxSlots() {
+        os_unfair_lock_lock(&fileLock)
+        auxSlots.removeAll()
+        os_unfair_lock_unlock(&fileLock)
+    }
     public func setDebugCaptureEnabled(_ on: Bool) { self.dbgCaptureEnabled = on }
     public func setAudioDebugExpectedPeakFrame(_ frame: Int?) { self.audioDebugExpectedPeakFrame = frame }
     public func dumpDebugCapture() {
@@ -653,12 +758,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         let chDefault = (normalizedSource == "mic" ? inputFormat?.channelCount : outputFormat?.channelCount) ?? 1
 
         if let requestedSr = sampleRate, abs(requestedSr - srDefault) > 0.5 {
-            emitRecordingEvent(type: "record_error", payload: [
-                "session_id": sessionId,
-                "error": "Requested sample rate not supported in AUv3",
-                "file_name": safeName
-            ])
-            return
+            // AUv3 must use the host sample rate; ignore the requested rate and continue
+            print("ℹ️ AUv3: ignoring requested SR \(requestedSr), using host SR \(srDefault)")
         }
         if let requestedCh = channels, Int(requestedCh) != Int(chDefault) {
             emitRecordingEvent(type: "record_error", payload: [
@@ -1282,8 +1383,27 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     // MARK: - File loading (decode to PCM for playback)
     public func loadLocalFile(_ path: String) {
         self.loadedFilePath = path
-        // Reset state for new decode
+        // Preserve currently playing audio in an aux slot for concurrent playback
     os_unfair_lock_lock(&fileLock)
+        let currentTotal = min(self.fileAudioL.count, self.fileAudioR.count)
+        if self.fileLoaded && self.fileFrameIndex < currentTotal && self.playActive {
+            let aux = AuxAudioSlot()
+            aux.audioL = self.fileAudioL
+            aux.audioR = self.fileAudioR
+            aux.frameIndex = self.fileFrameIndex
+            aux.loaded = true
+            aux.slotId = self.loadedFilePath ?? "main"
+            // Evict finished aux slots first
+            self.auxSlots.removeAll { slot in
+                slot.frameIndex >= min(slot.audioL.count, slot.audioR.count)
+            }
+            // Evict oldest if full
+            if self.auxSlots.count >= Self.maxAuxSlots {
+                self.auxSlots.removeFirst()
+            }
+            self.auxSlots.append(aux)
+        }
+        // Reset main slot state for new decode
         self.fileLoaded = false
         self.fileFrameIndex = 0
         self.fileAudioL.removeAll(keepingCapacity: false)
@@ -1368,7 +1488,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             // AVAudioFile path decodes whole file; signal ready now if we have frames
             if gen == self.currentDecodeGen, self.fileLoaded { self.emitClipReady(path: path) }
         } catch {
-            print("❌ AUv3: decode error \(error.localizedDescription) — trying AVAssetReader fallback")
+            // AVAudioFile often fails in AUv3 extensions (sandbox restrictions); AVAssetReader fallback is the normal path
+            print("ℹ️ AUv3: AVAudioFile unavailable (\(error.localizedDescription)) — using AVAssetReader")
             decodeWithAssetReader(url: url, gen: gen)
         }
     }
@@ -1497,8 +1618,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             }
             if reader.status == .reading { reachedEOF = true }
 
-            if reachedEOF && (!outL.isEmpty) {
+            if reachedEOF && (!outL.isEmpty || primed) {
                 print("ℹ️ AUv3: asset reader reached EOF with status 'reading'; committing decoded data")
+                var totalFrames = 0
                 if gen == self.currentDecodeGen {
                     os_unfair_lock_lock(&fileLock)
                     if primed {
@@ -1511,9 +1633,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     }
                     self.fileSampleRate = outSR
                     self.fileFrameIndex = 0
+                    totalFrames = self.fileAudioL.count
                     os_unfair_lock_unlock(&fileLock)
                 }
-                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader, EOF) frames=\(outL.count)") }
+                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader, EOF) frames=\(totalFrames)") }
                 self.isTestToneActive = false
                 // Do not auto-start playback; wait for explicit 'play' param from UI
                 self.isDecodingFile = false
@@ -1522,6 +1645,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
             switch reader.status {
             case .completed:
+                var totalFrames = 0
                 if gen == self.currentDecodeGen {
                     os_unfair_lock_lock(&fileLock)
                     if primed {
@@ -1534,9 +1658,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     }
                     self.fileSampleRate = outSR
                     self.fileFrameIndex = 0
+                    totalFrames = self.fileAudioL.count
                     os_unfair_lock_unlock(&fileLock)
                 }
-                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader) frames=\(outL.count)") }
+                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader) frames=\(totalFrames)") }
                 if outL.isEmpty {
                     // No decoded audio; keep silent (do not auto-enable test tone)
                     self.isTestToneActive = false

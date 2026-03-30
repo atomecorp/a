@@ -292,15 +292,18 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             if let schemeURL = URL(string: "atome:///src/index.html") {
                 shared.log.info("Attempt #\(mainLoadAttempts) loading AUv3 entry atome:///src/index.html")
                 webView.load(URLRequest(url: schemeURL))
+                mainLoadDone = true
                 return true
             }
         } else if let fileURL = mainURL {
             shared.log.info("Attempt #\(mainLoadAttempts) loading App entry file URL src/index.html")
             webView.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+            mainLoadDone = true
             return true
         } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
             shared.log.info("Attempt #\(mainLoadAttempts) loading fallback atome:///src/index.html")
             webView.load(URLRequest(url: schemeURL))
+            mainLoadDone = true
             return true
         }
         return false
@@ -467,6 +470,19 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     }
                     if action == "stopJavaScriptAudio" {
                         WebViewManager.audioController?.stopJavaScriptAudio()
+                        return
+                    }
+                    if action == "stopSlot" {
+                        if let slotId = body["slotId"] as? String,
+                           let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                            au.stopAudioSlot(slotId)
+                        }
+                        return
+                    }
+                    if action == "clearAuxSlots" {
+                        if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                            au.clearAuxSlots()
+                        }
                         return
                     }
                     if action == "loadLocalPath" || action == "loadAndPlay" || (body["type"] as? String) == "iplug" {
