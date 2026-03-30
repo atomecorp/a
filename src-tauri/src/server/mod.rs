@@ -51,6 +51,11 @@ struct AppState {
     auth_state: Option<local_auth::LocalAuthState>,
 }
 
+#[derive(Deserialize, Default)]
+struct MediaTokenQuery {
+    token: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct LocalFileQuery {
     path: Option<String>,
@@ -323,10 +328,12 @@ fn require_auth_user(
     headers: &HeaderMap,
     state: &AppState,
 ) -> Result<String, (StatusCode, Json<JsonValue>)> {
-    let auth_state = state
-        .auth_state
-        .as_ref()
-        .ok_or_else(|| json_error(StatusCode::INTERNAL_SERVER_ERROR, "Auth state not initialized"))?;
+    let auth_state = state.auth_state.as_ref().ok_or_else(|| {
+        json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Auth state not initialized",
+        )
+    })?;
 
     resolve_authenticated_user(headers, auth_state)
         .ok_or_else(|| json_error(StatusCode::UNAUTHORIZED, "Unauthorized"))
@@ -335,10 +342,12 @@ fn require_auth_user(
 fn require_atome_state(
     state: &AppState,
 ) -> Result<&local_atome::LocalAtomeState, (StatusCode, Json<JsonValue>)> {
-    state
-        .atome_state
-        .as_ref()
-        .ok_or_else(|| json_error(StatusCode::INTERNAL_SERVER_ERROR, "Atome state not initialized"))
+    state.atome_state.as_ref().ok_or_else(|| {
+        json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Atome state not initialized",
+        )
+    })
 }
 
 fn ws_events_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValue>) {
@@ -351,13 +360,22 @@ fn ws_events_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonVal
 
     let data = resp.data.unwrap_or_else(|| json!({}));
     if let Some(event) = data.get("event") {
-        return (StatusCode::OK, Json(json!({ "success": true, "event": event })));
+        return (
+            StatusCode::OK,
+            Json(json!({ "success": true, "event": event })),
+        );
     }
     if let Some(events) = data.get("events") {
-        return (StatusCode::OK, Json(json!({ "success": true, "events": events })));
+        return (
+            StatusCode::OK,
+            Json(json!({ "success": true, "events": events })),
+        );
     }
 
-    (StatusCode::OK, Json(json!({ "success": true, "data": data })))
+    (
+        StatusCode::OK,
+        Json(json!({ "success": true, "data": data })),
+    )
 }
 
 fn ws_state_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValue>) {
@@ -372,12 +390,21 @@ fn ws_state_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValu
         if state.is_null() {
             return json_error(StatusCode::NOT_FOUND, "State not found");
         }
-        return (StatusCode::OK, Json(json!({ "success": true, "state": state })));
+        return (
+            StatusCode::OK,
+            Json(json!({ "success": true, "state": state })),
+        );
     }
     if let Some(states) = data.get("states") {
-        return (StatusCode::OK, Json(json!({ "success": true, "states": states })));
+        return (
+            StatusCode::OK,
+            Json(json!({ "success": true, "states": states })),
+        );
     }
-    (StatusCode::OK, Json(json!({ "success": true, "data": data })))
+    (
+        StatusCode::OK,
+        Json(json!({ "success": true, "data": data })),
+    )
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -804,11 +831,7 @@ async fn eve_mail_sync_handler(
                     match serde_json::from_str::<JsonValue>(&stdout) {
                         Ok(value) => return Ok((output.status.success(), value)),
                         Err(error) => {
-                            return Err(format!(
-                                "mail_sync_invalid_json:{}:{}",
-                                error,
-                                stdout
-                            ))
+                            return Err(format!("mail_sync_invalid_json:{}:{}", error, stdout))
                         }
                     }
                 }
@@ -877,11 +900,7 @@ async fn eve_mail_send_handler(
                     match serde_json::from_str::<JsonValue>(&stdout) {
                         Ok(value) => return Ok((output.status.success(), value)),
                         Err(error) => {
-                            return Err(format!(
-                                "mail_send_invalid_json:{}:{}",
-                                error,
-                                stdout
-                            ))
+                            return Err(format!("mail_send_invalid_json:{}:{}", error, stdout))
                         }
                     }
                 }
@@ -950,11 +969,7 @@ async fn eve_mail_mark_read_handler(
                     match serde_json::from_str::<JsonValue>(&stdout) {
                         Ok(value) => return Ok((output.status.success(), value)),
                         Err(error) => {
-                            return Err(format!(
-                                "mail_mark_read_invalid_json:{}:{}",
-                                error,
-                                stdout
-                            ))
+                            return Err(format!("mail_mark_read_invalid_json:{}:{}", error, stdout))
                         }
                     }
                 }
@@ -1023,11 +1038,7 @@ async fn eve_mail_archive_handler(
                     match serde_json::from_str::<JsonValue>(&stdout) {
                         Ok(value) => return Ok((output.status.success(), value)),
                         Err(error) => {
-                            return Err(format!(
-                                "mail_archive_invalid_json:{}:{}",
-                                error,
-                                stdout
-                            ))
+                            return Err(format!("mail_archive_invalid_json:{}:{}", error, stdout))
                         }
                     }
                 }
@@ -1096,11 +1107,7 @@ async fn eve_mail_delete_handler(
                     match serde_json::from_str::<JsonValue>(&stdout) {
                         Ok(value) => return Ok((output.status.success(), value)),
                         Err(error) => {
-                            return Err(format!(
-                                "mail_delete_invalid_json:{}:{}",
-                                error,
-                                stdout
-                            ))
+                            return Err(format!("mail_delete_invalid_json:{}:{}", error, stdout))
                         }
                     }
                 }
@@ -1289,7 +1296,8 @@ fn provider_response_text(value: &JsonValue, provider_type: &str) -> String {
             .get("content")
             .and_then(|entry| entry.as_array())
             .map(|parts| {
-                parts.iter()
+                parts
+                    .iter()
                     .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
                     .collect::<Vec<_>>()
                     .join("\n")
@@ -1303,7 +1311,8 @@ fn provider_response_text(value: &JsonValue, provider_type: &str) -> String {
             .and_then(|content| content.get("parts"))
             .and_then(|parts| parts.as_array())
             .map(|parts| {
-                parts.iter()
+                parts
+                    .iter()
                     .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
                     .collect::<Vec<_>>()
                     .join("\n")
@@ -1347,12 +1356,19 @@ async fn eve_ai_provider_completion_handler(
     let system_prompt = payload.system_prompt.unwrap_or_default();
     let api_key = payload.api_key.unwrap_or_default();
 
-    if provider_type.trim().is_empty() || completion_endpoint.trim().is_empty() || api_key.trim().is_empty() {
+    if provider_type.trim().is_empty()
+        || completion_endpoint.trim().is_empty()
+        || api_key.trim().is_empty()
+    {
         return json_error(StatusCode::BAD_REQUEST, "Missing AI provider fields").into_response();
     }
 
     if !is_allowed_ai_proxy_endpoint(&completion_endpoint) {
-        return json_error(StatusCode::BAD_REQUEST, "AI provider endpoint is not allowed").into_response();
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "AI provider endpoint is not allowed",
+        )
+        .into_response();
     }
 
     let timeout_ms = ai_proxy_timeout_ms(payload.timeout_ms);
@@ -1362,7 +1378,11 @@ async fn eve_ai_provider_completion_handler(
     {
         Ok(client) => client,
         Err(err) => {
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to create AI proxy client: {}", err)).into_response();
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to create AI proxy client: {}", err),
+            )
+            .into_response();
         }
     };
 
@@ -1397,34 +1417,38 @@ async fn eve_ai_provider_completion_handler(
                 urlencoding::encode(&model),
                 urlencoding::encode(&api_key)
             );
-            client
-                .post(url)
-                .json(&json!({
-                    "systemInstruction": {
-                        "parts": [{ "text": system_prompt }]
-                    },
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [{ "text": prompt }]
-                        }
-                    ]
-                }))
+            client.post(url).json(&json!({
+                "systemInstruction": {
+                    "parts": [{ "text": system_prompt }]
+                },
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{ "text": prompt }]
+                    }
+                ]
+            }))
         }
         _ => {
-            return json_error(StatusCode::BAD_REQUEST, "Unsupported AI provider type").into_response();
+            return json_error(StatusCode::BAD_REQUEST, "Unsupported AI provider type")
+                .into_response();
         }
     };
 
     let upstream = match upstream_request.send().await {
         Ok(response) => response,
         Err(err) => {
-            return json_error(StatusCode::BAD_GATEWAY, &format!("AI proxy request failed: {}", err)).into_response();
+            return json_error(
+                StatusCode::BAD_GATEWAY,
+                &format!("AI proxy request failed: {}", err),
+            )
+            .into_response();
         }
     };
 
     if !upstream.status().is_success() {
-        let status = StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+        let status =
+            StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
         let content_type = upstream
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
@@ -1437,14 +1461,22 @@ async fn eve_ai_provider_completion_handler(
             .header(header::CONTENT_TYPE, content_type)
             .body(Body::from(body))
             .unwrap_or_else(|_| {
-                json_error(StatusCode::BAD_GATEWAY, "AI proxy upstream error forwarding failed").into_response()
+                json_error(
+                    StatusCode::BAD_GATEWAY,
+                    "AI proxy upstream error forwarding failed",
+                )
+                .into_response()
             });
     }
 
     let payload_value: JsonValue = match upstream.json().await {
         Ok(value) => value,
         Err(err) => {
-            return json_error(StatusCode::BAD_GATEWAY, &format!("AI proxy invalid upstream JSON: {}", err)).into_response();
+            return json_error(
+                StatusCode::BAD_GATEWAY,
+                &format!("AI proxy invalid upstream JSON: {}", err),
+            )
+            .into_response();
         }
     };
 
@@ -1536,8 +1568,7 @@ async fn events_commit_batch_handler(
     }
 
     let response =
-        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state)
-            .await;
+        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state).await;
     ws_events_to_http(response).into_response()
 }
 
@@ -1590,8 +1621,7 @@ async fn events_list_handler(
     }
 
     let response =
-        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state)
-            .await;
+        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state).await;
     ws_events_to_http(response).into_response()
 }
 
@@ -1618,8 +1648,7 @@ async fn state_current_get_handler(
         "atome_id": id,
         "owner_id": user_id
     });
-    let response =
-        local_atome::handle_state_current_message(message, &user_id, atome_state).await;
+    let response = local_atome::handle_state_current_message(message, &user_id, atome_state).await;
     ws_state_to_http(response).into_response()
 }
 
@@ -1652,9 +1681,12 @@ async fn state_current_list_handler(
         payload.insert("offset".to_string(), json!(value));
     }
 
-    let response =
-        local_atome::handle_state_current_message(JsonValue::Object(payload), &user_id, atome_state)
-            .await;
+    let response = local_atome::handle_state_current_message(
+        JsonValue::Object(payload),
+        &user_id,
+        atome_state,
+    )
+    .await;
     ws_state_to_http(response).into_response()
 }
 
@@ -2315,9 +2347,97 @@ async fn list_uploads_handler(
     )
 }
 
+/// Serve bytes with optional HTTP Range support.
+/// WKWebView <video> elements require Accept-Ranges for proper playback.
+fn serve_bytes_with_range(
+    bytes: Vec<u8>,
+    content_type: &'static str,
+    etag: &str,
+    request_headers: &HeaderMap,
+    disposition: &str,
+) -> axum::response::Response {
+    let total = bytes.len();
+
+    let range_header = request_headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| {
+            let trimmed = v.trim();
+            if trimmed.starts_with("bytes=") {
+                let spec = &trimmed[6..];
+                let parts: Vec<&str> = spec.splitn(2, '-').collect();
+                if parts.len() == 2 {
+                    let start = parts[0].parse::<usize>().ok();
+                    let end_raw = parts[1].trim();
+                    let end = if end_raw.is_empty() {
+                        None
+                    } else {
+                        end_raw.parse::<usize>().ok()
+                    };
+                    Some((start, end))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+    if let Some((range_start_opt, range_end_opt)) = range_header {
+        let start = range_start_opt.unwrap_or(0).min(total);
+        let end = range_end_opt.map(|e| (e + 1).min(total)).unwrap_or(total);
+        if start >= end || start >= total {
+            let mut h = HeaderMap::new();
+            if let Ok(cr) = HeaderValue::from_str(&format!("bytes */{}", total)) {
+                h.insert(header::CONTENT_RANGE, cr);
+            }
+            return (StatusCode::RANGE_NOT_SATISFIABLE, h).into_response();
+        }
+        let slice = bytes[start..end].to_vec();
+        let mut h = HeaderMap::new();
+        h.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+        h.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        if let Ok(cr) = HeaderValue::from_str(&format!("bytes {}-{}/{}", start, end - 1, total)) {
+            h.insert(header::CONTENT_RANGE, cr);
+        }
+        if let Ok(cl) = HeaderValue::from_str(&slice.len().to_string()) {
+            h.insert(header::CONTENT_LENGTH, cl);
+        }
+        if let Ok(hv) = HeaderValue::from_str(etag) {
+            h.insert(header::ETAG, hv);
+        }
+        h.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("private, max-age=300"),
+        );
+        return (StatusCode::PARTIAL_CONTENT, h, slice).into_response();
+    }
+
+    let mut h = HeaderMap::new();
+    h.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, max-age=300"),
+    );
+    if let Ok(hv) = HeaderValue::from_str(etag) {
+        h.insert(header::ETAG, hv);
+    }
+    h.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+    h.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    if !disposition.is_empty() {
+        if let Ok(dv) = HeaderValue::from_str(disposition) {
+            h.insert(header::CONTENT_DISPOSITION, dv);
+        }
+    }
+    if let Ok(cl) = HeaderValue::from_str(&total.to_string()) {
+        h.insert(header::CONTENT_LENGTH, cl);
+    }
+    (StatusCode::OK, h, bytes).into_response()
+}
+
 async fn download_upload_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<MediaTokenQuery>,
     AxumPath(file): AxumPath<String>,
 ) -> impl IntoResponse {
     let auth_state = match &state.auth_state {
@@ -2331,7 +2451,13 @@ async fn download_upload_handler(
         }
     };
 
-    let token = extract_bearer_token(&headers);
+    let token = extract_bearer_token(&headers).or_else(|| {
+        query
+            .token
+            .as_ref()
+            .filter(|t| !t.trim().is_empty())
+            .map(|t| t.trim().to_string())
+    });
     let token_user_id =
         local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
     let user_id = if token_user_id != "anonymous" {
@@ -2423,30 +2549,9 @@ async fn download_upload_handler(
                     bytes.len()
                 );
             }
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                header::CACHE_CONTROL,
-                HeaderValue::from_static("private, max-age=300"),
-            );
-            if let Ok(header_value) = HeaderValue::from_str(&etag_value) {
-                headers.insert(header::ETAG, header_value);
-            }
-            headers.insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static(guess_content_type_from_name(&safe_name)),
-            );
-            headers.insert(
-                header::CONTENT_DISPOSITION,
-                HeaderValue::from_str(&format!("inline; filename=\"{}\"", safe_name))
-                    .unwrap_or_else(|_| HeaderValue::from_static("inline")),
-            );
-
-            if let Ok(length_header) = HeaderValue::from_str(&bytes.len().to_string())
-            {
-                headers.insert(header::CONTENT_LENGTH, length_header);
-            }
-
-            (StatusCode::OK, headers, bytes).into_response()
+            let content_type = guess_content_type_from_name(&safe_name);
+            let disposition = format!("inline; filename=\"{}\"", safe_name);
+            serve_bytes_with_range(bytes, content_type, &etag_value, &headers, &disposition)
         }
         Err(err) => {
             if verbose_logs {
@@ -2467,6 +2572,7 @@ async fn download_upload_handler(
 async fn download_recording_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<MediaTokenQuery>,
     AxumPath(recording_id): AxumPath<String>,
 ) -> impl IntoResponse {
     let Some(safe_id) = sanitize_recording_id(&recording_id) else {
@@ -2488,18 +2594,14 @@ async fn download_recording_handler(
         }
     };
 
-    let token = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim())
-        .and_then(|v| {
-            if v.to_lowercase().starts_with("bearer ") {
-                Some(v[7..].trim())
-            } else {
-                Some(v)
-            }
-        })
-        .filter(|v| !v.is_empty());
+    let token_from_header = extract_bearer_token(&headers);
+    let token = token_from_header.as_deref().or_else(|| {
+        query
+            .token
+            .as_ref()
+            .map(|t| t.trim())
+            .filter(|t| !t.is_empty())
+    });
 
     let token_user_id = local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token);
     let user_id = if token_user_id != "anonymous" {
@@ -2516,28 +2618,23 @@ async fn download_recording_handler(
 
     // First, try to find the file directly in the user's recordings directory (like downloads)
     // This handles recordings synced from Fastify that may not be in the local DB
-    let recordings_dir = match resolve_user_storage_dir(
-        &state,
-        &user_id,
-        LocalStorageRoot::Recordings,
-    )
-    .await
-    {
-        Ok(dir) => dir,
-        Err(err) => {
-            println!(
-                "[download_recording_handler] Failed to resolve recordings dir: {}",
-                err
-            );
-            return (
+    let recordings_dir =
+        match resolve_user_storage_dir(&state, &user_id, LocalStorageRoot::Recordings).await {
+            Ok(dir) => dir,
+            Err(err) => {
+                println!(
+                    "[download_recording_handler] Failed to resolve recordings dir: {}",
+                    err
+                );
+                return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(
                     json!({ "success": false, "error": "Failed to resolve recordings directory" }),
                 ),
             )
                 .into_response();
-        }
-    };
+            }
+        };
 
     // Try direct file lookup first (by sanitized recording_id as filename)
     let safe_name = sanitize_file_name(&recording_id);
@@ -2556,17 +2653,9 @@ async fn download_recording_handler(
                     direct_path,
                     bytes.len()
                 );
-                let mut headers = HeaderMap::new();
-                headers.insert(
-                    header::CONTENT_TYPE,
-                    HeaderValue::from_static(guess_mime_from_ext(&safe_name)),
-                );
-                if let Ok(header_value) =
-                    HeaderValue::from_str(&format!("attachment; filename=\"{}\"", safe_name))
-                {
-                    headers.insert(header::CONTENT_DISPOSITION, header_value);
-                }
-                return (StatusCode::OK, headers, bytes).into_response();
+                let ct = guess_mime_from_ext(&safe_name);
+                let disposition = format!("attachment; filename=\"{}\"", safe_name);
+                return serve_bytes_with_range(bytes, ct, "", &headers, &disposition);
             }
             Err(err) => {
                 println!("[download_recording_handler] Direct read failed: {}", err);
@@ -2734,19 +2823,9 @@ async fn download_recording_handler(
         }
     };
 
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static(guess_mime_from_ext(&rel)),
-    );
-    if let Ok(header_value) = HeaderValue::from_str(&format!(
-        "attachment; filename=\"{}\"",
-        sanitize_file_name(&rel)
-    )) {
-        headers.insert(header::CONTENT_DISPOSITION, header_value);
-    }
-
-    (StatusCode::OK, headers, bytes).into_response()
+    let ct = guess_mime_from_ext(&rel);
+    let disposition = format!("attachment; filename=\"{}\"", sanitize_file_name(&rel));
+    serve_bytes_with_range(bytes, ct, "", &headers, &disposition)
 }
 
 /// Request for writing update files
@@ -3504,10 +3583,7 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
 }
 
 /// WebSocket handler for sync (compatible with sync_engine.js)
-async fn ws_sync_handler(
-    State(state): State<AppState>,
-    ws: WebSocketUpgrade,
-) -> impl IntoResponse {
+async fn ws_sync_handler(State(state): State<AppState>, ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_ws_sync(state.clone(), socket))
 }
 
@@ -3787,6 +3863,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             header::CONTENT_TYPE,
             header::AUTHORIZATION,
             header::ACCEPT,
+            header::RANGE,
             HeaderName::from_static("x-client-id"),
             HeaderName::from_static("x-filename"),
             HeaderName::from_static("x-original-name"),
@@ -3801,6 +3878,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             HeaderName::from_static("x-phone"),
             HeaderName::from_static("x-user-phone"),
         ])
+        .expose_headers([
+            header::CONTENT_RANGE,
+            header::ACCEPT_RANGES,
+            header::CONTENT_LENGTH,
+            header::CONTENT_TYPE,
+            header::ETAG,
+        ])
         .allow_credentials(true);
 
     let app = Router::new()
@@ -3811,14 +3895,20 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/debug-log", post(debug_log_handler))
         .route("/api/adole/debug/tables", get(adole_debug_tables_handler))
         .route("/api/db/status", get(db_status_handler))
-        .route("/api/eve/ai/provider-completion", post(eve_ai_provider_completion_handler))
+        .route(
+            "/api/eve/ai/provider-completion",
+            post(eve_ai_provider_completion_handler),
+        )
         .route("/api/eve/mail/sync", post(eve_mail_sync_handler))
         .route("/api/eve/mail/send", post(eve_mail_send_handler))
         .route("/api/eve/mail/mark-read", post(eve_mail_mark_read_handler))
         .route("/api/eve/mail/archive", post(eve_mail_archive_handler))
         .route("/api/eve/mail/delete", post(eve_mail_delete_handler))
         .route("/api/events/commit", post(events_commit_handler))
-        .route("/api/events/commit-batch", post(events_commit_batch_handler))
+        .route(
+            "/api/events/commit-batch",
+            post(events_commit_batch_handler),
+        )
         .route("/api/events", get(events_list_handler))
         .route("/api/state_current/:id", get(state_current_get_handler))
         .route("/api/state_current", get(state_current_list_handler))

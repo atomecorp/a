@@ -156,8 +156,8 @@ export const mountVoicePanel = async ({
         height: '52px',
         borderRadius: '999px',
         border: '1px solid rgba(14, 116, 110, 0.28)',
-        background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
-        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
+        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
         zIndex: '9999',
         cursor: 'pointer',
         boxShadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
@@ -183,9 +183,9 @@ export const mountVoicePanel = async ({
         padding: '14px',
         borderRadius: '18px',
         border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
+        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
         boxShadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
-        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
         fontFamily: 'Menlo, Consolas, monospace',
         zIndex: '9999',
         overflow: 'hidden',
@@ -243,7 +243,7 @@ export const mountVoicePanel = async ({
         overflowY: 'auto',
         padding: '10px',
         borderRadius: '12px',
-        background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
+        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
         border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
         fontSize: '12px',
         lineHeight: '1.45',
@@ -269,8 +269,8 @@ export const mountVoicePanel = async ({
         width: '100%',
         borderRadius: '12px',
         border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
-        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+        background: 'var(--system-input-bg, rgba(88, 88, 88, 0.52))',
+        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
         padding: '10px',
         fontSize: '12px',
         boxSizing: 'border-box'
@@ -284,8 +284,8 @@ export const mountVoicePanel = async ({
         height: '34px',
         borderRadius: '10px',
         border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
-        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+        background: 'var(--system-input-bg, rgba(88, 88, 88, 0.52))',
+        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
         padding: '0 10px',
         fontSize: '12px',
         boxSizing: 'border-box'
@@ -325,7 +325,7 @@ export const mountVoicePanel = async ({
         overflowY: 'auto',
         padding: '8px',
         borderRadius: '12px',
-        background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
+        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
         border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
         fontSize: '11px',
         lineHeight: '1.4'
@@ -334,7 +334,7 @@ export const mountVoicePanel = async ({
     panel.append(header, meta, transcript, fallback, input, commandInput, row1, row2, log);
     doc.body.append(launcher, panel);
 
-    const appendLog = (message, color = 'var(--system-text-color, rgba(58, 58, 58, 0.94))') => {
+    const appendLog = (message, color = 'var(--system-text-color, rgba(244, 244, 244, 0.94))') => {
         const line = createElement(doc, 'div', {
             color,
             marginBottom: '4px'

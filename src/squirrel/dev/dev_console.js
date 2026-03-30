@@ -68,11 +68,11 @@ function initDevConsole() {
     right: '12px',
     bottom: '12px',
     height: '280px',
-    background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
-    color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+    background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
+    color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
     fontFamily: 'Menlo, Consolas, monospace',
     fontSize: '12px',
-    border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+    border: '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
     borderRadius: '10px',
     display: 'flex',
     flexDirection: 'column',
@@ -86,8 +86,8 @@ function initDevConsole() {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '8px 12px',
-    borderBottom: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-    background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))'
+    borderBottom: '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
+    background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))'
   });
 
   const title = document.createElement('div');
@@ -117,9 +117,9 @@ function initDevConsole() {
 
   [pauseBtn, exportBtn, snapshotBtn].forEach((btn) => {
     Object.assign(btn.style, {
-      background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
-      color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
-      border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+      background: 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))',
+      color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
+      border: '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
       borderRadius: '6px',
       padding: '4px 8px',
       cursor: 'pointer'

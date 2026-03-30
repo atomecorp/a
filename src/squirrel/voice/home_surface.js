@@ -754,10 +754,10 @@ export const mountHomeVoiceSurface = async ({
         padding: '12px',
         marginBottom: '12px',
         borderRadius: '12px',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
-        boxShadow: 'var(--system-panel-shadow-soft, 0 8px 24px rgba(0, 0, 0, 0.12))',
-        color: 'var(--eve-text, var(--system-text-color, rgba(58, 58, 58, 0.94)))',
+        border: '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
+        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
+        boxShadow: 'var(--system-panel-shadow-soft, 0 8px 24px rgba(0, 0, 0, 0.22))',
+        color: 'var(--eve-text, var(--system-text-color, rgba(244, 244, 244, 0.94)))',
         backdropFilter: 'var(--system-backdrop-filter, blur(18px) saturate(145%))'
     }, {
         'data-role': 'eve-voice-surface'
@@ -791,8 +791,8 @@ export const mountHomeVoiceSurface = async ({
         width: '116px',
         height: '26px',
         borderRadius: '8px',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
+        border: '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
+        background: 'var(--system-input-bg, rgba(88, 88, 88, 0.52))',
         display: 'block'
     }, {
         'data-role': 'eve-voice-meter',
@@ -810,9 +810,9 @@ export const mountHomeVoiceSurface = async ({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
-        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+        border: '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
+        background: 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))',
+        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
         borderRadius: '10px',
         minWidth: '88px',
         height: '34px',
@@ -823,9 +823,9 @@ export const mountHomeVoiceSurface = async ({
     }, { type: 'button', 'data-role': 'eve-voice-action', text: labels().stop });
 
     const sendButton = createElement(doc, 'button', {
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
-        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+        border: '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
+        background: 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))',
+        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
         borderRadius: '10px',
         minWidth: '88px',
         height: '34px',
@@ -1009,10 +1009,10 @@ export const mountHomeVoiceSurface = async ({
                 padding: '10px 12px',
                 borderRadius: '14px',
                 background: isUser
-                    ? 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))'
-                    : 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
-                color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
-                border: isUser ? '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))' : '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+                    ? 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))'
+                    : 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
+                color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
+                border: isUser ? '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))' : '1px solid var(--system-panel-border, rgba(255, 255, 255, 0.12))',
                 whiteSpace: 'pre-wrap',
                 lineHeight: '1.4',
                 fontSize: '12px',
@@ -1045,7 +1045,7 @@ export const mountHomeVoiceSurface = async ({
             actionButton.style.display = 'none';
         } else if (state.processing && !state.listening && !state.speaking) {
             actionButton.textContent = activeLabels.thinking;
-            actionButton.style.background = 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))';
+            actionButton.style.background = 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))';
             actionButton.disabled = true;
             actionButton.style.opacity = '0.72';
             actionButton.style.cursor = 'default';

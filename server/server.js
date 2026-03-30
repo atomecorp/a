@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { promises as fs, createReadStream, createWriteStream, readFileSync, existsSync, mkdirSync } from 'fs';
 import crypto from 'crypto';
+import { execFile } from 'child_process';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../src/shared/logging.js';
 
@@ -154,6 +155,10 @@ const buildAllowedCorsOrigins = () => {
     .filter(Boolean);
   return new Set([
     ...fromEnv,
+    'http://127.0.0.1:1420',
+    'http://localhost:1420',
+    'http://127.0.0.1:1430',
+    'http://localhost:1430',
     'http://127.0.0.1:3000',
     'http://localhost:3000',
     'http://127.0.0.1:3001',
@@ -166,7 +171,10 @@ const buildAllowedCorsOrigins = () => {
 const ALLOWED_CORS_ORIGINS = buildAllowedCorsOrigins();
 
 const isAllowedCorsOrigin = (origin) => {
-  if (!origin) return true;
+  // When no Origin header is present (same-origin or no-cors requests),
+  // return false to prevent @fastify/cors from sending Access-Control-Allow-Origin: *
+  // which is invalid when credentials: true is set.
+  if (!origin) return false;
   if (ALLOWED_CORS_ORIGINS.has(origin)) return true;
   if (origin === 'null') return true;
   try {
@@ -2040,14 +2048,120 @@ async function startServer() {
         }
 
         await fs.access(target.filePath);
-        reply.header('Content-Disposition', `attachment; filename="${target.downloadName}"`);
-        reply.type('application/octet-stream');
+        const stat = await fs.stat(target.filePath);
+        const totalSize = stat.size;
+        const ext = path.extname(target.filePath).toLowerCase();
+
+        // Resolve MIME type: DB metadata > extension lookup > fallback
+        const MEDIA_MIME_TYPES = {
+          '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime',
+          '.webm': 'video/webm', '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska',
+          '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac',
+          '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.flac': 'audio/flac',
+          '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+          '.pdf': 'application/pdf', '.json': 'application/json',
+        };
+        const mimeType = (target.meta?.mime_type) || MEDIA_MIME_TYPES[ext] || 'application/octet-stream';
+
+        reply.header('Content-Type', mimeType);
+        reply.header('Accept-Ranges', 'bytes');
+        reply.header('Content-Disposition', `inline; filename="${target.downloadName}"`);
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
+
+        // HTTP Range support for media seeking
+        const rangeHeader = request.headers.range;
+        if (rangeHeader) {
+          const match = /^bytes=(\d+)-(\d*)$/.exec(String(rangeHeader));
+          if (match) {
+            const start = parseInt(match[1], 10);
+            const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+            if (start >= totalSize || end >= totalSize || start > end) {
+              reply.code(416);
+              reply.header('Content-Range', `bytes */${totalSize}`);
+              return reply.send('');
+            }
+            reply.code(206);
+            reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+            reply.header('Content-Length', end - start + 1);
+            return reply.send(createReadStream(target.filePath, { start, end }));
+          }
+        }
+
+        reply.header('Content-Length', totalSize);
         return reply.send(createReadStream(target.filePath));
       } catch (error) {
         request.log.error({ err: error }, 'Unable to download upload');
         const status = error?.status || 404;
         reply.code(status);
         return { success: false, error: error?.error || error?.message || 'File not found' };
+      }
+    });
+
+    // Audio extraction from video containers (FFmpeg)
+    // WebKit/WKWebView cannot decode audio from .mov/.m4v containers via decodeAudioData.
+    // This endpoint extracts the audio track to .m4a (AAC in MP4 container) that all browsers support.
+    server.get('/api/extract-audio/:file', async (request, reply) => {
+      try {
+        const { userId } = await resolveUploadIdentity(request);
+        const fileParam = request.params.file || '';
+        const target = await resolveDownloadTarget(fileParam, userId);
+
+        if (!target?.filePath) {
+          const status = target?.status || 404;
+          reply.code(status);
+          return { success: false, error: target?.error || 'Source file not found' };
+        }
+
+        await fs.access(target.filePath);
+
+        const ext = path.extname(target.filePath).toLowerCase();
+        const videoExtensions = ['.mov', '.m4v', '.mp4', '.avi', '.mkv', '.webm'];
+        if (!videoExtensions.includes(ext)) {
+          reply.code(400);
+          return { success: false, error: 'Not a video file' };
+        }
+
+        const cacheDir = path.join(path.dirname(target.filePath), '.audio_cache');
+        if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true });
+
+        const baseName = path.basename(target.filePath, ext);
+        const cachedAudio = path.join(cacheDir, `${baseName}.m4a`);
+
+        const cacheExists = existsSync(cachedAudio);
+        if (!cacheExists) {
+          await new Promise((resolve, reject) => {
+            execFile('ffmpeg', [
+              '-v', 'error',
+              '-y',
+              '-i', target.filePath,
+              '-vn',
+              '-acodec', 'copy',
+              '-movflags', '+faststart',
+              cachedAudio
+            ], { timeout: 60000 }, (error, _stdout, stderr) => {
+              if (error) {
+                const msg = String(stderr || error.message || 'ffmpeg_failed').slice(0, 200);
+                reject(new Error(`ffmpeg_extract_failed: ${msg}`));
+              } else {
+                resolve();
+              }
+            });
+          });
+        }
+
+        await fs.access(cachedAudio);
+        const stat = await fs.stat(cachedAudio);
+        reply.header('Content-Type', 'audio/mp4');
+        reply.header('Content-Length', stat.size);
+        reply.header('Accept-Ranges', 'bytes');
+        reply.header('Access-Control-Allow-Origin', '*');
+        return reply.send(createReadStream(cachedAudio));
+      } catch (error) {
+        request.log.error({ err: error }, 'Audio extraction failed');
+        reply.code(500);
+        return { success: false, error: error?.message || 'Audio extraction failed' };
       }
     });
 

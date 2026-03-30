@@ -4,15 +4,15 @@
 const default_theme = {
     mode: 'dark',
     colors: {
-        primary: 'var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68))',
-        background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
-        surface: 'var(--system-panel-bg, rgba(238, 238, 238, 0.56))',
-        surfaceAlt: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
-        inputSurface: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
-        border: 'var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        borderStrong: 'var(--system-panel-border-strong, rgba(79, 79, 79, 0.24))',
-        text: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
-        textMuted: 'var(--system-text-muted, rgba(82, 82, 82, 0.74))',
+        primary: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
+        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
+        surface: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
+        surfaceAlt: 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))',
+        inputSurface: 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))',
+        border: 'var(--system-panel-border, rgba(255, 255, 255, 0.12))',
+        borderStrong: 'var(--system-panel-border-strong, rgba(255, 255, 255, 0.18))',
+        text: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
+        textMuted: 'var(--system-text-muted, rgba(220, 220, 220, 0.74))',
         accent: '#3b82f6',
         accentHover: '#60a5fa',
         danger: '#ef4444',
@@ -35,7 +35,7 @@ const default_theme = {
     },
     panel: {
         headerHeight: '42px',
-        shadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
+        shadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.28))',
         backdrop: 'var(--system-backdrop-filter, blur(18px) saturate(145%))'
     },
     transitions: {
@@ -48,8 +48,8 @@ const default_theme = {
         toolbar: 2000
     },
     buttonActive: {
-        backgroundColor: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
-        outline: '1px solid var(--system-panel-border-strong, rgba(79, 79, 79, 0.24))'
+        backgroundColor: 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))',
+        outline: '1px solid var(--system-panel-border-strong, rgba(255, 255, 255, 0.18))'
     },
     // Theme colors (optional - if not defined, uses button.backgroundColor)
     // primaryColor: '#27ae60',     // Vert pour boutons primaires
@@ -62,9 +62,9 @@ const default_theme = {
     recordModeActiveColor: '#f44336',  // Rouge pour mode enregistrement actif
     
     button: {
-    backgroundColor: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+    backgroundColor: 'var(--system-input-bg-strong, rgba(108, 108, 108, 0.62))',
         top: '0px',
-    color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+    color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
     border: 'none', // Border removed for cleaner toolbar buttons
         borderRadius: '3px',
         cursor: 'pointer',
