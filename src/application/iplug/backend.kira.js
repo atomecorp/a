@@ -1,3 +1,5 @@
+import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js';
+
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
 // Replaces the legacy iplug + html backends with a unified CPAL/Kira engine.
@@ -9,19 +11,22 @@
     return;
   }
 
-  let mode = null;   // 'tauri' | 'wasm'
-  let wasm = null;    // WASM module reference
+  let mode = null; // 'tauri' | 'wasm'
+  let wasm = null;
 
-  // Detect environment
-  function isTauri() {
-    return !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
+  function resolveClipId(arg) {
+    if (typeof arg === 'string') return arg;
+    return arg && (arg.id || arg.clip_id || arg.clipId) || '';
   }
 
   function invoke(cmd, args) {
     if (mode === 'tauri') {
-      return window.__TAURI__.core.invoke(cmd, args || {});
+      const tauriInvoke = getTauriInvoke(window);
+      if (!tauriInvoke) {
+        return Promise.reject(new Error('[backend.kira] Tauri invoke() not available'));
+      }
+      return tauriInvoke(cmd, args || {});
     }
-    // WASM mode — call the exported function directly
     if (mode === 'wasm' && wasm && typeof wasm[cmd] === 'function') {
       try {
         return Promise.resolve(wasm[cmd](...Object.values(args || {})));
@@ -32,16 +37,32 @@
     return Promise.reject(new Error('[backend.kira] No audio backend available'));
   }
 
-  // Backend API matching Squirrel.av.audio facade expectations
-  var backend = {
+  function loadClipFromUrl(id, url) {
+    fetch(url)
+      .then(function (r) { return r.arrayBuffer(); })
+      .then(function (buf) {
+        const bytes = new Uint8Array(buf);
+        if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
+          wasm.audio_load_clip_from_bytes(id, bytes);
+          return;
+        }
+        return invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) });
+      })
+      .catch(function (e) {
+        console.warn('[backend.kira] fetch+load error:', e);
+      });
+  }
 
+  var backend = {
     async init() {
-      if (isTauri()) {
+      const runtime = resolveAudioRuntime(window);
+      if (runtime.playback === 'tauri_native_kira') {
         mode = 'tauri';
         await invoke('audio_init');
         console.log('[backend.kira] Initialized via Tauri (native CPAL + Kira)');
-      } else {
-        // Try loading WASM module
+        return;
+      }
+      if (runtime.playback === 'web_wasm_kira') {
         mode = 'wasm';
         try {
           var mod = await import('/wasm/squirrel_audio_wasm.js');
@@ -49,50 +70,59 @@
           wasm = mod;
           wasm.audio_init();
           console.log('[backend.kira] Initialized via WASM (CPAL + Kira)');
+          return;
         } catch (e) {
           mode = null;
           console.warn('[backend.kira] WASM module not available:', e.message);
           throw e;
         }
       }
+      throw new Error('[backend.kira] Unified playback runtime unavailable');
     },
 
     create_clip(arg) {
-      if (!arg || !arg.id) return;
-      if (mode === 'tauri') {
-        var path = arg.path_or_bookmark || arg.path || '';
-        invoke('audio_load_clip', { id: arg.id, path: path }).catch(function (e) {
+      var id = resolveClipId(arg);
+      if (!id) return;
+      var path = arg && (arg.path_or_bookmark || arg.path) || '';
+      var url = arg && arg.url || '';
+      var bytes = arg && arg.bytes || null;
+
+      if (mode === 'tauri' && path) {
+        invoke('audio_load_clip', { id: id, path: path }).catch(function (e) {
           console.warn('[backend.kira] load_clip error:', e);
         });
-      } else if (mode === 'wasm' && arg.bytes) {
-        // WASM cannot read files — bytes must be provided
-        try { wasm.audio_load_clip_from_bytes(arg.id, arg.bytes); }
-        catch (e) { console.warn('[backend.kira] wasm load error:', e); }
-      } else if (mode === 'wasm' && arg.url) {
-        // Fetch then load
-        fetch(arg.url)
-          .then(function (r) { return r.arrayBuffer(); })
-          .then(function (buf) {
-            wasm.audio_load_clip_from_bytes(arg.id, new Uint8Array(buf));
-          })
-          .catch(function (e) { console.warn('[backend.kira] wasm fetch+load error:', e); });
+        return;
+      }
+      if ((mode === 'tauri' || mode === 'wasm') && bytes) {
+        if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
+          try { wasm.audio_load_clip_from_bytes(id, bytes); }
+          catch (e) { console.warn('[backend.kira] wasm load error:', e); }
+          return;
+        }
+        invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) }).catch(function (e) {
+          console.warn('[backend.kira] load_clip_from_bytes error:', e);
+        });
+        return;
+      }
+      if ((mode === 'tauri' || mode === 'wasm') && url) {
+        loadClipFromUrl(id, url);
       }
     },
 
     destroy_clip(arg) {
-      var id = (typeof arg === 'string') ? arg : (arg && arg.id);
+      var id = resolveClipId(arg);
       if (id) invoke('audio_destroy_clip', { id: id }).catch(function () {});
     },
 
     play(arg) {
-      var id = (typeof arg === 'string') ? arg : (arg && arg.id);
+      var id = resolveClipId(arg);
       if (id) invoke('audio_play', { id: id }).catch(function (e) {
         console.warn('[backend.kira] play error:', e);
       });
     },
 
     stop(arg) {
-      var id = (typeof arg === 'string') ? arg : (arg && arg.id);
+      var id = resolveClipId(arg);
       if (id) invoke('audio_stop', { id: id }).catch(function (e) {
         console.warn('[backend.kira] stop error:', e);
       });
@@ -102,19 +132,18 @@
       backend.stop(arg);
     },
 
-    jump(arg) {
-      // Kira does not expose seek on StaticSoundHandle directly via our bridge yet
+    jump() {
       console.warn('[backend.kira] jump() not yet implemented');
     },
 
     set_param(arg) {
       if (!arg) return;
+      var id = resolveClipId(arg);
+      if (!id) return;
       if (arg.paramId === 'volume' || arg.paramId === 'gain') {
-        invoke('audio_set_volume', { id: arg.id || arg.clipId, db: arg.value || 0 })
-          .catch(function () {});
+        invoke('audio_set_volume', { id: id, db: arg.value || 0 }).catch(function () {});
       } else if (arg.paramId === 'playback_rate' || arg.paramId === 'speed') {
-        invoke('audio_set_playback_rate', { id: arg.id || arg.clipId, rate: arg.value || 1 })
-          .catch(function () {});
+        invoke('audio_set_playback_rate', { id: id, rate: arg.value || 1 }).catch(function () {});
       }
     },
 
@@ -135,16 +164,17 @@
     }
   };
 
-  // Register the backend
   audio.__register_backend('kira', backend);
 
-  // Auto-init: try to activate kira backend
-  // Use a microtask to let the facade finish loading
   Promise.resolve().then(function () {
     backend.init().then(function () {
       audio.set_backend('kira');
     }).catch(function () {
-      // Kira not available, facade keeps current backend
+      // Kira not available (expected for AUv3, possible for browser without WASM).
+      // Re-trigger detection so a fallback backend (iplug or html) can activate.
+      if (typeof audio.detect_and_set_backend === 'function') {
+        audio.detect_and_set_backend();
+      }
     });
   });
 })();

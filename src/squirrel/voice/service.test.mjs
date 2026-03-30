@@ -251,6 +251,19 @@ const forcedTauriProviders = resolveVoiceProviders({
 });
 assert.equal(forcedTauriProviders.stt.selected, 'tauri_plugin_stt', 'an explicit native override should still force the desktop STT backend when requested');
 
+const browserCaptureProviders = resolveVoiceProviders({
+    SpeechRecognition: FakeSpeechRecognition,
+    SpeechSynthesisUtterance: FakeSpeechSynthesisUtterance,
+    speechSynthesis: synth,
+    navigator: {
+        mediaDevices: {
+            async getUserMedia() {}
+        }
+    },
+    __SQUIRREL_RECORD_PROVIDER__: 'web_capture_recorder'
+});
+assert.equal(browserCaptureProviders.capture.selected, 'web_capture_recorder', 'browser capture fallback should be exposed as a dedicated provider when the recorder bridge is web-backed');
+
 const started = await voice.stt.start({
     lang: 'fr',
     partial: true

@@ -3,6 +3,22 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+    --system-text-color: rgba(58, 58, 58, 0.94);
+    --system-text-muted: rgba(82, 82, 82, 0.74);
+    --system-panel-bg: rgba(238, 238, 238, 0.56);
+    --system-panel-bg-strong: rgba(248, 248, 248, 0.68);
+    --system-panel-bg-soft: rgba(255, 255, 255, 0.40);
+    --system-input-bg: rgba(255, 255, 255, 0.34);
+    --system-input-bg-strong: rgba(255, 255, 255, 0.48);
+    --system-panel-border: rgba(79, 79, 79, 0.16);
+    --system-panel-border-strong: rgba(79, 79, 79, 0.24);
+    --system-panel-shadow: 0 14px 36px rgba(0, 0, 0, 0.16);
+    --system-panel-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --system-backdrop-blur-amount: 18px;
+    --system-backdrop-filter: blur(var(--system-backdrop-blur-amount)) saturate(145%);
+}
+
 html,
 body {
     font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;
@@ -10,7 +26,7 @@ body {
     margin: 0;
     padding: 0;
     background: #272727;
-    color: #5a5050;
+    color: var(--system-text-color);
     overflow: hidden;
     -webkit-overflow-scrolling: touch;
     width: 100%;

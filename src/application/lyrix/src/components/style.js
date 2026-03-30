@@ -4,21 +4,22 @@
 const default_theme = {
     mode: 'dark',
     colors: {
-        primary: '#1f2937', // panel header / primary background
-        background: '#111827', // main background
-        surface: '#1e2530', // panels body
-        surfaceAlt: '#253040',
-        border: 'rgba(255,255,255,0.08)',
-        borderStrong: 'rgba(255,255,255,0.18)',
-        text: '#f5f7fa',
-        textMuted: '#9ca3af',
+        primary: 'var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68))',
+        background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
+        surface: 'var(--system-panel-bg, rgba(238, 238, 238, 0.56))',
+        surfaceAlt: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+        inputSurface: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+        border: 'var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        borderStrong: 'var(--system-panel-border-strong, rgba(79, 79, 79, 0.24))',
+        text: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+        textMuted: 'var(--system-text-muted, rgba(82, 82, 82, 0.74))',
         accent: '#3b82f6',
         accentHover: '#60a5fa',
         danger: '#ef4444',
         warning: '#f59e0b',
         success: '#10b981',
         focus: '#2563eb',
-        overlay: 'rgba(0,0,0,0.55)'
+        overlay: 'rgba(24,24,24,0.18)'
     },
     spacing: {
         xs: '4px',
@@ -34,8 +35,8 @@ const default_theme = {
     },
     panel: {
         headerHeight: '42px',
-        shadow: '0 4px 16px rgba(0,0,0,0.4)',
-        backdrop: 'blur(10px) saturate(160%)'
+        shadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
+        backdrop: 'var(--system-backdrop-filter, blur(18px) saturate(145%))'
     },
     transitions: {
         normal: '150ms ease',
@@ -47,10 +48,8 @@ const default_theme = {
         toolbar: 2000
     },
     buttonActive: {
-        // Lightened active background (previously rgb(48,60,78))
-        // New: rgb(58,74,96) -> #3A4A60 for clearer active contrast
-        backgroundColor: 'rgb(58,74,96)',
-        outline: '1px solid rgba(255,255,255,0.15)'
+        backgroundColor: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+        outline: '1px solid var(--system-panel-border-strong, rgba(79, 79, 79, 0.24))'
     },
     // Theme colors (optional - if not defined, uses button.backgroundColor)
     // primaryColor: '#27ae60',     // Vert pour boutons primaires
@@ -63,10 +62,9 @@ const default_theme = {
     recordModeActiveColor: '#f44336',  // Rouge pour mode enregistrement actif
     
     button: {
-    // Unified default button background to match toolbar & list surfaces (#253040)
-    backgroundColor: '#253040',
+    backgroundColor: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
         top: '0px',
-    color: '#f5f7fa',
+    color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
     border: 'none', // Border removed for cleaner toolbar buttons
         borderRadius: '3px',
         cursor: 'pointer',

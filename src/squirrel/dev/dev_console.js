@@ -68,15 +68,16 @@ function initDevConsole() {
     right: '12px',
     bottom: '12px',
     height: '280px',
-    background: 'rgba(18, 18, 20, 0.96)',
-    color: '#e6e6e6',
+    background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
+    color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
     fontFamily: 'Menlo, Consolas, monospace',
     fontSize: '12px',
-    border: '1px solid rgba(255,255,255,0.12)',
+    border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
     borderRadius: '10px',
     display: 'flex',
     flexDirection: 'column',
-    zIndex: '9999'
+    zIndex: '9999',
+    backdropFilter: 'var(--system-backdrop-filter, blur(18px) saturate(145%))'
   });
 
   const header = document.createElement('div');
@@ -85,8 +86,8 @@ function initDevConsole() {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '8px 12px',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
-    background: 'rgba(25, 25, 28, 0.9)'
+    borderBottom: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+    background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))'
   });
 
   const title = document.createElement('div');
@@ -116,9 +117,9 @@ function initDevConsole() {
 
   [pauseBtn, exportBtn, snapshotBtn].forEach((btn) => {
     Object.assign(btn.style, {
-      background: '#2f2f36',
-      color: '#f4f4f4',
-      border: '1px solid rgba(255,255,255,0.1)',
+      background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+      color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+      border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
       borderRadius: '6px',
       padding: '4px 8px',
       cursor: 'pointer'
@@ -133,7 +134,7 @@ function initDevConsole() {
   filterRow.style.display = 'flex';
   filterRow.style.gap = '8px';
   filterRow.style.padding = '6px 12px';
-  filterRow.style.borderBottom = '1px solid rgba(255,255,255,0.08)';
+  filterRow.style.borderBottom = '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))';
 
   const sourceFilter = document.createElement('input');
   sourceFilter.placeholder = 'source';
@@ -148,9 +149,9 @@ function initDevConsole() {
   [sourceFilter, levelFilter, textFilter].forEach((input) => {
     Object.assign(input.style, {
       flex: '1',
-      background: '#1f1f23',
-      color: '#f4f4f4',
-      border: '1px solid rgba(255,255,255,0.12)',
+      background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
+      color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+      border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
       borderRadius: '6px',
       padding: '4px 6px'
     });

@@ -677,7 +677,7 @@ export function showSongLibrary() {
         newSongButton.textContent = 'New song';
     }
 
-    const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'midi note', css: { fontSize: UNIFIED_FONT_SIZE, color: '#fff', userSelect: 'none' } });
+    const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'midi note', css: { fontSize: UNIFIED_FONT_SIZE, color: default_theme.colors.text, userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
         id: 'auto-fill-midi-input',
@@ -689,8 +689,8 @@ export function showSongLibrary() {
             borderRadius: '3px',
             fontSize: '11px',
             textAlign: 'center',
-            backgroundColor: 'rgb(48, 60, 78)',
-            color: '#fff'
+            backgroundColor: default_theme.colors.inputSurface,
+            color: default_theme.colors.text
         }
     });
     autoFillInput.placeholder = 'Root';
@@ -736,7 +736,7 @@ export function showSongLibrary() {
     // Bouton supprimer toutes les chansons
     const deleteAllButton = window.$('button', {
         id: 'delete-all-songs-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '28px', lineHeight: '28px', boxSizing: 'border-box' }, onClick: () => {
-            window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [{ text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch { } }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } }], size: 'small' });
+            window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [{ text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch { } }, css: { backgroundColor: default_theme.colors.danger, color: default_theme.colors.text } }], size: 'small' });
         }
     });
     try {
@@ -800,8 +800,8 @@ export function showSongLibrary() {
             marginBottom: '15px',
             fontSize: '14px',
             boxSizing: 'border-box',
-            backgroundColor: 'rgb(48, 60, 78)',
-            color: '#fff'
+            backgroundColor: default_theme.colors.inputSurface,
+            color: default_theme.colors.text
         }
     });
 
@@ -885,8 +885,8 @@ export function showSongLibrary() {
             input.value = midiNote || '';
             // Enforce unified styling if legacy style (white background) persists
             if (input && input.style) {
-                input.style.backgroundColor = 'rgb(48, 60, 78)';
-                input.style.color = '#fff';
+                input.style.backgroundColor = default_theme.colors.inputSurface;
+                input.style.color = default_theme.colors.text;
                 input.style.border = input.style.border || '1px solid #ccc';
             }
         });

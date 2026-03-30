@@ -1,13 +1,24 @@
-// iPlug2-native recorder API (Tauri + AUv3)
+import {
+    getTauriInvoke,
+    resolveAudioRuntime,
+    resolveVoiceCaptureProvider
+} from '../iplug/runtime_audio_backend.js';
+
+// Unified recorder API (Tauri + AUv3 + browser fallback)
 // Contract:
 // - record_start(params) -> Promise<sessionId>
-// - record_stop(sessionId) -> Promise<payload> (record_done) or throws (record_error)
+// - record_stop(sessionId) -> Promise<payload> or throws
 
 (function () {
     if (typeof window === 'undefined') return;
 
     const PENDING = new Map();
     let listenersReady = false;
+
+    function updateRecordProvider() {
+        window.__SQUIRREL_RECORD_PROVIDER__ = resolveVoiceCaptureProvider(window);
+        return window.__SQUIRREL_RECORD_PROVIDER__;
+    }
 
     function normalizeSource(raw) {
         const v = (typeof raw === 'string' ? raw : '').trim().toLowerCase();
@@ -16,9 +27,9 @@
     }
 
     function detectContext() {
-        if (window.__TAURI__ || window.__TAURI_INTERNALS__) return 'tauri';
-        if (window.__HOST_ENV === 'auv3') return 'auv3';
-        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge) return 'auv3';
+        const runtime = resolveAudioRuntime(window);
+        if (runtime.runtime === 'tauri_native') return 'tauri';
+        if (runtime.runtime === 'ios_auv3') return 'auv3';
         return 'browser';
     }
 
@@ -112,21 +123,79 @@
         }
     }
 
+    async function ensureBrowserRecordAudio() {
+        if (typeof window.record_audio === 'function') return window.record_audio;
+        await import('../eVe/APIS/audio_api.js');
+        return (typeof window.record_audio === 'function') ? window.record_audio : null;
+    }
+
     async function record_start(params = {}) {
         ensureListeners();
+        updateRecordProvider();
         const context = detectContext();
         const source = normalizeSource(params.source || 'mic');
         const sessionId = params.sessionId || params.session_id || randomSessionId();
         const fileName = (typeof params.fileName === 'string' && params.fileName.trim())
             ? params.fileName.trim()
             : defaultFileName(source);
-
         const sampleRate = (typeof params.sampleRate === 'number')
             ? params.sampleRate
             : defaultSampleRate(context, source);
         const channels = (typeof params.channels === 'number')
             ? params.channels
             : defaultChannels(context, source);
+
+        if (context === 'tauri') {
+            const invoke = getTauriInvoke(window);
+            if (typeof invoke !== 'function') {
+                throw new Error('Tauri audio engine bridge is not available');
+            }
+            let userId = params.userId || params.user_id || null;
+            if (!userId) {
+                userId = await getAdoleUserId();
+            }
+            if (!userId) {
+                throw new Error('Missing userId for native recording');
+            }
+            const filePath = (typeof params.filePath === 'string' && params.filePath.trim())
+                ? params.filePath.trim()
+                : `data/users/${userId}/recordings/${fileName}`;
+            await invoke('audio_record_start', {
+                session_id: sessionId,
+                file_path: filePath,
+                sample_rate: Number(sampleRate) || defaultSampleRate(context, source) || 16000,
+                channels: Number(channels) || defaultChannels(context, source) || 1
+            });
+            PENDING.set(sessionId, {
+                provider: 'iplug_native_recorder',
+                transport: 'tauri',
+                fileName,
+                filePath,
+                sampleRate: Number(sampleRate) || defaultSampleRate(context, source) || 16000,
+                channels: Number(channels) || defaultChannels(context, source) || 1
+            });
+            window.__SQUIRREL_RECORD_PROVIDER__ = 'iplug_native_recorder';
+            return sessionId;
+        }
+
+        if (context === 'browser') {
+            const recordAudio = await ensureBrowserRecordAudio();
+            if (typeof recordAudio !== 'function') {
+                throw new Error('Browser capture recorder is not available');
+            }
+            const ctrl = await recordAudio(fileName, params.path || null, {
+                backend: 'webaudio',
+                source
+            });
+            PENDING.set(sessionId, {
+                provider: 'web_capture_recorder',
+                transport: 'browser',
+                fileName,
+                ctrl
+            });
+            window.__SQUIRREL_RECORD_PROVIDER__ = 'web_capture_recorder';
+            return sessionId;
+        }
 
         let userId = params.userId || params.user_id || null;
         if (!userId && context === 'tauri') {
@@ -145,7 +214,12 @@
         };
 
         return new Promise((resolve, reject) => {
-            PENDING.set(sessionId, { start: { resolve, reject }, stop: null });
+            PENDING.set(sessionId, {
+                provider: 'iplug_native_recorder',
+                transport: 'auv3',
+                start: { resolve, reject },
+                stop: null
+            });
             if (!sendNativeMessage(msg)) {
                 PENDING.delete(sessionId);
                 reject(new Error('Native recorder bridge is not available'));
@@ -155,8 +229,51 @@
 
     async function record_stop(sessionId) {
         ensureListeners();
+        updateRecordProvider();
         const sid = typeof sessionId === 'string' ? sessionId : '';
         if (!sid) throw new Error('Missing sessionId');
+
+        const entry = PENDING.get(sid);
+        if (entry?.transport === 'tauri') {
+            const invoke = getTauriInvoke(window);
+            if (typeof invoke !== 'function') {
+                PENDING.delete(sid);
+                throw new Error('Tauri audio engine bridge is not available');
+            }
+            try {
+                const result = await invoke('audio_record_stop', {
+                    session_id: sid
+                });
+                return {
+                    session_id: sid,
+                    file_name: entry.fileName,
+                    file_path: result?.file_path || entry.filePath,
+                    duration_sec: Number(result?.duration_sec || 0),
+                    sample_rate: Number(result?.sample_rate || entry.sampleRate || 0),
+                    channels: Number(result?.channels || entry.channels || 0),
+                    provider: entry.provider
+                };
+            } finally {
+                PENDING.delete(sid);
+            }
+        }
+
+        if (entry?.transport === 'browser') {
+            try {
+                if (!entry.ctrl || typeof entry.ctrl.stop !== 'function') {
+                    throw new Error('Browser capture session is not active');
+                }
+                const result = await entry.ctrl.stop();
+                return {
+                    session_id: sid,
+                    file_name: entry.fileName,
+                    provider: entry.provider,
+                    ...(result && typeof result === 'object' ? result : {})
+                };
+            } finally {
+                PENDING.delete(sid);
+            }
+        }
 
         const msg = {
             type: 'iplug',
@@ -165,9 +282,13 @@
         };
 
         return new Promise((resolve, reject) => {
-            const entry = PENDING.get(sid) || { start: null, stop: null };
-            entry.stop = { resolve, reject };
-            PENDING.set(sid, entry);
+            const pendingEntry = PENDING.get(sid) || {
+                provider: 'iplug_native_recorder',
+                start: null,
+                stop: null
+            };
+            pendingEntry.stop = { resolve, reject };
+            PENDING.set(sid, pendingEntry);
             if (!sendNativeMessage(msg)) {
                 PENDING.delete(sid);
                 reject(new Error('Native recorder bridge is not available'));
@@ -177,4 +298,5 @@
 
     window.record_start = record_start;
     window.record_stop = record_stop;
+    updateRecordProvider();
 })();

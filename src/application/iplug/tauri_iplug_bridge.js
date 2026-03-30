@@ -14,6 +14,9 @@
 
     function getInvoke() {
         try {
+            if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
+                return window.__TAURI__.core.invoke.bind(window.__TAURI__.core);
+            }
             if (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function') return window.__TAURI__.invoke.bind(window.__TAURI__);
             if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') return window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
         } catch (_) { }

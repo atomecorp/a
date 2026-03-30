@@ -754,10 +754,11 @@ export const mountHomeVoiceSurface = async ({
         padding: '12px',
         marginBottom: '12px',
         borderRadius: '12px',
-        border: '1px solid rgba(255,255,255,0.12)',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-        color: 'var(--eve-text, #e8edf2)'
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
+        boxShadow: 'var(--system-panel-shadow-soft, 0 8px 24px rgba(0, 0, 0, 0.12))',
+        color: 'var(--eve-text, var(--system-text-color, rgba(58, 58, 58, 0.94)))',
+        backdropFilter: 'var(--system-backdrop-filter, blur(18px) saturate(145%))'
     }, {
         'data-role': 'eve-voice-surface'
     });
@@ -790,8 +791,8 @@ export const mountHomeVoiceSurface = async ({
         width: '116px',
         height: '26px',
         borderRadius: '8px',
-        border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
         display: 'block'
     }, {
         'data-role': 'eve-voice-meter',
@@ -809,9 +810,9 @@ export const mountHomeVoiceSurface = async ({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        border: '1px solid rgba(255,255,255,0.14)',
-        background: 'rgba(255,255,255,0.06)',
-        color: '#f8fafc',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         borderRadius: '10px',
         minWidth: '88px',
         height: '34px',
@@ -822,9 +823,9 @@ export const mountHomeVoiceSurface = async ({
     }, { type: 'button', 'data-role': 'eve-voice-action', text: labels().stop });
 
     const sendButton = createElement(doc, 'button', {
-        border: '1px solid rgba(255,255,255,0.14)',
-        background: 'rgba(255,255,255,0.06)',
-        color: '#f8fafc',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         borderRadius: '10px',
         minWidth: '88px',
         height: '34px',
@@ -878,9 +879,9 @@ export const mountHomeVoiceSurface = async ({
         maxHeight: '160px',
         resize: 'vertical',
         borderRadius: '12px',
-        border: '1px solid rgba(255,255,255,0.10)',
-        background: 'rgba(255,255,255,0.04)',
-        color: '#f8fafc',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         padding: '10px',
         fontSize: '12px',
         boxSizing: 'border-box'
@@ -1008,10 +1009,10 @@ export const mountHomeVoiceSurface = async ({
                 padding: '10px 12px',
                 borderRadius: '14px',
                 background: isUser
-                    ? 'linear-gradient(135deg, rgba(15,118,110,0.85), rgba(8,145,178,0.8))'
-                    : 'rgba(255,255,255,0.06)',
-                color: '#f8fafc',
-                border: isUser ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                    ? 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))'
+                    : 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
+                color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
+                border: isUser ? '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))' : '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
                 whiteSpace: 'pre-wrap',
                 lineHeight: '1.4',
                 fontSize: '12px',
@@ -1044,13 +1045,13 @@ export const mountHomeVoiceSurface = async ({
             actionButton.style.display = 'none';
         } else if (state.processing && !state.listening && !state.speaking) {
             actionButton.textContent = activeLabels.thinking;
-            actionButton.style.background = 'rgba(255,255,255,0.08)';
+            actionButton.style.background = 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))';
             actionButton.disabled = true;
             actionButton.style.opacity = '0.72';
             actionButton.style.cursor = 'default';
         } else if (state.listening || state.speaking) {
             actionButton.textContent = activeLabels.stop;
-            actionButton.style.background = 'linear-gradient(135deg, #b91c1c, #dc2626)';
+            actionButton.style.background = 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))';
         } else {
             actionButton.textContent = activeLabels.resume;
             actionButton.style.background = 'linear-gradient(135deg, #0f766e, #155e75)';

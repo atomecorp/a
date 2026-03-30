@@ -13,6 +13,11 @@ import Accelerate
 import os.lock
 import WebKit
 
+// DEPRECATED — Legacy C FFI recording bridge
+// These squirrel_recorder_core_* functions bypass the unified Kira/CPAL engine.
+// Kept for AUv3 backward compatibility until native AUv3 recording
+// is routed through the unified audio pipeline. Do NOT use for new features.
+
 @_silgen_name("squirrel_recorder_core_start")
 private func squirrel_recorder_core_start(_ path: UnsafePointer<CChar>,
                                           _ sampleRate: UInt32,
@@ -127,6 +132,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var fadeInTotal: Int = 0
     // Decode state to avoid tone while decoding and allow instant play-once data arrives
     private var isDecodingFile: Bool = false
+    private var playWhenDecoded: Bool = false
     private var didEmitReadyForPath: Set<String> = []
     private var currentDecodeGen: Int = 0
     
@@ -1171,6 +1177,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     // MARK: - JavaScript Audio Injection
     
     /// Inject JavaScript-generated audio into the AUv3 pipeline
+    /// audioData is interleaved stereo: [L0, R0, L1, R1, ...]
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
     os_unfair_lock_lock(&jsAudioLock)
     defer { os_unfair_lock_unlock(&jsAudioLock) }
@@ -1180,19 +1187,20 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         let hostSampleRate = getSampleRate() ?? 44100.0
         var processedBuffer: [Float] = audioData
 
-        // 2) Resample if needed (linear interpolation)
+        // 2) Resample if needed — operate per-channel to preserve interleaving
         if abs(sampleRate - hostSampleRate) > 1.0 {
             let ratio = hostSampleRate / sampleRate
-            let newLength = Int(Double(audioData.count) * ratio)
-            processedBuffer = [Float](repeating: 0, count: newLength)
-            for i in 0..<newLength {
-                let srcIndex = Double(i) / ratio
-                let idx = Int(srcIndex)
-                let frac = Float(srcIndex - Double(idx))
-                if idx + 1 < audioData.count {
-                    processedBuffer[i] = audioData[idx] * (1 - frac) + audioData[idx + 1] * frac
-                } else {
-                    processedBuffer[i] = audioData.last ?? 0
+            let srcFrames = audioData.count / 2
+            let dstFrames = Int(Double(srcFrames) * ratio)
+            processedBuffer = [Float](repeating: 0, count: dstFrames * 2)
+            for ch in 0..<2 {
+                for i in 0..<dstFrames {
+                    let srcIndex = Double(i) / ratio
+                    let idx = Int(srcIndex)
+                    let frac = Float(srcIndex - Double(idx))
+                    let s0 = idx < srcFrames ? audioData[idx * 2 + ch] : (audioData.last ?? 0)
+                    let s1 = (idx + 1) < srcFrames ? audioData[(idx + 1) * 2 + ch] : s0
+                    processedBuffer[i * 2 + ch] = s0 * (1 - frac) + s1 * frac
                 }
             }
         }
@@ -1227,6 +1235,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     }
     
     /// Mix JavaScript audio into the output buffer (called from render thread)
+    /// JS sends interleaved stereo: [L0, R0, L1, R1, ...] so buffer holds 2 samples per frame.
     private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount, renderStartFrame: Int64) {
     guard jsAudioActive, !jsAudioBuffer.isEmpty, os_unfair_lock_trylock(&jsAudioLock) else { return }
     defer { os_unfair_lock_unlock(&jsAudioLock) }
@@ -1235,19 +1244,27 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             audioDebugPlaybackStartFrame = renderStartFrame
         }
 
-        let gain: Float = 0.4 // Conservative mix gain
-        let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
-        for i in 0..<bufferList.numberOfBuffers {
-            let buffer = bufferList.buffer(at: i)
+        let gain: Float = 1.0
+        let numChannels = bufferList.numberOfBuffers
+        // Each frame occupies 2 interleaved samples (L + R)
+        let interleavedStride = 2
+        let samplesRemaining = jsAudioBuffer.count - jsAudioPlaybackIndex
+        let framesToProcess = min(Int(frameCount), samplesRemaining / interleavedStride)
+
+        for ch in 0..<numChannels {
+            let buffer = bufferList.buffer(at: ch)
             guard let outputData = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-            // Mix the same JS segment into all channels
+            // Channel 0 = even indices (L), Channel 1 = odd indices (R)
+            // If more than 2 output channels, extra channels get the L channel
+            let channelOffset = min(ch, interleavedStride - 1)
             for frame in 0..<framesToProcess {
-                if jsAudioPlaybackIndex + frame < jsAudioBuffer.count {
-                    outputData[frame] += jsAudioBuffer[jsAudioPlaybackIndex + frame] * gain
+                let srcIdx = jsAudioPlaybackIndex + frame * interleavedStride + channelOffset
+                if srcIdx < jsAudioBuffer.count {
+                    outputData[frame] += jsAudioBuffer[srcIdx] * gain
                 }
             }
         }
-        jsAudioPlaybackIndex += framesToProcess
+        jsAudioPlaybackIndex += framesToProcess * interleavedStride
         // Stop when we've played all the JavaScript audio
         if jsAudioPlaybackIndex >= jsAudioBuffer.count {
             jsAudioActive = false

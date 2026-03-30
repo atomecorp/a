@@ -469,14 +469,58 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         WebViewManager.audioController?.stopJavaScriptAudio()
                         return
                     }
-                    if action == "loadLocalPath" || (body["type"] as? String) == "iplug" {
+                    if action == "loadLocalPath" || action == "loadAndPlay" || (body["type"] as? String) == "iplug" {
                         // Accept either { action:'loadLocalPath', relativePath } or { type:'iplug', action:'loadLocalPath', relativePath }
+                        let autoPlay = (action == "loadAndPlay")
                         if let rel = body["relativePath"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
-                            if let base = iCloudFileManager.shared.getCurrentStorageURL() {
-                                let full = base.appendingPathComponent(rel)
-                                au.loadLocalFile(full.path)
-                            } else {
-                                au.loadLocalFile(rel) // try raw path
+                            // Try to resolve relative path using SandboxPathValidator (same as AudioSchemeHandler)
+                            let trimmed = rel.trimmingCharacters(in: .whitespacesAndNewlines)
+                            var resolved = false
+                            if let sanitized = SandboxPathValidator.sanitizedRelativePath(trimmed) {
+                                let fm = FileManager.default
+                                let candidates = SandboxPathValidator.allowedRoots().map { root -> URL in
+                                    sanitized.isEmpty ? root : root.appendingPathComponent(sanitized)
+                                }
+                                if let found = candidates.first(where: { fm.fileExists(atPath: $0.path) }) {
+                                    au.loadLocalFile(found.path)
+                                    resolved = true
+                                    if autoPlay { au.setPlayActive(true) }
+                                }
+                            }
+                            // Fallback: search in data/users/*/Downloads/ and data/users/*/Recordings/ for the filename
+                            if !resolved {
+                                let fileName = (trimmed as NSString).lastPathComponent
+                                if !fileName.isEmpty, let root = iCloudFileManager.shared.getCurrentStorageURL() {
+                                    let fm = FileManager.default
+                                    let folderHints = ["Downloads", "Recordings"]
+                                    if let sanitizedUsers = SandboxPathValidator.sanitizedRelativePath("data/users") {
+                                        let usersURL = root.appendingPathComponent(sanitizedUsers, isDirectory: true)
+                                        if let directories = try? fm.contentsOfDirectory(at: usersURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+                                            for directory in directories {
+                                                for folder in folderHints {
+                                                    let candidate = directory.appendingPathComponent("\(folder)/\(fileName)")
+                                                    if fm.fileExists(atPath: candidate.path) {
+                                                        au.loadLocalFile(candidate.path)
+                                                        resolved = true
+                                                        if autoPlay { au.setPlayActive(true) }
+                                                        break
+                                                    }
+                                                }
+                                                if resolved { break }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if !resolved {
+                                // Fallback: try iCloud base path
+                                if let base = iCloudFileManager.shared.getCurrentStorageURL() {
+                                    let full = base.appendingPathComponent(rel)
+                                    au.loadLocalFile(full.path)
+                                } else {
+                                    au.loadLocalFile(rel) // try raw path
+                                }
+                                if autoPlay { au.setPlayActive(true) }
                             }
                         }
                         return

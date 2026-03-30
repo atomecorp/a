@@ -9,6 +9,7 @@ import {
     coalesceProactiveNotifications
 } from '../ai/proactive_scheduler.js';
 import { createProactiveStateStore } from '../ai/proactive_state_store.js';
+import { resolveVoiceCaptureProvider } from '../../application/iplug/runtime_audio_backend.js';
 
 const DEFAULT_LANG = 'fr-FR';
 const DEFAULT_STT_SILENCE_MS = 8000;
@@ -374,9 +375,15 @@ export const resolveVoiceProviders = (env = globalThis) => {
         ? 'browser_speech_synthesis'
         : 'unsupported';
 
-    const captureSelected = (typeof recordStart === 'function' && typeof recordStop === 'function')
-        ? 'iplug_native_recorder'
-        : 'unsupported';
+    const providerHint = resolveVoiceCaptureProvider(env);
+    const captureSelected = (() => {
+        if (typeof recordStart === 'function' && typeof recordStop === 'function') {
+            if (providerHint && providerHint !== 'unsupported') return providerHint;
+            return 'iplug_native_recorder';
+        }
+        if (providerHint === 'web_capture_recorder') return providerHint;
+        return 'unsupported';
+    })();
 
     return {
         stt: {

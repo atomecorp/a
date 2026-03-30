@@ -438,7 +438,7 @@ function createSettingsContent() {
         id: 'settings_overflow_container',
         css: {
             padding: '20px',
-            backgroundColor: 'rgb(48, 60, 78)',
+            backgroundColor: default_theme.colors.surface,
             flex: '1',
             height: '100%',
             overflowY: 'auto',
@@ -455,27 +455,27 @@ function createSettingsContent() {
                 border: 'none',
                 borderRadius: '8px',
                 overflow: 'hidden',
-                backgroundColor: 'rgb(52, 66, 86)' // slightly lighter/greyed blue
+                backgroundColor: default_theme.colors.surfaceAlt
             }
         });
 
         const sectionHeader = window.$('div', {
             text: title,
             css: {
-                backgroundColor: 'rgb(58, 74, 96)',
+                backgroundColor: default_theme.colors.inputSurface,
                 padding: '12px 15px',
                 fontWeight: 'bold',
                 fontSize: '16px',
-                color: '#fff',
-                borderBottom: '1px solid rgba(255,255,255,0.08)'
+                color: default_theme.colors.text,
+                borderBottom: `1px solid ${default_theme.colors.border}`
             }
         });
 
         const sectionContent = window.$('div', {
             css: {
                 padding: '15px',
-                backgroundColor: 'rgb(52, 66, 86)',
-                color: '#fff'
+                backgroundColor: default_theme.colors.surfaceAlt,
+                color: default_theme.colors.text
             }
         });
 
@@ -494,7 +494,7 @@ function createSettingsContent() {
                 justifyContent: 'space-between',
                 marginBottom: '15px',
                 padding: '10px',
-                backgroundColor: 'rgb(52, 66, 86)',
+                backgroundColor: default_theme.colors.surfaceAlt,
                 borderRadius: '5px',
                 border: 'none'
             }
@@ -509,7 +509,7 @@ function createSettingsContent() {
             css: {
                 fontWeight: '500',
                 marginBottom: '3px',
-                color: '#fff'
+                color: default_theme.colors.text
             }
         });
 
@@ -551,8 +551,8 @@ function createSettingsContent() {
                 borderRadius: '3px',
                 fontSize: '12px',
                 textAlign: 'center',
-                backgroundColor: 'rgb(48, 60, 78)',
-                color: '#fff'
+                backgroundColor: default_theme.colors.inputSurface,
+                color: default_theme.colors.text
             }
         });
 
@@ -913,8 +913,8 @@ function createSettingsContent() {
                 borderRadius: '3px',
                 fontSize: '12px',
                 textAlign: 'center',
-                backgroundColor: 'rgb(48, 60, 78)',
-                color: '#fff'
+                backgroundColor: default_theme.colors.inputSurface,
+                color: default_theme.colors.text
             }
         });
 
@@ -1170,8 +1170,8 @@ export function showSettingsModal() {
                 borderRadius: '3px',
                 fontSize: '12px',
                 textAlign: 'center',
-                backgroundColor: 'rgb(48, 60, 78)',
-                color: '#fff'
+                backgroundColor: default_theme.colors.inputSurface,
+                color: default_theme.colors.text
             }
         });
 

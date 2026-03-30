@@ -39,7 +39,7 @@ export class UIManager {
             ...config,
             css: {
                 backgroundColor: default_theme.primaryColor || default_theme.button.backgroundColor || '#27ae60',
-                color: 'white',
+                color: default_theme.colors.text,
                 ...config.css
             }
         });
@@ -51,7 +51,7 @@ export class UIManager {
             ...config,
             css: {
                 backgroundColor: default_theme.secondaryColor || default_theme.button.backgroundColor || '#3498db',
-                color: 'white',
+                color: default_theme.colors.text,
                 ...config.css
             }
         });
@@ -254,15 +254,16 @@ export class UIManager {
                 border: 'none',
                 outline: 'none',
                 borderRadius: '4px',
-                backgroundColor: 'rgb(48, 60, 78)',
-                color: 'white',
+                backgroundColor: default_theme.colors.inputSurface,
+                color: default_theme.colors.text,
                 fontSize: '14px',
                 ...(config && config.css ? config.css : {})
             },
             ...config,
             css: {
                 ...((config && config.css) || {}),
-                backgroundColor: 'rgb(48, 60, 78)',
+                backgroundColor: default_theme.colors.inputSurface,
+                color: default_theme.colors.text,
                 border: 'none',
                 outline: 'none'
             }

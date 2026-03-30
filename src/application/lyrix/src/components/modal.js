@@ -31,7 +31,7 @@ export function Modal(options = {}) {
             left: '0',
             width: '100vw',
             height: '100vh',
-            backgroundColor: overlay ? 'rgba(0, 0, 0, 0.5)' : 'transparent',
+            backgroundColor: overlay ? default_theme.colors.overlay : 'transparent',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -54,9 +54,9 @@ export function Modal(options = {}) {
     // Create modal container
     const modalContainer = $('div', {
         css: {
-            backgroundColor: '#ffffff',
+            backgroundColor: default_theme.colors.surface,
             borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+            boxShadow: default_theme.panel.shadow,
             maxWidth: '90vw',
             maxHeight: '90vh',
             overflow: 'hidden',
@@ -64,6 +64,8 @@ export function Modal(options = {}) {
             flexDirection: 'column',
             transform: animation ? 'scale(0.9)' : 'scale(1)',
             transition: animation ? 'transform 0.3s ease' : 'none',
+            color: default_theme.colors.text,
+            backdropFilter: default_theme.panel.backdrop,
             userSelect: 'none',
             webkitUserSelect: 'none',
             mozUserSelect: 'none',
@@ -358,8 +360,8 @@ export function InputModal(options = {}) {
             mozUserSelect: 'text',
             msUserSelect: 'text',
             webkitTouchCallout: 'default',
-            backgroundColor: 'rgb(48, 60, 78)',
-            color: '#fff'
+            backgroundColor: default_theme.colors.inputSurface,
+            color: default_theme.colors.text
         }
     });
     
@@ -472,8 +474,8 @@ export function FormModal(options = {}) {
                 mozUserSelect: 'text',
                 msUserSelect: 'text',
         webkitTouchCallout: 'default',
-        backgroundColor: 'rgb(48, 60, 78)',
-        color: '#fff'
+        backgroundColor: default_theme.colors.inputSurface,
+        color: default_theme.colors.text
             }
         });
         
@@ -575,8 +577,8 @@ export function SelectModal(options = {}) {
                 mozUserSelect: 'text',
                 msUserSelect: 'text',
         webkitTouchCallout: 'default',
-        backgroundColor: 'rgb(48, 60, 78)',
-        color: '#fff'
+        backgroundColor: default_theme.colors.inputSurface,
+        color: default_theme.colors.text
             }
         });
         

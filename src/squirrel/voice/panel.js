@@ -58,11 +58,11 @@ const createElement = (doc, tag, style = {}, attrs = {}) => {
     return node;
 };
 
-const createButton = (doc, label, background = '#2c3642') => {
+const createButton = (doc, label, accentBorder = 'rgba(79, 79, 79, 0.16)') => {
     const button = createElement(doc, 'button', {
-        border: '1px solid rgba(255,255,255,0.12)',
-        background,
-        color: '#f6f8fa',
+        border: `1px solid ${accentBorder}`,
+        background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         borderRadius: '8px',
         padding: '6px 10px',
         cursor: 'pointer',
@@ -155,12 +155,12 @@ export const mountVoicePanel = async ({
         width: '52px',
         height: '52px',
         borderRadius: '999px',
-        border: '1px solid rgba(255,255,255,0.12)',
-        background: 'linear-gradient(135deg, #0f766e, #155e75)',
-        color: '#f8fafc',
+        border: '1px solid rgba(14, 116, 110, 0.28)',
+        background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         zIndex: '9999',
         cursor: 'pointer',
-        boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
+        boxShadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
         fontWeight: '700',
         letterSpacing: '0.02em'
     }, {
@@ -182,13 +182,14 @@ export const mountVoicePanel = async ({
         gap: '10px',
         padding: '14px',
         borderRadius: '18px',
-        border: '1px solid rgba(255,255,255,0.10)',
-        background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.98))',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
-        color: '#e5edf5',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'linear-gradient(180deg, var(--system-panel-bg-strong, rgba(248, 248, 248, 0.68)), var(--system-panel-bg, rgba(238, 238, 238, 0.56)))',
+        boxShadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         fontFamily: 'Menlo, Consolas, monospace',
         zIndex: '9999',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        backdropFilter: 'var(--system-backdrop-filter, blur(18px) saturate(145%))'
     }, {
         id: PANEL_ID
     });
@@ -213,7 +214,7 @@ export const mountVoicePanel = async ({
     }, { text: 'Voice Runtime' });
     const providersLine = createElement(doc, 'div', {
         fontSize: '11px',
-        color: '#9fb2c7'
+        color: 'var(--system-text-muted, rgba(82, 82, 82, 0.74))'
     }, { text: 'providers: loading...' });
     titleWrap.append(title, providersLine);
 
@@ -242,8 +243,8 @@ export const mountVoicePanel = async ({
         overflowY: 'auto',
         padding: '10px',
         borderRadius: '12px',
-        background: 'rgba(255,255,255,0.05)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
         fontSize: '12px',
         lineHeight: '1.45',
         whiteSpace: 'pre-wrap'
@@ -267,9 +268,9 @@ export const mountVoicePanel = async ({
         resize: 'vertical',
         width: '100%',
         borderRadius: '12px',
-        border: '1px solid rgba(255,255,255,0.10)',
-        background: 'rgba(255,255,255,0.04)',
-        color: '#f8fafc',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         padding: '10px',
         fontSize: '12px',
         boxSizing: 'border-box'
@@ -282,9 +283,9 @@ export const mountVoicePanel = async ({
         width: '100%',
         height: '34px',
         borderRadius: '10px',
-        border: '1px solid rgba(255,255,255,0.10)',
-        background: 'rgba(255,255,255,0.04)',
-        color: '#f8fafc',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
+        background: 'var(--system-input-bg, rgba(255, 255, 255, 0.34))',
+        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
         padding: '0 10px',
         fontSize: '12px',
         boxSizing: 'border-box'
@@ -324,8 +325,8 @@ export const mountVoicePanel = async ({
         overflowY: 'auto',
         padding: '8px',
         borderRadius: '12px',
-        background: 'rgba(2, 6, 23, 0.72)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'var(--system-panel-bg-soft, rgba(255, 255, 255, 0.40))',
+        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
         fontSize: '11px',
         lineHeight: '1.4'
     }, { 'data-test-id': 'voice-panel-log' });
@@ -333,7 +334,7 @@ export const mountVoicePanel = async ({
     panel.append(header, meta, transcript, fallback, input, commandInput, row1, row2, log);
     doc.body.append(launcher, panel);
 
-    const appendLog = (message, color = '#d3dde8') => {
+    const appendLog = (message, color = 'var(--system-text-color, rgba(58, 58, 58, 0.94))') => {
         const line = createElement(doc, 'div', {
             color,
             marginBottom: '4px'

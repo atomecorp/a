@@ -1,0 +1,269 @@
+const readHostEnv = (env) => String(env?.__HOST_ENV || '').trim().toLowerCase();
+
+export const hasSwiftBridge = (env = globalThis) => !!(
+    env?.webkit?.messageHandlers?.swiftBridge
+    || env?.webkit?.messageHandlers?.squirrel
+    || env?.webkit?.messageHandlers?.callback
+);
+
+export const hasIPlugBridge = (env = globalThis) => !!(
+    typeof env?.__toDSP === 'function'
+    || hasSwiftBridge(env)
+);
+
+export const getTauriInvoke = (env = globalThis) => {
+    try {
+        if (typeof env?.__TAURI__?.core?.invoke === 'function') {
+            return env.__TAURI__.core.invoke.bind(env.__TAURI__.core);
+        }
+    } catch (_) { }
+    try {
+        if (typeof env?.__TAURI__?.invoke === 'function') {
+            return env.__TAURI__.invoke.bind(env.__TAURI__);
+        }
+    } catch (_) { }
+    try {
+        if (typeof env?.__TAURI_INTERNALS__?.invoke === 'function') {
+            return env.__TAURI_INTERNALS__.invoke.bind(env.__TAURI_INTERNALS__);
+        }
+    } catch (_) { }
+    return null;
+};
+
+export const isAuv3AudioRuntime = (env = globalThis) => {
+    const hostEnv = readHostEnv(env);
+    return hostEnv === 'auv3'
+        || env?.__AUV3_MODE__ === true
+        || hasSwiftBridge(env);
+};
+
+export const isTauriAudioRuntime = (env = globalThis) => {
+    if (env?.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (isAuv3AudioRuntime(env)) return false;
+    if (env?.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
+    const protocol = String(env?.location?.protocol || '').toLowerCase();
+    const host = String(env?.location?.hostname || '').toLowerCase();
+    const hostEnv = readHostEnv(env);
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
+    if (host === 'tauri.localhost') return true;
+    if (hostEnv === 'app') return true;
+    return !!getTauriInvoke(env);
+};
+
+export const resolveAudioRuntime = (env = globalThis) => {
+    const tauriInvoke = getTauriInvoke(env);
+    const wasmAvailable = typeof env?.WebAssembly !== 'undefined';
+    const hasAudioContext = !!(env?.AudioContext || env?.webkitAudioContext);
+    const hasWebCapture = !!env?.navigator?.mediaDevices?.getUserMedia;
+
+    if (isAuv3AudioRuntime(env)) {
+        return {
+            runtime: 'ios_auv3',
+            playback: 'ios_auv3_native',
+            record: 'ios_auv3_native',
+            preferredFacadeBackendOrder: ['iplug', 'kira', 'html'],
+            hasIPlugBridge: hasIPlugBridge(env),
+            hasSwiftBridge: hasSwiftBridge(env),
+            tauriInvoke: null
+        };
+    }
+
+    if (isTauriAudioRuntime(env) && tauriInvoke) {
+        return {
+            runtime: 'tauri_native',
+            playback: 'tauri_native_kira',
+            record: 'tauri_native_kira',
+            preferredFacadeBackendOrder: ['kira', 'iplug', 'html'],
+            hasIPlugBridge: hasIPlugBridge(env),
+            hasSwiftBridge: false,
+            tauriInvoke
+        };
+    }
+
+    if (wasmAvailable || hasAudioContext || hasWebCapture) {
+        return {
+            runtime: 'web',
+            playback: wasmAvailable ? 'web_wasm_kira' : (hasAudioContext ? 'html' : 'unsupported'),
+            record: hasWebCapture ? 'web_capture_fallback' : 'unsupported',
+            preferredFacadeBackendOrder: wasmAvailable ? ['kira', 'html'] : ['html'],
+            hasIPlugBridge: hasIPlugBridge(env),
+            hasSwiftBridge: false,
+            tauriInvoke: null
+        };
+    }
+
+    return {
+        runtime: 'unknown',
+        playback: 'unsupported',
+        record: 'unsupported',
+        preferredFacadeBackendOrder: ['html'],
+        hasIPlugBridge: hasIPlugBridge(env),
+        hasSwiftBridge: hasSwiftBridge(env),
+        tauriInvoke: null
+    };
+};
+
+export const resolveVoiceCaptureProvider = (env = globalThis) => {
+    const explicit = String(env?.__SQUIRREL_RECORD_PROVIDER__ || '').trim().toLowerCase();
+    if (explicit) return explicit;
+    const runtime = resolveAudioRuntime(env);
+    if (runtime.record === 'tauri_native_kira' || runtime.record === 'ios_auv3_native') {
+        return 'iplug_native_recorder';
+    }
+    if (runtime.record === 'web_capture_fallback') {
+        return 'web_capture_recorder';
+    }
+    return 'unsupported';
+};
+
+// ─── AUv3 host-routed media playback helpers ────────────────────────
+// These must be used instead of HTMLMediaElement.play() in AUv3 so that
+// audio goes through the host render callback (mixer) instead of the
+// iOS device speaker.
+//
+// Strategy: fetch the media as ArrayBuffer, decode with WebAudio
+// decodeAudioData, play via AudioBufferSourceNode, and tap the output
+// with ScriptProcessorNode to forward chunks to Swift's
+// injectJavaScriptAudio. Device output is muted with a zero-gain node.
+//
+// This avoids createMediaElementSource which is broken under custom URL
+// schemes in WKWebView (CORS zeroes the output).
+
+const _getAuv3Bridge = (env = globalThis) => {
+    if (!isAuv3AudioRuntime(env) || !hasSwiftBridge(env)) return null;
+    return env.webkit?.messageHandlers?.swiftBridge || null;
+};
+
+export const shouldUseAuv3HostPlayback = (env = globalThis) => !!_getAuv3Bridge(env);
+
+// ─── Native command-based AUv3 playback ─────────────────────────────
+// Audio is decoded and played entirely by the Swift native engine
+// (loadLocalFile → decodeFile → internalRenderBlock) which runs
+// independently of the WebView. The JS side only sends commands.
+//
+// This ensures audio continues when the AUv3 window is closed.
+
+/**
+ * Extract the relative audio path from an atome:// URL.
+ * Handles:
+ *   atome:///audio/Alive.m4a  → "Alive.m4a"
+ *   atome://audio/Alive.m4a   → "Alive.m4a"
+ *   /audio/subfolder/file.wav → "subfolder/file.wav"
+ *   https://server/files/x.mp3 → null (not a local file)
+ */
+const _extractRelativePath = (src) => {
+    if (!src) return null;
+    const str = String(src).trim();
+    // Only handle atome:// scheme (local files)
+    if (!str.startsWith('atome:')) return null;
+
+    try {
+        const url = new URL(str);
+        let path = url.pathname || '';
+        // atome:///audio/X → pathname = "/audio/X"
+        // atome://audio/X → host = "audio", pathname = "/X"
+        if (url.host === 'audio' && path.length > 1) {
+            return path.slice(1); // Remove leading /
+        }
+        if (path.startsWith('/audio/')) {
+            return path.slice('/audio/'.length);
+        }
+        // Fallback: return the full pathname without leading /
+        if (path.startsWith('/')) path = path.slice(1);
+        return path || null;
+    } catch (_) {
+        // URL parse failed; try regex
+        const m = str.match(/^atome:\/{2,3}(?:audio\/)?(.+)/);
+        return m ? m[1] : null;
+    }
+};
+
+/**
+ * Extract a playable filename from any source URL or API path.
+ * Handles:
+ *   /api/uploads/Evolution_2.wav       → "Evolution_2.wav"
+ *   /api/recordings/take_01.m4a        → "take_01.m4a"
+ *   blob:atome://xxx                   → null (check dataset)
+ *   http://127.0.0.1:62740/api/uploads/file.wav → "file.wav"
+ *   data/users/xxx/Downloads/file.wav  → "file.wav"
+ */
+const _extractFilenameFromSource = (src) => {
+    if (!src) return null;
+    const str = String(src).trim();
+    if (!str || str.startsWith('blob:') || str.startsWith('data:')) return null;
+    // Match /api/uploads/<name> or /api/recordings/<name>
+    const apiMatch = str.match(/\/api\/(?:uploads|recordings)\/([^?#]+)/i);
+    if (apiMatch) {
+        try { return decodeURIComponent(apiMatch[1]); } catch (_) { return apiMatch[1]; }
+    }
+    // Last path segment for data/users/... paths
+    const parts = str.split('/').filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last && /\.\w{2,5}$/i.test(last)) {
+        try { return decodeURIComponent(last); } catch (_) { return last; }
+    }
+    return null;
+};
+
+export const auv3PlayMedia = (node, env = globalThis) => {
+    const bridge = _getAuv3Bridge(env);
+    if (!bridge || !node) return false;
+
+    const src = String(node.currentSrc || node.src || '').trim();
+    const stableSource = String(node?.dataset?.eveMediaSource || '').trim();
+
+    // 1) Try atome:// scheme direct path (e.g. atome:///audio/file.wav)
+    let relativePath = _extractRelativePath(src);
+
+    // 2) If src is a blob/http URL, extract filename from the stable source
+    if (!relativePath && stableSource) {
+        const filename = _extractFilenameFromSource(stableSource);
+        if (filename) relativePath = filename;
+    }
+
+    // 3) Last resort: try to extract filename from the src itself
+    if (!relativePath) {
+        const filename = _extractFilenameFromSource(src);
+        if (filename) relativePath = filename;
+    }
+
+    const tagName = String(node.tagName || '').toLowerCase();
+
+    // For video elements: play muted in WebView for visual display
+    if (tagName === 'video') {
+        try { node.muted = true; } catch (_) { }
+        try { node.play().catch(() => {}); } catch (_) { }
+    } else {
+        // For audio elements: mute the HTML element entirely
+        try { node.muted = true; } catch (_) { }
+    }
+
+    if (relativePath) {
+        // Send the file path/name to Swift for native decode + auto-play
+        bridge.postMessage({
+            action: 'loadAndPlay',
+            relativePath: relativePath
+        });
+    } else {
+        // No identifiable source: toggle play state directly
+        // Swift will play whatever file is already loaded, or test tone
+        bridge.postMessage({ type: 'param', id: 'play', value: 1 });
+    }
+
+    return true;
+};
+
+export const auv3StopMedia = (env = globalThis) => {
+    const bridge = _getAuv3Bridge(env);
+    if (!bridge) return false;
+    bridge.postMessage({ type: 'param', id: 'play', value: 0 });
+    return true;
+};
+
+export const auv3StopNode = (node) => {
+    // No JS-side sources to stop — playback is fully native.
+    // Mute the HTML element if it was playing (video)
+    if (node) {
+        try { node.pause(); } catch (_) { }
+    }
+};

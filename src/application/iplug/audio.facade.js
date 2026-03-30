@@ -1,8 +1,13 @@
-// Squirrel AV Audio Facade
-// Exposes Squirrel.av.audio with a switchable backend (iplug | html)
+import { resolveAudioRuntime } from './runtime_audio_backend.js';
+
+// Squirrel AV Audio Facade — Unified Audio Engine entry point
+// Exposes Squirrel.av.audio with a switchable backend (kira | iplug | html)
+// - Primary backend: kira (Tauri native CPAL+Kira / WASM Kira)
+// - Bridge backend: iplug (AUv3 swiftBridge, deprecated for production playback)
+// - Fallback backend: html (WebAudio, browser-only when kira unavailable)
 // - Dynamic routing to active backend
 // - Event bus (type -> Set(callback))
-// - detect_and_set_backend(["iplug","html"]) on startup
+// - detect_and_set_backend() prefers kira > iplug > html
 // - UI->DSP batching per frame (<= 60 Hz)
 // Notes: Keep JS allocs out of the audio thread; backends talk to native or WebAudio.
 
@@ -25,7 +30,7 @@
 
   // Backend registry
   const backends = Object.create(null);
-  let active = null; // 'iplug' | 'html'
+  let active = null; // 'kira' | 'iplug' | 'html'
 
   // Frame-batched command queue (UI -> backend)
   const q = [];
@@ -43,7 +48,7 @@
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['play', 'jump', 'set_param']);
+  const immediateNames = new Set(['play', 'stop', 'stop_clip', 'jump', 'set_param']);
   const proxyCall = (name) => (arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       console.warn('No backend for', name); return false;
@@ -63,13 +68,23 @@
     if (!backends[name]) return false;
     active = name; emit('backend_changed', { backend: name }); return true;
   };
+  audio.get_backend = () => active;
+  audio.get_runtime = () => resolveAudioRuntime(window);
 
-  audio.detect_and_set_backend = (order = ['kira', 'iplug', 'html']) => {
+  audio.detect_and_set_backend = (order = null) => {
+    const runtime = resolveAudioRuntime(window);
+    const preferredOrder = Array.isArray(order) && order.length
+      ? order
+      : runtime.preferredFacadeBackendOrder;
     const available = [];
     if (backends['kira']) available.push('kira');
-    if ((window.__toDSP && window.__fromDSP) || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge)) available.push('iplug');
+    if (runtime.hasIPlugBridge) available.push('iplug');
     if (window.AudioContext || window.webkitAudioContext) available.push('html');
-    for (const pref of order) { if (available.includes(pref)) { audio.set_backend(pref); return pref; } }
+    for (const pref of preferredOrder) {
+      if (available.includes(pref) && audio.set_backend(pref)) {
+        return pref;
+      }
+    }
     return null;
   };
 
@@ -93,7 +108,7 @@
   audio.__emit = emit; // allow backends to emit on the facade bus
 
   // Auto detect backend
-  audio.detect_and_set_backend(['iplug', 'html']);
+  audio.detect_and_set_backend();
 
   // usage
   // Squirrel.av.audio.on('backend_changed', ({backend})=>console.log('backend:', backend));
