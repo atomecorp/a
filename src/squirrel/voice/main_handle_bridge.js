@@ -31,12 +31,13 @@ const clearTimer = (state) => {
     state.timer = 0;
 };
 
-const openDilasPanel = async ({
+const toggleDilasPanel = async ({
     env,
+    anchorEl = null,
     importModule = defaultImportModule
 } = {}) => {
     if (!env || typeof env !== 'object') return false;
-    if (typeof env.open_dilas_panel !== 'function') {
+    if (typeof env.toggle_dilas_panel !== 'function') {
         const module = await importModule('./dilas_panel.js');
         if (typeof module?.bootstrapDilasPanel === 'function') {
             module.bootstrapDilasPanel({ env });
@@ -45,11 +46,42 @@ const openDilasPanel = async ({
             return true;
         }
     }
+    if (typeof env.toggle_dilas_panel === 'function') {
+        await env.toggle_dilas_panel({ anchorEl });
+        return true;
+    }
+    if (typeof env.open_dilas_panel === 'function') {
+        await env.open_dilas_panel({ anchorEl });
+        return true;
+    }
+    env.console?.warn?.('[voice.main_handle] dilas panel toggle unavailable');
+    return false;
+};
+
+const openDilasPanel = async ({
+    env,
+    anchorEl = null,
+    importModule = defaultImportModule
+} = {}) => {
+    if (!env || typeof env !== 'object') return false;
+    if (typeof env.open_dilas_panel !== 'function' && typeof env.toggle_dilas_panel !== 'function') {
+        const module = await importModule('./dilas_panel.js');
+        if (typeof module?.bootstrapDilasPanel === 'function') {
+            module.bootstrapDilasPanel({ env });
+        } else if (typeof module?.openDilasPanel === 'function') {
+            await module.openDilasPanel({ env });
+            return true;
+        }
+    }
+    if (typeof env.toggle_dilas_panel === 'function') {
+        await env.toggle_dilas_panel({ anchorEl });
+        return true;
+    }
     if (typeof env.open_dilas_panel !== 'function') {
         env.console?.warn?.('[voice.main_handle] open_dilas_panel unavailable');
         return false;
     }
-    await env.open_dilas_panel();
+    await env.open_dilas_panel({ anchorEl });
     return true;
 };
 
@@ -80,7 +112,7 @@ const installHandleBridge = ({
         state.suppressClicksUntil = Date.now() + 900;
         handle.dataset.voiceHoldActive = 'true';
         try {
-            await openDilasPanel({ env, importModule });
+            await toggleDilasPanel({ env, anchorEl: handle, importModule });
         } catch (error) {
             env.console?.warn?.('[voice.main_handle] long-press open failed:', error?.message || error);
         } finally {

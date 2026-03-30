@@ -1,10 +1,25 @@
 import { createEveDialog, revealEveDialog } from '../../application/eVe/elements/design.js';
 import { eveT, onEveLocaleChange } from '../../application/eVe/i18n/i18n.js';
+import {
+    ensurePanelAttachedToIntuitionLayer,
+    positionPanelNearTool
+} from '../../application/eVe/intuition/panel_manager.js';
 import { mountHomeVoiceSurface } from './home_surface.js';
 
 const PANEL_KEY = '__SQUIRREL_DILAS_PANEL__';
 
 const toText = (value) => String(value || '').trim();
+
+const isDialogVisible = (dialog) => {
+    const root = dialog?.root;
+    if (!root || typeof window === 'undefined') return false;
+    const style = window.getComputedStyle(root);
+    const rect = root.getBoundingClientRect?.();
+    return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number((rect?.width || root.offsetWidth || 0)) > 0
+        && Number((rect?.height || root.offsetHeight || 0)) > 0;
+};
 
 const ensureDilasPanel = async ({
     env = globalThis
@@ -138,10 +153,19 @@ const ensureDilasPanel = async ({
         return surfacePromise;
     };
 
-    const open = async () => {
+    const open = async ({ anchorEl = null } = {}) => {
         revealEveDialog(dialog, { center: false });
+        ensurePanelAttachedToIntuitionLayer('eve_dilas_dialog');
+        if (anchorEl?.nodeType === 1) {
+            positionPanelNearTool('eve_dilas_dialog', anchorEl);
+        }
         const controller = await ensureSurface();
         controller?.activate?.();
+        if (anchorEl?.nodeType === 1 && typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => {
+                positionPanelNearTool('eve_dilas_dialog', anchorEl);
+            });
+        }
         syncHeaderState();
         return controller;
     };
@@ -153,6 +177,15 @@ const ensureDilasPanel = async ({
         await host?.__eveHomeVoiceSurfaceController?.deactivate?.();
         syncHeaderState();
         return true;
+    };
+
+    const toggle = async ({ anchorEl = null } = {}) => {
+        if (isDialogVisible(dialog)) {
+            await close();
+            return { ok: true, open: false };
+        }
+        await open({ anchorEl });
+        return { ok: true, open: true };
     };
     closePanel = close;
     if (dialog?.root) {
@@ -166,12 +199,14 @@ const ensureDilasPanel = async ({
 
     env.open_dilas_panel = open;
     env.close_dilas_panel = close;
+    env.toggle_dilas_panel = toggle;
     env[PANEL_KEY] = {
         dialog,
         host,
         ensureSurface,
         open,
         close,
+        toggle,
         get controller() {
             return host?.__eveHomeVoiceSurfaceController || null;
         },
