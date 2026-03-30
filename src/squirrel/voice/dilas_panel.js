@@ -7,6 +7,7 @@ import {
 import { mountHomeVoiceSurface } from './home_surface.js';
 
 const PANEL_KEY = '__SQUIRREL_DILAS_PANEL__';
+const PANEL_ID = 'eve_panel_dialog';
 
 const toText = (value) => String(value || '').trim();
 
@@ -29,7 +30,7 @@ const ensureDilasPanel = async ({
 
     let closePanel = async () => true;
     const dialog = createEveDialog({
-        id: 'eve_dilas_dialog',
+        id: PANEL_ID,
         title: eveT('eve.voice.eve.title', 'eVe'),
         titleKey: 'eve.voice.eve.title',
         titleFallback: 'eVe',
@@ -54,7 +55,7 @@ const ensureDilasPanel = async ({
     }
 
     const headerVoiceWrap = env.document.createElement('div');
-    headerVoiceWrap.id = 'eve_dilas_dialog__voice_status';
+    headerVoiceWrap.id = `${PANEL_ID}__voice_status`;
     Object.assign(headerVoiceWrap.style, {
         display: 'flex',
         alignItems: 'center',
@@ -66,7 +67,7 @@ const ensureDilasPanel = async ({
     });
 
     const headerVoiceText = env.document.createElement('div');
-    headerVoiceText.id = 'eve_dilas_dialog__voice_status__text';
+    headerVoiceText.id = `${PANEL_ID}__voice_status__text`;
     Object.assign(headerVoiceText.style, {
         fontSize: '10px',
         color: 'rgba(255,255,255,0.82)',
@@ -77,7 +78,7 @@ const ensureDilasPanel = async ({
     });
 
     const headerVoiceMeterHost = env.document.createElement('div');
-    headerVoiceMeterHost.id = 'eve_dilas_dialog__voice_status__meter';
+    headerVoiceMeterHost.id = `${PANEL_ID}__voice_status__meter`;
     Object.assign(headerVoiceMeterHost.style, {
         display: 'flex',
         alignItems: 'center',
@@ -87,10 +88,10 @@ const ensureDilasPanel = async ({
     });
 
     headerVoiceWrap.append(headerVoiceText, headerVoiceMeterHost);
-    dialog.header?.insertBefore(headerVoiceWrap, env.document.getElementById('eve_dilas_dialog__close') || null);
+    dialog.header?.insertBefore(headerVoiceWrap, env.document.getElementById(`${PANEL_ID}__close`) || null);
 
     const host = env.document.createElement('div');
-    host.id = 'eve_dilas_dialog_voice_surface';
+    host.id = `${PANEL_ID}_voice_surface`;
     Object.assign(host.style, {
         width: '100%',
         display: 'flex',
@@ -155,15 +156,15 @@ const ensureDilasPanel = async ({
 
     const open = async ({ anchorEl = null } = {}) => {
         revealEveDialog(dialog, { center: false });
-        ensurePanelAttachedToIntuitionLayer('eve_dilas_dialog');
+        ensurePanelAttachedToIntuitionLayer(PANEL_ID);
         if (anchorEl?.nodeType === 1) {
-            positionPanelNearTool('eve_dilas_dialog', anchorEl);
+            positionPanelNearTool(PANEL_ID, anchorEl);
         }
         const controller = await ensureSurface();
         controller?.activate?.();
         if (anchorEl?.nodeType === 1 && typeof requestAnimationFrame === 'function') {
             requestAnimationFrame(() => {
-                positionPanelNearTool('eve_dilas_dialog', anchorEl);
+                positionPanelNearTool(PANEL_ID, anchorEl);
             });
         }
         syncHeaderState();
