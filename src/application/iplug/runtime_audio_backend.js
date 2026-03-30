@@ -32,9 +32,11 @@ export const getTauriInvoke = (env = globalThis) => {
 
 export const isAuv3AudioRuntime = (env = globalThis) => {
     const hostEnv = readHostEnv(env);
+    // Only match when the native host explicitly declares AUv3 mode.
+    // hasSwiftBridge alone is NOT sufficient — the standalone iOS app
+    // also exposes webkit.messageHandlers.swiftBridge but is NOT an AUv3.
     return hostEnv === 'auv3'
-        || env?.__AUV3_MODE__ === true
-        || hasSwiftBridge(env);
+        || env?.__AUV3_MODE__ === true;
 };
 
 export const isTauriAudioRuntime = (env = globalThis) => {
