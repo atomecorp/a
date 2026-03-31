@@ -13,8 +13,8 @@ export const hasIPlugBridge = (env = globalThis) => !!(
 
 export const getTauriInvoke = (env = globalThis) => {
     try {
-        if (typeof env?.__TAURI__?.core?.invoke === 'function') {
-            return env.__TAURI__.core.invoke.bind(env.__TAURI__.core);
+        if (typeof env?.__TAURI_INTERNALS__?.invoke === 'function') {
+            return env.__TAURI_INTERNALS__.invoke.bind(env.__TAURI_INTERNALS__);
         }
     } catch (_) { }
     try {
@@ -23,8 +23,8 @@ export const getTauriInvoke = (env = globalThis) => {
         }
     } catch (_) { }
     try {
-        if (typeof env?.__TAURI_INTERNALS__?.invoke === 'function') {
-            return env.__TAURI_INTERNALS__.invoke.bind(env.__TAURI_INTERNALS__);
+        if (typeof env?.__TAURI__?.core?.invoke === 'function') {
+            return env.__TAURI__.core.invoke.bind(env.__TAURI__.core);
         }
     } catch (_) { }
     return null;

@@ -40,11 +40,11 @@ function isUiLoggingDisabled() {
 }
 
 function getTauriInvoke() {
-  if (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function') {
-    return window.__TAURI__.invoke.bind(window.__TAURI__);
-  }
   if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') {
     return window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
+  }
+  if (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function') {
+    return window.__TAURI__.invoke.bind(window.__TAURI__);
   }
   return null;
 }

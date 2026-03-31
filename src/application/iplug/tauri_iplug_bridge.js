@@ -14,11 +14,13 @@
 
     function getInvoke() {
         try {
+            if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') {
+                return window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
+            }
             if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
                 return window.__TAURI__.core.invoke.bind(window.__TAURI__.core);
             }
             if (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function') return window.__TAURI__.invoke.bind(window.__TAURI__);
-            if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') return window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
         } catch (_) { }
         return null;
     }
@@ -69,11 +71,14 @@
 
     // Poll native events
     let polling = false;
+    let disposed = false;
+    let intervalId = null;
     async function pollOnce() {
-        if (polling) return;
+        if (disposed || polling) return;
         polling = true;
         try {
             const events = await invoke('iplug_poll_events', {}).catch(() => null);
+            if (disposed) return;
             if (Array.isArray(events)) {
                 for (const evt of events) forwardNativeEvent(evt);
             }
@@ -85,8 +90,18 @@
     // 20Hz is enough for UI-level record_done delivery.
     const POLL_MS = 50;
     try {
-        setInterval(pollOnce, POLL_MS);
+        intervalId = setInterval(pollOnce, POLL_MS);
     } catch (_) { }
+
+    const dispose = () => {
+        disposed = true;
+        if (intervalId !== null) {
+            try { clearInterval(intervalId); } catch (_) { }
+            intervalId = null;
+        }
+    };
+    try { window.addEventListener('beforeunload', dispose, { once: true }); } catch (_) { }
+    try { window.addEventListener('pagehide', dispose, { once: true }); } catch (_) { }
 
     // Kick immediately
     pollOnce();
