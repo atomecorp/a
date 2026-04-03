@@ -31,20 +31,6 @@
         return;
     }
 
-    // UI -> native
-    if (typeof window.__toDSP !== 'function') {
-        window.__toDSP = function (msg) {
-            try {
-                // Fire-and-forget (do not await on UI path)
-                invoke('iplug_send', { msg: msg }).catch((e) => {
-                    console.warn('[tauri_iplug_bridge] iplug_send failed:', e && e.message ? e.message : e);
-                });
-            } catch (e) {
-                console.warn('[tauri_iplug_bridge] __toDSP failed:', e && e.message ? e.message : e);
-            }
-        };
-    }
-
     // Native -> UI helpers
     function forwardNativeEvent(evt) {
         if (!evt || typeof evt !== 'object') return;
@@ -73,6 +59,7 @@
     let polling = false;
     let disposed = false;
     let intervalId = null;
+    let pollingStarted = false;
     async function pollOnce() {
         if (disposed || polling) return;
         polling = true;
@@ -87,14 +74,38 @@
         }
     }
 
+    function ensurePollingStarted() {
+        if (disposed || pollingStarted) return;
+        pollingStarted = true;
+        try {
+            intervalId = setInterval(pollOnce, POLL_MS);
+        } catch (_) {
+            intervalId = null;
+        }
+        pollOnce();
+    }
+
+    // UI -> native
+    if (typeof window.__toDSP !== 'function') {
+        window.__toDSP = function (msg) {
+            try {
+                ensurePollingStarted();
+                // Fire-and-forget (do not await on UI path)
+                invoke('iplug_send', { msg: msg }).catch((e) => {
+                    console.warn('[tauri_iplug_bridge] iplug_send failed:', e && e.message ? e.message : e);
+                });
+            } catch (e) {
+                console.warn('[tauri_iplug_bridge] __toDSP failed:', e && e.message ? e.message : e);
+            }
+        };
+    }
+
     // 20Hz is enough for UI-level record_done delivery.
     const POLL_MS = 50;
-    try {
-        intervalId = setInterval(pollOnce, POLL_MS);
-    } catch (_) { }
 
     const dispose = () => {
         disposed = true;
+        pollingStarted = false;
         if (intervalId !== null) {
             try { clearInterval(intervalId); } catch (_) { }
             intervalId = null;
@@ -102,7 +113,4 @@
     };
     try { window.addEventListener('beforeunload', dispose, { once: true }); } catch (_) { }
     try { window.addEventListener('pagehide', dispose, { once: true }); } catch (_) { }
-
-    // Kick immediately
-    pollOnce();
 })();
