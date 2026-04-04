@@ -2182,36 +2182,10 @@ async fn user_recordings_upload_handler(
         urlencoding::decode(file_name_raw).unwrap_or_else(|_| Cow::from(file_name_raw));
     let safe_name = sanitize_file_name(decoded.as_ref());
 
-    let auth_state = match &state.auth_state {
-        Some(s) => s,
-        None => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "success": false, "error": "Auth state not initialized" })),
-            );
-        }
+    let user_id = match require_auth_user(&headers, &state) {
+        Ok(user_id) => user_id,
+        Err(response) => return response,
     };
-
-    let token = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim())
-        .and_then(|v| {
-            if v.to_lowercase().starts_with("bearer ") {
-                Some(v[7..].trim())
-            } else {
-                Some(v)
-            }
-        })
-        .filter(|v| !v.is_empty());
-
-    let user_id = local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token);
-    if user_id == "anonymous" {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "success": false, "error": "Unauthorized" })),
-        );
-    }
 
     let recordings_dir = state
         .project_root
