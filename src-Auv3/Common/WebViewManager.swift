@@ -243,7 +243,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     } else if isExtension && FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
                         webView.load(URLRequest(url: schemeURL))
                     } else if let fileURL = mainURL {
-                        webView.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+                        webView.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
                     } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
                         webView.load(URLRequest(url: schemeURL))
                     }
@@ -297,7 +297,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             }
         } else if let fileURL = mainURL {
             shared.log.info("Attempt #\(mainLoadAttempts) loading App entry file URL src/index.html")
-            webView.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+            webView.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
             mainLoadDone = true
             return true
         } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
@@ -927,7 +927,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     wv.load(URLRequest(url: entry))
                 } else if let fileURL = Bundle.main.url(forResource: "src/index", withExtension: "html") {
                     self.log.info("Retry load file src/index.html after termination; backoff=\(backoff)")
-                    wv.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+                    wv.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
                 } else if let entry = URL(string: "atome:///src/index.html") {
                     self.log.info("Retry fallback atome:///src/index.html after termination; backoff=\(backoff)")
                     wv.load(URLRequest(url: entry))
