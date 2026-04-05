@@ -27,14 +27,37 @@ fi
 
 restart_after=true
 no_git=false
+no_cert=false
 for arg in "$@"; do
 	if [[ "$arg" == "--no-restart" ]]; then
 		restart_after=false
 	elif [[ "$arg" == "--no-git" ]]; then
 		no_git=true
+	elif [[ "$arg" == "--no-cert" ]]; then
+		no_cert=true
 	fi
 done
 
+# ── SSL Certificate check & renewal ──────────────────────────────────────
+renew_certificate() {
+	if ! command -v certbot &>/dev/null; then
+		echo "[cert] certbot not found, skipping certificate renewal"
+		return 0
+	fi
+
+	echo "[cert] Running certbot renew for all managed certificates..."
+	if certbot renew --non-interactive --deploy-hook "systemctl reload nginx" 2>&1; then
+		echo "[cert] Certificate check/renewal completed successfully"
+	else
+		echo "[cert] WARNING: certbot renew failed — check logs with: sudo certbot renew --dry-run"
+	fi
+}
+
+if [[ "$no_cert" == false ]]; then
+	renew_certificate
+fi
+
+# ── Application update ────────────────────────────────────────────────────
 update_args=("$@" "--no-restart")
 
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
