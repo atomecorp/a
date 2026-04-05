@@ -75,11 +75,14 @@ renew_certificate() {
 		echo "[$timestamp][cert] WARNING: no certificate found at $cert_path"
 	fi
 
-	# Attempt renewal
+	# Attempt renewal (stop nginx before so certbot can bind port 80, restart after)
 	echo "[$timestamp][cert] Running: certbot renew --non-interactive --force-renewal ..."
+	echo "[$timestamp][cert]   Using pre/post hooks to stop/start nginx (port 80 conflict workaround)"
 	local certbot_output
 	local certbot_exit=0
-	certbot_output="$(certbot renew --non-interactive --force-renewal --deploy-hook "systemctl reload nginx" 2>&1)" || certbot_exit=$?
+	certbot_output="$(certbot renew --non-interactive --force-renewal \
+		--pre-hook "systemctl stop nginx" \
+		--post-hook "systemctl start nginx" 2>&1)" || certbot_exit=$?
 
 	timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
 	echo "[$timestamp][cert] certbot exit code: $certbot_exit"
