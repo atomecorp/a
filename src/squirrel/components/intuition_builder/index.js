@@ -44,6 +44,13 @@ import {
     resolveFloatingHostBlur,
     resolveFloatingGripBlur
 } from './theme_utils.js';
+import {
+    INTUITION_FLOATING_GROUP_LAYER_ID,
+    INTUITION_LAYER_Z_INDEX,
+    attachToIntuitionFloatingGroupLayer,
+    ensureIntuitionFloatingGroupLayer,
+    ensureIntuitionRoot
+} from '../../../application/eVe/intuition/runtime/layer_contract.js';
 
 function save_intuition_menu(...args) {
     if (typeof window.saveMenuHook === 'function') {
@@ -489,23 +496,48 @@ function toggleEditMode(force) {
 }
 
 function ensureFloatingLayer() {
+    const floatingGroupLayer = ensureIntuitionFloatingGroupLayer();
     let layer = document.getElementById('intuition-floating-layer');
-    if (layer) return layer;
-    ensureEditModeStyle();
-    layer = $('div', {
-        id: 'intuition-floating-layer',
-        parent: 'body',
-        css: {
-            position: 'absolute',
-            top: '0',
-            left: '0',
-            width: '100vw',
-            height: '100vh',
-            pointerEvents: 'none',
-            zIndex: 10000010
-        }
-    });
+    if (!layer) {
+        ensureEditModeStyle();
+        layer = $('div', {
+            id: 'intuition-floating-layer',
+            parent: floatingGroupLayer ? `#${INTUITION_FLOATING_GROUP_LAYER_ID}` : 'body',
+            css: {
+                position: 'fixed',
+                inset: '0',
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                zIndex: String(INTUITION_LAYER_Z_INDEX.FLOATING_GROUP_NODE)
+            }
+        });
+    } else {
+        layer.style.position = 'fixed';
+        layer.style.inset = '0';
+        layer.style.width = '100%';
+        layer.style.height = '100%';
+        layer.style.pointerEvents = 'none';
+    }
+    if (layer?.dataset) {
+        layer.dataset.eveRequiredLayer = INTUITION_FLOATING_GROUP_LAYER_ID;
+    }
+    if (floatingGroupLayer) {
+        attachToIntuitionFloatingGroupLayer(layer);
+    } else if (layer?.style) {
+        layer.style.zIndex = String(INTUITION_LAYER_Z_INDEX.FLOATING_GROUP_NODE);
+    }
     return layer;
+}
+
+function appendNodeToFloatingLayer(node) {
+    if (!node || typeof document === 'undefined') return null;
+    const layer = ensureFloatingLayer();
+    const parent = layer || document.body || document.documentElement || null;
+    if (parent && node.parentElement !== parent) {
+        try { parent.appendChild(node); } catch (_) { /* ignore */ }
+    }
+    return parent;
 }
 
 function resolveFloatingGripIconInfo(opts = {}) {
@@ -2045,8 +2077,8 @@ function handleMenuItemDragMove(e, ctx) {
                 theme: currentTheme,
                 typeName: ctx.typeName
             });
-            if (ctx.ghostEl && typeof document !== 'undefined' && document.body) {
-                document.body.appendChild(ctx.ghostEl);
+            if (ctx.ghostEl) {
+                appendNodeToFloatingLayer(ctx.ghostEl);
             }
         }
     }
@@ -4515,6 +4547,8 @@ const intuitionAddOn = {
 
 function ensureIntuitionLayerRoot() {
     if (typeof document === 'undefined') return null;
+    const sharedRoot = ensureIntuitionRoot();
+    if (sharedRoot) return sharedRoot;
     let root = document.getElementById('intuition');
     if (root) return root;
     const parent = document.body || document.documentElement;
@@ -5332,8 +5366,8 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     if (el.parentElement) {
         try { el.parentElement.removeChild(el); } catch (_) { }
     }
-    if (typeof document !== 'undefined' && document.body && el.parentElement !== document.body) {
-        try { document.body.appendChild(el); } catch (_) { }
+    if (typeof document !== 'undefined') {
+        appendNodeToFloatingLayer(el);
     }
 
     if (el.dataset) {
@@ -5483,8 +5517,8 @@ function handlePaletteClick(el, cfg) {
     el.style.height = `${placeholderHeight}px`;
     // Passer l'élément en position fixed pour le sortir du container, sans changer x/y main-axis
     el.style.position = 'fixed';
-    // Déplacer dans le body pour éviter le bug des ancêtres transformés qui piègent position:fixed
-    try { if (document.body && el.parentElement !== document.body) document.body.appendChild(el); } catch (e) { }
+    // Déporter dans la couche flottante canonique pour garder l'ordre panel > palette.
+    appendNodeToFloatingLayer(el);
     el.style.left = `${phRect.left}px`;
     el.style.top = `${phRect.top}px`;
     el.style.margin = '0';
@@ -5674,7 +5708,7 @@ function popOutPaletteByName(name, opts = {}) {
         el.style.width = `${anchorRect.width}px`;
         el.style.height = `${anchorRect.height}px`;
         el.style.position = 'fixed';
-        try { if (document.body && el.parentElement !== document.body) document.body.appendChild(el); } catch (e) { }
+        appendNodeToFloatingLayer(el);
         el.style.left = `${anchorRect.left}px`;
         el.style.top = `${anchorRect.top}px`;
         el.style.margin = '0';
@@ -5703,7 +5737,7 @@ function popOutPaletteByName(name, opts = {}) {
         el.style.width = `${phRect.width}px`;
         el.style.height = `${phRect.height}px`;
         el.style.position = 'fixed';
-        try { if (document.body && el.parentElement !== document.body) document.body.appendChild(el); } catch (e) { }
+        appendNodeToFloatingLayer(el);
         el.style.left = `${phRect.left}px`;
         el.style.top = `${phRect.top}px`;
         el.style.margin = '0';
