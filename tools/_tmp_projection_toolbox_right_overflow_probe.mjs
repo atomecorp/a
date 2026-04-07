@@ -29,7 +29,7 @@ const run = async () => {
     const ready = await waitFor(page, async () => {
       try {
         const mod = await import('/application/eVe/intuition/tools/project_drop.js');
-        const stateMod = await import('/application/eVe/intuition_x/core/state.js');
+        const stateMod = await import('/application/eVe/intuition/core/state.js');
         return !!mod?.rebalanceProjectionDynamicToolboxes && !!stateMod?.setHandedness;
       } catch (_) {
         return false;
@@ -39,7 +39,7 @@ const run = async () => {
 
     const setup = await page.evaluate(async () => {
       const dropMod = await import('/application/eVe/intuition/tools/project_drop.js');
-      const stateMod = await import('/application/eVe/intuition_x/core/state.js');
+      const stateMod = await import('/application/eVe/intuition/core/state.js');
       stateMod.setHandedness('right', { source: 'probe' });
       const root = document.getElementById('intuition_tool_layer') || document.body;
       const probeProjectId = `probe_project_right_overflow_${Date.now()}`;

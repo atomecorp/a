@@ -2843,7 +2843,7 @@ function createZonespecial(cfg) {
 function openPaletteFromTool(el, cfg = {}) {
     const nameKey = cfg.nameKey
         || (el && el.dataset && el.dataset.nameKey)
-        || (cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+        || (cfg.id ? String(cfg.id).replace(/^_intuition/, '') : '');
     if (!nameKey) return;
     const def = intuition_content[nameKey];
     const children = def && Array.isArray(def.children) ? def.children.filter(Boolean) : [];
@@ -3242,7 +3242,7 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
 // Render particle value + unit at bottom from currentTheme settings (plain text only)
 function renderParticleValueFromTheme(cfg) {
     if (!cfg || !cfg.id) return;
-    const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition/, '') : '');
     const def = intuition_content[key];
     if (!def) return;
     const particleEl = document.getElementById(cfg.id);
@@ -3434,7 +3434,7 @@ function renderParticleValueFromTheme(cfg) {
     }
 
     // Inline edit on double click (value only; unit stays static)
-    const nameKey = (particleEl && particleEl.dataset && particleEl.dataset.nameKey) || (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const nameKey = (particleEl && particleEl.dataset && particleEl.dataset.nameKey) || (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition/, '') : '');
     const beginEdit = () => {
         if (!nameKey) return;
         const def = intuition_content[nameKey];
@@ -3670,7 +3670,7 @@ function renderParticleValueFromTheme(cfg) {
 // ...existing code...
 function renderHelperForItem(cfg) {
     if (!cfg || !cfg.id) return;
-    const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition/, '') : '');
     const def = intuition_content[key];
     if (!def || !def.helper) return;
 
@@ -4482,7 +4482,7 @@ function expandToolInline(el, cfg) {
     if (!el) return;
     const supportEl = grab('toolbox_support');
     if (!supportEl) return;
-    const key = (el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const key = (el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition/, '') : '');
     const desc = intuition_content[key];
     const children = (desc && Array.isArray(desc.children)) ? desc.children : null;
     if (!children || !children.length) return;
@@ -4979,7 +4979,7 @@ window.setDirection = function (dir) {
             const nodes = supportEl.querySelectorAll('[id^="_intuition_"]');
             nodes.forEach(node => {
                 if (!node || !node.dataset) return;
-                const key = node.dataset.nameKey || String(node.id).replace(/^_intuition_/, '');
+                const key = node.dataset.nameKey || String(node.id).replace(/^_intuition/, '');
                 const def = intuition_content[key];
                 if (!def || def.type !== particle) return;
                 renderParticleValueFromTheme({ id: node.id, nameKey: key });
@@ -5004,7 +5004,7 @@ window.refreshMenu = function (partialTheme = {}) {
             const nodes = supportEl.querySelectorAll('[id^="_intuition_"]');
             nodes.forEach(node => {
                 if (!node || !node.dataset) return;
-                const key = node.dataset.nameKey || String(node.id).replace(/^_intuition_/, '');
+                const key = node.dataset.nameKey || String(node.id).replace(/^_intuition/, '');
                 const def = intuition_content[key];
                 if (!def || def.type !== particle) return;
                 renderParticleValueFromTheme({ id: node.id, nameKey: key });
@@ -5528,7 +5528,7 @@ function handlePaletteClick(el, cfg) {
     setLabelCentered(el, true);
     // Apply palette icon/label visibility rules while outside
     setPaletteVisualState(el, true);
-    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition/, '') : '');
     const themeBg = (currentTheme && currentTheme.satellite_bg);
     const paletteType = inferDefinitionType(key ? intuition_content[key] : undefined);
     applyThemeToFloatingEntry(el, currentTheme, paletteType);
@@ -5595,7 +5595,7 @@ function handlePaletteClick(el, cfg) {
 
 function handleFloatingPaletteClick(el, cfg) {
     if (!el) return;
-    const nameKey = (el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const nameKey = (el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition/, '') : '');
     if (!nameKey) return;
     const def = intuition_content[nameKey];
     if (!def) return;

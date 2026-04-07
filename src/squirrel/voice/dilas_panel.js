@@ -3,7 +3,7 @@ import { eveT, onEveLocaleChange } from '../../application/eVe/i18n/i18n.js';
 import {
     ensurePanelAttachedToIntuitionLayer,
     positionPanelNearTool
-} from '../../application/eVe/intuition/panel_manager.js';
+} from '../../application/eVe/intuition/runtime/panel_api.js';
 import { mountHomeVoiceSurface } from './home_surface.js';
 
 const PANEL_KEY = '__SQUIRREL_DILAS_PANEL__';

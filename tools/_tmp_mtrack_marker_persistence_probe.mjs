@@ -125,34 +125,37 @@ const openGroupTimeline = async (page, groupId) => {
         return { route: 'runtime', ok: false, error: String(error?.message || error || 'runtime_open_failed') };
       }
     }
-    const open = window.eVeGroupTimeline?.openGroupTimeline;
-    if (typeof open === 'function') {
-      try {
-        const res = await open({
-          group_id: String(gid || ''),
-          source: { type: 'headless_probe', layer: 'marker_persistence' }
-        });
-        if (res?.ok) {
-          return { route: 'bridge', ok: true, res };
+    try {
+      const mod = await import('/application/eVe/intuition/runtime/group_timeline_api.js');
+      const open = mod?.openGroupTimeline;
+      if (typeof open === 'function') {
+        try {
+          const res = await open({
+            group_id: String(gid || ''),
+            source: { type: 'headless_probe', layer: 'marker_persistence' }
+          });
+          if (res?.ok) {
+            return { route: 'group_timeline_api', ok: true, res };
+          }
+          const host = document.querySelector(`[data-atome-id="${String(gid || '').replace(/"/g, '\\"')}"]`);
+          if (host instanceof HTMLElement) {
+            const rect = host.getBoundingClientRect();
+            return {
+              route: 'group_timeline_api_dblclick',
+              ok: false,
+              res,
+              click: {
+                x: Math.round(rect.left + rect.width * 0.5),
+                y: Math.round(rect.top + rect.height * 0.5)
+              }
+            };
+          }
+          return { route: 'group_timeline_api', ok: false, res };
+        } catch (error) {
+          return { route: 'group_timeline_api', ok: false, error: String(error?.message || error || 'open_failed') };
         }
-        const host = document.querySelector(`[data-atome-id="${String(gid || '').replace(/"/g, '\\"')}"]`);
-        if (host instanceof HTMLElement) {
-          const rect = host.getBoundingClientRect();
-          return {
-            route: 'bridge_fallback_dblclick',
-            ok: false,
-            res,
-            click: {
-              x: Math.round(rect.left + rect.width * 0.5),
-              y: Math.round(rect.top + rect.height * 0.5)
-            }
-          };
-        }
-        return { route: 'bridge', ok: false, res };
-      } catch (error) {
-        return { route: 'bridge', ok: false, error: String(error?.message || error || 'open_failed') };
       }
-    }
+    } catch (_) { }
     const host = document.querySelector(`[data-atome-id="${String(gid || '').replace(/"/g, '\\"')}"]`);
     if (!(host instanceof HTMLElement)) return { route: 'dblclick', ok: false, error: 'group_host_missing' };
     const rect = host.getBoundingClientRect();
@@ -167,7 +170,7 @@ const openGroupTimeline = async (page, groupId) => {
   }, groupId, null);
   if (
     (invoked?.route === 'dblclick' && invoked?.ok && invoked?.click)
-    || (invoked?.route === 'bridge_fallback_dblclick' && invoked?.click)
+    || (invoked?.route === 'group_timeline_api_dblclick' && invoked?.click)
   ) {
     await page.mouse.dblclick(invoked.click.x, invoked.click.y, { delay: 55 });
   }
@@ -332,12 +335,13 @@ const resolveOrCreateTargetGroup = async (page) => {
   await sleep(260);
   if (!probe?.invoke || probe.invoke?.ok === false) {
     await safeEval(page, async () => {
-      const bridge = window.eVeGroupTimeline?.openGroupTimeline;
-      if (typeof bridge === 'function') {
-        try {
-          await bridge({ source: { type: 'headless_probe', layer: 'marker_persistence' } });
-        } catch (_) { }
-      }
+      try {
+        const mod = await import('/application/eVe/intuition/runtime/group_timeline_api.js');
+        const open = mod?.openGroupTimeline;
+        if (typeof open === 'function') {
+          await open({ source: { type: 'headless_probe', layer: 'marker_persistence' } });
+        }
+      } catch (_) { }
     }, null, null);
   }
 

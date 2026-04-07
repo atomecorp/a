@@ -117,7 +117,7 @@ An important consequence is that "web mode" must be treated explicitly as two di
 | `src-audio-wasm/src/lib.rs` | WASM build of the engine |
 | `src/application/iplug/backend.kira.js` | JS backend for Rust / native engine usage |
 | `src/application/iplug/audio.facade.js` | Public audio facade |
-| `src/application/eVe/intuition/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
+| `src/application/eVe/intuition_/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
 | `src-Auv3/Common/WebViewManager.swift` | JS → Swift bridge for AUv3 audio commands and PCM injection |
 | `src-Auv3/Common/AudioControllerProtocol.swift` | common contract for playback / stop / debug expected peak propagation |
 | `src-Auv3/auv3/AudioUnitViewController.swift` | AUv3 controller exposing the audio controller to the WebView bridge |
@@ -417,8 +417,8 @@ For this document to be usable as a real migration spec, the first rule is to na
 | Shared media persistence | `src/application/eVe/APIS/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
 | Media atome rendering | `src/application/examples/user.js`, `src/application/eVe/APIS/audio_api.js`, `src/application/eVe/APIS/video_api.js` | all media atomes must resolve to one playback ownership model |
 | AUv3 native bridge | `src-Auv3/Common/WebViewManager.swift`, `src-Auv3/Common/AudioControllerProtocol.swift`, `src-Auv3/auv3/AudioUnitViewController.swift`, `src-Auv3/auv3/utils.swift` | reference native implementation for Apple timing and routing |
-| Debug validation | `src/application/eVe/intuition/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
-| MTrack integration | `src/application/eVe/intuition/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
+| Debug validation | `src/application/eVe/intuition_/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
+| MTrack integration | `src/application/eVe/intuition_/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
 
 ### Meaning of "Migrated"
 
@@ -797,7 +797,7 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `src/application/eVe/intuition/tools/audio_engine_debug_runtime.js` | runtime validation suite | canonical validation harness | keep as source of truth for fixture playback, normalized sample-accuracy assessment, suite aggregation | AUv3 `play_record_sync` and `sample_alignment` stay at `delta_samples = 0` | `target` |
+| `src/application/eVe/intuition_/tools/audio_engine_debug_runtime.js` | runtime validation suite | canonical validation harness | keep as source of truth for fixture playback, normalized sample-accuracy assessment, suite aggregation | AUv3 `play_record_sync` and `sample_alignment` stay at `delta_samples = 0` | `target` |
 | AUv3 native timing payloads | native record-stop analysis | canonical runtime timing contract | keep exposing `first_peak_frame`, `playback_start_frame`, `recording_start_frame`, `expected_peak_frame` | sample-accurate verification remains possible | `target` |
 | ad hoc media debug paths | fragmented feature-level diagnostics | shared engine-observing diagnostics | remove or demote any debug tooling that does not observe the production signal path | meters and debug panels match audible output | `retire` |
 
@@ -815,7 +815,7 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `src/application/eVe/intuition/tools/mtrack.js` | timeline feature implementation | unified engine transport client | route audible playback, preview, scrub and playhead to engine clock | MTrack playback is engine-clocked | `current` |
+| `src/application/eVe/intuition_/tools/mtrack.js` | timeline feature implementation | unified engine transport client | route audible playback, preview, scrub and playhead to engine clock | MTrack playback is engine-clocked | `current` |
 | MTrack bridge / controller files | panel/runtime coordination | transport adapter on top of unified engine | keep UI/panel coordination, remove ownership of audio semantics | preview and timeline playback share routing model | `bridge` |
 | MTrack audio clips | mixed feature ownership | engine-managed clip sources | preload and render as first-class engine clips | mute/solo/gain behave predictably | `current` |
 | MTrack video clips | visual clip ownership with implicit soundtrack | visual clip + engine-owned soundtrack | extract or route soundtrack to the unified engine, keep visual timeline sync | no double audio, synced seek/play/rate | `current` |
