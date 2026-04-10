@@ -355,7 +355,9 @@ function ensureEditModeStyle() {
             align-items: stretch;
             justify-content: flex-start;
             border-radius: 12px;
-     
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            -webkit-transform-style: preserve-3d;
             z-index: 10000020;
         }
 
@@ -375,6 +377,8 @@ function ensureEditModeStyle() {
             text-transform: uppercase;
             cursor: grab;
             user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
             border-radius: 12px 12px 0 0;
         }
 
@@ -422,6 +426,8 @@ function ensureEditModeStyle() {
             justify-content: center;
             padding: 4px;
             gap: 6px;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
         }
     `;
     $('style', { id: 'intuition-edit-mode-style', parent: 'head', text: styleText });
@@ -1052,7 +1058,8 @@ function createFloatingHost(opts = {}) {
     const grip = $('div', {
         id: `${id}__grip`,
         parent: `#${id}`,
-        class: 'intuition-floating-grip'
+        class: 'intuition-floating-grip',
+        css: { touchAction: 'none' }
     });
     const appliedGripIcon = renderFloatingGripBadge(grip, opts);
 
@@ -4266,6 +4273,10 @@ function createFloatingDragGhost(opts = {}) {
     ghost.style.borderRadius = themeRef && themeRef.item_border_radius ? String(themeRef.item_border_radius) : '12px';
     ghost.style.background = resolveFloatingHostBackground(themeRef, opts.typeName || 'tool');
     ghost.style.boxShadow = themeRef && themeRef.item_shadow ? String(themeRef.item_shadow) : 'none';
+    // iOS WebKit compositing fix: force transparent GPU layer backing
+    ghost.style.webkitBackfaceVisibility = 'hidden';
+    ghost.style.backfaceVisibility = 'hidden';
+    ghost.style.webkitTransformStyle = 'preserve-3d';
     ghost.style.color = themeRef && themeRef.tool_text ? String(themeRef.tool_text) : '#cacacaff';
     ghost.style.fontSize = themeRef && themeRef.tool_font_px ? `${themeRef.tool_font_px}px` : '10px';
     ghost.style.fontFamily = (themeRef && themeRef.tool_font_family) || 'system-ui, sans-serif';
@@ -4675,9 +4686,19 @@ function ensureHiddenScrollbarsStyle() {
 }
 
 // Helper to set backdrop-filter with WebKit prefix
+// Treats zero-value blur (e.g. '0px', '0', 0) as 'none' to avoid iOS WebKit
+// GPU compositor layer promotion which causes an opaque black backing layer.
 function applyBackdropStyle(el, blurPx) {
     if (!el || !el.style) return;
-    const val = blurPx ? `blur(${blurPx})` : 'none';
+    // Normalise: strip the value to detect zero-blur
+    let effectiveBlur = blurPx;
+    if (effectiveBlur != null && effectiveBlur !== false) {
+        const str = String(effectiveBlur).trim().replace(/px$/i, '');
+        if (str === '' || str === '0' || str === 'none' || str === 'false') {
+            effectiveBlur = null;
+        }
+    }
+    const val = effectiveBlur ? `blur(${effectiveBlur})` : 'none';
     try {
         el.style.backdropFilter = val;
         el.style.WebkitBackdropFilter = val;
@@ -6355,7 +6376,9 @@ function restoreExtractedFloatingElement(options = {}) {
     };
 
     if (Array.isArray(rawPayload)) {
-        return rawPayload.map((entry) => restoreOne(entry)).filter(Boolean);
+        const results = rawPayload.map((entry) => restoreOne(entry)).filter(Boolean);
+        if (results.length && !isEditModeActive()) enterEditMode();
+        return results;
     }
     if (rawPayload && typeof rawPayload === 'object' && !rawPayload.id && !rawPayload.host && !rawPayload.content && !rawPayload.reference && !rawPayload.toolboxOffsetMain && !rawPayload.toolboxOffsetEdge && !rawPayload.position) {
         const restored = [];
@@ -6369,9 +6392,12 @@ function restoreExtractedFloatingElement(options = {}) {
                 restored.push(info);
             }
         });
+        if (restored.length && !isEditModeActive()) enterEditMode();
         return restored;
     }
-    return restoreOne(rawPayload);
+    const singleResult = restoreOne(rawPayload);
+    if (singleResult && !isEditModeActive()) enterEditMode();
+    return singleResult;
 }
 
 window.getFloatingPalettePersistenceSnapshot = function getFloatingPalettePersistenceSnapshot(hostId) {
