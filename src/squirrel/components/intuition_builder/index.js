@@ -2330,13 +2330,13 @@ function calculate_positions() {
     const toolboxOffsetMainNum = parseFloat(currentTheme.toolboxOffsetMain) || 0;
     const toolboxOffsetEdgeNum = parseFloat(currentTheme.toolboxOffsetEdge) || 0;
     const itemsOffsetMainNum = parseFloat(currentTheme.items_offset_main || '0') || 0;
+    const supportGapNum = parseFloat(currentTheme.support_gap) || 0;
 
     // centrage cross‑axis
     const centerDelta = (itemsSizeNum - thicknessNum) / 2;
-    const item_border_radius = parseFloat(currentTheme.item_border_radius);
 
-    // offsets
-    const itemOffsetMainPx = `${toolboxOffsetMainNum + itemsSizeNum - item_border_radius}px`;
+    // offsets — support starts right after the toolbox trigger + optional gap
+    const itemOffsetMainPx = `${toolboxOffsetMainNum + itemsSizeNum + supportGapNum}px`;
     const itemOffsetEdgeNum = toolboxOffsetEdgeNum + centerDelta;
     const itemOffsetEdgePx = `${itemOffsetEdgeNum}px`;
 

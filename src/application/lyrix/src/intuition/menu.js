@@ -185,6 +185,7 @@ Intuition({
         anim_duration_ms: 200,
         toolboxOffsetMain: "3px",
         toolboxOffsetEdge: "3px",
+        support_gap: '35px',
         satellite_bg: 'red',
         // tool_active_bg: "yellow",
         // tool_lock_bg: '#ff5555', 
