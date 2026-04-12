@@ -97,7 +97,8 @@ pub fn audio_load_clip(id: String, path: String) -> Result<Value, String> {
 #[tauri::command]
 pub fn audio_load_clip_from_bytes(id: String, bytes: Vec<u8>) -> Result<Value, String> {
     let byte_len = bytes.len();
-    playback::load_clip_from_bytes(&id, &bytes)?;
+    // Pass owned Vec to avoid an extra .to_vec() copy inside playback
+    playback::load_clip_from_bytes(&id, bytes)?;
     Ok(json!({ "success": true, "id": id, "bytes_len": byte_len }))
 }
 
@@ -164,7 +165,8 @@ pub fn audio_record_stop(session_id: String) -> Result<Value, String> {
         "file_path": result.file_path,
         "duration_sec": result.duration_sec,
         "sample_rate": result.sample_rate,
-        "channels": result.channels
+        "channels": result.channels,
+        "output_format": result.output_format
     }))
 }
 
@@ -236,7 +238,10 @@ pub fn audio_get_levels() -> Result<Value, String> {
         "rms": levels.rms,
         "peak": levels.peak,
         "rms_db": levels.rms_db,
-        "peak_db": levels.peak_db
+        "peak_db": levels.peak_db,
+        "smoothed_rms": levels.smoothed_rms,
+        "smoothed_rms_db": levels.smoothed_rms_db,
+        "clip_count": levels.clip_count
     }))
 }
 

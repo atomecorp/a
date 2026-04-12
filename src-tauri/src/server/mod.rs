@@ -257,13 +257,20 @@ fn sanitize_recording_id(raw: &str) -> Option<String> {
     if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
         return None;
     }
-    if !trimmed
+    // Apply sanitize_file_name first so that URL-decoded characters like spaces
+    // are converted to underscores (consistent with upload handler behavior)
+    // instead of rejecting the whole id as invalid.
+    let sanitized = sanitize_file_name(trimmed);
+    if sanitized.is_empty() {
+        return None;
+    }
+    if !sanitized
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
     {
         return None;
     }
-    Some(trimmed.to_string())
+    Some(sanitized)
 }
 
 fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
@@ -2633,7 +2640,26 @@ async fn download_recording_handler(
             }
             Err(err) => {
                 println!("[download_recording_handler] Direct read failed: {}", err);
-                // Fall through to DB lookup
+                // Fall through to downloads dir fallback, then DB lookup
+            }
+        }
+    }
+
+    // Fallback: file may have been stored in downloads/uploads dir instead of recordings.
+    // This happens when a file is uploaded via the regular upload endpoint but the clip
+    // source references /api/recordings/ (e.g. after a sync from another device).
+    if let Ok(downloads_dir) = resolve_user_downloads_dir(&state, &user_id).await {
+        let downloads_path = downloads_dir.join(&safe_name);
+        if downloads_path.exists() {
+            if let Ok(bytes) = fs::read(&downloads_path).await {
+                println!(
+                    "[download_recording_handler] ✅ Serving recording from downloads fallback: {:?} ({} bytes)",
+                    downloads_path,
+                    bytes.len()
+                );
+                let ct = guess_mime_from_ext(&safe_name);
+                let disposition = format!("inline; filename=\"{}\"", safe_name);
+                return serve_bytes_with_range(bytes, ct, "", &headers, &disposition);
             }
         }
     }

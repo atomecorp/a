@@ -213,13 +213,18 @@ import {
             userId
         };
 
+        // Pre-register the PENDING entry BEFORE creating the Promise to avoid
+        // a race where the native event fires before the Promise executor runs.
+        const pendingEntry = {
+            provider: 'iplug_native_recorder',
+            transport: 'auv3',
+            start: null,
+            stop: null
+        };
+        PENDING.set(sessionId, pendingEntry);
+
         return new Promise((resolve, reject) => {
-            PENDING.set(sessionId, {
-                provider: 'iplug_native_recorder',
-                transport: 'auv3',
-                start: { resolve, reject },
-                stop: null
-            });
+            pendingEntry.start = { resolve, reject };
             if (!sendNativeMessage(msg)) {
                 PENDING.delete(sessionId);
                 reject(new Error('Native recorder bridge is not available'));

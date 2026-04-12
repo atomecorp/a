@@ -8,7 +8,7 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 // - Dynamic routing to active backend
 // - Event bus (type -> Set(callback))
 // - detect_and_set_backend() prefers kira > iplug > html
-// - UI->DSP batching per frame (<= 60 Hz)
+// - UI->DSP batching with dual strategy: microtask for low-latency, RAF cap for UI sync
 // Notes: Keep JS allocs out of the audio thread; backends talk to native or WebAudio.
 
 (function () {
@@ -20,7 +20,11 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   const listeners = new Map(); // type -> Set(fn)
   function emit(type, payload) {
     const set = listeners.get(type);
-    if (set) { for (const fn of set) { try { fn(payload); } catch (e) { console.warn(e); } } }
+    if (set) {
+      for (const fn of set) {
+        try { fn(payload); } catch (e) { console.warn('[audio.facade] event handler error:', e); }
+      }
+    }
   }
   audio.on = (type, fn) => {
     if (!listeners.has(type)) listeners.set(type, new Set());
@@ -32,30 +36,42 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   const backends = Object.create(null);
   let active = null; // 'kira' | 'iplug' | 'html'
 
-  // Frame-batched command queue (UI -> backend)
+  // ─── Dual-strategy command queue ───────────────────────────────────
+  // Immediate calls (play/stop/jump/set_param) bypass the queue entirely.
+  // Batched calls use requestAnimationFrame so that dispatch happens once per
+  // frame, avoiding microtask stacking that can starve video rendering and
+  // cause choppy playback.
   const q = [];
-  let rafId = 0;
-  function pump() {
-    rafId = 0;
-    if (!active) return;
-    if (q.length === 0) return;
+  let flushScheduled = false;
+
+  function flush() {
+    flushScheduled = false;
+    if (!active || q.length === 0) return;
     const batch = q.splice(0, q.length);
-    try { backends[active].dispatch_batch(batch); } catch (e) { console.warn('dispatch_batch error', e); }
+    try {
+      backends[active].dispatch_batch(batch);
+    } catch (e) {
+      console.warn('[audio.facade] dispatch_batch error:', e);
+    }
   }
+
   function enqueue(cmd) {
     q.push(cmd);
-    if (!rafId) { rafId = requestAnimationFrame(pump); }
+    if (!flushScheduled) {
+      flushScheduled = true;
+      requestAnimationFrame(flush);
+    }
   }
 
   // API facade: routes to active backend
   const immediateNames = new Set(['play', 'stop', 'stop_clip', 'jump', 'set_param']);
   const proxyCall = (name) => (arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
-      console.warn('No backend for', name); return false;
+      console.warn('[audio.facade] No backend for', name); return false;
     }
     // low-latency calls go immediately
     if (immediateNames.has(name)) {
-      try { backends[active][name](arg); } catch (e) { console.warn('immediate call failed', e); }
+      try { backends[active][name](arg); } catch (e) { console.warn('[audio.facade] immediate call failed:', e); }
       return true;
     }
     // batch others UI->DSP calls
@@ -109,8 +125,4 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
   // Auto detect backend
   audio.detect_and_set_backend();
-
-  // usage
-  // Squirrel.av.audio.on('backend_changed', ({backend})=>console.log('backend:', backend));
-  // Squirrel.av.audio.create_clip({ id:'k', path_or_bookmark:'path', mode:'preload' });
 })();
