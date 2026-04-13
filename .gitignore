@@ -2,6 +2,10 @@
 node_modules/
 
 
+# AI
+.claude/
+
+
 # Database storage (outside src/ to avoid Tauri hot-reload)
 database_storage/
 *.db
