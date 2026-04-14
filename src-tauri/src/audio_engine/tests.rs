@@ -87,7 +87,7 @@ mod audio_engine_tests {
         let bytes = std::fs::read(&wav_path).unwrap();
 
         crate::audio_engine::playback::init().expect("init failed");
-        crate::audio_engine::playback::load_clip_from_bytes("test_bytes", &bytes)
+        crate::audio_engine::playback::load_clip_from_bytes("test_bytes", bytes)
             .expect("load_clip_from_bytes failed");
         crate::audio_engine::playback::play("test_bytes").expect("play failed");
 
