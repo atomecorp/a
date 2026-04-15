@@ -6,6 +6,27 @@ use super::{playback, recorder, metering};
 use std::path::{Path, PathBuf};
 use std::io::Cursor;
 
+fn resolve_audio_clip_path(project_root: &Path, clip_path: &str) -> Result<PathBuf, String> {
+    let raw = String::from(clip_path).trim().to_string();
+    if raw.is_empty() {
+        return Err("Missing clip path".to_string());
+    }
+    let candidate = if Path::new(&raw).is_absolute() {
+        PathBuf::from(&raw)
+    } else {
+        project_root.join(&raw)
+    };
+    if candidate.exists() {
+        return candidate
+            .canonicalize()
+            .map_err(|e| format!("Unable to canonicalize audio clip path {}: {e}", candidate.display()));
+    }
+    Err(format!(
+        "Audio clip path does not exist: {}",
+        candidate.display()
+    ))
+}
+
 fn resolve_debug_audio_path(project_root: &Path, file_path: &str) -> Result<PathBuf, String> {
     let raw = String::from(file_path).trim().to_string();
     if raw.is_empty() {
@@ -89,9 +110,20 @@ pub fn audio_init() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn audio_load_clip(id: String, path: String) -> Result<Value, String> {
-    playback::load_clip(&id, &path)?;
-    Ok(json!({ "success": true, "id": id }))
+pub fn audio_load_clip(
+    paths: tauri::State<crate::ProjectPaths>,
+    id: String,
+    path: String,
+) -> Result<Value, String> {
+    let resolved_path = resolve_audio_clip_path(&paths.project_root, &path)?;
+    playback::load_clip(&id, &resolved_path.to_string_lossy())?;
+    Ok(json!({
+        "success": true,
+        "id": id,
+        "path": resolved_path.to_string_lossy().to_string(),
+        "input_path": path,
+        "input_path_was_absolute": Path::new(&path).is_absolute()
+    }))
 }
 
 #[tauri::command]

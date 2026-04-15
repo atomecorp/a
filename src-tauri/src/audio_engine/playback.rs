@@ -11,6 +11,7 @@ use kira::backend::cpal::CpalBackend;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle};
 use kira::{AudioManager, AudioManagerSettings, Decibels, PlaybackRate, Tween};
 use std::collections::HashMap;
+use std::fs;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -78,8 +79,14 @@ pub fn init_with_config(tween_config: TweenConfig) -> Result<(), String> {
 pub fn load_clip(id: &str, path: &str) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let data = StaticSoundData::from_file(path)
-        .map_err(|e| format!("Failed to load audio from {path}: {e}"))?;
+    // Decode from owned bytes even for file-backed assets. This keeps the JS
+    // contract path-based while avoiding container/extension probe issues on
+    // formats like .mov whose audio track still needs Symphonia decoding.
+    let bytes = fs::read(path)
+        .map_err(|e| format!("Failed to read audio file {path}: {e}"))?;
+    let cursor = std::io::Cursor::new(bytes);
+    let data = StaticSoundData::from_cursor(cursor)
+        .map_err(|e| format!("Failed to decode audio from {path}: {e}"))?;
     engine.clips.insert(
         id.to_string(),
         ClipEntry {
