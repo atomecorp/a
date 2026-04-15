@@ -109,9 +109,43 @@ pub fn audio_play(id: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub fn audio_play_instance(
+    asset_id: String,
+    voice_id: String,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    rate: f64,
+    loop_start_seconds: Option<f64>,
+    loop_end_seconds: Option<f64>,
+) -> Result<Value, String> {
+    playback::play_instance(
+        &asset_id,
+        &voice_id,
+        start_seconds,
+        duration_seconds,
+        gain,
+        rate,
+        loop_start_seconds,
+        loop_end_seconds,
+    )?;
+    Ok(json!({
+        "success": true,
+        "asset_id": asset_id,
+        "voice_id": voice_id
+    }))
+}
+
+#[tauri::command]
 pub fn audio_stop(id: String) -> Result<Value, String> {
     playback::stop(&id)?;
     Ok(json!({ "success": true, "id": id }))
+}
+
+#[tauri::command]
+pub fn audio_stop_instance(voice_id: String) -> Result<Value, String> {
+    playback::stop_instance(&voice_id)?;
+    Ok(json!({ "success": true, "voice_id": voice_id }))
 }
 
 #[tauri::command]

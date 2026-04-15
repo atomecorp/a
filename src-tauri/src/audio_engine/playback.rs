@@ -35,12 +35,16 @@ impl Default for TweenConfig {
 struct ClipEntry {
     /// Shared reference — play() can clone the Arc (cheap) instead of the full data.
     data: Arc<StaticSoundData>,
-    handle: Option<StaticSoundHandle>,
+}
+
+struct VoiceEntry {
+    handle: StaticSoundHandle,
 }
 
 pub struct PlaybackEngine {
     manager: AudioManager<CpalBackend>,
     clips: HashMap<String, ClipEntry>,
+    voices: HashMap<String, VoiceEntry>,
     tween_config: TweenConfig,
 }
 
@@ -65,6 +69,7 @@ pub fn init_with_config(tween_config: TweenConfig) -> Result<(), String> {
     *guard = Some(PlaybackEngine {
         manager,
         clips: HashMap::new(),
+        voices: HashMap::new(),
         tween_config,
     });
     Ok(())
@@ -79,7 +84,6 @@ pub fn load_clip(id: &str, path: &str) -> Result<(), String> {
         id.to_string(),
         ClipEntry {
             data: Arc::new(data),
-            handle: None,
         },
     );
     Ok(())
@@ -96,54 +100,113 @@ pub fn load_clip_from_bytes(id: &str, bytes: Vec<u8>) -> Result<(), String> {
         id.to_string(),
         ClipEntry {
             data: Arc::new(data),
-            handle: None,
         },
     );
     Ok(())
 }
 
 pub fn play(id: &str) -> Result<(), String> {
+    play_instance(id, id, 0.0, None, 1.0, 1.0, None, None)
+}
+
+fn gain_to_decibels(gain: f64) -> Decibels {
+    let clamped = gain.clamp(0.000_001, 16.0);
+    Decibels((20.0 * clamped.log10()) as f32)
+}
+
+pub fn play_instance(
+    asset_id: &str,
+    voice_id: &str,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    rate: f64,
+    loop_start_seconds: Option<f64>,
+    loop_end_seconds: Option<f64>,
+) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let clip = engine
+    let sound_data_template = engine
         .clips
-        .get_mut(id)
-        .ok_or(format!("Clip '{id}' not found"))?;
-    // Clone the Arc (cheap pointer bump) then deref to get StaticSoundData for play()
-    let sound_data: StaticSoundData = (*clip.data).clone();
+        .get(asset_id)
+        .map(|clip| (*clip.data).clone())
+        .ok_or(format!("Clip '{asset_id}' not found"))?;
+
+    if let Some(mut existing_voice) = engine.voices.remove(voice_id) {
+        existing_voice.handle.stop(Tween::default());
+    }
+
+    let mut sound_data: StaticSoundData = sound_data_template;
+    let start = start_seconds.max(0.0);
+    let requested_rate = rate.max(0.0001);
+    let duration = duration_seconds
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.max(0.001));
+    let loop_start = loop_start_seconds.filter(|value| value.is_finite() && *value >= 0.0);
+    let loop_end = loop_end_seconds.filter(|value| value.is_finite() && *value > 0.0);
+
+    if let Some(duration) = duration {
+        let slice_end = start + duration;
+        sound_data = sound_data.slice(start..slice_end);
+    } else if start > 0.0 {
+        sound_data = sound_data.start_position(start);
+    }
+
+    if let (Some(loop_start), Some(loop_end)) = (loop_start, loop_end) {
+        if loop_end > loop_start {
+            if duration.is_some() {
+                let relative_loop_start = (loop_start - start).max(0.0);
+                let relative_loop_end = (loop_end - start).max(relative_loop_start + 0.0001);
+                sound_data = sound_data.loop_region(relative_loop_start..relative_loop_end);
+            } else {
+                sound_data = sound_data.loop_region(loop_start..loop_end);
+            }
+        }
+    }
+
+    sound_data = sound_data
+        .volume(gain_to_decibels(gain))
+        .playback_rate(PlaybackRate(requested_rate));
+
     let handle = engine
         .manager
         .play(sound_data)
-        .map_err(|e| format!("Failed to play clip '{id}': {e}"))?;
-    clip.handle = Some(handle);
+        .map_err(|e| format!("Failed to play clip '{asset_id}': {e}"))?;
+    engine.voices.insert(
+        voice_id.to_string(),
+        VoiceEntry { handle },
+    );
     Ok(())
 }
 
 pub fn stop(id: &str) -> Result<(), String> {
+    stop_instance(id)
+}
+
+pub fn stop_instance(voice_id: &str) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let clip = engine
-        .clips
-        .get_mut(id)
-        .ok_or(format!("Clip '{id}' not found"))?;
-    if let Some(ref mut handle) = clip.handle {
-        handle.stop(Tween {
-            duration: Duration::from_millis(engine.tween_config.stop_ms),
-            ..Default::default()
-        });
-    }
-    clip.handle = None;
+    let mut voice = engine
+        .voices
+        .remove(voice_id)
+        .ok_or(format!("Voice '{voice_id}' not found"))?;
+    let handle = &mut voice.handle;
+    handle.stop(Tween {
+        duration: Duration::from_millis(engine.tween_config.stop_ms),
+        ..Default::default()
+    });
     Ok(())
 }
 
 pub fn set_volume(id: &str, db: f64) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let clip = engine
-        .clips
+    let voice = engine
+        .voices
         .get_mut(id)
-        .ok_or(format!("Clip '{id}' not found"))?;
-    if let Some(ref mut handle) = clip.handle {
+        .ok_or(format!("Voice '{id}' not found"))?;
+    {
+        let handle = &mut voice.handle;
         handle.set_volume(
             Decibels(db as f32),
             Tween {
@@ -158,11 +221,12 @@ pub fn set_volume(id: &str, db: f64) -> Result<(), String> {
 pub fn set_playback_rate(id: &str, rate: f64) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let clip = engine
-        .clips
+    let voice = engine
+        .voices
         .get_mut(id)
-        .ok_or(format!("Clip '{id}' not found"))?;
-    if let Some(ref mut handle) = clip.handle {
+        .ok_or(format!("Voice '{id}' not found"))?;
+    {
+        let handle = &mut voice.handle;
         handle.set_playback_rate(
             PlaybackRate(rate),
             Tween {
@@ -177,11 +241,10 @@ pub fn set_playback_rate(id: &str, rate: f64) -> Result<(), String> {
 pub fn destroy_clip(id: &str) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    if let Some(mut clip) = engine.clips.remove(id) {
-        if let Some(ref mut handle) = clip.handle {
-            handle.stop(Tween::default());
-        }
+    if let Some(mut voice) = engine.voices.remove(id) {
+        voice.handle.stop(Tween::default());
     }
+    engine.clips.remove(id);
     Ok(())
 }
 
