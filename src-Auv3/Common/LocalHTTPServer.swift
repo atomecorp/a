@@ -2174,25 +2174,34 @@ fileprivate enum AiSRuntime {
         return atomeResponse(requestId: requestId, success: true)
     }
 
-    private static func handleEventCommit(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+    private static func resolveEventUserId(_ message: [String: Any]) -> String {
         let token = stringValue(message["token"])
-        guard let claims = try verifyToken(token) else {
-            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        if !token.isEmpty, let claims = try? verifyToken(token) {
+            let sub = normalizedOptionalString(claims["sub"])
+            if let sub, !sub.isEmpty { return sub }
         }
+        if let userId = normalizedOptionalString(message["userId"] ?? message["user_id"] ?? message["ownerId"] ?? message["owner_id"]) {
+            return userId
+        }
+        if let event = message["event"] as? [String: Any],
+           let userId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"]) {
+            return userId
+        }
+        return "anonymous"
+    }
+
+    private static func handleEventCommit(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let actorId = resolveEventUserId(message)
         guard let rawEvent = message["event"] as? [String: Any] else {
             return eventsResponse(requestId: requestId, success: false, error: "Invalid event payload")
         }
-        let event = try normalizeEventInput(rawEvent, defaultActorId: stringValue(claims["sub"]))
+        let event = try normalizeEventInput(rawEvent, defaultActorId: actorId)
         try appendEvent(db, event: event)
         return eventsResponse(requestId: requestId, success: true, event: event)
     }
 
     private static func handleEventCommitBatch(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let token = stringValue(message["token"])
-        guard let claims = try verifyToken(token) else {
-            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
-        }
-        let defaultActorId = stringValue(claims["sub"])
+        let defaultActorId = resolveEventUserId(message)
         let txId = stringValue(message["tx_id"] ?? message["txId"])
         guard let rawEvents = message["events"] as? [[String: Any]] else {
             return eventsResponse(requestId: requestId, success: false, error: "Missing events array")
