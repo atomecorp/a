@@ -39,9 +39,15 @@ export const isAuv3AudioRuntime = (env = globalThis) => {
         || env?.__AUV3_MODE__ === true;
 };
 
+export const isIosHostAppRuntime = (env = globalThis) => {
+    const hostEnv = readHostEnv(env);
+    return hostEnv === 'app' && !isAuv3AudioRuntime(env);
+};
+
 export const isTauriAudioRuntime = (env = globalThis) => {
     if (env?.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
     if (isAuv3AudioRuntime(env)) return false;
+    if (isIosHostAppRuntime(env)) return false;
     if (env?.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
     const protocol = String(env?.location?.protocol || '').toLowerCase();
     const host = String(env?.location?.hostname || '').toLowerCase();
@@ -64,6 +70,18 @@ export const resolveAudioRuntime = (env = globalThis) => {
             playback: 'ios_auv3_native',
             record: 'ios_auv3_native',
             preferredFacadeBackendOrder: ['iplug', 'kira', 'html'],
+            hasIPlugBridge: hasIPlugBridge(env),
+            hasSwiftBridge: hasSwiftBridge(env),
+            tauriInvoke: null
+        };
+    }
+
+    if (isIosHostAppRuntime(env)) {
+        return {
+            runtime: 'ios_app',
+            playback: 'html',
+            record: hasWebCapture ? 'web_capture_fallback' : 'unsupported',
+            preferredFacadeBackendOrder: ['html'],
             hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: hasSwiftBridge(env),
             tauriInvoke: null
