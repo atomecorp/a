@@ -179,6 +179,7 @@ function readLocalTauriHttpPort() {
     const raw = window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null;
     const value = Number(raw);
     if (Number.isFinite(value) && value > 0) return value;
+    if (isEmbeddedIOSRuntime()) return null;
     return isInTauri() ? 3000 : null;
 }
 
@@ -322,6 +323,7 @@ function getTauriHttpBaseUrl() {
 
     const port = readLocalTauriHttpPort();
     if (port) return `http://127.0.0.1:${port}`;
+    if (isEmbeddedIOSRuntime()) return '';
 
     return CONFIG.TAURI_BASE_URL;
 }

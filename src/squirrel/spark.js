@@ -275,14 +275,56 @@ import('./kickstart.js').then(async () => {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
+  const __readInjectedLocalPort = () => {
+    const raw = window.__ATOME_LOCAL_HTTP_PORT__
+      || window.ATOME_LOCAL_HTTP_PORT
+      || window.__LOCAL_HTTP_PORT
+      || window.__SQUIRREL_TAURI_LOCAL_PORT__
+      || 0;
+    const port = Number(raw);
+    return Number.isFinite(port) && port > 0 ? port : 0;
+  };
+
+  const __waitForIOSLocalServerReady = (timeoutMs = 6000) => {
+    if (__readInjectedLocalPort()) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let settled = false;
+      let pollId = null;
+      let timeoutId = null;
+
+      const cleanup = () => {
+        window.removeEventListener('local-server-ready', onReady);
+        if (pollId) clearInterval(pollId);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+      const finish = (ready) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(ready);
+      };
+      const onReady = () => finish(true);
+
+      window.addEventListener('local-server-ready', onReady, { once: true });
+      pollId = setInterval(() => {
+        if (__readInjectedLocalPort()) finish(true);
+      }, 50);
+      timeoutId = setTimeout(() => finish(!!__readInjectedLocalPort()), timeoutMs);
+    });
+  };
+
   if (!isIOS) {
     // Non-iOS: import immediately since squirrel:ready was just dispatched by kickstart
     __importAppOnce();
   } else {
-    // iOS waits for explicit native signal
-    window.addEventListener('local-server-ready', __importAppOnce, { once: true });
-    // Safety fallback: if native forgot to dispatch within 900ms, continue anyway
-    setTimeout(__importAppOnce, 900);
+    // iOS local HTTP uses an async native port; importing before it is injected makes
+    // project/matrix loaders cache empty backend responses.
+    __waitForIOSLocalServerReady().then((ready) => {
+      if (!ready) {
+        console.warn('[Squirrel] iOS local server was not ready before app import; continuing in degraded mode');
+      }
+      __importAppOnce();
+    });
   }
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
