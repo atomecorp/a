@@ -1,13 +1,278 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod dev_logging;
+mod iplug_bridge;
+mod native_contacts;
+mod native_recorder;
+mod audio_engine;
+mod server;
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use tauri::{Manager, State};
+
+#[derive(Clone)]
+pub struct ProjectPaths {
+    pub project_root: PathBuf,
+}
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn project_root(state: State<ProjectPaths>) -> String {
+    state.project_root.to_string_lossy().to_string()
+}
+
+fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> PathBuf {
+    match std::env::var("SQUIRREL_UPLOADS_DIR") {
+        Ok(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                eprintln!(
+                    "[tauri] SQUIRREL_UPLOADS_DIR is empty; using default uploads dir: {:?}",
+                    default_uploads_dir
+                );
+                return default_uploads_dir.to_path_buf();
+            }
+
+            let mut candidate = PathBuf::from(trimmed);
+            if !candidate.is_absolute() {
+                let project_root = static_dir
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_else(|| PathBuf::from("."));
+                candidate = project_root.join(candidate);
+            }
+            candidate
+        }
+        Err(_) => {
+            eprintln!(
+                "[tauri] SQUIRREL_UPLOADS_DIR is not set; using default uploads dir: {:?}",
+                default_uploads_dir
+            );
+            default_uploads_dir.to_path_buf()
+        }
+    }
+}
+
+fn load_env_file(path: &Path, override_existing: bool) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(2, '=');
+        let key = parts.next().unwrap_or("").trim();
+        if key.is_empty() {
+            continue;
+        }
+        let value_raw = parts.next().unwrap_or("").trim();
+        if !override_existing && std::env::var_os(key).is_some() {
+            continue;
+        }
+        let mut value = value_raw.to_string();
+        if (value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\''))
+        {
+            value = value[1..value.len().saturating_sub(1)].to_string();
+        }
+        let value = value.replace("\\n", "\n");
+        std::env::set_var(key, value);
+    }
+    Ok(true)
+}
+
+fn load_env_from_candidates() {
+    let mut bases: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        bases.push(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            bases.push(parent.to_path_buf());
+        }
+    }
+
+    for base in bases {
+        let mut dir = base.clone();
+        for _ in 0..8 {
+            let env_path = dir.join(".env");
+            if let Ok(true) = load_env_file(&env_path, false) {
+                println!("[tauri] Loaded environment from {:?}", env_path);
+                let env_local = dir.join(".env.local");
+                match load_env_file(&env_local, true) {
+                    Ok(true) => println!("[tauri] Loaded environment from {:?}", env_local),
+                    Ok(false) => {}
+                    Err(e) => eprintln!(
+                        "[tauri] Warning: Failed to load .env.local from {:?}: {}",
+                        env_local, e
+                    ),
+                }
+                return;
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+
+    println!("[tauri] No .env file found in cwd/exe path hierarchy");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    load_env_from_candidates();
+
+    let _log_guard = dev_logging::init_tracing();
+
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet])
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_stt::init())
+        .invoke_handler(tauri::generate_handler![
+            dev_logging::log_from_webview,
+            iplug_bridge::iplug_send,
+            iplug_bridge::iplug_poll_events,
+            native_contacts::macos_contacts_snapshot,
+            audio_engine::bridge::audio_init,
+            audio_engine::bridge::audio_load_clip,
+            audio_engine::bridge::audio_load_clip_from_bytes,
+            audio_engine::bridge::audio_play,
+            audio_engine::bridge::audio_play_instance,
+            audio_engine::bridge::audio_stop,
+            audio_engine::bridge::audio_stop_instance,
+            audio_engine::bridge::audio_destroy_clip,
+            audio_engine::bridge::audio_set_volume,
+            audio_engine::bridge::audio_set_playback_rate,
+            audio_engine::bridge::audio_record_start,
+            audio_engine::bridge::audio_record_stop,
+            audio_engine::bridge::audio_debug_read_file,
+            audio_engine::bridge::audio_debug_write_file,
+            audio_engine::bridge::audio_debug_capture_loopback,
+            audio_engine::bridge::audio_get_levels,
+            audio_engine::bridge::audio_shutdown,
+            project_root
+        ])
+        .setup(|app| {
+            println!("[tauri] fs plugin enabled");
+            println!("[tauri] stt plugin enabled");
+            let path_resolver = app.path();
+            let static_dir: PathBuf = match path_resolver.resource_dir() {
+                Ok(dir) => {
+                    let mut resolved: Option<PathBuf> = None;
+                    let mut candidates: Vec<PathBuf> = vec![
+                        dir.join("dist"),
+                        dir.join("public"),
+                        dir.join("src"),
+                        dir.join("_up_/dist"),
+                        dir.join("_up_/public"),
+                        dir.join("_up_/src"),
+                        dir.clone(),
+                    ];
+
+                    if cfg!(debug_assertions) {
+                        candidates.insert(0, PathBuf::from("../src"));
+                    }
+
+                    candidates.push(PathBuf::from("../src"));
+
+                    for candidate in candidates {
+                        if candidate.join("index.html").exists() {
+                            resolved = Some(candidate);
+                            break;
+                        }
+                    }
+
+                    resolved.unwrap_or_else(|| PathBuf::from("../src"))
+                }
+                Err(_) => PathBuf::from("../src"),
+            };
+
+            if !static_dir.join("index.html").exists() {
+                eprintln!(
+                    "⚠️  Static directory does not contain index.html: {:?}",
+                    static_dir
+                );
+            }
+
+            println!("📂 Static assets directory: {:?}", static_dir);
+
+            let static_dir_abs = static_dir
+                .canonicalize()
+                .unwrap_or_else(|_| static_dir.clone());
+            let project_root = static_dir_abs
+                .parent()
+                .unwrap_or(&static_dir_abs)
+                .to_path_buf();
+            app.manage(ProjectPaths {
+                project_root: project_root.clone(),
+            });
+
+            let default_base = path_resolver
+                .download_dir()
+                .ok()
+                .or_else(|| path_resolver.app_data_dir().ok())
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            let default_uploads_dir = default_base.join("squirrel").join("Uploads");
+
+            let data_base = path_resolver
+                .app_data_dir()
+                .ok()
+                .or_else(|| path_resolver.download_dir().ok())
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            let data_dir = data_base.join("squirrel").join("Data");
+
+            let uploads_dir = resolve_shared_uploads_dir(&static_dir, &default_uploads_dir);
+            if let Err(err) = fs::create_dir_all(&uploads_dir) {
+                panic!(
+                    "Unable to prepare shared uploads directory {:?}: {}",
+                    uploads_dir, err
+                );
+            }
+            println!("📁 Uploads directory: {:?}", uploads_dir);
+
+            let static_dir_for_server = static_dir.clone();
+            let uploads_dir_for_server = uploads_dir.clone();
+            let data_dir_for_server = data_dir.clone();
+
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    server::start_server(
+                        static_dir_for_server,
+                        uploads_dir_for_server,
+                        data_dir_for_server,
+                    )
+                    .await;
+                });
+            });
+
+            {
+                let handle = app.handle();
+                if let Some(win) = handle.get_webview_window("main") {
+                    let _ = win.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
+                    let root_js = format!(
+                        "window.__ATOME_PROJECT_ROOT__={:?};",
+                        project_root.to_string_lossy()
+                    );
+                    let _ = win.eval(&root_js);
+                } else {
+                    for (_, w) in app.webview_windows() {
+                        let _ = w.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
+                        let root_js = format!(
+                            "window.__ATOME_PROJECT_ROOT__={:?};",
+                            project_root.to_string_lossy()
+                        );
+                        let _ = w.eval(&root_js);
+                        break;
+                    }
+                }
+            }
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("Erreur lors du lancement de Tauri");
 }

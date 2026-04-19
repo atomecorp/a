@@ -1,0 +1,10 @@
+/Users/jean-ericgodard/RubymineProjects/a/src-audio-wasm/target/wasm32-unknown-unknown/release/deps/log-dade5cdf43dbbe17.d: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs
+
+/Users/jean-ericgodard/RubymineProjects/a/src-audio-wasm/target/wasm32-unknown-unknown/release/deps/liblog-dade5cdf43dbbe17.rlib: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs
+
+/Users/jean-ericgodard/RubymineProjects/a/src-audio-wasm/target/wasm32-unknown-unknown/release/deps/liblog-dade5cdf43dbbe17.rmeta: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs
+
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs:
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs:
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs:
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs:

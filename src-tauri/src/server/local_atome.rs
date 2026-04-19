@@ -324,15 +324,21 @@ fn ensure_state_current_columns(conn: &Connection) -> Result<(), rusqlite::Error
 
     if !names.contains("owner_id") {
         conn.execute("ALTER TABLE state_current ADD COLUMN owner_id TEXT", [])?;
-        let _ = conn.execute(
-            "UPDATE state_current
-             SET owner_id = (
-                SELECT owner_id FROM atomes WHERE atomes.atome_id = state_current.atome_id
-             )
-             WHERE owner_id IS NULL",
-            [],
-        );
     }
+
+    let _ = conn.execute(
+        "UPDATE state_current
+         SET owner_id = (
+            SELECT owner_id FROM atomes WHERE atomes.atome_id = state_current.atome_id
+         )
+         WHERE owner_id IS NULL
+           AND EXISTS (
+             SELECT 1 FROM atomes
+             WHERE atomes.atome_id = state_current.atome_id
+               AND atomes.owner_id IS NOT NULL
+           )",
+        [],
+    );
 
     Ok(())
 }
@@ -2347,6 +2353,7 @@ fn apply_event_to_state_current(
             .flatten()
             .flatten()
         })
+        .or_else(|| resolve_event_actor_user_id(event))
         .or_else(|| existing.as_ref().and_then(|row| row.3.clone()));
 
     let props_json = serde_json::to_string(&current_props).map_err(|e| e.to_string())?;
@@ -2373,6 +2380,83 @@ fn apply_event_to_state_current(
         "updated_at": event.ts,
         "version": next_version
     })))
+}
+
+fn resolve_event_actor_user_id(event: &EventRecord) -> Option<String> {
+    let actor = event.actor.as_ref()?;
+    if let Some(raw) = actor.as_str() {
+        let value = raw.trim();
+        if !value.is_empty() && value != "anonymous" {
+            return Some(value.to_string());
+        }
+        return None;
+    }
+    let object = actor.as_object()?;
+    for key in ["id", "user_id", "userId", "atome_id", "atomeId"] {
+        if let Some(raw) = object.get(key).and_then(|value| value.as_str()) {
+            let value = raw.trim();
+            if !value.is_empty() && value != "anonymous" {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod state_current_owner_tests {
+    use super::*;
+
+    fn test_event(actor: Option<JsonValue>) -> EventRecord {
+        EventRecord {
+            id: "event_test_1".to_string(),
+            ts: "2026-04-19T00:00:00Z".to_string(),
+            atome_id: Some("atome_test_1".to_string()),
+            project_id: Some("project_test_1".to_string()),
+            kind: "set".to_string(),
+            payload: Some(json!({
+                "props": {
+                    "kind": "shape",
+                    "left": "10px",
+                    "top": "20px",
+                    "project_id": "project_test_1"
+                }
+            })),
+            actor,
+            tx_id: None,
+            gesture_id: None,
+        }
+    }
+
+    #[test]
+    fn resolves_actor_user_id_from_object() {
+        let event = test_event(Some(json!({ "type": "user", "id": "user_test_1" })));
+        assert_eq!(
+            resolve_event_actor_user_id(&event),
+            Some("user_test_1".to_string())
+        );
+    }
+
+    #[test]
+    fn state_current_uses_actor_owner_when_atome_row_is_missing() {
+        let db = Connection::open_in_memory().expect("memory db");
+        db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+
+        let event = test_event(Some(json!({ "type": "user", "id": "user_test_1" })));
+        apply_event_to_state_current(&db, &event)
+            .expect("state_current projection")
+            .expect("projection payload");
+
+        let owner_id: Option<String> = db
+            .query_row(
+                "SELECT owner_id FROM state_current WHERE atome_id = ?1",
+                rusqlite::params!["atome_test_1"],
+                |row| row.get(0),
+            )
+            .expect("owner row");
+
+        assert_eq!(owner_id, Some("user_test_1".to_string()));
+    }
 }
 
 fn apply_event_to_atomes(

@@ -184,7 +184,7 @@ export async function load_saved_current_project() {
         return { id: cached.id, name: cached.name || null };
     }
 
-    // Fallback: try reading user atome for current_project_id if available
+    // Durable user state can also contain current_project_id.
     try {
         const userAtome = await get_atome(currentUserId);
         const raw = userAtome?.atome || userAtome?.data || null;

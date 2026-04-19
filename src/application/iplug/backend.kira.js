@@ -88,10 +88,10 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
   var backend = {
     async init() {
       var runtime = resolveAudioRuntime(window);
-      if (runtime.playback === 'tauri_native_kira') {
+      if (runtime.playback === 'tauri_native_kira' || runtime.playback === 'ios_native_kira') {
         mode = 'tauri';
         await invoke('audio_init');
-        console.log('[backend.kira] Initialized via Tauri (native CPAL + Kira)');
+        console.log('[backend.kira] Initialized via native invoke bridge');
         return;
       }
       if (runtime.playback === 'web_wasm_kira') {
@@ -267,10 +267,19 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
   Promise.resolve().then(function () {
     backend.init().then(function () {
       audio.set_backend('kira');
-    }).catch(function () {
-      // Kira not available (expected for AUv3, possible for browser without WASM).
-      // Re-trigger detection so a fallback backend (iplug or html) can activate.
-      if (typeof audio.detect_and_set_backend === 'function') {
+    }).catch(function (error) {
+      var runtime = resolveAudioRuntime(window);
+      var hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
+      var strictNativeKira = hostEnv === 'app'
+        || runtime.playback === 'tauri_native_kira'
+        || runtime.playback === 'ios_native_kira';
+      console.warn('[backend.kira] init failed:', error && error.message ? error.message : error, {
+        runtime: runtime.runtime,
+        playback: runtime.playback,
+        host_env: hostEnv || null,
+        strict_native_kira: strictNativeKira
+      });
+      if (!strictNativeKira && typeof audio.detect_and_set_backend === 'function') {
         audio.detect_and_set_backend();
       }
     });

@@ -11,6 +11,8 @@ import QuartzCore
 import AudioToolbox
 
 public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    typealias NativeInvokeHandler = (_ command: String, _ payload: [String: Any], _ completion: @escaping ([String: Any], String?) -> Void) -> Void
+
     static let shared = WebViewManager()
     private let log = Logger(subsystem: "atome", category: "WebViewManager")
     static var webView: WKWebView?
@@ -19,7 +21,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // NEW: MIDI controller reference injected from AudioUnitViewController
     static weak var midiController: MIDIController?
     static weak var hostAudioUnit: AUAudioUnit?
+    static var nativeInvokeHandler: NativeInvokeHandler?
     static func setHostAudioUnit(_ au: AUAudioUnit?) { self.hostAudioUnit = au }
+    static func setNativeInvokeHandler(_ handler: NativeInvokeHandler?) { self.nativeInvokeHandler = handler }
     private static var cachedTempo: Double = 120.0
     static func updateCachedTempo(_ t: Double) { if t > 0 { cachedTempo = t } }
     private static var lastPlayheadSeconds: Double = 0
@@ -148,6 +152,42 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 // Inject host environment flag early for UI logic
                 try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
                 \(localPortBootstrap)
+                \(isExtension ? "" : """
+                (function(){
+                    if(window.__ATOME_IOS_NATIVE_INVOKE) return;
+                    if(!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge)) return;
+                    const nativeInvokePending = new Map();
+                    var nativeInvokeSeq = 1;
+                    window.__ATOME_NATIVE_INVOKE_RESOLVE = function(requestId, payload, error){
+                        const key = String(requestId || '');
+                        const entry = nativeInvokePending.get(key);
+                        if(!entry) return;
+                        nativeInvokePending.delete(key);
+                        if(error){
+                            entry.reject(new Error(String(error)));
+                            return;
+                        }
+                        entry.resolve(payload);
+                    };
+                    window.__ATOME_IOS_NATIVE_INVOKE = function(command, payload){
+                        return new Promise(function(resolve, reject){
+                            const requestId = 'ios_native_invoke_' + String(nativeInvokeSeq++);
+                            nativeInvokePending.set(requestId, { resolve: resolve, reject: reject });
+                            try {
+                                window.webkit.messageHandlers.swiftBridge.postMessage({
+                                    action: 'nativeInvoke',
+                                    command: String(command || ''),
+                                    requestId: requestId,
+                                    payload: payload || {}
+                                });
+                            } catch(error) {
+                                nativeInvokePending.delete(requestId);
+                                reject(error instanceof Error ? error : new Error(String(error)));
+                            }
+                        });
+                    };
+                })();
+                """)
                 window.onerror = function(m, s, l, c, e) {
             var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
             try {
@@ -447,6 +487,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 }
                 // Vérifier si c'est un message de système de fichiers
                 if let action = body["action"] as? String {
+                    if action == "nativeInvoke" {
+                        let requestId = body["requestId"] as? String ?? ""
+                        let command = body["command"] as? String ?? ""
+                        let payload = body["payload"] as? [String: Any] ?? [:]
+                        WebViewManager.handleNativeInvokeMessage(requestId: requestId, command: command, payload: payload)
+                        return
+                    }
                     if action == "record_start" || action == "record_stop" {
                         let sessionId = (body["sessionId"] as? String)
                             ?? (body["session_id"] as? String)
@@ -948,6 +995,41 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     // MARK: - Bridge JSON helper
+    private static func jsonLiteral(_ value: Any) -> String? {
+        if let stringValue = value as? String {
+            guard let data = try? JSONSerialization.data(withJSONObject: [stringValue]),
+                  let json = String(data: data, encoding: .utf8) else { return nil }
+            return String(json.dropFirst().dropLast())
+        }
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
+    }
+
+    private static func sendNativeInvokeResponse(requestId: String,
+                                                 payload: [String: Any]? = nil,
+                                                 error: String? = nil) {
+        guard let requestLiteral = jsonLiteral(requestId) else { return }
+        let payloadLiteral = payload.flatMap { jsonLiteral($0) } ?? "null"
+        let errorLiteral = error.flatMap { jsonLiteral($0) } ?? "null"
+        let js = "window.__ATOME_NATIVE_INVOKE_RESOLVE(\(requestLiteral), \(payloadLiteral), \(errorLiteral));"
+        evaluateJS(js, label: "nativeInvoke.resolve", priority: .critical)
+    }
+
+    private static func handleNativeInvokeMessage(requestId: String,
+                                                  command: String,
+                                                  payload: [String: Any]) {
+        guard !requestId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let handler = nativeInvokeHandler else {
+            sendNativeInvokeResponse(requestId: requestId, error: "ios_app_native_invoke_handler_unavailable")
+            return
+        }
+        handler(command, payload) { response, error in
+            sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
+        }
+    }
+
     public static func sendBridgeJSON(_ dict: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return }

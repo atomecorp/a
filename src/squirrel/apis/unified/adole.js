@@ -645,13 +645,10 @@ function isCloudFastifyTarget() {
 }
 
 export function getToken(key) {
-    if (tokenMemory.has(key)) {
-        const cached = tokenMemory.get(key);
-        if (cached) return cached;
-    }
     if (typeof localStorage !== 'undefined') {
         const token = localStorage.getItem(key);
         if (token) {
+            // Persistent storage is authoritative: native auth can refresh it after JS memory was hydrated.
             tokenMemory.set(key, token);
             return token;
         }
@@ -673,6 +670,10 @@ export function getToken(key) {
             tokenMemory.set(key, token);
             return token;
         }
+    }
+    if (tokenMemory.has(key)) {
+        const cached = tokenMemory.get(key);
+        if (cached) return cached;
     }
     return null;
 }

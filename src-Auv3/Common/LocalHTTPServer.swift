@@ -1937,7 +1937,8 @@ fileprivate enum AiSRuntime {
                 return authResponse(requestId: requestId, success: true, user: user, token: token)
             }
             let user = try loadUserInfo(db, userId: existing.userId)
-            return authResponse(requestId: requestId, success: true, user: user, alreadyExists: true)
+            let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username, phone: user["phone"] as? String ?? phone)
+            return authResponse(requestId: requestId, success: true, user: user, token: token, alreadyExists: true)
         }
 
         try execute(db, """
