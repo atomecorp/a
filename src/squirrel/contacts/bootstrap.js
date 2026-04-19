@@ -2,6 +2,7 @@ import { CONTACTS_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
 import { createIcloudContactsConnector } from './icloud_connector.js';
 import { createMacosContactsSource } from './macos_source.js';
 import { createContactsService } from './service.js';
+import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
 
 const SERVICE_KEY = '__SQUIRREL_CONTACTS_SERVICE__';
 const API_KEY = '__SQUIRREL_CONTACTS_API__';
@@ -219,14 +220,23 @@ export const createGlobalContactsApi = ({
             return getOrCreateService(env).syncStatus();
         },
         async openPanel() {
+            const panelPerfStart = perfNowMs();
             const openPanel = env?.open_contact_panel
                 || env?.window?.open_contact_panel
                 || globalThis?.open_contact_panel
                 || null;
             if (typeof openPanel !== 'function') {
+                emitPerfEvent('contacts.open_panel', {
+                    ok: false,
+                    totalMs: perfElapsedMs(panelPerfStart),
+                    error: 'contact_panel_unavailable'
+                });
                 return { ok: false, error: 'contact_panel_unavailable' };
             }
             await openPanel();
+            const totalMs = perfElapsedMs(panelPerfStart);
+            perfLog('[Perf] contacts.openPanel', { totalMs });
+            emitPerfEvent('contacts.open_panel', { ok: true, totalMs });
             return { ok: true };
         },
         closePanel() {

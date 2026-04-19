@@ -20,6 +20,7 @@ import {
     resolveDataSource,
     resolveSyncDirection
 } from '../adole.js';
+import { alignLoopbackUrlToPageHost, getLocalServerUrl, isLocalAxumPage } from '../../serverUrls.js';
 
 const FILE_ASSET_TYPES = new Set([
     'file', 'image', 'video', 'sound', 'text', 'shape', 'raw',
@@ -98,6 +99,11 @@ const is_any_anonymous_phone = (phone) => {
 };
 
 const FLOW_LOG_TOKEN = '[AdoleFlow]';
+
+function allowFastifyPrimaryOnLocalAxumPage() {
+    if (typeof window === 'undefined') return false;
+    return window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ === true;
+}
 
 function now_ms() {
     if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
@@ -4411,7 +4417,7 @@ try {
                                     || (savedPhone && mePhoneNorm && String(savedPhone) === String(mePhoneNorm));
                                 if (meResult?.ok || meResult?.success) {
                                     if (sameUser) {
-                                        if (typeof window !== 'undefined') {
+                                        if (typeof window !== 'undefined' && (!isLocalAxumPage() || allowFastifyPrimaryOnLocalAxumPage())) {
                                             window.__SQUIRREL_AUTH_SOURCE__ = 'fastify';
                                             window.__SQUIRREL_DATA_SOURCE__ = 'fastify';
                                             window.__SQUIRREL_PROFILE_SOURCE__ = 'fastify';
@@ -5238,19 +5244,23 @@ async function sync_atomes(callback) {
     };
 
     const resolveLocalAxumBase = () => {
+        const defaultLocalPort = 3000;
+        const defaultLocalBase = alignLoopbackUrlToPageHost(`http://127.0.0.1:${defaultLocalPort}`);
+        const canonicalBase = getLocalServerUrl();
+        if (canonicalBase) return alignLoopbackUrlToPageHost(canonicalBase);
         if (typeof window !== 'undefined') {
             const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
             const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
             if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
-                return `http://127.0.0.1:${forcedPort}`;
+                return alignLoopbackUrlToPageHost(`http://127.0.0.1:${forcedPort}`);
             }
             const runtimePort = Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null);
             if (Number.isFinite(runtimePort) && runtimePort > 0) {
-                return `http://127.0.0.1:${runtimePort}`;
+                return alignLoopbackUrlToPageHost(`http://127.0.0.1:${runtimePort}`);
             }
-            return 'http://127.0.0.1:3000';
+            return defaultLocalBase;
         }
-        const base = CONFIG?.TAURI_BASE_URL || 'http://127.0.0.1:3000';
+        const base = CONFIG?.TAURI_BASE_URL || `http://127.0.0.1:${defaultLocalPort}`;
         return base.replace(/\/$/, '');
     };
 

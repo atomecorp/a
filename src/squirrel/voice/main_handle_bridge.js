@@ -3,6 +3,8 @@ const LONG_PRESS_DELAY_MS = 520;
 const MOVE_CANCEL_PX = 10;
 const BRIDGE_KEY = '__SQUIRREL_VOICE_MAIN_HANDLE_BRIDGE__';
 
+import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
+
 const defaultImportModule = (path) => import(path);
 
 const getClientPoint = (event) => {
@@ -36,6 +38,7 @@ const toggleDilasPanel = async ({
     anchorEl = null,
     importModule = defaultImportModule
 } = {}) => {
+    const panelPerfStart = perfNowMs();
     if (!env || typeof env !== 'object') return false;
     if (typeof env.toggle_dilas_panel !== 'function') {
         const module = await importModule('./dilas_panel.js');
@@ -48,13 +51,24 @@ const toggleDilasPanel = async ({
     }
     if (typeof env.toggle_dilas_panel === 'function') {
         await env.toggle_dilas_panel({ anchorEl });
+        const totalMs = perfElapsedMs(panelPerfStart);
+        perfLog('[Perf] voice.togglePanel', { totalMs, mode: 'toggle' });
+        emitPerfEvent('voice.toggle_panel', { ok: true, totalMs, mode: 'toggle' });
         return true;
     }
     if (typeof env.open_dilas_panel === 'function') {
         await env.open_dilas_panel({ anchorEl });
+        const totalMs = perfElapsedMs(panelPerfStart);
+        perfLog('[Perf] voice.togglePanel', { totalMs, mode: 'open' });
+        emitPerfEvent('voice.toggle_panel', { ok: true, totalMs, mode: 'open' });
         return true;
     }
     env.console?.warn?.('[voice.main_handle] dilas panel toggle unavailable');
+    emitPerfEvent('voice.toggle_panel', {
+        ok: false,
+        totalMs: perfElapsedMs(panelPerfStart),
+        error: 'dilas_panel_unavailable'
+    });
     return false;
 };
 
@@ -63,6 +77,7 @@ const openDilasPanel = async ({
     anchorEl = null,
     importModule = defaultImportModule
 } = {}) => {
+    const panelPerfStart = perfNowMs();
     if (!env || typeof env !== 'object') return false;
     if (typeof env.open_dilas_panel !== 'function' && typeof env.toggle_dilas_panel !== 'function') {
         const module = await importModule('./dilas_panel.js');
@@ -75,13 +90,24 @@ const openDilasPanel = async ({
     }
     if (typeof env.toggle_dilas_panel === 'function') {
         await env.toggle_dilas_panel({ anchorEl });
+        const totalMs = perfElapsedMs(panelPerfStart);
+        perfLog('[Perf] voice.openPanel', { totalMs, mode: 'toggle' });
+        emitPerfEvent('voice.open_panel', { ok: true, totalMs, mode: 'toggle' });
         return true;
     }
     if (typeof env.open_dilas_panel !== 'function') {
         env.console?.warn?.('[voice.main_handle] open_dilas_panel unavailable');
+        emitPerfEvent('voice.open_panel', {
+            ok: false,
+            totalMs: perfElapsedMs(panelPerfStart),
+            error: 'dilas_panel_unavailable'
+        });
         return false;
     }
     await env.open_dilas_panel({ anchorEl });
+    const totalMs = perfElapsedMs(panelPerfStart);
+    perfLog('[Perf] voice.openPanel', { totalMs, mode: 'open' });
+    emitPerfEvent('voice.open_panel', { ok: true, totalMs, mode: 'open' });
     return true;
 };
 

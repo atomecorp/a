@@ -32,7 +32,7 @@ import UnifiedAuth from './UnifiedAuth.js';
 import UnifiedAtome from './UnifiedAtome.js';
 import UnifiedUserData from './UnifiedUserData.js';
 import UnifiedSync from './UnifiedSync.js';
-import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from './_shared.js';
+import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from './adole.js';
 
 /**
  * Check if user is authenticated on any backend

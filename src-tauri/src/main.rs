@@ -3,15 +3,32 @@
     windows_subsystem = "windows"
 )]
 
+mod audio_engine;
 mod dev_logging;
 mod iplug_bridge;
 mod native_contacts;
 mod native_recorder;
-mod audio_engine;
+mod runtime_logging;
 mod server;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State}; // pour get_webview_window
+
+macro_rules! println {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::println!($($arg)*);
+        }
+    };
+}
+
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::eprintln!($($arg)*);
+        }
+    };
+}
 
 #[derive(Clone)]
 pub struct ProjectPaths {
@@ -108,7 +125,10 @@ fn load_env_from_candidates() {
                 match load_env_file(&env_local, true) {
                     Ok(true) => println!("[tauri] Loaded environment from {:?}", env_local),
                     Ok(false) => {}
-                    Err(e) => eprintln!("[tauri] Warning: Failed to load .env.local from {:?}: {}", env_local, e),
+                    Err(e) => eprintln!(
+                        "[tauri] Warning: Failed to load .env.local from {:?}: {}",
+                        env_local, e
+                    ),
                 }
                 return;
             }
@@ -193,7 +213,10 @@ fn main() {
             };
 
             if !static_dir.join("index.html").exists() {
-                eprintln!("⚠️  Static directory does not contain index.html: {:?}", static_dir);
+                eprintln!(
+                    "⚠️  Static directory does not contain index.html: {:?}",
+                    static_dir
+                );
             }
 
             println!("📂 Static assets directory: {:?}", static_dir);
@@ -243,7 +266,12 @@ fn main() {
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(async {
-                    server::start_server(static_dir_for_server, uploads_dir_for_server, data_dir_for_server).await;
+                    server::start_server(
+                        static_dir_for_server,
+                        uploads_dir_for_server,
+                        data_dir_for_server,
+                    )
+                    .await;
                 });
             });
 

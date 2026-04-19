@@ -11,6 +11,91 @@
  * @module src/squirrel/apis/serverUrls
  */
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '0.0.0.0', 'tauri.localhost']);
+
+const normalizePositivePort = (value, fallback) => {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    return fallback;
+};
+
+const getCurrentLocation = () => {
+    if (typeof window === 'undefined') return null;
+    return window.location || null;
+};
+
+export function isLoopbackHost(hostname) {
+    return LOOPBACK_HOSTS.has(String(hostname || '').trim().toLowerCase());
+}
+
+export function getLocalServerPort() {
+    if (typeof window === 'undefined') return 3000;
+    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+    const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+    if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
+        return forcedPort;
+    }
+    const customPort = Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__);
+    if (Number.isFinite(customPort) && customPort > 0) {
+        return customPort;
+    }
+    return 3000;
+}
+
+export function getCloudServerPort() {
+    if (typeof window === 'undefined') return 3001;
+    const raw = window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port ?? 3001;
+    let port = normalizePositivePort(raw, 3001);
+    const localPort = getLocalServerPort();
+    if (port === localPort) port = 3001;
+    return port;
+}
+
+export function isCurrentLoopbackPagePort(port) {
+    const loc = getCurrentLocation();
+    if (!loc || !isLoopbackHost(loc.hostname)) return false;
+    const effectivePort = Number(loc.port || (String(loc.protocol || '').toLowerCase() === 'https:' ? 443 : 80));
+    return effectivePort === normalizePositivePort(port, effectivePort);
+}
+
+export function isLocalAxumPage() {
+    const loc = getCurrentLocation();
+    const host = String(loc?.hostname || '').trim().toLowerCase();
+    const protocol = String(loc?.protocol || '').trim().toLowerCase();
+    if (host === 'tauri.localhost' && (protocol === 'http:' || protocol === 'https:')) {
+        return true;
+    }
+    return isCurrentLoopbackPagePort(getLocalServerPort());
+}
+
+const buildLoopbackOrigin = (port) => {
+    const normalizedPort = normalizePositivePort(port, 0);
+    const loc = getCurrentLocation();
+    const pageProtocol = String(loc?.protocol || '').toLowerCase();
+    const protocol = pageProtocol === 'https:' ? 'https:' : 'http:';
+    const pageHost = String(loc?.hostname || '').trim().toLowerCase();
+    const host = isLoopbackHost(pageHost) ? (pageHost === '0.0.0.0' ? '127.0.0.1' : pageHost) : '127.0.0.1';
+    return `${protocol}//${host}:${normalizedPort}`;
+};
+
+export function alignLoopbackUrlToPageHost(url) {
+    if (typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    const normalized = trimmed.replace(/\/$/, '');
+    const loc = getCurrentLocation();
+    if (!loc || !isLoopbackHost(loc.hostname)) return normalized;
+    try {
+        const parsed = new URL(normalized);
+        if (!isLoopbackHost(parsed.hostname)) return normalized;
+        parsed.protocol = String(loc.protocol || '').toLowerCase() === 'https:' ? 'https:' : parsed.protocol;
+        parsed.hostname = String(loc.hostname || '').toLowerCase() === '0.0.0.0' ? '127.0.0.1' : String(loc.hostname || '').toLowerCase();
+        return parsed.toString().replace(/\/$/, '');
+    } catch (_) {
+        return normalized;
+    }
+}
+
 /**
  * Check if running in Tauri environment
  */
@@ -19,7 +104,9 @@ export function isTauri() {
     if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
     if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
     const protocol = String(window.location?.protocol || '').toLowerCase();
-    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    const host = String(window.location?.hostname || '').toLowerCase();
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
+    if (host === 'tauri.localhost') return true;
     const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
     if (hasTauriInvoke) return true;
     const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -47,20 +134,19 @@ export function isLocalServerLikely() {
  */
 export function getLocalServerUrl() {
     if (typeof window === 'undefined') return null;
-    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
-    const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
-    if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
-        return `http://127.0.0.1:${forcedPort}`;
+    const localPort = getLocalServerPort();
+    const host = String(window.location?.hostname || '').trim().toLowerCase();
+    if (isCurrentLoopbackPagePort(localPort)) {
+        return window.location.origin;
     }
-    const customPort = Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__);
-    if (Number.isFinite(customPort) && customPort > 0) {
-        return `http://127.0.0.1:${customPort}`;
+    if (host === 'tauri.localhost') {
+        return window.location.origin;
     }
-    if (isTauri()) {
-        return 'http://127.0.0.1:3000';
+    const hasInjectedLocalPort = Number.isFinite(Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__))
+        || (window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true && Number.isFinite(Number(window.__SQUIRREL_TAURI_LOCAL_PORT__)));
+    if (hasInjectedLocalPort || isTauri()) {
+        return buildLoopbackOrigin(localPort);
     }
-
-    // Local server not available (pure browser/Fastify mode)
     return null;
 }
 
@@ -74,42 +160,51 @@ export function getCloudServerUrl() {
             ? window.__SQUIRREL_TAURI_FASTIFY_URL__.trim()
             : '';
         if (tauriProdOverride) {
-            return tauriProdOverride.replace(/\/$/, '');
+            return alignLoopbackUrlToPageHost(tauriProdOverride);
         }
 
         const customUrl = window.__SQUIRREL_FASTIFY_URL__;
         if (customUrl && typeof customUrl === 'string') {
-            return customUrl.trim().replace(/\/$/, '');
+            return alignLoopbackUrlToPageHost(customUrl);
         }
 
-        // Tauri production webview uses https://tauri.localhost for the UI origin.
-        // Cloud (Fastify) must be explicit and should never default to tauri.localhost.
+        const cloudPort = getCloudServerPort();
+        if (isCurrentLoopbackPagePort(cloudPort)) {
+            return window.location.origin;
+        }
+
         if (isTauri()) {
-            const host = window.location?.hostname || '';
-            if (host === 'tauri.localhost') {
-                return 'https://atome.one';
-            }
+            return buildLoopbackOrigin(cloudPort);
         }
 
         // If server_config.json was loaded into a global, derive from it
         const cfg = window.__SQUIRREL_SERVER_CONFIG__;
         if (cfg && cfg.fastify && cfg.fastify.host && cfg.fastify.port) {
+            const host = String(cfg.fastify.host || '').trim();
+            const port = getCloudServerPort();
+            if (isLoopbackHost(host)) {
+                return buildLoopbackOrigin(port);
+            }
             const protocol = window.location?.protocol || 'http:';
-            const host = cfg.fastify.host;
-            const port = cfg.fastify.port;
             return `${protocol}//${host}:${port}`;
         }
 
         // Auto-detect from current page URL (production mode)
         // If we're on https://atome.one, use that as the server
         const loc = window.location;
-        if (loc && loc.hostname && loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
+        if (loc && loc.hostname && !isLoopbackHost(loc.hostname)) {
             // We're on a real domain - use same origin
             const protocol = loc.protocol; // 'https:' or 'http:'
             const host = loc.hostname;
             // If port is default (80/443), don't include it
             const port = (loc.port && loc.port !== '80' && loc.port !== '443') ? `:${loc.port}` : '';
             return `${protocol}//${host}${port}`;
+        }
+
+        const protocol = window.location?.protocol || '';
+        const isEmbeddedIos = protocol === 'atome:' || window.__AUV3_MODE__ === true;
+        if (isEmbeddedIos) {
+            return 'https://atome.one';
         }
     }
 

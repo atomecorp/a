@@ -12,7 +12,7 @@
  * @module unified/UnifiedUserData
  */
 
-import { checkBackends, TauriAdapter, FastifyAdapter } from './_shared.js';
+import { checkBackends, TauriAdapter, FastifyAdapter } from './adole.js';
 
 // ============================================
 // UNIFIED USER DATA API

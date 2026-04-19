@@ -1,3 +1,5 @@
+import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
+
 // import('./examples/tables.js');
 // import('./examples/buttons.js');
 // import('./examples/matrix.js');
@@ -14,8 +16,6 @@
 // import('./examples/sliders.js');  
 
 // import('./examples/lists.js');
-
-//import('./examples/wavesurfer.js');
 
 // import('./examples/design_slider.js');
 
@@ -87,7 +87,15 @@
 // //////////////////////////////
 
 // //eVe below:
-import('./eVe/eVe.js');
+(async () => {
+	await loadModulesSequentially({
+		modules: [{ id: 'application.eVe', path: './eVe/eVe.js' }],
+		baseUrl: import.meta.url,
+		logPrefix: '[Application]'
+	});
+})().catch((error) => {
+	console.error('[Application] Bootstrap failed', error);
+});
 
 // import('./examples/AI.js');
 

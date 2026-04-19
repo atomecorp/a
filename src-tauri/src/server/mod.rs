@@ -36,6 +36,22 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use zip::ZipArchive;
 
+macro_rules! println {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::println!($($arg)*);
+        }
+    };
+}
+
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::eprintln!($($arg)*);
+        }
+    };
+}
+
 // Local authentication module
 pub mod local_auth;
 // Local atome storage module
@@ -1153,25 +1169,7 @@ async fn eve_mail_delete_handler(
 
 /// Debug log handler - receives logs from frontend to survive page reloads
 async fn debug_log_handler(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
-    // Print to terminal with timestamp
-    let level = payload
-        .get("level")
-        .and_then(|v| v.as_str())
-        .unwrap_or("info");
-    let message = payload
-        .get("message")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let elapsed = payload.get("elapsed").and_then(|v| v.as_i64()).unwrap_or(0);
-    let data = payload.get("data");
-
-    let icon = match level {
-        "error" => "❌",
-        "warn" => "⚠️",
-        _ => "📝",
-    };
-
-    println!("{} [FRONTEND +{}ms] {} {:?}", icon, elapsed, message, data);
+    let _ = payload;
 
     Json(json!({ "success": true }))
 }
@@ -3850,6 +3848,8 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             "http://localhost:3000".parse::<HeaderValue>().unwrap(),
             "http://127.0.0.1:3001".parse::<HeaderValue>().unwrap(),
             "http://localhost:3001".parse::<HeaderValue>().unwrap(),
+            "http://tauri.localhost".parse::<HeaderValue>().unwrap(),
+            "https://tauri.localhost".parse::<HeaderValue>().unwrap(),
             "tauri://localhost".parse::<HeaderValue>().unwrap(),
         ])
         .allow_methods([

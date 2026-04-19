@@ -163,6 +163,8 @@ const buildAllowedCorsOrigins = () => {
     'http://localhost:3000',
     'http://127.0.0.1:3001',
     'http://localhost:3001',
+    'http://tauri.localhost',
+    'https://tauri.localhost',
     'tauri://localhost',
     'null'
   ]);
@@ -182,6 +184,7 @@ const isAllowedCorsOrigin = (origin) => {
     const protocol = String(parsed.protocol || '').toLowerCase();
     const hostname = String(parsed.hostname || '').toLowerCase();
     if (protocol === 'tauri:' && hostname === 'localhost') return true;
+    if ((protocol === 'http:' || protocol === 'https:') && hostname === 'tauri.localhost') return true;
     if ((protocol === 'http:' || protocol === 'https:') && (hostname === 'localhost' || hostname === '127.0.0.1')) {
       return true;
     }

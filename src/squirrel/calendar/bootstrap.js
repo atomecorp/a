@@ -1,5 +1,6 @@
 import { createCalendarApiSource } from './calendar_api_source.js';
 import { createIcloudLegacyCalendarConnector } from './icloud_legacy_connector.js';
+import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
 import { createCalendarService } from './service.js';
 
 const SERVICE_KEY = '__SQUIRREL_CALENDAR_SERVICE__';
@@ -122,12 +123,16 @@ export const createGlobalCalendarApi = ({
             };
         },
         async openPanel() {
+            const panelPerfStart = perfNowMs();
             const openPanel = env?.open_calendar_panel
                 || env?.window?.open_calendar_panel
                 || globalThis?.open_calendar_panel
                 || null;
             if (typeof openPanel === 'function') {
                 await openPanel();
+                const totalMs = perfElapsedMs(panelPerfStart);
+                perfLog('[Perf] calendar.openPanel', { totalMs, bootstrapped: false });
+                emitPerfEvent('calendar.open_panel', { ok: true, totalMs, bootstrapped: false });
                 return { ok: true };
             }
             await ensureCalendarPanelApi();
@@ -136,9 +141,17 @@ export const createGlobalCalendarApi = ({
                 || globalThis?.open_calendar_panel
                 || null;
             if (typeof lateOpenPanel !== 'function') {
+                emitPerfEvent('calendar.open_panel', {
+                    ok: false,
+                    totalMs: perfElapsedMs(panelPerfStart),
+                    error: 'calendar_panel_unavailable'
+                });
                 return { ok: false, error: 'calendar_panel_unavailable' };
             }
             await lateOpenPanel();
+            const totalMs = perfElapsedMs(panelPerfStart);
+            perfLog('[Perf] calendar.openPanel', { totalMs, bootstrapped: true });
+            emitPerfEvent('calendar.open_panel', { ok: true, totalMs, bootstrapped: true });
             return { ok: true };
         },
         closePanel() {

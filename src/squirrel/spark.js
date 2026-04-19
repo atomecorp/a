@@ -3,329 +3,242 @@
  * Version with static imports for CDN bundling compatibility
  */
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CRITICAL FIX: Prevent page reload on unhandled promise rejections in Tauri WebView
-// This MUST be installed FIRST, in capture phase, before any async operations
-// ═══════════════════════════════════════════════════════════════════════════════
-(function () {
-  if (window._squirrelErrorHandlerInstalled) return;
-  window._squirrelErrorHandlerInstalled = true;
+import '../utils/console_silencer.js';
+import {
+  emitPerfEvent,
+  perfElapsedMs,
+  perfLog,
+  perfNowMs
+} from '../utils/perf_runtime.js';
+import { clearStaleSessionUI } from '../utils/session_ui_cleaner.js';
+import {
+  initializeSparkOptionalIntegrations,
+  loadSparkServerConfig,
+  migrateLegacyCloudAuthToken,
+  startSparkApplicationLoad
+} from '../utils/spark_bootstrap_runtime.js';
+import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
+import { exposeSparkGlobals } from '../utils/spark_exposure_runtime.js';
+import { installWebViewErrorGuards } from '../utils/webview_guards.js';
 
-  // Capture phase handler - catches rejections before they bubble
-  window.addEventListener('unhandledrejection', function (e) {
-    console.error('[Squirrel] Unhandled Promise Rejection caught:', e.reason);
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-    return false;
-  }, true); // true = capture phase
+const sparkBootstrapStartMs = perfNowMs();
 
-  // Also add bubble phase for safety
-  window.addEventListener('unhandledrejection', function (e) {
-    e.preventDefault();
-    return false;
-  }, false);
+const sparkBootModules = [
+  { id: 'atome.atome', path: './atome/atome.js' },
+  { id: 'atome.mcp', path: './atome/mcp.js' },
+  { id: 'ai.agent_gateway', path: './ai/agent_gateway.js' },
+  { id: 'ai.default_tools', path: './ai/default_tools.js' },
+  { id: 'ai.model_catalog_refresh', path: './ai/model_catalog_refresh.js' },
+  { id: 'dev.logging', path: './dev/logging.js' },
+  { id: 'dev.dev_console', path: './dev/dev_console.js' },
+  { id: 'security.bootstrap', path: './security/bootstrap.js' },
+  { id: 'observability.bootstrap', path: './observability/bootstrap.js' },
+  { id: 'bank.bootstrap', path: './bank/bootstrap.js' },
+  { id: 'calendar.bootstrap', path: './calendar/bootstrap.js' },
+  { id: 'contacts.bootstrap', path: './contacts/bootstrap.js' },
+  { id: 'mail.bootstrap', path: './mail/bootstrap.js' },
+  { id: 'voice.bootstrap', path: './voice/bootstrap.js' },
+  { id: 'voice.panel', path: './voice/panel.js' },
+  { id: 'apis.essentials', path: './apis/essentials.js' },
+  { id: 'apis.utils', path: './apis/utils.js' },
+  { id: 'apis.loader', path: './apis/loader.js' },
+  { id: 'apis.shortcut', path: './apis/shortcut.js' },
+  { id: 'apis.adole_apis', path: './apis/unified/adole_apis.js' },
+  { id: 'apis.loadServerConfig', path: './apis/loadServerConfig.js' },
+  { id: 'apis.dragdrop', path: './apis/dragdrop.js' },
+  { id: 'squirrel.core', path: './squirrel.js' },
+  { id: 'components.button', path: './components/button_builder.js' },
+  { id: 'components.slider', path: './components/slider_builder.js' },
+  { id: 'components.table', path: './components/table_builder.js' },
+  { id: 'components.matrix', path: './components/matrix_builder.js' },
+  { id: 'components.list', path: './components/List_builder.js' },
+  { id: 'components.menu', path: './components/menu_builder.js' },
+  { id: 'components.console', path: './components/console_builder.js' },
+  { id: 'components.unit', path: './components/unit_builder.js' },
+  { id: 'components.draggable', path: './components/draggable_builder.js' },
+  { id: 'components.badge', path: './components/badge_builder.js' },
+  { id: 'components.dropdown', path: './components/dropDown_builder.js' },
+  { id: 'components.tooltip', path: './components/tooltip_builder.js' },
+  { id: 'components.template', path: './components/template_builder.js' },
+  { id: 'components.minimal', path: './components/minimal_builder.js' },
+  { id: 'components.slice', path: './components/slice_builder.js' },
+  { id: 'default.shortcuts', path: './default/shortcuts.js' },
+  { id: 'integrations.iplug_web', path: './integrations/iplug_web.js' },
+  { id: 'apis.unified_sync', path: './apis/unified/UnifiedSync.js' }
+];
 
-  // Prevent any default error behavior that could cause reload
-  window.onerror = function (msg, url, line, col, error) {
-    console.error('[Squirrel] Uncaught error:', msg, 'at', url, line, col);
-    return true; // Prevents default handling
-  };
+const kickstartModule = [{ id: 'kickstart', path: './kickstart.js' }];
+const applicationEntryModule = [{ id: 'application.index', path: '../application/index.js' }];
 
-})();
+const squirrelComponentRegistry = {
+};
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECURITY: Clear any stale UI state from previous session immediately on startup
-// This prevents data leakage between users when the WebView caches DOM state
-// ═══════════════════════════════════════════════════════════════════════════════
-(function clearStaleSessionUI() {
-  if (typeof document === 'undefined') return;
+const emitSparkPerf = (stage, data = {}) => {
+  perfLog(`[Perf] spark.${String(stage || 'stage')}`, data);
+  emitPerfEvent(`spark.${String(stage || 'stage')}`, data);
+};
 
-  // Clear project matrix content if it exists from previous session, but keep the container
-  const matrixRoot = document.getElementById('eve_project_matrix');
-  if (matrixRoot) {
-    matrixRoot.classList.remove('is-active');
-    matrixRoot.style.display = 'none';
-    matrixRoot.style.opacity = '0';
-    // Clear the scroll container content, not the root
-    const scroll = matrixRoot.querySelector('#eve_project_matrix_scroll');
-    if (scroll) {
-      scroll.innerHTML = '';
-    }
-  }
-
-  // Clear matrix tool state
-  const matrixTool = document.getElementById('_intuition_matrix');
-  if (matrixTool) {
-    delete matrixTool.dataset.simpleActive;
-    delete matrixTool.dataset.activeTag;
-    matrixTool.style.removeProperty('background');
-  }
-
-  // Clear any stale project views - only if they exist AND have visible content
-  // This is a soft clear to prevent cross-user data leakage
-  const projectViews = document.querySelectorAll('[id^="project_view_"]');
-  projectViews.forEach(view => {
-    // Hide but don't remove - let the matrix handle removal properly
-    view.style.display = 'none';
-    view.style.visibility = 'hidden';
+const trackModuleLoad = (stage) => ({ moduleId, modulePath, totalMs }) => {
+  emitSparkPerf(stage, {
+    ok: true,
+    moduleId,
+    path: modulePath,
+    totalMs
   });
+};
 
-})();
-
-// atome imports
-import './atome/atome.js';
-import './atome/mcp.js';
-import './ai/agent_gateway.js';
-import './ai/default_tools.js';
-import { bootstrapAiModelCatalogRefresh } from './ai/model_catalog_refresh.js';
-import './dev/logging.js';
-import './dev/dev_console.js';
-import './security/bootstrap.js';
-import './observability/bootstrap.js';
-import './bank/bootstrap.js';
-import './calendar/bootstrap.js';
-import './contacts/bootstrap.js';
-import './mail/bootstrap.js';
-import './voice/bootstrap.js';
-import './voice/panel.js';
-
-bootstrapAiModelCatalogRefresh({ env: window });
-
-// === STATIC ES6 IMPORTS ===
-import './apis/essentials.js';
-import './apis/utils.js';
-import './apis/loader.js';
-import './apis/shortcut.js';
-import { AdoleAPI } from './apis/unified/adole_apis.js';
-import { loadServerConfigOnce } from './apis/loadServerConfig.js';
-import DragDrop from './apis/dragdrop.js';
-import { $, define, observeMutations } from './squirrel.js';
-
-// ============================================
-// GLOBAL API EXPOSURE
-// ============================================
-
-// Make AdoleAPI available globally throughout the framework
-if (typeof window !== 'undefined') {
-  window.AdoleAPI = AdoleAPI;
-}
-// Also make it available in Node.js environments
-if (typeof global !== 'undefined') {
-  global.AdoleAPI = AdoleAPI;
-}
-
-
-// === COMPONENT IMPORTS ===
-import Button from './components/button_builder.js';
-import Slider from './components/slider_builder.js';
-import Table from './components/table_builder.js';
-import Matrix from './components/matrix_builder.js';
-import List from './components/List_builder.js';
-import Menu from './components/menu_builder.js';
-import Console from './components/console_builder.js';
-import Unit, {
-  selectUnits,
-  getSelectedUnits,
-  deleteUnit,
-  connectUnits,
-  disconnectUnits,
-  getAllConnections,
-  getUnit,
-  getAllUnits
-} from './components/unit_builder.js';
-import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from './components/draggable_builder.js';
-import Badge from './components/badge_builder.js';
-import dropDown from './components/dropDown_builder.js';
-import Tooltip from './components/tooltip_builder.js';
-import Template from './components/template_builder.js';
-import Minimal from './components/minimal_builder.js';
-import Slice, { createSlice } from './components/slice_builder.js';
-
-
-// === default behavior ===
-import './default/shortcuts.js';
-
-// === OPTIONAL INTEGRATIONS ===
-import initIPlugWeb from './integrations/iplug_web.js';
-import UnifiedSync from './apis/unified/UnifiedSync.js';
-
-
-
-// === IMMEDIATE GLOBAL EXPOSURE ===
-window.Squirrel = window.Squirrel || {};
-window.$ = $;
-window.define = define;
-window.observeMutations = observeMutations;
-window.body = document.body;
-window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
+const trackModuleError = (stage) => ({ moduleId, modulePath, totalMs, error }) => {
+  emitSparkPerf(stage, {
+    ok: false,
+    moduleId,
+    path: modulePath,
+    totalMs,
+    error: String(error?.message || error || '')
+  });
+};
 
 // Legacy overlay layer removed.
 
-// === COMPONENT EXPOSURE ===
-window.Button = Button;
-window.Slider = Slider;
-window.Table = Table;
-window.Matrix = Matrix;
-window.List = List;
-window.Menu = Menu;
-window.Console = Console;
-window.Unit = Unit;
-window.Draggable = Draggable;
-window.makeDraggable = makeDraggable;
-window.makeDraggableWithDrop = makeDraggableWithDrop;
-window.makeDropZone = makeDropZone;
-window.Badge = Badge;
-window.dropDown = dropDown;
-window.Tooltip = Tooltip;
-window.Template = Template;
-window.Minimal = Minimal;
-window.Slice = Slice;
-window.createSlice = createSlice;
+const bootstrapSpark = async () => {
+  installWebViewErrorGuards();
+  clearStaleSessionUI();
 
-window.Squirrel.Button = Button;
-window.Squirrel.Slider = Slider;
-window.Squirrel.Table = Table;
-window.Squirrel.Matrix = Matrix;
-window.Squirrel.List = List;
-window.Squirrel.Menu = Menu;
-window.Squirrel.Console = Console;
-window.Squirrel.Unit = Unit;
-window.Squirrel.Draggable = Draggable;
-window.Squirrel.makeDraggable = makeDraggable;
-window.Squirrel.makeDraggableWithDrop = makeDraggableWithDrop;
-window.Squirrel.makeDropZone = makeDropZone;
-window.Squirrel.Badge = Badge;
-window.Squirrel.Tooltip = Tooltip;
-window.Squirrel.Template = Template;
-window.Squirrel.Minimal = Minimal;
-window.Squirrel.Slice = Slice;
-window.Squirrel.createSlice = createSlice;
-window.DragDrop = DragDrop;
-window.Squirrel.DragDrop = DragDrop;
+  const loadedModules = await loadModulesSequentially({
+    modules: sparkBootModules,
+    baseUrl: import.meta.url,
+    logPrefix: '[Squirrel]',
+    onModuleLoaded: trackModuleLoad('boot_module'),
+    onModuleError: trackModuleError('boot_module')
+  });
 
-// === ADD STATIC METHODS TO UNIT FOR COMPATIBILITY ===
-Unit.selectUnits = selectUnits;
-Unit.getSelectedUnits = getSelectedUnits;
-Unit.deleteUnit = deleteUnit;
-Unit.connectUnits = connectUnits;
-Unit.disconnectUnits = disconnectUnits;
-Unit.getAllConnections = getAllConnections;
-Unit.getUnit = getUnit;
-Unit.getAllUnits = getAllUnits;
+  const { bootstrapAiModelCatalogRefresh } = loadedModules['ai.model_catalog_refresh'];
+  const { AdoleAPI } = loadedModules['apis.adole_apis'];
+  const { loadServerConfigOnce } = loadedModules['apis.loadServerConfig'];
+  const DragDrop = loadedModules['apis.dragdrop'].default;
+  const { $, define, observeMutations } = loadedModules['squirrel.core'];
+  const Button = loadedModules['components.button'].default;
+  const Slider = loadedModules['components.slider'].default;
+  const Table = loadedModules['components.table'].default;
+  const Matrix = loadedModules['components.matrix'].default;
+  const List = loadedModules['components.list'].default;
+  const Menu = loadedModules['components.menu'].default;
+  const Console = loadedModules['components.console'].default;
+  const UnitModule = loadedModules['components.unit'];
+  const DraggableModule = loadedModules['components.draggable'];
+  const Badge = loadedModules['components.badge'].default;
+  const dropDown = loadedModules['components.dropdown'].default;
+  const Tooltip = loadedModules['components.tooltip'].default;
+  const Template = loadedModules['components.template'].default;
+  const Minimal = loadedModules['components.minimal'].default;
+  const SliceModule = loadedModules['components.slice'];
+  const initIPlugWeb = loadedModules['integrations.iplug_web'].default;
+  const UnifiedSync = loadedModules['apis.unified_sync'].default;
 
+  const Unit = UnitModule.default;
+  const {
+    selectUnits,
+    getSelectedUnits,
+    deleteUnit,
+    connectUnits,
+    disconnectUnits,
+    getAllConnections,
+    getUnit,
+    getAllUnits
+  } = UnitModule;
+  const {
+    default: Draggable,
+    makeDraggable,
+    makeDraggableWithDrop,
+    makeDropZone
+  } = DraggableModule;
+  const {
+    default: Slice,
+    createSlice
+  } = SliceModule;
 
-// === IMPORT KICKSTART AFTER EXPOSURE ===
-import('./kickstart.js').then(async () => {
-  // Load server_config.json early to avoid hardcoded localhost endpoints
-  try {
-    const cfg = await loadServerConfigOnce();
-    if (cfg) {
-      // Debug: confirm globals exist (helps diagnose "missing Fastify WebSocket URL")
-    } else {
-      console.warn('[Squirrel] server_config.json not loaded (Fastify endpoints may be unavailable)');
-    }
-  } catch (e) {
-    // Silent: config may not be available in some contexts
-  }
+  bootstrapAiModelCatalogRefresh({ env: globalThis?.window || globalThis });
+
+  squirrelComponentRegistry.Button = Button;
+  squirrelComponentRegistry.Slider = Slider;
+  squirrelComponentRegistry.Table = Table;
+  squirrelComponentRegistry.Matrix = Matrix;
+  squirrelComponentRegistry.List = List;
+  squirrelComponentRegistry.Menu = Menu;
+  squirrelComponentRegistry.Console = Console;
+  squirrelComponentRegistry.Unit = Unit;
+  squirrelComponentRegistry.Draggable = Draggable;
+  squirrelComponentRegistry.makeDraggable = makeDraggable;
+  squirrelComponentRegistry.makeDraggableWithDrop = makeDraggableWithDrop;
+  squirrelComponentRegistry.makeDropZone = makeDropZone;
+  squirrelComponentRegistry.Badge = Badge;
+  squirrelComponentRegistry.dropDown = dropDown;
+  squirrelComponentRegistry.Tooltip = Tooltip;
+  squirrelComponentRegistry.Template = Template;
+  squirrelComponentRegistry.Minimal = Minimal;
+  squirrelComponentRegistry.Slice = Slice;
+  squirrelComponentRegistry.createSlice = createSlice;
+  squirrelComponentRegistry.DragDrop = DragDrop;
+
+  const unitStaticMethods = {
+    selectUnits,
+    getSelectedUnits,
+    deleteUnit,
+    connectUnits,
+    disconnectUnits,
+    getAllConnections,
+    getUnit,
+    getAllUnits
+  };
+
+  exposeSparkGlobals({
+    AdoleAPI,
+    $,
+    define,
+    observeMutations,
+    componentRegistry: squirrelComponentRegistry,
+    Unit,
+    unitStaticMethods
+  });
+
+  await loadModulesSequentially({
+    modules: kickstartModule,
+    baseUrl: import.meta.url,
+    logPrefix: '[Squirrel]',
+    onModuleLoaded: trackModuleLoad('kickstart_module'),
+    onModuleError: trackModuleError('kickstart_module')
+  });
+
+  emitSparkPerf('kickstart_ready', {
+    totalMs: perfElapsedMs(sparkBootstrapStartMs)
+  });
+
+  const loadServerConfigMs = await loadSparkServerConfig(loadServerConfigOnce);
 
   // Token key migration (legacy -> current)
   // Some older builds stored the Fastify JWT under 'auth_token'. The unified Fastify adapter
   // expects 'cloud_auth_token'. Copy once to avoid breaking current_user(), projects, etc.
-  try {
-    const cloud = localStorage.getItem('cloud_auth_token');
-    const legacy = localStorage.getItem('auth_token');
-    if (!cloud || cloud.length < 10) {
-      if (legacy && legacy.length > 10) {
-        localStorage.setItem('cloud_auth_token', legacy);
-      }
-      // Never promote local_auth_token to cloud_auth_token.
-      // Tauri and Fastify often use different JWT secrets, which causes 401s.
-    }
-  } catch (e) {
-    // Ignore storage errors
-  }
+  migrateLegacyCloudAuthToken();
 
   // Toggle optional integrations once core runtime is ready
-  try { initIPlugWeb(); } catch (e) { console.warn('iPlug init failed', e); }
-  try { UnifiedSync.init({ autoConnect: true }); } catch (e) { console.warn('UnifiedSync init failed', e); }
+  const optionalIntegrationMs = initializeSparkOptionalIntegrations({ initIPlugWeb, UnifiedSync });
 
-  // === LOAD APPLICATION ===
-  // Setup drag/drop prevention
-  window.addEventListener("dragover", function (e) {
-    e.preventDefault();
-    e.stopPropagation();
+  startSparkApplicationLoad({
+    emitSparkPerf,
+    importApplication: async () => {
+      await loadModulesSequentially({
+        modules: applicationEntryModule,
+        baseUrl: import.meta.url,
+        logPrefix: '[Application]',
+        onModuleLoaded: trackModuleLoad('application_module'),
+        onModuleError: trackModuleError('application_module')
+      });
+    },
+    loadServerConfigMs,
+    optionalIntegrationMs,
+    sparkBootstrapStartMs
   });
-  window.addEventListener("drop", function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-  });
+};
 
-  // Import application once framework is ready
-  let __appImported = false;
-  function __importAppOnce() {
-    if (__appImported) return;
-    __appImported = true;
-    import('../application/index.js').catch(err => {
-      console.error('[Squirrel] Application import error:', err);
-      try { window.webkit?.messageHandlers?.console?.postMessage('[SPARK-DIAG] Application import ERROR: ' + String(err?.message || err)); } catch (_) { }
-    });
-  }
-
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-  const __readInjectedLocalPort = () => {
-    const raw = window.__ATOME_LOCAL_HTTP_PORT__
-      || window.ATOME_LOCAL_HTTP_PORT
-      || window.__LOCAL_HTTP_PORT
-      || window.__SQUIRREL_TAURI_LOCAL_PORT__
-      || 0;
-    const port = Number(raw);
-    return Number.isFinite(port) && port > 0 ? port : 0;
-  };
-
-  const __waitForIOSLocalServerReady = (timeoutMs = 6000) => {
-    if (__readInjectedLocalPort()) return Promise.resolve(true);
-    return new Promise((resolve) => {
-      let settled = false;
-      let pollId = null;
-      let timeoutId = null;
-
-      const cleanup = () => {
-        window.removeEventListener('local-server-ready', onReady);
-        if (pollId) clearInterval(pollId);
-        if (timeoutId) clearTimeout(timeoutId);
-      };
-      const finish = (ready) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(ready);
-      };
-      const onReady = () => finish(true);
-
-      window.addEventListener('local-server-ready', onReady, { once: true });
-      pollId = setInterval(() => {
-        if (__readInjectedLocalPort()) finish(true);
-      }, 50);
-      timeoutId = setTimeout(() => finish(!!__readInjectedLocalPort()), timeoutMs);
-    });
-  };
-
-  if (!isIOS) {
-    // Non-iOS: import immediately since squirrel:ready was just dispatched by kickstart
-    __importAppOnce();
-  } else {
-    // iOS local HTTP uses an async native port; importing before it is injected makes
-    // project/matrix loaders cache empty backend responses.
-    __waitForIOSLocalServerReady().then((ready) => {
-      if (!ready) {
-        console.warn('[Squirrel] iOS local server was not ready before app import; continuing in degraded mode');
-      }
-      __importAppOnce();
-    });
-  }
-}).catch(err => {
-  console.error('❌ Kickstart error:', err);
+bootstrapSpark().catch((error) => {
+  console.error('❌ Spark bootstrap error:', error);
 });

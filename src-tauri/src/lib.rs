@@ -1,13 +1,30 @@
+mod audio_engine;
 mod dev_logging;
 mod iplug_bridge;
 mod native_contacts;
 mod native_recorder;
-mod audio_engine;
+mod runtime_logging;
 mod server;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State};
+
+macro_rules! println {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::println!($($arg)*);
+        }
+    };
+}
+
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::eprintln!($($arg)*);
+        }
+    };
+}
 
 #[derive(Clone)]
 pub struct ProjectPaths {

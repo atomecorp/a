@@ -13,7 +13,7 @@
  * @module unified/UnifiedAuth
  */
 
-import { checkBackends } from './_shared.js';
+import { checkBackends } from './adole.js';
 
 const getAdoleAuth = () => {
     if (typeof window !== 'undefined' && window.AdoleAPI?.auth) return window.AdoleAPI.auth;

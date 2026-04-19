@@ -1,0 +1,57 @@
+import { perfElapsedMs, perfNowMs } from './perf_runtime.js';
+
+export const loadModulesSequentially = async ({
+    modules = [],
+    baseUrl,
+    logPrefix = '[Runtime]',
+    target = globalThis?.window,
+    onModuleLoaded,
+    onModuleError
+} = {}) => {
+    const loadedModules = {};
+
+    for (const entry of modules) {
+        const descriptor = typeof entry === 'string'
+            ? { id: entry, path: entry }
+            : (entry || {});
+        const moduleId = String(descriptor.id || descriptor.path || 'module');
+        const rawModulePath = String(descriptor.path || descriptor.id || '');
+        const modulePath = baseUrl
+            ? new URL(rawModulePath, baseUrl).href
+            : rawModulePath;
+        const moduleStart = perfNowMs();
+
+        try {
+            const moduleNamespace = await import(modulePath);
+            const totalMs = perfElapsedMs(moduleStart);
+
+            loadedModules[moduleId] = moduleNamespace;
+
+            if (typeof onModuleLoaded === 'function') {
+                onModuleLoaded({
+                    descriptor,
+                    moduleId,
+                    modulePath,
+                    moduleNamespace,
+                    totalMs
+                });
+            }
+        } catch (error) {
+            const totalMs = perfElapsedMs(moduleStart);
+
+            if (typeof onModuleError === 'function') {
+                onModuleError({
+                    descriptor,
+                    moduleId,
+                    modulePath,
+                    error,
+                    totalMs
+                });
+            }
+
+            throw error;
+        }
+    }
+
+    return loadedModules;
+};

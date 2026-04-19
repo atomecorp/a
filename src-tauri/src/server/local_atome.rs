@@ -20,6 +20,22 @@ use std::{
 };
 use uuid::Uuid;
 
+macro_rules! println {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::println!($($arg)*);
+        }
+    };
+}
+
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::eprintln!($($arg)*);
+        }
+    };
+}
+
 const ANONYMOUS_USERNAME: &str = "anonymous";
 const ANONYMOUS_PHONE_TAURI: &str = "0000000000";
 const ADOLE_SCHEMA_SQL: &str = include_str!("../../../database/schema.sql");

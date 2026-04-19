@@ -12,7 +12,7 @@
  * @module unified/UnifiedAtome
  */
 
-import { checkBackends, TauriAdapter, FastifyAdapter } from './_shared.js';
+import { checkBackends, TauriAdapter, FastifyAdapter } from './adole.js';
 import { AdoleAPI } from './adole_apis.js';
 
 const resolveAdoleAtomes = () => {

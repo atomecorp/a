@@ -23,6 +23,23 @@ const DEFAULT_LOG_ALLOWLIST = [
   /\[AtomeSync\]/
 ];
 
+function isConsoleSilencedByRuntime() {
+  if (typeof window === 'undefined') return false;
+  if (window.__SQUIRREL_ENABLE_DEV_LOG_WRAPPER__ === true) return false;
+  return window.__SQUIRREL_CONSOLE_SILENCED__ === true;
+}
+
+function canUseTauriLogBridge() {
+  if (typeof window === 'undefined') return false;
+  if (window.__SQUIRREL_DISABLE_TAURI_LOG_BRIDGE__ === true) return false;
+  if (window.__SQUIRREL_ENABLE_IPC_LOG_BRIDGE__ === true) return true;
+  const protocol = String(window.location?.protocol || '').toLowerCase();
+  const host = String(window.location?.hostname || '').toLowerCase();
+  if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
+  if (host === 'tauri.localhost') return true;
+  return false;
+}
+
 function isTauriRuntime() {
   if (typeof window === 'undefined') return false;
   if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
@@ -262,6 +279,7 @@ async function flushNetworkQueue() {
 }
 
 async function sendToTauri(payload) {
+  if (!canUseTauriLogBridge()) throw new Error('Tauri log bridge unavailable for current origin');
   const invoke = getTauriInvoke();
   if (!invoke) throw new Error('Tauri invoke unavailable');
   await invoke('log_from_webview', { payload });
@@ -295,7 +313,7 @@ async function emitLog(level, args) {
   if (!isValidLogEnvelope(finalPayload)) return;
 
   try {
-    if (isTauriRuntime()) {
+    if (canUseTauriLogBridge()) {
       await sendToTauri(finalPayload);
       return;
     }
@@ -308,6 +326,10 @@ async function emitLog(level, args) {
 
 function installConsoleWrapper() {
   if (typeof window === 'undefined') return;
+  if (isConsoleSilencedByRuntime()) {
+    window.atomeLog = () => { };
+    return;
+  }
   if (window.__ATOME_CONSOLE_WRAPPED__) return;
   window.__ATOME_CONSOLE_WRAPPED__ = true;
 
@@ -345,6 +367,11 @@ function installConsoleWrapper() {
 function bootstrapLogging() {
   if (typeof window === 'undefined') {
     installConsoleWrapper();
+    return;
+  }
+
+  if (isConsoleSilencedByRuntime()) {
+    window.atomeLog = () => { };
     return;
   }
 

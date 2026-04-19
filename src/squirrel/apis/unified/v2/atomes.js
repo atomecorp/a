@@ -1,6 +1,12 @@
 import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
+import {
+    alignLoopbackUrlToPageHost,
+    getCloudServerUrl,
+    getLocalServerUrl,
+    isLocalAxumPage
+} from '../../serverUrls.js';
 
 const adapters = {
     tauri: TauriAdapter,
@@ -40,6 +46,28 @@ const getCurrentUserId = () => {
 
 const isAnonymous = () => getSessionState().mode === 'anonymous';
 const isLoggedOut = () => getSessionState().mode === 'logged_out';
+const allowFastifyPrimaryOnLocalAxumPage = () => (
+    typeof window !== 'undefined'
+    && window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ === true
+);
+
+const isBrowserOnLocalAxumPage = () => !isTauriRuntime() && isLocalAxumPage();
+
+const canImplicitlyReachFastify = () => {
+    if (!isBrowserOnLocalAxumPage()) return true;
+    return allowFastifyPrimaryOnLocalAxumPage();
+};
+
+const resolveBackendPlan = () => {
+    const runtimeTauri = isTauriRuntime();
+    const browserOnLocalAxum = !runtimeTauri && isLocalAxumPage();
+    return {
+        runtimeTauri,
+        browserOnLocalAxum,
+        primary: (runtimeTauri || browserOnLocalAxum) ? 'tauri' : 'fastify',
+        secondary: (runtimeTauri || browserOnLocalAxum) ? 'fastify' : 'tauri'
+    };
+};
 
 const filterByOwner = (records, userId, { allowCreator = false } = {}) => {
     if (!Array.isArray(records) || !userId) return [];
@@ -201,13 +229,14 @@ const resolveHttpBaseUrl = (backend, adapter) => {
     if (base.startsWith('ws://')) base = `http://${base.slice(5)}`;
     if (base.startsWith('wss://')) base = `https://${base.slice(6)}`;
     base = base.replace(/\/ws\/api\/?$/, '').replace(/\/$/, '');
-    if (base) return base;
+    if (base) return alignLoopbackUrlToPageHost(base);
     if (typeof window === 'undefined') return '';
     if (backend === 'fastify') {
-        return (window.__SQUIRREL_FASTIFY_URL__ || 'http://127.0.0.1:3001').replace(/\/$/, '');
+        const cloudBase = getCloudServerUrl();
+        return cloudBase ? alignLoopbackUrlToPageHost(cloudBase) : '';
     }
-    const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || 3000;
-    return `http://127.0.0.1:${port}`;
+    const localBase = getLocalServerUrl();
+    return localBase ? alignLoopbackUrlToPageHost(localBase) : '';
 };
 
 const buildBackendAuthHeaders = (backend, token) => {
@@ -252,6 +281,7 @@ const listStateCurrentOnBackend = async (backend, options) => {
 export const __ATOMES_TEST_ONLY__ = { buildBackendAuthHeaders };
 
 const canUseFastify = async (currentUserId) => {
+    if (!canImplicitlyReachFastify()) return false;
     if (!FastifyAdapter?.getToken?.()) return false;
     try {
         const me = await FastifyAdapter.auth.me();
@@ -277,9 +307,7 @@ export async function list_atomes(options = {}, callback) {
         return result;
     }
 
-    const runtimeTauri = isTauriRuntime();
-    const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
+    const { runtimeTauri, browserOnLocalAxum, primary, secondary } = resolveBackendPlan();
     const atomeType = options.type || options.atomeType || options.atome_type || null;
     const skipOwnerFilter = options.skipOwner === true || options.ownerId === '*' || options.owner_id === '*' || options.ownerId === 'all' || options.owner_id === 'all';
     const allowCrossOwner = skipOwnerFilter && (options.includeShared === true || atomeType === 'user' || atomeType === 'share_request' || atomeType === 'share_policy' || atomeType === 'share_permission');
@@ -297,7 +325,7 @@ export async function list_atomes(options = {}, callback) {
         : await listOnBackend(primary, options, currentUserId, allowCrossOwner);
     results[primary] = { atomes: primaryResult.list, error: primaryResult.error };
 
-    if (runtimeTauri && !isAnonymous() && (options.includeShared || primaryResult.list.length === 0)) {
+    if ((runtimeTauri || browserOnLocalAxum) && !isAnonymous() && (options.includeShared || primaryResult.list.length === 0)) {
         const allowFastify = await canUseFastify(currentUserId);
         if (allowFastify) {
             const secondaryResult = shouldUseStateCurrent
@@ -344,9 +372,7 @@ export async function create_atome(options = {}, callback) {
         return result;
     }
 
-    const runtimeTauri = isTauriRuntime();
-    const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
+    const { runtimeTauri, primary, secondary } = resolveBackendPlan();
 
     const atomeId = options.id || generateUUID();
     const atomeType = options.type || options.kind || 'shape';
@@ -530,9 +556,7 @@ export async function alter_atome(atomeId, properties = {}, callback) {
         return result;
     }
 
-    const runtimeTauri = isTauriRuntime();
-    const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
+    const { runtimeTauri, primary, secondary } = resolveBackendPlan();
 
     const payload = properties?.properties || properties?.particles || properties || {};
 
@@ -570,9 +594,7 @@ export async function delete_atome(atomeId, callback) {
         return result;
     }
 
-    const runtimeTauri = isTauriRuntime();
-    const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
+    const { runtimeTauri, primary, secondary } = resolveBackendPlan();
 
     const primaryResult = await adapters[primary].atome.softDelete(atomeId);
     const okPrimary = !!(primaryResult?.ok || primaryResult?.success);
@@ -597,8 +619,7 @@ export async function delete_atome(atomeId, callback) {
 }
 
 export async function realtime_patch(atomeId, properties = {}, callback) {
-    const runtimeTauri = isTauriRuntime();
-    const primary = runtimeTauri ? 'tauri' : 'fastify';
+    const { primary } = resolveBackendPlan();
     const adapter = adapters[primary];
     if (!adapter?.atome?.realtime) {
         const result = { success: false, error: 'realtime_unavailable' };
@@ -612,8 +633,7 @@ export async function realtime_patch(atomeId, properties = {}, callback) {
 }
 
 export async function get_atome(atomeId, callback) {
-    const runtimeTauri = isTauriRuntime();
-    const primary = runtimeTauri ? 'tauri' : 'fastify';
+    const { primary } = resolveBackendPlan();
     const adapter = adapters[primary];
     if (!adapter?.atome?.get) {
         const result = { ok: false, error: 'get_unavailable' };

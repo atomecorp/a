@@ -8,6 +8,16 @@
  */
 
 import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
+import {
+    alignLoopbackUrlToPageHost,
+    getCloudServerPort,
+    getCloudServerUrl,
+    isLocalAxumPage,
+    getLocalServerPort,
+    getLocalServerUrl,
+    isCurrentLoopbackPagePort,
+    isTauri as isCanonicalTauriRuntime
+} from '../serverUrls.js';
 
 // ============================================
 // CONSTANTS
@@ -145,19 +155,7 @@ async function silentPing(baseUrl) {
  * Check if we're in Tauri environment
  */
 function isInTauri() {
-    if (typeof window === 'undefined') return false;
-    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
-    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
-    const protocol = window.location?.protocol || '';
-    const host = window.location?.hostname || '';
-    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
-    if (host === 'tauri.localhost') return true;
-    const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
-    if (hasTauriInvoke) return true;
-    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-    if (!hasTauriObjects) return false;
-    const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
-    return /tauri/i.test(userAgent);
+    return isCanonicalTauriRuntime();
 }
 
 function isEmbeddedIOSRuntime() {
@@ -169,18 +167,19 @@ function isEmbeddedIOSRuntime() {
     return hostEnv === 'app' || hostEnv === 'auv3';
 }
 
+function allowFastifyPrimaryOnLocalAxumPage() {
+    if (typeof window === 'undefined') return false;
+    return window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ === true;
+}
+
 function readLocalTauriHttpPort() {
     if (typeof window === 'undefined') return null;
-    const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
-    const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
-    if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
-        return forcedPort;
+    const localUrl = getLocalServerUrl();
+    if (!localUrl) {
+        if (isEmbeddedIOSRuntime()) return null;
+        return isInTauri() ? getLocalServerPort() : null;
     }
-    const raw = window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null;
-    const value = Number(raw);
-    if (Number.isFinite(value) && value > 0) return value;
-    if (isEmbeddedIOSRuntime()) return null;
-    return isInTauri() ? 3000 : null;
+    return getLocalServerPort();
 }
 
 function hasInjectedLocalTauriPort() {
@@ -200,12 +199,7 @@ function clearFastifyOverrideStorage() {
 }
 
 function readExpectedFastifyLoopbackPort() {
-    const raw = window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port ?? 3001;
-    let expected = Number(raw);
-    if (!Number.isFinite(expected) || expected <= 0) expected = 3001;
-    const localPort = readLocalTauriHttpPort();
-    if (localPort && expected === localPort) expected = 3001;
-    return expected;
+    return getCloudServerPort();
 }
 
 function isDisallowedFastifyLoopbackPort(baseUrl) {
@@ -283,6 +277,9 @@ function resolveBackendSource(kind) {
     const globalValue = readGlobalOverride(globalKey);
     const configDefault = CONFIG[`${key.toUpperCase()}_SOURCE`];
     const explicit = normalizeSource(globalValue || configValue || configDefault);
+    if (isLocalAxumPage() && !allowFastifyPrimaryOnLocalAxumPage()) {
+        return 'tauri';
+    }
     if (explicit && explicit !== 'auto') return explicit;
     if (isEmbeddedIOSRuntime()) {
         return 'tauri';
@@ -321,8 +318,8 @@ export function resolveSyncDirection() {
 function getTauriHttpBaseUrl() {
     if (typeof window === 'undefined') return CONFIG.TAURI_BASE_URL;
 
-    const port = readLocalTauriHttpPort();
-    if (port) return `http://127.0.0.1:${port}`;
+    const base = getLocalServerUrl();
+    if (base) return alignLoopbackUrlToPageHost(base);
     if (isEmbeddedIOSRuntime()) return '';
 
     return CONFIG.TAURI_BASE_URL;
@@ -335,44 +332,14 @@ function getTauriWsUrl() {
 
 function getFastifyHttpBaseUrl() {
     if (typeof window === 'undefined') return null;
-
-    const custom = window.__SQUIRREL_FASTIFY_URL__;
-    if (typeof custom === 'string' && custom.trim()) {
-        const normalized = custom.trim().replace(/\/$/, '');
-        if (isInvalidFastifyHttpBase(normalized)) {
-            clearFastifyOverrideStorage();
-        } else {
-            return normalized;
-        }
+    const base = getCloudServerUrl();
+    if (!base) return null;
+    const normalized = alignLoopbackUrlToPageHost(base);
+    if (isInvalidFastifyHttpBase(normalized)) {
+        clearFastifyOverrideStorage();
+        return null;
     }
-
-    // In Tauri mode, default to local Fastify on port 3001
-    if (isInTauri()) {
-        const config = window.__SQUIRREL_SERVER_CONFIG__;
-        const host = config?.fastify?.host || '127.0.0.1';
-        let port = Number(config?.fastify?.port || 3001);
-        if (!Number.isFinite(port) || port <= 0) {
-            port = 3001;
-        }
-        const localPort = readLocalTauriHttpPort();
-        if (localPort && port === localPort && isLoopbackHostname(host)) {
-            port = 3001;
-        }
-        return `http://127.0.0.1:${port}`;
-    }
-
-    const loc = window.location;
-    if (loc && loc.hostname && loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
-        return loc.origin;
-    }
-
-    const protocol = window.location?.protocol || '';
-    const isEmbeddedIos = protocol === 'atome:' || window.__AUV3_MODE__ === true;
-    if (isEmbeddedIos) {
-        return 'https://atome.one';
-    }
-
-    return null;
+    return normalized;
 }
 
 function getFastifyWsApiUrl() {
@@ -412,11 +379,13 @@ function isLocalDev() {
 function shouldAttemptFastify() {
     if (typeof window === 'undefined') return false;
     if (window.__SQUIRREL_DISABLE_FASTIFY__ === true) return false;
+    if (isLocalAxumPage() && !allowFastifyPrimaryOnLocalAxumPage()) return false;
     return !!getFastifyHttpBaseUrl();
 }
 
 async function checkFastifyViaTauri(fastifyBaseUrl) {
-    if (!isInTauri()) return null;
+    const localBase = getLocalServerUrl();
+    if (!localBase) return null;
 
     // This check only reports whether the LOCAL Fastify process (spawned by the Tauri local server)
     // is available. If the selected Fastify target is cloud, this must be skipped.
@@ -429,10 +398,8 @@ async function checkFastifyViaTauri(fastifyBaseUrl) {
         }
     } catch { }
 
-    const localBase = getTauriHttpBaseUrl();
-    if (!localBase) return null;
     try {
-        const res = await fetch(`${localBase}/api/fastify-status`, {
+        const res = await fetch(`${alignLoopbackUrlToPageHost(localBase)}/api/fastify-status`, {
             method: 'GET',
             credentials: 'omit',
             headers: { 'Accept': 'application/json' }
@@ -461,7 +428,8 @@ export async function checkConnection(backend) {
     // Browser/production must never assume localhost Tauri exists.
     if (backend === 'tauri') {
         const hasLocalRuntime = hasInjectedLocalTauriPort();
-        if (isInTauri() || hasLocalRuntime) {
+        const browserOnLocalAxum = !!(getLocalServerUrl() && isCurrentLoopbackPagePort(getLocalServerPort()));
+        if (isInTauri() || hasLocalRuntime || browserOnLocalAxum) {
             // In Tauri app, or embedded iOS with injected local AiS port, assume local server is available
             state.online = true;
             state.lastCheck = now;

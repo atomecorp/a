@@ -5,6 +5,8 @@ use tracing::{debug, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+pub use crate::runtime_logging::xcode_logs_enabled;
+
 #[derive(Debug, Deserialize)]
 pub struct WebviewLogPayload {
     pub timestamp: Option<String>,
@@ -112,6 +114,10 @@ pub fn init_tracing() -> Option<WorkerGuard> {
 
 #[tauri::command]
 pub fn log_from_webview(payload: WebviewLogPayload) {
+    if !xcode_logs_enabled() {
+        return;
+    }
+
     let level = payload.level.as_deref().unwrap_or("info");
     let webview_source = payload.source.as_deref().unwrap_or("tauri_webview");
     let webview_timestamp = payload.timestamp.as_deref().unwrap_or("");

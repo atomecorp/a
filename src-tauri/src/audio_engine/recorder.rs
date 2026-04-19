@@ -20,6 +20,14 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use super::metering;
 
+macro_rules! eprintln {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::eprintln!($($arg)*);
+        }
+    };
+}
+
 /// Output format for WAV recording.
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
 pub enum OutputFormat {

@@ -19,6 +19,14 @@ use std::{
 };
 use uuid::Uuid;
 
+macro_rules! println {
+    ($($arg:tt)*) => {
+        if crate::runtime_logging::xcode_logs_enabled() {
+            std::println!($($arg)*);
+        }
+    };
+}
+
 use super::local_atome::LocalAtomeState;
 
 // =============================================================================
