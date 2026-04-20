@@ -6,6 +6,31 @@
  * - Provides SVG rendering helpers for UI.
  */
 import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
+import { getLocalServerUrl } from './serverUrls.js';
+
+const normalizeNoTrailingSlash = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/\/$/, '');
+};
+
+const joinBaseAndPath = (base, path) => {
+  const normalizedBase = normalizeNoTrailingSlash(base);
+  const normalizedPath = String(path || '').replace(/^\/+/, '');
+  if (!normalizedBase || !normalizedPath) return '';
+  return `${normalizedBase}/${normalizedPath}`;
+};
+
+const isSameOriginBase = (base) => {
+  if (typeof window === 'undefined') return false;
+  const normalizedBase = normalizeNoTrailingSlash(base);
+  if (!normalizedBase) return false;
+  try {
+    const parsed = new URL(normalizedBase, window.location.href);
+    return parsed.origin === window.location.origin;
+  } catch (_) {
+    return false;
+  }
+};
 
 // --- Port persistence (survive refresh) -------------------------------------------------
 (function persistLocalPort() {
@@ -131,12 +156,28 @@ function dataFetcher(path, opts = {}) {
     const looksBinary = binPreferred.test(ext) || looksAudio; // kept for future branching
 
     const serverCandidates = [];
-    if (port) {
-      serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
-      if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
+    const pushServerCandidate = (base, routePath) => {
+      const nextUrl = joinBaseAndPath(base, routePath);
+      if (!nextUrl || serverCandidates.includes(nextUrl)) return;
+      serverCandidates.push(nextUrl);
+    };
+    const encodedPath = encodeURI(cleanPath);
+    const localServerBase = normalizeNoTrailingSlash(getLocalServerUrl() || '');
+    if (localServerBase) {
+      pushServerCandidate(localServerBase, `file/${encodedPath}`);
+      if (looksText) pushServerCandidate(localServerBase, `text/${encodedPath}`);
       if (looksAudio) {
-        serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
-        serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
+        pushServerCandidate(localServerBase, `audio/${encodeURIComponent(filename)}`);
+        pushServerCandidate(localServerBase, `audio/${encodedPath}`);
+      }
+    }
+    if (port) {
+      const fallbackBase = `http://127.0.0.1:${port}`;
+      pushServerCandidate(fallbackBase, `file/${encodedPath}`);
+      if (looksText) pushServerCandidate(fallbackBase, `text/${encodedPath}`);
+      if (looksAudio) {
+        pushServerCandidate(fallbackBase, `audio/${encodeURIComponent(filename)}`);
+        pushServerCandidate(fallbackBase, `audio/${encodedPath}`);
       }
     }
     let assetPath = cleanPath;
@@ -144,6 +185,9 @@ function dataFetcher(path, opts = {}) {
     const assetCandidates = [assetPath];
     const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
     if (altAsset !== assetPath) assetCandidates.push(altAsset);
+    const preferServerCandidatesFirst = isSameOriginBase(localServerBase);
+    const primaryCandidates = preferServerCandidatesFirst ? serverCandidates : assetCandidates;
+    const secondaryCandidates = preferServerCandidatesFirst ? assetCandidates : serverCandidates;
 
     const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
 
@@ -196,10 +240,10 @@ function dataFetcher(path, opts = {}) {
     }
 
     if (mode === 'url') {
-      const out = serverCandidates[0] || assetCandidates[0];
+      const out = primaryCandidates[0] || secondaryCandidates[0];
       return done(out);
     }
-    for (const u of serverCandidates) {
+    for (const u of primaryCandidates) {
       try {
         const r = await fetch(u);
         if (!r.ok) continue;
@@ -217,7 +261,7 @@ function dataFetcher(path, opts = {}) {
         return done(u);
       } catch (_) { }
     }
-    for (const u of assetCandidates) {
+    for (const u of secondaryCandidates) {
 
       try {
         if (looksText || mode === 'text' || mode === 'preview') {
@@ -240,7 +284,7 @@ function dataFetcher(path, opts = {}) {
     }
 
     delete __inflightData[key];
-    throw new Error('Not found (candidates: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+    throw new Error('Not found (candidates: ' + [...primaryCandidates, ...secondaryCandidates].join(', ') + ')');
   })();
   __inflightData[key] = p;
   return p;

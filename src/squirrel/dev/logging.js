@@ -167,6 +167,45 @@ function getSessionId() {
   }
 }
 
+function readRuntimeVersions() {
+  if (typeof window === 'undefined') {
+    return {
+      atome_version: null,
+      eve_version: null
+    };
+  }
+
+  const runtimeVersions = window.__SQUIRREL_VERSIONS__ || null;
+  const atomeVersion = typeof runtimeVersions?.atome === 'string' && runtimeVersions.atome.trim()
+    ? runtimeVersions.atome.trim()
+    : (typeof window.__ATOME_VERSION__ === 'string' && window.__ATOME_VERSION__.trim()
+      ? window.__ATOME_VERSION__.trim()
+      : (typeof window.__SQUIRREL_VERSION__ === 'string' && window.__SQUIRREL_VERSION__.trim()
+        ? window.__SQUIRREL_VERSION__.trim()
+        : null));
+  const eveVersion = typeof runtimeVersions?.eve === 'string' && runtimeVersions.eve.trim()
+    ? runtimeVersions.eve.trim()
+    : (typeof window.__EVE_VERSION__ === 'string' && window.__EVE_VERSION__.trim()
+      ? window.__EVE_VERSION__.trim()
+      : null);
+
+  return {
+    atome_version: atomeVersion,
+    eve_version: eveVersion
+  };
+}
+
+async function ensureRuntimeVersionsFresh() {
+  if (typeof window === 'undefined') return;
+  if (typeof window.__refreshSquirrelVersions__ === 'function') {
+    await Promise.resolve(window.__refreshSquirrelVersions__(false)).catch(() => null);
+    return;
+  }
+  if (window.__SQUIRREL_VERSION_PROMISE__) {
+    await Promise.resolve(window.__SQUIRREL_VERSION_PROMISE__).catch(() => null);
+  }
+}
+
 function safeStringify(value) {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
@@ -287,6 +326,7 @@ async function sendToTauri(payload) {
 
 async function emitLog(level, args) {
   if (isUiLoggingDisabled()) return;
+  await ensureRuntimeVersionsFresh();
   const source = isTauriRuntime() ? 'tauri_webview' : 'browser';
   const message = formatArgs(args);
   const data = {
@@ -297,7 +337,8 @@ async function emitLog(level, args) {
       return arg;
     }),
     url: typeof window !== 'undefined' ? window.location.href : null,
-    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+    runtime_versions: readRuntimeVersions()
   };
 
   const envelope = buildLogEnvelope({

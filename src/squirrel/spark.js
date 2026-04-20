@@ -208,8 +208,18 @@ const bootstrapSpark = async () => {
     onModuleError: trackModuleError('kickstart_module')
   });
 
+  if (typeof window !== 'undefined' && window.__SQUIRREL_VERSION_PROMISE__) {
+    await Promise.resolve(window.__SQUIRREL_VERSION_PROMISE__).catch(() => null);
+  }
+
+  const runtimeVersions = typeof window !== 'undefined' && window.__SQUIRREL_VERSIONS__
+    ? window.__SQUIRREL_VERSIONS__
+    : null;
+
   emitSparkPerf('kickstart_ready', {
-    totalMs: perfElapsedMs(sparkBootstrapStartMs)
+    totalMs: perfElapsedMs(sparkBootstrapStartMs),
+    atomeVersion: runtimeVersions?.atome || null,
+    eveVersion: runtimeVersions?.eve || null
   });
 
   const loadServerConfigMs = await loadSparkServerConfig(loadServerConfigOnce);

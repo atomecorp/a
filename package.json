@@ -64,6 +64,7 @@
     "build:minimal": "rollup -c scripts_utils/rollup.config.minimal.js",
     "check:syntax": "node check-syntax.mjs",
     "check:eve-ai-guardrails": "node tools/check_eve_ai_guardrails.mjs",
+    "check:no-fallbacks": "node tools/check_no_fallbacks.mjs",
     "check:molecule-guardrails": "node tools/check_molecule_guardrails.mjs",
     "check:palette-ssot": "node src/application/eVe/tests/strangler_v2/palette_ssot_guard.test.mjs",
     "test": "vitest",

@@ -356,12 +356,10 @@ function buildFastifyHttpBase(config) {
     // attempt to talk TLS directly to the Fastify HTTP port and fail.
     if (!isInTauriRuntime()) {
         const origin = window.location?.origin;
-        const host = window.location?.hostname || '';
-        const isLocalHost = host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0' || host === '';
-
-        if (!isLocalHost) {
-            if (typeof origin === 'string' && origin && origin !== 'null') {
-                return normalizeNoTrailingSlash(origin);
+        if (typeof origin === 'string' && origin && origin !== 'null') {
+            const normalizedOrigin = normalizeNoTrailingSlash(origin);
+            if (normalizedOrigin) {
+                return normalizedOrigin;
             }
         }
 
@@ -374,10 +372,6 @@ function buildFastifyHttpBase(config) {
                 return '';
             }
             return candidate;
-        }
-
-        if (typeof origin === 'string' && origin && origin !== 'null') {
-            return normalizeNoTrailingSlash(origin);
         }
     }
 
@@ -464,15 +458,6 @@ export async function loadServerConfigOnce() {
             }
             const origin = window.location?.origin;
             if (typeof origin === 'string' && origin && origin !== 'null') {
-                try {
-                    const parsedOrigin = new URL(origin);
-                    if (isLoopbackHost(parsedOrigin.hostname)) {
-                        const expectedPort = readExpectedFastifyLoopbackPort(currentConfig);
-                        const host = parsedOrigin.hostname || '127.0.0.1';
-                        applyFastifyGlobalsFromHttpBase(`${parsedOrigin.protocol}//${host}:${expectedPort}`, currentConfig);
-                        return;
-                    }
-                } catch (_) { }
                 applyFastifyGlobalsFromHttpBase(origin, currentConfig);
             }
         };

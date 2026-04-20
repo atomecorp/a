@@ -90,21 +90,21 @@ const typeSelect = $('select', {
 	parent: header,
 	css: { height: '36px', border: '1px solid #ddd', borderRadius: '6px', backgroundColor: '#fff' }
 });
-['all:Tous','videos:Vidéos','images:Images','news:Actualités','audio:Audio'].forEach(p => {
-	const [v,l] = p.split(':');
+['all:Tous', 'videos:Vidéos', 'images:Images', 'news:Actualités', 'audio:Audio'].forEach(p => {
+	const [v, l] = p.split(':');
 	$('option', { parent: typeSelect, attrs: { value: v }, text: l });
 });
 // Par défaut, afficher l’onglet Vidéos pour rendre la liste interne visible dès la première recherche
-try { typeSelect.value = 'videos'; } catch (_) {}
+try { typeSelect.value = 'videos'; } catch (_) { }
 // Changement de type: pas d'action (liste interne supprimée)
-typeSelect.onchange = () => {};
+typeSelect.onchange = () => { };
 
 const dateSelect = $('select', {
 	parent: header,
 	css: { height: '36px', border: '1px solid #ddd', borderRadius: '6px', backgroundColor: '#fff' }
 });
-['any:Toutes dates','hour:Dernière heure','day:Dernières 24h','week:Dernière semaine','month:Dernier mois','year:Dernière année'].forEach(p => {
-	const [v,l] = p.split(':');
+['any:Toutes dates', 'hour:Dernière heure', 'day:Dernières 24h', 'week:Dernière semaine', 'month:Dernier mois', 'year:Dernière année'].forEach(p => {
+	const [v, l] = p.split(':');
 	$('option', { parent: dateSelect, attrs: { value: v }, text: l });
 });
 
@@ -152,7 +152,7 @@ function buildGoogleUrl(q, type, date) {
 		const add = ' (filetype:mp3 OR filetype:wav OR site:soundcloud.com OR site:bandcamp.com)';
 		params.set('q', q + add);
 	}
-	const mapDate = { hour:'h', day:'d', week:'w', month:'m', year:'y' };
+	const mapDate = { hour: 'h', day: 'd', week: 'w', month: 'm', year: 'y' };
 	if (date && date !== 'any') params.set('tbs', 'qdr:' + mapDate[date]);
 	return 'https://www.google.com/search?' + params.toString();
 }
@@ -202,8 +202,8 @@ function parseEmbedFromUrl(href) {
 		const u = new URL(href);
 
 		// Cas Google redirect /url?q=...
-			if (/^www\.google\.[^/]+$/.test(u.hostname) && u.pathname === '/url') {
-				const target = u.searchParams.get('q') || u.searchParams.get('url') || '';
+		if (/^www\.google\.[^/]+$/.test(u.hostname) && u.pathname === '/url') {
+			const target = u.searchParams.get('q') || u.searchParams.get('url') || '';
 			if (target) return parseEmbedFromUrl(target);
 		}
 
@@ -237,7 +237,7 @@ function parseEmbedFromUrl(href) {
 		if (host.endsWith('youtube.com') && u.pathname.startsWith('/embed/')) {
 			return null;
 		}
-	} catch (_) {}
+	} catch (_) { }
 	return null;
 }
 
@@ -251,7 +251,7 @@ function ensureIframeWatcher() {
 				statusBarRef && statusBarRef.$({ text: 'Lecture YouTube (embed)…' });
 				searchFrameRef.src = embed;
 			}
-		} catch (_) {}
+		} catch (_) { }
 	}, 500);
 }
 
@@ -300,7 +300,7 @@ async function openEmbedFromClipboard() {
 
 
 function fct_to_trig(state) {
-    // console.log('trig: ' + state);
+	// console.log('trig: ' + state);
 	// Récupération correcte: grab attend un id sans '#'
 	const el = grab('search-frame');
 	if (!el) {
@@ -314,34 +314,34 @@ function fct_to_trig(state) {
 	// Pour un bouton toggle, on peut aussi lire l'état si disponible
 	const stateInfo = typeof el.getState === 'function' ? (' | state=' + el.getState()) : '';
 	// console.log('trig: text="' + text + '" | innerHTML length=' + inner.length + ' | outerHTML length=' + outer.length + stateInfo);
-console.log(text);
+	console.log(text);
 }
 
 function fct_to_trig2(state) {
-    console.clear();
+	return state;
 }
 
 // === EXEMPLE 1: Votre bouton existant ===
 const toggle = Button({
-    onText: 'ON',
-    offText: 'OFF',
-    onAction: fct_to_trig,
-    offAction: fct_to_trig2,
-    parent: '#view', // parent direct
-    onStyle: { backgroundColor: '#28a745', color: 'white' },
-    offStyle: { backgroundColor: '#dc3545', color: 'white' },
-    css: {
-        width: '50px',
-        height: '24px',
-        left: '120px',
-        top: '120px',
-        borderRadius: '6px',
-        backgroundColor: 'orange',
-        position: 'relative',
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-        border: '3px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 2px 4px rgba(255,255,1,1)',
-    }
+	onText: 'ON',
+	offText: 'OFF',
+	onAction: fct_to_trig,
+	offAction: fct_to_trig2,
+	parent: '#view', // parent direct
+	onStyle: { backgroundColor: '#28a745', color: 'white' },
+	offStyle: { backgroundColor: '#dc3545', color: 'white' },
+	css: {
+		width: '50px',
+		height: '24px',
+		left: '120px',
+		top: '120px',
+		borderRadius: '6px',
+		backgroundColor: 'orange',
+		position: 'relative',
+		border: 'none',
+		cursor: 'pointer',
+		transition: 'background-color 0.3s ease',
+		border: '3px solid rgba(255,255,255,0.3)',
+		boxShadow: '0 2px 4px rgba(255,255,1,1)',
+	}
 });

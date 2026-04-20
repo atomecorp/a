@@ -1,3 +1,5 @@
+import { getLocalServerUrl, isLocalAxumPage } from '../squirrel/apis/serverUrls.js';
+
 const isLoopbackHost = (hostname) => {
     const value = String(hostname || '').trim().toLowerCase();
     return value === '127.0.0.1' || value === 'localhost' || value === '0.0.0.0' || value === 'tauri.localhost';
@@ -70,7 +72,14 @@ const isProtectedMutationPath = (pathname) => {
     return value.startsWith('/api/events/commit') || value.startsWith('/api/state_current');
 };
 
-const buildLocalAxumRequestUrl = (targetUrl) => {
+const normalizeNoTrailingSlash = (value) => {
+    if (typeof value !== 'string') return '';
+    return value.trim().replace(/\/$/, '');
+};
+
+const readLocalAxumBaseUrl = () => {
+    const localBase = normalizeNoTrailingSlash(getLocalServerUrl() || '');
+    if (localBase) return localBase;
     if (typeof window === 'undefined') return '';
     const pageHost = String(window.location?.hostname || '').trim().toLowerCase();
     const nextHost = isLikelyLocalHost(pageHost)
@@ -78,15 +87,59 @@ const buildLocalAxumRequestUrl = (targetUrl) => {
         : '127.0.0.1';
     const nextProtocol = String(window.location?.protocol || '').toLowerCase() === 'https:' ? 'https:' : 'http:';
     const nextPort = readLocalAxumPort();
+    return normalizeNoTrailingSlash(`${nextProtocol}//${nextHost}:${nextPort}`);
+};
+
+const buildLocalAxumRequestUrl = (targetUrl) => {
+    if (typeof window === 'undefined') return '';
+    const localBase = readLocalAxumBaseUrl();
     try {
         const parsed = new URL(targetUrl, window.location.href);
-        parsed.protocol = nextProtocol;
-        parsed.hostname = nextHost;
-        parsed.port = String(nextPort);
+        if (!localBase) return '';
+        const baseUrl = new URL(localBase, window.location.href);
+        if (baseUrl.origin === window.location.origin) {
+            return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        }
+        parsed.protocol = baseUrl.protocol;
+        parsed.hostname = baseUrl.hostname;
+        parsed.port = baseUrl.port;
         return parsed.toString();
     } catch (_) {
         return '';
     }
+};
+
+const buildBrowserSameOriginRequestUrl = (targetUrl) => {
+    if (typeof window === 'undefined') return '';
+    try {
+        const parsed = new URL(targetUrl, window.location.href);
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch (_) {
+        return '';
+    }
+};
+
+const buildProtectedLoopbackCandidateUrls = (parsedUrl) => {
+    const candidates = [];
+    const pushCandidate = (value) => {
+        const normalized = String(value || '').trim();
+        if (!normalized) return;
+        if (candidates.includes(normalized)) return;
+        candidates.push(normalized);
+    };
+    const originalUrl = parsedUrl?.toString?.() || '';
+    const sameOriginUrl = buildBrowserSameOriginRequestUrl(originalUrl);
+    const localAxumUrl = buildLocalAxumRequestUrl(originalUrl);
+
+    if (isLocalAxumPage()) {
+        pushCandidate(localAxumUrl);
+        pushCandidate(sameOriginUrl);
+    } else {
+        pushCandidate(sameOriginUrl);
+        pushCandidate(localAxumUrl);
+    }
+
+    return candidates;
 };
 
 const readOrigin = (locationLike) => {
@@ -122,21 +175,18 @@ const installLoopbackMutationFetchGuard = () => {
         const fastifyPort = readFastifyLoopbackPort();
         const targetOrigin = readOrigin(parsedUrl);
         const sameOrigin = !!(pageOrigin && targetOrigin && pageOrigin === targetOrigin);
-        const targetPort = readLocationPort(parsedUrl);
-        const protectedLoopbackFastifyRequest = (
+        const protectedLoopbackRequest = (
             isLoopbackHost(parsedUrl.hostname)
             && isProtectedMutationPath(parsedUrl.pathname)
-            && targetPort === fastifyPort
         );
+        const shouldIntercept = protectedLoopbackRequest && !sameOrigin;
 
-        const shouldRewrite = protectedLoopbackFastifyRequest && !sameOrigin;
-
-        if (!shouldRewrite) {
+        if (!shouldIntercept) {
             return nativeFetch(input, init);
         }
 
-        const rewrittenUrl = buildLocalAxumRequestUrl(parsedUrl.toString());
-        if (!rewrittenUrl) {
+        const candidateUrls = buildProtectedLoopbackCandidateUrls(parsedUrl);
+        if (!candidateUrls.length) {
             throw new Error(`Blocked loopback Fastify request: ${parsedUrl.toString()}`);
         }
 
@@ -147,27 +197,43 @@ const installLoopbackMutationFetchGuard = () => {
         }
 
         if (input instanceof Request) {
-            const nextRequest = new Request(rewrittenUrl, {
-                method: init?.method || input.method,
-                headers,
-                body: init?.body,
-                mode: init?.mode || input.mode,
-                credentials: init?.credentials || input.credentials,
-                cache: init?.cache || input.cache,
-                redirect: init?.redirect || input.redirect,
-                referrer: init?.referrer || input.referrer,
-                referrerPolicy: init?.referrerPolicy || input.referrerPolicy,
-                integrity: init?.integrity || input.integrity,
-                keepalive: init?.keepalive ?? input.keepalive,
-                signal: init?.signal || input.signal
-            });
-            return nativeFetch(nextRequest);
+            let lastError = null;
+            for (const candidateUrl of candidateUrls) {
+                try {
+                    const nextRequest = new Request(candidateUrl, {
+                        method: init?.method || input.method,
+                        headers,
+                        body: init?.body,
+                        mode: init?.mode || input.mode,
+                        credentials: init?.credentials || input.credentials,
+                        cache: init?.cache || input.cache,
+                        redirect: init?.redirect || input.redirect,
+                        referrer: init?.referrer || input.referrer,
+                        referrerPolicy: init?.referrerPolicy || input.referrerPolicy,
+                        integrity: init?.integrity || input.integrity,
+                        keepalive: init?.keepalive ?? input.keepalive,
+                        signal: init?.signal || input.signal
+                    });
+                    return await nativeFetch(nextRequest);
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            throw lastError || new Error(`Blocked loopback Fastify request: ${parsedUrl.toString()}`);
         }
 
-        return nativeFetch(rewrittenUrl, {
-            ...(init || {}),
-            headers
-        });
+        let lastError = null;
+        for (const candidateUrl of candidateUrls) {
+            try {
+                return await nativeFetch(candidateUrl, {
+                    ...(init || {}),
+                    headers
+                });
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        throw lastError || new Error(`Blocked loopback Fastify request: ${parsedUrl.toString()}`);
     };
 };
 

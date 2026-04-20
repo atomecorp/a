@@ -74,20 +74,134 @@ function kickstartIsLocalAxumLikePage() {
   return effectivePort > 0 && effectivePort !== 3001;
 }
 
-async function logServerInfo() {
+function normalizeRuntimeVersion(value, fallback = 'unknown') {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
+function applyRuntimeVersions({ atomeVersion = 'unknown', eveVersion = 'unknown' } = {}) {
+  if (typeof window === 'undefined') return;
+  const normalizedAtomeVersion = normalizeRuntimeVersion(atomeVersion);
+  const normalizedEveVersion = normalizeRuntimeVersion(eveVersion);
+  window.__ATOME_VERSION__ = normalizedAtomeVersion;
+  window.__EVE_VERSION__ = normalizedEveVersion;
+  window.__SQUIRREL_VERSION__ = normalizedAtomeVersion;
+  window.__SQUIRREL_VERSIONS__ = {
+    atome: normalizedAtomeVersion,
+    eve: normalizedEveVersion
+  };
+  window.__SQUIRREL_VERSIONS_UPDATED_AT__ = Date.now();
+}
+
+function getStartupConsole() {
+  if (typeof window === 'undefined') return console;
+  const originalConsole = window.__SQUIRREL_ORIGINAL_CONSOLE__;
+  if (originalConsole && typeof originalConsole.log === 'function') return originalConsole;
+  return console;
+}
+
+function emitRuntimeVersionConsoleReport(versions, options = {}) {
+  const runtimeVersions = versions && typeof versions === 'object'
+    ? versions
+    : (typeof window !== 'undefined' ? window.__SQUIRREL_VERSIONS__ : null);
+  const atomeVersion = normalizeRuntimeVersion(runtimeVersions?.atome || 'unknown');
+  const eveVersion = normalizeRuntimeVersion(runtimeVersions?.eve || 'unknown');
+  const signature = `${atomeVersion}::${eveVersion}`;
+  if (
+    options?.force !== true
+    && typeof window !== 'undefined'
+    && window.__SQUIRREL_VERSIONS_CONSOLE_SIGNATURE__ === signature
+  ) {
+    return;
+  }
+  const startupConsole = getStartupConsole();
+  startupConsole.log(`eVe Version : ${eveVersion}`);
+  startupConsole.log(`atome version : ${atomeVersion}`);
+  if (typeof window !== 'undefined') {
+    window.__SQUIRREL_VERSIONS_CONSOLE_SIGNATURE__ = signature;
+  }
+}
+
+async function fetchTextVersion(endpoint) {
+  if (!endpoint) return '';
+  try {
+    const response = await fetch(endpoint, { cache: 'no-store' });
+    if (!response || !response.ok) return '';
+    const text = await response.text();
+    return normalizeRuntimeVersion(text, '');
+  } catch (_) {
+    return '';
+  }
+}
+
+function resolveVersionAssetBases() {
+  const bases = [''];
+  try {
+    const platform = typeof current_platform === 'function' ? current_platform() : '';
+    const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    const localAxumLikePage = kickstartIsLocalAxumLikePage();
+    if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
+      bases.push('http://127.0.0.1:3000');
+    }
+  } catch (_) { }
+  return Array.from(new Set(bases.filter(Boolean)));
+}
+
+async function resolveEveVersion() {
+  const bases = resolveVersionAssetBases();
+  for (const base of bases) {
+    const endpoint = `${base}/application/eVe/version.txt`;
+    const version = await fetchTextVersion(endpoint);
+    if (version) return version;
+  }
+  return 'unknown';
+}
+
+async function resolveServerVersions(apiBases) {
+  for (const base of apiBases) {
+    const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
+    try {
+      const res = await fetch(endpoint, { cache: 'no-store' });
+      if (!res || !res.ok) {
+        continue;
+      }
+      const data = await res.json();
+      if (data && data.success) {
+        return {
+          atome: normalizeRuntimeVersion(data.atomeVersion || data.version || 'unknown'),
+          eve: normalizeRuntimeVersion(data.eveVersion || 'unknown')
+        };
+      }
+    } catch (_) { }
+  }
+  return null;
+}
+
+async function loadRuntimeVersions(force = false) {
+  if (typeof window === 'undefined') {
+    return {
+      atome: 'unknown',
+      eve: 'unknown'
+    };
+  }
+
+  const lastUpdatedAt = Number(window.__SQUIRREL_VERSIONS_UPDATED_AT__ || 0);
+  const cachedVersions = window.__SQUIRREL_VERSIONS__ || null;
+  if (!force && cachedVersions && Date.now() - lastUpdatedAt < 5000) {
+    return cachedVersions;
+  }
+
   const isStandaloneFile = (() => {
-    if (typeof window === 'undefined' || !window.location) return false;
+    if (!window.location) return false;
     const { protocol, origin } = window.location;
     if (protocol === 'file:') return true;
-    // Some desktop browsers report origin "null" for local HTML files
     return origin === 'null';
   })();
 
   if (isStandaloneFile) {
-    if (typeof window !== 'undefined' && !window.__SQUIRREL_VERSION__) {
-      window.__SQUIRREL_VERSION__ = 'standalone';
-    }
-    return;
+    applyRuntimeVersions({ atomeVersion: 'standalone', eveVersion: 'standalone' });
+    return window.__SQUIRREL_VERSIONS__;
   }
 
   const resolveApiBases = () => {
@@ -96,9 +210,6 @@ async function logServerInfo() {
       const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
       const localAxumLikePage = kickstartIsLocalAxumLikePage();
       if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
-        // In Tauri, prefer local Axum server for version info.
-        // Avoid probing the dev page origin here because it can be a transient loopback page
-        // (for example 1430 during Tauri dev reloads) that does not own /api/server-info.
         return ['http://127.0.0.1:3000'];
       }
     } catch (_) { }
@@ -106,51 +217,32 @@ async function logServerInfo() {
   };
 
   const bases = resolveApiBases();
-
-  // Check if we're in Tauri environment
   const isInTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-  const currentPlatform = (() => {
-    try {
-      return typeof current_platform === 'function' ? current_platform() : null;
-    } catch (_) {
-      return 'current_platform_failed';
-    }
-  })();
-
-  for (const base of bases) {
-    // Skip Tauri server if we're not in Tauri environment (prevents console errors)
-    if (base.includes('127.0.0.1:3000') && !isInTauri) {
-      continue;
-    }
-    // Skip Fastify if explicitly marked offline
-    try {
-      const fastifyBase = typeof window !== 'undefined' ? window.__SQUIRREL_FASTIFY_URL__ : '';
-      if (fastifyBase && base && base === fastifyBase && window._checkFastifyAvailable && window._checkFastifyAvailable() === false) {
-        continue;
-      }
-    } catch (_) { }
-
-    const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
-    try {
-      const res = await fetch(endpoint, { cache: 'no-store' });
-      if (!res.ok) {
-        // Don't log warning - silent failure
-        continue;
-      }
-      const data = await res.json();
-      if (data && data.success) {
-        const version = (typeof data.version === 'string' && data.version.trim() !== '')
-          ? data.version.trim()
-          : 'unknown';
-        window.__SQUIRREL_VERSION__ = version;
-        return;
-      }
-    } catch (_) { }
-  }
-
-  if (typeof window !== 'undefined' && !window.__SQUIRREL_VERSION__) {
-    window.__SQUIRREL_VERSION__ = 'unknown';
-  }
+  const filteredBases = bases.filter((base) => {
+    if (!base) return true;
+    if (!base.includes('127.0.0.1:3000')) return true;
+    return isInTauri || kickstartIsLocalAxumLikePage();
+  });
+  const serverVersions = await resolveServerVersions(filteredBases);
+  const atomeVersion = normalizeRuntimeVersion(serverVersions?.atome || 'unknown');
+  const eveVersion = serverVersions?.eve && serverVersions.eve !== 'unknown'
+    ? serverVersions.eve
+    : await resolveEveVersion();
+  applyRuntimeVersions({ atomeVersion, eveVersion });
+  return window.__SQUIRREL_VERSIONS__;
 }
 
-logServerInfo();
+async function logServerInfo() {
+  const versions = await loadRuntimeVersions(true);
+  emitRuntimeVersionConsoleReport(versions);
+}
+
+const runtimeVersionPromise = logServerInfo().catch(() => {
+  applyRuntimeVersions({ atomeVersion: 'unknown', eveVersion: 'unknown' });
+});
+
+if (typeof window !== 'undefined') {
+  window.__SQUIRREL_VERSION_PROMISE__ = runtimeVersionPromise;
+  window.__refreshSquirrelVersions__ = (force = false) => loadRuntimeVersions(force);
+  window.__emitSquirrelVersionsToConsole__ = () => emitRuntimeVersionConsoleReport(window.__SQUIRREL_VERSIONS__);
+}

@@ -1,0 +1,5 @@
+
+> squirrel-framework@1.0.0 check:syntax
+> node check-syntax.mjs
+
+✅ Syntax OK (1009 file(s))

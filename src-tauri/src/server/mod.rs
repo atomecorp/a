@@ -62,6 +62,7 @@ struct AppState {
     static_dir: Arc<PathBuf>,
     project_root: Arc<PathBuf>,
     version: Arc<String>,
+    eve_version: Arc<String>,
     started_at: Arc<std::time::Instant>,
     atome_state: Option<local_atome::LocalAtomeState>,
     auth_state: Option<local_auth::LocalAuthState>,
@@ -663,10 +664,57 @@ fn load_version(static_dir: &Path) -> String {
     "unknown".to_string()
 }
 
+fn load_eve_version(static_dir: &Path) -> String {
+    let mut candidates = Vec::new();
+    candidates.push(
+        static_dir
+            .join("application")
+            .join("eVe")
+            .join("version.txt"),
+    );
+    if let Some(parent) = static_dir.parent() {
+        candidates.push(
+            parent
+                .join("src")
+                .join("application")
+                .join("eVe")
+                .join("version.txt"),
+        );
+        candidates.push(parent.join("application").join("eVe").join("version.txt"));
+    }
+    if let Ok(canon) = stdfs::canonicalize(static_dir) {
+        candidates.push(canon.join("application").join("eVe").join("version.txt"));
+        if let Some(parent) = canon.parent() {
+            candidates.push(
+                parent
+                    .join("src")
+                    .join("application")
+                    .join("eVe")
+                    .join("version.txt"),
+            );
+        }
+    }
+    candidates.push(PathBuf::from("src/application/eVe/version.txt"));
+    candidates.push(PathBuf::from("application/eVe/version.txt"));
+
+    for candidate in candidates {
+        if let Ok(raw) = stdfs::read_to_string(&candidate) {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    "unknown".to_string()
+}
+
 async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse {
     Json(json!({
         "success": true,
         "version": state.version.as_str(),
+        "atomeVersion": state.version.as_str(),
+        "eveVersion": state.eve_version.as_str(),
         "type": SERVER_TYPE,
     }))
 }
@@ -3780,7 +3828,9 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     }
 
     let version = load_version(&base_dir);
+    let eve_version = load_eve_version(&base_dir);
     println!("📦 Version applicative: {}", version);
+    println!("📦 eVe version: {}", eve_version);
 
     // Canonicalize static_dir to get absolute path for file updates
     let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
@@ -3818,6 +3868,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         static_dir: Arc::new(static_dir_abs),
         project_root: Arc::new(project_root),
         version: Arc::new(version.clone()),
+        eve_version: Arc::new(eve_version.clone()),
         started_at: Arc::new(std::time::Instant::now()),
         atome_state: Some(atome_state),
         auth_state: Some(auth_state),

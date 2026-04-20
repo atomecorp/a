@@ -5,7 +5,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { promises as fs, createReadStream, createWriteStream, readFileSync, existsSync, mkdirSync } from 'fs';
+import { promises as fs, createReadStream, createWriteStream, readFileSync, existsSync, mkdirSync, watchFile } from 'fs';
 import crypto from 'crypto';
 import { execFile } from 'child_process';
 import pino from 'pino';
@@ -329,7 +329,11 @@ const legacyUploadsDir = (() => {
   }
 })();
 const VERSION_FILE = path.join(projectRoot, 'version.txt');
+const EVE_VERSION_FILE = path.join(projectRoot, 'src', 'application', 'eVe', 'version.txt');
+const VERSION_FILE_WATCH_INTERVAL_MS = 1500;
 let SERVER_VERSION = 'unknown';
+let EVE_VERSION = 'unknown';
+let versionWatchersStarted = false;
 const SERVER_TYPE = 'Fastify';
 const getSyncEventBus = () => getABoxEventBus();
 let fileSyncWatcherHandle = null;
@@ -391,6 +395,8 @@ function logStructured(level, { source = 'fastify', component = 'server', reques
     component,
     request_id,
     session_id,
+    app_version: SERVER_VERSION,
+    eve_version: EVE_VERSION,
     data
   };
   if (typeof server?.log?.[level] === 'function') {
@@ -436,18 +442,65 @@ function isDuplicateAtomeCreate(atomeId) {
   return false;
 }
 
-async function loadServerVersion() {
+async function loadVersionFile(filePath, label) {
   try {
-    const raw = await fs.readFile(VERSION_FILE, 'utf8');
+    const raw = await fs.readFile(filePath, 'utf8');
     const trimmed = raw.trim();
     return trimmed || 'unknown';
   } catch (error) {
     const details = error && typeof error === 'object' && 'message' in error
       ? error.message
       : String(error);
-    console.warn('⚠️ Impossible de lire version.txt:', details);
+    console.warn(`[Version] Failed to read ${label}:`, details);
     return 'unknown';
   }
+}
+
+async function loadServerVersion() {
+  return loadVersionFile(VERSION_FILE, 'version.txt');
+}
+
+async function loadEveVersion() {
+  return loadVersionFile(EVE_VERSION_FILE, 'src/application/eVe/version.txt');
+}
+
+async function refreshVersionCache() {
+  const [nextServerVersion, nextEveVersion] = await Promise.all([
+    loadServerVersion(),
+    loadEveVersion()
+  ]);
+  const changed = nextServerVersion !== SERVER_VERSION || nextEveVersion !== EVE_VERSION;
+  SERVER_VERSION = nextServerVersion;
+  EVE_VERSION = nextEveVersion;
+  if (changed) {
+    console.info(`[Version] Runtime versions updated: Atome ${SERVER_VERSION}, eVe ${EVE_VERSION}`);
+  }
+  return {
+    atomeVersion: SERVER_VERSION,
+    eveVersion: EVE_VERSION
+  };
+}
+
+function startVersionWatchers() {
+  if (versionWatchersStarted) return;
+  versionWatchersStarted = true;
+  const refresh = () => {
+    void refreshVersionCache().catch(() => null);
+  };
+  const watch = (filePath) => {
+    watchFile(filePath, { interval: VERSION_FILE_WATCH_INTERVAL_MS }, (current, previous) => {
+      if (!current || !previous) {
+        refresh();
+        return;
+      }
+      if (current.mtimeMs !== previous.mtimeMs || current.size !== previous.size) {
+        refresh();
+      }
+    });
+  };
+
+  watch(VERSION_FILE);
+  watch(EVE_VERSION_FILE);
 }
 
 function resolveUploadsDir() {
@@ -920,6 +973,7 @@ async function startServer() {
         success: true,
         type: SERVER_TYPE,
         appVersion: SERVER_VERSION,
+        eveVersion: EVE_VERSION,
         fingerprint: getServerFingerprint()
       };
     });
@@ -929,6 +983,7 @@ async function startServer() {
         success: true,
         type: SERVER_TYPE,
         appVersion: SERVER_VERSION,
+        eveVersion: EVE_VERSION,
         uptime_sec: Number(process.uptime().toFixed(2))
       };
     });
@@ -973,8 +1028,10 @@ async function startServer() {
       });
     });
 
-    SERVER_VERSION = await loadServerVersion();
-    console.log(`📦 Version applicative: ${SERVER_VERSION}`);
+    await refreshVersionCache();
+    startVersionWatchers();
+    console.log(`📦 Atome version: ${SERVER_VERSION}`);
+    console.log(`📦 eVe version: ${EVE_VERSION}`);
 
     if (legacyUploadsDir) {
       await fs.mkdir(legacyUploadsDir, { recursive: true });
@@ -1020,6 +1077,8 @@ async function startServer() {
         success: true,
         source: 'fastify',
         version: SERVER_VERSION,
+        atomeVersion: SERVER_VERSION,
+        eveVersion: EVE_VERSION,
         uptime_sec: Number(process.uptime().toFixed(2)),
         ws_api_connections: wsApiConnections.size,
         ws_api_users: wsApiClientsByUserId.size,
@@ -1321,9 +1380,12 @@ async function startServer() {
     visioService.registerWebsocket(server, { path: '/ws/visio' });
 
     server.get('/api/server-info', async () => {
+      await refreshVersionCache();
       return {
         success: true,
         version: SERVER_VERSION,
+        atomeVersion: SERVER_VERSION,
+        eveVersion: EVE_VERSION,
         type: SERVER_TYPE
       };
     });
@@ -1333,6 +1395,8 @@ async function startServer() {
       return {
         status: 'ok',
         version: SERVER_VERSION,
+        atomeVersion: SERVER_VERSION,
+        eveVersion: EVE_VERSION,
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
         database: DATABASE_ENABLED ? 'connected' : 'disabled'
@@ -4704,7 +4768,7 @@ async function startServer() {
       host: HOST
     });
 
-    console.log(`✅ Fastify server v${server.version} (app ${SERVER_VERSION}) started on http://localhost:${PORT}`);
+    console.log(`✅ Fastify server v${server.version} started on http://localhost:${PORT} (Atome ${SERVER_VERSION}, eVe ${EVE_VERSION})`);
     console.log(`🔄 Sync WebSocket at ws://localhost:${PORT}/ws/sync`);
     console.log(`🌐 Frontend served from: http://localhost:${PORT}/`);
 
