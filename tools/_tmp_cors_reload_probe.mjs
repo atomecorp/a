@@ -173,7 +173,7 @@ const main = async () => {
 
         if (iterationConsoleEntries.some((entry) => isCors3001Error(entry.text))) {
             const screenshotPath = path.join(OUT_DIR, `reload_${index}_failure.png`);
-            await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+            await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => { });
             iteration.screenshot = screenshotPath;
         }
     }
