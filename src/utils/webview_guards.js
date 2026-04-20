@@ -97,35 +97,6 @@ const readOrigin = (locationLike) => {
     return '';
 };
 
-const emitFetchGuardLog = (stage, payload = {}) => {
-    if (typeof console === 'undefined') return;
-    try {
-        const message = `[SquirrelFetchGuard] ${String(stage || 'stage')} ${JSON.stringify(payload || {})}`;
-        if (String(stage || '').includes('passthrough') || String(stage || '').includes('blocked') || String(stage || '').includes('unexpected')) {
-            console.error(message);
-        } else {
-            console.warn(message);
-        }
-        const bridge = window.webkit?.messageHandlers?.console;
-        if (bridge && typeof bridge.postMessage === 'function') {
-            bridge.postMessage(message);
-        }
-        const invoke = window.__TAURI_INTERNALS__?.invoke || window.__TAURI__?.invoke;
-        if (typeof invoke === 'function') {
-            Promise.resolve(invoke('log_from_webview', {
-                payload: {
-                    level: 'warn',
-                    source: 'ios_webview',
-                    component: 'fetch_guard',
-                    message,
-                    data: payload,
-                    timestamp: new Date().toISOString()
-                }
-            })).catch(() => { });
-        }
-    } catch (_) { }
-};
-
 const installLoopbackMutationFetchGuard = () => {
     if (typeof window === 'undefined' || window._squirrelLoopbackMutationFetchGuardInstalled) return;
     if (typeof globalThis.fetch !== 'function') return;
@@ -152,70 +123,20 @@ const installLoopbackMutationFetchGuard = () => {
         const targetOrigin = readOrigin(parsedUrl);
         const sameOrigin = !!(pageOrigin && targetOrigin && pageOrigin === targetOrigin);
         const targetPort = readLocationPort(parsedUrl);
-        const shouldRewrite = (
-            isLoopbackHost(parsedUrl.hostname)
-            && targetPort === fastifyPort
-            && !sameOrigin
-            && isProtectedMutationPath(parsedUrl.pathname)
-        );
-
-        const snapshot = {
-            when: new Date().toISOString(),
-            inputUrl: parsedUrl.toString(),
-            page: window.location?.href || null,
-            pageOrigin,
-            targetOrigin,
-            sameOrigin,
-            targetPort,
-            fastifyPort,
-            shouldRewrite
-        };
-
         const protectedLoopbackFastifyRequest = (
             isLoopbackHost(parsedUrl.hostname)
             && isProtectedMutationPath(parsedUrl.pathname)
             && targetPort === fastifyPort
         );
 
-        if (protectedLoopbackFastifyRequest) {
-            try {
-                window.__SQUIRREL_FETCH_GUARD_LAST__ = snapshot;
-            } catch (_) { }
-            emitFetchGuardLog('decision', snapshot);
-        }
-
-        if (
-            protectedLoopbackFastifyRequest
-            && window.__CHECK_DEBUG__ === true
-            && window.__SQUIRREL_FETCH_GUARD_TRIPWIRE__ !== false
-        ) {
-            emitFetchGuardLog('tripwire', snapshot);
-            throw new Error(`[SquirrelFetchGuard] tripwire ${JSON.stringify(snapshot)}`);
-        }
-
-        const suspiciousPassthrough = (
-            protectedLoopbackFastifyRequest
-            && (!pageOrigin || !targetOrigin || pageOrigin !== targetOrigin)
-            && !shouldRewrite
-        );
-
-        if (suspiciousPassthrough) {
-            emitFetchGuardLog('unexpected_passthrough', snapshot);
-            throw new Error(`[SquirrelFetchGuard] unexpected_passthrough ${JSON.stringify(snapshot)}`);
-        }
+        const shouldRewrite = protectedLoopbackFastifyRequest && !sameOrigin;
 
         if (!shouldRewrite) {
-            emitFetchGuardLog('passthrough', snapshot);
             return nativeFetch(input, init);
         }
 
         const rewrittenUrl = buildLocalAxumRequestUrl(parsedUrl.toString());
         if (!rewrittenUrl) {
-            emitFetchGuardLog('blocked_no_rewrite_target', snapshot);
-            console.warn('[Squirrel] Blocked loopback Fastify request without local rewrite target', {
-                url: parsedUrl.toString(),
-                page: window.location?.href || null
-            });
             throw new Error(`Blocked loopback Fastify request: ${parsedUrl.toString()}`);
         }
 
@@ -224,28 +145,6 @@ const installLoopbackMutationFetchGuard = () => {
         if (localToken) {
             headers.set('Authorization', `Bearer ${localToken}`);
         }
-
-        emitFetchGuardLog('rewritten', {
-            ...snapshot,
-            from: parsedUrl.toString(),
-            to: rewrittenUrl,
-            hasLocalToken: !!localToken
-        });
-
-        if (window.__CHECK_DEBUG__ === true && window.__SQUIRREL_FETCH_GUARD_DIAG_THROW__ !== false) {
-            throw new Error(`[SquirrelFetchGuard] rewritten ${JSON.stringify({
-                ...snapshot,
-                from: parsedUrl.toString(),
-                to: rewrittenUrl,
-                hasLocalToken: !!localToken
-            })}`);
-        }
-
-        console.warn('[Squirrel] Rewriting loopback Fastify request to local Axum', {
-            from: parsedUrl.toString(),
-            to: rewrittenUrl,
-            page: window.location?.href || null
-        });
 
         if (input instanceof Request) {
             const nextRequest = new Request(rewrittenUrl, {
