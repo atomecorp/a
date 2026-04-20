@@ -52,6 +52,45 @@ function initKickstart() {
 initKickstart();
 
 
+function kickstartDiagLog(stage, details = {}) {
+  if (typeof console === 'undefined') return;
+  try {
+    console.warn(`[eVe:kickstart] ${String(stage || 'stage')} ${JSON.stringify(details || {})}`);
+  } catch (_) { }
+}
+
+function readKickstartStack(limit = 8) {
+  try {
+    const stack = String(new Error().stack || '').split('\n').slice(2, 2 + limit).map((line) => line.trim()).filter(Boolean);
+    return stack;
+  } catch (_) {
+    return [];
+  }
+}
+
+function kickstartIsLoopbackHost(hostname) {
+  const value = String(hostname || '').trim().toLowerCase();
+  return value === '127.0.0.1' || value === 'localhost' || value === '0.0.0.0' || value === 'tauri.localhost';
+}
+
+function kickstartPositivePort(value, fallback) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return fallback;
+}
+
+function kickstartIsLocalAxumLikePage() {
+  if (typeof window === 'undefined' || !window.location) return false;
+  const protocol = String(window.location.protocol || '').trim().toLowerCase();
+  const host = String(window.location.hostname || '').trim().toLowerCase();
+  if (host === 'tauri.localhost' && (protocol === 'http:' || protocol === 'https:')) {
+    return true;
+  }
+  if (!kickstartIsLoopbackHost(host)) return false;
+  const effectivePort = kickstartPositivePort(window.location.port, protocol === 'https:' ? 443 : 80);
+  return effectivePort > 0 && effectivePort !== 3001;
+}
+
 async function logServerInfo() {
   const isStandaloneFile = (() => {
     if (typeof window === 'undefined' || !window.location) return false;
@@ -71,10 +110,13 @@ async function logServerInfo() {
   const resolveApiBases = () => {
     try {
       const platform = typeof current_platform === 'function' ? current_platform() : '';
-      if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
+      const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+      const localAxumLikePage = kickstartIsLocalAxumLikePage();
+      if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
         // In Tauri, prefer local Axum server for version info.
-        // Avoid probing Fastify here to prevent noisy 'Failed to load resource' entries.
-        return ['http://127.0.0.1:3000', ''];
+        // Avoid probing the dev page origin here because it can be a transient loopback page
+        // (for example 1430 during Tauri dev reloads) that does not own /api/server-info.
+        return ['http://127.0.0.1:3000'];
       }
     } catch (_) { }
     return [''];
@@ -84,6 +126,25 @@ async function logServerInfo() {
 
   // Check if we're in Tauri environment
   const isInTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+  const currentPlatform = (() => {
+    try {
+      return typeof current_platform === 'function' ? current_platform() : null;
+    } catch (_) {
+      return 'current_platform_failed';
+    }
+  })();
+
+  kickstartDiagLog('server_info:start', {
+    location: typeof window !== 'undefined' ? window.location?.href || null : null,
+    origin: typeof window !== 'undefined' ? window.location?.origin || null : null,
+    bases,
+    isLocalAxumLikePage: kickstartIsLocalAxumLikePage(),
+    isInTauri,
+    currentPlatform,
+    hasTauri: typeof window !== 'undefined' ? !!window.__TAURI__ : false,
+    hasTauriInternals: typeof window !== 'undefined' ? !!window.__TAURI_INTERNALS__ : false,
+    stack: readKickstartStack(6)
+  });
 
   for (const base of bases) {
     // Skip Tauri server if we're not in Tauri environment (prevents console errors)
@@ -100,8 +161,22 @@ async function logServerInfo() {
 
     const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
     try {
+      kickstartDiagLog('server_info:fetch_start', {
+        endpoint,
+        base,
+        isInTauri,
+        currentPlatform,
+        location: typeof window !== 'undefined' ? window.location?.href || null : null
+      });
       const res = await fetch(endpoint, { cache: 'no-store' });
       if (!res.ok) {
+        kickstartDiagLog('server_info:fetch_non_ok', {
+          endpoint,
+          status: res.status,
+          statusText: res.statusText || null,
+          isInTauri,
+          currentPlatform
+        });
         // Don't log warning - silent failure
         continue;
       }
@@ -114,7 +189,14 @@ async function logServerInfo() {
         return;
       }
     } catch (error) {
-      // Silent failure - don't log to avoid console noise
+      kickstartDiagLog('server_info:fetch_error', {
+        endpoint,
+        base,
+        message: error?.message || String(error),
+        isInTauri,
+        currentPlatform,
+        location: typeof window !== 'undefined' ? window.location?.href || null : null
+      });
     }
   }
 

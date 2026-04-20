@@ -19,7 +19,7 @@ function current_platform() {
     const isIPadDesktopMode = (!isTrueIOSUA && isAppleVendor && touchCapable && /macintosh/i.test(ua));
     const isIOS = isTrueIOSUA || isIPadDesktopMode;
 
-    const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
+    const isTauri = !!window.__TAURI__ || !!window.__TAURI_INTERNALS__ || ua.includes('Tauri');
     if (isTauri) {
       if (/Macintosh|Mac OS X/.test(ua)) return 'Tauri Mac';
       if (/Windows/.test(ua)) return 'Tauri Windows';

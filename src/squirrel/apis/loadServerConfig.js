@@ -11,7 +11,36 @@
  * - window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ (ws/wss full URL)
  */
 
+import { canUseFastifyPrimaryOnLocalAxumPage, isLocalAxumPage } from './serverUrls.js';
+
 let _loadPromise = null;
+
+function shouldBlockFastifyPrimaryOnLocalAxumPage() {
+    if (typeof window === 'undefined') return false;
+    return isLocalAxumPage() && !canUseFastifyPrimaryOnLocalAxumPage();
+}
+
+function isCrossOriginLoopbackFastifyBaseForBrowser(base) {
+    if (typeof window === 'undefined') return false;
+    if (isInTauriRuntime()) return false;
+    if (typeof base !== 'string' || !base.trim()) return false;
+    try {
+        const parsed = new URL(base.trim(), window.location.href);
+        if (!isLoopbackHost(parsed.hostname)) return false;
+        return parsed.origin !== window.location.origin;
+    } catch (_) {
+        return false;
+    }
+}
+
+function clearFastifyRuntimeGlobals() {
+    if (typeof window === 'undefined') return;
+    try { window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ = false; } catch (_) { }
+    try { window.__SQUIRREL_FASTIFY_URL__ = ''; } catch (_) { }
+    try { window.__SQUIRREL_TAURI_FASTIFY_URL__ = ''; } catch (_) { }
+    try { window.__SQUIRREL_FASTIFY_WS_API_URL__ = ''; } catch (_) { }
+    try { window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = ''; } catch (_) { }
+}
 
 function applyDebugConfig(config) {
     if (typeof window === 'undefined') return;
@@ -214,6 +243,11 @@ function isLocalFastifyBase(base) {
 
 function readTauriFastifyOverride() {
     if (typeof window === 'undefined') return '';
+    if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
+        clearFastifyRuntimeGlobals();
+        clearFastifyOverrideStorage();
+        return '';
+    }
     try {
         const stored = localStorage.getItem('squirrel_tauri_fastify_url_override');
         const normalized = normalizeNoTrailingSlash(stored);
@@ -237,6 +271,16 @@ function toWsBase(httpBase) {
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
     const base = normalizeNoTrailingSlash(httpBase);
     if (!base) return;
+    if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
+        clearFastifyRuntimeGlobals();
+        clearFastifyOverrideStorage();
+        return;
+    }
+    if (isCrossOriginLoopbackFastifyBaseForBrowser(base) && !canUseFastifyPrimaryOnLocalAxumPage()) {
+        clearFastifyRuntimeGlobals();
+        clearFastifyOverrideStorage();
+        return;
+    }
     if (
         isInvalidFastifyLoopbackBase(base)
         || isDisallowedFastifyLoopbackPort(base, config)
@@ -325,7 +369,11 @@ function buildFastifyHttpBase(config) {
         const cfgHost = resolveFastifyHostFromConfig(config);
         const cfgPort = resolveFastifyPortFromConfig(config);
         if (cfgHost && cfgPort) {
-            return `${protocol}//${cfgHost}:${cfgPort}`;
+            const candidate = `${protocol}//${cfgHost}:${cfgPort}`;
+            if (isCrossOriginLoopbackFastifyBaseForBrowser(candidate) && !canUseFastifyPrimaryOnLocalAxumPage()) {
+                return '';
+            }
+            return candidate;
         }
 
         if (typeof origin === 'string' && origin && origin !== 'null') {
@@ -347,7 +395,11 @@ function buildFastifyHttpBase(config) {
     }
 
     // If this matches same-origin default ports, origin may be cleaner, but keep explicit.
-    return `${protocol}//${host}:${port}`;
+    const candidate = `${protocol}//${host}:${port}`;
+    if (isCrossOriginLoopbackFastifyBaseForBrowser(candidate) && !canUseFastifyPrimaryOnLocalAxumPage()) {
+        return '';
+    }
+    return candidate;
 }
 
 function buildFastifyWsUrl(httpBase, path) {
@@ -374,6 +426,10 @@ export async function loadServerConfigOnce() {
     if (_loadPromise) return _loadPromise;
 
     _loadPromise = (async () => {
+        if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
+            clearFastifyRuntimeGlobals();
+            clearFastifyOverrideStorage();
+        }
         const isTauriRuntime = isInTauriRuntime();
         const forceFetch = window.__SQUIRREL_FORCE_SERVER_CONFIG_FETCH__ === true;
         let tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';

@@ -24,6 +24,44 @@ const getCurrentLocation = () => {
     return window.location || null;
 };
 
+function isCrossOriginLoopbackUrlForBrowser(url) {
+    if (typeof window === 'undefined') return false;
+    if (isTauri()) return false;
+    if (typeof url !== 'string' || !url.trim()) return false;
+    try {
+        const parsed = new URL(url.trim(), window.location.href);
+        if (!isLoopbackHost(parsed.hostname)) return false;
+        return parsed.origin !== window.location.origin;
+    } catch (_) {
+        return false;
+    }
+}
+
+function isPrivateIpv4Host(hostname) {
+    const value = String(hostname || '').trim().toLowerCase();
+    const parts = value.split('.');
+    if (parts.length !== 4) return false;
+    const numbers = parts.map((part) => Number(part));
+    if (numbers.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+    if (numbers[0] === 10) return true;
+    if (numbers[0] === 127) return true;
+    if (numbers[0] === 192 && numbers[1] === 168) return true;
+    if (numbers[0] === 169 && numbers[1] === 254) return true;
+    if (numbers[0] === 172 && numbers[1] >= 16 && numbers[1] <= 31) return true;
+    return false;
+}
+
+function isLikelyLocalDevHost(hostname) {
+    const value = String(hostname || '').trim().toLowerCase();
+    if (!value) return false;
+    if (isLoopbackHost(value)) return true;
+    if (value === '::1' || value === '[::1]') return true;
+    if (isPrivateIpv4Host(value)) return true;
+    if (value.endsWith('.local') || value.endsWith('.lan') || value.endsWith('.home')) return true;
+    if (!value.includes('.')) return true;
+    return false;
+}
+
 export function isLoopbackHost(hostname) {
     return LOOPBACK_HOSTS.has(String(hostname || '').trim().toLowerCase());
 }
@@ -62,10 +100,40 @@ export function isLocalAxumPage() {
     const loc = getCurrentLocation();
     const host = String(loc?.hostname || '').trim().toLowerCase();
     const protocol = String(loc?.protocol || '').trim().toLowerCase();
+    const effectivePort = Number(loc?.port || (protocol === 'https:' ? 443 : 80));
     if (host === 'tauri.localhost' && (protocol === 'http:' || protocol === 'https:')) {
         return true;
     }
-    return isCurrentLoopbackPagePort(getLocalServerPort());
+    if (isLikelyLocalDevHost(host) && effectivePort === getLocalServerPort()) {
+        return true;
+    }
+    if (isCurrentLoopbackPagePort(getLocalServerPort())) {
+        return true;
+    }
+    // Loopback page on a port that is NOT the cloud server (e.g. Tauri devUrl 1430):
+    // treat as local Axum page so backend resolution never routes to Fastify.
+    if (isLoopbackHost(host)) {
+        if (effectivePort > 0 && effectivePort !== getCloudServerPort()) return true;
+    }
+    return false;
+}
+
+export function canUseFastifyPrimaryOnLocalAxumPage() {
+    if (typeof window === 'undefined') return false;
+    if (window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ !== true) return false;
+    if (!isLocalAxumPage()) return false;
+
+    const host = String(window.location?.hostname || '').trim().toLowerCase();
+    if (host !== 'tauri.localhost') return false;
+
+    const cloudBase = getCloudServerUrl();
+    if (!cloudBase) return false;
+    try {
+        const parsed = new URL(cloudBase);
+        return !isLoopbackHost(parsed.hostname);
+    } catch (_) {
+        return false;
+    }
 }
 
 const buildLoopbackOrigin = (port) => {
@@ -74,7 +142,9 @@ const buildLoopbackOrigin = (port) => {
     const pageProtocol = String(loc?.protocol || '').toLowerCase();
     const protocol = pageProtocol === 'https:' ? 'https:' : 'http:';
     const pageHost = String(loc?.hostname || '').trim().toLowerCase();
-    const host = isLoopbackHost(pageHost) ? (pageHost === '0.0.0.0' ? '127.0.0.1' : pageHost) : '127.0.0.1';
+    const host = isLikelyLocalDevHost(pageHost)
+        ? (pageHost === '0.0.0.0' ? '127.0.0.1' : pageHost)
+        : '127.0.0.1';
     return `${protocol}//${host}:${normalizedPort}`;
 };
 
@@ -84,12 +154,13 @@ export function alignLoopbackUrlToPageHost(url) {
     if (!trimmed) return '';
     const normalized = trimmed.replace(/\/$/, '');
     const loc = getCurrentLocation();
-    if (!loc || !isLoopbackHost(loc.hostname)) return normalized;
+    const pageHost = String(loc?.hostname || '').trim().toLowerCase();
+    if (!loc || !isLikelyLocalDevHost(pageHost)) return normalized;
     try {
         const parsed = new URL(normalized);
         if (!isLoopbackHost(parsed.hostname)) return normalized;
         parsed.protocol = String(loc.protocol || '').toLowerCase() === 'https:' ? 'https:' : parsed.protocol;
-        parsed.hostname = String(loc.hostname || '').toLowerCase() === '0.0.0.0' ? '127.0.0.1' : String(loc.hostname || '').toLowerCase();
+        parsed.hostname = pageHost === '0.0.0.0' ? '127.0.0.1' : pageHost;
         return parsed.toString().replace(/\/$/, '');
     } catch (_) {
         return normalized;
@@ -136,7 +207,9 @@ export function getLocalServerUrl() {
     if (typeof window === 'undefined') return null;
     const localPort = getLocalServerPort();
     const host = String(window.location?.hostname || '').trim().toLowerCase();
-    if (isCurrentLoopbackPagePort(localPort)) {
+    const protocol = String(window.location?.protocol || '').trim().toLowerCase();
+    const effectivePort = Number(window.location?.port || (protocol === 'https:' ? 443 : 80));
+    if (effectivePort === localPort && isLikelyLocalDevHost(host)) {
         return window.location.origin;
     }
     if (host === 'tauri.localhost') {
@@ -145,6 +218,11 @@ export function getLocalServerUrl() {
     const hasInjectedLocalPort = Number.isFinite(Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__))
         || (window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true && Number.isFinite(Number(window.__SQUIRREL_TAURI_LOCAL_PORT__)));
     if (hasInjectedLocalPort || isTauri()) {
+        return buildLoopbackOrigin(localPort);
+    }
+    // Tauri dev mode: page on loopback but on a non-standard port (e.g. 1430).
+    // Axum still listens on the canonical local port so return its origin.
+    if (isLocalAxumPage() && isLikelyLocalDevHost(host)) {
         return buildLoopbackOrigin(localPort);
     }
     return null;
@@ -160,12 +238,20 @@ export function getCloudServerUrl() {
             ? window.__SQUIRREL_TAURI_FASTIFY_URL__.trim()
             : '';
         if (tauriProdOverride) {
-            return alignLoopbackUrlToPageHost(tauriProdOverride);
+            const normalized = alignLoopbackUrlToPageHost(tauriProdOverride);
+            if (isCrossOriginLoopbackUrlForBrowser(normalized) && !canUseFastifyPrimaryOnLocalAxumPage()) {
+                return null;
+            }
+            return normalized;
         }
 
         const customUrl = window.__SQUIRREL_FASTIFY_URL__;
         if (customUrl && typeof customUrl === 'string') {
-            return alignLoopbackUrlToPageHost(customUrl);
+            const normalized = alignLoopbackUrlToPageHost(customUrl);
+            if (isCrossOriginLoopbackUrlForBrowser(normalized) && !canUseFastifyPrimaryOnLocalAxumPage()) {
+                return null;
+            }
+            return normalized;
         }
 
         const cloudPort = getCloudServerPort();
@@ -183,7 +269,11 @@ export function getCloudServerUrl() {
             const host = String(cfg.fastify.host || '').trim();
             const port = getCloudServerPort();
             if (isLoopbackHost(host)) {
-                return buildLoopbackOrigin(port);
+                const normalized = buildLoopbackOrigin(port);
+                if (isCrossOriginLoopbackUrlForBrowser(normalized) && !canUseFastifyPrimaryOnLocalAxumPage()) {
+                    return null;
+                }
+                return normalized;
             }
             const protocol = window.location?.protocol || 'http:';
             return `${protocol}//${host}:${port}`;

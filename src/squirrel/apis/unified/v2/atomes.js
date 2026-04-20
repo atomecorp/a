@@ -3,6 +3,7 @@ import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
 import {
     alignLoopbackUrlToPageHost,
+    canUseFastifyPrimaryOnLocalAxumPage,
     getCloudServerUrl,
     getLocalServerUrl,
     isLocalAxumPage
@@ -11,6 +12,25 @@ import {
 const adapters = {
     tauri: TauriAdapter,
     fastify: FastifyAdapter
+};
+
+const atomeListDiagLog = (stage, details = {}) => {
+    if (typeof console === 'undefined') return;
+    try {
+        console.warn(`[eVe:atomes_v2] ${String(stage || 'stage')} ${JSON.stringify(details || {})}`);
+    } catch (_) { }
+};
+
+const readAtomeListCallerStack = (limit = 8) => {
+    try {
+        return String(new Error().stack || '')
+            .split('\n')
+            .slice(2, 2 + limit)
+            .map((line) => line.trim())
+            .filter(Boolean);
+    } catch (_) {
+        return [];
+    }
 };
 
 const normalizeAtomeRecord = (record) => {
@@ -46,10 +66,7 @@ const getCurrentUserId = () => {
 
 const isAnonymous = () => getSessionState().mode === 'anonymous';
 const isLoggedOut = () => getSessionState().mode === 'logged_out';
-const allowFastifyPrimaryOnLocalAxumPage = () => (
-    typeof window !== 'undefined'
-    && window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ === true
-);
+const allowFastifyPrimaryOnLocalAxumPage = () => canUseFastifyPrimaryOnLocalAxumPage();
 
 const isBrowserOnLocalAxumPage = () => !isTauriRuntime() && isLocalAxumPage();
 
@@ -253,6 +270,19 @@ const listStateCurrentOnBackend = async (backend, options) => {
     const adapter = adapters[backend];
     const baseUrl = resolveHttpBaseUrl(backend, adapter);
     const token = adapter?.getToken?.();
+    atomeListDiagLog('list_state_current:start', {
+        backend,
+        baseUrl,
+        hasToken: !!token,
+        projectId: options.project_id || options.projectId || options.parent_id || options.parentId || null,
+        limit: options.limit ?? null,
+        offset: options.offset ?? null,
+        browserOnLocalAxum: isBrowserOnLocalAxumPage(),
+        allowFastifyPrimaryOnLocalAxum: allowFastifyPrimaryOnLocalAxumPage(),
+        authSource: typeof window !== 'undefined' ? window.__SQUIRREL_AUTH_SOURCE__ || null : null,
+        dataSource: typeof window !== 'undefined' ? window.__SQUIRREL_DATA_SOURCE__ || null : null,
+        callerStack: readAtomeListCallerStack(10)
+    });
     if (!baseUrl || !token) return { ok: false, list: [], error: 'state_current_unavailable' };
     const params = new URLSearchParams();
     const projectId = options.project_id || options.projectId || options.parent_id || options.parentId || null;
@@ -267,6 +297,12 @@ const listStateCurrentOnBackend = async (backend, options) => {
             credentials: 'include'
         });
         if (!response.ok) {
+            atomeListDiagLog('list_state_current:non_ok', {
+                backend,
+                url,
+                status: response.status,
+                statusText: response.statusText || null
+            });
             return { ok: false, list: [], error: `state_current_http_${response.status}` };
         }
         const payload = await response.json().catch(() => null);
@@ -274,6 +310,13 @@ const listStateCurrentOnBackend = async (backend, options) => {
         const list = listRaw.map(mapStateCurrentToAtome).filter(Boolean);
         return { ok: true, list, raw: payload };
     } catch (e) {
+        atomeListDiagLog('list_state_current:fetch_error', {
+            backend,
+            url,
+            message: e?.message || String(e),
+            browserOnLocalAxum: isBrowserOnLocalAxumPage(),
+            allowFastifyPrimaryOnLocalAxum: allowFastifyPrimaryOnLocalAxumPage()
+        });
         return { ok: false, list: [], error: e?.message || 'state_current_failed' };
     }
 };
@@ -308,6 +351,20 @@ export async function list_atomes(options = {}, callback) {
     }
 
     const { runtimeTauri, browserOnLocalAxum, primary, secondary } = resolveBackendPlan();
+    atomeListDiagLog('list_atomes:plan', {
+        runtimeTauri,
+        browserOnLocalAxum,
+        primary,
+        secondary,
+        projectId: options.projectId || options.project_id || options.parentId || options.parent_id || null,
+        type: options.type || options.atomeType || options.atome_type || null,
+        limit: options.limit ?? null,
+        includeShared: options.includeShared === true,
+        skipOwner: options.skipOwner === true,
+        authSource: typeof window !== 'undefined' ? window.__SQUIRREL_AUTH_SOURCE__ || null : null,
+        dataSource: typeof window !== 'undefined' ? window.__SQUIRREL_DATA_SOURCE__ || null : null,
+        callerStack: readAtomeListCallerStack(8)
+    });
     const atomeType = options.type || options.atomeType || options.atome_type || null;
     const skipOwnerFilter = options.skipOwner === true || options.ownerId === '*' || options.owner_id === '*' || options.ownerId === 'all' || options.owner_id === 'all';
     const allowCrossOwner = skipOwnerFilter && (options.includeShared === true || atomeType === 'user' || atomeType === 'share_request' || atomeType === 'share_policy' || atomeType === 'share_permission');

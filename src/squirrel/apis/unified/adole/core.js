@@ -20,7 +20,7 @@ import {
     resolveDataSource,
     resolveSyncDirection
 } from '../adole.js';
-import { alignLoopbackUrlToPageHost, getLocalServerUrl, isLocalAxumPage } from '../../serverUrls.js';
+import { alignLoopbackUrlToPageHost, canUseFastifyPrimaryOnLocalAxumPage, getLocalServerUrl, isLocalAxumPage } from '../../serverUrls.js';
 
 const FILE_ASSET_TYPES = new Set([
     'file', 'image', 'video', 'sound', 'text', 'shape', 'raw',
@@ -101,8 +101,7 @@ const is_any_anonymous_phone = (phone) => {
 const FLOW_LOG_TOKEN = '[AdoleFlow]';
 
 function allowFastifyPrimaryOnLocalAxumPage() {
-    if (typeof window === 'undefined') return false;
-    return window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ === true;
+    return canUseFastifyPrimaryOnLocalAxumPage();
 }
 
 function now_ms() {
@@ -1439,13 +1438,34 @@ function is_likely_ui_loopback_base(baseUrl) {
     }
 }
 
+function is_cross_origin_loopback_fastify_base_for_browser(baseUrl) {
+    if (typeof baseUrl !== 'string' || !baseUrl.trim()) return false;
+    if (typeof window === 'undefined') return false;
+    if (is_tauri_runtime()) return false;
+    try {
+        const parsed = new URL(baseUrl.trim(), window.location.href);
+        if (!is_loopback_hostname(parsed.hostname)) return false;
+        return parsed.origin !== window.location.origin;
+    } catch {
+        return false;
+    }
+}
+
 function resolve_fastify_http_base() {
     let baseUrl = '';
     const config = (typeof window !== 'undefined') ? window.__SQUIRREL_SERVER_CONFIG__ : null;
 
+    if (isLocalAxumPage() && !allowFastifyPrimaryOnLocalAxumPage()) {
+        return '';
+    }
+
     if (typeof window !== 'undefined' && window.__SQUIRREL_FASTIFY_URL__) {
         const explicit = String(window.__SQUIRREL_FASTIFY_URL__).trim().replace(/\/$/, '');
-        if (explicit && !is_likely_ui_loopback_base(explicit)) {
+        if (
+            explicit
+            && !is_likely_ui_loopback_base(explicit)
+            && !is_cross_origin_loopback_fastify_base_for_browser(explicit)
+        ) {
             baseUrl = explicit;
         }
     }
@@ -1474,7 +1494,10 @@ function resolve_fastify_http_base() {
         if (Number.isFinite(runtimePort) && runtimePort > 0 && port === runtimePort) {
             port = 3001;
         }
-        baseUrl = `http://127.0.0.1:${port}`;
+        const candidate = `http://127.0.0.1:${port}`;
+        if (!is_cross_origin_loopback_fastify_base_for_browser(candidate)) {
+            baseUrl = candidate;
+        }
     }
 
     return String(baseUrl || '').replace(/\/$/, '');
@@ -4421,6 +4444,11 @@ try {
                                             window.__SQUIRREL_AUTH_SOURCE__ = 'fastify';
                                             window.__SQUIRREL_DATA_SOURCE__ = 'fastify';
                                             window.__SQUIRREL_PROFILE_SOURCE__ = 'fastify';
+                                        } else if (typeof window !== 'undefined') {
+                                            window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ = false;
+                                            window.__SQUIRREL_AUTH_SOURCE__ = 'tauri';
+                                            window.__SQUIRREL_DATA_SOURCE__ = 'tauri';
+                                            window.__SQUIRREL_PROFILE_SOURCE__ = 'tauri';
                                         }
                                         token = cloudToken;
                                     } else {

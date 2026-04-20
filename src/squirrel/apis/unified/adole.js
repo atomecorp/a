@@ -10,6 +10,7 @@
 import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
 import {
     alignLoopbackUrlToPageHost,
+    canUseFastifyPrimaryOnLocalAxumPage,
     getCloudServerPort,
     getCloudServerUrl,
     isLocalAxumPage,
@@ -168,8 +169,7 @@ function isEmbeddedIOSRuntime() {
 }
 
 function allowFastifyPrimaryOnLocalAxumPage() {
-    if (typeof window === 'undefined') return false;
-    return window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ === true;
+    return canUseFastifyPrimaryOnLocalAxumPage();
 }
 
 function readLocalTauriHttpPort() {
@@ -428,7 +428,7 @@ export async function checkConnection(backend) {
     // Browser/production must never assume localhost Tauri exists.
     if (backend === 'tauri') {
         const hasLocalRuntime = hasInjectedLocalTauriPort();
-        const browserOnLocalAxum = !!(getLocalServerUrl() && isCurrentLoopbackPagePort(getLocalServerPort()));
+        const browserOnLocalAxum = isLocalAxumPage();
         if (isInTauri() || hasLocalRuntime || browserOnLocalAxum) {
             // In Tauri app, or embedded iOS with injected local AiS port, assume local server is available
             state.online = true;
