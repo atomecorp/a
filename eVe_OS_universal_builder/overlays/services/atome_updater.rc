@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# overlays/services/atome_updater.rc — lance l'updater au boot (one-shot)
+#
+# PROVIDE: atome_updater
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="atome_updater"
+rcvar="atome_updater_enable"
+desc="AtomeOS background updater"
+
+load_rc_config "${name}"
+
+: "${atome_updater_enable:=NO}"
+
+command="/usr/local/libexec/atome_updater.sh"
+start_cmd="atome_updater_start"
+
+atome_updater_start() {
+    # Lance en arrière-plan pour ne pas bloquer le boot
+    ( sleep 30 && ${command} ) &
+    return 0
+}
+
+run_rc_command "$1"

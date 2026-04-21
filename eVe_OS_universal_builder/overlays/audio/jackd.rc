@@ -1,0 +1,26 @@
+#!/bin/sh
+#
+# overlays/audio/jackd.rc — démarrage automatique de JACK pour le profil audio
+#
+# PROVIDE: jackd
+# REQUIRE: LOGIN
+# BEFORE: atome
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="jackd"
+rcvar="jackd_enable"
+desc="JACK Audio Connection Kit daemon"
+
+load_rc_config "${name}"
+
+: "${jackd_enable:=NO}"
+: "${jackd_user:=atome}"
+: "${jackd_home:=/home/${jackd_user}}"
+
+pidfile="/var/run/jackd.pid"
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -r -f -u ${jackd_user} sh -c 'exec ${jackd_home}/.jackdrc'"
+
+run_rc_command "$1"

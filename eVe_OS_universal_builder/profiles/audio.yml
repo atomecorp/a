@@ -1,0 +1,44 @@
+# profiles/audio.yml
+# Profil création musicale : desktop + JACK + tuning basse latence + outils DSP.
+
+profile:
+  name: audio
+  description: "Poste de création musicale, JACK basse latence, DSP"
+
+stacks:
+  - base
+  - js
+  - ruby
+  - rust
+  - native
+  - webview
+  - audio
+  - network
+
+ui:
+  enabled: true
+  compositor: wayland
+  webview: webkit
+  fullscreen: true
+  splash: true
+
+audio:
+  enabled: true
+  jack: true
+  lowlatency: true
+  sample_rate: 48000
+  buffer_frames: 128
+  periods: 2
+  realtime_priority: 80
+  xrun_monitor: true
+  pipewire_bridge: false     # FreeBSD : à activer uniquement si stable
+
+runtime:
+  framework_install: true
+  eve_enabled: true
+  autostart: true
+  watchdog: true
+
+image:
+  size_mb: 8192
+  compress: xz

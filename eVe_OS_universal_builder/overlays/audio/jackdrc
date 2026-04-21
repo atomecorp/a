@@ -1,0 +1,5 @@
+# overlays/audio/jackdrc
+# Config de lancement par défaut de jackd (~/.jackdrc)
+# Utilise le backend OSS FreeBSD (dev/dsp) avec taille buffer faible.
+
+/usr/local/bin/jackd -R -P70 -doss -r48000 -p128 -n2 -w16 -i2 -o2 /dev/dsp

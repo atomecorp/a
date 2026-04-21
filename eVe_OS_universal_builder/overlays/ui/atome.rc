@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# overlays/ui/atome.rc — service rc.d qui lance le stack UI Atome
+#
+# PROVIDE: atome
+# REQUIRE: LOGIN seatd NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="atome"
+rcvar="atome_enable"
+desc="AtomeOS UI runtime"
+
+load_rc_config "${name}"
+
+: "${atome_enable:=NO}"
+: "${atome_user:=atome}"
+: "${atome_home:=/home/atome}"
+
+command="/usr/sbin/daemon"
+pidfile="/var/run/atome.pid"
+command_args="-P ${pidfile} -r -f -u ${atome_user} ${atome_home}/.config/atome/start_atome.sh"
+
+run_rc_command "$1"

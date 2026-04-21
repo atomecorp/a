@@ -1,0 +1,30 @@
+# profiles/minimal.yml
+# Runtime Atome uniquement, aucune stack dev, pas de drivers GPU étendus.
+# Utile pour : images headless, conteneurs, POC, SBC à ressources limitées.
+
+profile:
+  name: minimal
+  description: "Runtime Atome seul, footprint réduit"
+
+stacks:
+  - base
+  - js          # Atome nécessite Node pour Fastify
+  - ruby        # Ruby legacy conservé (profil historique)
+  - native      # clang minimal pour modules natifs
+  - network
+
+ui:
+  enabled: false         # pas de compositor ni webview en minimal
+  webview: none
+
+audio:
+  enabled: false
+
+runtime:
+  framework_install: true
+  autostart: true
+  watchdog: true
+
+image:
+  size_mb: 2048
+  compress: xz

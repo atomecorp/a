@@ -1,0 +1,22 @@
+# packages/js.yml
+# Stack JavaScript : Node.js LTS + gestionnaires de paquets.
+#
+# Note : FreeBSD pkg fournit `node` comme alias de la dernière branche stable
+# (actuellement node22 / node24 selon l'évolution du repo).
+# Le builder choisit le meta-paquet `node` pour toujours suivre la LTS.
+
+stack:
+  name: js
+  pkg:
+    - node                # meta-package → LTS courante
+    - npm                 # fourni par le port node
+    - yarn
+    - pnpm
+    # Outils de build fréquents pour deps natives
+    - python3             # node-gyp
+    - gmake
+    - gcc                 # fallback si clang ne suffit pas
+  npm_global:
+    - "vite"
+    - "typescript"
+    - "@tauri-apps/cli"

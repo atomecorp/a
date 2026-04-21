@@ -1,0 +1,48 @@
+# profiles/dev.yml
+# Profil développeur : desktop + toutes les toolchains + outils debug.
+
+profile:
+  name: dev
+  description: "Desktop + Node/Ruby/Rust/C++ toolchains + outils debug"
+
+stacks:
+  - base
+  - js
+  - ruby
+  - rust
+  - native
+  - webview
+  - audio
+  - network
+
+extras:
+  - git
+  - gdb
+  - lldb
+  - tmux
+  - vim
+  - ripgrep
+  - htop
+
+ui:
+  enabled: true
+  compositor: wayland
+  webview: webkit
+  fullscreen: true
+  splash: true
+
+audio:
+  enabled: true
+  jack: true               # dev = accès JACK disponible
+  lowlatency: true
+
+runtime:
+  framework_install: true
+  framework_mode: editable  # clone pour édition plutôt que build figé
+  eve_enabled: true
+  autostart: false          # le dev lance manuellement
+  watchdog: false
+
+image:
+  size_mb: 12288
+  compress: xz

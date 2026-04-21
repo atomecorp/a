@@ -1,0 +1,21 @@
+# packages/base.yml
+# Paquets FreeBSD fondamentaux installés dans toutes les images.
+# Toutes les versions sont résolues par `pkg install` depuis le repo "latest".
+
+stack:
+  name: base
+  pkg:
+    - ca_root_nss         # trust store TLS
+    - curl
+    - git
+    - openssh-portable
+    - openssl
+    - sqlite3
+    - sudo
+    - bash
+    - xz
+    - unzip
+    - rsync
+    - pkgconf
+    - gettext
+    - readline

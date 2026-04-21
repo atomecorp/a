@@ -1,0 +1,21 @@
+# packages/ruby.yml
+# Stack Ruby : Ruby 3.x (dernière stable suivie par le port FreeBSD),
+# bundler, gems de base.
+#
+# Le package `ruby` du repo latest pointe vers la série stable courante
+# (ex: ruby33, ruby34 selon l'évolution). On utilise le meta ou le plus récent.
+
+stack:
+  name: ruby
+  pkg:
+    - ruby
+    - rubygem-bundler
+    - rubygem-rake
+    - rubygem-json
+    # Dépendances natives fréquemment réclamées par les gems C-extension
+    - libyaml
+    - libffi
+  gems_global:
+    # Installés sur l'image pour démarrer vite — bundler installera le reste
+    - "bundler"
+    - "rake"

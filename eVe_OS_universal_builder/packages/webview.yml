@@ -1,0 +1,35 @@
+# packages/webview.yml
+# Pile d'affichage + webview fullscreen.
+# Sur FreeBSD : Wayland + wlroots + Cage (kiosk compositor) = combo stable
+# pour un kiosk plein écran qui lance directement une webview WebKit/GTK.
+
+stack:
+  name: webview
+  pkg:
+    # Display / compositor
+    - wayland
+    - wayland-protocols
+    - wlroots
+    - cage                # kiosk Wayland compositor plein écran, sans déco
+    - seatd
+    - libinput
+    - mesa-dri
+    - mesa-libs
+    - xkeyboard-config
+    - libxkbcommon
+
+    # Webview — WebKit2GTK est la cible standard sur *BSD/Linux pour Tauri
+    - webkit2-gtk4
+    - gtk4
+    - librsvg2
+    - adwaita-icon-theme
+
+    # Fonts (sinon l'UI sera moche)
+    - dejavu
+    - noto
+    - noto-emoji
+    - roboto-fonts-ttf
+
+    # GPU accélération
+    - libdrm
+    - libglvnd

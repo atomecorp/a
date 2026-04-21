@@ -1,0 +1,39 @@
+# profiles/desktop.yml
+# Profil standard : UI plein écran, webview, réseau, audio basique.
+# C'est le profil par défaut attendu pour un poste utilisateur final.
+
+profile:
+  name: desktop
+  description: "Desktop Atome / eVe, webview fullscreen, boot silencieux"
+
+stacks:
+  - base
+  - js
+  - ruby
+  - rust          # Tauri runtime
+  - native
+  - webview
+  - audio         # audio standard non basse-latence
+  - network
+
+ui:
+  enabled: true
+  compositor: wayland
+  webview: webkit
+  fullscreen: true
+  splash: true
+
+audio:
+  enabled: true
+  jack: false              # desktop standard = pas de JACK
+  lowlatency: false
+
+runtime:
+  framework_install: true
+  eve_enabled: true
+  autostart: true
+  watchdog: true
+
+image:
+  size_mb: 6144
+  compress: xz

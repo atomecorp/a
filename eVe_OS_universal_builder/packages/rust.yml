@@ -1,0 +1,12 @@
+# packages/rust.yml
+# Stack Rust : toolchain stable via port FreeBSD.
+# Pour les besoins plus fins (nightly, targets croisées), `rustup` peut
+# être installé dans le home user via install_runtime.sh.
+
+stack:
+  name: rust
+  pkg:
+    - rust
+    - cargo-c             # utile pour Tauri/cbindgen
+  cargo_global:
+    - "tauri-cli"

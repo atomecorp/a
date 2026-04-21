@@ -1,0 +1,17 @@
+# Placeholder — remplacer par le logo Atome au format BMP
+#
+# Le loader FreeBSD splash_bmp_load attend un BMP (pas PNG).
+# Spécifications recommandées :
+#   - format : BMP 24 bits (non compressé)
+#   - résolution : 640x480 ou 1024x768 (compatible tous frameebuffers VESA)
+#   - fond : noir pur (#000000) pour éviter le flash blanc
+#   - logo Atome centré
+#
+# Pour générer à partir d'un PNG source :
+#   magick atome_logo.png -resize 1024x768 -background black -gravity center \
+#       -extent 1024x768 BMP3:atome_logo.bmp
+#
+# Ensuite le déposer ici sous le nom atome_logo.bmp.
+#
+# Si le fichier est absent au build, configure_boot.sh désactive automatiquement
+# la directive splash_bmp_load pour éviter un boot cassé.

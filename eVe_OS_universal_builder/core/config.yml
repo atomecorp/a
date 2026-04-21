@@ -1,0 +1,168 @@
+# AtomeOS / eVe Universal Builder — configuration globale
+# Tout ce qui est "latest" est résolu dynamiquement au build time.
+
+builder:
+  name: AtomeOS Universal Builder
+  version: 1.0.0
+  output_dir: ./output
+  work_dir: /var/tmp/atome_builder
+  keep_work: false           # true = conserve le chroot pour debug
+
+# ---------------------------------------------------------------------------
+# Politique de versions : tout en "latest" sauf mention contraire.
+# Le builder résout "latest" au runtime :
+#   - FreeBSD RELEASE courant    -> scripts/fetch_base_image.sh
+#   - pkg install                -> repo FreeBSD "latest"
+#   - Node                       -> fetch LTS courant depuis nodejs.org/dist/
+#   - Ruby                       -> dernière 3.x stable depuis ports/pkg
+#   - Rust                       -> rustup channel stable
+# ---------------------------------------------------------------------------
+versions:
+  freebsd: latest              # ou "15.0-RELEASE" pour pinner
+  pkg_repo: latest             # FreeBSD pkg repo
+  node: lts                    # lts | current | <version>
+  ruby: "3"                    # 3.x courant
+  rust: stable                 # stable | nightly | <version>
+  tauri: latest                # latest 2.x
+
+# ---------------------------------------------------------------------------
+# Architectures supportées
+# ---------------------------------------------------------------------------
+architectures:
+  amd64:
+    enabled: true
+    image_base_url: https://download.freebsd.org/releases/VM-IMAGES/
+    image_pattern: "FreeBSD-{RELEASE}-amd64.raw.xz"
+    boot_mode: UEFI
+    partition_layout: gpt
+    kernel_flags:
+      - kern.vty=vt
+      - boot_mute=YES
+    qemu_bin: qemu-system-x86_64
+
+  arm64:
+    enabled: true
+    image_base_url: https://download.freebsd.org/releases/arm64/aarch64/ISO-IMAGES/
+    image_pattern: "FreeBSD-{RELEASE}-arm64-aarch64.img.xz"
+    boot_mode: UEFI
+    partition_layout: gpt
+    kernel_flags:
+      - kern.vty=vt
+      - boot_mute=YES
+    qemu_bin: qemu-system-aarch64
+    sbc_targets:
+      - raspberrypi4
+      - raspberrypi5
+      - pine64
+      - rockpro64
+      - generic
+
+# ---------------------------------------------------------------------------
+# Mirroirs FreeBSD (fallback automatique)
+# ---------------------------------------------------------------------------
+mirrors:
+  - https://download.freebsd.org/
+  - https://ftp.freebsd.org/pub/FreeBSD/
+  - https://ftp4.fr.freebsd.org/pub/FreeBSD/
+
+# ---------------------------------------------------------------------------
+# Sources de vérité — dépôts à auditer
+# ---------------------------------------------------------------------------
+sources:
+  framework:
+    repo: https://github.com/atomecorp/a
+    branch: main
+    audit_files:
+      - package.json
+      - package-lock.json
+      - Gemfile
+      - Gemfile.lock
+      - Cargo.toml
+      - src-tauri/Cargo.toml
+      - CMakeLists.txt
+    install_scripts:
+      - install_full.sh
+    blocklist:
+      # wavesurfer abandonné côté Squirrel — ne pas packager
+      - wavesurfer.js
+      - wavesurfer
+
+  builder_legacy:
+    repo: https://github.com/atomecorp/atomic_builder
+    branch: master
+    role: reference_only
+
+# ---------------------------------------------------------------------------
+# Stacks activables par profil (référencent packages/<stack>.yml)
+# ---------------------------------------------------------------------------
+stacks_available:
+  - base
+  - js
+  - ruby
+  - rust
+  - native
+  - webview
+  - audio
+  - network
+
+# ---------------------------------------------------------------------------
+# Boot silencieux
+# ---------------------------------------------------------------------------
+boot:
+  silent: true
+  splash:
+    enabled: true
+    image: overlays/boot/atome_logo.png
+    fallback_image: overlays/boot/atome_logo.bmp
+  rc_startmsgs: false
+  console_redirect: /dev/null
+
+# ---------------------------------------------------------------------------
+# UI runtime
+# ---------------------------------------------------------------------------
+ui:
+  compositor: wayland           # wayland | weston | x11
+  webview: webkit               # webkit | tauri_embedded
+  fullscreen: true
+  cursor_hide_idle_ms: 3000
+  autostart_service: atome
+
+# ---------------------------------------------------------------------------
+# Runtime Atome
+# ---------------------------------------------------------------------------
+runtime:
+  clone_depth: 1
+  install_user: atome
+  install_home: /home/atome
+  framework_dir: /home/atome/atome
+  eve_enabled: true
+  watchdog: true
+  auto_restart: true
+
+# ---------------------------------------------------------------------------
+# Réseau + auto-update
+# ---------------------------------------------------------------------------
+network:
+  dhcp: true
+  ipv6: true
+  dns_fallback:
+    - 1.1.1.1
+    - 9.9.9.9
+  tls:
+    ca_bundle: /etc/ssl/cert.pem
+    update_on_boot: true
+  auto_update:
+    enabled: true
+    interval_hours: 6
+    targets:
+      - freebsd_pkg
+      - framework_atome
+      - builder_config
+
+# ---------------------------------------------------------------------------
+# Serveur central (facultatif à la construction de l'image)
+# ---------------------------------------------------------------------------
+central_server:
+  url: https://sync.atome.one    # à adapter
+  jails_per_user: true
+  sync_mode: offline_first

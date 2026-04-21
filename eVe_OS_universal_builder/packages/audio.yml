@@ -1,0 +1,23 @@
+# packages/audio.yml
+# Audio basse latence FreeBSD : OSS natif + JACK + utilitaires.
+# PipeWire est laissé désactivé par défaut côté FreeBSD (support encore irrégulier
+# sur certaines versions) ; si le profil audio l'active explicitement via
+# `pipewire_bridge: true`, configure_audio.sh ajoutera les paquets nécessaires.
+
+stack:
+  name: audio
+  pkg:
+    - jackit              # JACK2
+    - jack-example-tools
+    - alsa-lib            # compat couche OSS/ALSA pour apps tierces
+    - sndio               # alternative légère
+    - libsndfile
+    - libsamplerate
+    - sox
+    # Outils de test / diagnostic
+    - jack-oscrolloscope
+    - qjackctl            # UI facultative; retirée en profil minimal/kiosk
+
+  pkg_optional:            # activés seulement si lowlatency=true
+    - rtprio
+    - audio-bench

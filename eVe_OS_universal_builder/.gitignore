@@ -1,0 +1,20 @@
+# Sorties du build
+output/
+*.img
+*.img.xz
+*.iso
+
+# Répertoire de travail (devrait être /var/tmp/atome_builder mais si utilisé localement)
+.work/
+work/
+
+# Logs
+*.log
+
+# Splash BMP source (générer à partir de sources vectorielles)
+overlays/boot/atome_logo.bmp
+
+# Caches
+.DS_Store
+*.swp
+*~

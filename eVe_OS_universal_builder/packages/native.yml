@@ -1,0 +1,17 @@
+# packages/native.yml
+# Toolchain C/C++ : clang (système FreeBSD), cmake, ninja, pkgconf.
+# Requis par CMakeLists.txt du framework (dsp_core, ring_buffer, disk_reader).
+
+stack:
+  name: native
+  pkg:
+    - llvm                # clang, clang++, lld, lldb
+    - cmake
+    - ninja
+    - pkgconf
+    - autoconf
+    - automake
+    - libtool
+    - bison
+    - flex
+    - gmake
