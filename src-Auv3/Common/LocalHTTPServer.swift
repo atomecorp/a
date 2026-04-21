@@ -1647,7 +1647,7 @@ extension LocalHTTPServer {
 
 // (Helper async supprimé; utilisation d'attente sémaphore pour compat non-async)
 
-fileprivate enum AiSRuntime {
+enum AiSRuntime {
     private static let queue = DispatchQueue(label: "ais.runtime.queue")
     private static var db: OpaquePointer?
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -1660,6 +1660,14 @@ fileprivate enum AiSRuntime {
         "id", "atome_id", "user_id", "type", "kind", "owner_id", "creator_id",
         "created_at", "updated_at", "deleted_at", "sync_status", "last_sync",
         "password_hash", "phone", "username", "visibility", "access"
+    ]
+    private static let moleculeStoreNames: Set<String> = [
+        "molecule_project_store_projects",
+        "molecule_project_store_atomes",
+        "molecule_project_store_timelines",
+        "molecule_event_store_events",
+        "molecule_media_store_original_assets",
+        "molecule_media_store_refs"
     ]
     private static let schemaSQL = """
     PRAGMA foreign_keys = ON;
@@ -1739,6 +1747,19 @@ fileprivate enum AiSRuntime {
         created_by TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS molecule_store_records (
+        store_name TEXT NOT NULL,
+        record_key TEXT NOT NULL,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (store_name, record_key)
+    );
+    CREATE TABLE IF NOT EXISTS molecule_store_sequences (
+        store_name TEXT PRIMARY KEY,
+        next_seq INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_molecule_store_records_store
+        ON molecule_store_records (store_name);
     """
 
     static func handleAuthMessage(_ message: [String: Any]) -> [String: Any] {
@@ -1865,6 +1886,65 @@ fileprivate enum AiSRuntime {
                 return response
             } catch {
                 return snapshotResponse(requestId: requestId, success: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    static func handleMoleculeStoreMessage(_ message: [String: Any]) -> [String: Any] {
+        queue.sync {
+            let action = stringValue(message["action"]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let storeName = stringValue(message["storeName"] ?? message["store_name"]).trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                try validateMoleculeStoreName(storeName)
+                let db = try openDatabase()
+                switch action {
+                case "get":
+                    let key = try requireMoleculeStoreKey(message["key"])
+                    return [
+                        "success": true,
+                        "value": try moleculeStoreRead(db, storeName: storeName, key: key) ?? NSNull()
+                    ]
+                case "getAll":
+                    return [
+                        "success": true,
+                        "values": try moleculeStoreReadAll(db, storeName: storeName)
+                    ]
+                case "put":
+                    let key = try requireMoleculeStoreKey(message["key"])
+                    let value = try requireMoleculeStoreValue(message["value"])
+                    try moleculeStoreWrite(db, storeName: storeName, key: key, value: value)
+                    return ["success": true]
+                case "add":
+                    var value = try requireMoleculeStoreValue(message["value"])
+                    let key = try moleculeStoreNextSequence(db, storeName: storeName)
+                    if var object = value as? [String: Any] {
+                        object["seq"] = key
+                        value = object
+                    }
+                    try moleculeStoreWrite(db, storeName: storeName, key: String(key), value: value)
+                    return [
+                        "success": true,
+                        "key": key,
+                        "value": value
+                    ]
+                case "delete":
+                    let key = try requireMoleculeStoreKey(message["key"])
+                    try execute(db, "DELETE FROM molecule_store_records WHERE store_name = ? AND record_key = ?", [
+                        .text(storeName),
+                        .text(key)
+                    ])
+                    return ["success": true]
+                default:
+                    return [
+                        "success": false,
+                        "error": "molecule_store/invalid_action: \(action)"
+                    ]
+                }
+            } catch {
+                return [
+                    "success": false,
+                    "error": error.localizedDescription
+                ]
             }
         }
     }
@@ -2297,6 +2377,85 @@ fileprivate enum AiSRuntime {
             createdBy: stringValue(claims["sub"])
         )
         return snapshotResponse(requestId: requestId, success: true, snapshotId: snapshotId)
+    }
+
+    private static func validateMoleculeStoreName(_ storeName: String) throws {
+        guard moleculeStoreNames.contains(storeName) else {
+            throw AiSError("molecule_store/invalid_store: \(storeName)")
+        }
+    }
+
+    private static func requireMoleculeStoreKey(_ value: Any?) throws -> String {
+        let key = stringValue(value).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            throw AiSError("molecule_store/key_required")
+        }
+        return key
+    }
+
+    private static func requireMoleculeStoreValue(_ value: Any?) throws -> Any {
+        guard let value, !(value is NSNull) else {
+            throw AiSError("molecule_store/value_required")
+        }
+        return value
+    }
+
+    private static func moleculeStoreRead(_ db: OpaquePointer?, storeName: String, key: String) throws -> Any? {
+        let rows = try query(db, """
+            SELECT value_json
+            FROM molecule_store_records
+            WHERE store_name = ? AND record_key = ?
+            LIMIT 1
+            """, [
+            .text(storeName),
+            .text(key)
+        ])
+        guard let raw = rowString(rows.first, "value_json") else { return nil }
+        return parseJSONValue(raw)
+    }
+
+    private static func moleculeStoreReadAll(_ db: OpaquePointer?, storeName: String) throws -> [Any] {
+        let rows = try query(db, """
+            SELECT value_json
+            FROM molecule_store_records
+            WHERE store_name = ?
+            ORDER BY rowid ASC
+            """, [
+            .text(storeName)
+        ])
+        return rows.compactMap { row in
+            guard let raw = rowString(row, "value_json") else { return nil }
+            return parseJSONValue(raw)
+        }
+    }
+
+    private static func moleculeStoreWrite(_ db: OpaquePointer?, storeName: String, key: String, value: Any) throws {
+        try execute(db, """
+            INSERT INTO molecule_store_records (store_name, record_key, value_json, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(store_name, record_key)
+            DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+            """, [
+            .text(storeName),
+            .text(key),
+            .text(try jsonString(value)),
+            .text(isoNow())
+        ])
+    }
+
+    private static func moleculeStoreNextSequence(_ db: OpaquePointer?, storeName: String) throws -> Int64 {
+        try execute(db, "INSERT OR IGNORE INTO molecule_store_sequences (store_name, next_seq) VALUES (?, 1)", [
+            .text(storeName)
+        ])
+        let rows = try query(db, "SELECT next_seq FROM molecule_store_sequences WHERE store_name = ? LIMIT 1", [
+            .text(storeName)
+        ])
+        let next = intValue(rowValue(rows.first, "next_seq"), defaultValue: 1)
+        try execute(db, "UPDATE molecule_store_sequences SET next_seq = ? WHERE store_name = ?", [
+            .int(next + 1),
+            .text(storeName)
+        ])
+        return next
     }
 
     private static func openDatabase() throws -> OpaquePointer? {

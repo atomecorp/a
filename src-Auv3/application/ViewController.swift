@@ -651,6 +651,14 @@ final class FullscreenWebViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
+            let normalizedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+            if normalizedCommand == "molecule_store_execute" {
+                let response = AiSRuntime.handleMoleculeStoreMessage(payload)
+                let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
+                let error = success ? nil : ((response["error"] as? String) ?? "molecule_store/operation_failed")
+                completion(response, error)
+                return
+            }
             AppNativeAudioController.shared.handle(command: command, payload: payload, completion: completion)
         }
     view.insetsLayoutMarginsFromSafeArea = true

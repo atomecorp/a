@@ -6,6 +6,7 @@
 mod audio_engine;
 mod dev_logging;
 mod iplug_bridge;
+mod molecule_store;
 mod native_contacts;
 mod native_recorder;
 mod runtime_logging;
@@ -173,6 +174,7 @@ fn main() {
             audio_engine::bridge::audio_debug_capture_loopback,
             audio_engine::bridge::audio_get_levels,
             audio_engine::bridge::audio_shutdown,
+            molecule_store::molecule_store_execute,
             project_root
         ])
         .setup(|app| {
@@ -248,6 +250,10 @@ fn main() {
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_else(|| PathBuf::from("."));
             let data_dir = data_base.join("squirrel").join("Data");
+            let molecule_data_dir = data_dir.join("molecule");
+            let molecule_store_state = molecule_store::create_state(molecule_data_dir)
+                .expect("Unable to prepare Molecule store database");
+            app.manage(molecule_store_state);
 
             let uploads_dir = resolve_shared_uploads_dir(&static_dir, &default_uploads_dir);
             if let Err(err) = fs::create_dir_all(&uploads_dir) {

@@ -5,6 +5,10 @@ import process from 'node:process';
 const DEFAULT_ROOT = process.cwd();
 const DEFAULT_TARGETS = [
     'src/application/eVe/intuition/tools/molecule',
+    'src/application/eVe/core/molecule_store_bootstrap.js',
+    'src/application/eVe/core/browser_store',
+    'src/application/eVe/core/ios_store',
+    'src/application/eVe/core/tauri_store',
     'src/application/eVe/core/project_store',
     'src/application/eVe/core/event_store',
     'src/application/eVe/core/media_store'
@@ -39,6 +43,16 @@ const FORBIDDEN_PATTERNS = [
         regex: /\b(?:import|from)\b[\s\S]{0,160}['"][^'"]*(?:\/|^)mtrack(?:\/|\.js|['"])/gi
     },
     {
+        code: 'mtrack_reference_forbidden',
+        message: 'Molecule core paths must not reference the retired M-Track runtime.',
+        regex: /\bmtrack\b/gi
+    },
+    {
+        code: 'atome_commit_dependency_forbidden',
+        message: 'Molecule stores must not call the legacy atome_commit persistence path.',
+        regex: /(?:__atomeCommitApi|Atome\??\.\s*(?:commit|commitBatch|getStateCurrent|listStateCurrent)|['"`]\/api\/(?:events\/commit(?:-batch)?|state_current)\b)/g
+    },
+    {
         code: 'mtrack_global_forbidden',
         message: 'M-Track globals are forbidden in Molecule core paths.',
         regex: /\b(?:window\.__MTRACK|__MTRACK|MTRACK_TRACE|activeGroupId|activeGroupTimeline|currentClips)\b/g
@@ -67,6 +81,16 @@ const FORBIDDEN_PATTERNS = [
         code: 'tool_clone_forbidden',
         message: 'Molecule must not clone tools; it must render canonical tool definitions in the integrated tools row.',
         regex: /\b(?:cloneTool|destroyToolDomClone)\s*\(/g
+    },
+    {
+        code: 'hardcoded_tool_button_forbidden',
+        message: 'Molecule must not create tool buttons directly; render canonical tool definitions through the tool strip.',
+        regex: /\bcreateElement\s*\(\s*['"`]button['"`]/g
+    },
+    {
+        code: 'tool_design_copy_forbidden',
+        message: 'Molecule must not copy tool visual internals; use the canonical tool strip renderer.',
+        regex: /\b(?:eve-toolbox-v2|tool-surface|RIBBON_TOKENS|applyProjectionToolButtonBaseStyles|mountProjectionToolFace)\b/g
     },
     {
         code: 'inline_tool_definition_forbidden',
