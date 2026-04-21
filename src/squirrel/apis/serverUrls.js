@@ -19,9 +19,19 @@ const normalizePositivePort = (value, fallback) => {
     return fallback;
 };
 
+const normalizeNoTrailingSlash = (value) => {
+    if (typeof value !== 'string') return '';
+    return value.trim().replace(/\/$/, '');
+};
+
 const getCurrentLocation = () => {
     if (typeof window === 'undefined') return null;
     return window.location || null;
+};
+
+const readOrigin = (locationLike) => {
+    const origin = normalizeNoTrailingSlash(String(locationLike?.origin || ''));
+    return origin && origin !== 'null' ? origin : '';
 };
 
 function isCrossOriginLoopbackUrlForBrowser(url) {
@@ -64,6 +74,16 @@ function isLikelyLocalDevHost(hostname) {
 
 export function isLoopbackHost(hostname) {
     return LOOPBACK_HOSTS.has(String(hostname || '').trim().toLowerCase());
+}
+
+export function getBrowserSameOriginServerUrl() {
+    const loc = getCurrentLocation();
+    const origin = readOrigin(loc);
+    const host = String(loc?.hostname || '').trim().toLowerCase();
+    if (!origin) return null;
+    if (isTauri()) return null;
+    if (isLoopbackHost(host)) return null;
+    return origin;
 }
 
 export function getLocalServerPort() {
@@ -167,6 +187,23 @@ export function alignLoopbackUrlToPageHost(url) {
     }
 }
 
+export function resolveCanonicalFastifyHttpBase(url) {
+    const sameOriginBase = getBrowserSameOriginServerUrl();
+    const normalized = alignLoopbackUrlToPageHost(normalizeNoTrailingSlash(url || ''));
+
+    if (sameOriginBase) {
+        if (!normalized) return sameOriginBase;
+        try {
+            const parsed = new URL(normalized, window.location.href);
+            return parsed.origin === sameOriginBase ? normalizeNoTrailingSlash(parsed.toString()) : sameOriginBase;
+        } catch (_) {
+            return sameOriginBase;
+        }
+    }
+
+    return normalized || null;
+}
+
 /**
  * Check if running in Tauri environment
  */
@@ -233,12 +270,17 @@ export function getLocalServerUrl() {
  */
 export function getCloudServerUrl() {
     if (typeof window !== 'undefined') {
+        const sameOriginBase = getBrowserSameOriginServerUrl();
+        if (sameOriginBase) {
+            return sameOriginBase;
+        }
+
         // Check for custom Fastify URL
         const tauriProdOverride = (typeof window.__SQUIRREL_TAURI_FASTIFY_URL__ === 'string')
             ? window.__SQUIRREL_TAURI_FASTIFY_URL__.trim()
             : '';
         if (tauriProdOverride) {
-            const normalized = alignLoopbackUrlToPageHost(tauriProdOverride);
+            const normalized = resolveCanonicalFastifyHttpBase(tauriProdOverride);
             if (isCrossOriginLoopbackUrlForBrowser(normalized) && !canUseFastifyPrimaryOnLocalAxumPage()) {
                 return null;
             }
@@ -247,7 +289,7 @@ export function getCloudServerUrl() {
 
         const customUrl = window.__SQUIRREL_FASTIFY_URL__;
         if (customUrl && typeof customUrl === 'string') {
-            const normalized = alignLoopbackUrlToPageHost(customUrl);
+            const normalized = resolveCanonicalFastifyHttpBase(customUrl);
             if (isCrossOriginLoopbackUrlForBrowser(normalized) && !canUseFastifyPrimaryOnLocalAxumPage()) {
                 return null;
             }
@@ -256,11 +298,11 @@ export function getCloudServerUrl() {
 
         const cloudPort = getCloudServerPort();
         if (isCurrentLoopbackPagePort(cloudPort)) {
-            return window.location.origin;
+            return resolveCanonicalFastifyHttpBase(window.location.origin);
         }
 
         if (isTauri()) {
-            return buildLoopbackOrigin(cloudPort);
+            return resolveCanonicalFastifyHttpBase(buildLoopbackOrigin(cloudPort));
         }
 
         // If server_config.json was loaded into a global, derive from it
@@ -269,14 +311,14 @@ export function getCloudServerUrl() {
             const host = String(cfg.fastify.host || '').trim();
             const port = getCloudServerPort();
             if (isLoopbackHost(host)) {
-                const normalized = buildLoopbackOrigin(port);
+                const normalized = resolveCanonicalFastifyHttpBase(buildLoopbackOrigin(port));
                 if (isCrossOriginLoopbackUrlForBrowser(normalized) && !canUseFastifyPrimaryOnLocalAxumPage()) {
                     return null;
                 }
                 return normalized;
             }
             const protocol = window.location?.protocol || 'http:';
-            return `${protocol}//${host}:${port}`;
+            return resolveCanonicalFastifyHttpBase(`${protocol}//${host}:${port}`);
         }
 
         // Auto-detect from current page URL (production mode)
@@ -288,7 +330,7 @@ export function getCloudServerUrl() {
             const host = loc.hostname;
             // If port is default (80/443), don't include it
             const port = (loc.port && loc.port !== '80' && loc.port !== '443') ? `:${loc.port}` : '';
-            return `${protocol}//${host}${port}`;
+            return resolveCanonicalFastifyHttpBase(`${protocol}//${host}${port}`);
         }
 
         const protocol = window.location?.protocol || '';
@@ -387,9 +429,11 @@ export default {
     isLocalServerLikely,
     getLocalServerUrl,
     getCloudServerUrl,
+    getBrowserSameOriginServerUrl,
     getServerUrl,
     getBothServerUrls,
     buildApiUrl,
     buildLocalApiUrl,
-    buildCloudApiUrl
+    buildCloudApiUrl,
+    resolveCanonicalFastifyHttpBase
 };

@@ -11,7 +11,12 @@
  * - window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ (ws/wss full URL)
  */
 
-import { canUseFastifyPrimaryOnLocalAxumPage, isLocalAxumPage } from './serverUrls.js';
+import {
+    canUseFastifyPrimaryOnLocalAxumPage,
+    getBrowserSameOriginServerUrl,
+    isLocalAxumPage,
+    resolveCanonicalFastifyHttpBase
+} from './serverUrls.js';
 
 let _loadPromise = null;
 
@@ -269,7 +274,7 @@ function toWsBase(httpBase) {
 }
 
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
-    const base = normalizeNoTrailingSlash(httpBase);
+    const base = resolveCanonicalFastifyHttpBase(httpBase);
     if (!base) return;
     if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
         clearFastifyRuntimeGlobals();
@@ -355,12 +360,9 @@ function buildFastifyHttpBase(config) {
     // Never force :3001 in production web deployments, otherwise HTTPS pages will
     // attempt to talk TLS directly to the Fastify HTTP port and fail.
     if (!isInTauriRuntime()) {
-        const origin = window.location?.origin;
-        if (typeof origin === 'string' && origin && origin !== 'null') {
-            const normalizedOrigin = normalizeNoTrailingSlash(origin);
-            if (normalizedOrigin) {
-                return normalizedOrigin;
-            }
+        const sameOriginBase = getBrowserSameOriginServerUrl();
+        if (sameOriginBase) {
+            return sameOriginBase;
         }
 
         const protocol = resolveProtocolBase();
@@ -456,9 +458,9 @@ export async function loadServerConfigOnce() {
                 }
                 return;
             }
-            const origin = window.location?.origin;
-            if (typeof origin === 'string' && origin && origin !== 'null') {
-                applyFastifyGlobalsFromHttpBase(origin, currentConfig);
+                const sameOriginBase = getBrowserSameOriginServerUrl();
+                if (sameOriginBase) {
+                    applyFastifyGlobalsFromHttpBase(sameOriginBase, currentConfig);
             }
         };
 
