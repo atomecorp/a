@@ -44,6 +44,11 @@ const FORBIDDEN_PATTERNS = [
         regex: /\b(?:window\.__MTRACK|__MTRACK|MTRACK_TRACE|activeGroupId|activeGroupTimeline|currentClips)\b/g
     },
     {
+        code: 'molecule_active_global_forbidden',
+        message: 'Implicit molecule globals (activeTimeline, activeSession, currentMoleculeSession) are forbidden. Pass sessions by explicit handle.',
+        regex: /\b(?:activeTimeline|activeSession|currentMoleculeSession|__MOLECULE_ACTIVE__|window\.__MOLECULE__)\b/g
+    },
+    {
         code: 'silent_catch_forbidden',
         message: 'Silent catch blocks are forbidden. Fail loudly with typed errors.',
         regex: /catch\s*\([^)]*\)\s*\{\s*(?:(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)\s*)?\}/g

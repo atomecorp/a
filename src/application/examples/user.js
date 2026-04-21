@@ -1599,6 +1599,8 @@ function shouldSkipDragStart(event) {
   if (event && event.shiftKey) return false;
   const current = event?.currentTarget || event?.target;
   if (!current) return false;
+  if (current.getAttribute && current.getAttribute('data-eve-atome-focus-fullscreen') === 'true') return true;
+  if (current.getAttribute && current.getAttribute('data-eve-atome-drag-locked') === 'true') return true;
   if (current.getAttribute && current.getAttribute('data-editing') === 'true') return true;
   if (current.isContentEditable) return true;
   return false;
