@@ -36,7 +36,7 @@ record_video_UI.js
 ### ⚠️ Important Pitfall
 
 - `record_video_UI.js` **does NOT use** `record_audio.js`
-- It imports `../eVe/APIS/audio_api.js`
+- It imports `../eVe/domains/media/api/audio_api.js`
 - The two files implement `play()` differently
 
 ---
@@ -102,8 +102,8 @@ Apply changes to **ALL** files that may be used by UI components:
 | File | Used by |
 |------|---------|
 | `src/application/examples/record_audio.js` | Examples, tests, direct usage |
-| `src/application/eVe/APIS/audio_api.js` | `record_video_UI.js`, eVe components |
-| `src/application/eVe/APIS/media_api_shared.js` | Shared sync utilities |
+| `src/application/eVe/domains/media/api/audio_api.js` | `record_video_UI.js`, eVe components |
+| `src/application/eVe/domains/media/api/media_api_shared.js` | Shared sync utilities |
 | `src/application/eVe/tool_utils/tool_genesis.js` | Atome media hydration |
 
 ---
@@ -112,15 +112,15 @@ Apply changes to **ALL** files that may be used by UI components:
 
 > **Always check imports before modifying a file.**
 >
-> A UI component may import its API from an unexpected path (for example, `../eVe/APIS/` instead of `../examples/`).
+> A UI component may import its API from an unexpected path (for example, `../eVe/domains/...` instead of `../examples/`).
 
 ---
 
 ## 📁 Files Modified
 
-1. `src/application/eVe/APIS/audio_api.js` ← **main fix**
+1. `src/application/eVe/domains/media/api/audio_api.js` ← **main fix**
 2. `src/application/examples/record_audio.js` ← secondary fix
-3. `src/application/eVe/APIS/media_api_shared.js` ← **sync functions added**
+3. `src/application/eVe/domains/media/api/media_api_shared.js` ← **sync functions added**
 4. `src/application/eVe/tool_utils/tool_genesis.js` ← **hydration uses sync**
 
 ---

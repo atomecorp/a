@@ -18,14 +18,14 @@ const env = {
 
 const importModule = async (path) => {
     imported.push(path);
-    if (path.endsWith('tauri_iplug_bridge.js')) {
+    if (path.endsWith('tauri_audio_bridge.js')) {
         env.__toDSP = () => {};
     }
-    if (path.endsWith('___record_audio_api.js')) {
+    if (path.endsWith('record_audio_api.js')) {
         env.record_start = async ({ sessionId }) => sessionId;
         env.record_stop = async (sessionId) => ({ session_id: sessionId, ok: true });
     }
-    if (path.endsWith('___stt_api.js')) {
+    if (path.endsWith('stt_api.js')) {
         env.__TAURI__ = env.__TAURI__ || {};
         env.__TAURI__.stt = {
             async start() {},
@@ -39,7 +39,7 @@ const loaded = await ensureVoiceBridgeModules({
     env,
     importModule
 });
-assert.deepEqual(loaded, ['tauri_iplug_bridge', 'record_audio_api', 'stt_api'], 'voice bootstrap should load the missing Tauri bridge modules in order');
+assert.deepEqual(loaded, ['tauri_audio_bridge', 'record_audio_api', 'stt_api'], 'voice bootstrap should load the missing Tauri bridge modules in order');
 assert.equal(typeof env.__toDSP, 'function', 'voice bootstrap should expose __toDSP after loading the Tauri bridge');
 assert.equal(typeof env.record_start, 'function', 'voice bootstrap should expose record_start after loading the recorder API');
 assert.equal(typeof env.record_stop, 'function', 'voice bootstrap should expose record_stop after loading the recorder API');

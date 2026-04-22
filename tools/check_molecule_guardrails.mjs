@@ -36,7 +36,7 @@ const FORBIDDEN_PATTERNS = [
     {
         code: 'mtrack_dependency_forbidden',
         message: 'Molecule must not import M-Track runtime code.',
-        regex: /\b(?:import|from)\b[\s\S]{0,160}['"][^'"]*(?:\/|^)mtrack(?:\/|\.js|['"])/gi
+        regex: /\b(?:import|from)\b[\s\S]{0,160}['"][^'"]*(?:\/|^)(?:mtrack|mtrax)(?:\/|\.js|['"])/gi
     },
     {
         code: 'mtrack_global_forbidden',

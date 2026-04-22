@@ -1,4 +1,4 @@
-import { loadUserProfile } from '../../application/eVe/APIS/login.js';
+import { loadUserProfile } from '../../application/eVe/domains/user/profile_api.js';
 import { buildLocalApiUrl, isTauri } from '../apis/serverUrls.js';
 import {
     AI_MODEL_PROVIDER_LIST,

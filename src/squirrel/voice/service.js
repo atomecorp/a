@@ -9,7 +9,7 @@ import {
     coalesceProactiveNotifications
 } from '../ai/proactive_scheduler.js';
 import { createProactiveStateStore } from '../ai/proactive_state_store.js';
-import { resolveVoiceCaptureProvider } from '../../application/iplug/runtime_audio_backend.js';
+import { resolveVoiceCaptureProvider } from '../../application/audio_runtime/runtime_audio_backend.js';
 
 const DEFAULT_LANG = 'fr-FR';
 const DEFAULT_STT_SILENCE_MS = 8000;

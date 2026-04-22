@@ -2,7 +2,7 @@ import {
     getTauriInvoke,
     resolveAudioRuntime,
     resolveVoiceCaptureProvider
-} from '../iplug/runtime_audio_backend.js';
+} from './runtime_audio_backend.js';
 
 // Unified recorder API (Tauri + AUv3 + browser fallback)
 // Contract:
@@ -125,7 +125,7 @@ import {
 
     async function ensureBrowserRecordAudio() {
         if (typeof window.record_audio === 'function') return window.record_audio;
-        await import('../eVe/APIS/audio_api.js');
+        await import('../eVe/domains/media/api/audio_api.js');
         return (typeof window.record_audio === 'function') ? window.record_audio : null;
     }
 

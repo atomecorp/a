@@ -55,19 +55,19 @@ export const ensureVoiceBridgeModules = async ({
     });
 
     if (tauri && typeof readEnv(env, '__toDSP') !== 'function') {
-        await importModule('../../application/iplug/tauri_iplug_bridge.js');
-        loaded.push('tauri_iplug_bridge');
+        await importModule('../../application/audio_runtime/tauri_audio_bridge.js');
+        loaded.push('tauri_audio_bridge');
     }
 
     if (tauri && (typeof readEnv(env, 'record_start') !== 'function' || typeof readEnv(env, 'record_stop') !== 'function')) {
-        await importModule('../../application/apis/___record_audio_api.js');
+        await importModule('../../application/audio_runtime/record_audio_api.js');
         loaded.push('record_audio_api');
     }
 
     const tauriGlobal = readEnv(env, '__TAURI__');
     const tauriInternals = readEnv(env, '__TAURI_INTERNALS__');
     if (tauri && !(tauriGlobal?.stt || tauriInternals?.stt)) {
-        await importModule('../../application/apis/___stt_api.js');
+        await importModule('../../application/audio_runtime/stt_api.js');
         loaded.push('stt_api');
     }
 

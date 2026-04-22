@@ -49,7 +49,7 @@ The architecture is now a single logical audio stack with multiple native execut
 ┌─ JavaScript ───────────────────────────────────────────────────────────┐
 │  Squirrel.av.audio / runtime media APIs                               │
 │  audio_engine_debug_runtime.js                                        │
-│  ___record_audio_api.js                                               │
+│  record_audio_api.js                                               │
 │                                                                       │
 │  Responsibilities:                                                    │
 │  - transport commands                                                 │
@@ -115,14 +115,14 @@ An important consequence is that "web mode" must be treated explicitly as two di
 | `src-tauri/src/audio_engine/bridge.rs` | Tauri `#[tauri::command]` handlers |
 | `src-tauri/src/audio_engine/tests.rs` | Rust integration tests |
 | `src-audio-wasm/src/lib.rs` | WASM build of the engine |
-| `src/application/iplug/backend.kira.js` | JS backend for Rust / native engine usage |
-| `src/application/iplug/audio.facade.js` | Public audio facade |
+| `src/application/audio_runtime/backend.kira.js` | JS backend for Rust / native engine usage |
+| `src/application/audio_runtime/audio.facade.js` | Public audio facade |
 | `src/application/eVe/intuition_/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
 | `src-Auv3/Common/WebViewManager.swift` | JS → Swift bridge for AUv3 audio commands and PCM injection |
 | `src-Auv3/Common/AudioControllerProtocol.swift` | common contract for playback / stop / debug expected peak propagation |
 | `src-Auv3/auv3/AudioUnitViewController.swift` | AUv3 controller exposing the audio controller to the WebView bridge |
 | `src-Auv3/auv3/utils.swift` | AUv3 native render path, JS audio mix, record events, frame tracking |
-| `src/application/apis/___record_audio_api.js` | recording entry point that must converge to the unified engine |
+| `src/application/audio_runtime/record_audio_api.js` | recording entry point that must converge to the unified engine |
 
 ## JavaScript API
 
@@ -411,11 +411,11 @@ For this document to be usable as a real migration spec, the first rule is to na
 
 | Area | Current entry points | Migration target |
 |------|----------------------|------------------|
-| Public clip playback | `src/application/iplug/audio.facade.js`, `src/application/iplug/backend.kira.js`, `src/application/iplug/backend.iplug.js` | keep one public facade, retire backend-specific feature code |
-| Audio recording | `src/application/eVe/APIS/audio_api.js`, `src/application/examples/record_audio.js`, `src/application/examples/record_audio_UI.js`, `src/application/apis/___record_audio_api.js` | one recording contract backed by the unified native engine |
-| Video recording / media capture | `src/application/eVe/APIS/video_api.js`, `src/application/examples/record_video.js`, `src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
-| Shared media persistence | `src/application/eVe/APIS/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
-| Media atome rendering | `src/application/examples/user.js`, `src/application/eVe/APIS/audio_api.js`, `src/application/eVe/APIS/video_api.js` | all media atomes must resolve to one playback ownership model |
+| Public clip playback | `src/application/audio_runtime/audio.facade.js`, `src/application/audio_runtime/backend.kira.js`, `src/application/audio_runtime/backend.legacy_auv3.js` | keep one public facade, retire backend-specific feature code |
+| Audio recording | `src/application/eVe/domains/media/api/audio_api.js`, `src/application/examples/record_audio.js`, `src/application/examples/record_audio_UI.js`, `src/application/audio_runtime/record_audio_api.js` | one recording contract backed by the unified native engine |
+| Video recording / media capture | `src/application/eVe/domains/media/api/video_api.js`, `src/application/examples/record_video.js`, `src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
+| Shared media persistence | `src/application/eVe/domains/media/api/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
+| Media atome rendering | `src/application/examples/user.js`, `src/application/eVe/domains/media/api/audio_api.js`, `src/application/eVe/domains/media/api/video_api.js` | all media atomes must resolve to one playback ownership model |
 | AUv3 native bridge | `src-Auv3/Common/WebViewManager.swift`, `src-Auv3/Common/AudioControllerProtocol.swift`, `src-Auv3/auv3/AudioUnitViewController.swift`, `src-Auv3/auv3/utils.swift` | reference native implementation for Apple timing and routing |
 | Debug validation | `src/application/eVe/intuition_/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
 | MTrack integration | `src/application/eVe/intuition_/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
@@ -685,7 +685,7 @@ Definition of done:
 
 - all public audio playback enters through `Squirrel.av.audio`
 - `backend.kira.js` or its successor is the preferred native route
-- `backend.iplug.js` is fallback-only
+- `backend.legacy_auv3.js` is fallback-only
 - no feature module calls raw media elements for production audio
 
 ### Subsystem 2: Audio Atomes
@@ -709,7 +709,7 @@ Definition of done:
 
 Definition of done:
 
-- `audio_api.js`, `___record_audio_api.js`, `record_audio.js`, and UI wrappers all converge on one logical recording engine contract
+- `audio_api.js`, `record_audio_api.js`, `record_audio.js`, and UI wrappers all converge on one logical recording engine contract
 - runtime-specific adapters remain thin
 - playback of recorded results uses the unified playback engine
 
@@ -759,26 +759,26 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `src/application/iplug/audio.facade.js` | public JS facade with backend switching | remains public facade | keep as the only public JS entry point; hide backend specifics from feature code | all clip playback still enters through facade | `target` |
-| `src/application/iplug/backend.kira.js` | native/Rust backend adapter | unified native engine adapter | extend until it becomes the preferred native path for clip playback and transport | clip load/play/stop/rate/gain pass on Tauri/native runtimes | `target` |
-| `src/application/iplug/backend.iplug.js` | legacy backend | fallback only | forbid new feature dependencies; progressively detach feature modules from it | no production-critical feature depends on it | `bridge` |
+| `src/application/audio_runtime/audio.facade.js` | public JS facade with backend switching | remains public facade | keep as the only public JS entry point; hide backend specifics from feature code | all clip playback still enters through facade | `target` |
+| `src/application/audio_runtime/backend.kira.js` | native/Rust backend adapter | unified native engine adapter | extend until it becomes the preferred native path for clip playback and transport | clip load/play/stop/rate/gain pass on Tauri/native runtimes | `target` |
+| `src/application/audio_runtime/backend.legacy_auv3.js` | legacy backend | fallback only | forbid new feature dependencies; progressively detach feature modules from it | no production-critical feature depends on it | `bridge` |
 | `src/application/examples/user.js` media playback hooks | feature-local media creation/play behavior | facade + canonical media controller | route all audio/video audible playback commands to unified engine instead of local media ownership | `audio`, `sound`, `video` atomes play through unified transport | `current` |
 
 ### Recording and Persistence
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `src/application/eVe/APIS/audio_api.js` | eVe audio capture + persistence wrapper | canonical audio recording adapter | reduce to project/media/persistence adapter on top of one recording engine contract | recorded media persists and replays through unified engine | `bridge` |
-| `src/application/apis/___record_audio_api.js` | runtime recording bridge | canonical recording bridge | keep only as a thin adapter to the unified engine contract | start/stop semantics identical across runtimes | `bridge` |
+| `src/application/eVe/domains/media/api/audio_api.js` | eVe audio capture + persistence wrapper | canonical audio recording adapter | reduce to project/media/persistence adapter on top of one recording engine contract | recorded media persists and replays through unified engine | `bridge` |
+| `src/application/audio_runtime/record_audio_api.js` | runtime recording bridge | canonical recording bridge | keep only as a thin adapter to the unified engine contract | start/stop semantics identical across runtimes | `bridge` |
 | `src/application/examples/record_audio.js` | feature/runtime recording implementation | UI wrapper over canonical recording APIs | remove ownership of backend choices and engine semantics | no standalone engine logic remains in example layer | `current` |
 | `src/application/examples/record_audio_UI.js` | recording UI + backend toggles | UI only | keep UI concerns; remove backend-selection logic once migration completes | UI triggers canonical record commands only | `current` |
-| `src/application/eVe/APIS/media_api_shared.js` | shared media persistence helpers | remains canonical media helper layer | keep as common source for auth, path, project and media metadata resolution | audio/video APIs resolve the same canonical media fields | `target` |
+| `src/application/eVe/domains/media/api/media_api_shared.js` | shared media persistence helpers | remains canonical media helper layer | keep as common source for auth, path, project and media metadata resolution | audio/video APIs resolve the same canonical media fields | `target` |
 
 ### Video and Soundtrack Ownership
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `src/application/eVe/APIS/video_api.js` | video capture / preview / persistence wrapper | canonical video adapter with engine-owned soundtrack | keep capture/persistence concerns; move soundtrack playback ownership to unified engine | video playback does not emit double audio | `bridge` |
+| `src/application/eVe/domains/media/api/video_api.js` | video capture / preview / persistence wrapper | canonical video adapter with engine-owned soundtrack | keep capture/persistence concerns; move soundtrack playback ownership to unified engine | video playback does not emit double audio | `bridge` |
 | `src/application/examples/record_video.js` | browser/video capture implementation | capture-only wrapper | keep only capture-specific logic; remove long-term playback ownership | recorded video replays with engine-owned soundtrack | `current` |
 | `src/application/examples/record_video_UI.js` | video recording UI | UI only | keep UI concerns; delegate playback/record ownership to canonical APIs | UI never owns production soundtrack playback | `current` |
 | DOM / native video element audio output | local visual media element | unified engine soundtrack routing | mute local media-element audio whenever engine soundtrack is active | no double-output audio, seek/rate stay synchronized | `retire` |
@@ -875,7 +875,7 @@ All recording flows must converge to the unified engine contract:
 - plugin output recording
 - diagnostic fixture capture
 
-`___record_audio_api.js` should be treated as an adapter layer, not as an alternative recording system.
+`record_audio_api.js` should be treated as an adapter layer, not as an alternative recording system.
 
 ### 4. Debug and Metering Must Observe the Same Engine
 

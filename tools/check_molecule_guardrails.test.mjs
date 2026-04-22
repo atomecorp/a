@@ -17,7 +17,7 @@ let result = checkMoleculeGuardrails({ rootDir: tmpRoot });
 assert.equal(result.ok, true, 'safe Molecule source should pass guardrails');
 
 fs.writeFileSync(path.join(moleculeDir, 'bad.js'), [
-    "import '../mtrack/timeline_play_runtime.js';",
+    "import '../../../../domains/mtrax/timeline/play_runtime.js';",
     'export const run = () => {',
     '  try { return window.__MTRACK || null; } catch (_) {}',
     '};',

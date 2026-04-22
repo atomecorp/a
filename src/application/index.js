@@ -65,8 +65,8 @@ import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
 // import('./examples/messages_ui.js');
 // import('./examples/share.js');
 // import('./examples/share_ui.js');
-// import('./iplug/tauri_iplug_bridge.js');
-// import('./apis/record_audio_api.js');
+// import('./audio_runtime/tauri_audio_bridge.js');
+// import('./audio_runtime/record_audio_api.js');
 // import('./examples/record_audio.js');
 // import('./examples/record_audio_UI.js');
 
@@ -127,8 +127,8 @@ import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
 
 // import('./examples/ios_file_browser.js');
 
-// import('./iplug/audio.facade.js');
-// import('./iplug/backend.iplug.js');
+// import('./audio_runtime/audio.facade.js');
+// import('./audio_runtime/backend.legacy_auv3.js');
 // import('./examples/iplug_sampler.js');
 
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)

@@ -9,7 +9,7 @@ Kira/CPAL engine, as described in `src/application/eVe/todo/audio_engine_migrati
 
 ## 1. What Was Migrated
 
-### Audio Facade (`src/application/iplug/audio.facade.js`)
+### Audio Facade (`src/application/audio_runtime/audio.facade.js`)
 
 - Updated module header to reflect kira as the primary backend
 - Added `stop` and `stop_clip` to the `immediateNames` set for low-latency transport calls
@@ -35,10 +35,10 @@ Four files changed to route video clip audio through the native audio pipeline:
   when `disconnectLegacy` is true AND `shouldUseLegacyVideoElementAudio` returns false,
   video elements are muted. The change to return false triggers this existing behavior.
 
-### Recording Pipeline (`src/application/eVe/APIS/audio_api.js`)
+### Recording Pipeline (`src/application/eVe/domains/media/api/audio_api.js`)
 
 - `record_audio()` now checks for the unified `window.record_start` / `window.record_stop`
-  (from `___record_audio_api.js`) first for Tauri/AUv3 runtimes
+  (from `record_audio_api.js`) first for Tauri/AUv3 runtimes
 - Falls back to old backends only for browser `web_capture_fallback`
 - Returns a compatible controller object with `stop()` method
 
@@ -46,7 +46,7 @@ Four files changed to route video clip audio through the native audio pipeline:
 
 ## 2. What Was Deprecated (Markers Added)
 
-### `src/application/iplug/backend.iplug.js`
+### `src/application/audio_runtime/backend.legacy_auv3.js`
 
 - Header marked DEPRECATED — superseded by `backend.kira.js`
 - Kept for AUv3 swiftBridge compatibility until native AUv3 audio is fully unified
@@ -64,8 +64,8 @@ Four files changed to route video clip audio through the native audio pipeline:
 | Component | Kept? | Justification |
 |-----------|-------|---------------|
 | `backend.kira.js` | ✅ Primary | New unified backend (Tauri native + WASM) |
-| `backend.iplug.js` | ✅ Deprecated | AUv3 swiftBridge still routes through this for live hosts |
-| `___record_audio_api.js` | ✅ Active | Unified recorder wrapper (Tauri/AUv3/browser) — architecturally sound |
+| `backend.legacy_auv3.js` | ✅ Deprecated | AUv3 swiftBridge still routes through this for live hosts |
+| `record_audio_api.js` | ✅ Active | Unified recorder wrapper (Tauri/AUv3/browser) — architecturally sound |
 | `record_audio.js` | ✅ Active | Browser recording via getUserMedia + AudioWorklet — approved exception for web capture |
 | `record_video.js` | ✅ Active | MediaRecorder API — independent of audio engine |
 | `hmtracks_audio_engine_v1.js` | ✅ Active | AudioWorklet timeline clock for MTrack — not an audio decoder |
@@ -115,7 +115,7 @@ No automated test suite exists for the audio engine migration. Verification requ
    and audio plays through the native pipeline. Check WASM Kira initializes.
 2. **Tauri desktop**: Verify `backend.kira.js` initializes → `audio_init` Tauri invoke
    succeeds. Test playback and recording through the unified facade.
-3. **AUv3**: Verify swiftBridge still receives audio commands via `backend.iplug.js`.
+3. **AUv3**: Verify swiftBridge still receives audio commands via `backend.legacy_auv3.js`.
    Recording via C FFI still works (deprecated but functional).
 4. **Escape hatch**: Set `window.__eveMtraxForceLegacyVideoAudio = true` → verify
    video element audio restoration in MTrack.
