@@ -65,8 +65,8 @@
 
   // Backend picker
   $('span', { text:'Backend: ', parent: row1, css:{ marginRight:'6px' } });
-  const bI = $('button', { id:'b-iplug', parent: row1, text:'iPlug', css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>A.set_backend('iplug') });
-  const bH = $('button', { id:'b-html', parent: row1, text:'HTML', css:{ padding:'4px 8px' }, onclick:()=>A.set_backend('html') });
+  const bK = $('button', { id:'b-kira', parent: row1, text:'Kira', css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>A.set_backend('kira') });
+  const bI = $('button', { id:'b-iplug', parent: row1, text:'iPlug', css:{ padding:'4px 8px' }, onclick:()=>A.set_backend('iplug') });
 
   // Gain slider
   $('span', { text:'Gain', parent: row2, css:{ marginRight:'6px' } });
@@ -224,8 +224,8 @@
     if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge && A && typeof A.set_backend==='function'){
       A.set_backend('iplug');
     } else {
-      A.detect_and_set_backend(['iplug','html']);
+      A.detect_and_set_backend(['kira','iplug']);
     }
-  }catch(_){ A.detect_and_set_backend(['iplug','html']); }
+  }catch(_){ A.detect_and_set_backend(['kira','iplug']); }
   listRecordings();
 })();

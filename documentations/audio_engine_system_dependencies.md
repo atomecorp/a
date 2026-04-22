@@ -53,8 +53,9 @@ Both rely on the platform's native audio subsystem via `cpal::default_host()`.
 - **Playback**: WASM Kira module (`src-audio-wasm/`) compiled to WebAssembly
 - **Recording**: `getUserMedia` + `AudioWorklet` (browser-native, no server-side audio)
 - **Required**: Modern browser with WebAssembly and AudioWorklet support
-- **Notes**: If WASM Kira fails to load, the `backend.html.js` WebAudio fallback
-  is available but deprecated and not sample-accurate.
+- **Notes**: If WASM Kira fails to load, browser playback is unsupported until
+  the Kira module is rebuilt or redeployed; the retired WebAudio backend is not
+  part of the runtime path.
 
 ## Cargo.toml Reference
 

@@ -79,7 +79,7 @@ Urgent : debug - simplify - factorise - optimise - audit
 | [ ]       | VERY HIGH | Code mirror support                          | Allow code edition.                                               |
 | [ ]       | VERY HIGH | leaflet.js                                   | view geo maps.                                                    |
 | [ ]       | VERY HIGH | tone.js                                      | Audio framework.                                                  |
-| [done]    | VERY HIGH | wavesurfer.js                                | waveform view.                                                    |
+| [retired] | VERY HIGH | wavesurfer.js                                | Retired; waveform/audio UI no longer uses this dependency.        |
 | [irrl]    | HIGH      | Axum hot reload integration                  | Enable live reloading of Axum server endpoints when developing.   |
 | [ ]       | MEDIUM    | PWA support                                  | Add manifest, service worker, and offline capabilities.           |
 | [irrl]    | HIGH      | JSON serializer for DSL export               | Export any atome object to a JSON config that can be reloaded.    |

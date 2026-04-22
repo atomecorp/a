@@ -130,7 +130,6 @@ echo "===================================="
 echo "  🔐 jsonwebtoken@^9.0.2         - JWT authentication"
 echo "  🗄️ sequelize@^6.37.1           - Database ORM"
 echo "  💾 sqlite3@^5.1.6              - SQLite driver"
-echo "  🎵 wavesurfer.js@^7.9.5        - Audio visualization"
 echo ""
 
 # Ask for confirmation
@@ -433,10 +432,6 @@ show_version "@rollup/plugin-node-resolve"
 echo ""
 echo "🖥️ DESKTOP:"
 show_version "@tauri-apps/cli"
-
-echo ""
-echo "🎵 MEDIA:"
-show_version "wavesurfer.js"
 
 echo ""
 echo "🔐 SECURITY:"

@@ -1,15 +1,14 @@
 import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
 // Squirrel AV Audio Facade — Unified Audio Engine entry point
-// Exposes Squirrel.av.audio with a switchable backend (kira | iplug | html)
+// Exposes Squirrel.av.audio with a switchable backend (kira | iplug)
 // - Primary backend: kira (Tauri native CPAL+Kira / WASM Kira)
 // - Bridge backend: iplug (AUv3 swiftBridge, deprecated for production playback)
-// - Fallback backend: html (WebAudio, browser-only when kira unavailable)
 // - Dynamic routing to active backend
 // - Event bus (type -> Set(callback))
-// - detect_and_set_backend() prefers kira > iplug > html
+// - detect_and_set_backend() follows the runtime's explicit backend order
 // - UI->DSP batching with dual strategy: microtask for low-latency, RAF cap for UI sync
-// Notes: Keep JS allocs out of the audio thread; backends talk to native or WebAudio.
+// Notes: Keep JS allocations out of the audio thread; backends talk to native or Kira/WASM.
 
 (function () {
   const ns = (window.Squirrel = window.Squirrel || {});
@@ -34,7 +33,7 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
   // Backend registry
   const backends = Object.create(null);
-  let active = null; // 'kira' | 'iplug' | 'html'
+  let active = null; // 'kira' | 'iplug'
 
   // ─── Dual-strategy command queue ───────────────────────────────────
   // Immediate calls (play/stop/jump/set_param) bypass the queue entirely.
@@ -94,8 +93,7 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
       : runtime.preferredFacadeBackendOrder;
     const available = [];
     if (backends['kira']) available.push('kira');
-    if (runtime.hasIPlugBridge) available.push('iplug');
-    if (window.AudioContext || window.webkitAudioContext) available.push('html');
+    if (runtime.hasIPlugBridge && backends['iplug']) available.push('iplug');
     for (const pref of preferredOrder) {
       if (available.includes(pref) && audio.set_backend(pref)) {
         return pref;

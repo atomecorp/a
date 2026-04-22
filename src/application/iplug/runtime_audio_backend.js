@@ -124,7 +124,6 @@ export const describeAudioRuntimeEnvironment = (env = globalThis) => {
 export const resolveAudioRuntime = (env = globalThis) => {
     const tauriInvoke = getTauriInvoke(env);
     const wasmAvailable = typeof env?.WebAssembly !== 'undefined';
-    const hasAudioContext = !!(env?.AudioContext || env?.webkitAudioContext);
     const hasWebCapture = !!env?.navigator?.mediaDevices?.getUserMedia;
 
     if (isAuv3AudioRuntime(env)) {
@@ -132,7 +131,7 @@ export const resolveAudioRuntime = (env = globalThis) => {
             runtime: 'ios_auv3',
             playback: 'ios_auv3_native',
             record: 'ios_auv3_native',
-            preferredFacadeBackendOrder: ['iplug', 'kira', 'html'],
+            preferredFacadeBackendOrder: ['iplug', 'kira'],
             hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: hasSwiftBridge(env),
             tauriInvoke: null
@@ -176,12 +175,12 @@ export const resolveAudioRuntime = (env = globalThis) => {
         };
     }
 
-    if (wasmAvailable || hasAudioContext || hasWebCapture) {
+    if (wasmAvailable || hasWebCapture) {
         return {
             runtime: 'web',
-            playback: wasmAvailable ? 'web_wasm_kira' : (hasAudioContext ? 'html' : 'unsupported'),
+            playback: wasmAvailable ? 'web_wasm_kira' : 'unsupported',
             record: hasWebCapture ? 'web_capture_fallback' : 'unsupported',
-            preferredFacadeBackendOrder: wasmAvailable ? ['kira', 'html'] : ['html'],
+            preferredFacadeBackendOrder: wasmAvailable ? ['kira'] : [],
             hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: false,
             tauriInvoke: null
@@ -192,7 +191,7 @@ export const resolveAudioRuntime = (env = globalThis) => {
         runtime: 'unknown',
         playback: 'unsupported',
         record: 'unsupported',
-        preferredFacadeBackendOrder: ['html'],
+        preferredFacadeBackendOrder: [],
         hasIPlugBridge: hasIPlugBridge(env),
         hasSwiftBridge: hasSwiftBridge(env),
         tauriInvoke: null

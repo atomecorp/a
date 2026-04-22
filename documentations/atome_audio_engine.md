@@ -411,7 +411,7 @@ For this document to be usable as a real migration spec, the first rule is to na
 
 | Area | Current entry points | Migration target |
 |------|----------------------|------------------|
-| Public clip playback | `src/application/iplug/audio.facade.js`, `src/application/iplug/backend.kira.js`, `src/application/iplug/backend.iplug.js`, `src/application/iplug/backend.html.js` | keep one public facade, retire backend-specific feature code |
+| Public clip playback | `src/application/iplug/audio.facade.js`, `src/application/iplug/backend.kira.js`, `src/application/iplug/backend.iplug.js` | keep one public facade, retire backend-specific feature code |
 | Audio recording | `src/application/eVe/APIS/audio_api.js`, `src/application/examples/record_audio.js`, `src/application/examples/record_audio_UI.js`, `src/application/apis/___record_audio_api.js` | one recording contract backed by the unified native engine |
 | Video recording / media capture | `src/application/eVe/APIS/video_api.js`, `src/application/examples/record_video.js`, `src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
 | Shared media persistence | `src/application/eVe/APIS/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
@@ -685,7 +685,7 @@ Definition of done:
 
 - all public audio playback enters through `Squirrel.av.audio`
 - `backend.kira.js` or its successor is the preferred native route
-- `backend.iplug.js` and `backend.html.js` are fallback-only
+- `backend.iplug.js` is fallback-only
 - no feature module calls raw media elements for production audio
 
 ### Subsystem 2: Audio Atomes
@@ -762,7 +762,6 @@ Status legend:
 | `src/application/iplug/audio.facade.js` | public JS facade with backend switching | remains public facade | keep as the only public JS entry point; hide backend specifics from feature code | all clip playback still enters through facade | `target` |
 | `src/application/iplug/backend.kira.js` | native/Rust backend adapter | unified native engine adapter | extend until it becomes the preferred native path for clip playback and transport | clip load/play/stop/rate/gain pass on Tauri/native runtimes | `target` |
 | `src/application/iplug/backend.iplug.js` | legacy backend | fallback only | forbid new feature dependencies; progressively detach feature modules from it | no production-critical feature depends on it | `bridge` |
-| `src/application/iplug/backend.html.js` | HTML/WebAudio fallback | compatibility fallback only | keep only where native engine is unavailable; remove production ownership on supported runtimes | no native-supported runtime uses it as primary owner | `bridge` |
 | `src/application/examples/user.js` media playback hooks | feature-local media creation/play behavior | facade + canonical media controller | route all audio/video audible playback commands to unified engine instead of local media ownership | `audio`, `sound`, `video` atomes play through unified transport | `current` |
 
 ### Recording and Persistence

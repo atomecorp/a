@@ -51,11 +51,6 @@ Four files changed to route video clip audio through the native audio pipeline:
 - Header marked DEPRECATED — superseded by `backend.kira.js`
 - Kept for AUv3 swiftBridge compatibility until native AUv3 audio is fully unified
 
-### `src/application/iplug/backend.html.js`
-
-- Header marked DEPRECATED — superseded by WASM Kira for browser playback
-- Retained as last-resort fallback when WASM Kira fails to load
-
 ### `src-Auv3/auv3/utils.swift` — C FFI Recording Bridge
 
 - `squirrel_recorder_core_*` functions marked DEPRECATED
@@ -70,7 +65,6 @@ Four files changed to route video clip audio through the native audio pipeline:
 |-----------|-------|---------------|
 | `backend.kira.js` | ✅ Primary | New unified backend (Tauri native + WASM) |
 | `backend.iplug.js` | ✅ Deprecated | AUv3 swiftBridge still routes through this for live hosts |
-| `backend.html.js` | ✅ Deprecated | Last-resort WebAudio fallback if WASM fails |
 | `___record_audio_api.js` | ✅ Active | Unified recorder wrapper (Tauri/AUv3/browser) — architecturally sound |
 | `record_audio.js` | ✅ Active | Browser recording via getUserMedia + AudioWorklet — approved exception for web capture |
 | `record_video.js` | ✅ Active | MediaRecorder API — independent of audio engine |
@@ -133,7 +127,7 @@ No automated test suite exists for the audio engine migration. Verification requ
 | Risk | Severity | Mitigation |
 |------|----------|------------|
 | Video clip audio decode failure | Medium | `decodeAudioData` may fail on some video containers; MTrack should handle gracefully |
-| WASM Kira module not built/deployed | Medium | `backend.html.js` fallback remains available (deprecated) |
+| WASM Kira module not built/deployed | Medium | Browser playback is unsupported until the Kira module is rebuilt or redeployed |
 | AUv3 C FFI recording still active | Low | Deprecated with markers; removal requires coordinated Xcode rebuild |
 | `shouldUseLegacyVideoElementAudio` returns false breaks edge case | Low | Escape hatch `__eveMtraxForceLegacyVideoAudio` available |
 | No automated regression tests | Medium | Manual verification protocol needed for each runtime |

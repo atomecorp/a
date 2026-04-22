@@ -8,7 +8,6 @@
 
 ### Audio
 - **Tone.js v15.1.22** - Audio synthesis and music library
-- **Wavesurfer.js v7.10.1** - Audio waveform visualization with plugins
 
 ### Mapping
 - **Leaflet v1.9.4** - Interactive maps library
@@ -49,53 +48,8 @@ src/js/
 ├── leaflet.min.js.version
 ├── leaflet.min.css (11KB)
 ├── leaflet.min.css.version
-├── wavesurfer.min.js (30KB)
-├── wavesurfer.min.js.version
 ├── three.min.js (331KB)
 ├── three.min.js.version
-└── wavesurfer-v7/
-    ├── core/
-    │   ├── wavesurfer.esm.min.js (29KB)
-    │   └── wavesurfer.esm.min.js.version
-    └── plugins/
-        ├── envelope.esm.min.js (8.8KB)
-        ├── hover.esm.min.js (3.5KB)
-        ├── minimap.esm.min.js (32KB)
-        ├── record.esm.min.js (6.7KB)
-        ├── regions.esm.min.js (12KB)
-        ├── spectrogram.esm.min.js (32KB)
-        ├── spectrogram-windowed.esm.min.js (35KB)
-        ├── timeline.esm.min.js (4.9KB)
-        └── zoom.esm.min.js (2.7KB)
-```
-
-## 🎭 Wavesurfer.js Plugins
-
-### Essential Plugins Included:
-- **envelope** - Amplitude envelope visualization
-- **hover** - Hover interactions and tooltips
-- **minimap** - Overview/minimap of the waveform
-- **record** - Audio recording capabilities
-- **regions** - Select and manipulate waveform regions
-- **spectrogram** - Frequency spectrum visualization
-- **spectrogram-windowed** - Windowed spectrogram analysis
-- **timeline** - Time axis and markers
-- **zoom** - Zoom functionality for waveforms
-
-### Usage Example:
-```javascript
-// Import wavesurfer with plugins
-import WaveSurfer from './js/wavesurfer-v7/core/wavesurfer.esm.min.js';
-import RegionsPlugin from './js/wavesurfer-v7/plugins/regions.esm.min.js';
-import TimelinePlugin from './js/wavesurfer-v7/plugins/timeline.esm.min.js';
-
-const wavesurfer = WaveSurfer.create({
-  container: '#waveform',
-  plugins: [
-    RegionsPlugin.create(),
-    TimelinePlugin.create()
-  ]
-});
 ```
 
 ## 📊 Version Tracking
@@ -117,7 +71,6 @@ Each library includes a `.version` file with:
 <script src="js/gsap.min.js"></script>
 <script src="js/tone.min.js"></script>
 <script src="js/leaflet.min.js"></script>
-<script src="js/wavesurfer.min.js"></script>
 <script type="module" src="js/three.min.js"></script>
 ```
 
@@ -131,9 +84,6 @@ const synth = new Tone.Synth().toDestination();
 
 // Leaflet maps
 const map = L.map('mapid').setView([51.505, -0.09], 13);
-
-// Wavesurfer audio
-const wavesurfer = WaveSurfer.create({ container: '#waveform' });
 
 // Three.js 3D (ES6 module)
 import * as THREE from './js/three.min.js';
@@ -164,5 +114,5 @@ ls -lh src/js/
 ---
 
 *Generated: $(date)*
-*Total Libraries: 5 core + 9 wavesurfer plugins*
-*Total Size: ~1.1MB optimized*
+*Total Libraries: 4 core*
+*Total Size: optimized by local asset policy*

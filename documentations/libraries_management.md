@@ -9,7 +9,6 @@ Ce système permet d'avoir des librairies JavaScript en local tout en s'assurant
 - **GSAP** (GreenSock Animation Platform) - Animation
 - **Tone.js** - Audio/Synthèse/Musique
 - **Leaflet** (JS + CSS) - Cartographie interactive
-- **wavesurfer.js** (core + plugins) - Waveform audio & enregistrement
 - **Three.js** - Rendu 3D WebGL
 
 ## 📂 Structure
@@ -24,11 +23,6 @@ src/js/
 ├── leaflet.min.js.version
 ├── leaflet.min.css                 # Leaflet CSS
 ├── leaflet.min.css.version
-├── wavesurfer.min.js               # wavesurfer.js UMD
-├── wavesurfer.min.js.version
-├── wavesurfer-v7/
-│   ├── core/wavesurfer.esm.min.js
-│   └── plugins/*.js                # 9 plugins principaux
 ├── three.min.js                    # Three.js module wrapper
 ├── three.min.js.version
 ├── three.core.min.js               # Chunk requis par Three.js
@@ -49,7 +43,7 @@ npm run update:libs
 **Fonctionnalités :**
 
 - ✅ Récupère automatiquement la vraie dernière version depuis NPM
-- ✅ Télécharge depuis les CDN officiels (GSAP, Tone, Leaflet, wavesurfer.js + plugins, Three.js)
+- ✅ Télécharge depuis les CDN officiels (GSAP, Tone, Leaflet, Three.js)
 - ✅ Sauvegarde + rollback automatiques en cas de problème
 - ✅ Génère des fichiers `.version` pour chaque asset téléchargé
 - ✅ Met à jour @tauri-apps/cli et la stack Fastify (désactivables avec `--skip-tauri` / `--skip-fastify`)
@@ -177,7 +171,7 @@ Pour ajouter une nouvelle librairie au système :
 
 1. **Mettre à jour `update_all_libraries.sh`**
 
-   - Dans `run_latest_updates`, utilisez `download_latest_asset` (et, si besoin, `download_wavesurfer_plugins_latest`) pour récupérer la librairie et créer son fichier `.version`.
+   - Dans `run_latest_updates`, utilisez `download_latest_asset` pour récupérer la librairie et créer son fichier `.version`.
    - Dans `run_stable_updates`, ajoutez l'URL épinglée correspondante si vous souhaitez proposer une version fallback.
 
 2. **Intégrer la librairie dans le bundle si nécessaire** (ex. en l'important dans `scripts_utils/bundle.js`).

@@ -60,10 +60,9 @@ Cette liste reprend les "points critiques à valider" du cahier des charges et a
 - `resolve_freebsd_latest()` parse du HTML → fragile si le listing change de format
 - **Mitigation** : option `--freebsd-version 15.0-RELEASE` pour pinner
 
-### Blocklist naïve
-- Retire wavesurfer de `package.json` mais pas des `import` dans le code
-- Si un fichier du framework fait `import WaveSurfer from 'wavesurfer.js'`, le runtime plantera
-- **À ajouter** : grep -R `wavesurfer` dans le framework après clone et warn
+### Blocklist WaveSurfer
+- La dépendance a été retirée du framework courant.
+- La blocklist reste utile pour neutraliser d'anciens clones ou branches qui embarqueraient encore `wavesurfer.js`.
 
 ### Profile `dev` trop permissif
 - Clone en éditable, autostart off, watchdog off

@@ -133,7 +133,7 @@
   // Auto-select: re-trigger backend detection now that iplug is registered.
   // In AUv3, the facade's initial detect_and_set_backend() runs before any
   // backend is registered, so nothing gets selected. This ensures iplug
-  // becomes active when the runtime prefers it (AUv3 order: iplug > kira > html).
+  // becomes active when the runtime explicitly prefers it.
   if (typeof audio.detect_and_set_backend === 'function') {
     audio.detect_and_set_backend();
   }

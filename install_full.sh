@@ -514,33 +514,6 @@ download_latest_asset() {
   return 1
 }
 
-download_wavesurfer_plugins_latest() {
-  local version="$1"
-  local success_ref="$2"
-  local total_ref="$3"
-
-  local plugins=(
-    envelope.esm.min.js
-    hover.esm.min.js
-    minimap.esm.min.js
-    record.esm.min.js
-    regions.esm.min.js
-    spectrogram.esm.min.js
-    spectrogram-windowed.esm.min.js
-    timeline.esm.min.js
-    zoom.esm.min.js
-  )
-
-  for plugin in "${plugins[@]}"; do
-    printf -v "$total_ref" '%d' "$(( ${!total_ref} + 1 ))"
-    local plugin_path="wavesurfer-v7/plugins/$plugin"
-    local plugin_url="https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/$version/plugins/$plugin"
-    if download_latest_asset "$plugin_path" "$plugin_url" "wavesurfer.js" "$version" 64; then
-      printf -v "$success_ref" '%d' "$(( ${!success_ref} + 1 ))"
-    fi
-  done
-}
-
 update_tauri_cli() {
   if [ "$SKIP_TAURI" = true ]; then
     log_warn "⏭️  Skipping Tauri CLI update (--skip-tauri)"
@@ -653,8 +626,6 @@ run_stable_updates() {
     "event-calendar.css|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.css"
     "event-calendar.min.map.json|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.min.map.json"
     "event-calendar.css.map|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.css.map"
-    "wavesurfer.min.js|https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.10.1/wavesurfer.min.js"
-    "wavesurfer-v7/core/wavesurfer.esm.min.js|https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.10.1/wavesurfer.esm.min.js"
     "three.min.js|https://cdnjs.cloudflare.com/ajax/libs/three.js/0.179.1/three.module.min.js"
     "three.core.min.js|https://cdnjs.cloudflare.com/ajax/libs/three.js/0.179.1/three.core.min.js"
     # Opal Ruby runtime
@@ -665,26 +636,6 @@ run_stable_updates() {
   for entry in "${STABLE_LIBS[@]}"; do
     IFS='|' read -r target url <<<"$entry"
     download_file "$url" "$JS_DIR/$target" "$target"
-  done
-
-  # Wavesurfer plugins
-  log_info "🔌 Updating wavesurfer.js plugins"
-  local plugins=(
-    envelope.esm.min.js
-    hover.esm.min.js
-    minimap.esm.min.js
-    record.esm.min.js
-    regions.esm.min.js
-    spectrogram.esm.min.js
-    spectrogram-windowed.esm.min.js
-    timeline.esm.min.js
-    zoom.esm.min.js
-  )
-  for plugin in "${plugins[@]}"; do
-    download_file \
-      "https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.10.1/plugins/$plugin" \
-      "$JS_DIR/wavesurfer-v7/plugins/$plugin" \
-      "wavesurfer plugin $plugin"
   done
 
   log_ok "🎉 Stable libraries refreshed"
@@ -700,14 +651,12 @@ run_latest_updates() {
   local GSAP_VERSION
   local TONE_VERSION
   local LEAFLET_VERSION
-  local WAVESURFER_VERSION
   local THREE_VERSION
   local EVENT_CALENDAR_VERSION
 
   GSAP_VERSION=$(get_latest_version "gsap") || return 1
   TONE_VERSION=$(get_latest_version "tone") || return 1
   LEAFLET_VERSION=$(get_latest_version "leaflet") || return 1
-  WAVESURFER_VERSION=$(get_latest_version "wavesurfer.js") || return 1
   THREE_VERSION=$(get_latest_version "three") || return 1
   EVENT_CALENDAR_VERSION=$(get_latest_version "event-calendar") || return 1
 
@@ -716,7 +665,6 @@ run_latest_updates() {
   log_info "   • Tone.js:     $TONE_VERSION"
   log_info "   • Leaflet:     $LEAFLET_VERSION"
   log_info "   • EventCalendar: $EVENT_CALENDAR_VERSION"
-  log_info "   • Wavesurfer:  $WAVESURFER_VERSION"
   log_info "   • Three.js:    $THREE_VERSION"
 
   local success=0
@@ -767,18 +715,6 @@ run_latest_updates() {
   if download_latest_asset "event-calendar.css.map" "https://unpkg.com/event-calendar@$EVENT_CALENDAR_VERSION/dist/event-calendar.css.map" "event-calendar" "$EVENT_CALENDAR_VERSION"; then
     success=$((success + 1))
   fi
-
-  total=$((total + 1))
-  if download_latest_asset "wavesurfer.min.js" "https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/$WAVESURFER_VERSION/wavesurfer.min.js" "wavesurfer.js" "$WAVESURFER_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  total=$((total + 1))
-  if download_latest_asset "wavesurfer-v7/core/wavesurfer.esm.min.js" "https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/$WAVESURFER_VERSION/wavesurfer.esm.min.js" "wavesurfer.js" "$WAVESURFER_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  download_wavesurfer_plugins_latest "$WAVESURFER_VERSION" success total
 
   total=$((total + 1))
   if download_latest_asset "three.min.js" "https://cdnjs.cloudflare.com/ajax/libs/three.js/$THREE_VERSION/three.module.min.js" "three" "$THREE_VERSION"; then

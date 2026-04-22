@@ -96,7 +96,7 @@ universal_builder/
 
 ## Exclusions explicites
 
-- **WaveSurfer** : la dépendance `wavesurfer.js` présente dans le framework Squirrel est **abandonnée** et doit être neutralisée lors du build. Voir `scripts/install_runtime.sh` (section blocklist).
+- **WaveSurfer** : la dépendance `wavesurfer.js` est **abandonnée** côté Squirrel. Elle reste en blocklist dans le builder pour neutraliser d'anciens clones ou branches qui la contiendraient encore.
 
 ## Source de vérité des dépendances
 
