@@ -33,7 +33,7 @@ Cette liste reprend les "points critiques à valider" du cahier des charges et a
 - Risqué : interfaces class-compliant non-UAC1 (MOTU récents), à tester
 
 ### Runtime Atome + pile audio
-- Le DSP core du framework (`src/core/`) doit être recompilé côté runtime si l'architecture cible diffère de celle de construction
+- Le DSP core du framework (`engines/audio/core/`) doit être recompilé côté runtime si l'architecture cible diffère de celle de construction
 - **Pas géré actuellement** : l'image amd64 contient les binaires compilés pour amd64 ; l'image arm64 doit être construite sur ARM ou via qemu-user-static
 
 ### Synchronisation offline/online

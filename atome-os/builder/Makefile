@@ -1,4 +1,4 @@
-# Makefile — raccourcis build AtomeOS Universal Builder
+# Makefile — raccourcis build Atome OS Universal Builder
 #
 # Usage:
 #   make amd64          # image desktop amd64

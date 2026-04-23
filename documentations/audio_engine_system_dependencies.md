@@ -50,7 +50,7 @@ Both rely on the platform's native audio subsystem via `cpal::default_host()`.
 
 ### Browser (Fastify-served / PWA)
 
-- **Playback**: WASM Kira module (`src-audio-wasm/`) compiled to WebAssembly
+- **Playback**: WASM Kira module (`platforms/web/audio-wasm/`) compiled to WebAssembly
 - **Recording**: `getUserMedia` + `AudioWorklet` (browser-native, no server-side audio)
 - **Required**: Modern browser with WebAssembly and AudioWorklet support
 - **Notes**: If WASM Kira fails to load, browser playback is unsupported until

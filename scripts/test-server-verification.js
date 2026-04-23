@@ -2,10 +2,10 @@
 /**
  * Test script for server identity verification
  * 
- * Usage: node scripts_utils/test-server-verification.js [server-url]
+ * Usage: node scripts/test-server-verification.js [server-url]
  * 
  * Example:
- *   node scripts_utils/test-server-verification.js http://localhost:3001
+ *   node scripts/test-server-verification.js http://localhost:3001
  */
 
 import crypto from 'crypto';

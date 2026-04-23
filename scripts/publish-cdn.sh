@@ -1,13 +1,13 @@
 #!/bin/zsh
 # CDN publication script via GitHub + jsDelivr
-# Usage: ./scripts_utils/publish-cdn.sh
+# Usage: ./scripts/publish-cdn.sh
 
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
-# 1. Build with rollup (config in ./scripts_utils/rollup.config.cdn.js)
+# 1. Build with rollup (config in ./scripts/rollup.config.cdn.js)
 "$PROJECT_ROOT/node_modules/.bin/rollup" -c "$SCRIPT_DIR/rollup.config.cdn.js"
 
 # 2. (Optional) Minification if needed

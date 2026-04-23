@@ -52,7 +52,7 @@ function main() {
     const roots = [
         path.join(ROOT, 'src'),
         path.join(ROOT, 'server'),
-        path.join(ROOT, 'scripts_utils'),
+        path.join(ROOT, 'scripts'),
         path.join(ROOT, 'tests')
     ].filter(p => fs.existsSync(p));
 

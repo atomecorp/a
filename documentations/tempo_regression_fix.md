@@ -61,8 +61,8 @@ The enhanced logging shows the source of tempo data:
 - `noAU(XXX)`: No hostAudioUnit available
 
 ## Files Modified
-1. `/src-Auv3/auv3/utils.swift`: Added tempo update in `checkHostTransport()`
-2. `/src-Auv3/Common/WebViewManager.swift`: Enhanced `requestHostTempo` handling
+1. `/platforms/ios/atome-auv3/auv3/utils.swift`: Added tempo update in `checkHostTransport()`
+2. `/platforms/ios/atome-auv3/Common/WebViewManager.swift`: Enhanced `requestHostTempo` handling
 
 ## Performance Impact
 Minimal - tempo check piggybacks on existing transport polling (throttled to 5 FPS).

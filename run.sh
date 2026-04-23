@@ -10,7 +10,7 @@ while [ -h "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
-SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
+SCRIPTS_DIR="$PROJECT_ROOT/scripts"
 
 # Dev-only: shared JWT secret so Tauri + Fastify accept the same tokens.
 DEV_SHARED_JWT_SECRET="squirrel_dev_shared_jwt_secret_change_me"

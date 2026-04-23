@@ -14,8 +14,8 @@ database_storage/
 
 # Build outputs
 src/svelte/build/
-src-Auv3/build/
-src-audio-wasm/target/
+platforms/ios/atome-auv3/build/
+platforms/web/audio-wasm/target/
 /temp/
 
 # Development files
@@ -63,6 +63,9 @@ data/
 *.key
 *.p12
 *.pfx
+deploy/certs/*
+!deploy/certs/.gitkeep
+deploy/renew_cert_hook.sh
 server/certificates/
 !server/certificates/.gitkeep
 !src/application/security/trusted_keys.js
@@ -77,5 +80,5 @@ src-tauri/Cargo.lock
 src-tauri/gen/schemas/acl-manifests.json
 src-tauri/gen/schemas/desktop-schema.json
 src/assets/videos/avengers.mp4
-src-Auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
+platforms/ios/atome-auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
 src/application/eVe

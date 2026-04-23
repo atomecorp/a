@@ -2,12 +2,12 @@
 
 ## 🚨 Problème Identifié
 
-L'AUv3 dans `src-Auv3_crash` plante dans **Loopy Pro** mais fonctionne correctement dans **AUM**. L'analyse comparative avec `src-Auv3` (qui fonctionne partout) révèle plusieurs problèmes critiques.
+L'AUv3 dans `platforms/ios/atome-auv3_crash` plante dans **Loopy Pro** mais fonctionne correctement dans **AUM**. L'analyse comparative avec `platforms/ios/atome-auv3` (qui fonctionne partout) révèle plusieurs problèmes critiques.
 
 ## 🔍 Différences Critiques Identifiées
 
 ### 1. **CRITIQUE : Variable Non-Déclarée**
-**Fichier :** `src-Auv3_crash/auv3/AUMIDIOutputHelper.swift`
+**Fichier :** `platforms/ios/atome-auv3_crash/auv3/AUMIDIOutputHelper.swift`
 
 ❌ **Problème :** Utilisation de `midiEventSender` qui n'est **jamais déclarée** dans la classe `auv3Utils`
 
@@ -20,9 +20,9 @@ guard let sender = midiEventSender else { ... }
 **Impact :** Crash potentiel lors de l'accès à une variable inexistante.
 
 ### 2. **CRITIQUE : Tag MIDI Manquant**
-**Fichier :** `src-Auv3_crash/auv3/Info.plist`
+**Fichier :** `platforms/ios/atome-auv3_crash/auv3/Info.plist`
 
-❌ **src-Auv3_crash (plante) :**
+❌ **platforms/ios/atome-auv3_crash (plante) :**
 ```xml
 <key>tags</key>
 <array>
@@ -31,7 +31,7 @@ guard let sender = midiEventSender else { ... }
 </array>
 ```
 
-✅ **src-Auv3 (fonctionne) :**
+✅ **platforms/ios/atome-auv3 (fonctionne) :**
 ```xml
 <key>tags</key>
 <array>
@@ -43,7 +43,7 @@ guard let sender = midiEventSender else { ... }
 **Impact :** Loopy Pro peut rejeter les AUv3 sans tag MIDI approprié.
 
 ### 3. **RISQUE : Logique MIDI Complexe et Dangereuse**
-**Fichier :** `src-Auv3_crash/Common/WebViewManager.swift`
+**Fichier :** `platforms/ios/atome-auv3_crash/Common/WebViewManager.swift`
 
 ❌ **Version crash (complexe et dangereuse) :**
 ```swift
@@ -63,7 +63,7 @@ WebViewManager.midiController?.sendRaw(bytes: u8)
 **Impact :** Les appels de sélecteurs dynamiques peuvent échouer et causer des crashes dans certains hosts.
 
 ### 4. **COMPLEXITÉ EXCESSIVE : Système de Queue MIDI**
-**Fichier :** `src-Auv3_crash/auv3/utils.swift`
+**Fichier :** `platforms/ios/atome-auv3_crash/auv3/utils.swift`
 
 ❌ **Problèmes identifiés :**
 - Queue MIDI thread-safe complexe avec locks
@@ -81,11 +81,11 @@ WebViewManager.midiController?.sendRaw(bytes: u8)
 
 ### Action 1 : Supprimer le Fichier Problématique
 ```bash
-rm src-Auv3_crash/auv3/AUMIDIOutputHelper.swift
+rm platforms/ios/atome-auv3_crash/auv3/AUMIDIOutputHelper.swift
 ```
 
 ### Action 2 : Corriger Info.plist
-**Fichier :** `src-Auv3_crash/auv3/Info.plist`
+**Fichier :** `platforms/ios/atome-auv3_crash/auv3/Info.plist`
 
 Ajouter le tag MIDI manquant :
 ```xml
@@ -97,7 +97,7 @@ Ajouter le tag MIDI manquant :
 ```
 
 ### Action 3 : Simplifier WebViewManager
-**Fichier :** `src-Auv3_crash/Common/WebViewManager.swift`
+**Fichier :** `platforms/ios/atome-auv3_crash/Common/WebViewManager.swift`
 
 Remplacer la logique complexe par :
 ```swift
@@ -111,7 +111,7 @@ if action == "sendMidi" {
 ```
 
 ### Action 4 : Simplifier utils.swift
-**Fichier :** `src-Auv3_crash/auv3/utils.swift`
+**Fichier :** `platforms/ios/atome-auv3_crash/auv3/utils.swift`
 
 Supprimer :
 - ❌ `midiOutputEventBlock` override
@@ -120,7 +120,7 @@ Supprimer :
 - ❌ Appel à `processMIDIOutputQueue()` dans render block
 
 ### Action 5 : Nettoyer AudioUnitViewController
-**Fichier :** `src-Auv3_crash/auv3/AudioUnitViewController.swift`
+**Fichier :** `platforms/ios/atome-auv3_crash/auv3/AudioUnitViewController.swift`
 
 Supprimer la ligne problématique :
 ```swift
@@ -135,23 +135,23 @@ WebViewManager.midiController = midiController
 echo "🔧 Correction automatique du crash Loopy Pro..."
 
 # 1. Supprimer le fichier problématique
-rm -f src-Auv3_crash/auv3/AUMIDIOutputHelper.swift
+rm -f platforms/ios/atome-auv3_crash/auv3/AUMIDIOutputHelper.swift
 echo "✅ AUMIDIOutputHelper.swift supprimé"
 
 # 2. Sauvegarder et copier la version stable
-cp src-Auv3/auv3/Info.plist src-Auv3_crash/auv3/Info.plist
+cp platforms/ios/atome-auv3/auv3/Info.plist platforms/ios/atome-auv3_crash/auv3/Info.plist
 echo "✅ Info.plist corrigé avec tag MIDI"
 
 # 3. Copier WebViewManager stable
-cp src-Auv3/Common/WebViewManager.swift src-Auv3_crash/Common/WebViewManager.swift
+cp platforms/ios/atome-auv3/Common/WebViewManager.swift platforms/ios/atome-auv3_crash/Common/WebViewManager.swift
 echo "✅ WebViewManager simplifié"
 
 # 4. Copier utils.swift stable
-cp src-Auv3/auv3/utils.swift src-Auv3_crash/auv3/utils.swift
+cp platforms/ios/atome-auv3/auv3/utils.swift platforms/ios/atome-auv3_crash/auv3/utils.swift
 echo "✅ utils.swift simplifié"
 
 # 5. Copier AudioUnitViewController stable
-cp src-Auv3/auv3/AudioUnitViewController.swift src-Auv3_crash/auv3/AudioUnitViewController.swift
+cp platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift platforms/ios/atome-auv3_crash/auv3/AudioUnitViewController.swift
 echo "✅ AudioUnitViewController nettoyé"
 
 echo "🎉 Correction terminée ! Testez maintenant dans Loopy Pro."
@@ -159,7 +159,7 @@ echo "🎉 Correction terminée ! Testez maintenant dans Loopy Pro."
 
 ## 📊 Comparaison Avant/Après
 
-| Aspect | src-Auv3_crash (AVANT) | src-Auv3_crash (APRÈS) |
+| Aspect | platforms/ios/atome-auv3_crash (AVANT) | platforms/ios/atome-auv3_crash (APRÈS) |
 |--------|------------------------|------------------------|
 | **Compatibilité Loopy Pro** | ❌ Crash | ✅ Fonctionne |
 | **Complexité MIDI** | ❌ Très complexe | ✅ Simple |
@@ -189,7 +189,7 @@ Après correction, tester dans l'ordre :
 
 > **"Plus simple = plus stable"**
 > 
-> La version `src-Auv3` fonctionne partout car elle évite les optimisations prématurées et les comportements non-standard qui peuvent causer des incompatibilités.
+> La version `platforms/ios/atome-auv3` fonctionne partout car elle évite les optimisations prématurées et les comportements non-standard qui peuvent causer des incompatibilités.
 
 ## 🚀 Prochaines Étapes
 

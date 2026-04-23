@@ -1,11 +1,11 @@
 # Installeur Desktop (Windows / macOS)
 
-Objectif : permettre à un utilisateur final d'installer AtomeOS sur sa machine en **un clic**, à la manière d'un installeur Windows ou macOS standard.
+Objectif : permettre à un utilisateur final d'installer Atome OS sur sa machine en **un clic**, à la manière d'un installeur Windows ou macOS standard.
 
 ## Architecture cible
 
 ```
-Utilisateur télécharge AtomeOS-Installer-<os>.{exe,dmg}
+Utilisateur télécharge Atome OS-Installer-<os>.{exe,dmg}
          │
          ▼
 Interface graphique simple :
@@ -15,14 +15,14 @@ Interface graphique simple :
          │
          ▼
 Étapes automatiques :
-  1. Download image FreeBSD AtomeOS depuis releases/
+  1. Download image FreeBSD Atome OS depuis releases/
   2. Vérification SHA256 + signature
   3. Flash du disque (dd-equivalent natif OS)
   4. Installation bootloader UEFI
   5. Reboot
          │
          ▼
-Premier boot : AtomeOS directement, logo Atome puis webview.
+Premier boot : Atome OS directement, logo Atome puis webview.
 ```
 
 ## Stack technique recommandée
@@ -81,7 +81,7 @@ installer/desktop/
 
 ## Flux utilisateur (< 5 clics)
 
-1. Ouvrir `AtomeOS-Installer.exe`
+1. Ouvrir `Atome OS-Installer.exe`
 2. Choisir le disque
 3. Cocher "Je comprends que ce disque sera effacé"
 4. Cliquer [Installer]

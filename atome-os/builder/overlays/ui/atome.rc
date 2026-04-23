@@ -10,7 +10,7 @@
 
 name="atome"
 rcvar="atome_enable"
-desc="AtomeOS UI runtime"
+desc="Atome OS UI runtime"
 
 load_rc_config "${name}"
 

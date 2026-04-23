@@ -12,10 +12,10 @@ Required Info.plist adjustments
 
 Key code locations
 
-- src-Auv3/Common/WKWebViewFactory.swift: shared WKProcessPool and per-target configuration.
-- src-Auv3/auv3/AudioUnitViewController.swift: uses factory, logs layout, retries on web process termination, no UIWindow usage.
-- src-Auv3/Common/ExternalDisplayGuards.swift: skips external display in extension; app-only observation.
-- src-Auv3/application/SceneDelegate.swift: app main scene boot using the shared factory; logs and external display observation hooks.
+- platforms/ios/atome-auv3/Common/WKWebViewFactory.swift: shared WKProcessPool and per-target configuration.
+- platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift: uses factory, logs layout, retries on web process termination, no UIWindow usage.
+- platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift: skips external display in extension; app-only observation.
+- platforms/ios/atome-auv3/application/SceneDelegate.swift: app main scene boot using the shared factory; logs and external display observation hooks.
 
 Testing matrix
 

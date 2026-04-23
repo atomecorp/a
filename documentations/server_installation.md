@@ -215,7 +215,7 @@ tail -f /var/log/messages  # Logs (or specific app log if configured)
 | **Port** | Dynamic (usually 8080+) |
 | **Bind Address** | `127.0.0.1` only (loopback) |
 | **Database** | None (uses App Group Shared Container + iCloud) |
-| **Location** | `/src-Auv3/Common/LocalHTTPServer.swift` |
+| **Location** | `/platforms/ios/atome-auv3/Common/LocalHTTPServer.swift` |
 
 ### Why AiS Exists
 
@@ -370,9 +370,9 @@ Use AiS when:
 ### Related Documentation
 
 * **Architecture details**: `documentations/databas_architecture.md` (Section 6: AiS)
-* **AUV3 implementation**: `/src-Auv3/Common/LocalHTTPServer.swift`
-* **WebView integration**: `/src-Auv3/Common/WebViewManager.swift`
-* **File management**: `/src-Auv3/Common/iCloudFileManager.swift`
+* **AUV3 implementation**: `/platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+* **WebView integration**: `/platforms/ios/atome-auv3/Common/WebViewManager.swift`
+* **File management**: `/platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
 
 ---
 

@@ -8,8 +8,8 @@
  * 
  * Usage:
  *   npm run generate-keys
- *   node scripts_utils/generate-server-keys.js
- *   node scripts_utils/generate-server-keys.js --output ./custom/path
+ *   node scripts/generate-server-keys.js
+ *   node scripts/generate-server-keys.js --output ./custom/path
  * 
  * Output:
  *   - server.key (private key) - KEEP SECRET, never commit to Git
@@ -20,7 +20,7 @@
  * - Private key must be stored securely
  * - Public key fingerprint should be added to trusted_keys.js
  * 
- * @module scripts_utils/generate-server-keys
+ * @module scripts/generate-server-keys
  */
 
 import crypto from 'crypto';

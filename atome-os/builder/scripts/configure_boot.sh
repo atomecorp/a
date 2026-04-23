@@ -60,7 +60,7 @@ sed -E -i '' \
 # ---------------------------------------------------------------------------
 cat >> "${WORK_MNT}/etc/sysctl.conf" <<'EOF'
 
-# AtomeOS — silence console
+# Atome OS — silence console
 kern.consmsgbuf_size=131072
 kern.quiet_boot=1
 EOF

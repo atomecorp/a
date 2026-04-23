@@ -51,7 +51,7 @@ Four files changed to route video clip audio through the native audio pipeline:
 - Header marked DEPRECATED — superseded by `backend.kira.js`
 - Kept for AUv3 swiftBridge compatibility until native AUv3 audio is fully unified
 
-### `src-Auv3/auv3/utils.swift` — C FFI Recording Bridge
+### `platforms/ios/atome-auv3/auv3/utils.swift` — C FFI Recording Bridge
 
 - `squirrel_recorder_core_*` functions marked DEPRECATED
 - Kept for AUv3 backward compatibility until native AUv3 recording

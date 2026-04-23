@@ -52,8 +52,8 @@ fi
 
 # --- 4. Installation des dépendances du projet ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Si le script est dans scripts_utils/, on remonte d'un cran. Sinon on assume être à la racine.
-if [[ "$(basename "$SCRIPT_DIR")" == "scripts_utils" ]]; then
+# Si le script est dans scripts/, on remonte d'un cran. Sinon on assume être à la racine.
+if [[ "$(basename "$SCRIPT_DIR")" == "scripts" ]]; then
     PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 else
     PROJECT_ROOT="$SCRIPT_DIR"

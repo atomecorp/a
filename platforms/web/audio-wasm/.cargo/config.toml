@@ -1,2 +1,2 @@
 [build]
-target-dir = "../temp/src-audio-wasm-target"
+target-dir = "../../../temp/platforms-web-audio-wasm-target"

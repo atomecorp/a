@@ -12,7 +12,7 @@ const DEFAULT_INCLUDE = [
     'documentations/**/*.{md,json}',
     'database/**/*.js',
     'server/**/*.js',
-    'scripts_utils/**/*.js',
+    'scripts/**/*.js',
     'src/assets/**/*'
 ];
 

@@ -14,7 +14,7 @@ Measured today:
 3. Biggest disk consumers are generated or mirrored paths, not primary source:
    - `src-tauri/target`: about 19.49 GiB
    - `.claude/worktrees`: about 8.29 GiB
-   - `src-audio-wasm/target`: about 0.77 GiB
+   - `temp/platforms-web-audio-wasm-target`: about 0.77 GiB
    - `logs`: about 0.22 GiB
 
 Conclusion:
@@ -30,7 +30,7 @@ Conclusion:
 These are ignored or generated paths and can be cleaned without changing framework behavior:
 
 1. `src-tauri/target`
-2. `src-audio-wasm/target`
+2. `temp/platforms-web-audio-wasm-target`
 3. `logs`
 4. `target`
 5. `temp`

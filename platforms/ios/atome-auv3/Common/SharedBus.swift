@@ -2,7 +2,7 @@ import Foundation
 import CoreFoundation
 
 // Shared bus for AUv3 <-> App communication
-// Keep all iOS-related code inside src-Auv3 per project convention.
+// Keep all iOS-related code inside platforms/ios/atome-auv3 per project convention.
 enum SharedBus {
     // App Group suite used to exchange data between the AUv3 extension and the container app.
     static let appGroupSuite: String = "group.atome.one"

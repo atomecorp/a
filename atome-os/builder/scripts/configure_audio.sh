@@ -38,7 +38,7 @@ if [ "${JACK}" = "true" ]; then
     install -m 755 "${OVERLAY}/jackd.rc" "${WORK_MNT}/etc/rc.d/jackd"
     cat >> "${WORK_MNT}/etc/rc.conf" <<EOF
 
-# AtomeOS — JACK
+# Atome OS — JACK
 jackd_enable="YES"
 jackd_user="${INSTALL_USER}"
 EOF
@@ -53,7 +53,7 @@ fi
 if [ "${LOWLAT}" = "true" ]; then
     cat >> "${WORK_MNT}/etc/login.conf" <<'EOF'
 
-# AtomeOS — classe audio basse latence
+# Atome OS — classe audio basse latence
 audio:\
     :priority=-5:\
     :ignoretime@:\

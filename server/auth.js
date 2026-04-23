@@ -2122,8 +2122,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     ? name.substring(rootPrefix.length)
                     : name;
 
-                // Only process files EXACTLY in extractPath (src/)
-                // Must start with "src/" but NOT "src-tauri/" or "src-Auv3/"
+                // Only process files exactly in the configured extractPath folder.
+                // For the default "src/" path, this excludes sibling roots such as "src-tauri/".
                 const extractPrefix = extractPath.replace(/\/$/, '') + '/';
                 if (!relativePath.startsWith(extractPrefix)) {
                     continue;

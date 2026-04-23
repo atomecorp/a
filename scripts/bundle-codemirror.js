@@ -1,6 +1,6 @@
 /**
  * Bundle CodeMirror for offline use
- * Run with: node scripts_utils/bundle-codemirror.js
+ * Run with: node scripts/bundle-codemirror.js
  */
 
 import { build } from 'esbuild';
@@ -15,7 +15,7 @@ async function bundleCodeMirror() {
 
     try {
         await build({
-            entryPoints: [join(projectRoot, 'scripts_utils/codemirror-entry.js')],
+            entryPoints: [join(projectRoot, 'scripts/codemirror-entry.js')],
             bundle: true,
             minify: true,
             format: 'esm',

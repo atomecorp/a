@@ -1,28 +1,28 @@
-# ✅ Corrections Appliquées - src-Auv3_crash
+# ✅ Corrections Appliquées - platforms/ios/atome-auv3_crash
 
 ## 🎯 Résumé des Actions Effectuées
 
 ### ✅ Action 1 : Fichier Problématique Supprimé
-- **Supprimé :** `src-Auv3_crash/auv3/AUMIDIOutputHelper.swift`
+- **Supprimé :** `platforms/ios/atome-auv3_crash/auv3/AUMIDIOutputHelper.swift`
 - **Raison :** Contenait des références à `midiEventSender` non-déclarée
 - **Status :** ✅ TERMINÉ
 
 ### ✅ Action 2 : Info.plist Corrigé
-- **Fichier :** `src-Auv3_crash/auv3/Info.plist`
+- **Fichier :** `platforms/ios/atome-auv3_crash/auv3/Info.plist`
 - **Changement :** Ajout du tag `<string>MIDI</string>` dans la section tags
 - **Avant :** `["Effects"]`
 - **Après :** `["Effects", "MIDI"]`
 - **Status :** ✅ TERMINÉ
 
 ### ✅ Action 3 : WebViewManager Simplifié
-- **Fichier :** `src-Auv3_crash/Common/WebViewManager.swift`
+- **Fichier :** `platforms/ios/atome-auv3_crash/Common/WebViewManager.swift`
 - **Changement :** Suppression de la logique complexe avec sélecteurs dynamiques
 - **Avant :** Logique complexe avec `perform(Selector("sendMIDIRawViaHost:"))`
 - **Après :** Simple appel `WebViewManager.midiController?.sendRaw(bytes: u8)`
 - **Status :** ✅ TERMINÉ
 
 ### ✅ Action 4 : utils.swift Simplifié
-- **Fichier :** `src-Auv3_crash/auv3/utils.swift`
+- **Fichier :** `platforms/ios/atome-auv3_crash/auv3/utils.swift`
 - **Suppressions effectuées :**
   - ❌ `midiOutputEventBlock` override
   - ❌ `sendMIDIRawViaHost` méthode
@@ -32,7 +32,7 @@
 - **Status :** ✅ TERMINÉ
 
 ### ✅ Action 5 : AudioUnitViewController Nettoyé
-- **Fichier :** `src-Auv3_crash/auv3/AudioUnitViewController.swift`
+- **Fichier :** `platforms/ios/atome-auv3_crash/auv3/AudioUnitViewController.swift`
 - **Suppressions effectuées :**
   - ❌ `WebViewManager.midiController = midiController`
   - ❌ Commentaire obsolète sur `sendMIDIRawViaHost`
@@ -76,7 +76,7 @@
 
 ## 🚀 Prochaines Étapes
 
-1. **Compiler** le projet `src-Auv3_crash`
+1. **Compiler** le projet `platforms/ios/atome-auv3_crash`
 2. **Tester** dans AUM (régression)
 3. **Tester** dans Loopy Pro (correction)
 4. **Valider** le comportement MIDI

@@ -48,7 +48,7 @@ npm run update:libs
 - ✅ Génère des fichiers `.version` pour chaque asset téléchargé
 - ✅ Met à jour @tauri-apps/cli et la stack Fastify (désactivables avec `--skip-tauri` / `--skip-fastify`)
 - ✅ Rafraîchit aussi iPlug2 (exécute `tools/update_iplug2.sh`)
-- ✅ Réinstalle toutes les dépendances npm via `scripts_utils/install_dependencies.sh`
+- ✅ Réinstalle toutes les dépendances npm via `scripts/install_dependencies.sh`
 
 Pour ignorer iPlug2 : `npm run update:libs:no-iplug`, `npm run update:libs -- --skip-iplug` ou `./update_all_libraries.sh --mode latest --skip-iplug`
 
@@ -174,7 +174,7 @@ Pour ajouter une nouvelle librairie au système :
    - Dans `run_latest_updates`, utilisez `download_latest_asset` pour récupérer la librairie et créer son fichier `.version`.
    - Dans `run_stable_updates`, ajoutez l'URL épinglée correspondante si vous souhaitez proposer une version fallback.
 
-2. **Intégrer la librairie dans le bundle si nécessaire** (ex. en l'important dans `scripts_utils/bundle.js`).
+2. **Intégrer la librairie dans le bundle si nécessaire** (ex. en l'important dans `scripts/bundle.js`).
 
 3. **Ajouter dans `index.html`** :
 
@@ -206,7 +206,7 @@ cp src/js/gsap.min.js.backup src/js/gsap.min.js
 ### Permissions d'exécution
 
 ```bash
-chmod +x update_all_libraries.sh tools/update_iplug2.sh scripts_utils/*.sh
+chmod +x update_all_libraries.sh tools/update_iplug2.sh scripts/*.sh
 ```
 
 ## 📈 Monitoring des Versions

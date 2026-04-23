@@ -1,7 +1,7 @@
 #include "Plugin.h"
 #include <IPlug_include_in_plug_src.h>
 #include <IPlugConstants.h>
-#include "../native/iplug/recorder/RecorderCore.h"
+#include "../iplug/recorder/RecorderCore.h"
 
 enum EParams {
   kParamGain = 0,

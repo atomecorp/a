@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-# AtomeOS / eVe — Universal Builder
+# Atome OS / eVe — Universal Builder
 # core/build.sh — orchestrateur principal
 #
 # Usage:
@@ -70,7 +70,7 @@ PROFILE_FILE="${BUILDER_ROOT}/profiles/${PROFILE}.yml"
 [ ! -f "${PROFILE_FILE}" ] && { log_error "Profil introuvable: ${PROFILE_FILE}"; exit 1; }
 
 log_info "=========================================="
-log_info "AtomeOS Universal Builder"
+log_info "Atome OS Universal Builder"
 log_info "  Architecture : ${ARCH}"
 log_info "  Profil       : ${PROFILE}"
 log_info "  Auto-update  : ${AUTO_UPDATE}"

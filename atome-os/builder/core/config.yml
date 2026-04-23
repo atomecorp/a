@@ -1,8 +1,8 @@
-# AtomeOS / eVe Universal Builder — configuration globale
+# Atome OS / eVe Universal Builder — configuration globale
 # Tout ce qui est "latest" est résolu dynamiquement au build time.
 
 builder:
-  name: AtomeOS Universal Builder
+  name: Atome OS Universal Builder
   version: 1.0.0
   output_dir: ./output
   work_dir: /var/tmp/atome_builder

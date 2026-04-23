@@ -172,4 +172,4 @@ This matches tools like “URL Beamer” in hosts that permit direct UIApplicati
 
 ---
 
-If you need a minimal integration example or to toggle behaviors per-host, reach for the example JS in `src/application/examples/iOS_app_launcher.js` and the AUv3 opener in `src-Auv3/Common/URLOpener.swift`.
+If you need a minimal integration example or to toggle behaviors per-host, reach for the example JS in `src/application/examples/iOS_app_launcher.js` and the AUv3 opener in `platforms/ios/atome-auv3/Common/URLOpener.swift`.

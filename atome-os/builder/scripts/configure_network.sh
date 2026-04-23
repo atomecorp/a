@@ -15,7 +15,7 @@ OVERLAY_SVC="${BUILDER_ROOT}/overlays/services"
 # ---------------------------------------------------------------------------
 cat >> "${WORK_MNT}/etc/rc.conf" <<'EOF'
 
-# AtomeOS — réseau auto
+# Atome OS — réseau auto
 ifconfig_DEFAULT="SYNCDHCP"
 # wifi : wpa_supplicant sur toutes les interfaces wlan
 wpa_supplicant_enable="YES"
@@ -43,7 +43,7 @@ if [ "${AUTO_UPDATE}" = "true" ]; then
     # cron : vérification toutes les 6h (intervalle configurable dans config.yml)
     mkdir -p "${WORK_MNT}/var/cron/tabs"
     cat > "${WORK_MNT}/var/cron/tabs/root" <<'EOF'
-# AtomeOS auto-update : toutes les 6h avec jitter aléatoire
+# Atome OS auto-update : toutes les 6h avec jitter aléatoire
 SHELL=/bin/sh
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 MAILTO=""
@@ -53,7 +53,7 @@ EOF
 
     cat >> "${WORK_MNT}/etc/rc.conf" <<'EOF'
 
-# AtomeOS — services
+# Atome OS — services
 cron_enable="YES"
 atome_updater_enable="YES"
 EOF
@@ -68,7 +68,7 @@ fi
 install -m 644 "${OVERLAY_NET}/pf.conf" "${WORK_MNT}/etc/pf.conf"
 cat >> "${WORK_MNT}/etc/rc.conf" <<'EOF'
 
-# AtomeOS — PF firewall
+# Atome OS — PF firewall
 pf_enable="YES"
 pflog_enable="NO"
 EOF

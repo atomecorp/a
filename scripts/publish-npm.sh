@@ -1,13 +1,13 @@
 #!/bin/zsh
 # NPM publication script + unpkg
-# Usage: ./scripts_utils/publish-npm.sh
+# Usage: ./scripts/publish-npm.sh
 
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
-# 1. Build with rollup (config in ./scripts_utils/rollup.config.npm.js)
+# 1. Build with rollup (config in ./scripts/rollup.config.npm.js)
 "$PROJECT_ROOT/node_modules/.bin/rollup" -c "$SCRIPT_DIR/rollup.config.npm.js"
 
 # 2. (Optional) Minification

@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-#include "../../../core/ring_buffer.h"
+#include "../../core/ring_buffer.h"
 
 namespace {
 

@@ -17,8 +17,8 @@ VERSION=$(jq -r .version ../src/version.json 2>/dev/null || echo "")
 # Add and commit automatically
 cd .. # go back to project root
 git add dist/* 2>/dev/null || true
-if [ -f scripts_utils/publish-to-github.sh ]; then
-  git add scripts_utils/publish-to-github.sh 2>/dev/null || true
+if [ -f scripts/publish-to-github.sh ]; then
+  git add scripts/publish-to-github.sh 2>/dev/null || true
 fi
 git status
 

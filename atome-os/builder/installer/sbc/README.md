@@ -32,7 +32,7 @@ Pour les SBC, **aucun installeur natif n'est nécessaire** : l'image brute produ
 - Le SBC doit avoir une alimentation stable (5 V 3 A minimum pour Pi)
 - HDMI branché **avant** le démarrage (certains SBC n'activent pas HDMI à chaud)
 - Clavier USB pour la configuration wifi initiale si pas d'ethernet
-- À partir du deuxième boot, AtomeOS mémorise la config réseau
+- À partir du deuxième boot, Atome OS mémorise la config réseau
 
 ## Dépannage
 

@@ -31,7 +31,7 @@
 
 ## Solution implemented (Swift-only)
 
-Changes in `src-Auv3/auv3/utils.swift`:
+Changes in `platforms/ios/atome-auv3/auv3/utils.swift`:
 
 1) Offline resampling to host sample rate
 
@@ -64,7 +64,7 @@ Changes in `src-Auv3/auv3/utils.swift`:
 
 ## Files and key functions
 
-- `src-Auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
   - `injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double)`
     - Resample + fade + store.
   - `mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount)`

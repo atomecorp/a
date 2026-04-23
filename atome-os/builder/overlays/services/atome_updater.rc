@@ -10,7 +10,7 @@
 
 name="atome_updater"
 rcvar="atome_updater_enable"
-desc="AtomeOS background updater"
+desc="Atome OS background updater"
 
 load_rc_config "${name}"
 

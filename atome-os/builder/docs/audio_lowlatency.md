@@ -1,6 +1,6 @@
 # Audio basse latence
 
-Le profil `audio` est conçu pour faire d'AtomeOS une base de travail pour la création musicale.
+Le profil `audio` est conçu pour faire d'Atome OS une base de travail pour la création musicale.
 
 ## Cible
 

@@ -2,13 +2,13 @@
 
 ## 🚨 Problème Résolu
 
-L'AUv3 dans `src-Auv3_crash` plantait dans **Loopy Pro** mais fonctionnait dans **AUM**. Le problème a été identifié et corrigé avec succès.
+L'AUv3 dans `platforms/ios/atome-auv3_crash` plantait dans **Loopy Pro** mais fonctionnait dans **AUM**. Le problème a été identifié et corrigé avec succès.
 
 ## 🎯 La Cause Racine Identifiée
 
-### ❌ **Code Problématique dans src-Auv3_crash**
+### ❌ **Code Problématique dans platforms/ios/atome-auv3_crash**
 
-**Fichier :** `src-Auv3_crash/auv3/AudioUnitViewController.swift`
+**Fichier :** `platforms/ios/atome-auv3_crash/auv3/AudioUnitViewController.swift`
 
 ```swift
 // ❌ PROBLÈME : Force l'allocation des ressources de rendu
@@ -22,9 +22,9 @@ if let audioUnit = audioUnit {
 }
 ```
 
-### ✅ **Code Correct dans src-Auv3 (qui fonctionne)**
+### ✅ **Code Correct dans platforms/ios/atome-auv3 (qui fonctionne)**
 
-**Fichier :** `src-Auv3/auv3/AudioUnitViewController.swift`
+**Fichier :** `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
 
 ```swift
 // ✅ CORRECT : Pas d'allocation forcée des ressources
@@ -45,7 +45,7 @@ if let audioUnit = audioUnit {
 ## ⚡ La Solution Appliquée
 
 ### **Action Effectuée**
-Suppression du bloc de code problématique dans `src-Auv3_crash/auv3/AudioUnitViewController.swift` :
+Suppression du bloc de code problématique dans `platforms/ios/atome-auv3_crash/auv3/AudioUnitViewController.swift` :
 
 ```swift
 // ❌ SUPPRIMÉ CE BLOC ENTIER :

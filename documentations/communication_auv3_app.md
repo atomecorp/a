@@ -119,6 +119,6 @@ Caveats:
 
 For code references, see:
 
-- `src-Auv3/Common/SharedBus.swift`, `AppGroupOpenURLInbox.swift` (inbox, Darwin).
-- `src-Auv3/Common/URLOpener.swift` (launch/relay).
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`, `AppGroupOpenURLInbox.swift` (inbox, Darwin).
+- `platforms/ios/atome-auv3/Common/URLOpener.swift` (launch/relay).
 - `src/application/examples/iOS_app_launcher.js` (Squirrel UI examples).

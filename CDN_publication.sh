@@ -5,6 +5,6 @@ set -e
 
 ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 
-"$ROOT_DIR/scripts_utils/publish-cdn.sh"
-"$ROOT_DIR/scripts_utils/publish-npm.sh"
-"$ROOT_DIR/scripts_utils/publish-to-github.sh"
+"$ROOT_DIR/scripts/publish-cdn.sh"
+"$ROOT_DIR/scripts/publish-npm.sh"
+"$ROOT_DIR/scripts/publish-to-github.sh"

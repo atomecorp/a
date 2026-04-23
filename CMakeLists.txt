@@ -10,13 +10,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# Fetch or expose iPlug2
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deps/iplug2_fetch.cmake OPTIONAL)
-
-add_subdirectory(src/core)
+add_subdirectory(engines/audio/core)
 
 if(ATOME_BUILD_AU)
-  add_subdirectory(src/au)
+  # Fetch or expose iPlug2 only when the AU target is requested.
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deps/iplug2_fetch.cmake OPTIONAL)
+  add_subdirectory(engines/audio/au)
 endif()
 
 if(ATOME_BUILD_WAM)

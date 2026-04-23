@@ -1,9 +1,9 @@
-# ✅ Correction Appliquée - src-Auv3_last
+# ✅ Correction Appliquée - platforms/ios/atome-auv3_last
 
 ## 🎯 Correctif Loopy Pro Appliqué
 
 ### **Action Effectuée**
-Suppression du code problématique qui forçait l'allocation des ressources de rendu dans `src-Auv3_last/auv3/AudioUnitViewController.swift`.
+Suppression du code problématique qui forçait l'allocation des ressources de rendu dans `platforms/ios/atome-auv3_last/auv3/AudioUnitViewController.swift`.
 
 ### **Code Supprimé**
 ```swift
@@ -26,14 +26,14 @@ do {
 ### ✅ **Confirmations**
 - [x] Plus aucune référence à `allocateRenderResources()` dans AudioUnitViewController
 - [x] Commentaire nettoyé
-- [x] Code aligné avec la version stable `src-Auv3`
+- [x] Code aligné avec la version stable `platforms/ios/atome-auv3`
 
 ### ⚠️ **Note**
-`src-Auv3_last` contient encore le système de queue MIDI complexe dans `utils.swift` et `WebViewManager.swift`, mais le correctif principal (suppression de l'allocation forcée) a été appliqué.
+`platforms/ios/atome-auv3_last` contient encore le système de queue MIDI complexe dans `utils.swift` et `WebViewManager.swift`, mais le correctif principal (suppression de l'allocation forcée) a été appliqué.
 
 ## 🧪 Tests Recommandés
 
-1. **Compiler** le projet `src-Auv3_last`
+1. **Compiler** le projet `platforms/ios/atome-auv3_last`
 2. **Tester** dans Loopy Pro (ne devrait plus planter)
 3. **Tester** dans AUM (devrait continuer à fonctionner)
 

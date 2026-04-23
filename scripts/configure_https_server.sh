@@ -5,14 +5,15 @@
 # Automatise l'obtention d'un certificat Let's Encrypt pour atome.one
 # et configure le projet pour l'utiliser.
 #
-# Usage: sudo ./scripts_utils/configure_https_server.sh
+# Usage: sudo ./scripts/configure_https_server.sh
 
 set -e
 
 # Default domain
 DEFAULT_DOMAIN="atome.one"
 PROJECT_ROOT="$(pwd)"
-CERT_DIR="$PROJECT_ROOT/scripts_utils/certs"
+CERT_DIR="$PROJECT_ROOT/deploy/certs"
+HOOK_DIR="$PROJECT_ROOT/deploy"
 
 # Couleurs
 GREEN='\033[0;32m'
@@ -82,7 +83,7 @@ log_ok "Certificat généré avec succès dans $LE_LIVE_DIR"
 # 4. Installation des certificats dans le projet
 log_info "Configuration des certificats pour le serveur Node..."
 
-mkdir -p "$CERT_DIR"
+mkdir -p "$CERT_DIR" "$HOOK_DIR"
 
 # Sauvegarde des anciens certificats (auto-signés) si présents
 if [ -f "$CERT_DIR/key.pem" ] && [ ! -L "$CERT_DIR/key.pem" ]; then
@@ -101,7 +102,7 @@ OWNER_UID=$(stat -c '%u' "$PROJECT_ROOT")
 OWNER_GID=$(stat -c '%g' "$PROJECT_ROOT")
 
 # 5. Création d'un script de renouvellement automatique
-HOOK_SCRIPT="/opt/a/scripts_utils/renew_cert_hook.sh"
+HOOK_SCRIPT="$HOOK_DIR/renew_cert_hook.sh"
 cat > "$HOOK_SCRIPT" <<EOF
 #!/bin/bash
 # Hook exécuté après le renouvellement Certbot

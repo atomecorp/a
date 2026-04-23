@@ -15,7 +15,7 @@ PROFILE_FILE="${BUILDER_ROOT}/profiles/${PROFILE}.yml"
 # ---------------------------------------------------------------------------
 mkdir -p "${WORK_MNT}/usr/local/etc/pkg/repos"
 cat > "${WORK_MNT}/usr/local/etc/pkg/repos/FreeBSD.conf" <<'EOF'
-# Forcé par AtomeOS Universal Builder : toujours suivre latest
+# Forcé par Atome OS Universal Builder : toujours suivre latest
 FreeBSD: {
   url: "pkg+http://pkg.FreeBSD.org/${ABI}/latest",
   mirror_type: "srv",

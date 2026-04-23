@@ -13,7 +13,7 @@ This document describes the concrete steps to implement the new **native audio s
 
 1. Create (or confirm) a dedicated native audio module:
 
-   * Suggested path: `src/native/audio/` (Rust + C++ + iPlug2)
+   * Suggested path: `engines/audio/` (C++ + iPlug2 shared DSP code)
    * Suggested JS/TS bridge path: `src/squirrel/audio/bridge/`
 2. Add an `iplug2/` vendor directory or submodule:
 
@@ -73,11 +73,11 @@ Deduplication is mandatory for `AudioFileAtome` (content hash).
 
 1. Create a C++ project folder:
 
-   * `src/native/audio/engine/`
+   * `engines/audio/iplug/`
 2. Create a C ABI interface for Rust:
 
-   * `src/native/audio/engine/atome_audio_c_api.h`
-   * `src/native/audio/engine/atome_audio_c_api.cpp`
+   * `engines/audio/iplug/include/atome_audio_c_api.h`
+   * `engines/audio/iplug/bridge/atome_audio_c_api.cpp`
 3. Compile the engine as:
 
    * macOS: `.dylib`
@@ -330,7 +330,7 @@ Follow actions must be able to trigger both audio and action clips.
 
 1. Create Rust bindings:
 
-   * `src-tauri/src/audio/mod.rs`
+   * `src-tauri/src/audio_engine/mod.rs`
    * Link to the native iPlug2 engine library.
 2. Expose Tauri commands:
 

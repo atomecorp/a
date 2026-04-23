@@ -258,7 +258,7 @@ Client                                         Server
 │       ├── .gitkeep
 │       ├── server.key                      # Private key (GITIGNORED)
 │       └── server.pub                      # Public key
-├── scripts_utils/
+├── scripts/
 │   ├── generate-server-keys.js             # Key generation script
 │   └── test-server-verification.js         # Verification test
 ├── src/

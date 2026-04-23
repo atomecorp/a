@@ -43,7 +43,7 @@ if block(&currentTempo, nil, nil, nil, nil, nil), currentTempo > 0 {
 ## Solution Implémentée
 
 ### 1. Mise à Jour du Tempo dans le Transport
-**Fichier:** `/src-Auv3/auv3/utils.swift`
+**Fichier:** `/platforms/ios/atome-auv3/auv3/utils.swift`
 
 J'ai ajouté la vérification du tempo dans la fonction `checkHostTransport()` existante :
 
@@ -75,7 +75,7 @@ private func checkHostTransport() {
 - Tempo mis à jour en temps réel
 
 ### 2. Amélioration du Gestionnaire `requestHostTempo`
-**Fichier:** `/src-Auv3/Common/WebViewManager.swift`
+**Fichier:** `/platforms/ios/atome-auv3/Common/WebViewManager.swift`
 
 ```swift
 if action == "requestHostTempo" {
@@ -185,10 +185,10 @@ addBtn('Tempo', async()=>{
 
 ## Fichiers Modifiés
 
-1. **`/src-Auv3/auv3/utils.swift`**
+1. **`/platforms/ios/atome-auv3/auv3/utils.swift`**
    - Ajout de la mise à jour tempo dans `checkHostTransport()`
 
-2. **`/src-Auv3/Common/WebViewManager.swift`** 
+2. **`/platforms/ios/atome-auv3/Common/WebViewManager.swift`**
    - Amélioration de `requestHostTempo` avec retry et debug
 
 ## Cas d'Usage Spéciaux

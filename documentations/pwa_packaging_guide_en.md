@@ -22,7 +22,7 @@ This guide explains how to produce a standalone Progressive Web App (PWA) packag
 ### CLI mode (custom entry or automation)
 
 ```bash
-node scripts_utils/package-app.js \
+node scripts/package-app.js \
   --source=/absolute/path/to/your/example.js \
   --name=my-pwa \
   --overwrite
@@ -84,4 +84,4 @@ npx http-server
 
 ## 7. Updating the packaging script
 
-The generator lives in `scripts_utils/package-app.js`. If you need additional files copied or further customization, edit that script and regenerate your packages.
+The generator lives in `scripts/package-app.js`. If you need additional files copied or further customization, edit that script and regenerate your packages.

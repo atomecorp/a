@@ -62,9 +62,9 @@ The architecture is now a single logical audio stack with multiple native execut
                 │                                   │
 ┌─ Tauri / Native App ─────────────────────┐  ┌─ AUv3 / iOS Plugin ──────────────┐
 │ Rust audio engine                        │  │ Swift bridge + native render path │
-│ src-tauri/src/audio_engine               │  │ src-Auv3/Common/WebViewManager    │
-│ - playback.rs (Kira)                     │  │ src-Auv3/auv3/AudioUnit...        │
-│ - recorder.rs (CPAL)                     │  │ src-Auv3/auv3/utils.swift         │
+│ src-tauri/src/audio_engine               │  │ platforms/ios/atome-auv3/Common/WebViewManager    │
+│ - playback.rs (Kira)                     │  │ platforms/ios/atome-auv3/auv3/AudioUnit...        │
+│ - recorder.rs (CPAL)                     │  │ platforms/ios/atome-auv3/auv3/utils.swift         │
 │ - metering.rs                            │  │                                   │
 │ - bridge.rs                              │  │ Responsibilities:                 │
 │                                          │  │ - accept JS PCM buffers           │
@@ -114,14 +114,14 @@ An important consequence is that "web mode" must be treated explicitly as two di
 | `src-tauri/src/audio_engine/metering.rs` | Lock-free RMS + peak metering |
 | `src-tauri/src/audio_engine/bridge.rs` | Tauri `#[tauri::command]` handlers |
 | `src-tauri/src/audio_engine/tests.rs` | Rust integration tests |
-| `src-audio-wasm/src/lib.rs` | WASM build of the engine |
+| `platforms/web/audio-wasm/src/lib.rs` | WASM build of the engine |
 | `src/application/audio_runtime/backend.kira.js` | JS backend for Rust / native engine usage |
 | `src/application/audio_runtime/audio.facade.js` | Public audio facade |
 | `src/application/eVe/intuition_/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
-| `src-Auv3/Common/WebViewManager.swift` | JS → Swift bridge for AUv3 audio commands and PCM injection |
-| `src-Auv3/Common/AudioControllerProtocol.swift` | common contract for playback / stop / debug expected peak propagation |
-| `src-Auv3/auv3/AudioUnitViewController.swift` | AUv3 controller exposing the audio controller to the WebView bridge |
-| `src-Auv3/auv3/utils.swift` | AUv3 native render path, JS audio mix, record events, frame tracking |
+| `platforms/ios/atome-auv3/Common/WebViewManager.swift` | JS → Swift bridge for AUv3 audio commands and PCM injection |
+| `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift` | common contract for playback / stop / debug expected peak propagation |
+| `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift` | AUv3 controller exposing the audio controller to the WebView bridge |
+| `platforms/ios/atome-auv3/auv3/utils.swift` | AUv3 native render path, JS audio mix, record events, frame tracking |
 | `src/application/audio_runtime/record_audio_api.js` | recording entry point that must converge to the unified engine |
 
 ## JavaScript API
@@ -211,7 +211,7 @@ Recording currently outputs **16-bit PCM WAV**.
 ## WASM Build (Web)
 
 ```bash
-cd src-audio-wasm
+cd platforms/web/audio-wasm
 ./build.sh
 ```
 
@@ -291,7 +291,7 @@ On AUv3, the native recorder now emits:
 - `recording_start_frame`
 - `expected_peak_frame`
 
-This is emitted in the `record_done` payload from `src-Auv3/auv3/utils.swift`.
+This is emitted in the `record_done` payload from `platforms/ios/atome-auv3/auv3/utils.swift`.
 
 ### Why Raw Peak Detection Was Not Enough
 
@@ -416,7 +416,7 @@ For this document to be usable as a real migration spec, the first rule is to na
 | Video recording / media capture | `src/application/eVe/domains/media/api/video_api.js`, `src/application/examples/record_video.js`, `src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
 | Shared media persistence | `src/application/eVe/domains/media/api/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
 | Media atome rendering | `src/application/examples/user.js`, `src/application/eVe/domains/media/api/audio_api.js`, `src/application/eVe/domains/media/api/video_api.js` | all media atomes must resolve to one playback ownership model |
-| AUv3 native bridge | `src-Auv3/Common/WebViewManager.swift`, `src-Auv3/Common/AudioControllerProtocol.swift`, `src-Auv3/auv3/AudioUnitViewController.swift`, `src-Auv3/auv3/utils.swift` | reference native implementation for Apple timing and routing |
+| AUv3 native bridge | `platforms/ios/atome-auv3/Common/WebViewManager.swift`, `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`, `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`, `platforms/ios/atome-auv3/auv3/utils.swift` | reference native implementation for Apple timing and routing |
 | Debug validation | `src/application/eVe/intuition_/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
 | MTrack integration | `src/application/eVe/intuition_/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
 
@@ -787,10 +787,10 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `src-Auv3/Common/WebViewManager.swift` | JS → Swift bridge | canonical AUv3 bridge | keep accepting PCM payloads and expected peak metadata; avoid runtime-specific divergence | debug fixture injection still works | `target` |
-| `src-Auv3/Common/AudioControllerProtocol.swift` | AU audio control contract | remains shared native contract | preserve unified methods for play/stop/inject/debug peak propagation | all AU controllers expose the same contract | `target` |
-| `src-Auv3/auv3/AudioUnitViewController.swift` | AUv3 host/controller | unified AUv3 controller | keep transport ownership thin; delegate signal semantics to the audio engine path | playback/record/debug commands remain stable | `target` |
-| `src-Auv3/auv3/utils.swift` | AUv3 render/mix/record implementation | canonical AUv3 native reference | preserve frame tracking and `record_done` timing payloads required for validation | sample accuracy stays green | `target` |
+| `platforms/ios/atome-auv3/Common/WebViewManager.swift` | JS → Swift bridge | canonical AUv3 bridge | keep accepting PCM payloads and expected peak metadata; avoid runtime-specific divergence | debug fixture injection still works | `target` |
+| `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift` | AU audio control contract | remains shared native contract | preserve unified methods for play/stop/inject/debug peak propagation | all AU controllers expose the same contract | `target` |
+| `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift` | AUv3 host/controller | unified AUv3 controller | keep transport ownership thin; delegate signal semantics to the audio engine path | playback/record/debug commands remain stable | `target` |
+| `platforms/ios/atome-auv3/auv3/utils.swift` | AUv3 render/mix/record implementation | canonical AUv3 native reference | preserve frame tracking and `record_done` timing payloads required for validation | sample accuracy stays green | `target` |
 
 ### Debug and Validation
 

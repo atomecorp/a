@@ -26,7 +26,7 @@
 
 ### Étape 1 : Correction des propriétés MIDI Swift
 
-**Fichier** : `src-Auv3/auv3/utils.swift`
+**Fichier** : `platforms/ios/atome-auv3/auv3/utils.swift`
 
 **AVANT** (incorrect) :
 ```swift
@@ -57,7 +57,7 @@ override public var midiOutputNames: [String] {
 
 ### Étape 2 : Résolution dépendance cross-target
 
-**Fichier** : `src-Auv3/Common/WebViewManager.swift`
+**Fichier** : `platforms/ios/atome-auv3/Common/WebViewManager.swift`
 
 **Problème** : WebViewManager essayait d'accéder à `auv3Utils` au moment de la compilation, causant des erreurs cross-target.
 
@@ -84,7 +84,7 @@ if let auv3Instance = webView.window?.windowScene?.delegate,
 ### 1. Identifier les erreurs Swift
 
 ```bash
-cd /Users/atome/a/src-Auv3
+cd /Users/atome/a/platforms/ios/atome-auv3
 xcodebuild clean build -scheme "atome" 2>&1 | grep -i error
 ```
 
@@ -95,7 +95,7 @@ xcodebuild clean build -scheme "atome" 2>&1 | grep -i error
 
 ### 2. Correction des APIs MIDI
 
-**Localiser** : `src-Auv3/auv3/utils.swift` ligne ~45-60
+**Localiser** : `platforms/ios/atome-auv3/auv3/utils.swift` ligne ~45-60
 
 **Remplacer** :
 ```swift
@@ -111,7 +111,7 @@ override public var midiOutputNames: [String] {
 
 ### 3. Correction dépendances cross-target
 
-**Localiser** : `src-Auv3/Common/WebViewManager.swift`
+**Localiser** : `platforms/ios/atome-auv3/Common/WebViewManager.swift`
 
 **Pattern runtime-safe** :
 ```swift
@@ -126,7 +126,7 @@ if let instance = potentialAuv3Instance,
 
 ```bash
 # Build complet
-cd /Users/atome/a/src-Auv3
+cd /Users/atome/a/platforms/ios/atome-auv3
 xcodebuild clean install -scheme "atome" CODE_SIGN_IDENTITY="iPhone Developer" -allowProvisioningUpdates
 
 # Lancement app

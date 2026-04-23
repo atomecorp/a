@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-CERT_DIR="certs"
+CERT_DIR="dev/certs"
 KEY_FILE="$CERT_DIR/key.pem"
 CERT_FILE="$CERT_DIR/cert.pem"
 

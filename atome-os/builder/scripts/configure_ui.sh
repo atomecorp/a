@@ -42,7 +42,7 @@ chroot "${WORK_MNT}" chown -R "${INSTALL_USER}:${INSTALL_USER}" "${INSTALL_HOME}
 # ---------------------------------------------------------------------------
 cat >> "${WORK_MNT}/etc/rc.conf" <<EOF
 
-# AtomeOS — UI autostart
+# Atome OS — UI autostart
 seatd_enable="YES"
 atome_enable="YES"
 atome_user="${INSTALL_USER}"

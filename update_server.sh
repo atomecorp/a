@@ -17,7 +17,7 @@ fi
 
 cd "$project_root"
 
-server_update="$project_root/scripts_utils/server_update.js"
+server_update="$project_root/scripts/server_update.js"
 node_bin="${NODE_BIN:-node}"
 
 if [[ ! -f "$server_update" ]]; then

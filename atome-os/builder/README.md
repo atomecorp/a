@@ -1,4 +1,4 @@
-# AtomeOS / eVe — Universal Builder
+# Atome OS / eVe — Builder
 
 Builder modulaire et déclaratif pour produire des images bootables **FreeBSD >= 15** capables de démarrer directement l'environnement **Atome / eVe (Squirrel)** sans logs visibles, avec webview plein écran.
 
@@ -44,7 +44,7 @@ L'image finale est produite dans `./output/atome-<profile>-<arch>-<date>.img`.
 ## Arborescence
 
 ```
-universal_builder/
+atome-os/builder/
 ├── README.md
 ├── Makefile                    # raccourcis make amd64 / make arm64 / make dev ...
 ├── core/

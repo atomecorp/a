@@ -2,7 +2,7 @@
 #import <AVFoundation/AVFoundation.h>
 
 #include "recorder.h"
-#include "../../src/native/iplug/recorder/RecorderCore.h"
+#include "../../engines/audio/iplug/recorder/RecorderCore.h"
 
 static char *dup_cstr(NSString *s) {
   if (!s) return nullptr;

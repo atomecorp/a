@@ -175,7 +175,7 @@ Ensure HTTPS is enabled in production:
 export USE_HTTPS=true
 ```
 
-Certificates should be in `scripts_utils/certs/` or `certs/`.
+Production certificates should be in `deploy/certs/`; local self-signed certificates should be in `dev/certs/`.
 
 ---
 

@@ -195,11 +195,11 @@ if Int.random(in: 1...1000) == 1 {
 
 ## Fichiers Modifiés
 
-- `src-Auv3/Common/AudioControllerProtocol.swift` - Ajout méthode
-- `src-Auv3/auv3/AudioUnitViewController.swift` - Implémentation détection
-- `src-Auv3/Common/WebViewManager.swift` - Correction hardcoding
-- `src-Auv3/auv3/AUMIDIOutputHelper.swift` - Logging allocation
-- `src-Auv3/auv3/utils.swift` - Réduction spam logs
+- `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift` - Ajout méthode
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift` - Implémentation détection
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift` - Correction hardcoding
+- `platforms/ios/atome-auv3/auv3/AUMIDIOutputHelper.swift` - Logging allocation
+- `platforms/ios/atome-auv3/auv3/utils.swift` - Réduction spam logs
 - `src/application/examples/ios_apis.js` - Interface utilisateur
 
 ---

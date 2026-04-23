@@ -13,7 +13,7 @@
 set -e
 
 # Configuration
-PROJECT_PATH="src-Auv3/atome.xcodeproj"
+PROJECT_PATH="platforms/ios/atome-auv3/atome.xcodeproj"
 SCHEME_NAME="atome"
 DEFAULT_TARGET_APP="AUM"
 

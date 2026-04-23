@@ -5,7 +5,7 @@ This note explains how to use the built-in "aBox" drop zone to push files into t
 ## 1. Prerequisites
 
 - Node.js 18+ (or the runtime already bundled in Tauri).
-- Project dependencies installed (`./scripts_utils/install_dependencies.sh --non-interactive`).
+- Project dependencies installed (`./scripts/install_dependencies.sh --non-interactive`).
 - PostgreSQL is optional; uploads + watcher work without the database, but file sharing and per-user access control require SQLite/libSQL.
 
 ## 2. Start the runtimes
@@ -23,7 +23,7 @@ Open `http://localhost:3001` and make sure `src/application/aBox/index.js` is im
 ### Tauri desktop build
 
 ```bash
-scripts_utils/run_tauri.sh
+scripts/run_tauri.sh
 ```
 
 Tauri spawns two servers for you: Axum on `127.0.0.1:3000` (static files/upload API) and Fastify on `127.0.0.1:3001` (watcher + WebSocket stream).
@@ -36,7 +36,7 @@ The chokidar watcher lives in `server/sync/fileSyncWatcher.js`. By default it tr
 src/application/**/*.js
 src/squirrel/**/*.js
 server/**/*.js
-scripts_utils/**/*.js
+scripts/**/*.js
 src/assets/**/*
 ```
 

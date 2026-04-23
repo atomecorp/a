@@ -47,7 +47,7 @@ This document unifies the WebAudio MVP plan and the iPlug2 native plan into a si
 
 **Native audio engine (C++/Rust/iPlug2)**
 
-`src/native/audio/engine/`
+`engines/audio/iplug/`
 
 * `atome_audio_engine.cpp` / `.h` – core iPlug2-based engine.
 * `atome_audio_c_api.cpp` / `.h` – C ABI facade for Rust.
@@ -56,7 +56,7 @@ This document unifies the WebAudio MVP plan and the iPlug2 native plan into a si
 **JS/TS ↔ native bridge**
 
 * `src/squirrel/audio/bridge/` – optional helpers (types, serialization, IPC payloads).
-* `src-tauri/src/audio/mod.rs` – Rust module exposing Tauri commands that call the C ABI.
+* `src-tauri/src/audio_engine/mod.rs` – Rust module exposing Tauri commands that call the C ABI.
 
 ---
 
@@ -454,7 +454,7 @@ Punch-in/overdub : identique, enregistrement aligné sur le transport et suivi d
 
 ### 5.1 Native engine project
 
-In `src/native/audio/engine/`:
+In `engines/audio/iplug/`:
 
 * Implement `AtomeAudioEngine` using iPlug2.
 * Provide C ABI:
@@ -605,7 +605,7 @@ Latence :
 
 ### 6.1 Rust bindings
 
-In `src-tauri/src/audio/mod.rs`:
+In `src-tauri/src/audio_engine/mod.rs`:
 
 * Load the native library.
 * Expose Tauri commands that wrap C API:

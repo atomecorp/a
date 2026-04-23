@@ -561,7 +561,7 @@ ensure_chokidar_dependency() {
 }
 
 reinstall_project_dependencies() {
-  local installer="$PROJECT_ROOT/scripts_utils/install_dependencies.sh"
+  local installer="$PROJECT_ROOT/scripts/install_dependencies.sh"
   if [ ! -f "$installer" ]; then
     log_warn "⚠️  Dependency installer not found at $installer (skipping full dependency refresh)"
     return

@@ -818,10 +818,13 @@ async function resolveDownloadTarget(fileParam, userId) {
 let httpsOptions = null;
 if (process.env.USE_HTTPS === 'true') {
   // Check multiple locations for certificates
-  // 1. Production path (scripts_utils/certs)
-  // 2. Legacy/Local path (certs/)
+  // 1. Production path (deploy/certs)
+  // 2. Local development path (dev/certs)
+  // 3. Legacy paths kept for existing installations
   const possibleDirs = [
-    path.join(projectRoot, 'scripts_utils', 'certs'),
+    path.join(projectRoot, 'deploy', 'certs'),
+    path.join(projectRoot, 'dev', 'certs'),
+    path.join(projectRoot, 'scripts', 'certs'),
     path.join(projectRoot, 'certs')
   ];
 
@@ -858,7 +861,7 @@ if (process.env.USE_HTTPS === 'true') {
       console.error('❌ Failed to load SSL certificates:', e.message);
     }
   } else {
-    console.warn('⚠️ USE_HTTPS is true but no valid certificates found in scripts_utils/certs/ or certs/');
+    console.warn('⚠️ USE_HTTPS is true but no valid certificates found in deploy/certs/, dev/certs/, scripts/certs/, or certs/');
   }
 }
 

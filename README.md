@@ -16,7 +16,7 @@ Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that driv
 | **Fastify server** (`server/server.js`) | Serves static files during development, exposes `/api/uploads` backed by `src/assets/uploads`, handles DB access (SQLite/libSQL via ADOLE). | `http://127.0.0.1:3001` |
 | **Axum server in Tauri** (`src-tauri/src/server`) | Mirrors the same API when the app runs inside Tauri, persisting uploads under the sandbox (`~/Library/Containers/.../uploads`). | `http://127.0.0.1:3000` |
 | **Tauri host** (`src-tauri`) | Launches the Axum server, makes sure Fastify is running (spawning it if needed), and exposes the port to the frontend. | Native desktop bundle. |
-| **DSP / AUv3 / WAM** (`src/core`, `src/au`, `src/web`, `src-Auv3`) | Shared C++ DSP core compiled via the root CMake superbuild, surfaced either as an AUv3 (iPlug2) or as a WebAudio Module bridge. | Depends on the chosen target. |
+| **DSP / AUv3 / WAM** (`engines/audio/core`, `engines/audio/au`, `platforms/web/audio-wasm`, `platforms/ios/atome-auv3`) | Shared C++ DSP core compiled via the root CMake superbuild, surfaced either as an AUv3 (iPlug2) or as a WebAssembly audio bridge. | Depends on the chosen target. |
 
 ## Key capabilities
 
@@ -104,18 +104,29 @@ npm run check:syntax
 src/
 ├── application/            # Squirrel UI modules (aBox, intuition toolbox, etc.)
 ├── assets/                 # Shared media + uploads (dev)
-├── core/                   # DSP building blocks shared with AUv3/WAM
 ├── squirrel/               # Spark runtime, component registry
 ├── js/, css/, web/         # Third-party libs bundled with the UI
 ├── index.html              # Entry point consumed by Squirrel (never edited directly)
+engines/
+├── audio/                  # Shared DSP, AU, and iPlug recorder bridge code
 src-tauri/
 ├── src/main.rs             # Tauri bootstrap + server launch
 ├── src/server/             # Axum router, uploads handler, static serving
-src-Auv3/                   # iPlug2 AUv3 host + Swift UI bridge
-server/server.js            # Fastify server used outside of Tauri
-scripts_utils/              # Helper scripts run by run.sh (dependencies, Fastify, Tauri)
-documentations/             # Detailed guides (AUv3, deployment, squirrel usage, etc.)
-Problems solving/, audit&bench/, R&D/  # Notes, experiments, benchmark reports
+atome-os/
+├── builder/                # Atome OS FreeBSD image builder
+platforms/
+├── web/audio-wasm/         # Browser Kira WASM audio engine source
+├── ios/atome-auv3/         # iPlug2 AUv3 host + Swift UI bridge
+├── ios/shared/             # Shared iOS support code
+server/
+├── server.js               # Fastify server used outside of Tauri
+scripts/                    # Helper scripts run by run.sh (dependencies, Fastify, Tauri)
+deploy/
+├── certs/                  # Production HTTPS certificates (ignored except .gitkeep)
+dev/
+├── certs/                  # Local self-signed HTTPS certificates
+documentations/
+├── audits/                 # Audit notes, experiments, benchmark reports
 ```
 
 ## DSL ⇄ Rust ⇄ JavaScript pipeline
@@ -138,8 +149,8 @@ The generated JS is still plain ES modules and ends up calling helpers like `cre
 ## Audio plugins, AUv3, and WAM
 
 - The root `CMakeLists.txt` builds shared targets: `dsp_core`, `ring_buffer`, `disk_reader`.
-- `src/au` exposes the DSP parameters to iPlug2; `src/web` exposes the same graph to a WebAudio Module stub, and `src-Auv3/iplug/AUViewController.swift` renders the Squirrel UI via WKWebView.
-- `auv3.sh`, `build_PWA_app.sh`, and `scripts_utils/run_fastify.sh`/`run_tauri.sh` automate packaging for each runtime.
+- `engines/audio/au` exposes the DSP parameters to iPlug2; `platforms/web/audio-wasm` exposes the browser audio engine source, and `platforms/ios/atome-auv3/iplug/AUViewController.swift` renders the Squirrel UI via WKWebView.
+- `auv3.sh`, `build_PWA_app.sh`, and `scripts/run_fastify.sh`/`run_tauri.sh` automate packaging for each runtime.
 - Known limitations (see `Problems solving/`): disk streaming is a placeholder, time-stretch hooks exist but need concrete implementations, and the WAM glue is still minimal.
 
 ## Documentation & references
