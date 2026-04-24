@@ -575,6 +575,25 @@ async fn resolve_user_upload_path(
     }
 }
 
+fn redact_sensitive_query_params(uri: &str) -> String {
+    let Some((path, query)) = uri.split_once('?') else {
+        return uri.to_string();
+    };
+    let sanitized_query = query
+        .split('&')
+        .map(|part| {
+            let key = part.split_once('=').map(|(key, _)| key).unwrap_or(part);
+            if matches!(key, "access_token" | "auth_token" | "token") {
+                format!("{key}=<redacted>")
+            } else {
+                part.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{path}?{sanitized_query}")
+}
+
 async fn log_request_middleware(req: Request<Body>, next: middleware::Next) -> Response {
     let request_id = req
         .headers()
@@ -585,7 +604,7 @@ async fn log_request_middleware(req: Request<Body>, next: middleware::Next) -> R
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
     let method = req.method().to_string();
-    let uri = req.uri().to_string();
+    let uri = redact_sensitive_query_params(&req.uri().to_string());
     let start = std::time::Instant::now();
 
     let mut response = next.run(req).await;

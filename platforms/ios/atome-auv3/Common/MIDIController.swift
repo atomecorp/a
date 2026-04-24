@@ -17,6 +17,7 @@ public class MIDIController: NSObject {
     private var midiClient: MIDIClientRef = 0
     private var inputPort: MIDIPortRef = 0
     private var destinationEndpoint: MIDIEndpointRef = 0
+    private var isSetup = false
     
     // Logger for Xcode console
     private let logger = Logger(subsystem: "com.atomecorp.atome", category: "MIDI")
@@ -31,10 +32,11 @@ public class MIDIController: NSObject {
     private var lastPacketLogTime: CFTimeInterval = 0
     private let packetLogInterval: CFTimeInterval = 0.25 // reduce spam from frequent packets
     private var lastSourceCountLogged: Int = -1
+    private let maxPacketsPerCallback = 256
+    private let midiDisabledForStartupIsolation = false
     
     public override init() {
         super.init()
-        setupMIDI()
     }
     
     deinit {
@@ -54,6 +56,13 @@ public class MIDIController: NSObject {
     // MARK: - Main MIDI Setup
     
     private func setupMIDI() {
+        guard !midiDisabledForStartupIsolation else {
+            logger.warning("MIDI disabled for AUv3 startup isolation")
+            return
+        }
+        
+        guard !isSetup else { return }
+        
         // Create MIDI client
         let clientName = "AtomeMIDIClient" as CFString
         let status = MIDIClientCreateWithBlock(clientName, &midiClient) { [weak self] notification in
@@ -81,6 +90,7 @@ public class MIDIController: NSObject {
             return
         }
         
+        isSetup = true
         logger.info("✅ MIDI Input Port created successfully")
         
         // NOTE: AUv3 cannot create MIDI destinations due to sandbox restrictions
@@ -96,11 +106,16 @@ public class MIDIController: NSObject {
     
     /// Captures and logs MIDI data to Xcode console (MIDI 2.0 API)
     internal func get_midi_data(eventList: UnsafePointer<MIDIEventList>, srcConnRefCon: UnsafeMutableRawPointer?) {
+        guard !midiDisabledForStartupIsolation else { return }
         
         let timestamp = Date().timeIntervalSince1970
         
-        // Parse MIDI event list
-        var packet = eventList.pointee.packet
+        let packetCount = Int(eventList.pointee.numPackets)
+        guard packetCount > 0 else { return }
+        guard packetCount <= maxPacketsPerCallback else {
+            logger.error("Invalid MIDI packet count: \(packetCount)")
+            return
+        }
         
         // Rate-limit the high-frequency packet log to avoid console flood on some hosts
         let nowt = CACurrentMediaTime()
@@ -109,30 +124,34 @@ public class MIDIController: NSObject {
             lastPacketLogTime = nowt
         }
         
-        for _ in 0..<eventList.pointee.numPackets {
+        let eventListPointer = UnsafeMutablePointer<MIDIEventList>(mutating: eventList)
+        withUnsafeMutablePointer(to: &eventListPointer.pointee.packet) { firstPacketPointer in
+            var packetPointer = firstPacketPointer
+            let maxWordCount = MemoryLayout.size(ofValue: packetPointer.pointee.words) / MemoryLayout<UInt32>.stride
+            let wordsOffset = MemoryLayout<MIDIEventPacket>.offset(of: \.words) ?? 12
             
-            // Extract MIDI data from packet
-            let wordCount = packet.wordCount
-            
-            if wordCount > 0 {
-                // Extract MIDI words (UInt32) safely: take the address of the first tuple element (words.0)
-                // Avoid rebinding a tuple pointer which can lead to undefined behavior.
-                let words: [UInt32] = withUnsafePointer(to: &packet.words.0) { p in
-                    let buf = UnsafeBufferPointer(start: p, count: Int(wordCount))
-                    return Array(buf)
-                }
+            for _ in 0..<packetCount {
+                let wordCount = Int(packetPointer.pointee.wordCount)
                 
-                // Log raw MIDI data with rate limiting
-                logMIDIMessage("🎹 MIDI Data - Timestamp: \(timestamp), Words: \(wordCount)")
-                
-                // Parse MIDI messages from words
-                if wordCount >= 1 {
+                if wordCount > 0 {
+                    guard wordCount <= maxWordCount else {
+                        logger.error("Invalid MIDI packet word count: \(wordCount)")
+                        break
+                    }
+                    
+                    let wordsPointer = UnsafeRawPointer(packetPointer)
+                        .advanced(by: wordsOffset)
+                        .assumingMemoryBound(to: UInt32.self)
+                    let words = Array(UnsafeBufferPointer(start: wordsPointer, count: wordCount))
+                    
+                    // Log raw MIDI data with rate limiting
+                    logMIDIMessage("🎹 MIDI Data - Timestamp: \(timestamp), Words: \(wordCount)")
+                    
                     parseMIDIWords(words: words, timestamp: timestamp)
                 }
+                
+                packetPointer = MIDIEventPacketNext(packetPointer)
             }
-            
-            // Move to next packet
-            packet = MIDIEventPacketNext(&packet).pointee
         }
     }
     
@@ -257,6 +276,7 @@ public class MIDIController: NSObject {
     private func connectToAllMIDISources() {
         midiQueue.async { [weak self] in
             guard let self = self else { return }
+            guard self.inputPort != 0 else { return }
             let sourceCount = MIDIGetNumberOfSources()
             if self.lastSourceCountLogged != sourceCount {
                 self.logger.info("📡 Found \(sourceCount) MIDI sources")
@@ -354,6 +374,9 @@ public class MIDIController: NSObject {
             midiClient = 0
         }
         
+        isSetup = false
+        connectedSources.removeAll()
+        
         logger.info("🧹 MIDI Controller cleaned up")
     }
     
@@ -361,7 +384,17 @@ public class MIDIController: NSObject {
     
     /// Start MIDI monitoring (call this from your Audio Unit)
     public func startMIDIMonitoring() {
+        guard !midiDisabledForStartupIsolation else {
+            logger.warning("MIDI monitoring disabled for AUv3 startup isolation")
+            return
+        }
+        
         logger.info("🎯 Starting MIDI monitoring...")
+        setupMIDI()
+        guard inputPort != 0 else {
+            logger.error("❌ MIDI monitoring cannot start because input port is unavailable")
+            return
+        }
         connectToAllMIDISources()
         
         // Test if callback is working by simulating data

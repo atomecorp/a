@@ -35,6 +35,7 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     private var initialLoadScheduled = false
     private var reloadAttempt = 0
     private var nextBackoff: TimeInterval = 0.2
+    private var midiStartupScheduled = false
     
     public override func viewDidLoad() {
         super.viewDidLoad()
@@ -45,18 +46,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     log.info("Startup AUv3 AudioUnitViewController")
         assert(ExternalDisplayGuards.isRunningInExtension, "AudioUnitViewController must run inside extension")
 
-        // Initialize MIDI Controller once (AUv3 view may recreate with external display changes)
-        if midiController == nil {
-            midiController = MIDIController()
-            midiController?.startMIDIMonitoring()
-            print("🎹 MIDI Controller initialized and monitoring started")
-        }
-        
-        // Run MIDI system diagnostic after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.midiController?.checkMIDISystemStatus()
-        }
-      
     // Create WKWebView via factory to guarantee shared process pool and config
     if FeatureFlags.mainThreadPrecondition { dispatchPrecondition(condition: .onQueue(.main)) }
     webView = WKWebViewFactory.shared.createWebView(frame: view.bounds, mode: .auv3)
@@ -292,8 +281,29 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     deinit {
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "squirrel.openURL")
         midiController?.stopMIDIMonitoring()
+        if WebViewManager.midiController === midiController {
+            WebViewManager.midiController = nil
+        }
         midiController = nil
         print("🧹 AudioUnitViewController cleanup: MIDI monitoring stopped")
+    }
+
+    private func scheduleMIDIStartupAfterHostIsStable() {
+        guard !midiStartupScheduled else { return }
+        midiStartupScheduled = true
+        log.info("MIDI startup scheduled after AUv3/WebView stabilization")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            guard let self = self else { return }
+            guard self.view.window != nil else {
+                self.log.warning("MIDI startup skipped: AUv3 view is not attached to a window")
+                return
+            }
+            let controller = self.midiController ?? MIDIController()
+            self.midiController = controller
+            WebViewManager.midiController = controller
+            self.log.info("Starting MIDI after delayed AUv3 startup")
+            controller.startMIDIMonitoring()
+        }
     }
 }
 
@@ -340,6 +350,7 @@ extension AudioUnitViewController {
         log.info("viewDidAppear -> may trigger initial load if bounds ready")
         maybeScheduleInitialLoad()
     if FeatureFlags.deferMainLoad { WebViewManager.triggerMainLoadNow() }
+        scheduleMIDIStartupAfterHostIsStable()
     }
 
     private func maybeScheduleInitialLoad() {

@@ -340,11 +340,11 @@ final class LocalHTTPServer {
         } else if routePath.hasPrefix("/api/uploads/") {
             let raw = String(routePath.dropFirst("/api/uploads/".count))
             let fileName = raw.removingPercentEncoding ?? raw
-            handleUploadsGet(fileName: fileName, headers: headers, on: connection)
+            handleUploadsGet(fileName: fileName, headers: headers, rangeHeader: rangeHeader, isHead: method == "HEAD", on: connection)
         } else if routePath.hasPrefix("/api/recordings/") {
             let raw = String(routePath.dropFirst("/api/recordings/".count))
             let fileName = raw.removingPercentEncoding ?? raw
-            handleRecordingGet(fileName: fileName, headers: headers, on: connection)
+            handleRecordingGet(fileName: fileName, headers: headers, rangeHeader: rangeHeader, isHead: method == "HEAD", on: connection)
         } else if routePath == "/api/auth/me" {
             var message: [String: Any] = ["type": "auth", "action": "me"]
             if let token = bearerToken(from: headers) { message["token"] = token }
@@ -1132,34 +1132,52 @@ final class LocalHTTPServer {
         }
     }
 
-    private func handleUploadsGet(fileName: String, headers: [String: String], on connection: NWConnection) {
+    private func handleUploadsGet(fileName: String, headers: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
         let userId = resolveUploadUserId(from: headers)
+        print("[UPLOAD] \(isHead ? "HEAD" : "GET") file=\(fileName) user=\(userId ?? "<none>") range=\(rangeHeader ?? "<none>")")
         guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: ["Downloads", "Recordings"]) else {
+            print("[UPLOAD] \(isHead ? "HEAD" : "GET") 404 file=\(fileName)")
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
             return
         }
-        do {
-            let data = try Data(contentsOf: fileURL)
-            sendRaw(status: 200, reason: "OK", headers: [
-                "Content-Type": mimeType(for: fileURL.lastPathComponent)
-            ], body: data, on: connection)
-        } catch {
-            sendJsonResponse(["success": false, "error": error.localizedDescription], status: 500, on: connection)
-        }
+        serveUploadFile(fileURL: fileURL, label: "UPLOAD", fileName: fileName, rangeHeader: rangeHeader, isHead: isHead, on: connection)
     }
 
-    private func handleRecordingGet(fileName: String, headers: [String: String], on connection: NWConnection) {
+    private func handleRecordingGet(fileName: String, headers: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
         let userId = resolveUploadUserId(from: headers)
+        print("[RECORDING] \(isHead ? "HEAD" : "GET") file=\(fileName) user=\(userId ?? "<none>") range=\(rangeHeader ?? "<none>")")
         guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: ["Recordings", "Downloads"]) else {
+            print("[RECORDING] \(isHead ? "HEAD" : "GET") 404 file=\(fileName)")
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
+            return
+        }
+        serveUploadFile(fileURL: fileURL, label: "RECORDING", fileName: fileName, rangeHeader: rangeHeader, isHead: isHead, on: connection)
+    }
+
+    private func serveUploadFile(fileURL: URL, label: String, fileName: String, rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
+        let mime = mimeType(for: fileURL.lastPathComponent)
+        let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        print("[\(label)] \(isHead ? "HEAD" : "GET") 200 file=\(fileName) path=\(fileURL.path) bytes=\(size) mime=\(mime)")
+        if isHead {
+            sendRaw(status: 200, reason: "OK", headers: [
+                "Content-Type": mime,
+                "Content-Length": String(size),
+                "Accept-Ranges": "bytes"
+            ], body: Data(), on: connection)
+            return
+        }
+        if mime.hasPrefix("video/") || mime.hasPrefix("audio/") || rangeHeader != nil {
+            serveFileWithRange(url: fileURL, mime: mime, rangeHeader: rangeHeader, on: connection)
             return
         }
         do {
             let data = try Data(contentsOf: fileURL)
             sendRaw(status: 200, reason: "OK", headers: [
-                "Content-Type": mimeType(for: fileURL.lastPathComponent)
+                "Content-Type": mime
             ], body: data, on: connection)
         } catch {
+            print("[\(label)] GET 500 file=\(fileName) error=\(error)")
             sendJsonResponse(["success": false, "error": error.localizedDescription], status: 500, on: connection)
         }
     }
