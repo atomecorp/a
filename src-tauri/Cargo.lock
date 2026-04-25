@@ -4811,6 +4811,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "symphonia",
  "tauri",
  "tauri-build",
  "tauri-plugin-fs",

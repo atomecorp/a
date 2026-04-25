@@ -63,15 +63,14 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['play', 'stop', 'stop_clip', 'jump', 'set_param']);
+  const immediateNames = new Set(['create_clip', 'destroy_clip', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param']);
   const proxyCall = (name) => (arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       console.warn('[audio.facade] No backend for', name); return false;
     }
     // low-latency calls go immediately
     if (immediateNames.has(name)) {
-      try { backends[active][name](arg); } catch (e) { console.warn('[audio.facade] immediate call failed:', e); }
-      return true;
+      try { return backends[active][name](arg); } catch (e) { console.warn('[audio.facade] immediate call failed:', e); return false; }
     }
     // batch others UI->DSP calls
     enqueue({ name, arg });
@@ -106,7 +105,9 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   audio.create_clip = proxyCall('create_clip');
   audio.destroy_clip = proxyCall('destroy_clip');
   audio.play = proxyCall('play');
+  audio.play_instance = proxyCall('play_instance');
   audio.stop = proxyCall('stop');
+  audio.stop_instance = proxyCall('stop_instance');
   audio.stop_clip = proxyCall('stop_clip');
   audio.jump = proxyCall('jump');
   audio.set_param = proxyCall('set_param');
