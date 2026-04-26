@@ -55,14 +55,14 @@ const readLocalAxumPort = () => {
 };
 
 const readLocalAuthToken = () => {
-    try {
+    if (typeof localStorage !== 'undefined') {
         const fromLocal = localStorage.getItem('local_auth_token');
         if (fromLocal) return fromLocal;
-    } catch (_) { }
-    try {
+    }
+    if (typeof sessionStorage !== 'undefined') {
         const fromSession = sessionStorage.getItem('local_auth_token');
         if (fromSession) return fromSession;
-    } catch (_) { }
+    }
     return '';
 };
 
@@ -93,30 +93,22 @@ const readLocalAxumBaseUrl = () => {
 const buildLocalAxumRequestUrl = (targetUrl) => {
     if (typeof window === 'undefined') return '';
     const localBase = readLocalAxumBaseUrl();
-    try {
-        const parsed = new URL(targetUrl, window.location.href);
-        if (!localBase) return '';
-        const baseUrl = new URL(localBase, window.location.href);
-        if (baseUrl.origin === window.location.origin) {
-            return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-        }
-        parsed.protocol = baseUrl.protocol;
-        parsed.hostname = baseUrl.hostname;
-        parsed.port = baseUrl.port;
-        return parsed.toString();
-    } catch (_) {
-        return '';
+    if (!localBase) return '';
+    const parsed = new URL(targetUrl, window.location.href);
+    const baseUrl = new URL(localBase, window.location.href);
+    if (baseUrl.origin === window.location.origin) {
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
     }
+    parsed.protocol = baseUrl.protocol;
+    parsed.hostname = baseUrl.hostname;
+    parsed.port = baseUrl.port;
+    return parsed.toString();
 };
 
 const buildBrowserSameOriginRequestUrl = (targetUrl) => {
     if (typeof window === 'undefined') return '';
-    try {
-        const parsed = new URL(targetUrl, window.location.href);
-        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-    } catch (_) {
-        return '';
-    }
+    const parsed = new URL(targetUrl, window.location.href);
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 };
 
 const buildProtectedLoopbackCandidateUrls = (parsedUrl) => {
