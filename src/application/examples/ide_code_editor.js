@@ -13,7 +13,7 @@
  * - Run code with ▶ button or Ctrl/Cmd+Enter
  * - Output panel shows console.log and results
  * - Auto-save to localStorage
- * - Database sync via UnifiedAtome API
+ * - Database sync via AdoleAPI
  * 
  * Shortcuts:
  * - Alt+E: Open a new editor from anywhere

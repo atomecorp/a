@@ -98,7 +98,8 @@ function isAnonymousLogin(phone, username, password) {
         if (stored && cleanPhone && String(stored).trim() === cleanPhone) {
             return true;
         }
-    } catch { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     const cleanUsername = username ? String(username).trim().toLowerCase() : '';
     if (cleanUsername === 'anonymous') return true;
     const cleanPassword = password ? String(password).trim().toLowerCase() : '';
@@ -127,7 +128,8 @@ async function silentPing(baseUrl) {
             const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
             const localPort = readLocalTauriHttpPort();
             isTauriServer = !!(localPort && isLoopbackHostname(parsed.hostname) && port === localPort);
-        } catch (_) {
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
             isTauriServer = false;
         }
         const pingEndpoint = isTauriServer ? '/api/auth/local/me' : '/api/auth/me';
@@ -195,7 +197,8 @@ function clearFastifyOverrideStorage() {
     if (typeof window === 'undefined') return;
     try {
         localStorage.removeItem('squirrel_tauri_fastify_url_override');
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 }
 
 function readExpectedFastifyLoopbackPort() {
@@ -212,7 +215,8 @@ function isDisallowedFastifyLoopbackPort(baseUrl) {
         const candidatePort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
         if (!Number.isFinite(candidatePort) || candidatePort <= 0) return false;
         return candidatePort !== readExpectedFastifyLoopbackPort();
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return false;
     }
 }
@@ -228,7 +232,8 @@ function isInvalidFastifyHttpBase(baseUrl) {
         if (!isLoopbackHostname(parsed.hostname)) return false;
         const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
         return Number.isFinite(port) && port === localPort;
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return false;
     }
 }
@@ -396,7 +401,8 @@ async function checkFastifyViaTauri(fastifyBaseUrl) {
             const isLocalHost = host === '127.0.0.1' || host === 'localhost';
             if (!isLocalHost) return null;
         }
-    } catch { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
     try {
         const res = await fetch(`${alignLoopbackUrlToPageHost(localBase)}/api/fastify-status`, {
@@ -409,7 +415,8 @@ async function checkFastifyViaTauri(fastifyBaseUrl) {
         if (data && typeof data.available === 'boolean') {
             return data.available;
         }
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return null;
     }
     return null;
@@ -566,7 +573,7 @@ export function generateUUID() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
     }
-    // Fallback: generate UUID v4 manually
+    // Secondary: generate UUID v4 manually
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0;
         const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -593,7 +600,7 @@ export function generateClientId() {
  */
 const tokenMemory = new Map();
 
-function clearLegacyFastifyTokenStorage() {
+function clearPreviousFastifyTokenStorage() {
     if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('auth_token');
     }
@@ -623,12 +630,12 @@ export function getToken(key) {
         const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
         const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
         if (key === cloudKey) {
-            // Legacy migration: use auth_token as cloud token only.
-            const legacy = localStorage.getItem('auth_token');
-            if (legacy) {
-                localStorage.setItem(cloudKey, legacy);
-                tokenMemory.set(cloudKey, legacy);
-                return legacy;
+            // Previous migration: use auth_token as cloud token only.
+            const previous = localStorage.getItem('auth_token');
+            if (previous) {
+                localStorage.setItem(cloudKey, previous);
+                tokenMemory.set(cloudKey, previous);
+                return previous;
             }
         }
     }
@@ -678,10 +685,10 @@ export function clearToken(key) {
 
     const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
     if (key === cloudKey) {
-        // Legacy Fastify builds stored the same JWT under auth_token.
+        // Previous Fastify builds stored the same JWT under auth_token.
         // If we only clear cloud_auth_token, getToken() may immediately
-        // rehydrate the expired legacy token and recreate the 401 loop.
-        clearLegacyFastifyTokenStorage();
+        // rehydrate the expired previous token and recreate the 401 loop.
+        clearPreviousFastifyTokenStorage();
     }
 }
 
@@ -985,7 +992,8 @@ class TauriWebSocket {
                                     if (detail?.atomeId || detail?.atome_id) {
                                         window.dispatchEvent(new CustomEvent('squirrel:atome-created', { detail }));
                                     }
-                                } catch (_) { }
+                                } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
                                 return;
                             }
 
@@ -1025,7 +1033,8 @@ class TauriWebSocket {
                             }
                         }
                     }
-                } catch (_) { }
+                } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
                 return;
             }
@@ -1142,11 +1151,11 @@ class TauriWebSocket {
                 return;
             }
 
-            const fallbackId = message.request_id || message.requestId;
-            if (fallbackId) {
-                const pending = this.pendingRequests.get(fallbackId);
+            const secondaryId = message.request_id || message.requestId;
+            if (secondaryId) {
+                const pending = this.pendingRequests.get(secondaryId);
                 if (pending) {
-                    this.pendingRequests.delete(fallbackId);
+                    this.pendingRequests.delete(secondaryId);
                     clearTimeout(pending.timeout);
                     const success = message.success ?? message.ok;
                     pending.resolve({
@@ -1288,7 +1297,8 @@ function getTauriWs() {
 
     const wsUrl = getTauriWsUrl();
     if (!_tauriWs || _tauriWs.url !== wsUrl) {
-        try { _tauriWs?.socket?.close?.(); } catch (_) { }
+        try { _tauriWs?.socket?.close?.(); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
         _tauriWs = new TauriWebSocket(wsUrl, 'tauri');
     }
     return _tauriWs;
@@ -1301,7 +1311,8 @@ function getFastifyWs() {
     }
 
     if (!_fastifyWs || _fastifyWs.url !== wsUrl) {
-        try { _fastifyWs?.socket?.close?.(); } catch (_) { }
+        try { _fastifyWs?.socket?.close?.(); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
         _fastifyWs = new TauriWebSocket(wsUrl, 'fastify');
     }
 

@@ -1,4 +1,4 @@
-import auth from './v2/auth.js';
+import auth from './adole_api/auth.js';
 import {
   create_project,
   list_projects,
@@ -7,8 +7,8 @@ import {
   get_current_project,
   set_current_project,
   load_saved_current_project
-} from './v2/projects.js';
-import { create_atome, list_atomes, delete_atome, alter_atome, realtime_patch, get_atome } from './v2/atomes.js';
+} from './adole_api/projects.js';
+import { create_atome, list_atomes, delete_atome, alter_atome, realtime_patch, get_atome } from './adole_api/atomes.js';
 import {
   create_activity,
   list_activities,
@@ -25,7 +25,7 @@ import {
   get_global_toolbox_state,
   save_activity_toolbox_state,
   get_activity_toolbox_state
-} from './v2/activities.js';
+} from './adole_api/activities.js';
 import {
   share_atome,
   share_request,
@@ -33,12 +33,16 @@ import {
   share_publish,
   share_policy,
   grant_share_permission
-} from './v2/sharing.js';
+} from './adole_api/sharing.js';
 import { list_tables } from './adole/debug.js';
-import { getSessionState, waitForAuthCheck } from './v2/session.js';
+import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 
 // Kick off auth bootstrap immediately so UI waits on a single source of truth.
-try { auth.tryAutoLogin(); } catch (_) { }
+try {
+  auth.tryAutoLogin();
+} catch (error) {
+  console.warn('[AdoleAPI] auth bootstrap failed:', error);
+}
 
 const isAnonymousMode = () => getSessionState().mode === 'anonymous';
 const getAnonymousIdentity = () => {

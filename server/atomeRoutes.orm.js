@@ -45,7 +45,7 @@ function syncDebugLog(message, data = null) {
  * 
  * SECURITY: Events are broadcast to all clients for file sync purposes,
  * but clients MUST validate owner_id before mirroring to local DB.
- * This is defense in depth - see UnifiedSync.js for client-side validation.
+ * This is defense in depth; client-side validation is not trusted.
  * 
  * For atome CRUD operations, the owner_id is always included so clients
  * can filter events that don't belong to them.
@@ -234,7 +234,7 @@ function formatAtome(obj) {
         created_at: obj.created_at,
         updated_at: obj.updated_at,
         particles: obj.particles || obj.properties || obj.data || {},
-        // Legacy format aliases for backward compatibility
+        // Previous format aliases for backward compatibility
         id: obj.atome_id || obj.id,
         type: obj.atome_type || obj.type,
         parent: obj.parent_id || obj.parent,
@@ -293,7 +293,7 @@ async function resolveAtomeForSync(event) {
  * Register all atome routes
  */
 export async function registerAtomeRoutes(server, dataSource = null) {
-    // Initialize database (dataSource param is legacy, kept for API compatibility)
+    // Initialize database (dataSource param is previous, kept for API compatibility)
     await db.initDatabase();
 
     // ========================================================================
@@ -350,7 +350,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     childOwnerId: resolvedOwnerId,
                     grantorId: user.id
                 });
-            } catch (_) { }
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
             try {
                 await broadcastAtomeCreate({
@@ -360,7 +361,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     particles: data || {},
                     senderUserId: user.id
                 });
-            } catch (_) { }
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
             // Broadcast to WebSocket clients
             broadcastMessage({
@@ -544,7 +546,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                         senderUserId: user.id
                     });
                 }
-            } catch (_) { }
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
             // Broadcast
             broadcastMessage({
@@ -617,7 +620,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                         senderUserId: user.id
                     });
                 }
-            } catch (_) { }
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
             // Broadcast
             broadcastMessage({
@@ -683,7 +687,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     atomeId: id,
                     senderUserId: user.id
                 });
-            } catch (_) { }
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
             // Broadcast
             broadcastMessage({
@@ -806,11 +811,11 @@ export async function registerAtomeRoutes(server, dataSource = null) {
     // ========================================================================
 
     const normalizeCommitActor = (candidate, authenticatedUserId) => {
-        const fallback = { type: 'user', id: authenticatedUserId };
-        if (!candidate || typeof candidate !== 'object') return fallback;
+        const secondary = { type: 'user', id: authenticatedUserId };
+        if (!candidate || typeof candidate !== 'object') return secondary;
         const actorId = candidate.id || candidate.user_id || candidate.userId || null;
-        if (!actorId) return fallback;
-        if (String(actorId) !== String(authenticatedUserId)) return fallback;
+        if (!actorId) return secondary;
+        if (String(actorId) !== String(authenticatedUserId)) return secondary;
         return {
             ...candidate,
             id: actorId
@@ -890,10 +895,10 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const txId = body.tx_id || null;
-        const fallbackActor = normalizeCommitActor(body.actor, user.id);
+        const secondaryActor = normalizeCommitActor(body.actor, user.id);
         const normalizedEvents = events.map((evt) => ({
             ...evt,
-            actor: normalizeCommitActor(evt?.actor, user.id) || fallbackActor
+            actor: normalizeCommitActor(evt?.actor, user.id) || secondaryActor
         }));
         console.log('[Fastify] /api/events/commit-batch processing', {
             user_id: user.id,
@@ -1061,7 +1066,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                         actor,
                         payload: { snapshot_id: snapshotId, label }
                     });
-                } catch (_) { }
+                } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
             }
 
             return reply.send({ success: true, snapshotId });
@@ -1118,7 +1124,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
     });
 
-    // NOTE: All sync routes (pull, push, hash, reconcile, queue-status) are deprecated
+    // NOTE: All sync routes (pull, push, hash, reconcile, queue-status) are retired
     // Synchronization is now handled in real-time via WebSocket EventBus
 
     console.log('[Atome] Routes v3.0 registered (ADOLE v3.0 schema with WebSocket sync)');

@@ -141,6 +141,13 @@ fn load_env_from_candidates() {
     println!("[tauri] No .env file found in cwd/exe path hierarchy");
 }
 
+fn live_repo_src_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|root| root.join("src"))
+        .unwrap_or_else(|| PathBuf::from("../src"))
+}
+
 fn main() {
     // Load .env/.env.local from a stable location (cwd or executable parent).
     // This keeps JWT_SECRET consistent across Tauri + Fastify in dev.
@@ -179,37 +186,33 @@ fn main() {
             println!("[tauri] fs plugin enabled");
             println!("[tauri] stt plugin enabled");
             let path_resolver = app.path();
-            let static_dir: PathBuf = match path_resolver.resource_dir() {
-                Ok(dir) => {
-                    let mut resolved: Option<PathBuf> = None;
-                    let mut candidates: Vec<PathBuf> = vec![
-                        dir.join("dist"),
-                        dir.join("public"),
-                        dir.join("src"),
-                        dir.join("_up_/dist"),
-                        dir.join("_up_/public"),
-                        dir.join("_up_/src"),
-                        dir.clone(),
-                    ];
+            let static_dir: PathBuf = if cfg!(debug_assertions) {
+                live_repo_src_dir()
+            } else {
+                match path_resolver.resource_dir() {
+                    Ok(dir) => {
+                        let mut resolved: Option<PathBuf> = None;
+                        let candidates: Vec<PathBuf> = vec![
+                            dir.join("dist"),
+                            dir.join("public"),
+                            dir.join("src"),
+                            dir.join("_up_/dist"),
+                            dir.join("_up_/public"),
+                            dir.join("_up_/src"),
+                            dir.clone(),
+                        ];
 
-                    // Prefer live repo assets in dev so new files are immediately served.
-                    if cfg!(debug_assertions) {
-                        candidates.insert(0, PathBuf::from("../src"));
-                    }
-
-                    // Dev fallback (../src) checked last
-                    candidates.push(PathBuf::from("../src"));
-
-                    for candidate in candidates {
-                        if candidate.join("index.html").exists() {
-                            resolved = Some(candidate);
-                            break;
+                        for candidate in candidates {
+                            if candidate.join("index.html").exists() {
+                                resolved = Some(candidate);
+                                break;
+                            }
                         }
-                    }
 
-                    resolved.unwrap_or_else(|| PathBuf::from("../src"))
+                        resolved.unwrap_or_else(|| PathBuf::from("../src"))
+                    }
+                    Err(_) => PathBuf::from("../src"),
                 }
-                Err(_) => PathBuf::from("../src"),
             };
 
             if !static_dir.join("index.html").exists() {
@@ -286,7 +289,7 @@ fn main() {
                     );
                     let _ = win.eval(&root_js);
                 } else {
-                    // Fallback: essaye toute fenêtre disponible
+                    // Secondary: essaye toute fenêtre disponible
                     for (_, w) in app.webview_windows() {
                         let _ = w.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
                         let root_js = format!(

@@ -102,6 +102,67 @@ const languageLabels = {
     rb: 'Ruby'
 };
 
+const loadAdoleApi = async () => {
+    if (typeof window !== 'undefined' && window.AdoleAPI) return window.AdoleAPI;
+    if (typeof globalThis !== 'undefined' && globalThis.AdoleAPI) return globalThis.AdoleAPI;
+    const mod = await import('../apis/unified/adole_apis.js');
+    return mod.AdoleAPI;
+};
+
+const isAdoleAuthenticated = (api) => !!api?.auth?.isAuthenticated?.();
+
+const collectAdoleAtomes = (result = {}) => {
+    const byId = new Map();
+    const add = (items = [], source = '') => {
+        if (!Array.isArray(items)) return;
+        items.forEach((item) => {
+            const id = item?.atome_id || item?.id || item?.data?.atome_id || item?.data?.id || null;
+            if (!id || byId.has(String(id))) return;
+            byId.set(String(id), { ...item, id, source });
+        });
+    };
+    add(result?.tauri?.atomes, 'tauri');
+    add(result?.fastify?.atomes, 'fastify');
+    add(result?.atomes, result?.source || '');
+    add(result?.data, result?.source || '');
+    return Array.from(byId.values());
+};
+
+const extractAdoleAtome = (result) => (
+    result?.atome
+    || result?.data?.atome
+    || result?.data
+    || result?.tauri?.data?.atome
+    || result?.fastify?.data?.atome
+    || result?.tauri?.data?.data?.atome
+    || result?.fastify?.data?.data?.atome
+    || null
+);
+
+const extractCreatedAtomeId = (result) => (
+    result?.tauri?.data?.atome_id
+    || result?.tauri?.data?.id
+    || result?.tauri?.data?.data?.atome_id
+    || result?.tauri?.data?.data?.id
+    || result?.fastify?.data?.atome_id
+    || result?.fastify?.data?.id
+    || result?.fastify?.data?.data?.atome_id
+    || result?.fastify?.data?.data?.id
+    || null
+);
+
+const adoleOperationSucceeded = (result) => !!(
+    result?.ok
+    || result?.success
+    || result?.tauri?.success
+    || result?.fastify?.success
+);
+
+const listCodeFileAtomes = async (api, options = {}) => {
+    const { kind, ...rest } = options;
+    return collectAdoleAtomes(await api.atomes.list({ ...rest, type: kind || options.type || 'code_file' }));
+};
+
 // === MAIN EDITOR BUILDER ===
 const createEditor = (config = {}) => {
     const {
@@ -633,9 +694,9 @@ const createEditor = (config = {}) => {
         const content = state.editorView.state.doc.toString();
 
         try {
-            console.log('[Editor] Importing UnifiedAtome module...');
-            const { UnifiedAtome, isAuthenticated } = await import('../apis/unified/index.js');
-            const authenticated = isAuthenticated();
+            console.log('[Editor] Loading AdoleAPI...');
+            const adoleApi = await loadAdoleApi();
+            const authenticated = isAdoleAuthenticated(adoleApi);
             console.log('[Editor] isAuthenticated:', authenticated);
 
             if (!authenticated) {
@@ -653,7 +714,9 @@ const createEditor = (config = {}) => {
                 let localFiles = [];
                 try {
                     localFiles = JSON.parse(localStorage.getItem('editor_local_files') || '[]');
-                } catch { }
+                } catch (error) {
+                    console.warn('[Editor] local file index parse failed:', error);
+                }
 
                 const existingIndex = localFiles.findIndex(f => f.fileName === state.fileName);
                 if (existingIndex >= 0) {
@@ -673,35 +736,33 @@ const createEditor = (config = {}) => {
             }
 
             // Authenticated - save to server with ADOLE-compliant format
-            console.log('[Editor] Authenticated, calling UnifiedAtome.create...');
+            console.log('[Editor] Authenticated, calling AdoleAPI.atomes.create...');
             const atomeData = {
-                kind: 'code_file',
-                type: state.language || 'javascript',
-                data: {
+                type: 'code_file',
+                properties: {
                     fileName: state.fileName,
                     language: state.language,
                     content: content,
                     lastModified: new Date().toISOString(),
-                    size: content.length
-                },
-                meta: {
+                    size: content.length,
                     fileId: state.fileId || null
                 }
             };
 
-            const result = await UnifiedAtome.create(atomeData);
+            const result = await adoleApi.atomes.create(atomeData);
             console.log('[Editor] create result:', result);
 
-            if (result.success) {
-                state.fileId = result.id;
+            if (adoleOperationSucceeded(result)) {
+                state.fileId = extractCreatedAtomeId(result) || state.fileId;
                 state.lastValidatedContent = content;
                 state.isDirty = false;
                 updateDirtyIndicator(false);
-                updateStatus(`✓ Saved (v${result.version || 1})`);
-                onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content, version: result.version });
+                updateStatus('✓ Saved');
+                onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content });
             } else {
-                console.warn('[Editor] Save failed:', result.error);
-                updateStatus('✗ Save failed: ' + (result.error || 'Unknown error'));
+                const error = result?.tauri?.error || result?.fastify?.error || result?.error || 'Unknown error';
+                console.warn('[Editor] Save failed:', error);
+                updateStatus('✗ Save failed: ' + error);
             }
 
         } catch (error) {
@@ -715,7 +776,7 @@ const createEditor = (config = {}) => {
 
     async function showLoadDialog() {
         try {
-            const { UnifiedAtome, isAuthenticated } = await import('../apis/unified/index.js');
+            const adoleApi = await loadAdoleApi();
 
             updateStatus('Loading files...');
 
@@ -737,23 +798,25 @@ const createEditor = (config = {}) => {
                         }
                     });
                 });
-            } catch { }
+            } catch (error) {
+                console.warn('[LoadDialog] local file index parse failed:', error);
+            }
 
             // Get database files if authenticated
-            if (isAuthenticated()) {
+            if (isAdoleAuthenticated(adoleApi)) {
                 console.log('[LoadDialog] User is authenticated, fetching code_file atomes...');
-                const result = await UnifiedAtome.list({ kind: 'code_file' });
-                console.log('[LoadDialog] UnifiedAtome.list result:', result);
-                if (result.success && result.data?.length) {
-                    console.log('[LoadDialog] Found', result.data.length, 'files in database');
-                    result.data.forEach(f => {
+                const files = await listCodeFileAtomes(adoleApi);
+                console.log('[LoadDialog] AdoleAPI.atomes.list result:', files);
+                if (files.length) {
+                    console.log('[LoadDialog] Found', files.length, 'files in database');
+                    files.forEach(f => {
                         allFiles.push({
                             ...f,
                             source: 'database'
                         });
                     });
                 } else {
-                    console.log('[LoadDialog] No files found or error:', result);
+                    console.log('[LoadDialog] No files found');
                 }
             } else {
                 console.log('[LoadDialog] User is NOT authenticated, skipping database fetch');
@@ -1130,38 +1193,33 @@ const createEditor = (config = {}) => {
         // Clear previous output
         outputContent.innerHTML = '';
 
-        // Captured output
         const logs = [];
 
-        // Capture console methods
-        const originalConsole = {
-            log: console.log.bind(console),
-            warn: console.warn.bind(console),
-            error: console.error.bind(console),
-            info: console.info.bind(console)
+        const formatValue = (arg) => {
+            if (typeof arg === 'object') {
+                try {
+                    return JSON.stringify(arg, null, 2);
+                } catch (error) {
+                    console.warn('[Editor] output serialization failed:', error);
+                    return String(arg);
+                }
+            }
+            return String(arg);
         };
 
         const captureLog = (type, ...args) => {
-            const formatted = args.map(arg => {
-                if (typeof arg === 'object') {
-                    try {
-                        return JSON.stringify(arg, null, 2);
-                    } catch {
-                        return String(arg);
-                    }
-                }
-                return String(arg);
-            }).join(' ');
+            const formatted = args.map(formatValue).join(' ');
 
             logs.push({ type, message: formatted });
-            originalConsole[type](...args); // Also log to real console
+            console[type](...args);
         };
 
-        // Temporarily override console
-        console.log = (...args) => captureLog('log', ...args);
-        console.warn = (...args) => captureLog('warn', ...args);
-        console.error = (...args) => captureLog('error', ...args);
-        console.info = (...args) => captureLog('info', ...args);
+        const executionConsole = {
+            log: (...args) => captureLog('log', ...args),
+            warn: (...args) => captureLog('warn', ...args),
+            error: (...args) => captureLog('error', ...args),
+            info: (...args) => captureLog('info', ...args)
+        };
 
         const displayOutput = () => {
             logs.forEach(({ type, message }) => {
@@ -1182,11 +1240,6 @@ const createEditor = (config = {}) => {
                 outputContent.appendChild(line);
             });
 
-            // Restore console
-            console.log = originalConsole.log;
-            console.warn = originalConsole.warn;
-            console.error = originalConsole.error;
-            console.info = originalConsole.info;
         };
 
         const displayError = (error) => {
@@ -1204,11 +1257,7 @@ const createEditor = (config = {}) => {
 
                 let displayValue;
                 if (typeof result === 'object') {
-                    try {
-                        displayValue = JSON.stringify(result, null, 2);
-                    } catch {
-                        displayValue = String(result);
-                    }
+                    displayValue = formatValue(result);
                 } else {
                     displayValue = String(result);
                 }
@@ -1281,7 +1330,7 @@ const createEditor = (config = {}) => {
         if (lang === 'javascript' || lang === 'js') {
             // JavaScript execution
             try {
-                const result = new Function(code)();
+                const result = new Function('console', code)(executionConsole);
                 displayOutput();
                 displayResult(result);
             } catch (error) {
@@ -1431,20 +1480,17 @@ createEditor.closeAll = () => {
 };
 
 createEditor.loadFile = async (options = {}) => {
-    const { fileId, fileName, userId = 'current' } = options;
+    const { fileId, fileName } = options;
 
     try {
-        const { UnifiedAtome } = await import('../apis/unified/index.js');
+        const adoleApi = await loadAdoleApi();
 
         let file;
         if (fileId) {
-            const result = await UnifiedAtome.get(fileId);
-            if (result.success) file = result.atome;
+            file = extractAdoleAtome(await adoleApi.atomes.get(fileId));
         } else if (fileName) {
-            const result = await UnifiedAtome.list({ kind: 'code_file' });
-            if (result.success) {
-                file = result.data.find(f => (f.properties?.fileName || f.data?.fileName) === fileName);
-            }
+            const files = await listCodeFileAtomes(adoleApi);
+            file = files.find(f => (f.properties?.fileName || f.data?.fileName) === fileName);
         }
 
         if (file) {
@@ -1465,9 +1511,8 @@ createEditor.loadFile = async (options = {}) => {
 
 createEditor.listFiles = async (options = {}) => {
     try {
-        const { UnifiedAtome } = await import('../apis/unified/index.js');
-        const result = await UnifiedAtome.list({ kind: 'code_file', ...options });
-        return result.success ? result.atomes : [];
+        const adoleApi = await loadAdoleApi();
+        return listCodeFileAtomes(adoleApi, { kind: 'code_file', ...options });
     } catch (error) {
         console.error('[EditorBuilder] listFiles failed:', error);
         return [];

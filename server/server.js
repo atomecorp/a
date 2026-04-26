@@ -13,11 +13,6 @@ import { coerceLogEnvelope, isValidLogEnvelope } from '../src/shared/logging.js'
 
 const SERVER_LOG_LEVEL = (process.env.SQUIRREL_LOG_LEVEL || 'warn').toLowerCase();
 const SERVER_INFO_ENABLED = SERVER_LOG_LEVEL === 'info' || SERVER_LOG_LEVEL === 'debug';
-if (!SERVER_INFO_ENABLED) {
-  console.log = () => { };
-  console.info = () => { };
-  console.debug = () => { };
-}
 
 // Load environment variables from .env files
 const __filename_env = fileURLToPath(import.meta.url);
@@ -179,16 +174,14 @@ const isAllowedCorsOrigin = (origin) => {
   if (!origin) return false;
   if (ALLOWED_CORS_ORIGINS.has(origin)) return true;
   if (origin === 'null') return true;
-  try {
-    const parsed = new URL(origin);
-    const protocol = String(parsed.protocol || '').toLowerCase();
-    const hostname = String(parsed.hostname || '').toLowerCase();
-    if (protocol === 'tauri:' && hostname === 'localhost') return true;
-    if ((protocol === 'http:' || protocol === 'https:') && hostname === 'tauri.localhost') return true;
-    if ((protocol === 'http:' || protocol === 'https:') && (hostname === 'localhost' || hostname === '127.0.0.1')) {
-      return true;
-    }
-  } catch (_) { }
+  const parsed = new URL(origin);
+  const protocol = String(parsed.protocol || '').toLowerCase();
+  const hostname = String(parsed.hostname || '').toLowerCase();
+  if (protocol === 'tauri:' && hostname === 'localhost') return true;
+  if ((protocol === 'http:' || protocol === 'https:') && hostname === 'tauri.localhost') return true;
+  if ((protocol === 'http:' || protocol === 'https:') && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+    return true;
+  }
   return false;
 };
 
@@ -207,7 +200,8 @@ const safeJsonParse = (value) => {
   if (!value) return null;
   try {
     return typeof value === 'string' ? JSON.parse(value) : value;
-  } catch (_) {
+  } catch (error) {
+    console.warn('[server] invalid JSON payload', { error: error?.message || String(error) });
     return null;
   }
 };
@@ -303,7 +297,9 @@ async function listUserDownloadsSnapshot(userId) {
         try {
           const stats = await fs.stat(path.join(downloadsDir, name));
           size = stats?.size ?? null;
-        } catch (_) { }
+        } catch (error) {
+          console.warn('[Downloads] unable to stat entry', { name, error: error?.message || String(error) });
+        }
         files.push({ name, size });
       } else if (entry.isDirectory()) {
         files.push({ name: `${name}/`, size: null });
@@ -319,12 +315,12 @@ async function listUserDownloadsSnapshot(userId) {
     };
   }
 }
-const legacyUploadsDir = (() => {
+const uploadsDir = (() => {
   try {
     return resolveUploadsDir();
   } catch (error) {
     const message = error?.message || error;
-    console.warn('⚠️ Unable to resolve legacy uploads directory:', message);
+    console.warn('⚠️ Unable to resolve uploads directory:', message);
     return null;
   }
 })();
@@ -402,8 +398,8 @@ function logStructured(level, { source = 'fastify', component = 'server', reques
   if (typeof server?.log?.[level] === 'function') {
     server.log[level](payload, message);
   } else {
-    const fallback = { ...payload, level, timestamp: new Date().toISOString(), message };
-    process.stdout.write(`${JSON.stringify(fallback)}\n`);
+    const logLine = { ...payload, level, timestamp: new Date().toISOString(), message };
+    process.stdout.write(`${JSON.stringify(logLine)}\n`);
   }
 }
 
@@ -518,22 +514,22 @@ function resolveUploadsDir() {
   return path.resolve(absolute);
 }
 
-async function listLegacyUploads() {
-  if (!legacyUploadsDir) return [];
-  const entries = await fs.readdir(legacyUploadsDir, { withFileTypes: true });
+async function listAnonymousUploads() {
+  if (!uploadsDir) return [];
+  const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
   const files = [];
 
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     const safeName = sanitizeFileName(entry.name);
-    const absolutePath = path.join(legacyUploadsDir, safeName);
+    const absolutePath = path.join(uploadsDir, safeName);
     try {
       const stats = await fs.stat(absolutePath);
       files.push({
         name: safeName,
         size: stats.size,
         modified: stats.mtime.toISOString(),
-        origin: 'legacy'
+        origin: 'previous'
       });
     } catch (error) {
       console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
@@ -557,9 +553,9 @@ function resolveUserId(user) {
     if (text) return generateDeterministicUserId(text);
   }
 
-  const fallback = user?.username || user?.name;
-  if (fallback !== undefined && fallback !== null) {
-    const text = String(fallback).trim();
+  const logLine = user?.username || user?.name;
+  if (logLine !== undefined && logLine !== null) {
+    const text = String(logLine).trim();
     if (text) return text;
   }
 
@@ -578,11 +574,7 @@ function isAdminPasswordValid(value) {
   const secretBuf = Buffer.from(String(secret));
   const valueBuf = Buffer.from(String(value));
   if (secretBuf.length !== valueBuf.length) return false;
-  try {
-    return crypto.timingSafeEqual(secretBuf, valueBuf);
-  } catch (_) {
-    return false;
-  }
+  return crypto.timingSafeEqual(secretBuf, valueBuf);
 }
 
 function getAdminPasswordFromRequest(request) {
@@ -592,7 +584,7 @@ function getAdminPasswordFromRequest(request) {
   return request.body?.admin_password || request.body?.adminPassword || null;
 }
 
-function pickDisplayName(file, fallbackName) {
+function pickDisplayName(file, safeRequestedName) {
   if (typeof file?.original_name === 'string' && file.original_name.trim()) {
     return file.original_name;
   }
@@ -602,7 +594,7 @@ function pickDisplayName(file, fallbackName) {
   if (typeof file?.name === 'string' && file.name.trim()) {
     return file.name;
   }
-  return fallbackName;
+  return safeRequestedName;
 }
 
 async function listUserDownloads(userId) {
@@ -650,28 +642,20 @@ async function listUploadsForUser(userId) {
     let stats = null;
     const rawPath = entry.file_path || entry.filePath || null;
     if (rawPath) {
-      try {
-        const normalizedRelative = normalizeUserRelativePath(rawPath, ownerId);
-        if (normalizedRelative) {
-          const resolved = await resolveUserAssetPath(
-            projectRoot,
-            { id: ownerId },
-            normalizedRelative
-          );
-          stats = await fs.stat(resolved.filePath);
-        }
-      } catch (_) {
-        stats = null;
+      const normalizedRelative = normalizeUserRelativePath(rawPath, ownerId);
+      if (normalizedRelative) {
+        const resolved = await resolveUserAssetPath(
+          projectRoot,
+          { id: ownerId },
+          normalizedRelative
+        );
+        stats = await fs.stat(resolved.filePath);
       }
     }
 
     if (!stats) {
-      try {
-        const filePath = await resolveUserFilePath(projectRoot, ownerId, safeName);
-        stats = await fs.stat(filePath);
-      } catch (_) {
-        stats = null;
-      }
+      const filePath = await resolveUserFilePath(projectRoot, ownerId, safeName);
+      stats = await fs.stat(filePath);
     }
 
     const parsedSize = typeof entry.size === 'number' ? entry.size : Number(entry.size);
@@ -688,8 +672,8 @@ async function listUploadsForUser(userId) {
   }
 
   if (userId === 'anonymous') {
-    const legacy = await listLegacyUploads();
-    const mapped = legacy.map((file) => ({
+    const previous = await listAnonymousUploads();
+    const mapped = previous.map((file) => ({
       id: null,
       name: file.name,
       file_name: file.name,
@@ -698,7 +682,7 @@ async function listUploadsForUser(userId) {
       owner_id: userId,
       access: 'owner',
       shared: false,
-      legacy: true
+      previous: true
     }));
     files.push(...mapped);
   }
@@ -746,70 +730,28 @@ async function resolveDownloadTarget(fileParam, userId) {
         : safeName;
       const rawPath = meta.file_path || meta.filePath || null;
       if (rawPath) {
-        try {
-          const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
-          if (normalizedRelative) {
-            const resolved = await resolveUserAssetPath(
-              projectRoot,
-              { id: meta.owner_id || userId },
-              normalizedRelative
-            );
-            await fs.access(resolved.filePath);
-            return { filePath: resolved.filePath, downloadName, meta };
-          }
-        } catch (_) {
-          // Fallback to Downloads resolution below.
-        }
-      }
-      try {
-        const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
-        await fs.access(filePath);
-        return { filePath, downloadName, meta };
-      } catch (_) {
-        // Continue to recordings fallback.
-      }
-
-      try {
-        const recordingsPath = normalizeUserRelativePath(`recordings/${safeName}`, meta.owner_id || userId);
-        if (recordingsPath) {
-          const resolved = await resolveUserAssetPath(projectRoot, { id: meta.owner_id || userId }, recordingsPath);
+        const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
+        if (normalizedRelative) {
+          const resolved = await resolveUserAssetPath(
+            projectRoot,
+            { id: meta.owner_id || userId },
+            normalizedRelative
+          );
           await fs.access(resolved.filePath);
           return { filePath: resolved.filePath, downloadName, meta };
         }
-      } catch (_) {
-        // Fallback handled below.
       }
+
+      const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
+      await fs.access(filePath);
+      return { filePath, downloadName, meta };
     }
   }
 
-  const fallbackName = sanitizeFileName(safeParam);
-
-  if (userId === 'anonymous' && legacyUploadsDir) {
-    const legacyPath = path.join(legacyUploadsDir, fallbackName);
-    try {
-      await fs.access(legacyPath);
-      return { filePath: legacyPath, downloadName: fallbackName, meta: null };
-    } catch (_) { }
-  }
-
-  try {
-    const userPath = await resolveUserFilePath(projectRoot, userId, fallbackName);
-    await fs.access(userPath);
-    return { filePath: userPath, downloadName: fallbackName, meta: null };
-  } catch (_) {
-    // keep searching
-  }
-
-  try {
-    const recordingsPath = normalizeUserRelativePath(`recordings/${fallbackName}`, userId);
-    if (recordingsPath) {
-      const resolved = await resolveUserAssetPath(projectRoot, { id: userId }, recordingsPath);
-      await fs.access(resolved.filePath);
-      return { filePath: resolved.filePath, downloadName: fallbackName, meta: null };
-    }
-  } catch (_) {
-    // fallthrough
-  }
+  const safeRequestedName = sanitizeFileName(safeParam);
+  const userPath = await resolveUserFilePath(projectRoot, userId, safeRequestedName);
+  await fs.access(userPath);
+  return { filePath: userPath, downloadName: safeRequestedName, meta: null };
 
   return null;
 }
@@ -820,7 +762,6 @@ if (process.env.USE_HTTPS === 'true') {
   // Check multiple locations for certificates
   // 1. Production path (deploy/certs)
   // 2. Local development path (dev/certs)
-  // 3. Legacy paths kept for existing installations
   const possibleDirs = [
     path.join(projectRoot, 'deploy', 'certs'),
     path.join(projectRoot, 'dev', 'certs'),
@@ -1036,11 +977,11 @@ async function startServer() {
     console.log(`📦 Atome version: ${SERVER_VERSION}`);
     console.log(`📦 eVe version: ${EVE_VERSION}`);
 
-    if (legacyUploadsDir) {
-      await fs.mkdir(legacyUploadsDir, { recursive: true });
-      console.log('📁 Legacy uploads directory:', legacyUploadsDir);
+    if (uploadsDir) {
+      await fs.mkdir(uploadsDir, { recursive: true });
+      console.log('📁 uploads directory:', uploadsDir);
     } else {
-      console.log('📁 Legacy uploads directory: disabled');
+      console.log('📁 uploads directory: disabled');
     }
 
     // Serve server_config.json from the real project root.
@@ -1053,7 +994,8 @@ async function startServer() {
         let config;
         try {
           config = JSON.parse(raw);
-        } catch (_) {
+        } catch (error) {
+          request.log.warn({ err: error }, 'server_config.json is not valid JSON; returning raw file');
           return raw;
         }
 
@@ -1145,7 +1087,7 @@ async function startServer() {
     });
 
     // Initialize user files tracking
-    await initUserFiles(legacyUploadsDir || 'per-user Downloads');
+    await initUserFiles(uploadsDir || 'per-user Downloads');
 
     if (process.env.SQUIRREL_DISABLE_WATCHER === '1') {
       console.log('🛑 File sync watcher disabled via SQUIRREL_DISABLE_WATCHER=1');
@@ -1235,8 +1177,9 @@ async function startServer() {
         const token = authHeader.substring(7);
         try {
           return await verifyJwt(token);
-        } catch (_) {
-          // Fall through to cookie check
+        } catch (error) {
+          request.log.warn({ err: error }, 'Bearer token validation failed');
+          return null;
         }
       }
 
@@ -1249,8 +1192,9 @@ async function startServer() {
       if (queryToken) {
         try {
           return await verifyJwt(Array.isArray(queryToken) ? queryToken[0] : String(queryToken));
-        } catch (_) {
-          // Fall through to cookie check
+        } catch (error) {
+          request.log.warn({ err: error }, 'Query token validation failed');
+          return null;
         }
       }
 
@@ -1259,7 +1203,8 @@ async function startServer() {
       if (cookieToken) {
         try {
           return await verifyJwt(cookieToken);
-        } catch (_) {
+        } catch (error) {
+          request.log.warn({ err: error }, 'Cookie token validation failed');
           return null;
         }
       }
@@ -1370,7 +1315,7 @@ async function startServer() {
         isProduction: process.env.NODE_ENV === 'production'
       });
 
-      // Register Atome API routes (uses Knex directly, dataSource param is legacy)
+      // Register Atome API routes (uses Knex directly, dataSource param is previous)
       registerAtomeRoutes(server, dataSourceAdapter);
 
       // Register Sharing routes
@@ -1438,12 +1383,7 @@ async function startServer() {
           return { success: false, error: 'Missing X-Filename header' };
         }
 
-        let decodedName = headerValue ? String(headerValue) : '';
-        try {
-          decodedName = decodedName ? decodeURIComponent(decodedName) : decodedName;
-        } catch {
-          // Keep original value if decoding fails
-        }
+        const decodedName = headerValue ? decodeURIComponent(String(headerValue)) : '';
 
         const bodyBuffer = request.body;
         if (!bodyBuffer || !(bodyBuffer instanceof Buffer) || !bodyBuffer.length) {
@@ -1506,7 +1446,7 @@ async function startServer() {
             file_path: relativePath || null
           });
           if (!registration?.success) {
-            try { await fs.rm(filePath, { force: true }); } catch (_) { }
+            await fs.rm(filePath, { force: true });
             reply.code(500);
             return { success: false, error: registration?.error || 'file_registration_failed' };
           }
@@ -1557,12 +1497,7 @@ async function startServer() {
           return { success: false, error: 'Invalid chunk index/count' };
         }
 
-        let decodedName = String(headerValue);
-        try {
-          decodedName = decodeURIComponent(decodedName);
-        } catch {
-          // Keep original value if decoding fails
-        }
+        const decodedName = decodeURIComponent(String(headerValue));
 
         const bodyBuffer = request.body;
         if (!bodyBuffer || !(bodyBuffer instanceof Buffer) || !bodyBuffer.length) {
@@ -1627,12 +1562,7 @@ async function startServer() {
           return { success: false, error: 'Invalid chunk count' };
         }
 
-        let decodedName = String(headerValue);
-        try {
-          decodedName = decodeURIComponent(decodedName);
-        } catch {
-          // Keep original value if decoding fails
-        }
+        const decodedName = decodeURIComponent(String(headerValue));
 
         const uploadDir = path.join(UPLOADS_TMP_DIR, safeUploadId);
         let fileName = decodedName;
@@ -1686,24 +1616,22 @@ async function startServer() {
           output.end(resolve);
         });
 
-        try {
-          await fs.rm(uploadDir, { recursive: true, force: true });
-        } catch (_) { }
+        await fs.rm(uploadDir, { recursive: true, force: true });
 
         if (DATABASE_ENABLED) {
           const mimeType = mimeHeader || null;
           const atomeIdHeader = getHeaderValue(request, 'x-atome-id');
-          const stats = await fs.stat(filePath).catch(() => null);
+          const stats = await fs.stat(filePath);
           const registration = await registerFileUpload(fileName, userId, {
             atome_id: atomeIdHeader || null,
             atome_type: atomeTypeHeader || null,
             original_name: decodedName,
             mime_type: mimeType || null,
-            size_bytes: stats ? stats.size : null,
+            size_bytes: stats.size,
             file_path: relativePath || null
           });
           if (!registration?.success) {
-            try { await fs.rm(filePath, { force: true }); } catch (_) { }
+            await fs.rm(filePath, { force: true });
             reply.code(500);
             return { success: false, error: registration?.error || 'file_registration_failed' };
           }
@@ -1859,7 +1787,10 @@ async function startServer() {
         return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
       }
 
-      // TODO: Check if user is admin
+      if (!isAdminPasswordValid(getAdminPasswordFromRequest(request))) {
+        return replyJson(reply, 403, { success: false, error: 'admin_required' });
+      }
+
       const stats = await getFileStats();
 
       return { success: true, data: stats };
@@ -2141,7 +2072,7 @@ async function startServer() {
         const totalSize = stat.size;
         const ext = path.extname(target.filePath).toLowerCase();
 
-        // Resolve MIME type: DB metadata > extension lookup > fallback
+        // Resolve MIME type: DB metadata > extension lookup > logLine
         const MEDIA_MIME_TYPES = {
           '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime',
           '.webm': 'video/webm', '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska',
@@ -2354,7 +2285,8 @@ async function startServer() {
         try {
           const crypto = await import('crypto');
           connection._wsApiConnectionId = crypto.randomUUID();
-        } catch (_) {
+        } catch (error) {
+          console.warn("[server] operation failed", error);
           connection._wsApiConnectionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         }
 
@@ -2362,7 +2294,8 @@ async function startServer() {
           console.log('🔗 New WebSocket API connection');
         }
 
-        try { wsApiConnections.add(connection); } catch (_) { }
+        try { wsApiConnections.add(connection); } catch (error) {
+          console.warn("[server] operation failed", error); }
 
         const unknownMessageTypesSeen = new Set();
 
@@ -2509,8 +2442,8 @@ async function startServer() {
                     return;
                   }
 
-                  const fallbackActor = body.actor || { type: 'user', id: attachedSenderUserId };
-                  const normalized = events.map((evt) => ({ ...evt, actor: evt?.actor || fallbackActor }));
+                  const defaultActor = body.actor || { type: 'user', id: attachedSenderUserId };
+                  const normalized = events.map((evt) => ({ ...evt, actor: evt?.actor || defaultActor }));
                   const syncSource = String(body.sync_source || '').toLowerCase();
                   const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
                   const created = await db.appendEvents(normalized, {
@@ -2550,7 +2483,8 @@ async function startServer() {
                           particles: properties
                         };
                         syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(evt.kind));
-                      } catch (_) { }
+                      } catch (error) {
+          console.warn("[server] operation failed", error); }
                     }
                   }
 
@@ -2615,7 +2549,8 @@ async function startServer() {
                   senderPhone = senderUser.phone || null;
                   senderUsername = senderUser.username || null;
                 }
-              } catch (_) { }
+              } catch (error) {
+          console.warn("[server] operation failed", error); }
 
               // If token payload is missing username, enrich from DB.
               // This keeps `from.username` reliable even for older tokens.
@@ -2627,7 +2562,8 @@ async function startServer() {
                   } else if (senderPhone) {
                     senderUser = await findUserByPhone(dataSource, String(senderPhone));
                   }
-                } catch (_) {
+                } catch (error) {
+          console.warn("[server] operation failed", error);
                   senderUser = null;
                 }
                 if (senderUser) {
@@ -2648,7 +2584,8 @@ async function startServer() {
                 } else {
                   try {
                     targetUserId = generateDeterministicUserId(String(normalizedToPhone));
-                  } catch (_) {
+                  } catch (error) {
+          console.warn("[server] operation failed", error);
                     targetUserId = null;
                   }
                 }
@@ -2658,7 +2595,8 @@ async function startServer() {
               if (targetUserId && !targetUser) {
                 try {
                   targetUser = await findUserById(dataSource, targetUserId);
-                } catch (_) {
+                } catch (error) {
+          console.warn("[server] operation failed", error);
                   targetUser = null;
                 }
               }
@@ -2714,7 +2652,8 @@ async function startServer() {
                 let parsed = null;
                 try {
                   parsed = JSON.parse(String(msgText));
-                } catch (_) {
+                } catch (error) {
+          console.warn("[server] operation failed", error);
                   parsed = null;
                 }
                 const params = parsed?.params && typeof parsed.params === 'object' ? parsed.params : {};
@@ -2879,7 +2818,8 @@ async function startServer() {
                   detachWsApiClient(connection);
                   requesterId = null;
                 }
-              } catch (_) { }
+              } catch (error) {
+          console.warn("[server] operation failed", error); }
 
               if (!requesterId && data.token) {
                 try {
@@ -2894,7 +2834,8 @@ async function startServer() {
                       connection._wsApiAuthExpMs = decoded.exp * 1000;
                     }
                   }
-                } catch (_) {
+                } catch (error) {
+          console.warn("[server] operation failed", error);
                   requesterId = null;
                 }
               }
@@ -3018,7 +2959,8 @@ async function startServer() {
                 sendFileResponse({ success: false, error: error.message || 'download_chunk_failed' });
               } finally {
                 if (handle) {
-                  try { await handle.close(); } catch (_) { }
+                  try { await handle.close(); } catch (error) {
+          console.warn("[server] operation failed", error); }
                 }
               }
               return;
@@ -3140,7 +3082,8 @@ async function startServer() {
 
                 try {
                   await fs.rm(uploadDir, { recursive: true, force: true });
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 if (DATABASE_ENABLED) {
                   const stats = await fs.stat(filePath).catch(() => null);
@@ -3290,7 +3233,8 @@ async function startServer() {
                     );
                     const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
                     console.log(`[ws/api] Register stored access=${storedAccess ?? 'unknown'} userId=${userId}`);
-                  } catch (_) {
+                  } catch (error) {
+          console.warn("[server] operation failed", error);
                     console.log(`[ws/api] Register stored access=unknown userId=${userId}`);
                   }
                 } catch (err) {
@@ -3333,7 +3277,8 @@ async function startServer() {
                       }
                     });
                   }
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 // Issue JWT immediately so first post-register commit has a token.
                 const jwt = await import('jsonwebtoken');
@@ -3368,7 +3313,8 @@ async function startServer() {
                   } else {
                     connection._wsApiAuthExpMs = null;
                   }
-                } catch (_) {
+                } catch (error) {
+          console.warn("[server] operation failed", error);
                   connection._wsApiAuthExpMs = null;
                 }
               } else if (action === 'lookup-phone') {
@@ -3404,9 +3350,11 @@ async function startServer() {
                     [user.user_id]
                   );
                   if (rows && rows[0] && rows[0].particle_value) {
-                    try { visibility = JSON.parse(rows[0].particle_value); } catch { visibility = rows[0].particle_value; }
+                    try { visibility = JSON.parse(rows[0].particle_value); } catch (error) {
+          console.warn("[server] operation failed", error); visibility = rows[0].particle_value; }
                   }
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 safeSend({
                   type: 'auth-response',
@@ -3463,7 +3411,8 @@ async function startServer() {
                       }
                     });
                   }
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 safeSend({
                   type: 'auth-response',
@@ -3610,7 +3559,8 @@ async function startServer() {
                   } else {
                     connection._wsApiAuthExpMs = null;
                   }
-                } catch (_) {
+                } catch (error) {
+          console.warn("[server] operation failed", error);
                   connection._wsApiAuthExpMs = null;
                 }
               } else if (action === 'me') {
@@ -3716,7 +3666,8 @@ async function startServer() {
                 // Logout is client-side token clearing, just acknowledge
                 try {
                   detachWsApiClient(connection);
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
                 safeSend({
                   type: 'auth-response',
                   requestId,
@@ -3773,7 +3724,8 @@ async function startServer() {
                 detachWsApiClient(connection);
                 requesterId = null;
               }
-            } catch (_) { }
+            } catch (error) {
+          console.warn("[server] operation failed", error); }
 
             if (!requesterId && data.token) {
               try {
@@ -3789,12 +3741,13 @@ async function startServer() {
                     connection._wsApiAuthExpMs = decoded.exp * 1000;
                   }
                 }
-              } catch (_) {
+              } catch (error) {
+          console.warn("[server] operation failed", error);
                 requesterId = null;
               }
             }
 
-            // Last-resort fallback (legacy callers). Prefer not to rely on this.
+            // Last-resort logLine (previous callers). Prefer not to rely on this.
             if (!requesterId) {
               requesterId = data.user_id || data.owner_id || null;
             }
@@ -3870,7 +3823,8 @@ async function startServer() {
                     childOwnerId: ownerId || requesterId,
                     grantorId: requesterId
                   });
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 try {
                   await broadcastAtomeCreate({
@@ -3881,7 +3835,8 @@ async function startServer() {
                     senderUserId: requesterId,
                     senderConnection: connection
                   });
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -3891,7 +3846,8 @@ async function startServer() {
                     owner_id: ownerId || requesterId || null,
                     particles
                   }, 'create');
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 safeSend({
                   type: 'atome-response',
@@ -3983,7 +3939,8 @@ async function startServer() {
                     senderUserId: requesterId,
                     senderConnection: connection
                   });
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 if (data.noReply === true) {
                   return;
@@ -3997,11 +3954,8 @@ async function startServer() {
                 });
                 return;
               } else if (action === 'update') {
-                // Support both formats: 
-                // - Legacy: { id, properties, author }
-                // - ADOLE v3.0: { atome_id, particles, token }
-                const atomeId = data.atome_id || data.id;
-                const particles = data.particles || data.properties;
+                const atomeId = data.atome_id;
+                const particles = data.particles;
                 const author = data.author;
 
                 if (process.env.WS_UPDATE_DEBUG === '1') {
@@ -4059,7 +4013,8 @@ async function startServer() {
                 // Realtime collaboration: broadcast patch to share recipients
                 try {
                   await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -4078,7 +4033,8 @@ async function startServer() {
                     owner_id: currentAtome?.owner_id || data.owner_id || requesterId || null,
                     particles
                   }, 'update');
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 safeSend({
                   type: 'atome-response',
@@ -4131,7 +4087,8 @@ async function startServer() {
                 // Realtime collaboration: broadcast patch to share recipients
                 try {
                   await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -4150,7 +4107,8 @@ async function startServer() {
                     owner_id: currentAtome?.owner_id || data.owner_id || requesterId || null,
                     particles
                   }, 'update');
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 safeSend({
                   type: 'atome-response',
@@ -4198,7 +4156,8 @@ async function startServer() {
                 if (!allowTransfer) {
                   try {
                     allowTransfer = await db.isAnonymousUser(fromOwnerId);
-                  } catch (_) {
+                  } catch (error) {
+          console.warn("[server] operation failed", error);
                     allowTransfer = false;
                   }
                 }
@@ -4263,11 +4222,13 @@ async function startServer() {
                     senderUserId: requesterId,
                     senderConnection: connection
                   });
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 try {
                   syncAtomeViaWebSocket({ atome_id: atomeId }, 'delete');
-                } catch (_) { }
+                } catch (error) {
+          console.warn("[server] operation failed", error); }
 
                 safeSend({
                   type: 'atome-response',
@@ -4344,7 +4305,8 @@ async function startServer() {
                   atomes = rows.map((row) => {
                     const parse = (val) => {
                       if (!val) return null;
-                      try { return JSON.parse(val); } catch { return val; }
+                      try { return JSON.parse(val); } catch (error) {
+          console.warn("[server] operation failed", error); return val; }
                     };
                     return {
                       atome_id: row.atome_id,
@@ -4413,7 +4375,8 @@ async function startServer() {
                           const value = pair.substring(colonIdx + 1);
                           try {
                             atome[key] = JSON.parse(value);
-                          } catch {
+                          } catch (error) {
+          console.warn("[server] operation failed", error);
                             atome[key] = value;
                           }
                         }
@@ -4470,7 +4433,8 @@ async function startServer() {
                           const value = pair.substring(colonIdx + 1);
                           try {
                             atome[key] = JSON.parse(value);
-                          } catch {
+                          } catch (error) {
+          console.warn("[server] operation failed", error);
                             atome[key] = value;
                           }
                         }
@@ -4630,7 +4594,8 @@ async function startServer() {
 
         // Cleanup
         connection.on('close', () => {
-          try { wsApiConnections.delete(connection); } catch (_) { }
+          try { wsApiConnections.delete(connection); } catch (error) {
+          console.warn("[server] operation failed", error); }
           detachWsApiClient(connection);
         });
       });
@@ -4644,8 +4609,6 @@ async function startServer() {
         if (process.env.WS_CONNECTION_DEBUG === '1') {
           console.log('🔗 Nouvelle connexion sync:', clientId);
         }
-
-        const allowLegacySyncPayload = process.env.SQUIRREL_SYNC_LEGACY_PAYLOAD === '1';
 
         // Helper for safe sending
         const safeSend = (payload) => wsSendJson(connection, payload, { scope: 'ws/sync', op: 'send' });
@@ -4689,14 +4652,11 @@ async function startServer() {
           if (type === 'sync:file-event' || type === 'file-event') {
             if (fileSyncWatcherHandle) {
               safeSendEvent('sync:file-event', payload, payload.timestamp);
-              if (allowLegacySyncPayload) {
-                safeSend(payload);
-              }
             }
             return;
           }
 
-          // Account events (always forward) + legacy user aliases.
+          // Account events (always forward) + previous user aliases.
           if (
             type === 'sync:account-created' || type === 'sync:account-deleted'
             || type === 'account-created' || type === 'account-deleted'
@@ -4706,9 +4666,6 @@ async function startServer() {
             if (eventType === 'sync:user-created') eventType = 'sync:account-created';
             if (eventType === 'sync:user-deleted') eventType = 'sync:account-deleted';
             safeSendEvent(eventType, payload, payload.timestamp);
-            if (allowLegacySyncPayload) {
-              safeSend(payload);
-            }
             return;
           }
 
@@ -4723,14 +4680,6 @@ async function startServer() {
             const atome = payload.atome || null;
             const atomeId = atome?.atome_id || payload.atome_id || null;
             safeSendEvent(mapType, payload, payload.timestamp);
-            if (allowLegacySyncPayload) {
-              safeSend({
-                type: mapType,
-                atome,
-                atome_id: atomeId,
-                timestamp: payload.timestamp || new Date().toISOString()
-              });
-            }
             return;
           }
         };

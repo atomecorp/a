@@ -137,6 +137,13 @@ fn load_env_from_candidates() {
     println!("[tauri] No .env file found in cwd/exe path hierarchy");
 }
 
+fn live_repo_src_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|root| root.join("src"))
+        .unwrap_or_else(|| PathBuf::from("../src"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     load_env_from_candidates();
@@ -174,35 +181,33 @@ pub fn run() {
             println!("[tauri] fs plugin enabled");
             println!("[tauri] stt plugin enabled");
             let path_resolver = app.path();
-            let static_dir: PathBuf = match path_resolver.resource_dir() {
-                Ok(dir) => {
-                    let mut resolved: Option<PathBuf> = None;
-                    let mut candidates: Vec<PathBuf> = vec![
-                        dir.join("dist"),
-                        dir.join("public"),
-                        dir.join("src"),
-                        dir.join("_up_/dist"),
-                        dir.join("_up_/public"),
-                        dir.join("_up_/src"),
-                        dir.clone(),
-                    ];
+            let static_dir: PathBuf = if cfg!(debug_assertions) {
+                live_repo_src_dir()
+            } else {
+                match path_resolver.resource_dir() {
+                    Ok(dir) => {
+                        let mut resolved: Option<PathBuf> = None;
+                        let candidates: Vec<PathBuf> = vec![
+                            dir.join("dist"),
+                            dir.join("public"),
+                            dir.join("src"),
+                            dir.join("_up_/dist"),
+                            dir.join("_up_/public"),
+                            dir.join("_up_/src"),
+                            dir.clone(),
+                        ];
 
-                    if cfg!(debug_assertions) {
-                        candidates.insert(0, PathBuf::from("../src"));
-                    }
-
-                    candidates.push(PathBuf::from("../src"));
-
-                    for candidate in candidates {
-                        if candidate.join("index.html").exists() {
-                            resolved = Some(candidate);
-                            break;
+                        for candidate in candidates {
+                            if candidate.join("index.html").exists() {
+                                resolved = Some(candidate);
+                                break;
+                            }
                         }
-                    }
 
-                    resolved.unwrap_or_else(|| PathBuf::from("../src"))
+                        resolved.unwrap_or_else(|| PathBuf::from("../src"))
+                    }
+                    Err(_) => PathBuf::from("../src"),
                 }
-                Err(_) => PathBuf::from("../src"),
             };
 
             if !static_dir.join("index.html").exists() {
