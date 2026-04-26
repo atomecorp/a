@@ -37,7 +37,17 @@ Same rules as the eVe purge — restated for clarity:
 
 ## 1. Files to Delete Entirely (orphan / temporary)
 
-### 1.1 ⚠️ MISTAKE & CORRECTION — `apis/unified/v2/runtime.js` and `apis/unified/v2/storage.js`
+### 1.1 ✅ ENTIRE `apis/unified/v2/` FOLDER DELETED — 3 254 LOC removed
+
+After verifying that the folder had **zero external consumers** (no HTML script tag, no package.json script, no tools/ runner, no CI workflow, no shell script), the entire `src/squirrel/apis/unified/v2/` directory was removed:
+
+- 8 production files: `activities.js`, `atomes.js`, `auth.js`, `projects.js`, `runtime.js`, `session.js`, `sharing.js`, `storage.js`
+- 2 test files: `atomes.local_auth_headers.test.mjs`, `session.current_project.test.mjs`
+- Total: **3 254 LOC**, 10 files
+
+Syntax check passes on 1023 files (down from 1033). Clean removal.
+
+### 1.1.archive ⚠️ Earlier mistake — `v2/runtime.js` and `v2/storage.js` (now moot)
 
 **Initial claim (WRONG):** these two files had 0 imports based on a `grep -r 'unified/v2/runtime' .` search and were marked DELETE.
 
@@ -446,6 +456,7 @@ When all phases are complete:
 |---|---|---|---|
 | 2026-04-26 | A | Commit `b435ca70`: deleted 4 files (`v2/runtime.js`, `v2/storage.js`, `_tmp_ui_block_probe.mjs`, `_tmp_webgpu_promote_probe.mjs`). | ⚠️ Partial mistake: syntax check passed but the v2/ deletions broke import resolution at runtime (sibling v2 files import them via `./` relative path). |
 | 2026-04-26 | A-fix | Restored `v2/runtime.js` and `v2/storage.js` from `HEAD~1`. Investigation revealed the entire `apis/unified/v2/` folder is functionally orphan in PROD (only its own tests reference it) — see §1.1. | ✅ Syntax check passes (1033 files). Net Phase A: only `_tmp_` files removed (≈11 KB, 2 files). |
+| 2026-04-26 | A.2 | Deleted entire `src/squirrel/apis/unified/v2/` folder (8 prod files + 2 tests = 3 254 LOC) after confirming zero external consumers. | ✅ Syntax check passes (1023 files). |
 
 **Lesson learned (added to triage protocol §7):** for any deletion candidate, run an additional check for relative-path imports inside the same directory:
 ```sh
