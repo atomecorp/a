@@ -605,9 +605,9 @@ function queueRealtimePatch(instance, properties) {
         const payload = state.pending;
         state.pending = null;
         state.lastAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        try {
+        
             api.atomes.realtimePatch(atomeId, payload);
-        } catch (_) { }
+        
     };
 
     const elapsed = now - state.lastAt;

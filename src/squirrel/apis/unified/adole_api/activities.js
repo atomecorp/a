@@ -150,9 +150,9 @@ const updateWindowActivity = (activity) => {
 
 const dispatchActivityChanged = (detail = {}) => {
     if (typeof window === 'undefined') return;
-    try {
+    
         window.dispatchEvent(new CustomEvent('squirrel:activity-changed', { detail }));
-    } catch (_) { }
+    
 };
 
 const sanitizeLayerIdPart = (value, fallback = 'all') => {
@@ -263,14 +263,14 @@ export async function set_current_activity(activityId, activityName = null, pers
 
     if (!persist) return true;
 
-    try {
+    
         await alter_atome(currentUserId, {
             current_activity_id: payload.id,
             currentActivityId: payload.id,
             current_activity_name: payload.name || null,
             currentActivityName: payload.name || null
         });
-    } catch (_) { }
+    
 
     return true;
 }
@@ -283,7 +283,7 @@ export async function load_saved_current_activity() {
         return { id: currentActivityCache.id, name: currentActivityCache.name || null };
     }
 
-    try {
+    
         const userAtome = await get_atome(currentUserId);
         const raw = userAtome?.atome || userAtome?.data || null;
         if (raw && typeof raw === 'object') {
@@ -297,7 +297,7 @@ export async function load_saved_current_activity() {
                 return { id: payload.id, name: payload.name };
             }
         }
-    } catch (_) { }
+    
 
     return null;
 }

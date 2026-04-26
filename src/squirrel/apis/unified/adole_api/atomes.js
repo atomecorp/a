@@ -253,14 +253,14 @@ export const __ATOMES_TEST_ONLY__ = { buildBackendAuthHeaders };
 
 const canUseFastify = async (currentUserId) => {
     if (!FastifyAdapter?.getToken?.()) return false;
-    try {
+    
         const me = await FastifyAdapter.auth.me();
         const user = normalizeAtomeRecord(me?.user || me?.data?.user || me?.user_data || null);
         const id = extractUserId(me?.user || me?.data?.user || null);
         if (id && currentUserId && String(id) === String(currentUserId)) {
             return true;
         }
-    } catch (_) { }
+    
     return false;
 };
 
@@ -411,7 +411,7 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
 
     let tauriProjects = [];
     let fastifyProjects = [];
-    try {
+    
         const localRes = await adapters.tauri.atome.list({
             type: 'project',
             owner_id: currentUserId,
@@ -419,9 +419,9 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
             limit: 2000
         });
         tauriProjects = Array.isArray(localRes?.atomes) ? localRes.atomes.map(normalizeAtomeRecord) : [];
-    } catch (_) { }
+    
 
-    try {
+    
         const remoteRes = await adapters.fastify.atome.list({
             type: 'project',
             owner_id: currentUserId,
@@ -429,7 +429,7 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
             limit: 2000
         });
         fastifyProjects = Array.isArray(remoteRes?.atomes) ? remoteRes.atomes.map(normalizeAtomeRecord) : [];
-    } catch (_) { }
+    
 
     const fastifyProjectIds = new Set(
         fastifyProjects.map(resolveAtomeId).filter(Boolean).map(String)

@@ -232,7 +232,7 @@ export const bootstrapMainHandleVoiceEntry = ({
     env[BRIDGE_KEY] = {
         attach,
         destroy() {
-            try { observer?.disconnect?.(); } catch (_) { }
+            observer?.disconnect?.();
             delete env[BRIDGE_KEY];
         }
     };

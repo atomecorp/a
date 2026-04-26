@@ -9,13 +9,13 @@ export const readStorage = (key) => {
 
 export const writeStorage = (key, value) => {
     if (typeof localStorage === 'undefined') return;
-    try {
+    
         if (value === null || value === undefined) {
             localStorage.removeItem(key);
             return;
         }
         localStorage.setItem(key, value);
-    } catch (_) { }
+    
 };
 
 export const readJson = (key) => {
@@ -33,14 +33,14 @@ export const writeJson = (key, value) => {
         writeStorage(key, null);
         return;
     }
-    try {
+    
         writeStorage(key, JSON.stringify(value));
-    } catch (_) { }
+    
 };
 
 export const removeStorage = (key) => {
     if (typeof localStorage === 'undefined') return;
-    try {
+    
         localStorage.removeItem(key);
-    } catch (_) { }
+    
 };

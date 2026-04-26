@@ -85,7 +85,7 @@
 			if (!cbs || cbs.size === 0) return;
 			// Call all callbacks with the normalized combo and the event
 			for (const cb of cbs) {
-				try { cb(combo, e); } catch (_) { }
+				cb(combo, e);
 			}
 		}, true);
 		addHandler._installed = true;

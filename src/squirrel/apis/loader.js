@@ -47,10 +47,10 @@ const isSameOriginBase = (base) => {
   };
   const writeStoredPort = (port) => {
     if (!Number.isFinite(port) || port <= 0) return;
-    try { localStorage.setItem(k, String(port)); } catch (_) { }
+    localStorage.setItem(k, String(port));
   };
   const clearStoredPort = () => {
-    try { localStorage.removeItem(k); } catch (_) { }
+    localStorage.removeItem(k);
   };
   const isTauriRuntime = () => {
     if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
@@ -207,10 +207,10 @@ function dataFetcher(path, opts = {}) {
         candidates.unshift('src/' + fsRelPath);
       }
       for (const c of candidates) {
-        try {
+        
           const txt = await fs.readTextFile(c).catch(() => null);
           if (txt && /^<svg[\s>]/i.test(txt.trim()) && !isHtmlFallback(txt)) return { txt, path: c };
-        } catch (_) { }
+        
       }
       return null;
     }
@@ -224,7 +224,7 @@ function dataFetcher(path, opts = {}) {
     // Immediate asset try if no port yet
     if (!port) {
       for (const u of assetCandidates) {
-        try {
+        
           if (looksText || mode === 'text' || mode === 'preview') {
             const r = await fetch(u); if (!r.ok) continue;
             const txt = await r.text();
@@ -235,7 +235,7 @@ function dataFetcher(path, opts = {}) {
           if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
           if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
           const r = await fetch(u); if (!r.ok) continue; return done(u);
-        } catch (_) { }
+        
       }
     }
 
@@ -244,7 +244,7 @@ function dataFetcher(path, opts = {}) {
       return done(out);
     }
     for (const u of primaryCandidates) {
-      try {
+      
         const r = await fetch(u);
         if (!r.ok) continue;
         if (mode === 'arraybuffer') return done(await r.arrayBuffer());
@@ -259,11 +259,11 @@ function dataFetcher(path, opts = {}) {
         }
         if (looksAudio && mode === 'auto') return done(u); // streaming URL path
         return done(u);
-      } catch (_) { }
+      
     }
     for (const u of secondaryCandidates) {
 
-      try {
+      
         if (looksText || mode === 'text' || mode === 'preview') {
 
           const r = await fetch(u); if (!r.ok) continue;
@@ -280,7 +280,7 @@ function dataFetcher(path, opts = {}) {
           const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
         }
         return done(u);
-      } catch (_) { }
+      
     }
 
     delete __inflightData[key];

@@ -9,9 +9,9 @@ const with_callback = (result, callback) => {
 
 const dispatchProjectChanged = (detail = {}) => {
     if (typeof window === 'undefined') return;
-    try {
+    
         window.dispatchEvent(new CustomEvent('squirrel:project-changed', { detail }));
-    } catch (_) { }
+    
 };
 
 const getCurrentUserId = () => {
@@ -115,9 +115,9 @@ export async function list_projects(callback) {
             return id && !fastifyIds.has(String(id));
         });
         if (hasMissing) {
-            try {
+            
                 syncLocalProjectsToFastify({ reason: 'list_projects' }).catch(() => { });
-            } catch (_) { }
+            
         }
     }
 
@@ -185,7 +185,7 @@ export async function load_saved_current_project() {
     }
 
     // Fallback: try reading user atome for current_project_id if available
-    try {
+    
         const userAtome = await get_atome(currentUserId);
         const raw = userAtome?.atome || userAtome?.data || null;
         if (raw && typeof raw === 'object') {
@@ -198,7 +198,7 @@ export async function load_saved_current_project() {
                 return { id: payload.id, name: payload.name };
             }
         }
-    } catch (_) { }
+    
 
     return null;
 }

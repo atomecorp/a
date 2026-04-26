@@ -1606,9 +1606,9 @@ export const mountHomeVoiceSurface = async ({
         }
         if (textOnly) {
             if (state.speaking && state.sessionId && state.api?.stopSpeaking) {
-                try {
+                
                     await state.api.stopSpeaking(state.sessionId, { reason: 'eve_panel_stop' });
-                } catch (_) { }
+                
                 state.speaking = false;
                 updateControls();
             }
@@ -1620,9 +1620,9 @@ export const mountHomeVoiceSurface = async ({
             return;
         }
         if (state.speaking && state.sessionId && state.api?.stopSpeaking) {
-            try {
+            
                 await state.api.stopSpeaking(state.sessionId, { reason: 'eve_panel_stop' });
-            } catch (_) { }
+            
             state.speaking = false;
         }
         if (state.processing) {
@@ -1694,9 +1694,9 @@ export const mountHomeVoiceSurface = async ({
             }
             await stopInterruptListening();
             if (state.sessionId && state.api?.stopSpeaking) {
-                try {
+                
                     await state.api.stopSpeaking(state.sessionId, { reason: 'eve_panel_close' });
-                } catch (_) { }
+                
             }
             state.speaking = false;
             state.processing = false;
@@ -1731,7 +1731,7 @@ export const mountHomeVoiceSurface = async ({
             });
         },
         destroy() {
-        try { state.unsubscribe(); } catch (_) { }
+        state.unsubscribe();
             clearRestartTimer();
             clearInterruptRestartTimer();
             clearTranscriptCommitTimers();

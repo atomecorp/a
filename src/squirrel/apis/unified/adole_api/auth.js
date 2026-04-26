@@ -95,10 +95,10 @@ const loginBackend = async (backend, { phone, password }) => {
     let ok = !!(result?.ok || result?.success);
     let user = normalizeUser(extractUser(result));
     if (ok && !user) {
-        try {
+        
             const me = await meBackend(backend);
             if (me.ok && me.user) user = me.user;
-        } catch (_) { }
+        
     }
     let error = ok ? null : (result?.error || 'login_failed');
     if (ok && !user) {
@@ -108,7 +108,7 @@ const loginBackend = async (backend, { phone, password }) => {
     if (ok && !isPhoneMatch(user, phone)) {
         ok = false;
         user = null;
-        try { adapter?.clearToken?.(); } catch (_) { }
+        adapter?.clearToken?.();
         console.warn(`[Auth] Login phone mismatch on ${backend}: expected ${String(phone || '').slice(0, 4)}***`);
         error = 'phone_mismatch';
     }
@@ -128,10 +128,10 @@ const registerBackend = async (backend, { phone, password, username, visibility 
     const ok = !!(result?.ok || result?.success);
     let user = normalizeUser(extractUser(result));
     if (ok && !user) {
-        try {
+        
             const me = await meBackend(backend);
             if (me.ok && me.user) user = me.user;
-        } catch (_) { }
+        
     }
     return {
         ok,
@@ -205,13 +205,13 @@ const persistFastifyLoginCache = ({ phone, password } = {}) => {
     const plainPassword = String(password || '');
     if (!normalizedPhone || !plainPassword) return;
     if (isAnonymousLikePhone(normalizedPhone)) return;
-    try {
+    
         localStorage.setItem('fastify_login_cache_v1', JSON.stringify({
             phone: normalizedPhone,
             password: plainPassword,
             updated_at: new Date().toISOString()
         }));
-    } catch (_) { }
+    
 };
 
 const ensureFastifyTokenLocal = async () => {
@@ -234,15 +234,15 @@ const ensureFastifyTokenLocal = async () => {
                 const expectedUserId = state?.user?.id ? String(state.user.id) : null;
                 const resolvedUserId = me?.user?.id ? String(me.user.id) : null;
                 if (me?.ok && resolvedUserId && (!expectedUserId || resolvedUserId === expectedUserId)) {
-                    try {
+                    
                         if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
-                    } catch (_) { }
+                    
                     return { ok: true, reason: 'tauri_token_bridge' };
                 }
             } catch (_) {
                 // Ignore and continue with credential cache fallback.
             }
-            try { FastifyAdapter?.clearToken?.(); } catch (_) { }
+            FastifyAdapter?.clearToken?.();
         }
     }
 
@@ -269,9 +269,9 @@ const ensureFastifyTokenLocal = async () => {
             error: loginResult.error || null
         };
     }
-    try {
+    
         if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
-    } catch (_) { }
+    
     return { ok: true, reason: 'cache_login_success' };
 };
 
@@ -292,9 +292,9 @@ const migrateAnonymousWorkspace = async (fromUserId, toUserId) => {
         });
         const ok = !!(res?.ok || res?.success);
         if (ok) {
-            try {
+            
                 syncLocalProjectsToFastify({ reason: 'anonymous-migration' }).catch(() => { });
-            } catch (_) { }
+            
         }
         return { ok, raw: res };
     } catch (e) {
@@ -349,7 +349,7 @@ export const auth = {
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
 
-        try {
+        
             console.log('[Auth][register] start', {
                 phone: maskPhoneForLog(cleanPhone),
                 primary,
@@ -357,7 +357,7 @@ export const auth = {
                 visibility,
                 availability
             });
-        } catch (_) { }
+        
 
         const prevSession = getSessionState();
         const prevAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
@@ -368,12 +368,12 @@ export const auth = {
             username: cleanName,
             visibility
         });
-        try {
+        
             console.log('[Auth][register] primary-result', {
                 backend: primary,
                 ...summarizeBackendAttempt(primaryResult)
             });
-        } catch (_) { }
+        
         let fallbackResult = null;
         let activeBackend = primary;
 
@@ -383,7 +383,7 @@ export const auth = {
         };
         // If register succeeded but did not return a token, try immediate login
         if (primaryResult.ok && !primaryResult.token) {
-            try {
+            
                 const loginResult = await loginBackend(primary, { phone: cleanPhone, password });
                 if (loginResult.ok) {
                     primaryResult = {
@@ -392,7 +392,7 @@ export const auth = {
                         token: loginResult.token || primaryResult.token
                     };
                 }
-            } catch (_) { }
+            
         }
 
         if (!primaryResult.ok && availability[secondary]) {
@@ -402,12 +402,12 @@ export const auth = {
                 username: cleanName,
                 visibility
             });
-            try {
+            
                 console.log('[Auth][register] secondary-result', {
                     backend: secondary,
                     ...summarizeBackendAttempt(fallbackResult)
                 });
-            } catch (_) { }
+            
             response[secondary] = {
                 success: fallbackResult.ok,
                 data: fallbackResult.raw,
@@ -431,12 +431,12 @@ export const auth = {
                 username: cleanName,
                 visibility
             });
-            try {
+            
                 console.log('[Auth][register] mirror-result', {
                     backend: secondary,
                     ...summarizeBackendAttempt(secondaryResult)
                 });
-            } catch (_) { }
+            
             response[secondary] = {
                 success: secondaryResult.ok || secondaryResult.error === 'user_exists',
                 data: secondaryResult.raw,
@@ -454,15 +454,15 @@ export const auth = {
             clearCurrentProjectCache();
 
             if (prevAnonymousId && String(prevAnonymousId) !== String(activeResult.user.id)) {
-                try { await migrateAnonymousWorkspace(prevAnonymousId, activeResult.user.id); } catch (_) { }
+                await migrateAnonymousWorkspace(prevAnonymousId, activeResult.user.id);
             }
 
-            try {
+            
                 syncLocalProjectsToFastify({ reason: 'register' }).catch(() => { });
-            } catch (_) { }
+            
         }
 
-        try {
+        
             console.log('[Auth][register] done', {
                 phone: maskPhoneForLog(cleanPhone),
                 activeBackend,
@@ -470,7 +470,7 @@ export const auth = {
                 sessionMode: getSessionState()?.mode || null,
                 sessionUserId: getSessionState()?.user?.id || null
             });
-        } catch (_) { }
+        
 
         return response;
     },
@@ -492,8 +492,8 @@ export const auth = {
         const prevAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
 
         // Security: clear any stale auth state before attempting a new login
-        try { TauriAdapter?.clearToken?.(); } catch (_) { }
-        try { FastifyAdapter?.clearToken?.(); } catch (_) { }
+        TauriAdapter?.clearToken?.();
+        FastifyAdapter?.clearToken?.();
         clearSessionState();
 
         const primaryResult = await loginBackend(primary, {
@@ -554,22 +554,22 @@ export const auth = {
             clearCurrentProjectCache();
 
             if (prevAnonymousId && String(prevAnonymousId) !== String(loggedUser.id)) {
-                try { await migrateAnonymousWorkspace(prevAnonymousId, loggedUser.id); } catch (_) { }
+                await migrateAnonymousWorkspace(prevAnonymousId, loggedUser.id);
             }
 
-            try {
+            
                 syncLocalProjectsToFastify({ reason: 'login' }).catch(() => { });
-            } catch (_) { }
+            
         }
 
         return response;
     },
 
     async logout() {
-        try { await TauriAdapter?.auth?.logout?.(); } catch (_) { }
-        try { await FastifyAdapter?.auth?.logout?.(); } catch (_) { }
-        try { TauriAdapter?.clearToken?.(); } catch (_) { }
-        try { FastifyAdapter?.clearToken?.(); } catch (_) { }
+        await TauriAdapter?.auth?.logout?.();
+        await FastifyAdapter?.auth?.logout?.();
+        TauriAdapter?.clearToken?.();
+        FastifyAdapter?.clearToken?.();
         clearSessionState();
         clearCurrentProjectCache();
         resetWorkspaceForNextUser({ clearStorage: true, reason: 'logout' });
@@ -585,7 +585,7 @@ export const auth = {
         if (state.mode === 'logged_out') {
             const stored = loadSessionState();
             if (stored && stored.mode && stored.mode !== 'logged_out') {
-                try { await auth.tryAutoLogin(); } catch (_) { }
+                await auth.tryAutoLogin();
                 state = getSessionState();
             }
         }
@@ -633,7 +633,7 @@ export const auth = {
                 backend: primary
             }, { silent: true });
 
-            try {
+            
                 const me = await meBackend(primary);
                 if (me.ok && me.user) {
                     setSessionState({
@@ -648,7 +648,7 @@ export const auth = {
                     clearSessionState();
                     return { authenticated: false, user: null };
                 }
-            } catch (_) { }
+            
 
             return { authenticated: true, user: getSessionState().user };
         }
@@ -742,19 +742,19 @@ export const auth = {
     async ensureFastifyToken() {
         const token = FastifyAdapter?.getToken?.();
         if (token) {
-            try {
+            
                 const me = await meBackend('fastify');
                 if (me?.ok) {
-                    try {
+                    
                         if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
-                    } catch (_) { }
+                    
                     return { ok: true, reason: 'token_valid' };
                 }
-            } catch (_) { }
-            try { FastifyAdapter?.clearToken?.(); } catch (_) { }
-            try {
+            
+            FastifyAdapter?.clearToken?.();
+            
                 if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = true;
-            } catch (_) { }
+            
         }
         try {
             const result = await ensureFastifyTokenLocal();
@@ -916,7 +916,7 @@ export const auth = {
     // Compatibility stubs for legacy sync/machine APIs.
     async sync() {
         if (typeof window !== 'undefined' && window.Squirrel?.SyncEngine?.requestSync) {
-            try { return await window.Squirrel.SyncEngine.requestSync(); } catch (_) { }
+            return await window.Squirrel.SyncEngine.requestSync();
         }
         return { ok: false, error: 'sync_unavailable' };
     },
@@ -943,7 +943,7 @@ export const auth = {
 
     clearView() {
         if (typeof window === 'undefined') return;
-        try { window.dispatchEvent(new CustomEvent('squirrel:view-cleared', { detail: { timestamp: Date.now() } })); } catch (_) { }
+         window.dispatchEvent(new CustomEvent('squirrel:view-cleared', { detail: { timestamp: Date.now() } })); 
     },
 
     signalAuthComplete() {

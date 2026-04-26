@@ -117,7 +117,7 @@ window.grab = (function () {
   };
 
   const resolveSelectableId = (thing, fallbackId = null) => {
-    try {
+    
       if (!thing) return null;
       if (typeof thing === 'string') return thing;
 
@@ -130,7 +130,7 @@ window.grab = (function () {
       // Common object id fields
       const candidate = thing.atome_id || thing.object_id || thing.id || null;
       if (candidate && looksLikeUuid(candidate)) return String(candidate);
-    } catch (_) { }
+    
 
     if (fallbackId && looksLikeUuid(fallbackId)) return String(fallbackId);
     return fallbackId ? String(fallbackId) : null;
@@ -143,11 +143,11 @@ window.grab = (function () {
     let _last = null;
 
     const publish = () => {
-      try {
+      
         window.__selectedAtomeId = _last;
         window.__selectedAtomeIds = Array.from(_selected);
         window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: _last, selected: Array.from(_selected) } }));
-      } catch (_) { }
+      
     };
 
     window.SelectionAPI = {
@@ -195,7 +195,7 @@ window.grab = (function () {
   const enhanceSelectable = (obj, fallbackId = null) => {
     if (!obj) return obj;
     if (obj._enhancedSelection) return obj;
-    try {
+    
       Object.defineProperty(obj, '_enhancedSelection', { value: true, enumerable: false });
 
       Object.defineProperty(obj, 'select', {
@@ -213,7 +213,7 @@ window.grab = (function () {
         },
         enumerable: false
       });
-    } catch (_) { }
+    
     return obj;
   };
 

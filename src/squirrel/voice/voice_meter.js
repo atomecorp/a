@@ -109,15 +109,15 @@ export const mountVoiceMeter = ({
             env.cancelAnimationFrame?.(rafId);
             rafId = 0;
         }
-        try { source?.disconnect?.(); } catch (_) { }
-        try { analyser?.disconnect?.(); } catch (_) { }
+        source?.disconnect?.();
+        analyser?.disconnect?.();
         if (stream) {
-            try {
+            
                 stream.getTracks?.().forEach((track) => track.stop?.());
-            } catch (_) { }
+            
         }
         if (audioContext && typeof audioContext.close === 'function') {
-            try { await audioContext.close(); } catch (_) { }
+            await audioContext.close();
         }
         stream = null;
         audioContext = null;

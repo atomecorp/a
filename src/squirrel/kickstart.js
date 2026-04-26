@@ -137,14 +137,14 @@ async function fetchTextVersion(endpoint) {
 
 function resolveVersionAssetBases() {
   const bases = [''];
-  try {
+  
     const platform = typeof current_platform === 'function' ? current_platform() : '';
     const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
     const localAxumLikePage = kickstartIsLocalAxumLikePage();
     if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
       bases.push('http://127.0.0.1:3000');
     }
-  } catch (_) { }
+  
   return Array.from(new Set(bases.filter(Boolean)));
 }
 
@@ -161,7 +161,7 @@ async function resolveEveVersion() {
 async function resolveServerVersions(apiBases) {
   for (const base of apiBases) {
     const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
-    try {
+    
       const res = await fetch(endpoint, { cache: 'no-store' });
       if (!res || !res.ok) {
         continue;
@@ -173,7 +173,7 @@ async function resolveServerVersions(apiBases) {
           eve: normalizeRuntimeVersion(data.eveVersion || 'unknown')
         };
       }
-    } catch (_) { }
+    
   }
   return null;
 }
@@ -205,14 +205,14 @@ async function loadRuntimeVersions(force = false) {
   }
 
   const resolveApiBases = () => {
-    try {
+    
       const platform = typeof current_platform === 'function' ? current_platform() : '';
       const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
       const localAxumLikePage = kickstartIsLocalAxumLikePage();
       if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
         return ['http://127.0.0.1:3000'];
       }
-    } catch (_) { }
+    
     return [''];
   };
 

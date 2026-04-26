@@ -33,7 +33,7 @@ function current_platform() {
     const explicitAUv3 = !!(window.__AUV3_MODE__ || window.__AUV3__ || (typeof location !== 'undefined' && /[?&](auv3=1|mode=auv3)(?:&|$)/i.test(location.search)));
     if (explicitAUv3 && isIOS) return 'ios_auv3';
     if (isIOS && window.webkit && window.webkit.messageHandlers) {
-      try {
+      
         const mh = window.webkit.messageHandlers;
         const names = Object.keys(mh);
         if (names.length) {
@@ -45,7 +45,7 @@ function current_platform() {
             hasAUv3Bridge = true;
           }
         }
-      } catch (_) { }
+      
     }
     if (window.forceAUv3Mode === true) hasAUv3Bridge = true;
     if (hasAUv3Bridge) return 'ios_auv3';

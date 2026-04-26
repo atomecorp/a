@@ -605,12 +605,12 @@ const findExistingContactForMutation = async (contactsApi, payload = {}) => {
     ].map((entry) => String(entry || '').trim()).filter(Boolean);
 
     for (const seed of seeds) {
-        try {
+        
             const result = await contactsApi.search(seed, { limit: 5 });
             const items = Array.isArray(result?.items) ? result.items : [];
             const matched = items.find((entry) => contactMatchesMutationPayload(entry, payload));
             if (matched) return matched;
-        } catch (_) { }
+        
     }
     return null;
 };

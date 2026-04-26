@@ -130,25 +130,25 @@ const collectSpeechHints = (env, sessionRuntime, sessionId, options = {}) => {
 
     const workingMemory = sessionRuntime?.workingMemory || null;
     if (workingMemory) {
-        try {
+        
             appendSpeechHintsFromValue(hints, workingMemory.getSessionPreferences?.());
-        } catch (_) { }
-        try {
+        
+        
             appendSpeechHintsFromValue(hints, workingMemory.listActiveEntities?.());
-        } catch (_) { }
+        
         for (const domain of ['atome', 'mail', 'contacts', 'calendar']) {
-            try {
+            
                 appendSpeechHintsFromValue(hints, workingMemory.getCurrentItem?.(domain));
-            } catch (_) { }
+            
         }
     }
 
     if (sessionRuntime && sessionId) {
-        try {
+        
             const snapshot = sessionRuntime.getSession(sessionId);
             appendSpeechHintsFromValue(hints, snapshot?.conversation?.active_intent);
             appendSpeechHintsFromValue(hints, snapshot?.conversation?.last_user_text);
-        } catch (_) { }
+        
     }
 
     return Array.from(hints)

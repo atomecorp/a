@@ -460,10 +460,10 @@ function suppressInteractionDuringEdit(ev) {
     if (!isEditModeActive()) return false;
     if (ev) {
         if (ev.cancelable && typeof ev.preventDefault === 'function') {
-            try { ev.preventDefault(); } catch (_) { }
+            ev.preventDefault();
         }
         if (typeof ev.stopPropagation === 'function') {
-            try { ev.stopPropagation(); } catch (_) { }
+            ev.stopPropagation();
         }
     }
     return true;
@@ -886,7 +886,7 @@ function removeFloating(id) {
             });
         }
         if (info.container.parentElement) {
-            try { info.container.parentElement.removeChild(info.container); } catch (_) { }
+            info.container.parentElement.removeChild(info.container);
         }
     }
     orientationSelectionMap.delete(info.id);
@@ -915,7 +915,7 @@ function attachFloatingGripInteractions(info) {
 
         const releasePointerCapture = () => {
             if (pointerId != null && typeof grip.releasePointerCapture === 'function') {
-                try { grip.releasePointerCapture(pointerId); } catch (_) { }
+                grip.releasePointerCapture(pointerId);
             }
             pointerId = null;
         };
@@ -946,7 +946,7 @@ function attachFloatingGripInteractions(info) {
                 releasePointerCapture();
             }, longPressDelay);
             if (pointerId != null && typeof grip.setPointerCapture === 'function') {
-                try { grip.setPointerCapture(pointerId); } catch (_) { }
+                grip.setPointerCapture(pointerId);
             }
             if (isEditModeActive()) {
                 e.preventDefault();
@@ -1032,7 +1032,7 @@ function createFloatingHost(opts = {}) {
         }
         const existingNode = (typeof document !== 'undefined') ? document.getElementById(id) : null;
         if (existingNode && existingNode.parentElement) {
-            try { existingNode.parentElement.removeChild(existingNode); } catch (_) { }
+            existingNode.parentElement.removeChild(existingNode);
         }
     } else {
         id = `intuition-floating-${nextFloatingCounter()}`;
@@ -1205,7 +1205,7 @@ function setupEditModeDrag(el, meta = {}) {
         if (!nameKey) return;
         const capturePointerId = (typeof ev.pointerId === 'number') ? ev.pointerId : null;
         if (capturePointerId != null && typeof el.setPointerCapture === 'function') {
-            try { el.setPointerCapture(capturePointerId); } catch (_) { }
+            el.setPointerCapture(capturePointerId);
         }
         beginMenuItemDrag(ev, {
             el,
@@ -1247,11 +1247,11 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
     const created = document.getElementById(uniqueId);
     if (created) {
         const themeRef = info && info.theme ? info.theme : currentTheme;
-        try { created.dataset.nameKey = datasetNameKey; } catch (_) { }
+        created.dataset.nameKey = datasetNameKey;
         created.dataset.floating = 'true';
-        try { created.dataset.floatingHostId = info.id; } catch (_) { }
+        created.dataset.floatingHostId = info.id;
         if (info.parentFloatingId) {
-            try { created.dataset.parentFloatingId = info.parentFloatingId; } catch (_) { }
+            created.dataset.parentFloatingId = info.parentFloatingId;
         } else if (created.dataset && created.dataset.parentFloatingId) {
             delete created.dataset.parentFloatingId;
         }
@@ -2001,7 +2001,7 @@ function cleanupDragContext(ctx) {
     if (!ctx) return;
     detachRobustGlobalDragListeners(ctx);
     if (ctx.originEl && typeof ctx.originEl.releasePointerCapture === 'function' && ctx.capturePointerId != null) {
-        try { ctx.originEl.releasePointerCapture(ctx.capturePointerId); } catch (_) { }
+        ctx.originEl.releasePointerCapture(ctx.capturePointerId);
         ctx.capturePointerId = null;
     }
     clearFloatingDropPreview(ctx);
@@ -2277,7 +2277,7 @@ function attachToolboxEditBehavior(toolboxEl) {
             enterEditMode();
             editModeState.suppressToolboxClick = true;
         }, longPressDelay);
-        try { toolboxEl.setPointerCapture(pointerId); } catch (_) { }
+        toolboxEl.setPointerCapture(pointerId);
     };
 
     const onPointerMove = (e) => {
@@ -2293,7 +2293,7 @@ function attachToolboxEditBehavior(toolboxEl) {
     const finalize = (e) => {
         if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
         clearTimer();
-        try { toolboxEl.releasePointerCapture(pointerId); } catch (_) { }
+        toolboxEl.releasePointerCapture(pointerId);
         pointerId = null;
     };
 
@@ -2895,7 +2895,7 @@ function attachToolHoldBehavior(el, cfg, def) {
             const defaultBg = currentTheme.tool_bg || '';
             const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
             if (!restoreToggleActive) {
-                try { el.style.background = activeBg; } catch (_) { }
+                el.style.background = activeBg;
             }
         }
         const handler = resolveHoldHandler('active');
@@ -2913,9 +2913,9 @@ function attachToolHoldBehavior(el, cfg, def) {
         holdActive = false;
         if (!openChildrenOnHold && !restoreToggleActive) {
             if (previousBg) {
-                try { el.style.background = previousBg; } catch (_) { }
+                el.style.background = previousBg;
             } else {
-                try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
+                el.style.background = currentTheme.tool_bg || '';
             }
         }
         const handler = resolveHoldHandler('inactive');
@@ -2971,7 +2971,7 @@ function attachToolHoldBehavior(el, cfg, def) {
 function attachToolLockBehavior(el, cfg, def) {
     if (!el) return;
     if (!def && cfg && cfg.nameKey) {
-        try { def = intuition_content[cfg.nameKey]; } catch (_) { }
+        def = intuition_content[cfg.nameKey];
     }
     const longPressAction = (def && typeof def.longPressAction === 'string')
         ? def.longPressAction.trim().toLowerCase()
@@ -3019,11 +3019,11 @@ function attachToolLockBehavior(el, cfg, def) {
     const clearLockVisual = () => {
         el.classList.remove('tool-locked');
         const glow = el.querySelector('.lock-glow');
-        if (glow) try { glow.remove(); } catch (_) { }
+        if (glow) glow.remove();
         if (previousBg) {
-            try { el.style.background = previousBg; } catch (_) { }
+            el.style.background = previousBg;
         } else {
-            try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
+            el.style.background = currentTheme.tool_bg || '';
         }
         delete el.dataset.lockTag;
     };
@@ -3035,7 +3035,7 @@ function attachToolLockBehavior(el, cfg, def) {
         applyLockVisual();
         suppressNextClick = true; // le clic qui suit le long press ne doit pas quitter le lock
         // Appel handler 'lock' (entrée)
-        try { handleToolSemanticEvent('lock', el, intuition_content[el.dataset.nameKey], { phase: 'enter' }); } catch (_) { }
+         handleToolSemanticEvent('lock', el, intuition_content[el.dataset.nameKey], { phase: 'enter' }); 
     };
     const exitLock = () => {
         if (!locking) return;
@@ -3043,7 +3043,7 @@ function attachToolLockBehavior(el, cfg, def) {
         delete el.dataset.locked;
         clearLockVisual();
         // Appel handler 'lock' (sortie)
-        try { handleToolSemanticEvent('lock', el, intuition_content[el.dataset.nameKey], { phase: 'exit' }); } catch (_) { }
+         handleToolSemanticEvent('lock', el, intuition_content[el.dataset.nameKey], { phase: 'exit' }); 
     };
 
     // Toggle par simple clic si déjà en lock
@@ -3128,7 +3128,7 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
     if (isEditModeActive()) return;
     const nameKey = el.dataset && el.dataset.nameKey;
     if (!def && nameKey) {
-        try { def = intuition_content[nameKey]; } catch (_) { }
+        def = intuition_content[nameKey];
     }
 
     const triggerMomentaryPulse = () => {
@@ -3150,21 +3150,21 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
         })();
         const previousTransition = el.style.transition;
         if (!previousTransition || !/background/i.test(previousTransition)) {
-            try { el.style.transition = `background ${Math.max(flashDuration, 80)}ms ease-out`; } catch (_) { }
+             el.style.transition = `background ${Math.max(flashDuration, 80)}ms ease-out`; 
         }
-        try { el.style.background = activeBg; } catch (_) { }
+        el.style.background = activeBg;
         runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
         const revert = () => {
             if (inlineBgBefore) {
-                try { el.style.background = inlineBgBefore; } catch (_) { }
+                el.style.background = inlineBgBefore;
             } else {
-                try { el.style.removeProperty('background'); } catch (_) { }
+                el.style.removeProperty('background');
             }
             runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
             if (previousTransition) {
-                try { el.style.transition = previousTransition; } catch (_) { }
+                el.style.transition = previousTransition;
             } else {
-                try { el.style.removeProperty('transition'); } catch (_) { }
+                el.style.removeProperty('transition');
             }
         };
         if (flashDuration > 0) {
@@ -3187,11 +3187,11 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
         if (isActive) {
             delete el.dataset.simpleActive;
             delete el.dataset.activeTag;
-            try { el.style.background = defaultBg; } catch (_) { }
+            el.style.background = defaultBg;
             runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
         } else {
             el.dataset.simpleActive = 'true';
-            try { el.style.background = activeBg; } catch (_) { }
+            el.style.background = activeBg;
             el.dataset.activeTag = 'true';
             runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
         }
@@ -3219,13 +3219,13 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             if (actionMode === 'momentary') {
                 triggerMomentaryPulse();
                 if (expandChildrenOnClick) {
-                    try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
+                     expandToolInline(el, { id: el.id, nameKey }); 
                 }
                 break;
             }
             // Si tool avec enfants -> comportement historique (expand). Sinon toggle actif simple.
             if (expandChildrenOnClick) {
-                try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
+                 expandToolInline(el, { id: el.id, nameKey }); 
             } else {
                 toggleChildlessActive();
             }
@@ -3358,8 +3358,8 @@ function renderParticleValueFromTheme(cfg) {
     const triggerEvents = window.PointerEvent ? ['pointerdown'] : ['mousedown', 'click'];
     const toggleUnitDropdown = (ev) => {
         if (ev) {
-            try { ev.preventDefault(); } catch (_) { }
-            try { ev.stopPropagation(); } catch (_) { }
+            ev.preventDefault();
+            ev.stopPropagation();
         }
         let entry = unitDropdownRegistry.get(key);
         if (!entry || !entry.wrap || !entry.dropdown) {
@@ -3378,19 +3378,19 @@ function renderParticleValueFromTheme(cfg) {
             } else if (dropdown && typeof dropdown.toggleDropDown === 'function') {
                 dropdown.toggleDropDown();
             } else if (wrapEl) {
-                try { wrapEl.click(); } catch (_) { }
+                wrapEl.click();
             }
             hideUnitDropdownEntry(entry);
             return;
         }
         showUnitDropdownEntry(entry, particleEl);
-        try { positionUnitDropdownEntry(entry); } catch (_) { }
+        positionUnitDropdownEntry(entry);
         if (dropdown && typeof dropdown.openDropDown === 'function') {
             dropdown.openDropDown();
         } else if (dropdown && typeof dropdown.toggleDropDown === 'function') {
             dropdown.toggleDropDown();
         } else if (wrapEl) {
-            try { wrapEl.click(); } catch (_) { }
+            wrapEl.click();
         }
         if (dropdown && typeof dropdown.isDropDownOpen === 'function') {
             const opened = dropdown.isDropDownOpen();
@@ -3447,7 +3447,7 @@ function renderParticleValueFromTheme(cfg) {
         const def = intuition_content[nameKey];
         if (!def) return;
         // Hide current value text
-        try { valueSpan.style.display = 'none'; } catch (_) { }
+        valueSpan.style.display = 'none';
         const inputId = `${cfg.id}__particle_value_input`;
         let input = document.getElementById(inputId);
         if (input) { try { input.remove(); } catch (e) { } }
@@ -3471,7 +3471,7 @@ function renderParticleValueFromTheme(cfg) {
         });
         input.value = String(def.value ?? '');
         // Focus/select
-        try { input.focus(); input.select(); } catch (_) { }
+        input.focus(); input.select();
         const commit = () => {
             const raw = input.value;
             let newVal = raw;
@@ -3483,12 +3483,12 @@ function renderParticleValueFromTheme(cfg) {
                 }
             }
             // Utilise updateParticleValue pour forcer la synchronisation helpers
-            try { input.remove(); } catch (_) { }
+            input.remove();
             dispatchParticleUpdate(newVal);
         };
         const cancel = () => {
-            try { input.remove(); } catch (_) { }
-            try { valueSpan.style.display = ''; } catch (_) { }
+            input.remove();
+            valueSpan.style.display = '';
         };
         input.addEventListener('keydown', (ev) => {
             if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
@@ -3529,7 +3529,7 @@ function renderParticleValueFromTheme(cfg) {
             valueSpan.addEventListener('touchstart', (ev) => {
                 pressed = true;
                 if (lpTimer) clearTimeout(lpTimer);
-                lpTimer = setTimeout(() => { if (pressed) { try { ev.stopPropagation(); } catch (_) { } beginEdit(); } }, 520);
+                lpTimer = setTimeout(() => { if (pressed) { ev.stopPropagation(); beginEdit(); } }, 520);
             }, { passive: true });
             ['touchend', 'touchcancel'].forEach(evName => valueSpan.addEventListener(evName, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
         })();
@@ -3558,7 +3558,7 @@ function renderParticleValueFromTheme(cfg) {
                     lastTapTime = now; lastX = t.clientX; lastY = t.clientY;
                 }, { passive: true });
                 let lpTimer = null; let pressed = false;
-                wrap.addEventListener('touchstart', (ev) => { pressed = true; if (lpTimer) clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (pressed) { try { ev.stopPropagation(); } catch (_) { } beginEdit(); } }, 520); }, { passive: true });
+                wrap.addEventListener('touchstart', (ev) => { pressed = true; if (lpTimer) clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (pressed) { ev.stopPropagation(); beginEdit(); } }, 520); }, { passive: true });
                 ['touchend', 'touchcancel'].forEach(n => wrap.addEventListener(n, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
             })();
         } else {
@@ -3804,7 +3804,7 @@ function renderHelperForItem(cfg) {
                 dispatchParticleUpdate(nv);
             }
         });
-        try { host._helperSlider = slider; } catch (_) { }
+        host._helperSlider = slider;
 
         // Zoom animation on press / touch (parent + option slider width)
         (function attachZoom() {
@@ -3839,7 +3839,7 @@ function renderHelperForItem(cfg) {
                 const doParentZoom = target && Math.abs(target - baseDim) >= 2;
                 if (!doParentZoom && !hasSliderAlt) return; // rien à faire
                 // Empêche la lib interne d'attraper l'event et de repositionner brutalement le handle
-                try { e.stopPropagation(); e.preventDefault(); } catch (_) { }
+                e.stopPropagation(); e.preventDefault();
                 if (doParentZoom) {
                     if (isVertical) {
                         itemEl.style.transition = `height ${dur} ease`;
@@ -3853,13 +3853,13 @@ function renderHelperForItem(cfg) {
                 if (hasSliderAlt) {
                     if (isVertical) {
                         if (!sliderRoot._origHeightStyle) sliderRoot._origHeightStyle = sliderRoot.style.height;
-                        try { sliderRoot.style.transition = `height ${dur} ease`; } catch (_) { }
+                         sliderRoot.style.transition = `height ${dur} ease`; 
                         if (zoomMainSize !== sliderRoot.style.height && zoomMainSize) {
                             sliderRoot.style.height = zoomMainSize;
                         }
                     } else {
                         if (!sliderRoot._origWidthStyle) sliderRoot._origWidthStyle = sliderRoot.style.width;
-                        try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
+                         sliderRoot.style.transition = `width ${dur} ease`; 
                         if (zoomMainSize !== sliderRoot.style.width && zoomMainSize) {
                             sliderRoot.style.width = zoomMainSize;
                         }
@@ -3901,12 +3901,12 @@ function renderHelperForItem(cfg) {
                     const dRaw = cPos - startPos;
                     const d = isVertical ? -dRaw : dRaw; // Inversion verticale: monter augmente, descendre diminue
                     applyDelta(d);
-                    try { ev.stopPropagation(); ev.preventDefault(); } catch (_) { }
+                    ev.stopPropagation(); ev.preventDefault();
                 };
                 const release = (ev) => {
                     if (!dragging) return;
                     if (itemEl.dataset.zoomed) {
-                        try { itemEl.style.transition = `${isVertical ? 'height' : 'width'} ${dur} ease`; } catch (_) { }
+                         itemEl.style.transition = `${isVertical ? 'height' : 'width'} ${dur} ease`; 
                         if (isVertical) {
                             itemEl.style.height = itemEl._origHeightPx + 'px';
                         } else {
@@ -3916,10 +3916,10 @@ function renderHelperForItem(cfg) {
                     }
                     if (sliderRoot) {
                         if (isVertical && sliderRoot._origHeightStyle != null) {
-                            try { sliderRoot.style.transition = `height ${dur} ease`; } catch (_) { }
+                             sliderRoot.style.transition = `height ${dur} ease`; 
                             sliderRoot.style.height = sliderRoot._origHeightStyle;
                         } else if (!isVertical && sliderRoot._origWidthStyle != null) {
-                            try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
+                             sliderRoot.style.transition = `width ${dur} ease`; 
                             sliderRoot.style.width = sliderRoot._origWidthStyle;
                         }
                     }
@@ -3937,14 +3937,14 @@ function renderHelperForItem(cfg) {
             if (sliderRootInit) {
                 if (isVertical) {
                     if (String(sliderRootInit.style.height).endsWith('%')) {
-                        try { sliderRootInit.style.transition = `height ${dur} ease`; } catch (_) { }
+                         sliderRootInit.style.transition = `height ${dur} ease`; 
                     }
                     sliderRootInit.addEventListener('mousedown', onDown, true);
                     sliderRootInit.addEventListener('pointerdown', onDown, true);
                     sliderRootInit.addEventListener('touchstart', onDown, { passive: true, capture: true });
                 } else {
                     if (String(sliderRootInit.style.width).endsWith('%')) {
-                        try { sliderRootInit.style.transition = `width ${dur} ease`; } catch (_) { }
+                         sliderRootInit.style.transition = `width ${dur} ease`; 
                     }
                     sliderRootInit.addEventListener('mousedown', onDown, true);
                     sliderRootInit.addEventListener('pointerdown', onDown, true);
@@ -3980,11 +3980,11 @@ function renderHelperForItem(cfg) {
             // Colorize track / progression / handle from theme
             const trackEl = root.querySelector('.hs-slider-track');
             if (trackEl && currentTheme.slider_track_color) {
-                try { trackEl.style.backgroundColor = currentTheme.slider_track_color; } catch (_) { }
+                trackEl.style.backgroundColor = currentTheme.slider_track_color;
             }
             const progEl = root.querySelector('.hs-slider-progression');
             if (progEl && currentTheme.slider_revealed_track_color) {
-                try { progEl.style.backgroundColor = currentTheme.slider_revealed_track_color; } catch (_) { }
+                progEl.style.backgroundColor = currentTheme.slider_revealed_track_color;
             }
             handleEl.style.width = pxVal + 'px';
             handleEl.style.height = pxVal + 'px';
@@ -3994,7 +3994,7 @@ function renderHelperForItem(cfg) {
             handleEl.style.border = 'none';
             handleEl.style.outline = 'none';
             if (currentTheme.handle_color) {
-                try { handleEl.style.backgroundColor = currentTheme.handle_color; } catch (_) { }
+                handleEl.style.backgroundColor = currentTheme.handle_color;
             }
             // Optionally remove box shadow if undesired; comment out if you want to keep it
             // handleEl.style.boxShadow = 'none';
@@ -4075,7 +4075,7 @@ function renderHelperForItem(cfg) {
             } catch (_) { /* ignore */ }
         }
 
-        try { host._helperButton = buttonObj; } catch (_) { }
+        host._helperButton = buttonObj;
 
         requestAnimationFrame(() => {
             const buttonNode = document.getElementById(btnId);
@@ -4420,27 +4420,27 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
         if (host && host._helperSlider) {
             const comp = host._helperSlider;
             if (typeof comp.setValue === 'function') {
-                try { comp._syncing = true; comp.setValue(currentVal); } catch (_) { } finally { try { comp._syncing = false; } catch (_) { } }
+                try { comp._syncing = true; comp.setValue(currentVal); } finally { comp._syncing = false; }
             }
         } else {
             const sliderEl = document.getElementById(`${elId}__helper_slider`);
             if (sliderEl && typeof sliderEl.setValue === 'function') {
-                try { sliderEl._syncing = true; sliderEl.setValue(currentVal); } catch (_) { } finally { try { sliderEl._syncing = false; } catch (_) { } }
+                try { sliderEl._syncing = true; sliderEl.setValue(currentVal); } finally { sliderEl._syncing = false; }
             }
         }
         // Ensure visual progression update (some slider libs only update on input events)
-        try {
+        
             const root = document.getElementById(`${elId}__helper_slider`);
             if (root) {
                 const prog = root.querySelector('.hs-slider-progression');
                 if (prog) prog.style.width = Math.max(0, Math.min(100, parseFloat(currentVal))) + '%';
             }
-        } catch (_) { }
+        
         // Sync helper button color/state
         const active = !!currentVal && Number(currentVal) !== 0;
         if (host && host._helperButton) {
             const btn = host._helperButton;
-            try {
+            
                 if (btn && typeof btn.getState === 'function' && !btn._internalToggleSync) {
                     const btnState = !!btn.getState();
                     if (btnState !== active) {
@@ -4468,12 +4468,12 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
                     targetEl.style.border = 'none';
                     targetEl.style.outline = 'none';
                 }
-            } catch (_) { }
+            
         } else {
             const btnEl = document.getElementById(`${elId}__helper_button`);
             if (btnEl) {
-                try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch (_) { }
-                try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
+                btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color;
+                btnEl.style.boxShadow = currentTheme.item_shadow;
             }
         }
         const handlerValue = newValue !== undefined ? newValue : currentVal;
@@ -4510,7 +4510,7 @@ function expandToolInline(el, cfg) {
         }
         el.dataset.expanded = 'false';
         // Restore inactive background when collapsed
-        try { el.style.background = currentTheme.tool_bg; } catch (_) { }
+        el.style.background = currentTheme.tool_bg;
         delete el.dataset.activeTag;
         ensureOverflowForcerAtEnd();
         return;
@@ -4533,7 +4533,7 @@ function expandToolInline(el, cfg) {
         }
         if (!childEl) return;
         // Mark as inline child of this tool for collapse logic
-        try { if (childEl.dataset) childEl.dataset.inlineParent = key; } catch (_) { }
+        if (childEl.dataset) childEl.dataset.inlineParent = key;
         // Ensure it becomes visible even though intuitionCommon hides new menu items until slideIn
         childEl.style.visibility = 'visible';
         childEl.style.transform = 'translate3d(0,0,0)';
@@ -4549,7 +4549,7 @@ function expandToolInline(el, cfg) {
     ensureOverflowForcerAtEnd();
     if (el.dataset) el.dataset.expanded = 'true';
     // Highlight as active while expanded
-    try { el.style.background = currentTheme.tool_bg_active; } catch (_) { }
+    el.style.background = currentTheme.tool_bg_active;
     el.dataset.activeTag = 'true';
 }
 const intuitionAddOn = {
@@ -5249,8 +5249,8 @@ function getFloatingFallbackKeys(info) {
 function disposeFloatingSatelliteState(hostInfo, nameKey, state, opts = {}) {
     if (!state) return;
     if (typeof state === 'object' && state.el) {
-        try { setLabelCentered(state.el, false); } catch (_) { }
-        try { setPaletteVisualState(state.el, false); } catch (_) { }
+        setLabelCentered(state.el, false);
+        setPaletteVisualState(state.el, false);
         if (state.el.dataset) {
             delete state.el.dataset.floatingSatellite;
             delete state.el.dataset.floatingSatelliteId;
@@ -5259,9 +5259,9 @@ function disposeFloatingSatelliteState(hostInfo, nameKey, state, opts = {}) {
             delete state.el.dataset.floatingPaletteTitle;
             delete state.el.dataset.sourcePalette;
         }
-        try { state.el.remove(); } catch (_) { }
+        state.el.remove();
         if (state.placeholder && state.placeholder.parentElement) {
-            try { state.placeholder.parentElement.removeChild(state.placeholder); } catch (_) { }
+            state.placeholder.parentElement.removeChild(state.placeholder);
         }
     } else if (typeof state === 'string' && floatingRegistry.has(state) && !opts.preventCascade) {
         removeFloating(state);
@@ -5385,7 +5385,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     if (!satelliteId) return null;
 
     if (el.parentElement) {
-        try { el.parentElement.removeChild(el); } catch (_) { }
+        el.parentElement.removeChild(el);
     }
     if (typeof document !== 'undefined') {
         appendNodeToFloatingLayer(el);
@@ -5671,12 +5671,12 @@ function handleFloatingPaletteClick(el, cfg) {
     placeholder.style.display = 'inline-block';
     placeholder.style.borderRadius = getComputedStyle(el).borderRadius;
     if (el.parentElement) {
-        try { el.parentElement.insertBefore(placeholder, el); } catch (_) { }
+        el.parentElement.insertBefore(placeholder, el);
     }
 
     const satelliteState = createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder, { children });
     if (!satelliteState) {
-        try { placeholder.remove(); } catch (_) { }
+        placeholder.remove();
         return;
     }
 

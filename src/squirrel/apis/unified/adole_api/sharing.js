@@ -45,10 +45,10 @@ const normalizeAtome = (record) => {
 
 const ensureFastifyAtomeExists = async (atomeId) => {
     if (!atomeId) return { ok: false, error: 'missing_atome_id' };
-    try {
+    
         const res = await FastifyAdapter.atome.get(atomeId);
         if (res?.ok || res?.success) return { ok: true, source: 'fastify' };
-    } catch (_) { }
+    
 
     if (!isTauriRuntime()) return { ok: false, error: 'fastify_atome_missing' };
 
@@ -135,7 +135,7 @@ export async function share_atome(phoneNumber, atomeIds, sharePermissions, shari
     }
 
     for (const id of ids) {
-        try { await ensureFastifyAtomeExists(id); } catch (_) { }
+        await ensureFastifyAtomeExists(id);
     }
 
     const permissions = {

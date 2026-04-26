@@ -144,7 +144,7 @@ function makeDraggableWithDrop(element, options = {}) {
   // Configuration CSS de base
   element.style.cursor = cursor;
   element.style.userSelect = 'none';
-  try { element.style.touchAction = 'none'; } catch (_) { }
+  element.style.touchAction = 'none';
 
   // Activer le drag HTML5 si demandé
   if (enableHTML5) {
@@ -242,8 +242,8 @@ function makeDraggableWithDrop(element, options = {}) {
       }
 
       // Empêcher le comportement par défaut
-      try { startEvent.preventDefault(); } catch (_) { }
-      try { startEvent.stopPropagation(); } catch (_) { }
+      startEvent.preventDefault();
+      startEvent.stopPropagation();
 
       isDraggingClassic = true;
 
@@ -283,7 +283,7 @@ function makeDraggableWithDrop(element, options = {}) {
         const deltaX = e.clientX - startX;
         const deltaY = e.clientY - startY;
         onDragMove(element, e.clientX, e.clientY, deltaX, deltaY);
-        try { e.preventDefault(); } catch (_) { }
+        e.preventDefault();
       };
 
       const onEnd = (e) => {
@@ -298,7 +298,7 @@ function makeDraggableWithDrop(element, options = {}) {
         }
 
         if (onDropDetection) {
-          try { onDropDetection(element, e.clientX, e.clientY); } catch (_) { }
+          onDropDetection(element, e.clientX, e.clientY);
         }
 
         removeGhostElement();
@@ -370,7 +370,7 @@ function makeDraggableWithDrop(element, options = {}) {
     else element.removeEventListener('mousedown', onMouseDownClassic);
     element.style.cursor = '';
     element.style.userSelect = '';
-    try { element.style.touchAction = ''; } catch (_) { }
+    element.style.touchAction = '';
     element.draggable = false;
 
     // Nettoyer le ghost s'il existe encore
@@ -406,7 +406,7 @@ function makeDraggable(element, options = {}) {
   // Configuration CSS de base
   element.style.cursor = cursor;
   element.style.userSelect = 'none';
-  try { element.style.touchAction = 'none'; } catch (_) { }
+  element.style.touchAction = 'none';
 
   // Variables pour stocker la translation
   let currentX = 0;
@@ -474,7 +474,7 @@ function makeDraggable(element, options = {}) {
       lastX = e.clientX;
       lastY = e.clientY;
 
-      try { e.preventDefault(); } catch (_) { }
+      e.preventDefault();
     };
 
     const onEnd = () => {
@@ -509,7 +509,7 @@ function makeDraggable(element, options = {}) {
       document.addEventListener('mouseleave', onEnd);
     }
 
-    try { startEvent.preventDefault(); } catch (_) { }
+    startEvent.preventDefault();
   };
 
   const supportsPointer = typeof window !== 'undefined' && 'PointerEvent' in window;
@@ -530,7 +530,7 @@ function makeDraggable(element, options = {}) {
     else element.removeEventListener('mousedown', onMouseDown);
     element.style.cursor = '';
     element.style.userSelect = '';
-    try { element.style.touchAction = ''; } catch (_) { }
+    element.style.touchAction = '';
     element.style.transform = '';
   };
 }

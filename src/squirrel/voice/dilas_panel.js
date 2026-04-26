@@ -145,7 +145,7 @@ const ensureDilasPanel = async ({
                 headerVoiceMeterHost.appendChild(meterCanvas);
             }
             syncHeaderState();
-            try { runtimeUnsubscribe(); } catch (_) { }
+            runtimeUnsubscribe();
             runtimeUnsubscribe = env?.Squirrel?.voice?.subscribe?.(() => {
                 syncHeaderState();
             }) || (() => {});
@@ -212,7 +212,7 @@ const ensureDilasPanel = async ({
             return host?.__eveHomeVoiceSurfaceController || null;
         },
         destroy() {
-            try { runtimeUnsubscribe(); } catch (_) { }
+            runtimeUnsubscribe();
         }
     };
     return env[PANEL_KEY];

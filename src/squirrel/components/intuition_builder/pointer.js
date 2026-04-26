@@ -103,7 +103,7 @@ export function attachRobustGlobalDragListeners(ctx) {
             requestAnimationFrame(() => {
                 if (ctx.dragFinished) return;
                 if (editModeState.dragContext !== ctx) return;
-                try { ctx.originEl.setPointerCapture(ctx.capturePointerId); } catch (_) { }
+                ctx.originEl.setPointerCapture(ctx.capturePointerId);
             });
         };
         ctx.lostPointerCaptureHandler = onLostCapture;
@@ -137,7 +137,7 @@ export function detachRobustGlobalDragListeners(ctx) {
         ctx.windowBlurHandler = null;
     }
     if (ctx.originEl && ctx.lostPointerCaptureHandler) {
-        try { ctx.originEl.removeEventListener('lostpointercapture', ctx.lostPointerCaptureHandler); } catch (_) { }
+        ctx.originEl.removeEventListener('lostpointercapture', ctx.lostPointerCaptureHandler);
         ctx.lostPointerCaptureHandler = null;
     }
     ctx.fallbackMoveHandler = null;

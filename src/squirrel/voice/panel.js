@@ -689,7 +689,7 @@ export const mountVoicePanel = async ({
             probe: state.probe
         }),
         destroy: () => {
-            try { state.unsubscribe(); } catch (_) { }
+            state.unsubscribe();
             launcher.remove();
             panel.remove();
             delete env.__ATOME_VOICE_PANEL_CONTROLLER__;

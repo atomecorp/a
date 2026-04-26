@@ -40,11 +40,11 @@ function isCrossOriginLoopbackFastifyBaseForBrowser(base) {
 
 function clearFastifyRuntimeGlobals() {
     if (typeof window === 'undefined') return;
-    try { window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ = false; } catch (_) { }
-    try { window.__SQUIRREL_FASTIFY_URL__ = ''; } catch (_) { }
-    try { window.__SQUIRREL_TAURI_FASTIFY_URL__ = ''; } catch (_) { }
-    try { window.__SQUIRREL_FASTIFY_WS_API_URL__ = ''; } catch (_) { }
-    try { window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = ''; } catch (_) { }
+    window.__SQUIRREL_ALLOW_FASTIFY_PRIMARY_ON_LOCAL_AXUM__ = false;
+    window.__SQUIRREL_FASTIFY_URL__ = '';
+    window.__SQUIRREL_TAURI_FASTIFY_URL__ = '';
+    window.__SQUIRREL_FASTIFY_WS_API_URL__ = '';
+    window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = '';
 }
 
 function applyDebugConfig(config) {
@@ -230,9 +230,9 @@ function isLikelyTauriLoopbackBase(base, config = null) {
 
 function clearFastifyOverrideStorage() {
     if (typeof window === 'undefined') return;
-    try {
+    
         localStorage.removeItem('squirrel_tauri_fastify_url_override');
-    } catch (_) { }
+    
 }
 
 function isLocalFastifyBase(base) {

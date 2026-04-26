@@ -17,9 +17,9 @@ const authWaiters = new Set();
 
 const dispatchEvent = (name, detail) => {
     if (typeof window === 'undefined') return;
-    try {
+    
         window.dispatchEvent(new CustomEvent(name, { detail }));
-    } catch (_) { }
+    
 };
 
 const clearMatrixDom = () => {
@@ -44,17 +44,17 @@ const clearProjectAndAtomeDom = () => {
         ? viewRoot.querySelectorAll('[data-atome-id], [data-atome], .atome-element, .eve-atome')
         : [];
     atomeElements.forEach((el) => {
-        try { el.remove(); } catch (_) { }
+        el.remove();
     });
     const projectViews = document.querySelectorAll('[id^="project_view_"], #view .project-view');
     projectViews.forEach((el) => {
-        try {
+        
             if (String(el.id || '').startsWith('project_view_')) {
                 el.remove();
             } else {
                 el.innerHTML = '';
             }
-        } catch (_) { }
+        
     });
 };
 
@@ -69,11 +69,11 @@ const resetBackgroundVisual = () => {
         view.style.backgroundRepeat = '';
         view.style.backgroundAttachment = '';
     }
-    try {
+    
         if (window.eveBackground?.setParams && window.eveBackground?.defaults) {
             window.eveBackground.setParams({ ...window.eveBackground.defaults });
         }
-    } catch (_) { }
+    
 };
 
 const clearWindowSessionState = () => {
@@ -118,7 +118,7 @@ const notifyAuthCheckComplete = (state) => {
         anonymous: false
     };
     authWaiters.forEach((resolve) => {
-        try { resolve(result); } catch (_) { }
+        resolve(result);
     });
     authWaiters.clear();
     dispatchEvent('squirrel:auth-checked', result);
@@ -220,16 +220,16 @@ export const resetWorkspaceForNextUser = ({ clearStorage = false, reason = 'logo
     });
 
     if (clearStorage) {
-        try {
+        
             if (typeof localStorage !== 'undefined') {
                 localStorage.clear();
             }
-        } catch (_) { }
-        try {
+        
+        
             if (typeof sessionStorage !== 'undefined') {
                 sessionStorage.clear();
             }
-        } catch (_) { }
+        
     }
 };
 
@@ -278,7 +278,7 @@ export const setCurrentProjectCache = (payload) => {
 
 export const clearCurrentProjectCache = () => {
     currentProjectCache = null;
-    try { removeStorage(CURRENT_PROJECT_KEY); } catch (_) { }
+    removeStorage(CURRENT_PROJECT_KEY);
 };
 
 export const updateWindowProject = (project) => {
