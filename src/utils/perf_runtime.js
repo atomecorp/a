@@ -1,8 +1,6 @@
 const readPerfFlag = (name) => {
-    try {
-        if (typeof window !== 'undefined' && window?.[name] === true) return true;
-        if (typeof globalThis !== 'undefined' && globalThis?.[name] === true) return true;
-    } catch (_) { }
+    if (typeof window !== 'undefined' && window?.[name] === true) return true;
+    if (typeof globalThis !== 'undefined' && globalThis?.[name] === true) return true;
     return false;
 };
 
@@ -34,16 +32,12 @@ export const perfLog = (...args) => {
 export const emitPerfEvent = (name, detail = {}) => {
     if (!perfEventsEnabled()) return false;
     if (typeof window === 'undefined' || typeof CustomEvent !== 'function') return false;
-    try {
-        window.dispatchEvent(new CustomEvent('squirrel:perf', {
-            detail: {
-                name: String(name || ''),
-                atMs: perfNowMs(),
-                ...detail
-            }
-        }));
-        return true;
-    } catch (_) {
-        return false;
-    }
+    window.dispatchEvent(new CustomEvent('squirrel:perf', {
+        detail: {
+            name: String(name || ''),
+            atMs: perfNowMs(),
+            ...detail
+        }
+    }));
+    return true;
 };

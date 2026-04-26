@@ -15,7 +15,7 @@ export function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left
   const svgEl = tmp.querySelector('svg');
   if (!svgEl) return null;
   const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
-  try { svgEl.id = finalId; } catch (_) { }
+  svgEl.id = finalId;
   svgEl.style.position = 'absolute';
   svgEl.style.top = top; svgEl.style.left = left;
 
@@ -28,57 +28,52 @@ export function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left
   const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
   const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
 
-  try {
-    const existingViewBox = svgEl.getAttribute('viewBox');
-    const attrW = parseFloat(svgEl.getAttribute('width')) || null;
-    const attrH = parseFloat(svgEl.getAttribute('height')) || null;
-    if (!existingViewBox) {
-      const vbW = (attrW && attrW > 0) ? attrW : targetW;
-      const vbH = (attrH && attrH > 0) ? attrH : targetH;
-      svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
-    }
-    if (!svgEl.getAttribute('preserveAspectRatio')) {
-      svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    }
-    if (responsive) {
-      // Responsive mode: width/height 100%, parent controls sizing
-      if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
-      if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
-      svgEl.style.width = widthIsPercent ? widthStr : '100%';
-      svgEl.style.height = heightIsPercent ? heightStr : '100%';
-      try { svgEl.dataset.intuitionResponsive = '1'; } catch (_) { }
-    } else {
-      // Fixed mode: also set attributes for backward compatibility
-      try { svgEl.setAttribute('width', String(targetW)); } catch (_) { }
-      try { svgEl.setAttribute('height', String(targetH)); } catch (_) { }
-      svgEl.style.width = targetW + 'px';
-      svgEl.style.height = targetH + 'px';
-    }
-    svgEl.style.overflow = 'visible';
-    svgEl.style.display = 'block';
-  } catch (_) { }
+  const existingViewBox = svgEl.getAttribute('viewBox');
+  const attrW = parseFloat(svgEl.getAttribute('width')) || null;
+  const attrH = parseFloat(svgEl.getAttribute('height')) || null;
+  if (!existingViewBox) {
+    const vbW = (attrW && attrW > 0) ? attrW : targetW;
+    const vbH = (attrH && attrH > 0) ? attrH : targetH;
+    svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+  }
+  if (!svgEl.getAttribute('preserveAspectRatio')) {
+    svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  }
+  if (responsive) {
+    if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
+    if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
+    svgEl.style.width = widthIsPercent ? widthStr : '100%';
+    svgEl.style.height = heightIsPercent ? heightStr : '100%';
+    svgEl.dataset.intuitionResponsive = '1';
+  } else {
+    svgEl.setAttribute('width', String(targetW));
+    svgEl.setAttribute('height', String(targetH));
+    svgEl.style.width = targetW + 'px';
+    svgEl.style.height = targetH + 'px';
+  }
+  svgEl.style.overflow = 'visible';
+  svgEl.style.display = 'block';
+
   if (color || path_color) {
     const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
     shapes.forEach(node => {
       if (path_color) {
-        try { if (node.style) node.style.stroke = path_color; } catch (_) { }
+        if (node.style) node.style.stroke = path_color;
         node.setAttribute('stroke', path_color);
       }
       if (color) {
-        // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
-        try { if (node.style) node.style.fill = color; } catch (_) { }
+        if (node.style) node.style.fill = color;
         const f = node.getAttribute('fill');
         if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
-        // Remove gradient/URL fill if we want solid override
         if (/^url\(/i.test(f || '')) node.removeAttribute('fill');
       }
     });
     if (color) {
-      try { if (svgEl.style) svgEl.style.fill = color; } catch (_) { }
+      if (svgEl.style) svgEl.style.fill = color;
       if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
     }
     if (path_color) {
-      try { if (svgEl.style) svgEl.style.stroke = path_color; } catch (_) { }
+      if (svgEl.style) svgEl.style.stroke = path_color;
       if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
     }
   }
@@ -96,10 +91,8 @@ export function fetch_and_render_svg(path, id, parent_id = 'view', left = '0px',
   }
   return resolveFetcher(path, { mode: 'text' })
     .then(svgData => {
-      // Remove prior element with same id to avoid duplicates
       const prev = document.getElementById(id);
       if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
       return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
-    })
-    .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
+    });
 }
