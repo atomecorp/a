@@ -37,19 +37,38 @@ Same rules as the eVe purge — restated for clarity:
 
 ## 1. Files to Delete Entirely (orphan / temporary)
 
-### 1.1 Confirmed orphans — `apis/unified/v2/` ✅ DONE
+### 1.1 ⚠️ MISTAKE & CORRECTION — `apis/unified/v2/runtime.js` and `apis/unified/v2/storage.js`
 
-| Path | LOC | Status |
-|---|---|---|
-| `src/squirrel/apis/unified/v2/runtime.js` | 19 | ✅ DELETED (Phase A, 2026-04-26) |
-| `src/squirrel/apis/unified/v2/storage.js` | 46 | ✅ DELETED (Phase A, 2026-04-26) |
+**Initial claim (WRONG):** these two files had 0 imports based on a `grep -r 'unified/v2/runtime' .` search and were marked DELETE.
 
-**Why DELETE:**
+**Reality:** sibling files in the same folder import them with **relative paths** (`./runtime.js`, `./storage.js`), which the original grep missed:
 
-- **`v2/runtime.js`** — exports `isTauriRuntime()` and `nowIso()`. `grep -r 'unified/v2/runtime' .` → **zero references** anywhere in the project. Function is duplicated by the canonical `isTauri` in `src/squirrel/apis/serverUrls.js`.
-- **`v2/storage.js`** — wrappers around `localStorage.getItem/setItem` with silent catches on every function (`try { … } catch (_) { }`). **Zero references.** Dead even if it were imported because the silent catches turn it into a violation of §1.3.
+| Importer | Imports |
+|---|---|
+| `src/squirrel/apis/unified/v2/session.js:1-2` | `./storage.js`, `./runtime.js` |
+| `src/squirrel/apis/unified/v2/auth.js:2` | `./runtime.js` |
+| `src/squirrel/apis/unified/v2/sharing.js:2` | `./runtime.js` |
+| `src/squirrel/apis/unified/v2/atomes.js:2` | `./runtime.js` |
 
-**Action:** `rm src/squirrel/apis/unified/v2/runtime.js src/squirrel/apis/unified/v2/storage.js` then run §7 verification.
+**Correction action:** files restored from `HEAD~1` in commit (see Progress Log). Phase A LOC reduction was overstated; actual net reduction is `_tmp_` files only (≈11 KB).
+
+**Larger finding while investigating:** the entire `apis/unified/v2/` folder is actually **functionally orphan in production code**:
+
+- `src/squirrel/apis/unified/index.js` (the barrel) imports only the v1 surface (`UnifiedAuth`, `UnifiedAtome`, `UnifiedUserData`, `UnifiedSync`, `adole.js`) — **never** the `v2/` files.
+- The only references to `v2/*` are the test files inside `v2/` itself (`atomes.local_auth_headers.test.mjs`, `session.current_project.test.mjs`) and they use dynamic `import()` of their siblings.
+- No production code path imports `v2/auth.js`, `v2/atomes.js`, `v2/projects.js`, `v2/session.js`, `v2/sharing.js`, `v2/activities.js`, `v2/runtime.js`, or `v2/storage.js`.
+
+**This means the v2/ folder is either (a) abandoned in-progress migration work, or (b) intentionally vendored for future activation.** Decide which case applies before deleting:
+
+```sh
+# Confirm the orphan status:
+grep -rE "['\"][^'\"]*unified/v2" . --include='*.js' --include='*.mjs' --include='*.cjs' --include='*.html' \
+  | grep -v '/node_modules/' | grep -v '/target/' | grep -v '/.git/' \
+  | grep -v 'apis/unified/v2/'
+# Empty output = no production importer.
+```
+
+If (a), the entire `v2/` folder (~3,200 LOC across 8 files + 2 tests) is deletable as a unit. If (b), the team should add a top-level entry point that exposes it. **Action deferred — this is a product decision, not a mechanical cleanup.**
 
 ### 1.2 Explicitly temporary probes — `tools/_tmp_*` ✅ DONE
 
@@ -361,11 +380,11 @@ After deleting any single file or fixing a batch of silent-catches/fallbacks in 
 
 ## 8. Recommended Order of Execution
 
-### Phase A — Quick wins ✅ DONE (zero-risk file deletions, ≈70 lines)
+### Phase A — Partial (zero-risk file deletions)
 
-1. ✅ **§1.1** — `rm src/squirrel/apis/unified/v2/runtime.js` (19 lines, 0 imports).
-2. ✅ **§1.1** — `rm src/squirrel/apis/unified/v2/storage.js` (46 lines, 0 imports, also has silent catches).
-3. ✅ **§1.2** — `git rm tools/_tmp_ui_block_probe.mjs tools/_tmp_webgpu_promote_probe.mjs`.
+1. ⚠️ **§1.1** — `rm src/squirrel/apis/unified/v2/runtime.js` — **REVERTED** (sibling files in v2/ import it via relative path; see §1.1 correction).
+2. ⚠️ **§1.1** — `rm src/squirrel/apis/unified/v2/storage.js` — **REVERTED** (same reason).
+3. ✅ **§1.2** — `git rm tools/_tmp_ui_block_probe.mjs tools/_tmp_webgpu_promote_probe.mjs` — confirmed orphan, no refs anywhere.
 
 ### Phase B — §SILENT-CATCH-PURGE (the real cleanup, 533 occurrences)
 
@@ -425,4 +444,13 @@ When all phases are complete:
 
 | Date | Phase | Action | Result |
 |---|---|---|---|
-| 2026-04-26 | A | Deleted 4 orphan/tmp files (`v2/runtime.js`, `v2/storage.js`, `_tmp_ui_block_probe.mjs`, `_tmp_webgpu_promote_probe.mjs`) | ✅ Syntax check passes (1031 files). -116 LOC. |
+| 2026-04-26 | A | Commit `b435ca70`: deleted 4 files (`v2/runtime.js`, `v2/storage.js`, `_tmp_ui_block_probe.mjs`, `_tmp_webgpu_promote_probe.mjs`). | ⚠️ Partial mistake: syntax check passed but the v2/ deletions broke import resolution at runtime (sibling v2 files import them via `./` relative path). |
+| 2026-04-26 | A-fix | Restored `v2/runtime.js` and `v2/storage.js` from `HEAD~1`. Investigation revealed the entire `apis/unified/v2/` folder is functionally orphan in PROD (only its own tests reference it) — see §1.1. | ✅ Syntax check passes (1033 files). Net Phase A: only `_tmp_` files removed (≈11 KB, 2 files). |
+
+**Lesson learned (added to triage protocol §7):** for any deletion candidate, run an additional check for relative-path imports inside the same directory:
+```sh
+DIR=$(dirname <file_to_delete>)
+BASE=$(basename <file_to_delete> .js)
+grep -rE "from\s*['\"]\\./${BASE}['\"]" "$DIR"
+```
+A non-empty result means the file is locally imported and must NOT be deleted blindly.
