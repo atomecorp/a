@@ -60,7 +60,8 @@ const main = async () => {
             let parsedBody = null;
             try {
                 parsedBody = JSON.parse(request.postData() || '{}');
-            } catch (_) {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 parsedBody = null;
             }
             report.requests.push({

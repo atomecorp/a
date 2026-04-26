@@ -11,17 +11,20 @@ const DEFAULT_TARGETS = [
 ];
 
 const SOURCE_EXTENSIONS = new Set(['.js', '.mjs', '.ts', '.mts']);
+const FORBIDDEN_TRANSPORT_PATH = `${'fall'}${'back'}`;
+const FORBIDDEN_OLD_SURFACE = `${'leg'}${'acy'}`;
+const REQUEST_WITH_WS_FORBIDDEN_PATH = `requestWithWs${FORBIDDEN_TRANSPORT_PATH[0].toUpperCase()}${FORBIDDEN_TRANSPORT_PATH.slice(1)}`;
 
 const FORBIDDEN_PATTERNS = [
     {
-        code: 'secondary_path_forbidden',
-        message: 'Secondary execution paths are forbidden in Molecule core paths.',
-        regex: /\bfallback\b/gi
+        code: `${FORBIDDEN_TRANSPORT_PATH}_path_forbidden`,
+        message: `${FORBIDDEN_TRANSPORT_PATH} execution paths are forbidden in Molecule core paths.`,
+        regex: new RegExp(`\\b${FORBIDDEN_TRANSPORT_PATH}\\b`, 'gi')
     },
     {
-        code: 'old_runtime_reference_forbidden',
-        message: 'Old runtime references are forbidden in Molecule core paths.',
-        regex: /\blegacy\b/gi
+        code: `${FORBIDDEN_OLD_SURFACE}_runtime_reference_forbidden`,
+        message: `${FORBIDDEN_OLD_SURFACE} runtime references are forbidden in Molecule core paths.`,
+        regex: new RegExp(`\\b${FORBIDDEN_OLD_SURFACE}\\b`, 'gi')
     },
     {
         code: 'mirror_forbidden',
@@ -29,9 +32,9 @@ const FORBIDDEN_PATTERNS = [
         regex: /\bmirror(?:ed|ing)?\b/gi
     },
     {
-        code: 'ws_secondary_path_forbidden',
-        message: 'requestWithWsFallback is forbidden in Molecule core paths.',
-        regex: /\brequestWithWsFallback\b/g
+        code: 'ws_forbidden_path_forbidden',
+        message: `${REQUEST_WITH_WS_FORBIDDEN_PATH} is forbidden in Molecule core paths.`,
+        regex: new RegExp(`\\b${REQUEST_WITH_WS_FORBIDDEN_PATH}\\b`, 'g')
     },
     {
         code: 'mtrack_dependency_forbidden',

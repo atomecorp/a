@@ -8,7 +8,8 @@ function safeParseJson(value) {
   if (typeof value === 'object') return value;
   try {
     return JSON.parse(value);
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     return null;
   }
 }
@@ -27,7 +28,8 @@ async function getEffectiveOwnerIdForAtome(atomeId) {
     );
 
     return pendingRow?.particle_value ? String(pendingRow.particle_value) : null;
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     return null;
   }
 }
@@ -59,7 +61,8 @@ async function listAtomeRealtimeRecipients(atomeId) {
     }
 
     return Array.from(recipients);
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     return [];
   }
 }
@@ -113,7 +116,8 @@ async function inheritPermissionsFromParent({ parentId, childId, childOwnerId, g
         { canCreate: true, shareMode: 'real-time' }
       );
     }
-  } catch (_) { }
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 }
 
 async function broadcastAtomeCreate({ atomeId, atomeType, parentId, particles, senderUserId, senderConnection = null }) {
@@ -153,7 +157,8 @@ async function broadcastAtomeCreate({ atomeId, atomeType, parentId, particles, s
     try {
       const targetUserId = String(recipientId);
       wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-create', targetUserId });
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
   }
 }
 
@@ -192,7 +197,8 @@ async function broadcastAtomeDelete({ atomeId, senderUserId, senderConnection = 
     try {
       const targetUserId = String(recipientId);
       wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
   }
 }
 
@@ -235,7 +241,8 @@ async function broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId, s
       } else {
         wsSendJsonToUser(targetUserId, payload, { scope: 'ws/api', op: 'share-sync', targetUserId });
       }
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
   }
 }
 

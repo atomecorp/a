@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createIcloudLegacyCalendarConnector } from '../src/squirrel/calendar/icloud_legacy_connector.js';
+import { createIcloudPreviousCalendarConnector } from '../src/squirrel/calendar/icloud_previous_connector.js';
 import { selectIcloudAccount } from './icloud_account_discovery.mjs';
 import {
     buildIcloudAuthUserCandidates,
@@ -59,7 +59,7 @@ if (!calendarUrlCandidates.length) {
     throw new Error('icloud_calendar_live_smoke_missing_calendar_url');
 }
 
-const createConnector = (authUser, password, resolvedCalendarUrl) => createIcloudLegacyCalendarConnector({
+const createConnector = (authUser, password, resolvedCalendarUrl) => createIcloudPreviousCalendarConnector({
     auth: {
         email: authUser,
         appPassword: password
@@ -190,8 +190,8 @@ try {
             normalized: !entry.includes('-') && !/\s/.test(entry)
         })),
         calendar_url_candidates: calendarUrlCandidates,
-        provider: 'icloud_caldav_legacy',
-        source_id: 'icloud_legacy',
+        provider: 'icloud_caldav_previous',
+        source_id: 'icloud_previous',
         error: error?.message || String(error),
         details: error?.details || null
     };

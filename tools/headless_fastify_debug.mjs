@@ -21,7 +21,7 @@ const log = (msg, obj) => {
   console.log(line);
 };
 
-const safeEval = async (page, fn, arg = null, fallback = null, timeoutMs = 8000) => {
+const safeEval = async (page, fn, arg = null, secondary = null, timeoutMs = 8000) => {
   try {
     const result = await Promise.race([
       page.evaluate(fn, arg),
@@ -29,7 +29,7 @@ const safeEval = async (page, fn, arg = null, fallback = null, timeoutMs = 8000)
     ]);
     return result;
   } catch (e) {
-    return fallback;
+    return secondary;
   }
 };
 
@@ -39,7 +39,8 @@ const waitFor = async (page, predicate, timeoutMs = 15000, intervalMs = 300) => 
     try {
       const ok = await page.evaluate(predicate);
       if (ok) return true;
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
       // ignore
     }
     await page.waitForTimeout(intervalMs);
@@ -63,7 +64,8 @@ const getAuthSnapshot = async (page, label) => {
           const res = await api.auth.current();
           currentUser = res?.user || null;
         }
-      } catch {
+      } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         currentUser = null;
       }
       try {
@@ -74,7 +76,8 @@ const getAuthSnapshot = async (page, label) => {
             fastifyCount: Array.isArray(res?.fastify?.projects) ? res.fastify.projects.length : null
           };
         }
-      } catch {
+      } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         projectList = null;
       }
     }
@@ -208,7 +211,8 @@ const run = async () => {
           const list = Array.isArray(window.__EVE_PROBE_EVENTS__) ? window.__EVE_PROBE_EVENTS__ : [];
           list.push({ name, detail: detail || null, at: Date.now() });
           window.__EVE_PROBE_EVENTS__ = list.slice(-120);
-        } catch (_) {}
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
       };
       window.addEventListener('eve:tool-state-changed', (event) => push('eve:tool-state-changed', event?.detail || null));
       window.addEventListener('eve:mtrack-panel-closed', (event) => push('eve:mtrack-panel-closed', event?.detail || null));
@@ -225,8 +229,10 @@ const run = async () => {
   await page.setViewportSize({ width: 1280, height: 720 });
   if (clearStorage) {
     await page.evaluate(() => {
-      try { localStorage.clear(); } catch {}
-      try { sessionStorage.clear(); } catch {}
+      try { localStorage.clear(); } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
+      try { sessionStorage.clear(); } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
     });
     await page.reload({ waitUntil: 'networkidle' });
   }

@@ -141,7 +141,8 @@ const collectSnapshot = async (page, label = '') => safeEval(page, async (sample
   try {
     const hash = String(debugState?.activeTimelineHash || state?.activeTimelineHash || '').trim();
     parsedTimeline = hash ? JSON.parse(hash) : null;
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     parsedTimeline = null;
   }
   const parsedClips = Array.isArray(parsedTimeline?.clips) ? parsedTimeline.clips : [];
@@ -308,7 +309,8 @@ const clickPlayButton = async (page) => {
           window.__MTRACK_UI_TRANSPORT_TRACE__.push({
             method,
             args: args.map((arg) => {
-              try { return JSON.parse(JSON.stringify(arg)); } catch (_) { return String(arg); }
+              try { return JSON.parse(JSON.stringify(arg)); } catch (error) {
+        console.warn("[cleanup] operation failed", error); return String(arg); }
             }),
             result: result && typeof result === 'object' ? result : { value: result },
             error,

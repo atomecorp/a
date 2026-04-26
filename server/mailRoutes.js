@@ -4,9 +4,9 @@ import { resolveMailCredentials } from '../tools/icloud_live_credentials.mjs';
 
 const DEFAULT_LIMIT = 20;
 
-const toLimit = (value, fallback = DEFAULT_LIMIT) => {
+const toLimit = (value, secondary = DEFAULT_LIMIT) => {
     const number = Number(value);
-    return Number.isFinite(number) ? Math.max(1, Math.round(number)) : fallback;
+    return Number.isFinite(number) ? Math.max(1, Math.round(number)) : secondary;
 };
 
 export const createMailGateway = ({

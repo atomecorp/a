@@ -60,7 +60,8 @@ function parseJson(value) {
   if (typeof value !== 'string') return null;
   try {
     return JSON.parse(value);
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     return null;
   }
 }
@@ -76,7 +77,8 @@ async function loadPolicy(projectRoot) {
   try {
     const raw = await fs.readFile(policyPath, 'utf8');
     filePolicy = JSON.parse(raw);
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     filePolicy = {};
   }
 
@@ -417,7 +419,8 @@ export async function executeShellCommand({
 
     const killTimer = setTimeout(() => {
       timedOut = true;
-      try { proc.kill('SIGKILL'); } catch (_) { }
+      try { proc.kill('SIGKILL'); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }, timeoutMs);
 
     proc.stdout.on('data', (chunk) => {

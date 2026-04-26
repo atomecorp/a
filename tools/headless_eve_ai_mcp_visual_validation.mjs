@@ -18,7 +18,8 @@ const waitFor = async (page, predicate, timeoutMs = 30000, intervalMs = 200) => 
         try {
             const result = await page.evaluate(predicate);
             if (result) return result;
-        } catch (_) {
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
             // ignore early boot errors
         }
         await page.waitForTimeout(intervalMs);
@@ -26,12 +27,12 @@ const waitFor = async (page, predicate, timeoutMs = 30000, intervalMs = 200) => 
     return null;
 };
 
-const safeEval = async (page, fn, arg = null, fallback = null) => {
+const safeEval = async (page, fn, arg = null, secondary = null) => {
     try {
         return await page.evaluate(fn, arg);
     } catch (error) {
         return {
-            ...(fallback && typeof fallback === 'object' ? fallback : {}),
+            ...(secondary && typeof secondary === 'object' ? secondary : {}),
             __eval_error: String(error?.message || error || 'eval_failed')
         };
     }
@@ -128,10 +129,10 @@ const run = async () => {
                     attempt = await tryLogin(phone, password);
                 }
                 if (!attempt.success) {
-                    const fallbackPhone = `7${String(Date.now()).slice(-7)}`;
-                    const fallbackPassword = `eve_${fallbackPhone}`;
-                    await tryCreate(fallbackPhone, fallbackPassword);
-                    attempt = await tryLogin(fallbackPhone, fallbackPassword);
+                    const secondaryPhone = `7${String(Date.now()).slice(-7)}`;
+                    const secondaryPassword = `eve_${secondaryPhone}`;
+                    await tryCreate(secondaryPhone, secondaryPassword);
+                    attempt = await tryLogin(secondaryPhone, secondaryPassword);
                 }
                 return {
                     ok: true,
@@ -432,14 +433,17 @@ const run = async () => {
             await invoke('ui.select', 'pointer.click', { atome_id: circleId, selection_ids: [circleId] });
             try {
                 window.SelectionAPI?.select?.(circleId);
-            } catch (_) {}
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
             try {
                 window.__selectedAtomeIds = [circleId];
                 window.__selectedAtomeId = circleId;
-            } catch (_) {}
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
             try {
                 window.eveAtomeEditFooterApi?.publishSelection?.(circleId);
-            } catch (_) {}
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
             const result = await invoke('ui.delete.selection', 'pointer.click', { atome_id: circleId, selection_ids: [circleId] });
             const state = await window.Atome.getStateCurrent(circleId).catch(() => null);
             return {
@@ -644,15 +648,17 @@ const run = async () => {
                 || document.getElementById(id)
                 || null;
             const clearSelection = () => {
-                try { window.SelectionAPI?.clear?.(); } catch (_) {}
+                try { window.SelectionAPI?.clear?.(); } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
                 try {
                     window.__selectedAtomeIds = [];
                     window.__selectedAtomeId = null;
-                } catch (_) {}
+                } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
             };
-            const px = (value, fallback = 0) => {
+            const px = (value, secondary = 0) => {
                 const parsed = Number.parseFloat(String(value ?? ''));
-                return Number.isFinite(parsed) ? parsed : fallback;
+                return Number.isFinite(parsed) ? parsed : secondary;
             };
             const createShape = async (id, {
                 left,

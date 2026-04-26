@@ -2705,12 +2705,12 @@ async fn download_recording_handler(
             }
             Err(err) => {
                 println!("[download_recording_handler] Direct read failed: {}", err);
-                // Fall through to downloads dir fallback, then DB lookup
+                // Fall through to downloads dir secondary, then DB lookup
             }
         }
     }
 
-    // Fallback: file may have been stored in downloads/uploads dir instead of recordings.
+    // Secondary: file may have been stored in downloads/uploads dir instead of recordings.
     // This happens when a file is uploaded via the regular upload endpoint but the clip
     // source references /api/recordings/ (e.g. after a sync from another device).
     if let Ok(downloads_dir) = resolve_user_downloads_dir(&state, &user_id).await {
@@ -2718,7 +2718,7 @@ async fn download_recording_handler(
         if downloads_path.exists() {
             if let Ok(bytes) = fs::read(&downloads_path).await {
                 println!(
-                    "[download_recording_handler] ✅ Serving recording from downloads fallback: {:?} ({} bytes)",
+                    "[download_recording_handler] ✅ Serving recording from downloads secondary: {:?} ({} bytes)",
                     downloads_path,
                     bytes.len()
                 );
@@ -2729,7 +2729,7 @@ async fn download_recording_handler(
         }
     }
 
-    // Fallback: Try to find via database (original logic for locally-created recordings)
+    // Secondary: Try to find via database (original logic for locally-created recordings)
     let rel = {
         let atome_state = match &state.atome_state {
             Some(s) => s,
@@ -2793,10 +2793,12 @@ async fn download_recording_handler(
         let owner = match owner_id {
             Some(id) if id == user_id => id,
             Some(id) if !id.is_empty() => {
-                // Owner exists but doesn't match - for now, allow access if user is authenticated
-                // TODO: Implement proper permission checking
-                println!("[download_recording_handler] ⚠️ Owner mismatch but allowing: owner={}, user={}", id, user_id);
-                id
+                println!("[download_recording_handler] Owner mismatch denied: owner={}, user={}", id, user_id);
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "success": false, "error": "Recording access denied" })),
+                )
+                    .into_response();
             }
             _ => {
                 // No owner set - allow authenticated user to access
@@ -3440,7 +3442,7 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                             let token = data.get("token").and_then(|v| v.as_str());
                             local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token)
                         } else {
-                            // Fallback to userId from message (insecure, only for dev)
+                            // Secondary to userId from message (insecure, only for dev)
                             data.get("userId")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("anonymous")
@@ -3604,7 +3606,7 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
-                // Handle legacy API requests (for backward compatibility)
+                // Handle previous API requests (for backward compatibility)
                 if msg_type == "api-request" {
                     let id = data.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     let method = data.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
@@ -3744,7 +3746,7 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
                             continue;
                         }
 
-                        // Handle heartbeat (legacy)
+                        // Handle heartbeat (previous)
                         if data.get("type").and_then(|v| v.as_str()) == Some("heartbeat") {
                             let _ = ws_sender
                                 .send(Message::Text(json!({"type": "heartbeat_ack"}).to_string()))
@@ -3776,7 +3778,7 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
                             continue;
                         }
 
-                        // Echo other messages for now (legacy ack)
+                        // Echo other messages for now (previous ack)
                         let _ = ws_sender
                             .send(Message::Text(json!({"type": "ack", "received": data}).to_string()))
                             .await;

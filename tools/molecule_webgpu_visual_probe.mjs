@@ -268,7 +268,8 @@ const main = async () => {
             await session.dispose();
             const hiddenVideoCountAfterDispose = document.querySelectorAll('video').length;
             for (const objectUrl of window.__moleculeProbeObjectUrls || []) {
-                try { URL.revokeObjectURL(objectUrl); } catch (_) { }
+                try { URL.revokeObjectURL(objectUrl); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
             }
             document.getElementById('molecule_probe_canvas')?.remove();
             document.getElementById('molecule_probe_input')?.remove();

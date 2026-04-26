@@ -18,7 +18,8 @@ const waitFor = async (page, predicate, timeoutMs = 20000, intervalMs = 250) => 
   while ((Date.now() - start) < timeoutMs) {
     try {
       if (await page.evaluate(predicate)) return true;
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
       // Retry until the page runtime is ready.
     }
     await page.waitForTimeout(intervalMs);
@@ -230,7 +231,8 @@ run().catch((error) => {
     existing.ok = false;
     existing.fatal = message;
     fs.writeFileSync(outFile, JSON.stringify(existing, null, 2));
-  } catch {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     // Ignore reporting failures; the process exit code carries the failure.
   }
   console.error(message);

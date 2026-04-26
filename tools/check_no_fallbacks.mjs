@@ -11,7 +11,7 @@ const main = () => {
     const targets = parseTargets(process.argv);
     const result = checkMoleculeGuardrails(targets ? { targets } : undefined);
     if (!result.ok) {
-        console.error(`check_no_fallbacks failed with ${result.violations.length} violation(s):`);
+        console.error(`check_no_forbidden_paths failed with ${result.violations.length} violation(s):`);
         for (const violation of result.violations.slice(0, 80)) {
             console.error(`- [${violation.code}] ${violation.file}`);
             console.error(`  ${violation.message}`);
@@ -19,7 +19,7 @@ const main = () => {
         }
         process.exit(1);
     }
-    console.log(`check_no_fallbacks OK (${result.scanned_files.length} file(s))`);
+    console.log(`check_no_forbidden_paths OK (${result.scanned_files.length} file(s))`);
 };
 
 main();

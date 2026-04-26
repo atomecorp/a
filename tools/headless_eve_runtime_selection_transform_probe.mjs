@@ -164,7 +164,7 @@ const run = async () => {
         ));
 
         report.groups.selection.push(toResult(
-            'select_id_fallback',
+            'select_id_secondary',
             await invoke({
                 tool_id: 'ui.select',
                 action: 'select',

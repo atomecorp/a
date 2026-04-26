@@ -121,12 +121,14 @@ async function getUserOptionalParticles(dataSource, userId) {
             if (key.startsWith('_')) continue;
             let value = row?.particle_value;
             if (typeof value === 'string') {
-                try { value = JSON.parse(value); } catch { }
+                try { value = JSON.parse(value); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
             }
             optional[key] = value;
         }
         return optional;
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return {};
     }
 }
@@ -141,7 +143,8 @@ async function ensureUserAtomeType(dataSource, userId, currentType = null) {
             [now, userId]
         );
         return true;
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return false;
     }
 }
@@ -172,7 +175,8 @@ async function repairMistypedUserAtomes(dataSource) {
             if (changed) repaired += 1;
         }
         return repaired;
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return 0;
     }
 }
@@ -195,7 +199,8 @@ async function upsertUserStateCurrent(dataSource, userId, username, phone, visib
             'SELECT properties, version, project_id FROM state_current WHERE atome_id = ?',
             [userId]
         );
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         existing = [];
     }
 
@@ -203,7 +208,8 @@ async function upsertUserStateCurrent(dataSource, userId, username, phone, visib
     if (existing.length > 0 && existing[0]?.properties) {
         try {
             currentProps = JSON.parse(existing[0].properties);
-        } catch {
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
             currentProps = {};
         }
     }
@@ -305,7 +311,7 @@ export function verifyOTP(phone, code) {
  * @returns {Promise<boolean>}
  */
 export async function sendSMS(phone, message) {
-    // TODO: Integrate with real SMS provider (Twilio, Vonage, OVH, etc.)
+    // Development transport: production deployments must inject a provider before enabling OTP.
     console.log(`📱 [SMS SIMULATION] To: ${phone} | Message: "${message}"`);
     return true;
 }
@@ -470,7 +476,8 @@ async function createUserAtome(dataSource, userId, username, phone, passwordHash
         );
         const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
         console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}] access=${storedAccess}`);
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}] access=${normalizedVisibility}`);
     }
 
@@ -542,7 +549,8 @@ async function findUserByPhone(dataSource, phone) {
         try {
             const storedPhone = JSON.parse(row.phone);
             return normalizePhone(storedPhone) === normalizedPhone;
-        } catch {
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
             return false;
         }
     });
@@ -634,7 +642,7 @@ async function findUserById(dataSource, userId) {
         };
     }
 
-    const fallback = await dataSource.query(
+    const secondary = await dataSource.query(
         `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
@@ -646,8 +654,8 @@ async function findUserById(dataSource, userId) {
         [userId]
     );
 
-    if (fallback.length === 0) return null;
-    const user = fallback[0];
+    if (secondary.length === 0) return null;
+    const user = secondary[0];
     if (!user.password_hash) return null;
     if (user.atome_type && user.atome_type !== 'user') {
         await ensureUserAtomeType(dataSource, user.user_id, user.atome_type);
@@ -906,7 +914,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Helper to safely parse JSON values
             const parseJsonValue = (val) => {
                 if (!val) return null;
-                try { return JSON.parse(val); } catch { return val; }
+                try { return JSON.parse(val); } catch (error) {
+        console.warn("[cleanup] operation failed", error); return val; }
             };
 
             return {
@@ -991,7 +1000,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 );
                 const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
                 console.log(`[Auth] Register stored access=${storedAccess ?? 'unknown'} userId=${principalId}`);
-            } catch (_) {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 console.log(`[Auth] Register stored access=unknown userId=${principalId}`);
             }
 
@@ -1130,7 +1140,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 );
                 const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
                 console.log(`[Auth] Sync-register stored access=${storedAccess ?? 'unknown'} userId=${principalId}`);
-            } catch (_) {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 console.log(`[Auth] Sync-register stored access=unknown userId=${principalId}`);
             }
 
@@ -1202,7 +1213,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     visibility || 'public',
                     new Date().toISOString()
                 );
-            } catch {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 // Ignore state_current sync issues on login.
             }
 
@@ -1276,7 +1288,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Accept token from cookie OR Authorization header
             let token = request.cookies.access_token;
 
-            // Fallback to Authorization header if no cookie
+            // Secondary to Authorization header if no cookie
             if (!token) {
                 const authHeader = request.headers.authorization;
                 if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -1646,7 +1658,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Parse optional if it's a string
             let optional = current.optional;
             if (typeof optional === 'string') {
-                try { optional = JSON.parse(optional); } catch { optional = {}; }
+                try { optional = JSON.parse(optional); } catch (error) {
+        console.warn("[cleanup] operation failed", error); optional = {}; }
             }
 
             return {
@@ -1688,7 +1701,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             let decoded;
             try {
                 decoded = server.jwt.verify(token);
-            } catch {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 reply.clearCookie('access_token', {
                     path: '/',
                     httpOnly: true,
@@ -2193,7 +2207,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             let decoded;
             try {
                 decoded = server.jwt.verify(token, { ignoreExpiration: true });
-            } catch (_) {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 return reply.code(401).send({ success: false, error: 'Invalid token' });
             }
 

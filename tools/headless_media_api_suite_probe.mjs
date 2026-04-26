@@ -51,7 +51,8 @@ const closeBrowser = async (browser) => {
       browser.close(),
       sleep(5000).then(() => ({ timedOut: true }))
     ]);
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     // Probe teardown must not hide the suite result already written to disk.
   }
 };

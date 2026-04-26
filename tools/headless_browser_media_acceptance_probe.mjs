@@ -265,7 +265,8 @@ const collectDesktopInventory = async (page) => safeEval(page, async () => {
         let state = null;
         try {
             state = typeof stateApi === 'function' ? await stateApi(atomeId) : null;
-        } catch (_) {
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
             state = null;
         }
         const props = (state && typeof state === 'object' && (state.properties || state.props || state)) || {};
@@ -699,7 +700,8 @@ const readMtrackState = async (page) => safeEval(page, async () => {
     try {
         const parsed = typeof state?.activeTimelineHash === 'string' ? JSON.parse(state.activeTimelineHash) : null;
         if (Array.isArray(parsed?.clips)) timelineClips = parsed.clips;
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     const clips = Array.isArray(state?.clips) && state.clips.length ? state.clips : timelineClips;
     const previewHost = document.getElementById('eve_mtrack_dialog__preview_host') || document.querySelector('#eve_mtrack_dialog');
     const previewMedia = previewHost?.querySelector?.('[data-role="mtrax-gpu-overlay"] canvas')

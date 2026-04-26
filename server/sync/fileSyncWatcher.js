@@ -40,14 +40,14 @@ function resolveProjectRoot(customRoot) {
     return path.resolve(__dirname, '..', '..');
 }
 
-function normalizeList(value, fallback) {
+function normalizeList(value, secondary) {
     if (Array.isArray(value) && value.length) {
         return value;
     }
     if (typeof value === 'string' && value.trim().length) {
         return value.split(',').map((entry) => entry.trim()).filter(Boolean);
     }
-    return fallback.slice();
+    return secondary.slice();
 }
 
 async function hashFile(absPath, limitBytes = MAX_HASH_BYTES) {
@@ -63,7 +63,8 @@ async function hashFile(absPath, limitBytes = MAX_HASH_BYTES) {
         const hash = createHash('sha1');
         hash.update(data);
         return hash.digest('hex');
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return null;
     }
 }

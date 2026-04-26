@@ -45,7 +45,8 @@ const walk = (fullPath, acc = []) => {
     let stats;
     try {
         stats = fs.statSync(fullPath);
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return acc;
     }
     if (stats.isDirectory()) {

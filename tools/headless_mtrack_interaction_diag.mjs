@@ -17,17 +17,19 @@ const waitFor = async (page, predicate, timeoutMs = 20000, intervalMs = 220) => 
     try {
       const ok = await page.evaluate(predicate);
       if (ok) return true;
-    } catch (_) {}
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
     await page.waitForTimeout(intervalMs);
   }
   return false;
 };
 
-const safeEval = async (page, fn, arg = null, fallback = null) => {
+const safeEval = async (page, fn, arg = null, secondary = null) => {
   try {
     return await page.evaluate(fn, arg);
-  } catch (_) {
-    return fallback;
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
+    return secondary;
   }
 };
 
@@ -68,7 +70,8 @@ const run = async () => {
     await safeEval(page, async (creds) => {
       const api = window.AdoleAPI || null;
       if (!api?.auth?.login) return;
-      try { await api.auth.login(creds.phone, creds.password, creds.phone); } catch (_) {}
+      try { await api.auth.login(creds.phone, creds.password, creds.phone); } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
     }, { phone, password }, null);
     await sleep(900);
     await page.reload({ waitUntil: 'networkidle' });
@@ -231,7 +234,8 @@ const run = async () => {
             role: String(el.getAttribute('data-role') || ''),
             class_name: String(el.className || '')
           }));
-        } catch (_) {
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
           return [];
         }
       })();

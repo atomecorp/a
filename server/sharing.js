@@ -145,7 +145,8 @@ async function resolveUserCurrentProjectId(userId) {
         const user = await db.getAtome(userId);
         const data = user?.data || user?.particles || user?.properties || {};
         return data.current_project_id || data.currentProjectId || null;
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return null;
     }
 }
@@ -177,7 +178,8 @@ export async function createShare(grantorId, atomeId, principalId, permission, o
                     LIMIT 1
                 `, [atomeId]);
                 if (pending?.particle_value) pendingOwner = JSON.parse(pending.particle_value);
-            } catch (_) { }
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
             const hasSharePermission = await db.query('get', `
                 SELECT can_share
@@ -195,7 +197,8 @@ export async function createShare(grantorId, atomeId, principalId, permission, o
                 pending_owner_id: pendingOwner,
                 grantor_can_share: hasSharePermission?.can_share || 0
             });
-        } catch (_) { }
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
         return { success: false, error: 'You do not have permission to share this resource' };
     }
 
@@ -701,7 +704,8 @@ async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
                         senderUserId: sharerId
                     });
                 }
-            } catch (_) { }
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
         }
     }
 
@@ -735,7 +739,8 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
                 projectId = await resolveProjectIdForAtome(atomeIds[0]);
             }
         }
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         projectId = null;
     }
 
@@ -780,7 +785,8 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
             if (inboxId) await db.updateAtome(inboxId, linkPayload);
             if (outboxId) await db.updateAtome(outboxId, linkPayload);
         }
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
     try {
         const stackRes = await pushNotificationToUserStack({
@@ -914,7 +920,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
         if (!progress) break;
     }
 
-    // Fallback for remaining entries (no parent ordering available)
+    // Secondary for remaining entries (no parent ordering available)
     for (const id of Array.from(pending)) {
         const original = originals.get(id);
         if (!original) {
@@ -966,7 +972,8 @@ async function resolveReceiverProjectIdFromState(userId) {
         const state = await db.getStateCurrent(userId);
         const props = state?.properties || {};
         return props.current_project_id || props.currentProjectId || null;
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return null;
     }
 }
@@ -1098,10 +1105,12 @@ async function resolveUserAccessInfo(userId) {
     let visibility = null;
     try {
         access = await db.getParticle(String(userId), 'access');
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     try {
         visibility = await db.getParticle(String(userId), 'visibility');
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     return { access: access || '', visibility: visibility || '' };
 }
 
@@ -1168,7 +1177,8 @@ async function broadcastShareCommand({ recipients, senderUserId, command, params
         };
         try {
             wsSendJsonToUser(String(recipientId), payload, { scope: 'ws/api', op: command, targetUserId: String(recipientId) });
-        } catch (_) { }
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }
 }
 

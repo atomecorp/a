@@ -18,7 +18,8 @@ const waitFor = async (page, predicate, timeoutMs = 30000, intervalMs = 250) => 
     try {
       const ok = await page.evaluate(predicate);
       if (ok) return true;
-    } catch {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
       // ignore and retry
     }
     await page.waitForTimeout(intervalMs);
@@ -80,7 +81,7 @@ const run = async () => {
         commandBusTextAccepted: false,
         commandBusMatrixAccepted: false,
         commandBusContinuousClosed: false,
-        routingLogHasLegacyFallback: null,
+        routingLogHasPreviousSecondary: null,
         errors: []
       };
 
@@ -294,9 +295,9 @@ const run = async () => {
         const routingLog = Array.isArray(window.atome?.tools?.gatewayRoutingLog)
           ? window.atome.tools.gatewayRoutingLog
           : [];
-        out.routingLogHasLegacyFallback = routingLog.some((entry) => {
+        out.routingLogHasPreviousSecondary = routingLog.some((entry) => {
           const route = String(entry?.route || '').toLowerCase();
-          return route.includes('legacy_fallback') || route.includes('legacy_runtime');
+          return route.includes('previous_secondary') || route.includes('previous_runtime');
         });
       } catch (error) {
         out.errors.push(String(error?.message || error));
@@ -378,8 +379,8 @@ const run = async () => {
       ok: integration?.commandBusContinuousClosed === true
     });
     report.checks.push({
-      name: 'no_legacy_fallback_route',
-      ok: integration?.routingLogHasLegacyFallback === false
+      name: 'no_previous_secondary_route',
+      ok: integration?.routingLogHasPreviousSecondary === false
     });
 
     if (Array.isArray(integration?.errors) && integration.errors.length) {

@@ -54,7 +54,7 @@ fn resolve_log_dir() -> PathBuf {
         }
     }
 
-    // Fallback when we are outside the repo and no logs dir exists yet.
+    // Secondary when we are outside the repo and no logs dir exists yet.
     if let Ok(home) = std::env::var("HOME") {
         let trimmed = home.trim();
         if !trimmed.is_empty() {

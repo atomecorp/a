@@ -195,7 +195,8 @@ export async function getFileMetadata(identifier, options = {}) {
         for (const p of (particles || [])) {
             try {
                 meta[p.particle_key] = JSON.parse(p.particle_value);
-            } catch {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 meta[p.particle_key] = p.particle_value;
             }
         }
@@ -229,7 +230,8 @@ export async function getUserFiles(userId) {
         for (const p of (particles || [])) {
             try {
                 meta[p.particle_key] = JSON.parse(p.particle_value);
-            } catch {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 meta[p.particle_key] = p.particle_value;
             }
         }
@@ -265,7 +267,8 @@ export async function getAccessibleFiles(userId) {
         for (const p of (particles || [])) {
             try {
                 meta[p.particle_key] = JSON.parse(p.particle_value);
-            } catch {
+            } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                 meta[p.particle_key] = p.particle_value;
             }
         }
@@ -282,7 +285,7 @@ export async function canAccessFile(fileIdentifier, userId, requiredAccess = 're
     const meta = await getFileMetadata(fileIdentifier);
 
     if (!meta) {
-        // File not in DB - allow access (legacy files)
+        // File not in DB - allow access (previous files)
         return true;
     }
 
@@ -301,14 +304,14 @@ export async function canAccessFile(fileIdentifier, userId, requiredAccess = 're
     const directAccess = await checkPermission(userId, meta.atome_id, permLevel);
     if (directAccess) return true;
 
-    // Fallback: If the file atome_id differs from the identifier, also check the identifier
+    // Secondary: If the file atome_id differs from the identifier, also check the identifier
     // (handles pre-fix data where the recording atome_id != file atome_id)
     if (meta.atome_id !== fileIdentifier && fileIdentifier) {
-        const fallbackAccess = await checkPermission(userId, fileIdentifier, permLevel);
-        if (fallbackAccess) return true;
+        const secondaryAccess = await checkPermission(userId, fileIdentifier, permLevel);
+        if (secondaryAccess) return true;
     }
 
-    // Fallback: Check if any atome that references this file (by file_name) grants access.
+    // Secondary: Check if any atome that references this file (by file_name) grants access.
     // This covers shared recordings where permission was granted on the recording atome
     // but the file was registered under a different atome_id.
     const fileName = meta.file_name || meta.original_name || null;
@@ -328,8 +331,9 @@ export async function canAccessFile(fileIdentifier, userId, requiredAccess = 're
                     if (refAccess) return true;
                 }
             }
-        } catch (_) {
-            // Fallback query failed - continue with denial
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
+            // Secondary query failed - continue with denial
         }
     }
 

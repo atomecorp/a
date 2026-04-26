@@ -45,7 +45,8 @@ export function attachWsApiClientToUser(connection, userId) {
         if (connection._wsApiUserId && connection._wsApiUserId !== userId) {
             detachWsApiClient(connection);
         }
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 
     connection._wsApiUserId = userId;
     if (!wsApiClientsByUserId.has(userId)) wsApiClientsByUserId.set(userId, new Set());
@@ -56,7 +57,8 @@ export function attachWsApiClientToUser(connection, userId) {
         if (flushed > 0) {
             console.log(`📬 Flushed ${flushed} queued message(s) to user ${userId}`);
         }
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
 }
 
 export function detachWsApiClient(connection) {

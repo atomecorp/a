@@ -30,7 +30,8 @@ const safeParseJson = (value) => {
   if (!value) return null;
   try {
     return JSON.parse(value);
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     return null;
   }
 };
@@ -162,7 +163,8 @@ export async function buildUserExportZip({
           const targetRoot = normalizeEntryPath(path.join('data', 'users', userId));
           zip.addLocalFolder(userDir, targetRoot);
         }
-      } catch (_) {
+      } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         // Skip missing user folder
       }
     }

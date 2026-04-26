@@ -11,15 +11,17 @@ const outFile = path.join(outDir, 'mtrack_synthetic_video_preview_probe.json');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const persistReport = (report) => fs.writeFileSync(outFile, JSON.stringify(report, null, 2));
-const safeEval = async (page, fn, arg = null, fallback = null) => {
-  try { return await page.evaluate(fn, arg); } catch (_) { return fallback; }
+const safeEval = async (page, fn, arg = null, secondary = null) => {
+  try { return await page.evaluate(fn, arg); } catch (error) {
+        console.warn("[cleanup] operation failed", error); return secondary; }
 };
 const waitFor = async (page, predicate, timeoutMs = 20000, intervalMs = 220) => {
   const start = Date.now();
   while ((Date.now() - start) < timeoutMs) {
     try {
       if (await page.evaluate(predicate)) return true;
-    } catch (_) {}
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
     await page.waitForTimeout(intervalMs);
   }
   return false;
@@ -74,7 +76,8 @@ const run = async () => {
     await safeEval(page, async (creds) => {
       const api = window.AdoleAPI || null;
       if (!api?.auth?.login) return;
-      try { await api.auth.login(creds.phone, creds.password, creds.phone); } catch (_) {}
+      try { await api.auth.login(creds.phone, creds.password, creds.phone); } catch (error) {
+        console.warn("[cleanup] operation failed", error);}
     }, { phone, password }, null);
     await sleep(900);
     await page.reload({ waitUntil: 'networkidle' });

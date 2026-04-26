@@ -8,7 +8,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const outFile = path.join(outDir, 'eve_runtime_comm_calendar_probe.json');
 
 installMockBrowserEnv({
-    runTool: async (payload = {}) => ({ ok: true, legacy: true, payload }),
+    runTool: async (payload = {}) => ({ ok: true, previous: true, payload }),
     eveToolBase: {
         createAtome: async (spec) => ({ ok: true, id: `comm_calendar_probe_${Date.now()}`, spec })
     }

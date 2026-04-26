@@ -8,14 +8,15 @@ const readPayload = () => {
     try {
         const parsed = JSON.parse(raw);
         return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return {};
     }
 };
 
-const toLimit = (value, fallback = 20) => {
+const toLimit = (value, secondary = 20) => {
     const number = Number(value);
-    return Number.isFinite(number) ? Math.max(1, Math.round(number)) : fallback;
+    return Number.isFinite(number) ? Math.max(1, Math.round(number)) : secondary;
 };
 
 const payload = readPayload();

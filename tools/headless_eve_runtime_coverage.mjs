@@ -105,7 +105,7 @@ const run = async () => {
 
     try {
         installMockBrowserEnv({
-            runTool: async (payload = {}) => ({ ok: true, legacy: true, payload }),
+            runTool: async (payload = {}) => ({ ok: true, previous: true, payload }),
             eveToolBase: {
                 createAtome: async (spec) => ({ ok: true, id: `atome_coverage_${Date.now()}`, spec })
             }

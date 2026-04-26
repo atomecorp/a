@@ -11,7 +11,8 @@ const normalizeStackValue = (value) => {
                 const nested = parsed.items || parsed.data || null;
                 return Array.isArray(nested) ? nested.slice() : [];
             }
-        } catch (_) { }
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }
     if (value && typeof value === 'object') {
         const nested = value.items || value.data || null;

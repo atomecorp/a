@@ -28,7 +28,8 @@ const DEFAULT_MEDIA_CODECS = [
 function nowIso() {
   try {
     return new Date().toISOString();
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     return String(Date.now());
   }
 }
@@ -46,7 +47,8 @@ function makeRequestId() {
 function safeParseJson(raw) {
   try {
     return JSON.parse(raw);
-  } catch (_) {
+  } catch (error) {
+        console.warn("[cleanup] operation failed", error);
     return null;
   }
 }
@@ -134,7 +136,8 @@ export function createVisioService(options = {}) {
     if (!room) return;
     try {
       room.router.close();
-    } catch (_) { }
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     rooms.delete(roomId);
   }
 
@@ -160,13 +163,16 @@ export function createVisioService(options = {}) {
     if (!peer) return;
 
     for (const consumer of peer.consumers.values()) {
-      try { consumer.close(); } catch (_) { }
+      try { consumer.close(); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }
     for (const producer of peer.producers.values()) {
-      try { producer.close(); } catch (_) { }
+      try { producer.close(); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }
     for (const transport of peer.transports.values()) {
-      try { transport.close(); } catch (_) { }
+      try { transport.close(); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }
 
     room.peers.delete(peerId);
@@ -195,12 +201,14 @@ export function createVisioService(options = {}) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         return await verifyJwtToken(request.server, authHeader.slice(7));
-      } catch (_) { }
+      } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }
     if (request.cookies?.access_token) {
       try {
         return await verifyJwtToken(request.server, request.cookies.access_token);
-      } catch (_) { }
+      } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
     }
 
     const headerUserId = request.headers?.['x-user-id'] || request.headers?.['x-userid'] || null;
@@ -453,7 +461,8 @@ export function createVisioService(options = {}) {
       peer.transports.set(transport.id, transport);
       transport.on('dtlsstatechange', (state) => {
         if (state === 'closed') {
-          try { transport.close(); } catch (_) { }
+          try { transport.close(); } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
         }
       });
       transport.on('close', () => {
@@ -729,7 +738,8 @@ export function createVisioService(options = {}) {
           } else {
             detailed.push({ user_id: id });
           }
-        } catch (_) {
+        } catch (error) {
+        console.warn("[cleanup] operation failed", error);
           detailed.push({ user_id: id });
         }
       }

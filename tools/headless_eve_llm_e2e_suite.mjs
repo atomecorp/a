@@ -78,7 +78,8 @@ const addCheck = (name, ok, details = {}) => {
 const toSerializable = (value) => {
     try {
         return JSON.parse(JSON.stringify(value));
-    } catch (_) {
+    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
         return value;
     }
 };
@@ -302,7 +303,8 @@ const run = async () => {
                 try {
                     const anon = await api.security.ensureAnonymousUser({ force: true });
                     anonymousEnsured = !!anon?.ok;
-                } catch (_) { }
+                } catch (error) {
+        console.warn("[cleanup] operation failed", error); }
             }
             if (anonymousEnsured) {
                 const deadline = Date.now() + 5000;
@@ -858,7 +860,8 @@ const run = async () => {
                 await page.evaluate(async ({ eventId }) => {
                     try {
                         window.__eveLlmCalendarHarness?.deleteEvent?.(eventId);
-                    } catch (_) {
+                    } catch (error) {
+        console.warn("[cleanup] operation failed", error);
                         // Ignore cleanup failures.
                     }
                 }, { eventId }).catch(() => {});

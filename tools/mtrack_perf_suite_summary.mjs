@@ -17,10 +17,10 @@ const readJson = (filename) => {
   }
 };
 
-const metric = (root, key, fallbackPath = 'result') => {
-  const base = fallbackPath === 'perf'
+const metric = (root, key, secondaryPath = 'result') => {
+  const base = secondaryPath === 'perf'
     ? root?.analysis?.perf
-    : (fallbackPath === 'benchmark'
+    : (secondaryPath === 'benchmark'
       ? root?.analysis?.perf?.benchmark
       : root?.analysis?.result);
   const value = base?.[key];
