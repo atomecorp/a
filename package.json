@@ -82,7 +82,8 @@
     "generate-keys": "node scripts/generate-server-keys.js",
     "test:server-verification": "node scripts/test-server-verification.js",
     "dev:logs": "node dev/daemon/index.js",
-    "dev:test-ui": "node tests/ui/runner/run-scenario.js"
+    "dev:test-ui": "node tests/ui/runner/run-scenario.js",
+    "probe:browser-media-acceptance": "node tools/headless_browser_media_acceptance_probe.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",

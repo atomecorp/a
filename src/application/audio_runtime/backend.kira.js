@@ -88,7 +88,11 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
   var backend = {
     async init() {
       var runtime = resolveAudioRuntime(window);
-      if (runtime.playback === 'tauri_native_kira' || runtime.playback === 'ios_native_kira') {
+      if (
+        runtime.playback === 'tauri_native_kira'
+        || runtime.playback === 'ios_native_kira'
+        || runtime.playback === 'ios_auv3_native'
+      ) {
         mode = 'tauri';
         await invoke('audio_init');
         console.log('[backend.kira] Initialized via native invoke bridge');
@@ -306,8 +310,10 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
       var runtime = resolveAudioRuntime(window);
       var hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
       var strictNativeKira = hostEnv === 'app'
+        || hostEnv === 'auv3'
         || runtime.playback === 'tauri_native_kira'
-        || runtime.playback === 'ios_native_kira';
+        || runtime.playback === 'ios_native_kira'
+        || runtime.playback === 'ios_auv3_native';
       console.warn('[backend.kira] init failed:', error && error.message ? error.message : error, {
         runtime: runtime.runtime,
         playback: runtime.playback,

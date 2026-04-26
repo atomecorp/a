@@ -1,3 +1,5 @@
+import { CALENDAR_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
+
 const cloneValue = (value) => {
     if (typeof structuredClone === 'function') {
         return structuredClone(value);
@@ -6,11 +8,11 @@ const cloneValue = (value) => {
 };
 
 export const createCalendarSyncState = ({
-    provider = 'icloud_caldav_legacy',
+    provider = CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.id,
     now = () => Date.now()
 } = {}) => {
     const state = {
-        provider: String(provider || 'icloud_caldav_legacy'),
+        provider: String(provider || CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.id),
         cursor: null,
         last_sync_at: null,
         batches: 0,

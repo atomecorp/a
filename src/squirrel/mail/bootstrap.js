@@ -264,238 +264,16 @@ const resolveRuntimeMailCredentials = async (env, options = {}) => {
     };
 };
 
-const applyRemoteSyncPayload = (service, payload = {}, options = {}) => {
-    const items = Array.isArray(payload?.items)
-        ? payload.items
-        : (Array.isArray(payload?.messages) ? payload.messages : []);
-    if (!items.length) {
-        return {
-            ok: true,
-            items: [],
-            stats: typeof service.mailList === 'function' ? service.mailList({ limit: 1 }).stats || null : null,
-            sync: service.syncStatus?.().sync || null,
-            remote: payload
-        };
-    }
-    const applied = service.syncApply(items, {
-        cursor: payload?.cursor ?? payload?.sync?.cursor ?? null,
-        source: {
-            provider: String(payload?.provider || 'fastify_remote_mail').trim() || 'fastify_remote_mail',
-            mailbox: String(payload?.mailbox || options?.mailbox || '').trim() || null,
-            mode: String(payload?.mode || 'remote_sync').trim() || 'remote_sync'
-        }
-    });
-    const listed = service.mailList({
-        mailbox: options?.mailbox,
-        unread_only: options?.unread_only === true,
-        limit: Number.isFinite(Number(options?.limit)) ? Math.max(1, Number(options.limit)) : 20
-    });
-    return {
-        ok: true,
-        items: listed?.items || [],
-        stats: listed?.stats || applied?.stats || null,
-        sync: applied?.sync || null,
-        remote: payload
-    };
-};
-
-const syncThroughFastify = async (env, service, options = {}) => {
-    const fetchImpl = resolveFetch(env);
-    const baseUrl = resolveMailSyncBase(env);
-    if (!fetchImpl || !baseUrl) {
-        return { ok: false, error: 'mail_remote_sync_unavailable' };
-    }
-
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timeoutId = controller
-        ? setTimeout(() => controller.abort(), REMOTE_SYNC_TIMEOUT_MS)
-        : null;
-    try {
-        const response = await fetchImpl(`${baseUrl}/api/eve/mail/sync`, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json'
-            },
-            body: JSON.stringify({
-                initial: options?.initial === true,
-                mailbox: options?.mailbox,
-                limit: Number.isFinite(Number(options?.limit)) ? Math.max(1, Number(options.limit)) : 20,
-                credentials: await resolveRuntimeMailCredentials(env, options)
-            }),
-            ...(controller ? { signal: controller.signal } : {})
-        });
-        const payload = await response.json().catch(() => null);
-        if (env?.console?.log) {
-            env.console.log('[mail:bootstrap:syncThroughFastify] server response:', JSON.stringify({
-                httpStatus: response.status,
-                httpOk: response.ok,
-                payloadOk: payload?.ok,
-                payloadError: payload?.error || null,
-                payloadItemCount: Array.isArray(payload?.items) ? payload.items.length : null,
-                payloadProvider: payload?.provider || null,
-                payloadMode: payload?.mode || null
-            }));
-        }
-        if (!response.ok || payload?.ok !== true) {
-            return {
-                ok: false,
-                error: payload?.error || `mail_remote_sync_http_${response.status}`,
-                message: payload?.message || null
-            };
-        }
-        return applyRemoteSyncPayload(service, payload, options);
-    } catch (error) {
-        return {
-            ok: false,
-            error: error?.name === 'AbortError' ? 'mail_remote_sync_timeout' : 'mail_remote_sync_failed',
-            message: error?.message || String(error)
-        };
-    } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-    }
-};
-
-const sendThroughRemote = async (env, service, draftId, options = {}) => {
-    const fetchImpl = resolveFetch(env);
-    const baseUrl = resolveMailSyncBase(env);
-    if (!fetchImpl || !baseUrl) {
-        return { ok: false, error: 'mail_remote_send_unavailable' };
-    }
-
-    const localDraft = typeof service.mailGetDraft === 'function'
-        ? service.mailGetDraft(draftId)
-        : { ok: false, error: 'mail_draft_not_found' };
-    if (localDraft?.ok !== true || !localDraft?.draft) {
-        return {
-            ok: false,
-            error: localDraft?.error || 'mail_draft_not_found'
-        };
-    }
-
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timeoutId = controller
-        ? setTimeout(() => controller.abort(), REMOTE_SYNC_TIMEOUT_MS)
-        : null;
-    try {
-        const response = await fetchImpl(`${baseUrl}/api/eve/mail/send`, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json'
-            },
-            body: JSON.stringify({
-                draft: localDraft.draft,
-                confirmed: options?.confirmed !== false,
-                credentials: await resolveRuntimeMailCredentials(env, options)
-            }),
-            ...(controller ? { signal: controller.signal } : {})
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || payload?.ok !== true) {
-            return {
-                ok: false,
-                error: payload?.error || `mail_remote_send_http_${response.status}`,
-                message: payload?.message || null
-            };
-        }
-        const applied = typeof service.mailApplyRemoteDelivery === 'function'
-            ? service.mailApplyRemoteDelivery(draftId, payload)
-            : null;
-        return {
-            ok: true,
-            delivered: true,
-            draft: applied?.draft || localDraft.draft,
-            delivery: payload
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            error: error?.name === 'AbortError' ? 'mail_remote_send_timeout' : 'mail_remote_send_failed',
-            message: error?.message || String(error)
-        };
-    } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-    }
-};
-
-const markReadThroughRemote = async (env, service, messageId, options = {}) => {
-    const fetchImpl = resolveFetch(env);
-    const baseUrl = resolveMailSyncBase(env);
-    if (!fetchImpl || !baseUrl) {
-        return { ok: false, error: 'mail_remote_mark_read_unavailable' };
-    }
-
-    const itemResult = typeof service.mailRead === 'function'
-        ? service.mailRead(messageId)
-        : { ok: false, error: 'mail_not_found' };
-    if (itemResult?.ok !== true || !itemResult?.item) {
-        return {
-            ok: false,
-            error: itemResult?.error || 'mail_not_found'
-        };
-    }
-
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timeoutId = controller
-        ? setTimeout(() => controller.abort(), REMOTE_SYNC_TIMEOUT_MS)
-        : null;
-    try {
-        const response = await fetchImpl(`${baseUrl}/api/eve/mail/mark-read`, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: itemResult.item,
-                read: options?.read !== false,
-                credentials: await resolveRuntimeMailCredentials(env, options)
-            }),
-            ...(controller ? { signal: controller.signal } : {})
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || payload?.ok !== true) {
-            return {
-                ok: false,
-                error: payload?.error || `mail_remote_mark_read_http_${response.status}`,
-                message: payload?.message || null
-            };
-        }
-        return {
-            ok: true,
-            item: typeof service.mailRead === 'function'
-                ? service.mailRead(messageId)?.item || itemResult.item
-                : itemResult.item,
-            remote: payload
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            error: error?.name === 'AbortError' ? 'mail_remote_mark_read_timeout' : 'mail_remote_mark_read_failed',
-            message: error?.message || String(error)
-        };
-    } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-    }
-};
-
-const moveMessageThroughRemote = async (env, service, messageId, {
-    action = 'archive',
-    mailbox = action === 'delete' ? 'trash' : 'archive',
-    remote_mailbox = action === 'delete' ? 'Trash' : 'Archive'
+const callRemoteMailEndpoint = async (env, path, {
+    body = {},
+    unavailableError = 'mail_remote_unavailable',
+    timeoutError = 'mail_remote_timeout',
+    failedError = 'mail_remote_failed'
 } = {}) => {
     const fetchImpl = resolveFetch(env);
     const baseUrl = resolveMailSyncBase(env);
     if (!fetchImpl || !baseUrl) {
-        return { ok: false, error: `mail_remote_${action}_unavailable` };
-    }
-
-    const itemResult = typeof service.mailRead === 'function'
-        ? service.mailRead(messageId)
-        : { ok: false, error: 'mail_not_found' };
-    if (itemResult?.ok !== true || !itemResult?.item) {
-        return {
-            ok: false,
-            error: itemResult?.error || 'mail_not_found'
-        };
+        return { ok: false, error: unavailableError };
     }
 
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -503,45 +281,171 @@ const moveMessageThroughRemote = async (env, service, messageId, {
         ? setTimeout(() => controller.abort(), REMOTE_SYNC_TIMEOUT_MS)
         : null;
     try {
-        const response = await fetchImpl(`${baseUrl}/api/eve/mail/${action}`, {
+        const response = await fetchImpl(`${baseUrl}${path}`, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json'
             },
-            body: JSON.stringify({
-                message: itemResult.item,
-                mailbox,
-                remote_mailbox,
-                credentials: await resolveRuntimeMailCredentials(env, {})
-            }),
+            body: JSON.stringify(body),
             ...(controller ? { signal: controller.signal } : {})
         });
         const payload = await response.json().catch(() => null);
         if (!response.ok || payload?.ok !== true) {
             return {
                 ok: false,
-                error: payload?.error || `mail_remote_${action}_http_${response.status}`,
+                error: payload?.error || `${failedError}_http_${response.status}`,
                 message: payload?.message || null
             };
         }
-        const localResult = action === 'delete'
-            ? await service.mailDelete(messageId, { remote_mailbox })
-            : await service.mailArchive(messageId, { remote_mailbox });
-        return {
-            ok: localResult?.ok === true,
-            item: localResult?.item || itemResult.item,
-            remote: payload
-        };
+        return payload;
     } catch (error) {
         return {
             ok: false,
-            error: error?.name === 'AbortError' ? `mail_remote_${action}_timeout` : `mail_remote_${action}_failed`,
+            error: error?.name === 'AbortError' ? timeoutError : failedError,
             message: error?.message || String(error)
         };
     } finally {
         if (timeoutId) clearTimeout(timeoutId);
     }
 };
+
+const buildRemoteMailCredentials = ({
+    provider = 'custom_imap_smtp',
+    auth = {},
+    imap = {},
+    smtp = {},
+    mailbox = 'INBOX'
+} = {}) => {
+    const email = String(auth?.username || auth?.email || '').trim();
+    return {
+        provider: String(provider || 'custom_imap_smtp').trim() || 'custom_imap_smtp',
+        email,
+        username: email,
+        password: String(auth?.password || '').trim(),
+        mailbox: String(mailbox || 'INBOX').trim() || 'INBOX',
+        imap: {
+            host: String(imap?.host || '').trim(),
+            port: Number(imap?.port) || 993,
+            security: String(imap?.security || 'tls').trim() || 'tls'
+        },
+        smtp: {
+            host: String(smtp?.host || '').trim(),
+            port: Number(smtp?.port) || 587,
+            security: String(smtp?.security || 'starttls').trim() || 'starttls'
+        }
+    };
+};
+
+const buildRemoteMailMessage = (request = {}) => ({
+    message_id: String(request?.message_id || '').trim() || null,
+    mailbox: String(request?.local_mailbox || request?.mailbox || '').trim() || null,
+    source: {
+        provider: String(request?.provider || 'custom_imap_smtp').trim() || 'custom_imap_smtp',
+        mailbox: String(request?.local_mailbox || request?.mailbox || '').trim() || null,
+        remote_mailbox: String(request?.mailbox || '').trim() || null
+    },
+    meta: {
+        uid: String(request?.uid || '').trim() || null
+    }
+});
+
+const mergeRemoteMailConnectorRequest = (baseConfig = {}, request = {}) => ({
+    provider: request?.provider || baseConfig?.provider,
+    auth: request?.auth && typeof request.auth === 'object'
+        ? { ...(baseConfig?.auth || {}), ...request.auth }
+        : { ...(baseConfig?.auth || {}) },
+    imap: request?.imap && typeof request.imap === 'object'
+        ? { ...(baseConfig?.imap || {}), ...request.imap }
+        : { ...(baseConfig?.imap || {}) },
+    smtp: request?.smtp && typeof request.smtp === 'object'
+        ? { ...(baseConfig?.smtp || {}), ...request.smtp }
+        : { ...(baseConfig?.smtp || {}) },
+    mailbox: request?.mailbox || request?.local_mailbox || baseConfig?.mailbox || 'INBOX',
+    local_mailbox: request?.local_mailbox || request?.mailbox || baseConfig?.mailbox || 'INBOX',
+    uid: request?.uid,
+    read: request?.read,
+    destination_mailbox: request?.destination_mailbox,
+    destination_local_mailbox: request?.destination_local_mailbox,
+    message_id: request?.message_id
+});
+
+const createRemoteImapClientFactory = (env, baseConfig = {}) => async () => ({
+    async fetchInitialMailbox(request = {}) {
+        const remoteRequest = mergeRemoteMailConnectorRequest(baseConfig, request);
+        return callRemoteMailEndpoint(env, '/api/eve/mail/sync', {
+            body: {
+                initial: true,
+                mailbox: remoteRequest.local_mailbox,
+                limit: Number.isFinite(Number(request?.limit)) ? Math.max(1, Number(request.limit)) : 20,
+                credentials: buildRemoteMailCredentials(remoteRequest)
+            },
+            unavailableError: 'mail_remote_sync_unavailable',
+            timeoutError: 'mail_remote_sync_timeout',
+            failedError: 'mail_remote_sync_failed'
+        });
+    },
+    async fetchDelta(request = {}) {
+        const remoteRequest = mergeRemoteMailConnectorRequest(baseConfig, request);
+        return callRemoteMailEndpoint(env, '/api/eve/mail/sync', {
+            body: {
+                initial: false,
+                mailbox: remoteRequest.local_mailbox,
+                limit: Number.isFinite(Number(request?.limit)) ? Math.max(1, Number(request.limit)) : 20,
+                cursor: request?.cursor ?? null,
+                credentials: buildRemoteMailCredentials(remoteRequest)
+            },
+            unavailableError: 'mail_remote_sync_unavailable',
+            timeoutError: 'mail_remote_sync_timeout',
+            failedError: 'mail_remote_sync_failed'
+        });
+    },
+    async markRead(request = {}) {
+        const remoteRequest = mergeRemoteMailConnectorRequest(baseConfig, request);
+        return callRemoteMailEndpoint(env, '/api/eve/mail/mark-read', {
+            body: {
+                message: buildRemoteMailMessage(remoteRequest),
+                read: request?.read !== false,
+                credentials: buildRemoteMailCredentials(remoteRequest)
+            },
+            unavailableError: 'mail_remote_mark_read_unavailable',
+            timeoutError: 'mail_remote_mark_read_timeout',
+            failedError: 'mail_remote_mark_read_failed'
+        });
+    },
+    async moveMessage(request = {}) {
+        const remoteRequest = mergeRemoteMailConnectorRequest(baseConfig, request);
+        const action = String(request?.destination_local_mailbox || '').trim().toLowerCase() === 'trash'
+            ? 'delete'
+            : 'archive';
+        return callRemoteMailEndpoint(env, `/api/eve/mail/${action}`, {
+            body: {
+                message: buildRemoteMailMessage(remoteRequest),
+                mailbox: request?.destination_local_mailbox,
+                remote_mailbox: request?.destination_mailbox,
+                credentials: buildRemoteMailCredentials(remoteRequest)
+            },
+            unavailableError: `mail_remote_${action}_unavailable`,
+            timeoutError: `mail_remote_${action}_timeout`,
+            failedError: `mail_remote_${action}_failed`
+        });
+    }
+});
+
+const createRemoteSmtpClientFactory = (env, baseConfig = {}) => async () => ({
+    async sendDraft(request = {}) {
+        const remoteRequest = mergeRemoteMailConnectorRequest(baseConfig, request);
+        return callRemoteMailEndpoint(env, '/api/eve/mail/send', {
+            body: {
+                draft: request?.draft,
+                confirmed: request?.confirmed !== false,
+                credentials: buildRemoteMailCredentials(remoteRequest)
+            },
+            unavailableError: 'mail_remote_send_unavailable',
+            timeoutError: 'mail_remote_send_timeout',
+            failedError: 'mail_remote_send_failed'
+        });
+    }
+});
 
 const installMailGlobals = (env, api) => {
     env.Squirrel = env.Squirrel || {};
@@ -582,6 +486,63 @@ const resolveSecureAuthOptions = async (env, options = {}) => {
     };
 };
 
+const createRuntimeMailConnector = async (env, options = {}) => {
+    const runtimeCredentials = await resolveRuntimeMailCredentials(env, options);
+    if (!hasCompleteRuntimeMailCredentials(runtimeCredentials)) {
+        return null;
+    }
+    const connectorOptions = {
+        provider: runtimeCredentials.provider,
+        auth: {
+            username: runtimeCredentials.username || runtimeCredentials.email,
+            password: runtimeCredentials.password
+        },
+        imap: runtimeCredentials.imap,
+        smtp: runtimeCredentials.smtp,
+        mailbox: runtimeCredentials.mailbox
+    };
+    if (!isNodeRuntime(env)) {
+        connectorOptions.imapClientFactory = createRemoteImapClientFactory(env, connectorOptions);
+        connectorOptions.smtpClientFactory = createRemoteSmtpClientFactory(env, connectorOptions);
+    }
+    return createIcloudMailConnector(connectorOptions);
+};
+
+const createConfiguredMailConnector = async (env, options = {}) => {
+    const resolvedOptions = await resolveSecureAuthOptions(env, options);
+    const connectorOptions = {
+        provider: resolvedOptions.provider,
+        auth: resolvedOptions.auth,
+        imap: resolvedOptions.imap,
+        smtp: resolvedOptions.smtp,
+        mailbox: resolvedOptions.mailbox
+    };
+    if (typeof resolvedOptions.imapClientFactory === 'function') {
+        connectorOptions.imapClientFactory = resolvedOptions.imapClientFactory;
+    } else if (!isNodeRuntime(env)) {
+        connectorOptions.imapClientFactory = createRemoteImapClientFactory(env, connectorOptions);
+    }
+    if (typeof resolvedOptions.smtpClientFactory === 'function') {
+        connectorOptions.smtpClientFactory = resolvedOptions.smtpClientFactory;
+    } else if (!isNodeRuntime(env)) {
+        connectorOptions.smtpClientFactory = createRemoteSmtpClientFactory(env, connectorOptions);
+    }
+    return createIcloudMailConnector(connectorOptions);
+};
+
+const ensureMailConnector = async (env, options = {}) => {
+    const service = getOrCreateService(env);
+    if (service.connectorStatus().configured) {
+        return service.getConnector();
+    }
+    const connector = await createRuntimeMailConnector(env, options);
+    if (!connector) {
+        return null;
+    }
+    service.setConnector(connector);
+    return connector;
+};
+
 export const createGlobalMailApi = ({
     env = globalThis
 } = {}) => {
@@ -605,19 +566,8 @@ export const createGlobalMailApi = ({
         },
         async markRead(messageId, options = {}) {
             const service = getOrCreateService(env);
-            const localResult = await service.mailMarkRead(messageId, options);
-            if (localResult?.ok !== true || isNodeRuntime(env) || service.connectorStatus().configured) {
-                return localResult;
-            }
-            const remoteResult = await markReadThroughRemote(env, service, messageId, options);
-            if (remoteResult?.ok === true) {
-                return remoteResult;
-            }
-            return {
-                ...localResult,
-                remote_error: remoteResult?.error || null,
-                remote_message: remoteResult?.message || null
-            };
+            await ensureMailConnector(env, options);
+            return service.mailMarkRead(messageId, options);
         },
         async markUnread(messageId, options = {}) {
             return this.markRead(messageId, {
@@ -647,8 +597,7 @@ export const createGlobalMailApi = ({
             return getOrCreateService(env).setConnector(connector);
         },
         async configureIcloudConnector(options = {}) {
-            const resolvedOptions = await resolveSecureAuthOptions(env, options);
-            const connector = createIcloudMailConnector(resolvedOptions);
+            const connector = await createConfiguredMailConnector(env, options);
             return getOrCreateService(env).setConnector(connector);
         },
         connectorStatus() {
@@ -656,58 +605,37 @@ export const createGlobalMailApi = ({
         },
         async archive(messageId, options = {}) {
             const service = getOrCreateService(env);
-            if (service.connectorStatus().configured) {
-                return service.mailArchive(messageId, options);
-            }
-            if (!isNodeRuntime(env)) {
-                return moveMessageThroughRemote(env, service, messageId, {
-                    action: 'archive',
-                    mailbox: 'archive',
-                    remote_mailbox: options?.remote_mailbox || 'Archive'
-                });
-            }
+            await ensureMailConnector(env, options);
             return service.mailArchive(messageId, options);
         },
         async delete(messageId, options = {}) {
             const service = getOrCreateService(env);
-            if (service.connectorStatus().configured) {
-                return service.mailDelete(messageId, options);
-            }
-            if (!isNodeRuntime(env)) {
-                return moveMessageThroughRemote(env, service, messageId, {
-                    action: 'delete',
-                    mailbox: 'trash',
-                    remote_mailbox: options?.remote_mailbox || 'Trash'
-                });
-            }
+            await ensureMailConnector(env, options);
             return service.mailDelete(messageId, options);
         },
         async send(draftId, options = {}) {
             const service = getOrCreateService(env);
-            if (service.connectorStatus().configured) {
-                return service.mailSend(draftId, options);
-            }
-            if (!isNodeRuntime(env)) {
-                return sendThroughRemote(env, service, draftId, options);
-            }
+            await ensureMailConnector(env, options);
             return service.mailSend(draftId, options);
         },
         syncApply(messages = [], options = {}) {
             return getOrCreateService(env).syncApply(messages, options);
         },
-        syncInitial(options = {}) {
-            return getOrCreateService(env).syncInitial(options);
+        async syncInitial(options = {}) {
+            const service = getOrCreateService(env);
+            await ensureMailConnector(env, options);
+            return service.syncInitial(options);
         },
-        syncIncremental(options = {}) {
-            return getOrCreateService(env).syncIncremental(options);
+        async syncIncremental(options = {}) {
+            const service = getOrCreateService(env);
+            await ensureMailConnector(env, options);
+            return service.syncIncremental(options);
         },
         async syncPull(options = {}) {
             const service = getOrCreateService(env);
-            if (service.connectorStatus().configured) {
+            const connector = await ensureMailConnector(env, options);
+            if (connector) {
                 return service.syncPull(options);
-            }
-            if (!isNodeRuntime(env)) {
-                return syncThroughFastify(env, service, options);
             }
             return { ok: false, error: 'mail_connector_missing' };
         },
@@ -733,7 +661,8 @@ export const createGlobalMailApi = ({
                 };
             }
 
-            if (service.connectorStatus().configured) {
+            const connector = await ensureMailConnector(env, options);
+            if (connector) {
                 const syncResult = await service.syncPull(options);
                 if (syncResult?.ok === true) return syncResult;
                 if (hasIndexedMail) {
@@ -748,32 +677,6 @@ export const createGlobalMailApi = ({
                     };
                 }
                 return syncResult;
-            }
-            if (!isNodeRuntime(env)) {
-                const mirrored = await syncThroughFastify(env, service, options);
-                if (env?.console?.log) {
-                    env.console.log('[mail:bootstrap:ensureReady] syncThroughFastify result:', JSON.stringify({
-                        ok: mirrored?.ok,
-                        error: mirrored?.error || null,
-                        itemCount: Array.isArray(mirrored?.items) ? mirrored.items.length : null,
-                        hasRemote: !!mirrored?.remote,
-                        remoteOk: mirrored?.remote?.ok,
-                        remoteItemCount: Array.isArray(mirrored?.remote?.items) ? mirrored.remote.items.length : null
-                    }));
-                }
-                if (mirrored?.ok === true) return mirrored;
-                if (hasIndexedMail) {
-                    return {
-                        ok: true,
-                        cached: true,
-                        sync_error: mirrored?.error || null,
-                        items: service.mailList({
-                            limit: Number.isFinite(Number(options?.limit)) ? Math.max(1, Number(options.limit)) : 20
-                        }).items,
-                        stats: service.mailList({ limit: 1 }).stats || null
-                    };
-                }
-                return mirrored;
             }
             if (hasIndexedMail) {
                 return {

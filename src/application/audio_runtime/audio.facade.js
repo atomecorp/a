@@ -1,12 +1,11 @@
 import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
 // Squirrel AV Audio Facade — Unified Audio Engine entry point
-// Exposes Squirrel.av.audio with a switchable backend (kira | iplug)
-// - Primary backend: kira (Tauri native CPAL+Kira / WASM Kira)
-// - Bridge backend: iplug (AUv3 swiftBridge, deprecated for production playback)
-// - Dynamic routing to active backend
+// Exposes Squirrel.av.audio with a single playback authority: kira.
+// - Playback backend: kira (Tauri native CPAL+Kira / iOS native Kira / WASM Kira)
+// - Dynamic routing to the active runtime-backed Kira engine
 // - Event bus (type -> Set(callback))
-// - detect_and_set_backend() follows the runtime's explicit backend order
+// - detect_and_set_backend() follows the runtime's single-authority contract
 // - UI->DSP batching with dual strategy: microtask for low-latency, RAF cap for UI sync
 // Notes: Keep JS allocations out of the audio thread; backends talk to native or Kira/WASM.
 
@@ -33,7 +32,7 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
   // Backend registry
   const backends = Object.create(null);
-  let active = null; // 'kira' | 'iplug'
+  let active = null; // 'kira'
 
   // ─── Dual-strategy command queue ───────────────────────────────────
   // Immediate calls (play/stop/jump/set_param) bypass the queue entirely.
@@ -85,18 +84,13 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   audio.get_backend = () => active;
   audio.get_runtime = () => resolveAudioRuntime(window);
 
-  audio.detect_and_set_backend = (order = null) => {
+  audio.detect_and_set_backend = () => {
     const runtime = resolveAudioRuntime(window);
-    const preferredOrder = Array.isArray(order) && order.length
-      ? order
-      : runtime.preferredFacadeBackendOrder;
-    const available = [];
-    if (backends['kira']) available.push('kira');
-    if (runtime.hasIPlugBridge && backends['iplug']) available.push('iplug');
-    for (const pref of preferredOrder) {
-      if (available.includes(pref) && audio.set_backend(pref)) {
-        return pref;
-      }
+    if (!runtime.preferredFacadeBackendOrder.includes('kira')) {
+      return null;
+    }
+    if (backends['kira'] && audio.set_backend('kira')) {
+      return 'kira';
     }
     return null;
   };

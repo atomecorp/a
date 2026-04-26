@@ -145,7 +145,7 @@ export const mountVoicePanel = async ({
             processing_settled: false,
             cancel_latency_ms: null
         },
-        unsubscribe: () => {}
+        unsubscribe: () => { }
     };
 
     const launcher = createElement(doc, 'button', {
@@ -716,7 +716,3 @@ export const bootstrapVoicePanel = ({
     }
     return true;
 };
-
-if (typeof window !== 'undefined' && shouldEnableVoicePanel(window)) {
-    bootstrapVoicePanel({ env: window });
-}

@@ -19,6 +19,7 @@ If a conflict exists, this document MUST be enforced.
 Strict Enforcement Mode
 
 If a user request conflicts with this document:
+
  1. The assistant MUST explicitly identify the violated section.
  2. The assistant MUST refuse to comply.
  3. The assistant MUST NOT silently auto-correct.

@@ -7,10 +7,8 @@ export {
     normalizeCalendarApiEvent
 } from './calendar_api_source.js';
 export {
-    createIcloudLegacyCalendarConnector,
-    normalizeIcloudLegacyCalendarConnectorConfig
-} from './icloud_legacy_connector.js';
-export { createCalendarSyncState } from './sync_state.js';
+    createCalendarSyncState
+} from './sync_state.js';
 export { createNodeCaldavClient, parseCalendarData } from './node_protocol_clients.js';
 export { createCalendarService } from './service.js';
 export {

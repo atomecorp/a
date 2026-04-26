@@ -1,3 +1,5 @@
+import { CALENDAR_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
+
 const normalizeText = (value) => String(value || '').trim();
 
 const xmlDecode = (value) => String(value || '')
@@ -148,40 +150,40 @@ export const parseCalendarData = (calendarData = '') => {
             const property = parseIcsProperty(line);
             if (!property) return;
             switch (property.name) {
-            case 'UID':
-                state.id = normalizeText(property.value);
-                break;
-            case 'SUMMARY':
-                state.title = xmlDecode(property.value);
-                break;
-            case 'DESCRIPTION':
-                state.description = xmlDecode(property.value).replace(/\\n/g, '\n');
-                break;
-            case 'LOCATION':
-                state.location = xmlDecode(property.value);
-                break;
-            case 'DTSTART': {
-                const parsed = parseIcsDate(property.value, property.params);
-                state.start = parsed.date;
-                state.allDay = parsed.allDay;
-                break;
-            }
-            case 'DTEND': {
-                const parsed = parseIcsDate(property.value, property.params);
-                state.end = parsed.date;
-                break;
-            }
-            case 'LAST-MODIFIED':
-            case 'DTSTAMP': {
-                const parsed = parseIcsDate(property.value, property.params);
-                if (parsed.date) state.updatedAt = parsed.date.toISOString();
-                break;
-            }
-            case 'RRULE':
-                state.recurrence = parseRrule(property.value);
-                break;
-            default:
-                break;
+                case 'UID':
+                    state.id = normalizeText(property.value);
+                    break;
+                case 'SUMMARY':
+                    state.title = xmlDecode(property.value);
+                    break;
+                case 'DESCRIPTION':
+                    state.description = xmlDecode(property.value).replace(/\\n/g, '\n');
+                    break;
+                case 'LOCATION':
+                    state.location = xmlDecode(property.value);
+                    break;
+                case 'DTSTART': {
+                    const parsed = parseIcsDate(property.value, property.params);
+                    state.start = parsed.date;
+                    state.allDay = parsed.allDay;
+                    break;
+                }
+                case 'DTEND': {
+                    const parsed = parseIcsDate(property.value, property.params);
+                    state.end = parsed.date;
+                    break;
+                }
+                case 'LAST-MODIFIED':
+                case 'DTSTAMP': {
+                    const parsed = parseIcsDate(property.value, property.params);
+                    if (parsed.date) state.updatedAt = parsed.date.toISOString();
+                    break;
+                }
+                case 'RRULE':
+                    state.recurrence = parseRrule(property.value);
+                    break;
+                default:
+                    break;
             }
         });
 
@@ -343,6 +345,7 @@ const ensureOkResponse = async (response, label = 'caldav_request_failed') => {
 };
 
 export const createNodeCaldavClient = ({
+    provider = CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.id,
     auth = {},
     caldav = {},
     fetchImpl = null
@@ -438,7 +441,7 @@ export const createNodeCaldavClient = ({
             });
             return {
                 ok: true,
-                provider: 'icloud_caldav_legacy',
+                provider: String(provider || CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.id),
                 calendar_url: calendarUrl || null,
                 cursor: parsed.sync_token,
                 items: normalized.items,
@@ -464,7 +467,7 @@ export const createNodeCaldavClient = ({
             });
             return {
                 ok: true,
-                provider: 'icloud_caldav_legacy',
+                provider: String(provider || CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.id),
                 calendar_url: calendarUrl || null,
                 cursor: parsed.sync_token || cursor,
                 items: normalized.items,

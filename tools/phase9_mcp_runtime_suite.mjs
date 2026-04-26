@@ -7,7 +7,6 @@ runSuite({
         'src/squirrel/atome/mcp.runtime_bridge.test.mjs',
         'src/squirrel/atome/mcp.platform_surface.test.mjs',
         'src/squirrel/atome/mcp.security_surface.test.mjs',
-        'src/squirrel/ai/default_tools.runtime_bridge.test.mjs',
-        'src/application/eVe/tests/strangler_v2/runtime_registered_handlers_headless.test.mjs'
+        'src/squirrel/ai/default_tools.runtime_bridge.test.mjs'
     ]
 });

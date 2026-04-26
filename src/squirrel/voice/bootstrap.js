@@ -1,5 +1,6 @@
 import { createVoiceService } from './service.js';
 import { bootstrapMainHandleVoiceEntry } from './main_handle_bridge.js';
+import { bootstrapVoicePanel, shouldEnableVoicePanel } from './panel.js';
 
 const READY_PROMISE_KEY = '__SQUIRREL_VOICE_READY_PROMISE__';
 const SERVICE_KEY = '__SQUIRREL_VOICE_SERVICE__';
@@ -167,7 +168,7 @@ export const createGlobalVoiceApi = ({
             return service.runtime.listSessions(options);
         },
         subscribe(listener) {
-            let unsubscribe = () => {};
+            let unsubscribe = () => { };
             ensureReady()
                 .then((service) => {
                     unsubscribe = service.runtime.subscribe(listener);
@@ -259,6 +260,9 @@ export const bootstrapGlobalVoice = ({
 } = {}) => {
     const api = createGlobalVoiceApi({ env, importModule });
     bootstrapMainHandleVoiceEntry({ env, importModule });
+    if (env?.document && shouldEnableVoicePanel(env)) {
+        bootstrapVoicePanel({ env, voiceApi: api });
+    }
     api.ensureReady().catch((error) => {
         if (env?.console?.warn) {
             env.console.warn('[voice.bootstrap] Voice bootstrap failed:', error?.message || error);

@@ -128,7 +128,6 @@ import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
 // import('./examples/ios_file_browser.js');
 
 // import('./audio_runtime/audio.facade.js');
-// import('./audio_runtime/backend.legacy_auv3.js');
 // import('./examples/iplug_sampler.js');
 
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)

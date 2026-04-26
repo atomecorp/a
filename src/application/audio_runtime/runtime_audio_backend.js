@@ -131,10 +131,11 @@ export const resolveAudioRuntime = (env = globalThis) => {
             runtime: 'ios_auv3',
             playback: 'ios_auv3_native',
             record: 'ios_auv3_native',
-            preferredFacadeBackendOrder: ['iplug', 'kira'],
+            preferredFacadeBackendOrder: ['kira'],
             hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: hasSwiftBridge(env),
-            tauriInvoke: null
+            tauriInvoke: null,
+            native_kira_required: true
         };
     }
 
@@ -179,7 +180,7 @@ export const resolveAudioRuntime = (env = globalThis) => {
         return {
             runtime: 'web',
             playback: wasmAvailable ? 'web_wasm_kira' : 'unsupported',
-            record: hasWebCapture ? 'web_capture_fallback' : 'unsupported',
+            record: hasWebCapture ? 'web_capture' : 'unsupported',
             preferredFacadeBackendOrder: wasmAvailable ? ['kira'] : [],
             hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: false,
@@ -205,7 +206,7 @@ export const resolveVoiceCaptureProvider = (env = globalThis) => {
     if (runtime.record === 'tauri_native_kira' || runtime.record === 'ios_auv3_native') {
         return 'iplug_native_recorder';
     }
-    if (runtime.record === 'web_capture_fallback') {
+    if (runtime.record === 'web_capture') {
         return 'web_capture_recorder';
     }
     return 'unsupported';
@@ -267,7 +268,6 @@ const _extractRelativePath = (src) => {
         if (path.startsWith('/audio/')) {
             return path.slice('/audio/'.length);
         }
-        // Fallback: return the full pathname without leading /
         if (path.startsWith('/')) path = path.slice(1);
         return path || null;
     } catch (_) {

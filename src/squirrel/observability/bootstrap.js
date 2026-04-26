@@ -1,3 +1,5 @@
+import '../dev/logging.js';
+
 const OBSERVABILITY_KEY = '__SQUIRREL_OBSERVABILITY_API__';
 const STORE_KEY = '__SQUIRREL_OBSERVABILITY_STORE__';
 const UNBIND_KEY = '__SQUIRREL_OBSERVABILITY_UNBIND__';
@@ -81,7 +83,7 @@ const pushEntry = (env, channel, type, payload = {}) => {
 
 const bindBrowserEvent = (env, name, channel) => {
     if (!env || typeof env.addEventListener !== 'function') {
-        return () => {};
+        return () => { };
     }
     const handler = (event) => {
         const detail = event?.detail && typeof event.detail === 'object' ? event.detail : {};
@@ -98,12 +100,12 @@ const bindBrowserEvent = (env, name, channel) => {
 const bindRuntimeBus = (env) => {
     const bus = env?.atome?.tools?.v2CommandBus || env?.window?.atome?.tools?.v2CommandBus || null;
     if (!bus || typeof bus.subscribe !== 'function') {
-        return () => {};
+        return () => { };
     }
     const unsubscribe = bus.subscribe((event = {}) => {
         pushEntry(env, 'runtime', event.kind || 'runtime.event', event);
     });
-    return typeof unsubscribe === 'function' ? unsubscribe : () => {};
+    return typeof unsubscribe === 'function' ? unsubscribe : () => { };
 };
 
 const bindSources = (env) => {

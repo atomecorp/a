@@ -1,5 +1,4 @@
 import { createCalendarApiSource } from './calendar_api_source.js';
-import { createIcloudLegacyCalendarConnector } from './icloud_legacy_connector.js';
 import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
 import { createCalendarService } from './service.js';
 
@@ -34,25 +33,6 @@ const getOrCreateService = (env) => {
     });
     env[SERVICE_KEY] = service;
     return service;
-};
-
-const resolveSecureAuthOptions = async (env, options = {}) => {
-    const authRef = String(options?.auth_ref || options?.authRef || '').trim();
-    if (!authRef) {
-        return { ...options };
-    }
-    const securityApi = env?.Squirrel?.security || env?.atome?.security || env?.AtomeSecurity || null;
-    if (!securityApi || typeof securityApi.readToken !== 'function') {
-        throw new Error('security_token_vault_unavailable');
-    }
-    const stored = await securityApi.readToken(authRef);
-    if (!stored || stored.ok !== true) {
-        throw new Error(stored?.error || 'security_token_read_failed');
-    }
-    return {
-        ...options,
-        auth: stored.value
-    };
 };
 
 export const createGlobalCalendarApi = ({
@@ -111,16 +91,6 @@ export const createGlobalCalendarApi = ({
         },
         delete(eventId, options = {}) {
             return getOrCreateService(env).calendarDelete(eventId, options);
-        },
-        async configureIcloudLegacyConnector(options = {}) {
-            const resolvedOptions = await resolveSecureAuthOptions(env, options);
-            const connector = createIcloudLegacyCalendarConnector(resolvedOptions);
-            getOrCreateService(env).registerSource(connector);
-            return {
-                ok: true,
-                source: connector.source_id,
-                provider: connector.provider
-            };
         },
         async openPanel() {
             const panelPerfStart = perfNowMs();
