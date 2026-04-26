@@ -3,23 +3,84 @@
  * Version with static imports for CDN bundling compatibility
  */
 
-import '../utils/console_silencer.js';
 import {
   emitPerfEvent,
   perfElapsedMs,
   perfLog,
   perfNowMs
 } from '../utils/perf_runtime.js';
-import { clearStaleSessionUI } from '../utils/session_ui_cleaner.js';
-import {
-  initializeSparkOptionalIntegrations,
-  loadSparkServerConfig,
-  migrateLegacyCloudAuthToken,
-  startSparkApplicationLoad
-} from '../utils/spark_bootstrap_runtime.js';
+import { isIOSDevice, waitForIOSLocalServerReady } from '../utils/ios_runtime.js';
 import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
 import { exposeSparkGlobals } from '../utils/spark_exposure_runtime.js';
-import { installWebViewErrorGuards } from '../utils/webview_guards.js';
+
+const loadSparkServerConfig = async (loadServerConfigOnce) => {
+  const start = perfNowMs();
+  await loadServerConfigOnce();
+  return perfElapsedMs(start);
+};
+
+const installSparkDragDropGuards = (target = globalThis?.window) => {
+  if (!target?.addEventListener) return;
+  target.addEventListener('dragover', (event) => { event.preventDefault(); event.stopPropagation(); });
+  target.addEventListener('drop', (event) => { event.preventDefault(); event.stopPropagation(); });
+};
+
+const startSparkApplicationLoad = ({
+  emitSparkPerf,
+  importApplication,
+  loadServerConfigMs,
+  optionalIntegrationMs,
+  sparkBootstrapStartMs
+}) => {
+  installSparkDragDropGuards();
+
+  let appImported = false;
+  const importApplicationOnce = () => {
+    if (appImported) return;
+    appImported = true;
+    const appImportStart = perfNowMs();
+    importApplication().then(() => {
+      emitSparkPerf('application_import', {
+        ok: true,
+        totalMs: perfElapsedMs(appImportStart),
+        loadServerConfigMs,
+        optionalIntegrationMs
+      });
+    }).catch((error) => {
+      emitSparkPerf('application_import', {
+        ok: false,
+        totalMs: perfElapsedMs(appImportStart),
+        loadServerConfigMs,
+        optionalIntegrationMs,
+        error: String(error?.message || error || '')
+      });
+    });
+  };
+
+  if (!isIOSDevice(globalThis?.navigator)) {
+    emitSparkPerf('ready_for_application', {
+      totalMs: perfElapsedMs(sparkBootstrapStartMs),
+      loadServerConfigMs,
+      optionalIntegrationMs,
+      isIOS: false
+    });
+    importApplicationOnce();
+    return;
+  }
+
+  const iosWaitStart = perfNowMs();
+  waitForIOSLocalServerReady().then((ready) => {
+    emitSparkPerf('ready_for_application', {
+      totalMs: perfElapsedMs(sparkBootstrapStartMs),
+      loadServerConfigMs,
+      optionalIntegrationMs,
+      isIOS: true,
+      iosWaitMs: perfElapsedMs(iosWaitStart),
+      iosReady: !!ready
+    });
+    importApplicationOnce();
+  });
+};
 
 const sparkBootstrapStartMs = perfNowMs();
 
@@ -29,9 +90,7 @@ const sparkBootModules = [
   { id: 'ai.agent_gateway', path: './ai/agent_gateway.js' },
   { id: 'ai.default_tools', path: './ai/default_tools.js' },
   { id: 'ai.model_catalog_refresh', path: './ai/model_catalog_refresh.js' },
-  { id: 'dev.dev_console', path: './dev/dev_console.js' },
   { id: 'security.bootstrap', path: './security/bootstrap.js' },
-  { id: 'observability.bootstrap', path: './observability/bootstrap.js' },
   { id: 'bank.bootstrap', path: './bank/bootstrap.js' },
   { id: 'calendar.bootstrap', path: './calendar/bootstrap.js' },
   { id: 'contacts.bootstrap', path: './contacts/bootstrap.js' },
@@ -59,10 +118,7 @@ const sparkBootModules = [
   { id: 'components.tooltip', path: './components/tooltip_builder.js' },
   { id: 'components.template', path: './components/template_builder.js' },
   { id: 'components.minimal', path: './components/minimal_builder.js' },
-  { id: 'components.slice', path: './components/slice_builder.js' },
-  { id: 'default.shortcuts', path: './default/shortcuts.js' },
-  { id: 'integrations.iplug_web', path: './integrations/iplug_web.js' },
-  { id: 'apis.unified_sync', path: './apis/unified/UnifiedSync.js' }
+  { id: 'components.slice', path: './components/slice_builder.js' }
 ];
 
 const kickstartModule = [{ id: 'kickstart', path: './kickstart.js' }];
@@ -98,9 +154,6 @@ const trackModuleError = (stage) => ({ moduleId, modulePath, totalMs, error }) =
 // Legacy overlay layer removed.
 
 const bootstrapSpark = async () => {
-  installWebViewErrorGuards();
-  clearStaleSessionUI();
-
   const loadedModules = await loadModulesSequentially({
     modules: sparkBootModules,
     baseUrl: import.meta.url,
@@ -129,8 +182,6 @@ const bootstrapSpark = async () => {
   const Template = loadedModules['components.template'].default;
   const Minimal = loadedModules['components.minimal'].default;
   const SliceModule = loadedModules['components.slice'];
-  const initIPlugWeb = loadedModules['integrations.iplug_web'].default;
-  const UnifiedSync = loadedModules['apis.unified_sync'].default;
 
   const Unit = UnitModule.default;
   const {
@@ -222,13 +273,7 @@ const bootstrapSpark = async () => {
 
   const loadServerConfigMs = await loadSparkServerConfig(loadServerConfigOnce);
 
-  // Token key migration (legacy -> current)
-  // Some older builds stored the Fastify JWT under 'auth_token'. The unified Fastify adapter
-  // expects 'cloud_auth_token'. Copy once to avoid breaking current_user(), projects, etc.
-  migrateLegacyCloudAuthToken();
-
-  // Toggle optional integrations once core runtime is ready
-  const optionalIntegrationMs = initializeSparkOptionalIntegrations({ initIPlugWeb, UnifiedSync });
+  const optionalIntegrationMs = 0;
 
   startSparkApplicationLoad({
     emitSparkPerf,
