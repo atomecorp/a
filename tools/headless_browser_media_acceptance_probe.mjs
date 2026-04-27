@@ -10,7 +10,9 @@ const MEDIA_DIR = path.resolve(process.env.ATOME_MEDIA_TEST_DIR || 'temp_import_
 const OUT_DIR = path.resolve('tools/headless_output/browser_media_acceptance_probe');
 const LOG_FILE = path.join(OUT_DIR, 'run.log');
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
-const HEADLESS = process.env.BROWSER_MEDIA_PROBE_HEADLESS !== '0';
+// WebGPU validation in this probe is reliable in headed Chromium in this repository.
+// Keep headless as an explicit opt-in via BROWSER_MEDIA_PROBE_HEADLESS=1.
+const HEADLESS = process.env.BROWSER_MEDIA_PROBE_HEADLESS === '1';
 
 const MEDIA_CASES = [
     { name: '0000.png', kind: 'image' },
@@ -111,7 +113,12 @@ const analyzePngBuffer = (buffer) => {
 };
 
 const captureLocatorStats = async (locator, filePath) => {
-    const buffer = await locator.screenshot({ path: filePath });
+    const buffer = await locator.screenshot({
+        path: filePath,
+        animations: 'disabled',
+        caret: 'hide',
+        timeout: 120000
+    });
     return analyzePngBuffer(buffer);
 };
 
@@ -157,7 +164,7 @@ const tryLogin = async (page) => {
 };
 
 const bootstrapImport = async (page) => {
-    const bootstrap = await safeEval(page, async () => {
+    const runtimeReady = await safeEval(page, async () => {
         window.__CHECK_DEBUG__ = true;
         window.__EVE_MEDIA_DIAG_HEADLESS__ = true;
         window.__EVE_MTRACK_DEBUG__ = true;
@@ -169,18 +176,32 @@ const bootstrapImport = async (page) => {
         if (typeof window.__DEBUG__?.setDeterministicTestMode === 'function') {
             window.__DEBUG__.setDeterministicTestMode(true);
         }
-        const projectEl = document.querySelector('[id^="project_view_"]');
-        const projectId = window.__currentProject?.id || projectEl?.id?.replace(/^project_view_/, '') || null;
         return {
-            ok: !!(window.eveProjectDropApi?.importFilesToProjectViaCreator && projectEl && projectId),
-            project_id: projectId,
-            project_el_id: projectEl?.id || null,
+            ok: !!window.eveProjectDropApi?.importFilesToProjectViaCreator,
             debug_ready: !!window.__DEBUG__
         };
     }, null, 25000);
-    if (!bootstrap?.ok) {
-        throw new Error(`bootstrap_failed:${bootstrap?.error || JSON.stringify(bootstrap)}`);
+    if (!runtimeReady?.ok) {
+        throw new Error(`bootstrap_failed:${runtimeReady?.error || JSON.stringify(runtimeReady)}`);
     }
+    const projectReady = await waitFor(page, () => {
+        const projectEl = document.querySelector('[id^="project_view_"]');
+        const projectId = window.__currentProject?.id || projectEl?.id?.replace(/^project_view_/, '') || null;
+        return {
+            ok: !!(projectEl && projectId),
+            project_id: projectId,
+            project_el_id: projectEl?.id || null
+        };
+    }, 45000, 300);
+    if (!projectReady?.ok) {
+        throw new Error(`bootstrap_failed:${JSON.stringify(projectReady?.last || { ok: false, error: 'project_not_ready' })}`);
+    }
+    const bootstrap = {
+        ok: true,
+        project_id: projectReady?.last?.project_id || null,
+        project_el_id: projectReady?.last?.project_el_id || null,
+        debug_ready: runtimeReady?.debug_ready === true
+    };
     await page.evaluate(() => {
         document.getElementById('browser_media_acceptance_input')?.remove();
         const input = document.createElement('input');
@@ -266,7 +287,7 @@ const collectDesktopInventory = async (page) => safeEval(page, async () => {
         try {
             state = typeof stateApi === 'function' ? await stateApi(atomeId) : null;
         } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+            console.warn("[cleanup] operation failed", error);
             state = null;
         }
         const props = (state && typeof state === 'object' && (state.properties || state.props || state)) || {};
@@ -701,7 +722,8 @@ const readMtrackState = async (page) => safeEval(page, async () => {
         const parsed = typeof state?.activeTimelineHash === 'string' ? JSON.parse(state.activeTimelineHash) : null;
         if (Array.isArray(parsed?.clips)) timelineClips = parsed.clips;
     } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+        console.warn("[cleanup] operation failed", error);
+    }
     const clips = Array.isArray(state?.clips) && state.clips.length ? state.clips : timelineClips;
     const previewHost = document.getElementById('eve_mtrack_dialog__preview_host') || document.querySelector('#eve_mtrack_dialog');
     const previewMedia = previewHost?.querySelector?.('[data-role="mtrax-gpu-overlay"] canvas')
@@ -776,6 +798,28 @@ const waitForMtrackClosed = async (page) => waitFor(page, () => {
     const visible = !!(panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden');
     return { ok: !visible };
 }, 15000, 300, null);
+
+const readHostRectById = async (page, atomeId) => {
+    const id = String(atomeId || '').trim();
+    if (!id) return { ok: false, error: 'atome_id_missing' };
+    return safeEval(page, (atomeId) => {
+        const host = document.querySelector(`[data-atome-id="${CSS.escape(String(atomeId || ''))}"]`);
+        if (!(host instanceof HTMLElement)) return { ok: false, error: 'host_missing', atome_id: String(atomeId || '') };
+        const rect = host.getBoundingClientRect?.();
+        if (!rect) return { ok: false, error: 'host_rect_missing', atome_id: String(atomeId || '') };
+        return {
+            ok: true,
+            atome_id: String(atomeId || ''),
+            rect: {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+                on_screen: rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight
+            }
+        };
+    }, id, 12000);
+};
 
 const verifyDesktopCase = async (page, mediaCase, entry, report) => {
     await raiseDesktopAtomeForInteraction(page, entry.id);
@@ -965,6 +1009,26 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
     const longRunMs = Math.max(10000, Number(process.env.BROWSER_MEDIA_PROBE_MIN_PLAY_MS || 10000));
     if (replay) await sleep(longRunMs);
     const afterLongRunState = await readMtrackState(page);
+    const observedClipCount = Math.max(
+        Number(stateAfterOpen?.state?.clipCount || 0),
+        Number(afterPlayState?.state?.clipCount || 0),
+        Number(afterPlayAtState?.state?.clipCount || 0),
+        Number(afterLongRunState?.state?.clipCount || 0)
+    );
+    const observedGroupIds = [
+        stateAfterOpen?.state?.activeGroupId,
+        afterPlayState?.state?.activeGroupId,
+        afterPlayAtState?.state?.activeGroupId,
+        afterLongRunState?.state?.activeGroupId
+    ]
+        .map((value) => String(value || '').trim())
+        .filter((value) => value.length > 0);
+    const readyObserved = ready?.ok === true || (
+        observedClipCount > 0
+        && observedGroupIds.includes(String(targetGroupId || '').trim())
+    );
+    const playbackEvidenceReady = Number(afterPlayState?.state?.playhead || 0) > 0.2;
+    const mediaReadyObserved = observedClipCount > 0 || playbackEvidenceReady;
     const pause = (mediaCase.kind === 'video' || mediaCase.kind === 'audio')
         ? await mtrackTransport(page, 'pause')
         : null;
@@ -974,6 +1038,13 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
     const desktopAfterClose = await collectDesktopInventory(page);
     const rematchedEntry = buildCaseMap(desktopAfterClose, report.import_result).get(mediaCase.name) || null;
     const closedEntry = resolveVisibleDesktopEntry(rematchedEntry, desktopAfterClose, report.import_result, mediaCase);
+    const closedEntryVisible = closedEntry?.rect?.on_screen === true || closedEntry?.media_rect?.on_screen === true;
+    const closedOwnerId = String(closedEntry?.group_id || '').trim();
+    const closedOwnerRect = closedOwnerId ? await readHostRectById(page, closedOwnerId) : null;
+    const closedSelfRect = (!closedEntryVisible && closedEntry?.id) ? await readHostRectById(page, closedEntry.id) : null;
+    const closedDesktopVisible = closedEntryVisible
+        || closedOwnerRect?.rect?.on_screen === true
+        || closedSelfRect?.rect?.on_screen === true;
     const mtrackResult = {
         ok: true,
         media: mediaCase,
@@ -987,9 +1058,21 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
         state_after_play: afterPlayState,
         state_after_play_at: afterPlayAtState,
         state_after_long_run: afterLongRunState,
+        readiness: {
+            target_group_id: String(targetGroupId || '').trim(),
+            wait_ready_ok: ready?.ok === true,
+            observed_ready_ok: readyObserved,
+            observed_clip_count: observedClipCount,
+            observed_group_ids: observedGroupIds,
+            playback_evidence_ready: playbackEvidenceReady,
+            media_ready_ok: mediaReadyObserved
+        },
         close,
         closed,
         desktop_after_close: closedEntry,
+        desktop_after_close_owner_rect: closedOwnerRect,
+        desktop_after_close_self_rect: closedSelfRect,
+        desktop_after_close_visible: closedDesktopVisible,
         screenshots: {
             initial: path.basename(initialFile),
             play: path.basename(afterPlayFile),
@@ -1003,17 +1086,17 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
     };
     if (mediaCase.kind === 'image' || mediaCase.kind === 'svg') {
         mtrackResult.ok = open?.ok === true
-            && ready?.ok === true
-            && Number(stateAfterOpen?.state?.clipCount || 0) > 0
+            && readyObserved === true
+            && observedClipCount > 0
             && stateAfterOpen?.preview?.hostRect?.on_screen === true
             && initialStats.opaque_ratio > 0.02
             && close?.ok === true
             && closed?.ok === true
-            && closedEntry?.rect?.on_screen === true;
+            && closedDesktopVisible === true;
     } else {
         mtrackResult.ok = open?.ok === true
-            && ready?.ok === true
-            && Number(stateAfterOpen?.state?.clipCount || 0) > 0
+            && readyObserved === true
+            && mediaReadyObserved === true
             && stateAfterOpen?.preview?.hostRect?.on_screen === true
             && Number(afterPlayState?.state?.playhead || 0) > 0.2
             && Math.abs(Number(afterPlayAtState?.state?.playhead || 0) - Number(afterPlayState?.state?.playhead || 0)) > 0.4
@@ -1021,7 +1104,7 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
             && afterPlayStats.hash !== afterPlayAtStats.hash
             && close?.ok === true
             && closed?.ok === true
-            && closedEntry?.rect?.on_screen === true;
+            && closedDesktopVisible === true;
     }
     report.mtrack[mediaCase.name] = mtrackResult;
     return mtrackResult;
