@@ -4,9 +4,11 @@ export const isTauriRuntime = () => {
     if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
     const protocol = String(window.location?.protocol || '').toLowerCase();
     const host = String(window.location?.hostname || '').toLowerCase();
+    const port = String(window.location?.port || '').trim();
     const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
     if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
     if (host === 'tauri.localhost') return true;
+    if ((host === 'localhost' || host === '127.0.0.1') && port === '3000') return true;
     if (window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3') return true;
     const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
     if (hasTauriInvoke) return true;
