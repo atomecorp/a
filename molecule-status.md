@@ -70,9 +70,10 @@ Validated with:
 
 ## ✅ Cleanup Phase
 
-- Generated headless artifacts under `tools/headless_output` were removed, and active outputs now write under `temp/probe_reports` and `temp/script_reports`.
+- Generated legacy headless artifacts were removed, and active outputs now write under `temp/probe_reports` and `temp/script_reports`.
 - Former headless probe sources were reclassified under `tests/probes/*.test.mjs`, including `tests/probes/browser_media_acceptance_probe.test.mjs` for `probe:browser-media-acceptance`.
 - The browser acceptance probe was rerun after the output-path migration and remained green while writing `report.json` under `temp/probe_reports/browser_media_acceptance_probe`.
+- A final stale-reference cleanup pass removed the old legacy artifact-directory references from active temp/source artifacts, and the generated Tauri mirror under `src-tauri/target/debug/_up_` was purged.
 - No additional temporary MTrack source scaffolding specific to this fix remained in the touched runtime files beyond the functional fixes that are still required.
 
 ---
@@ -85,4 +86,4 @@ Validated with:
 
 ---
 
-**Last Updated**: 2026-04-28 cleanup completed after final green validation on ports 3000 and 3001, with artifact outputs migrated to `temp/*_reports`
+**Last Updated**: 2026-04-28 cleanup completed after final green validation on ports 3000 and 3001, with source/temp artifact paths migrated to `temp/*_reports` and stale generated mirror references purged
