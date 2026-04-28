@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createIcloudPreviousCalendarConnector } from '../src/squirrel/calendar/icloud_previous_connector.js';
+import { createNodeCaldavClient } from '../src/squirrel/calendar/node_protocol_clients.js';
 import { selectIcloudAccount } from './icloud_account_discovery.mjs';
 import {
     buildIcloudAuthUserCandidates,
@@ -59,18 +59,58 @@ if (!calendarUrlCandidates.length) {
     throw new Error('icloud_calendar_live_smoke_missing_calendar_url');
 }
 
-const createConnector = (authUser, password, resolvedCalendarUrl) => createIcloudPreviousCalendarConnector({
-    auth: {
-        email: authUser,
-        appPassword: password
-    },
-    calendar_url: resolvedCalendarUrl,
-    calendar_id: readEnv('ICLOUD_CALENDAR_ID') || null,
-    caldav: {
-        lookback_days: readEnv('ICLOUD_CALENDAR_LOOKBACK_DAYS') ? Number(readEnv('ICLOUD_CALENDAR_LOOKBACK_DAYS')) : undefined,
-        lookahead_days: readEnv('ICLOUD_CALENDAR_LOOKAHEAD_DAYS') ? Number(readEnv('ICLOUD_CALENDAR_LOOKAHEAD_DAYS')) : undefined
-    }
-});
+const createConnector = (authUser, password, resolvedCalendarUrl) => {
+    const provider = 'icloud_caldav';
+    const source_id = 'icloud_caldav';
+    const client = createNodeCaldavClient({
+        provider,
+        auth: {
+            username: authUser,
+            password
+        },
+        caldav: {
+            calendar_url: resolvedCalendarUrl,
+            calendar_id: readEnv('ICLOUD_CALENDAR_ID') || null,
+            lookback_days: readEnv('ICLOUD_CALENDAR_LOOKBACK_DAYS') ? Number(readEnv('ICLOUD_CALENDAR_LOOKBACK_DAYS')) : undefined,
+            lookahead_days: readEnv('ICLOUD_CALENDAR_LOOKAHEAD_DAYS') ? Number(readEnv('ICLOUD_CALENDAR_LOOKAHEAD_DAYS')) : undefined
+        }
+    });
+    let cachedItems = [];
+
+    return {
+        provider,
+        source_id,
+        async fetchInitialCalendar(options = {}) {
+            const result = await client.fetchInitialCalendar(options);
+            if (result?.ok === true && Array.isArray(result.items)) {
+                cachedItems = result.items;
+            }
+            return result;
+        },
+        async fetchDelta(options = {}) {
+            const result = await client.fetchDelta(options);
+            if (result?.ok === true && Array.isArray(result.items)) {
+                const byId = new Map(cachedItems.map((item) => [String(item?.id || ''), item]));
+                result.items.forEach((item) => {
+                    const id = String(item?.id || '');
+                    if (id) byId.set(id, item);
+                });
+                cachedItems = Array.from(byId.values());
+            }
+            return result;
+        },
+        async listEvents() {
+            return { ok: true, items: cachedItems };
+        },
+        async getEvent(eventId) {
+            const id = String(eventId || '');
+            const event = cachedItems.find((item) => String(item?.id || '') === id) || null;
+            return event
+                ? { ok: true, event }
+                : { ok: false, error: 'calendar_event_not_found', event_id: id || null };
+        }
+    };
+};
 
 try {
     let connector = null;

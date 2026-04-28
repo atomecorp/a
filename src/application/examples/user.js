@@ -1,7 +1,6 @@
-import { isDebugEnabled } from '../../shared/debug.js';
 import Intuition from '../../squirrel/components/intuition_builder/index.js';
 
-const CHECK_DEBUG = isDebugEnabled();
+const CHECK_DEBUG = typeof window !== 'undefined' && window.__CHECK_DEBUG__ === true;
 function checkDebugPuts(message) {
   if (!CHECK_DEBUG) return;
   if (typeof puts === 'function') puts(message);
@@ -200,9 +199,6 @@ const share_atome = AdoleAPI.sharing.share;
 // Sync functions - Use AdoleAPI.sync.*
 const sync_atomes = AdoleAPI.sync.sync;
 const list_unsynced_atomes = AdoleAPI.sync.listUnsynced;
-
-// Debug functions - Use AdoleAPI.debug.*
-const list_tables = AdoleAPI.debug.listTables;
 
 // ============================================
 // ⚠️⚠️⚠️ TEST SECTION - DO NOT CALL FROM PRODUCTION CODE ⚠️⚠️⚠️

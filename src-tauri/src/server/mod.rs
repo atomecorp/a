@@ -1241,55 +1241,6 @@ async fn debug_log_handler(Json(payload): Json<serde_json::Value>) -> impl IntoR
     Json(json!({ "success": true }))
 }
 
-async fn adole_debug_tables_handler(State(state): State<AppState>) -> impl IntoResponse {
-    let atome_state = match require_atome_state(&state) {
-        Ok(s) => s,
-        Err(resp) => return resp.into_response(),
-    };
-
-    let db = match atome_state.db.lock() {
-        Ok(d) => d,
-        Err(err) => {
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
-        }
-    };
-
-    let mut stmt = match db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-    ) {
-        Ok(s) => s,
-        Err(err) => {
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
-        }
-    };
-
-    let rows = match stmt.query_map([], |row| row.get::<_, String>(0)) {
-        Ok(r) => r,
-        Err(err) => {
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, &err.to_string()).into_response();
-        }
-    };
-
-    let mut tables = Vec::new();
-    for row in rows {
-        if let Ok(name) = row {
-            tables.push(name);
-        }
-    }
-
-    (
-        StatusCode::OK,
-        Json(json!({
-            "success": true,
-            "database": "Tauri/SQLite",
-            "tables": tables,
-            "schema_hash": local_atome::schema_hash(),
-            "schema": local_atome::schema_tables()
-        })),
-    )
-        .into_response()
-}
-
 async fn db_status_handler(State(state): State<AppState>) -> impl IntoResponse {
     let atome_state = match require_atome_state(&state) {
         Ok(s) => s,
@@ -2793,7 +2744,10 @@ async fn download_recording_handler(
         let owner = match owner_id {
             Some(id) if id == user_id => id,
             Some(id) if !id.is_empty() => {
-                println!("[download_recording_handler] Owner mismatch denied: owner={}, user={}", id, user_id);
+                println!(
+                    "[download_recording_handler] Owner mismatch denied: owner={}, user={}",
+                    id, user_id
+                );
                 return (
                     StatusCode::FORBIDDEN,
                     Json(json!({ "success": false, "error": "Recording access denied" })),
@@ -3547,65 +3501,6 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
-                // Route to debug handler
-                if msg_type == "debug" {
-                    let action = data.get("action").and_then(|v| v.as_str()).unwrap_or("");
-                    let request_id = data
-                        .get("requestId")
-                        .and_then(|v| v.as_str())
-                        .map(String::from);
-
-                    if action == "list-tables" {
-                        let response = if let Some(ref atome_state) = state.atome_state {
-                            // Collect tables in a sync block, then drop the guard before await
-                            let tables_result: Result<Vec<String>, String> = (|| {
-                                let db = atome_state.db.lock().map_err(|e| e.to_string())?;
-                                let mut stmt = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-                                    .map_err(|e| e.to_string())?;
-                                let tables: Vec<String> = stmt
-                                    .query_map([], |row| row.get(0))
-                                    .map_err(|e| e.to_string())?
-                                    .filter_map(|r| r.ok())
-                                    .collect();
-                                Ok(tables)
-                            })(
-                            );
-
-                            match tables_result {
-                                Ok(tables) => json!({
-                                    "type": "debug-response",
-                                    "requestId": request_id,
-                                    "success": true,
-                                    "tables": tables
-                                }),
-                                Err(e) => json!({
-                                    "type": "debug-response",
-                                    "requestId": request_id,
-                                    "success": false,
-                                    "error": e
-                                }),
-                            }
-                        } else {
-                            json!({
-                                "type": "debug-response",
-                                "requestId": request_id,
-                                "success": false,
-                                "error": "Database not initialized"
-                            })
-                        };
-                        let _ = socket.send(Message::Text(response.to_string())).await;
-                    } else {
-                        let response = json!({
-                            "type": "debug-response",
-                            "requestId": request_id,
-                            "success": false,
-                            "error": format!("Unknown debug action: {}", action)
-                        });
-                        let _ = socket.send(Message::Text(response.to_string())).await;
-                    }
-                    continue;
-                }
-
                 // Handle previous API requests (for backward compatibility)
                 if msg_type == "api-request" {
                     let id = data.get("id").and_then(|v| v.as_str()).unwrap_or("");
@@ -3965,7 +3860,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/fastify-status", get(fastify_status_handler))
         .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
-        .route("/api/adole/debug/tables", get(adole_debug_tables_handler))
         .route("/api/db/status", get(db_status_handler))
         .route(
             "/api/eve/ai/provider-completion",

@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const readText = (relativePath) => fs.readFileSync(path.join(rootDir, relativePath), 'utf8');
+const resolvePath = (relativePath) => path.join(rootDir, relativePath);
+const readText = (relativePath) => fs.readFileSync(resolvePath(relativePath), 'utf8');
 
 const forbiddenByFile = [
     {
@@ -26,6 +27,7 @@ const forbiddenByFile = [
     },
     {
         path: 'src/application/eVe/intuition/tools/audio_engine_debug_runtime.js',
+        optional: true,
         patterns: [/__TAURI__(?:\?\.|\.)fs/, /resolveFsApi/, /tauri_fs_unavailable/]
     },
     {
@@ -67,6 +69,9 @@ const forbiddenByFile = [
 ];
 
 for (const entry of forbiddenByFile) {
+    if (entry.optional && !fs.existsSync(resolvePath(entry.path))) {
+        continue;
+    }
     const content = readText(entry.path);
     for (const pattern of entry.patterns) {
         assert.equal(

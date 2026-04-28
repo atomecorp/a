@@ -34,7 +34,6 @@ import {
   share_policy,
   grant_share_permission
 } from './adole_api/sharing.js';
-import { list_tables } from './adole/debug.js';
 import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 
 // Kick off auth bootstrap immediately so UI waits on a single source of truth.
@@ -136,9 +135,6 @@ export const AdoleAPI = {
     migrateAnonymousWorkspace: auth.migrateAnonymousWorkspace,
     signalAuthComplete: auth.signalAuthComplete,
     waitForAuthCheck: waitForAuthCheck
-  },
-  debug: {
-    listTables: list_tables
   }
 };
 

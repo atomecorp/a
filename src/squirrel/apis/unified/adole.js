@@ -99,7 +99,8 @@ function isAnonymousLogin(phone, username, password) {
             return true;
         }
     } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+        console.warn("[cleanup] operation failed", error);
+    }
     const cleanUsername = username ? String(username).trim().toLowerCase() : '';
     if (cleanUsername === 'anonymous') return true;
     const cleanPassword = password ? String(password).trim().toLowerCase() : '';
@@ -129,7 +130,7 @@ async function silentPing(baseUrl) {
             const localPort = readLocalTauriHttpPort();
             isTauriServer = !!(localPort && isLoopbackHostname(parsed.hostname) && port === localPort);
         } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+            console.warn("[cleanup] operation failed", error);
             isTauriServer = false;
         }
         const pingEndpoint = isTauriServer ? '/api/auth/local/me' : '/api/auth/me';
@@ -198,7 +199,8 @@ function clearFastifyOverrideStorage() {
     try {
         localStorage.removeItem('squirrel_tauri_fastify_url_override');
     } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+        console.warn("[cleanup] operation failed", error);
+    }
 }
 
 function readExpectedFastifyLoopbackPort() {
@@ -402,7 +404,8 @@ async function checkFastifyViaTauri(fastifyBaseUrl) {
             if (!isLocalHost) return null;
         }
     } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+        console.warn("[cleanup] operation failed", error);
+    }
 
     try {
         const res = await fetch(`${alignLoopbackUrlToPageHost(localBase)}/api/fastify-status`, {
@@ -993,7 +996,8 @@ class TauriWebSocket {
                                         window.dispatchEvent(new CustomEvent('squirrel:atome-created', { detail }));
                                     }
                                 } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                                    console.warn("[cleanup] operation failed", error);
+                                }
                                 return;
                             }
 
@@ -1034,7 +1038,8 @@ class TauriWebSocket {
                         }
                     }
                 } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                    console.warn("[cleanup] operation failed", error);
+                }
 
                 return;
             }
@@ -1298,7 +1303,8 @@ function getTauriWs() {
     const wsUrl = getTauriWsUrl();
     if (!_tauriWs || _tauriWs.url !== wsUrl) {
         try { _tauriWs?.socket?.close?.(); } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+            console.warn("[cleanup] operation failed", error);
+        }
         _tauriWs = new TauriWebSocket(wsUrl, 'tauri');
     }
     return _tauriWs;
@@ -1312,7 +1318,8 @@ function getFastifyWs() {
 
     if (!_fastifyWs || _fastifyWs.url !== wsUrl) {
         try { _fastifyWs?.socket?.close?.(); } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+            console.warn("[cleanup] operation failed", error);
+        }
         _fastifyWs = new TauriWebSocket(wsUrl, 'fastify');
     }
 
@@ -1761,15 +1768,6 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async ack() {
                 return { ok: true, success: true };
-            }
-        },
-
-        debug: {
-            async listTables() {
-                return getWs().send({
-                    type: 'debug',
-                    action: 'list-tables'
-                });
             }
         }
     };

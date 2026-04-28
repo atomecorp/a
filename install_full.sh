@@ -92,7 +92,7 @@ Options:
   -l, --latest                 Shortcut for --mode latest
   --skip-tauri             Skip updating @tauri-apps/cli
   --skip-fastify           Skip updating Fastify and related plugins
-  --skip-iplug             Skip refreshing iPlug2 (tools/update_iplug2.sh)
+  --skip-iplug             Skip refreshing iPlug2 (scripts/update_iplug2.sh)
   --skip-system            Skip OS/system dependency installation
   --skip-install-server    Skip calling install_server.sh (Debian/FreeBSD)
   --os <auto|debian|freebsd|macos>
@@ -586,7 +586,7 @@ update_iplug2() {
     return
   fi
 
-  local updater="$PROJECT_ROOT/tools/update_iplug2.sh"
+  local updater="$PROJECT_ROOT/scripts/update_iplug2.sh"
   if [ ! -f "$updater" ]; then
     log_error "❌ iPlug2 updater not found at $updater"
     return 1

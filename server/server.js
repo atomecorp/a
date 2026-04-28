@@ -2007,36 +2007,6 @@ async function startServer() {
 
     console.warn('[Admin] Routes registered: POST /api/admin/users/export, POST /api/admin/users/import');
 
-    /**
-     * GET /api/adole/debug/tables
-     * List all tables in the database (for debugging)
-     */
-    server.get('/api/adole/debug/tables', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const dataSourceAdapter = db.getDataSourceAdapter();
-        const rows = await dataSourceAdapter.query(
-          "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        );
-        const tables = rows.map(r => r.name);
-        console.log(`[Debug] Listed ${tables.length} tables from LibSQL`);
-        return {
-          success: true,
-          database: 'Fastify/LibSQL',
-          tables,
-          schema: SCHEMA_TABLES,
-          schema_hash: getSchemaHash()
-        };
-      } catch (error) {
-        request.log.error({ err: error }, 'List tables failed');
-        return reply.code(500).send({ success: false, error: error.message });
-      }
-    });
-
     // NOTE: User management is now handled via /api/auth/* routes in auth.js
     // which use the ADOLE v3.0 schema (atomes + particles tables)
 
@@ -2295,7 +2265,8 @@ async function startServer() {
         }
 
         try { wsApiConnections.add(connection); } catch (error) {
-          console.warn("[server] operation failed", error); }
+          console.warn("[server] operation failed", error);
+        }
 
         const unknownMessageTypesSeen = new Set();
 
@@ -2484,7 +2455,8 @@ async function startServer() {
                         };
                         syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(evt.kind));
                       } catch (error) {
-          console.warn("[server] operation failed", error); }
+                        console.warn("[server] operation failed", error);
+                      }
                     }
                   }
 
@@ -2550,7 +2522,8 @@ async function startServer() {
                   senderUsername = senderUser.username || null;
                 }
               } catch (error) {
-          console.warn("[server] operation failed", error); }
+                console.warn("[server] operation failed", error);
+              }
 
               // If token payload is missing username, enrich from DB.
               // This keeps `from.username` reliable even for older tokens.
@@ -2563,7 +2536,7 @@ async function startServer() {
                     senderUser = await findUserByPhone(dataSource, String(senderPhone));
                   }
                 } catch (error) {
-          console.warn("[server] operation failed", error);
+                  console.warn("[server] operation failed", error);
                   senderUser = null;
                 }
                 if (senderUser) {
@@ -2585,7 +2558,7 @@ async function startServer() {
                   try {
                     targetUserId = generateDeterministicUserId(String(normalizedToPhone));
                   } catch (error) {
-          console.warn("[server] operation failed", error);
+                    console.warn("[server] operation failed", error);
                     targetUserId = null;
                   }
                 }
@@ -2596,7 +2569,7 @@ async function startServer() {
                 try {
                   targetUser = await findUserById(dataSource, targetUserId);
                 } catch (error) {
-          console.warn("[server] operation failed", error);
+                  console.warn("[server] operation failed", error);
                   targetUser = null;
                 }
               }
@@ -2653,7 +2626,7 @@ async function startServer() {
                 try {
                   parsed = JSON.parse(String(msgText));
                 } catch (error) {
-          console.warn("[server] operation failed", error);
+                  console.warn("[server] operation failed", error);
                   parsed = null;
                 }
                 const params = parsed?.params && typeof parsed.params === 'object' ? parsed.params : {};
@@ -2770,41 +2743,6 @@ async function startServer() {
             return;
           }
 
-          // Handle debug requests (ADOLE v3.0)
-          if (data.type === 'debug') {
-            const action = data.action || '';
-            const requestId = data.requestId;
-
-            if (action === 'list-tables') {
-              try {
-                const dataSource = db.getDataSourceAdapter();
-                const result = await dataSource.query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
-                const tables = result.map(row => row.name);
-                safeSend({
-                  type: 'debug-response',
-                  requestId,
-                  success: true,
-                  tables
-                });
-              } catch (error) {
-                safeSend({
-                  type: 'debug-response',
-                  requestId,
-                  success: false,
-                  error: error.message
-                });
-              }
-            } else {
-              safeSend({
-                type: 'debug-response',
-                requestId,
-                success: false,
-                error: `Unknown debug action: ${action}`
-              });
-            }
-            return;
-          }
-
           // Handle file requests (ADOLE v3.0 WebSocket)
           if (data.type === 'file') {
             const action = data.action || '';
@@ -2819,7 +2757,8 @@ async function startServer() {
                   requesterId = null;
                 }
               } catch (error) {
-          console.warn("[server] operation failed", error); }
+                console.warn("[server] operation failed", error);
+              }
 
               if (!requesterId && data.token) {
                 try {
@@ -2835,7 +2774,7 @@ async function startServer() {
                     }
                   }
                 } catch (error) {
-          console.warn("[server] operation failed", error);
+                  console.warn("[server] operation failed", error);
                   requesterId = null;
                 }
               }
@@ -2960,7 +2899,8 @@ async function startServer() {
               } finally {
                 if (handle) {
                   try { await handle.close(); } catch (error) {
-          console.warn("[server] operation failed", error); }
+                    console.warn("[server] operation failed", error);
+                  }
                 }
               }
               return;
@@ -3083,7 +3023,8 @@ async function startServer() {
                 try {
                   await fs.rm(uploadDir, { recursive: true, force: true });
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 if (DATABASE_ENABLED) {
                   const stats = await fs.stat(filePath).catch(() => null);
@@ -3234,7 +3175,7 @@ async function startServer() {
                     const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
                     console.log(`[ws/api] Register stored access=${storedAccess ?? 'unknown'} userId=${userId}`);
                   } catch (error) {
-          console.warn("[server] operation failed", error);
+                    console.warn("[server] operation failed", error);
                     console.log(`[ws/api] Register stored access=unknown userId=${userId}`);
                   }
                 } catch (err) {
@@ -3278,7 +3219,8 @@ async function startServer() {
                     });
                   }
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 // Issue JWT immediately so first post-register commit has a token.
                 const jwt = await import('jsonwebtoken');
@@ -3314,7 +3256,7 @@ async function startServer() {
                     connection._wsApiAuthExpMs = null;
                   }
                 } catch (error) {
-          console.warn("[server] operation failed", error);
+                  console.warn("[server] operation failed", error);
                   connection._wsApiAuthExpMs = null;
                 }
               } else if (action === 'lookup-phone') {
@@ -3351,10 +3293,12 @@ async function startServer() {
                   );
                   if (rows && rows[0] && rows[0].particle_value) {
                     try { visibility = JSON.parse(rows[0].particle_value); } catch (error) {
-          console.warn("[server] operation failed", error); visibility = rows[0].particle_value; }
+                      console.warn("[server] operation failed", error); visibility = rows[0].particle_value;
+                    }
                   }
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 safeSend({
                   type: 'auth-response',
@@ -3412,7 +3356,8 @@ async function startServer() {
                     });
                   }
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 safeSend({
                   type: 'auth-response',
@@ -3560,7 +3505,7 @@ async function startServer() {
                     connection._wsApiAuthExpMs = null;
                   }
                 } catch (error) {
-          console.warn("[server] operation failed", error);
+                  console.warn("[server] operation failed", error);
                   connection._wsApiAuthExpMs = null;
                 }
               } else if (action === 'me') {
@@ -3667,7 +3612,8 @@ async function startServer() {
                 try {
                   detachWsApiClient(connection);
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
                 safeSend({
                   type: 'auth-response',
                   requestId,
@@ -3725,7 +3671,8 @@ async function startServer() {
                 requesterId = null;
               }
             } catch (error) {
-          console.warn("[server] operation failed", error); }
+              console.warn("[server] operation failed", error);
+            }
 
             if (!requesterId && data.token) {
               try {
@@ -3742,7 +3689,7 @@ async function startServer() {
                   }
                 }
               } catch (error) {
-          console.warn("[server] operation failed", error);
+                console.warn("[server] operation failed", error);
                 requesterId = null;
               }
             }
@@ -3824,7 +3771,8 @@ async function startServer() {
                     grantorId: requesterId
                   });
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 try {
                   await broadcastAtomeCreate({
@@ -3836,7 +3784,8 @@ async function startServer() {
                     senderConnection: connection
                   });
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -3847,7 +3796,8 @@ async function startServer() {
                     particles
                   }, 'create');
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 safeSend({
                   type: 'atome-response',
@@ -3940,7 +3890,8 @@ async function startServer() {
                     senderConnection: connection
                   });
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 if (data.noReply === true) {
                   return;
@@ -4014,7 +3965,8 @@ async function startServer() {
                 try {
                   await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -4034,7 +3986,8 @@ async function startServer() {
                     particles
                   }, 'update');
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 safeSend({
                   type: 'atome-response',
@@ -4088,7 +4041,8 @@ async function startServer() {
                 try {
                   await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -4108,7 +4062,8 @@ async function startServer() {
                     particles
                   }, 'update');
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 safeSend({
                   type: 'atome-response',
@@ -4157,7 +4112,7 @@ async function startServer() {
                   try {
                     allowTransfer = await db.isAnonymousUser(fromOwnerId);
                   } catch (error) {
-          console.warn("[server] operation failed", error);
+                    console.warn("[server] operation failed", error);
                     allowTransfer = false;
                   }
                 }
@@ -4223,12 +4178,14 @@ async function startServer() {
                     senderConnection: connection
                   });
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 try {
                   syncAtomeViaWebSocket({ atome_id: atomeId }, 'delete');
                 } catch (error) {
-          console.warn("[server] operation failed", error); }
+                  console.warn("[server] operation failed", error);
+                }
 
                 safeSend({
                   type: 'atome-response',
@@ -4306,7 +4263,8 @@ async function startServer() {
                     const parse = (val) => {
                       if (!val) return null;
                       try { return JSON.parse(val); } catch (error) {
-          console.warn("[server] operation failed", error); return val; }
+                        console.warn("[server] operation failed", error); return val;
+                      }
                     };
                     return {
                       atome_id: row.atome_id,
@@ -4376,7 +4334,7 @@ async function startServer() {
                           try {
                             atome[key] = JSON.parse(value);
                           } catch (error) {
-          console.warn("[server] operation failed", error);
+                            console.warn("[server] operation failed", error);
                             atome[key] = value;
                           }
                         }
@@ -4434,7 +4392,7 @@ async function startServer() {
                           try {
                             atome[key] = JSON.parse(value);
                           } catch (error) {
-          console.warn("[server] operation failed", error);
+                            console.warn("[server] operation failed", error);
                             atome[key] = value;
                           }
                         }
@@ -4595,7 +4553,8 @@ async function startServer() {
         // Cleanup
         connection.on('close', () => {
           try { wsApiConnections.delete(connection); } catch (error) {
-          console.warn("[server] operation failed", error); }
+            console.warn("[server] operation failed", error);
+          }
           detachWsApiClient(connection);
         });
       });
