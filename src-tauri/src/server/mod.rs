@@ -27,6 +27,7 @@ use std::{
 };
 use tokio::{
     fs,
+    io::{AsyncReadExt, AsyncSeekExt},
     net::TcpStream,
     sync::broadcast,
     time::{timeout, Duration},
@@ -2431,6 +2432,89 @@ fn serve_bytes_with_range(
     (StatusCode::OK, h, bytes).into_response()
 }
 
+fn parse_http_range(request_headers: &HeaderMap, total: usize) -> Option<Result<(usize, usize), HeaderMap>> {
+    let range_header = request_headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())?
+        .trim()
+        .to_string();
+    if !range_header.starts_with("bytes=") {
+        return None;
+    }
+    let spec = &range_header[6..];
+    let parts: Vec<&str> = spec.splitn(2, '-').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let start = parts[0].parse::<usize>().ok().unwrap_or(0).min(total);
+    let end_raw = parts[1].trim();
+    let end = if end_raw.is_empty() {
+        total
+    } else {
+        end_raw
+            .parse::<usize>()
+            .ok()
+            .map(|value| (value + 1).min(total))
+            .unwrap_or(total)
+    };
+    if start >= end || start >= total {
+        let mut h = HeaderMap::new();
+        if let Ok(cr) = HeaderValue::from_str(&format!("bytes */{}", total)) {
+            h.insert(header::CONTENT_RANGE, cr);
+        }
+        return Some(Err(h));
+    }
+    Some(Ok((start, end)))
+}
+
+async fn serve_file_with_range(
+    file_path: &Path,
+    content_type: &'static str,
+    etag: &str,
+    request_headers: &HeaderMap,
+    disposition: &str,
+) -> Result<axum::response::Response, std::io::Error> {
+    let metadata = fs::metadata(file_path).await?;
+    let total = metadata.len() as usize;
+    if let Some(range) = parse_http_range(request_headers, total) {
+        let (start, end) = match range {
+            Ok(range) => range,
+            Err(headers) => return Ok((StatusCode::RANGE_NOT_SATISFIABLE, headers).into_response()),
+        };
+        let mut file = fs::File::open(file_path).await?;
+        file.seek(std::io::SeekFrom::Start(start as u64)).await?;
+        let mut slice = vec![0; end - start];
+        file.read_exact(&mut slice).await?;
+
+        let mut h = HeaderMap::new();
+        h.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+        h.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        if let Ok(cr) = HeaderValue::from_str(&format!("bytes {}-{}/{}", start, end - 1, total)) {
+            h.insert(header::CONTENT_RANGE, cr);
+        }
+        if let Ok(cl) = HeaderValue::from_str(&slice.len().to_string()) {
+            h.insert(header::CONTENT_LENGTH, cl);
+        }
+        if let Ok(hv) = HeaderValue::from_str(etag) {
+            h.insert(header::ETAG, hv);
+        }
+        h.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("private, max-age=300"),
+        );
+        return Ok((StatusCode::PARTIAL_CONTENT, h, slice).into_response());
+    }
+
+    let bytes = fs::read(file_path).await?;
+    Ok(serve_bytes_with_range(
+        bytes,
+        content_type,
+        etag,
+        request_headers,
+        disposition,
+    ))
+}
+
 async fn download_upload_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -2537,18 +2621,23 @@ async fn download_upload_handler(
         return (StatusCode::NOT_MODIFIED, response_headers).into_response();
     }
 
-    match fs::read(&file_path).await {
-        Ok(bytes) => {
+    match serve_file_with_range(
+        &file_path,
+        guess_content_type_from_name(&safe_name),
+        &etag_value,
+        &headers,
+        &format!("inline; filename=\"{}\"", safe_name),
+    )
+    .await
+    {
+        Ok(response) => {
             if verbose_logs {
                 println!(
-                    "[download_upload_handler] ✅ Serving file: {:?} ({} bytes)",
-                    file_path,
-                    bytes.len()
+                    "[download_upload_handler] ✅ Serving file: {:?}",
+                    file_path
                 );
             }
-            let content_type = guess_content_type_from_name(&safe_name);
-            let disposition = format!("inline; filename=\"{}\"", safe_name);
-            serve_bytes_with_range(bytes, content_type, &etag_value, &headers, &disposition)
+            response
         }
         Err(err) => {
             if verbose_logs {
@@ -2643,16 +2732,15 @@ async fn download_recording_handler(
     );
 
     if direct_path.exists() {
-        match fs::read(&direct_path).await {
-            Ok(bytes) => {
+        let ct = guess_mime_from_ext(&safe_name);
+        let disposition = format!("attachment; filename=\"{}\"", safe_name);
+        match serve_file_with_range(&direct_path, ct, "", &headers, &disposition).await {
+            Ok(response) => {
                 println!(
-                    "[download_recording_handler] ✅ Serving recording (direct): {:?} ({} bytes)",
-                    direct_path,
-                    bytes.len()
+                    "[download_recording_handler] ✅ Serving recording (direct): {:?}",
+                    direct_path
                 );
-                let ct = guess_mime_from_ext(&safe_name);
-                let disposition = format!("attachment; filename=\"{}\"", safe_name);
-                return serve_bytes_with_range(bytes, ct, "", &headers, &disposition);
+                return response;
             }
             Err(err) => {
                 println!("[download_recording_handler] Direct read failed: {}", err);
@@ -2667,15 +2755,14 @@ async fn download_recording_handler(
     if let Ok(downloads_dir) = resolve_user_downloads_dir(&state, &user_id).await {
         let downloads_path = downloads_dir.join(&safe_name);
         if downloads_path.exists() {
-            if let Ok(bytes) = fs::read(&downloads_path).await {
+            let ct = guess_mime_from_ext(&safe_name);
+            let disposition = format!("inline; filename=\"{}\"", safe_name);
+            if let Ok(response) = serve_file_with_range(&downloads_path, ct, "", &headers, &disposition).await {
                 println!(
-                    "[download_recording_handler] ✅ Serving recording from downloads secondary: {:?} ({} bytes)",
-                    downloads_path,
-                    bytes.len()
+                    "[download_recording_handler] ✅ Serving recording from downloads secondary: {:?}",
+                    downloads_path
                 );
-                let ct = guess_mime_from_ext(&safe_name);
-                let disposition = format!("inline; filename=\"{}\"", safe_name);
-                return serve_bytes_with_range(bytes, ct, "", &headers, &disposition);
+                return response;
             }
         }
     }
@@ -2822,14 +2909,15 @@ async fn download_recording_handler(
         target_path.exists()
     );
 
-    let bytes = match fs::read(&target_path).await {
-        Ok(b) => {
+    let ct = guess_mime_from_ext(&rel);
+    let disposition = format!("attachment; filename=\"{}\"", sanitize_file_name(&rel));
+    match serve_file_with_range(&target_path, ct, "", &headers, &disposition).await {
+        Ok(response) => {
             println!(
-                "[download_recording_handler] ✅ Serving recording: {:?} ({} bytes)",
-                target_path,
-                b.len()
+                "[download_recording_handler] ✅ Serving recording: {:?}",
+                target_path
             );
-            b
+            response
         }
         Err(err) => {
             println!(
@@ -2842,11 +2930,7 @@ async fn download_recording_handler(
             )
                 .into_response();
         }
-    };
-
-    let ct = guess_mime_from_ext(&rel);
-    let disposition = format!("attachment; filename=\"{}\"", sanitize_file_name(&rel));
-    serve_bytes_with_range(bytes, ct, "", &headers, &disposition)
+    }
 }
 
 /// Request for writing update files

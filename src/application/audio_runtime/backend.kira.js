@@ -1,3 +1,9 @@
+import {
+  buildTauriKiraAudioPayload,
+  KIRA_AUDIO_COMMANDS,
+  normalizeKiraPlayInstancePayload,
+  normalizeKiraStopInstancePayload
+} from './kira_audio_commands.js';
 import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js';
 
 // Kira backend for Squirrel.av.audio
@@ -171,26 +177,13 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
 
     play_instance(arg) {
       if (!arg) return;
-      var assetId = arg.asset_id || arg.assetId || arg.id || arg.clip_id || arg.clipId || '';
-      var voiceId = arg.voice_id || arg.voiceId || assetId;
-      if (!assetId || !voiceId) return;
-      return invoke('audio_play_instance', {
-        asset_id: assetId,
-        voice_id: voiceId,
-        start_seconds: Number(arg.start_seconds ?? arg.startSeconds ?? arg.start ?? 0) || 0,
-        duration_seconds: Number.isFinite(Number(arg.duration_seconds ?? arg.durationSeconds ?? arg.duration))
-          ? Number(arg.duration_seconds ?? arg.durationSeconds ?? arg.duration)
-          : null,
-        gain: Number.isFinite(Number(arg.gain)) ? Number(arg.gain) : 1,
-        rate: Number.isFinite(Number(arg.rate)) ? Number(arg.rate) : 1,
-        loop_start_seconds: Number.isFinite(Number(arg.loop_start_seconds ?? arg.loopStartSeconds))
-          ? Number(arg.loop_start_seconds ?? arg.loopStartSeconds)
-          : null,
-        loop_end_seconds: Number.isFinite(Number(arg.loop_end_seconds ?? arg.loopEndSeconds))
-          ? Number(arg.loop_end_seconds ?? arg.loopEndSeconds)
-          : null
-      }).catch(function (e) {
-        emitError('play_instance(' + assetId + '/' + voiceId + ')', e);
+      var payload = normalizeKiraPlayInstancePayload(arg);
+      if (!payload.assetId || !payload.voiceId) return;
+      return invoke(
+        KIRA_AUDIO_COMMANDS.PLAY_INSTANCE,
+        buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload)
+      ).catch(function (e) {
+        emitError('play_instance(' + payload.assetId + '/' + payload.voiceId + ')', e);
         throw e;
       });
     },
@@ -203,9 +196,12 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
     },
 
     stop_instance(arg) {
-      var id = typeof arg === 'string' ? arg : (arg && (arg.voice_id || arg.voiceId || arg.id || arg.clip_id || arg.clipId)) || '';
-      if (id) return invoke('audio_stop_instance', { voice_id: id }).catch(function (e) {
-        emitError('stop_instance(' + id + ')', e);
+      var payload = normalizeKiraStopInstancePayload(arg);
+      if (payload.voiceId) return invoke(
+        KIRA_AUDIO_COMMANDS.STOP_INSTANCE,
+        buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.STOP_INSTANCE, payload)
+      ).catch(function (e) {
+        emitError('stop_instance(' + payload.voiceId + ')', e);
         throw e;
       });
       return false;

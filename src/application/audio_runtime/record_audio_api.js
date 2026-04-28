@@ -161,9 +161,9 @@ import {
                 ? params.filePath.trim()
                 : `data/users/${userId}/recordings/${fileName}`;
             await invoke('audio_record_start', {
-                session_id: sessionId,
-                file_path: filePath,
-                sample_rate: Number(sampleRate) || defaultSampleRate(context, source) || 16000,
+                sessionId,
+                filePath,
+                sampleRate: Number(sampleRate) || defaultSampleRate(context, source) || 16000,
                 channels: Number(channels) || defaultChannels(context, source) || 1
             });
             PENDING.set(sessionId, {
@@ -247,7 +247,7 @@ import {
             }
             try {
                 const result = await invoke('audio_record_stop', {
-                    session_id: sid
+                    sessionId: sid
                 });
                 return {
                     session_id: sid,
