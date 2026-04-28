@@ -63,11 +63,11 @@ const report = {
     ],
     next_commands: {
         mail: discovered
-            ? `ICLOUD_ACCOUNT_ID="${discovered.account_id}" ICLOUD_APP_PASSWORD="app-password" node tools/phase9_icloud_mail_live_smoke.mjs`
-            : 'ICLOUD_EMAIL="user@icloud.com" ICLOUD_APP_PASSWORD="app-password" node tools/phase9_icloud_mail_live_smoke.mjs',
+            ? `ICLOUD_ACCOUNT_ID="${discovered.account_id}" ICLOUD_APP_PASSWORD="app-password" node scripts/phase9_icloud_mail_live_smoke.mjs`
+            : 'ICLOUD_EMAIL="user@icloud.com" ICLOUD_APP_PASSWORD="app-password" node scripts/phase9_icloud_mail_live_smoke.mjs',
         calendar: discovered
-            ? `ICLOUD_ACCOUNT_ID="${discovered.account_id}" ICLOUD_APP_PASSWORD="app-password" node tools/phase9_icloud_calendar_live_smoke.mjs`
-            : 'ICLOUD_EMAIL="user@icloud.com" ICLOUD_APP_PASSWORD="app-password" ICLOUD_CALENDAR_URL="https://caldav.icloud.com/..." node tools/phase9_icloud_calendar_live_smoke.mjs'
+            ? `ICLOUD_ACCOUNT_ID="${discovered.account_id}" ICLOUD_APP_PASSWORD="app-password" node scripts/phase9_icloud_calendar_live_smoke.mjs`
+            : 'ICLOUD_EMAIL="user@icloud.com" ICLOUD_APP_PASSWORD="app-password" ICLOUD_CALENDAR_URL="https://caldav.icloud.com/..." node scripts/phase9_icloud_calendar_live_smoke.mjs'
     }
 };
 

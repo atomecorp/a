@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const outDir = path.resolve('tools/headless_output');
+const outDir = path.resolve('temp/script_reports');
 const summaryFile = path.join(outDir, 'mtrack_perf_suite_summary.json');
 
 const fail = (message, extra = {}) => {

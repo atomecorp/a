@@ -20,8 +20,8 @@ const runNode = (script) => {
     };
 };
 
-const mail = runNode('tools/phase9_icloud_mail_live_smoke.mjs');
-const calendar = runNode('tools/phase9_icloud_calendar_live_smoke.mjs');
+const mail = runNode('scripts/phase9_icloud_mail_live_smoke.mjs');
+const calendar = runNode('scripts/phase9_icloud_calendar_live_smoke.mjs');
 
 const report = {
     generated_at: new Date().toISOString(),

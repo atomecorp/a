@@ -68,11 +68,21 @@ Validated with:
 
 ---
 
+## ✅ Cleanup Phase
+
+- Generated headless artifacts under `tools/headless_output` were removed, and active outputs now write under `temp/probe_reports` and `temp/script_reports`.
+- Former headless probe sources were reclassified under `tests/probes/*.test.mjs`, including `tests/probes/browser_media_acceptance_probe.test.mjs` for `probe:browser-media-acceptance`.
+- The browser acceptance probe was rerun after the output-path migration and remained green while writing `report.json` under `temp/probe_reports/browser_media_acceptance_probe`.
+- No additional temporary MTrack source scaffolding specific to this fix remained in the touched runtime files beyond the functional fixes that are still required.
+
+---
+
 ## 📋 Notes
 
 - The transient terminal failures seen during validation were caused by using `status=$?` in `zsh`; `status` is read-only there. Validation results above were confirmed with safe exit-code capture.
 - Syntax diagnostics are clean on the touched source files.
+- Everything listed in this status file is now accomplished.
 
 ---
 
-**Last Updated**: 2026-04-28 final green validation on ports 3000 and 3001
+**Last Updated**: 2026-04-28 cleanup completed after final green validation on ports 3000 and 3001, with artifact outputs migrated to `temp/*_reports`

@@ -47,7 +47,7 @@ npm run update:libs
 - ✅ Sauvegarde + rollback automatiques en cas de problème
 - ✅ Génère des fichiers `.version` pour chaque asset téléchargé
 - ✅ Met à jour @tauri-apps/cli et la stack Fastify (désactivables avec `--skip-tauri` / `--skip-fastify`)
-- ✅ Rafraîchit aussi iPlug2 (exécute `tools/update_iplug2.sh`)
+- ✅ Rafraîchit aussi iPlug2 (exécute `scripts/update_iplug2.sh`)
 - ✅ Réinstalle toutes les dépendances npm via `scripts/install_dependencies.sh`
 
 Pour ignorer iPlug2 : `npm run update:libs:no-iplug`, `npm run update:libs -- --skip-iplug` ou `./update_all_libraries.sh --mode latest --skip-iplug`
@@ -206,7 +206,7 @@ cp src/js/gsap.min.js.backup src/js/gsap.min.js
 ### Permissions d'exécution
 
 ```bash
-chmod +x update_all_libraries.sh tools/update_iplug2.sh scripts/*.sh
+chmod +x update_all_libraries.sh scripts/update_iplug2.sh scripts/*.sh
 ```
 
 ## 📈 Monitoring des Versions

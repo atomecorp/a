@@ -21,8 +21,8 @@ const writeReport = (report) => {
 const printUsage = () => {
     console.log([
         'Usage:',
-        '  ICLOUD_EMAIL=... ICLOUD_APP_PASSWORD=... ICLOUD_CALENDAR_URL=... node tools/phase9_icloud_calendar_live_smoke.mjs',
-        '  ICLOUD_KEYCHAIN_ACCOUNT=... ICLOUD_CALENDAR_URL=... node tools/phase9_icloud_calendar_live_smoke.mjs',
+        '  ICLOUD_EMAIL=... ICLOUD_APP_PASSWORD=... ICLOUD_CALENDAR_URL=... node scripts/phase9_icloud_calendar_live_smoke.mjs',
+        '  ICLOUD_KEYCHAIN_ACCOUNT=... ICLOUD_CALENDAR_URL=... node scripts/phase9_icloud_calendar_live_smoke.mjs',
         '',
         'Optional:',
         '  ICLOUD_KEYCHAIN_ACCOUNT=user@icloud.com',

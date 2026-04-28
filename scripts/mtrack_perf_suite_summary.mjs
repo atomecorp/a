@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const outDir = path.resolve('tools/headless_output');
+const probeOutDir = path.resolve('temp/probe_reports');
+const outDir = path.resolve('temp/script_reports');
 const outFile = path.join(outDir, 'mtrack_perf_suite_summary.json');
 
 const readJson = (filename) => {
-  const target = path.join(outDir, filename);
+  const target = path.join(probeOutDir, filename);
   if (!fs.existsSync(target)) {
     return { ok: false, file: target, error: 'missing' };
   }
@@ -89,5 +90,6 @@ const summary = {
   } : null
 };
 
+fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(outFile, JSON.stringify(summary, null, 2));
 process.stdout.write(`${JSON.stringify({ ok: true, outFile, summary }, null, 2)}\n`);

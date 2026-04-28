@@ -22,8 +22,8 @@ const writeReport = (report) => {
 const printUsage = () => {
     console.log([
         'Usage:',
-        '  ICLOUD_EMAIL=... ICLOUD_APP_PASSWORD=... node tools/phase9_icloud_mail_live_smoke.mjs',
-        '  ICLOUD_KEYCHAIN_ACCOUNT=... node tools/phase9_icloud_mail_live_smoke.mjs',
+        '  ICLOUD_EMAIL=... ICLOUD_APP_PASSWORD=... node scripts/phase9_icloud_mail_live_smoke.mjs',
+        '  ICLOUD_KEYCHAIN_ACCOUNT=... node scripts/phase9_icloud_mail_live_smoke.mjs',
         '',
         'Optional:',
         '  ICLOUD_MAILBOX=INBOX',
