@@ -1,6 +1,6 @@
 import { createIcloudMailConnector } from '../src/squirrel/mail/icloud_connector.js';
 import { createMailService } from '../src/squirrel/mail/service.js';
-import { resolveMailCredentials } from '../tools/icloud_live_credentials.mjs';
+import { resolveMailCredentials } from '../scripts/icloud_live_credentials.mjs';
 
 const DEFAULT_LIMIT = 20;
 

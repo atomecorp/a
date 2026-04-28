@@ -123,7 +123,7 @@
     };
 
     const resolveSelectableId = (thing, fallbackId = null) => {
-      try {
+      
         if (!thing) return null;
         if (typeof thing === 'string') return thing;
 
@@ -136,7 +136,7 @@
         // Common object id fields
         const candidate = thing.atome_id || thing.object_id || thing.id || null;
         if (candidate && looksLikeUuid(candidate)) return String(candidate);
-      } catch (_) { }
+      
 
       if (fallbackId && looksLikeUuid(fallbackId)) return String(fallbackId);
       return fallbackId ? String(fallbackId) : null;
@@ -149,11 +149,11 @@
       let _last = null;
 
       const publish = () => {
-        try {
+        
           window.__selectedAtomeId = _last;
           window.__selectedAtomeIds = Array.from(_selected);
           window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: _last, selected: Array.from(_selected) } }));
-        } catch (_) { }
+        
       };
 
       window.SelectionAPI = {
@@ -201,7 +201,7 @@
     const enhanceSelectable = (obj, fallbackId = null) => {
       if (!obj) return obj;
       if (obj._enhancedSelection) return obj;
-      try {
+      
         Object.defineProperty(obj, '_enhancedSelection', { value: true, enumerable: false });
 
         Object.defineProperty(obj, 'select', {
@@ -219,7 +219,7 @@
           },
           enumerable: false
         });
-      } catch (_) { }
+      
       return obj;
     };
 
@@ -410,7 +410,7 @@
       const isIPadDesktopMode = (!isTrueIOSUA && isAppleVendor && touchCapable && /macintosh/i.test(ua));
       const isIOS = isTrueIOSUA || isIPadDesktopMode;
 
-      const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
+      const isTauri = !!window.__TAURI__ || !!window.__TAURI_INTERNALS__ || ua.includes('Tauri');
       if (isTauri) {
         if (/Macintosh|Mac OS X/.test(ua)) return 'Tauri Mac';
         if (/Windows/.test(ua)) return 'Tauri Windows';
@@ -424,7 +424,7 @@
       const explicitAUv3 = !!(window.__AUV3_MODE__ || window.__AUV3__ || (typeof location !== 'undefined' && /[?&](auv3=1|mode=auv3)(?:&|$)/i.test(location.search)));
       if (explicitAUv3 && isIOS) return 'ios_auv3';
       if (isIOS && window.webkit && window.webkit.messageHandlers) {
-        try {
+        
           const mh = window.webkit.messageHandlers;
           const names = Object.keys(mh);
           if (names.length) {
@@ -436,7 +436,7 @@
               hasAUv3Bridge = true;
             }
           }
-        } catch (_) { }
+        
       }
       if (window.forceAUv3Mode === true) hasAUv3Bridge = true;
       if (hasAUv3Bridge) return 'ios_auv3';
@@ -545,7 +545,7 @@
   			if (!cbs || cbs.size === 0) return;
   			// Call all callbacks with the normalized combo and the event
   			for (const cb of cbs) {
-  				try { cb(combo, e); } catch (_) { }
+  				cb(combo, e);
   			}
   		}, true);
   		addHandler._installed = true;
@@ -588,7 +588,7 @@
     const svgEl = tmp.querySelector('svg');
     if (!svgEl) return null;
     const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
-    try { svgEl.id = finalId; } catch (_) { }
+    svgEl.id = finalId;
     svgEl.style.position = 'absolute';
     svgEl.style.top = top; svgEl.style.left = left;
 
@@ -601,57 +601,52 @@
     const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
     const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
 
-    try {
-      const existingViewBox = svgEl.getAttribute('viewBox');
-      const attrW = parseFloat(svgEl.getAttribute('width')) || null;
-      const attrH = parseFloat(svgEl.getAttribute('height')) || null;
-      if (!existingViewBox) {
-        const vbW = (attrW && attrW > 0) ? attrW : targetW;
-        const vbH = (attrH && attrH > 0) ? attrH : targetH;
-        svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
-      }
-      if (!svgEl.getAttribute('preserveAspectRatio')) {
-        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      }
-      if (responsive) {
-        // Responsive mode: width/height 100%, parent controls sizing
-        if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
-        if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
-        svgEl.style.width = widthIsPercent ? widthStr : '100%';
-        svgEl.style.height = heightIsPercent ? heightStr : '100%';
-        try { svgEl.dataset.intuitionResponsive = '1'; } catch (_) { }
-      } else {
-        // Fixed mode: also set attributes for backward compatibility
-        try { svgEl.setAttribute('width', String(targetW)); } catch (_) { }
-        try { svgEl.setAttribute('height', String(targetH)); } catch (_) { }
-        svgEl.style.width = targetW + 'px';
-        svgEl.style.height = targetH + 'px';
-      }
-      svgEl.style.overflow = 'visible';
-      svgEl.style.display = 'block';
-    } catch (_) { }
+    const existingViewBox = svgEl.getAttribute('viewBox');
+    const attrW = parseFloat(svgEl.getAttribute('width')) || null;
+    const attrH = parseFloat(svgEl.getAttribute('height')) || null;
+    if (!existingViewBox) {
+      const vbW = (attrW && attrW > 0) ? attrW : targetW;
+      const vbH = (attrH && attrH > 0) ? attrH : targetH;
+      svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+    }
+    if (!svgEl.getAttribute('preserveAspectRatio')) {
+      svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    }
+    if (responsive) {
+      if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
+      if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
+      svgEl.style.width = widthIsPercent ? widthStr : '100%';
+      svgEl.style.height = heightIsPercent ? heightStr : '100%';
+      svgEl.dataset.intuitionResponsive = '1';
+    } else {
+      svgEl.setAttribute('width', String(targetW));
+      svgEl.setAttribute('height', String(targetH));
+      svgEl.style.width = targetW + 'px';
+      svgEl.style.height = targetH + 'px';
+    }
+    svgEl.style.overflow = 'visible';
+    svgEl.style.display = 'block';
+
     if (color || path_color) {
       const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
       shapes.forEach(node => {
         if (path_color) {
-          try { if (node.style) node.style.stroke = path_color; } catch (_) { }
+          if (node.style) node.style.stroke = path_color;
           node.setAttribute('stroke', path_color);
         }
         if (color) {
-          // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
-          try { if (node.style) node.style.fill = color; } catch (_) { }
+          if (node.style) node.style.fill = color;
           const f = node.getAttribute('fill');
           if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
-          // Remove gradient/URL fill if we want solid override
           if (/^url\(/i.test(f || '')) node.removeAttribute('fill');
         }
       });
       if (color) {
-        try { if (svgEl.style) svgEl.style.fill = color; } catch (_) { }
+        if (svgEl.style) svgEl.style.fill = color;
         if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
       }
       if (path_color) {
-        try { if (svgEl.style) svgEl.style.stroke = path_color; } catch (_) { }
+        if (svgEl.style) svgEl.style.stroke = path_color;
         if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
       }
     }
@@ -669,21 +664,203 @@
     }
     return resolveFetcher(path, { mode: 'text' })
       .then(svgData => {
-        // Remove prior element with same id to avoid duplicates
         const prev = document.getElementById(id);
         if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
         return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
-      })
-      .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
+      });
+  }
+
+  /**
+   * Server URL Resolution Module
+   * 
+   * Centralized URL resolution for Squirrel servers.
+   * Handles both Tauri (local Axum) and browser (Fastify) modes.
+   * 
+   * Ports:
+   * - 3000: Tauri/Axum local server (auth, atomes, static files)
+   * - 3001: Fastify cloud server (auth, atomes, sync, WebSocket)
+   * 
+   * @module src/squirrel/apis/serverUrls
+   */
+
+  const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '0.0.0.0', 'tauri.localhost']);
+
+  const normalizePositivePort = (value, fallback) => {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+      return fallback;
+  };
+
+  const getCurrentLocation = () => {
+      if (typeof window === 'undefined') return null;
+      return window.location || null;
+  };
+
+  function isPrivateIpv4Host(hostname) {
+      const value = String(hostname || '').trim().toLowerCase();
+      const parts = value.split('.');
+      if (parts.length !== 4) return false;
+      const numbers = parts.map((part) => Number(part));
+      if (numbers.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+      if (numbers[0] === 10) return true;
+      if (numbers[0] === 127) return true;
+      if (numbers[0] === 192 && numbers[1] === 168) return true;
+      if (numbers[0] === 169 && numbers[1] === 254) return true;
+      if (numbers[0] === 172 && numbers[1] >= 16 && numbers[1] <= 31) return true;
+      return false;
+  }
+
+  function isLikelyLocalDevHost(hostname) {
+      const value = String(hostname || '').trim().toLowerCase();
+      if (!value) return false;
+      if (isLoopbackHost(value)) return true;
+      if (value === '::1' || value === '[::1]') return true;
+      if (isPrivateIpv4Host(value)) return true;
+      if (value.endsWith('.local') || value.endsWith('.lan') || value.endsWith('.home')) return true;
+      if (!value.includes('.')) return true;
+      return false;
+  }
+
+  function isLoopbackHost(hostname) {
+      return LOOPBACK_HOSTS.has(String(hostname || '').trim().toLowerCase());
+  }
+
+  function getLocalServerPort() {
+      if (typeof window === 'undefined') return 3000;
+      const allowCustomPort = window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true;
+      const forcedPort = Number(window.__SQUIRREL_TAURI_LOCAL_PORT__);
+      if (allowCustomPort && Number.isFinite(forcedPort) && forcedPort > 0) {
+          return forcedPort;
+      }
+      const customPort = Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__);
+      if (Number.isFinite(customPort) && customPort > 0) {
+          return customPort;
+      }
+      return 3000;
+  }
+
+  function getCloudServerPort() {
+      if (typeof window === 'undefined') return 3001;
+      const raw = window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port ?? 3001;
+      let port = normalizePositivePort(raw, 3001);
+      const localPort = getLocalServerPort();
+      if (port === localPort) port = 3001;
+      return port;
+  }
+
+  function isCurrentLoopbackPagePort(port) {
+      const loc = getCurrentLocation();
+      if (!loc || !isLoopbackHost(loc.hostname)) return false;
+      const effectivePort = Number(loc.port || (String(loc.protocol || '').toLowerCase() === 'https:' ? 443 : 80));
+      return effectivePort === normalizePositivePort(port, effectivePort);
+  }
+
+  function isLocalAxumPage() {
+      const loc = getCurrentLocation();
+      const host = String(loc?.hostname || '').trim().toLowerCase();
+      const protocol = String(loc?.protocol || '').trim().toLowerCase();
+      const effectivePort = Number(loc?.port || (protocol === 'https:' ? 443 : 80));
+      if (host === 'tauri.localhost' && (protocol === 'http:' || protocol === 'https:')) {
+          return true;
+      }
+      if (isLikelyLocalDevHost(host) && effectivePort === getLocalServerPort()) {
+          return true;
+      }
+      if (isCurrentLoopbackPagePort(getLocalServerPort())) {
+          return true;
+      }
+      // Loopback page on a port that is NOT the cloud server (e.g. Tauri devUrl 1430):
+      // treat as local Axum page so backend resolution never routes to Fastify.
+      if (isLoopbackHost(host)) {
+          if (effectivePort > 0 && effectivePort !== getCloudServerPort()) return true;
+      }
+      return false;
+  }
+
+  const buildLoopbackOrigin = (port) => {
+      const normalizedPort = normalizePositivePort(port, 0);
+      const loc = getCurrentLocation();
+      const pageProtocol = String(loc?.protocol || '').toLowerCase();
+      const protocol = pageProtocol === 'https:' ? 'https:' : 'http:';
+      const pageHost = String(loc?.hostname || '').trim().toLowerCase();
+      const host = isLikelyLocalDevHost(pageHost)
+          ? (pageHost === '0.0.0.0' ? '127.0.0.1' : pageHost)
+          : '127.0.0.1';
+      return `${protocol}//${host}:${normalizedPort}`;
+  };
+
+  /**
+   * Check if running in Tauri environment
+   */
+  function isTauri() {
+      if (typeof window === 'undefined') return false;
+      if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+      if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
+      const protocol = String(window.location?.protocol || '').toLowerCase();
+      const host = String(window.location?.hostname || '').toLowerCase();
+      if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
+      if (host === 'tauri.localhost') return true;
+      const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
+      if (hasTauriInvoke) return true;
+      const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+      if (!hasTauriObjects) return false;
+      const userAgent = (typeof navigator !== 'undefined') ? String(navigator.userAgent || '') : '';
+      return /tauri/i.test(userAgent);
+  }
+
+  /**
+   * Get the local server URL (Tauri Axum on port 3000)
+   * Returns null if local server is not available
+   */
+  function getLocalServerUrl() {
+      if (typeof window === 'undefined') return null;
+      const localPort = getLocalServerPort();
+      const host = String(window.location?.hostname || '').trim().toLowerCase();
+      const protocol = String(window.location?.protocol || '').trim().toLowerCase();
+      const effectivePort = Number(window.location?.port || (protocol === 'https:' ? 443 : 80));
+      if (effectivePort === localPort && isLikelyLocalDevHost(host)) {
+          return window.location.origin;
+      }
+      if (host === 'tauri.localhost') {
+          return window.location.origin;
+      }
+      const hasInjectedLocalPort = Number.isFinite(Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__))
+          || (window.__SQUIRREL_ALLOW_CUSTOM_TAURI_PORT__ === true && Number.isFinite(Number(window.__SQUIRREL_TAURI_LOCAL_PORT__)));
+      if (hasInjectedLocalPort || isTauri()) {
+          return buildLoopbackOrigin(localPort);
+      }
+      // Tauri dev mode: page on loopback but on a non-standard port (e.g. 1430).
+      // Axum still listens on the canonical local port so return its origin.
+      if (isLocalAxumPage() && isLikelyLocalDevHost(host)) {
+          return buildLoopbackOrigin(localPort);
+      }
+      return null;
   }
 
   /**
    * loader
    *
    * Role:
-   * - Asset loading utilities with cache and Tauri-aware paths.
+   * - Asset loading utilities with cache and local-server-aware paths.
    * - Provides SVG rendering helpers for UI.
    */
+
+  const normalizeNoTrailingSlash = (value) => {
+    if (typeof value !== 'string') return '';
+    return value.trim().replace(/\/$/, '');
+  };
+
+  const joinBaseAndPath = (base, path) => {
+    const normalizedBase = normalizeNoTrailingSlash(base);
+    const normalizedPath = String(path || '').replace(/^\/+/, '');
+    if (!normalizedBase || !normalizedPath) return '';
+    return `${normalizedBase}/${normalizedPath}`;
+  };
+
+  const encodeRoutePath = (path) => String(path || '')
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
 
   // --- Port persistence (survive refresh) -------------------------------------------------
   (function persistLocalPort() {
@@ -700,10 +877,10 @@
     };
     const writeStoredPort = (port) => {
       if (!Number.isFinite(port) || port <= 0) return;
-      try { localStorage.setItem(k, String(port)); } catch (_) { }
+      localStorage.setItem(k, String(port));
     };
     const clearStoredPort = () => {
-      try { localStorage.removeItem(k); } catch (_) { }
+      localStorage.removeItem(k);
     };
     const isTauriRuntime = () => {
       if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
@@ -719,7 +896,8 @@
     };
     const isEmbeddedIosRuntime = () => {
       const protocol = String(window.location?.protocol || '').toLowerCase();
-      return protocol === 'atome:' || window.__AUV3_MODE__ === true;
+      const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
+      return protocol === 'atome:' || window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3';
     };
 
     // Contract:
@@ -796,7 +974,6 @@
       const filename = cleanPath.split('/').pop();
       const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
       const looksSvg = ext === 'svg';
-      const hasSpace = cleanPath.includes(' ');
       const port = (typeof window !== 'undefined') ? (window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__) : null;
 
       const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
@@ -805,127 +982,126 @@
       const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
       const looksAudio = audioExt.test(ext);
 
-      const serverCandidates = [];
-      if (port) {
-        serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
-        if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
-        if (looksAudio) {
-          serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
-          serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
-        }
-      }
       let assetPath = cleanPath;
       if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
-      const assetCandidates = [assetPath];
-      const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
-      if (altAsset !== assetPath) assetCandidates.push(altAsset);
+      const canonicalAssetPath = assetPath.replace(/^src\/assets\//, 'assets/');
+      const assetCandidates = [];
+      const pushAssetCandidate = (candidate) => {
+        if (!candidate || assetCandidates.includes(candidate)) return;
+        assetCandidates.push(candidate);
+      };
+      pushAssetCandidate(canonicalAssetPath);
+      pushAssetCandidate(assetPath);
+      pushAssetCandidate(canonicalAssetPath.replace(/^assets\//, 'src/assets/'));
+
+      const serverPathCandidates = [];
+      const pushServerPathCandidate = (candidate) => {
+        if (!candidate || serverPathCandidates.includes(candidate)) return;
+        serverPathCandidates.push(candidate);
+      };
+      pushServerPathCandidate(canonicalAssetPath);
+      pushServerPathCandidate(cleanPath);
+      pushServerPathCandidate(assetPath);
+
+      const serverCandidates = [];
+      const pushServerCandidate = (base, routePath) => {
+        const nextUrl = joinBaseAndPath(base, routePath);
+        if (!nextUrl || serverCandidates.includes(nextUrl)) return;
+        serverCandidates.push(nextUrl);
+      };
+      const localServerBase = normalizeNoTrailingSlash(getLocalServerUrl() || '');
+      if (localServerBase) {
+        for (const serverPath of serverPathCandidates) {
+          const encodedPath = encodeRoutePath(serverPath);
+          pushServerCandidate(localServerBase, `file/${encodedPath}`);
+          if (looksText) pushServerCandidate(localServerBase, `text/${encodedPath}`);
+          if (looksAudio) {
+            pushServerCandidate(localServerBase, `audio/${encodeURIComponent(filename)}`);
+            pushServerCandidate(localServerBase, `audio/${encodedPath}`);
+          }
+        }
+      }
+      if (port) {
+        const explicitPortBase = `http://127.0.0.1:${port}`;
+        for (const serverPath of serverPathCandidates) {
+          const encodedPath = encodeRoutePath(serverPath);
+          pushServerCandidate(explicitPortBase, `file/${encodedPath}`);
+          if (looksText) pushServerCandidate(explicitPortBase, `text/${encodedPath}`);
+          if (looksAudio) {
+            pushServerCandidate(explicitPortBase, `audio/${encodeURIComponent(filename)}`);
+            pushServerCandidate(explicitPortBase, `audio/${encodedPath}`);
+          }
+        }
+      }
+      const preferServerCandidatesFirst = serverCandidates.length > 0;
+      const primaryCandidates = preferServerCandidatesFirst ? serverCandidates : assetCandidates;
+      const secondaryCandidates = preferServerCandidatesFirst ? assetCandidates : serverCandidates;
 
       const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
 
-      // Helper: detect HTML fallback (index.html returned instead of asset)
-      const isHtmlFallback = (txt) => {
+      const isHtmlIndexResponse = (txt) => {
         if (!txt) return false; const t = txt.slice(0, 120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
       };
 
-      // Helper: attempt direct Tauri FS read for svg with space (server often rewrites to index)
-      async function tryTauriSvgSpace(fsRelPath) {
-        if (!(looksSvg && hasSpace)) return null;
-        if (typeof window === 'undefined' || !window.__TAURI__ || !window.__TAURI__.fs) return null;
-        const fs = window.__TAURI__.fs;
-        // Prefer original path; if starts with assets/ also try src/assets equivalent
-        const candidates = [fsRelPath];
-        if (/^assets\//.test(fsRelPath) && !/^src\/assets\//.test(fsRelPath)) {
-          candidates.unshift('src/' + fsRelPath);
-        }
-        for (const c of candidates) {
-          try {
-            const txt = await fs.readTextFile(c).catch(() => null);
-            if (txt && /^<svg[\s>]/i.test(txt.trim()) && !isHtmlFallback(txt)) return { txt, path: c };
-          } catch (_) { }
-        }
-        return null;
-      }
-
-      // 1) Direct FS read first for svg with space (most robust after refresh)
-      const directFs = await tryTauriSvgSpace(cleanPath);
-      if (directFs) {
-        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0, max)); }
-        return done(directFs.txt);
-      }
-      // Immediate asset try if no port yet
-      if (!port) {
+      // Immediate bundled asset read only when no local server route is available.
+      if (!port && serverCandidates.length === 0) {
         for (const u of assetCandidates) {
-          try {
-            if (looksText || mode === 'text' || mode === 'preview') {
-              const r = await fetch(u); if (!r.ok) continue;
-              const txt = await r.text();
-              if (looksSvg && isHtmlFallback(txt)) { continue; }
-              if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
-              return done(txt);
-            }
-            if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
-            if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
-            const r = await fetch(u); if (!r.ok) continue; return done(u);
-          } catch (_) { }
+          if (looksText || mode === 'text' || mode === 'preview') {
+            const r = await fetch(u); if (!r.ok) continue;
+            const txt = await r.text();
+            if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
+            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
+            return done(txt);
+          }
+          if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+          if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+          const r = await fetch(u); if (!r.ok) continue; return done(u);
         }
       }
 
       if (mode === 'url') {
-        const out = serverCandidates[0] || assetCandidates[0];
+        const out = primaryCandidates[0] || secondaryCandidates[0];
         return done(out);
       }
-      for (const u of serverCandidates) {
-        try {
-          const r = await fetch(u);
-          if (!r.ok) continue;
-          if (mode === 'arraybuffer') return done(await r.arrayBuffer());
-          if (mode === 'blob') return done(await r.blob());
-          if (looksText || mode === 'text' || mode === 'preview') {
-            const txt = await r.text();
-            if (looksSvg && isHtmlFallback(txt)) { continue; }
-            if (mode === 'preview' || opts.preview) {
-              const max = opts.preview || 120; return done(txt.slice(0, max));
-            }
-            return done(txt);
+      for (const u of primaryCandidates) {
+        const r = await fetch(u);
+        if (!r.ok) continue;
+        if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+        if (mode === 'blob') return done(await r.blob());
+        if (looksText || mode === 'text' || mode === 'preview') {
+          const txt = await r.text();
+          if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
+          if (mode === 'preview' || opts.preview) {
+            const max = opts.preview || 120; return done(txt.slice(0, max));
           }
-          if (looksAudio && mode === 'auto') return done(u); // streaming URL path
-          return done(u);
-        } catch (_) { }
+          return done(txt);
+        }
+        if (looksAudio && mode === 'auto') return done(u); // streaming URL path
+        return done(u);
       }
-      for (const u of assetCandidates) {
-
-        try {
-          if (looksText || mode === 'text' || mode === 'preview') {
-
-            const r = await fetch(u); if (!r.ok) continue;
-            const txt = await r.text();
-            if (looksSvg && isHtmlFallback(txt)) { continue; }
-            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
-            return done(txt);
-          }
-          if (mode === 'arraybuffer') {
-
-            const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer());
-          }
-          if (mode === 'blob') {
-            const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
-          }
-          return done(u);
-        } catch (_) { }
+      for (const u of secondaryCandidates) {
+        if (looksText || mode === 'text' || mode === 'preview') {
+          const r = await fetch(u); if (!r.ok) continue;
+          const txt = await r.text();
+          if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
+          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
+          return done(txt);
+        }
+        if (mode === 'arraybuffer') {
+          const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer());
+        }
+        if (mode === 'blob') {
+          const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
+        }
+        return done(u);
       }
 
       delete __inflightData[key];
-      throw new Error('Not found (candidates: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+      throw new Error('Not found (candidates: ' + [...primaryCandidates, ...secondaryCandidates].join(', ') + ')');
     })();
     __inflightData[key] = p;
     return p;
   }
-
-
-
-
-
-
 
   function resize(id, newWidth, newHeight, durationSec = 0, easing = 'ease') {
     let el = document.getElementById(id);
@@ -3647,7 +3823,7 @@
     // Configuration CSS de base
     element.style.cursor = cursor;
     element.style.userSelect = 'none';
-    try { element.style.touchAction = 'none'; } catch (_) { }
+    element.style.touchAction = 'none';
 
     // Activer le drag HTML5 si demandé
     if (enableHTML5) {
@@ -3732,7 +3908,7 @@
       else element.removeEventListener('mousedown', onMouseDownClassic);
       element.style.cursor = '';
       element.style.userSelect = '';
-      try { element.style.touchAction = ''; } catch (_) { }
+      element.style.touchAction = '';
       element.draggable = false;
     };
   }
@@ -3759,7 +3935,7 @@
     // Configuration CSS de base
     element.style.cursor = cursor;
     element.style.userSelect = 'none';
-    try { element.style.touchAction = 'none'; } catch (_) { }
+    element.style.touchAction = 'none';
 
     // Variables pour stocker la translation
     let currentX = 0;
@@ -3827,7 +4003,7 @@
         lastX = e.clientX;
         lastY = e.clientY;
 
-        try { e.preventDefault(); } catch (_) { }
+        e.preventDefault();
       };
 
       const onEnd = () => {
@@ -3862,7 +4038,7 @@
         document.addEventListener('mouseleave', onEnd);
       }
 
-      try { startEvent.preventDefault(); } catch (_) { }
+      startEvent.preventDefault();
     };
 
     const supportsPointer = typeof window !== 'undefined' && 'PointerEvent' in window;
@@ -3883,7 +4059,7 @@
       else element.removeEventListener('mousedown', onMouseDown);
       element.style.cursor = '';
       element.style.userSelect = '';
-      try { element.style.touchAction = ''; } catch (_) { }
+      element.style.touchAction = '';
       element.style.transform = '';
     };
   }

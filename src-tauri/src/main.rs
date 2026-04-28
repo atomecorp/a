@@ -156,7 +156,6 @@ fn main() {
     let _log_guard = dev_logging::init_tracing();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_stt::init())
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,

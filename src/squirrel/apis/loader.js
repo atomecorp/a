@@ -2,7 +2,7 @@
  * loader
  *
  * Role:
- * - Asset loading utilities with cache and Tauri-aware paths.
+ * - Asset loading utilities with cache and local-server-aware paths.
  * - Provides SVG rendering helpers for UI.
  */
 import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
@@ -20,17 +20,10 @@ const joinBaseAndPath = (base, path) => {
   return `${normalizedBase}/${normalizedPath}`;
 };
 
-const isSameOriginBase = (base) => {
-  if (typeof window === 'undefined') return false;
-  const normalizedBase = normalizeNoTrailingSlash(base);
-  if (!normalizedBase) return false;
-  try {
-    const parsed = new URL(normalizedBase, window.location.href);
-    return parsed.origin === window.location.origin;
-  } catch (_) {
-    return false;
-  }
-};
+const encodeRoutePath = (path) => String(path || '')
+  .split('/')
+  .map((segment) => encodeURIComponent(segment))
+  .join('/');
 
 // --- Port persistence (survive refresh) -------------------------------------------------
 (function persistLocalPort() {
@@ -144,16 +137,34 @@ function dataFetcher(path, opts = {}) {
     const filename = cleanPath.split('/').pop();
     const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
     const looksSvg = ext === 'svg';
-    const hasSpace = cleanPath.includes(' ');
     const port = (typeof window !== 'undefined') ? (window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__) : null;
 
     const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
     const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
-    const binPreferred = /^(png|jpe?g|gif|webp|avif|bmp|ico|mp4|mov|webm|m4v|woff2?|ttf|otf|pdf)$/;
 
     const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
     const looksAudio = audioExt.test(ext);
-    const looksBinary = binPreferred.test(ext) || looksAudio; // kept for future branching
+
+    let assetPath = cleanPath;
+    if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
+    const canonicalAssetPath = assetPath.replace(/^src\/assets\//, 'assets/');
+    const assetCandidates = [];
+    const pushAssetCandidate = (candidate) => {
+      if (!candidate || assetCandidates.includes(candidate)) return;
+      assetCandidates.push(candidate);
+    };
+    pushAssetCandidate(canonicalAssetPath);
+    pushAssetCandidate(assetPath);
+    pushAssetCandidate(canonicalAssetPath.replace(/^assets\//, 'src/assets/'));
+
+    const serverPathCandidates = [];
+    const pushServerPathCandidate = (candidate) => {
+      if (!candidate || serverPathCandidates.includes(candidate)) return;
+      serverPathCandidates.push(candidate);
+    };
+    pushServerPathCandidate(canonicalAssetPath);
+    pushServerPathCandidate(cleanPath);
+    pushServerPathCandidate(assetPath);
 
     const serverCandidates = [];
     const pushServerCandidate = (base, routePath) => {
@@ -161,81 +172,53 @@ function dataFetcher(path, opts = {}) {
       if (!nextUrl || serverCandidates.includes(nextUrl)) return;
       serverCandidates.push(nextUrl);
     };
-    const encodedPath = encodeURI(cleanPath);
     const localServerBase = normalizeNoTrailingSlash(getLocalServerUrl() || '');
     if (localServerBase) {
-      pushServerCandidate(localServerBase, `file/${encodedPath}`);
-      if (looksText) pushServerCandidate(localServerBase, `text/${encodedPath}`);
-      if (looksAudio) {
-        pushServerCandidate(localServerBase, `audio/${encodeURIComponent(filename)}`);
-        pushServerCandidate(localServerBase, `audio/${encodedPath}`);
+      for (const serverPath of serverPathCandidates) {
+        const encodedPath = encodeRoutePath(serverPath);
+        pushServerCandidate(localServerBase, `file/${encodedPath}`);
+        if (looksText) pushServerCandidate(localServerBase, `text/${encodedPath}`);
+        if (looksAudio) {
+          pushServerCandidate(localServerBase, `audio/${encodeURIComponent(filename)}`);
+          pushServerCandidate(localServerBase, `audio/${encodedPath}`);
+        }
       }
     }
     if (port) {
-      const fallbackBase = `http://127.0.0.1:${port}`;
-      pushServerCandidate(fallbackBase, `file/${encodedPath}`);
-      if (looksText) pushServerCandidate(fallbackBase, `text/${encodedPath}`);
-      if (looksAudio) {
-        pushServerCandidate(fallbackBase, `audio/${encodeURIComponent(filename)}`);
-        pushServerCandidate(fallbackBase, `audio/${encodedPath}`);
+      const explicitPortBase = `http://127.0.0.1:${port}`;
+      for (const serverPath of serverPathCandidates) {
+        const encodedPath = encodeRoutePath(serverPath);
+        pushServerCandidate(explicitPortBase, `file/${encodedPath}`);
+        if (looksText) pushServerCandidate(explicitPortBase, `text/${encodedPath}`);
+        if (looksAudio) {
+          pushServerCandidate(explicitPortBase, `audio/${encodeURIComponent(filename)}`);
+          pushServerCandidate(explicitPortBase, `audio/${encodedPath}`);
+        }
       }
     }
-    let assetPath = cleanPath;
-    if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
-    const assetCandidates = [assetPath];
-    const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
-    if (altAsset !== assetPath) assetCandidates.push(altAsset);
-    const preferServerCandidatesFirst = isSameOriginBase(localServerBase);
+    const preferServerCandidatesFirst = serverCandidates.length > 0;
     const primaryCandidates = preferServerCandidatesFirst ? serverCandidates : assetCandidates;
     const secondaryCandidates = preferServerCandidatesFirst ? assetCandidates : serverCandidates;
 
     const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
 
-    // Helper: detect HTML fallback (index.html returned instead of asset)
-    const isHtmlFallback = (txt) => {
+    const isHtmlIndexResponse = (txt) => {
       if (!txt) return false; const t = txt.slice(0, 120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
     };
 
-    // Helper: attempt direct Tauri FS read for svg with space (server often rewrites to index)
-    async function tryTauriSvgSpace(fsRelPath) {
-      if (!(looksSvg && hasSpace)) return null;
-      if (typeof window === 'undefined' || !window.__TAURI__ || !window.__TAURI__.fs) return null;
-      const fs = window.__TAURI__.fs;
-      // Prefer original path; if starts with assets/ also try src/assets equivalent
-      const candidates = [fsRelPath];
-      if (/^assets\//.test(fsRelPath) && !/^src\/assets\//.test(fsRelPath)) {
-        candidates.unshift('src/' + fsRelPath);
-      }
-      for (const c of candidates) {
-        
-          const txt = await fs.readTextFile(c).catch(() => null);
-          if (txt && /^<svg[\s>]/i.test(txt.trim()) && !isHtmlFallback(txt)) return { txt, path: c };
-        
-      }
-      return null;
-    }
-
-    // 1) Direct FS read first for svg with space (most robust after refresh)
-    const directFs = await tryTauriSvgSpace(cleanPath);
-    if (directFs) {
-      if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0, max)); }
-      return done(directFs.txt);
-    }
-    // Immediate asset try if no port yet
-    if (!port) {
+    // Immediate bundled asset read only when no local server route is available.
+    if (!port && serverCandidates.length === 0) {
       for (const u of assetCandidates) {
-        
-          if (looksText || mode === 'text' || mode === 'preview') {
-            const r = await fetch(u); if (!r.ok) continue;
-            const txt = await r.text();
-            if (looksSvg && isHtmlFallback(txt)) { continue; }
-            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
-            return done(txt);
-          }
-          if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
-          if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
-          const r = await fetch(u); if (!r.ok) continue; return done(u);
-        
+        if (looksText || mode === 'text' || mode === 'preview') {
+          const r = await fetch(u); if (!r.ok) continue;
+          const txt = await r.text();
+          if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
+          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
+          return done(txt);
+        }
+        if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+        if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+        const r = await fetch(u); if (!r.ok) continue; return done(u);
       }
     }
 
@@ -244,43 +227,36 @@ function dataFetcher(path, opts = {}) {
       return done(out);
     }
     for (const u of primaryCandidates) {
-      
-        const r = await fetch(u);
-        if (!r.ok) continue;
-        if (mode === 'arraybuffer') return done(await r.arrayBuffer());
-        if (mode === 'blob') return done(await r.blob());
-        if (looksText || mode === 'text' || mode === 'preview') {
-          const txt = await r.text();
-          if (looksSvg && isHtmlFallback(txt)) { continue; }
-          if (mode === 'preview' || opts.preview) {
-            const max = opts.preview || 120; return done(txt.slice(0, max));
-          }
-          return done(txt);
+      const r = await fetch(u);
+      if (!r.ok) continue;
+      if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+      if (mode === 'blob') return done(await r.blob());
+      if (looksText || mode === 'text' || mode === 'preview') {
+        const txt = await r.text();
+        if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
+        if (mode === 'preview' || opts.preview) {
+          const max = opts.preview || 120; return done(txt.slice(0, max));
         }
-        if (looksAudio && mode === 'auto') return done(u); // streaming URL path
-        return done(u);
-      
+        return done(txt);
+      }
+      if (looksAudio && mode === 'auto') return done(u); // streaming URL path
+      return done(u);
     }
     for (const u of secondaryCandidates) {
-
-      
-        if (looksText || mode === 'text' || mode === 'preview') {
-
-          const r = await fetch(u); if (!r.ok) continue;
-          const txt = await r.text();
-          if (looksSvg && isHtmlFallback(txt)) { continue; }
-          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
-          return done(txt);
-        }
-        if (mode === 'arraybuffer') {
-
-          const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer());
-        }
-        if (mode === 'blob') {
-          const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
-        }
-        return done(u);
-      
+      if (looksText || mode === 'text' || mode === 'preview') {
+        const r = await fetch(u); if (!r.ok) continue;
+        const txt = await r.text();
+        if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
+        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
+        return done(txt);
+      }
+      if (mode === 'arraybuffer') {
+        const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer());
+      }
+      if (mode === 'blob') {
+        const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
+      }
+      return done(u);
     }
 
     delete __inflightData[key];
@@ -289,12 +265,6 @@ function dataFetcher(path, opts = {}) {
   __inflightData[key] = p;
   return p;
 }
-
-
-
-
-
-
 
 function resize(id, newWidth, newHeight, durationSec = 0, easing = 'ease') {
   let el = document.getElementById(id);
