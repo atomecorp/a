@@ -58,8 +58,17 @@ final class AppNativeAudioController: NSObject {
     }
 
     private func resolveClipURL(_ rawPath: String) -> URL? {
-        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return nil }
+
+        if let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            trimmed = url.path
+        }
+        if trimmed.hasPrefix("/file/") {
+            trimmed = String(trimmed.dropFirst("/file/".count))
+        } else if trimmed.hasPrefix("file/") {
+            trimmed = String(trimmed.dropFirst("file/".count))
+        }
 
         if trimmed.hasPrefix("/") {
             let url = URL(fileURLWithPath: trimmed)
@@ -399,10 +408,12 @@ final class AppNativeAudioController: NSObject {
                     let id = self.resolveString(payload, ["id"])
                     let rawPath = self.resolveString(payload, ["path"])
                     guard !id.isEmpty else {
+                        print("[AUDIO_NATIVE] audio_load_clip ERROR missing_id path=\(rawPath)")
                         self.complete(completion, payload: ["success": false], error: "Missing clip id")
                         return
                     }
                     guard let url = self.resolveClipURL(rawPath) else {
+                        print("[AUDIO_NATIVE] audio_load_clip ERROR path_not_found id=\(id) input=\(rawPath)")
                         self.complete(completion, payload: ["success": false, "id": id], error: "Audio clip path does not exist: \(rawPath)")
                         return
                     }
@@ -415,6 +426,7 @@ final class AppNativeAudioController: NSObject {
                         sampleRate: sampleRate,
                         durationSeconds: durationSeconds
                     )
+                    print("[AUDIO_NATIVE] audio_load_clip OK id=\(id) input=\(rawPath) path=\(url.path) sample_rate=\(sampleRate) duration=\(durationSeconds)")
                     self.complete(completion, payload: [
                         "success": true,
                         "id": id,
@@ -445,10 +457,12 @@ final class AppNativeAudioController: NSObject {
                     let assetId = self.resolveString(payload, ["assetId", "asset_id"])
                     let voiceId = self.resolveString(payload, ["voiceId", "voice_id"])
                     guard !assetId.isEmpty, !voiceId.isEmpty else {
+                        print("[AUDIO_NATIVE] audio_play_instance ERROR missing_ids asset=\(assetId) voice=\(voiceId)")
                         self.complete(completion, payload: ["success": false], error: "Missing asset or voice id")
                         return
                     }
                     guard let clip = self.clips[assetId] else {
+                        print("[AUDIO_NATIVE] audio_play_instance ERROR clip_not_found asset=\(assetId) voice=\(voiceId)")
                         self.complete(completion, payload: ["success": false, "asset_id": assetId, "voice_id": voiceId], error: "Clip '\(assetId)' not found")
                         return
                     }
@@ -504,6 +518,7 @@ final class AppNativeAudioController: NSObject {
                     }
                     self.voices[voiceId] = voice
                     playerNode.play()
+                    print("[AUDIO_NATIVE] audio_play_instance OK asset=\(assetId) voice=\(voiceId) start=\(startSeconds) duration=\(durationSeconds ?? -1) rate=\(rate) gain=\(gain)")
 
                     if let durationSeconds = self.resolveOptionalDouble(payload, ["durationSeconds", "duration_seconds"]),
                        durationSeconds > 0 {
@@ -609,6 +624,10 @@ final class FullscreenWebViewController: UIViewController {
         // Configure WKWebView with earliest possible black styling
         let config = WKWebViewConfiguration()
         let ucc = config.userContentController
+        config.allowsInlineMediaPlayback = true
+        if #available(iOS 10.0, *) {
+            config.mediaTypesRequiringUserActionForPlayback = [.audio]
+        }
         // Ultra-early user script painting html/body black BEFORE any content
         let paintBlack = "(function(){try{var d=document; if(d.documentElement){d.documentElement.style.background='#000';d.documentElement.style.color='#ccc';} if(d.body){d.body.style.background='#000';d.body.style.color='#ccc';}}catch(e){}})();"
         let preScript = WKUserScript(source: paintBlack, injectionTime: .atDocumentStart, forMainFrameOnly: true)
