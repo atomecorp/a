@@ -382,6 +382,70 @@ Reste à faire:
 3. [à faire][P1] Ajouter des probes visuelles browser/Tauri: drag header, resize panel, drop record audio/video, suppression cellule, reload avec couleurs/record cells.
 4. [à faire][P2] Harmoniser les rapports API pour exposer "Molécule/cellules" côté UI sans renommer les contrats techniques MTRX.
 
+### 2026-04-30 - Régression son vidéo Web/Torii et contrat audio lié
+
+Statut: première correction insuffisante confirmée par test manuel. Deuxième passe appliquée sur le vrai chemin runtime: source extraite protégée/authentifiée + extraction FFmpeg déterministe AAC. Validation manuelle Web/Safari, Web3 et Torii encore nécessaire.
+
+Matrice de test manuel rapportée:
+
+| Plateforme | Audio atome | Vidéo atome | Scrub vidéo | Vignette vidéo | Autre |
+| --- | --- | --- | --- | --- | --- |
+| Web/Safari | OK, scrub OK | image OK, son absent ou micro-saut puis silence | position visuelle OK, son absent | très instable | après fermeture, une molécule vidéo peut devenir non déplaçable |
+| Web3 | OK, scrub OK | vidéo OK avec son | OK avec son | instable/absente | lecture globalement correcte |
+| Torii/Tauri | OK, scrub OK | image OK, son absent/intermittent | scrub visuel OK, son absent | instable | proche Web/Safari |
+| iOS/AUv3 | OK d'après tests précédents | OK d'après tests précédents | OK d'après tests précédents | à confirmer | différent de Torii malgré le natif |
+
+Constats d'enquête:
+
+- [confirmé] L'import vidéo crée bien deux clips: un clip `video` role `video_image` et un clip `audio` lié role `video_audio`.
+- [confirmé] Le clip audio lié pointait encore vers le même conteneur vidéo, pas vers une ressource audio extraite.
+- [confirmé] Plusieurs runtimes traitaient encore le clip vidéo lui-même comme porteur d'audio natif. Résultat: double routage possible, mute/unmute incohérent et comportement divergent selon WebKit, Tauri/Kira, Web3/WASM et iOS.
+- [confirmé] Le serveur Fastify possède déjà `/api/extract-audio/:file`, qui extrait une piste `.m4a` avec FFmpeg pour les conteneurs vidéo.
+- [confirmé] La première correction Web ne pouvait pas changer le comportement de manière fiable: `/api/extract-audio/:file` n'était pas normalisé comme source protégée, donc le resolver auth pouvait laisser sortir une source non fetchée/authentifiée vers Kira WASM.
+- [confirmé] L'extraction serveur faisait `-acodec copy`; un `.m4a` pouvait donc conserver un codec non supporté ou fragile côté Safari/WebAudio. Le symptôme compatible est un micro-départ de son puis silence.
+- [confirmé] Le générateur de thumbnails normalisait toutes les vidéos comme `video_recording`, ce qui pouvait transformer un upload `/api/uploads/foo.mov` en `/api/recordings/foo.mov`.
+- [confirmé] Une erreur thumbnail était stockée comme état final non retenté, donc un échec transitoire pouvait laisser la vignette absente jusqu'à un nouvel import/reload favorable.
+
+Corrections appliquées:
+
+- [fait] Ajout de `clips/audio_link_policy.js`: source de vérité pour `video_image`, `video_audio`, `linked_audio_clip_id` et `linked_video_clip_id`.
+- [fait] `hmtracks_session_runtime.js`: les clips vidéo liés `video_image` ne sont plus ajoutés à `native_audio_clips`. Seul le clip audio lié porte le son.
+- [fait] `hmtracks_native_playback_runtime.js`: lecture, scrub et preview audio ignorent les clips vidéo qui ne portent pas leur propre audio.
+- [fait] `position_runtime.js`, `audio_state_runtime.js`, `playback_seek_policy_runtime.js`: un clip vidéo `video_image` est toujours muet; il ne peut plus réactiver par accident l'audio du `HTMLVideoElement`.
+- [fait] `element_runtime.js`: en browser non Tauri/iOS/AUv3, un clip `video_audio` résout son playback vers `/api/extract-audio/:file`, tout en conservant la source canonique vidéo pour la persistance.
+- [fait] `hmtracks_session_runtime.js`: la session audio peut utiliser la source runtime extraite pour le moteur audio sans polluer le `src` persistant.
+- [fait] `source_runtime.js`: `/api/extract-audio/:file` est normalisé comme source API canonique, y compris depuis une URL absolue avec token.
+- [fait] `authorized_playback_runtime.js`: `/api/extract-audio/:file` est traité comme source protégée, fetché avec auth et converti en blob avant Kira WASM; il n'est plus réécrit vers `/api/uploads/:file`.
+- [fait] `server/server.js`: extraction audio vidéo réencodée systématiquement en AAC stéréo 48 kHz `.aac.m4a`; nouveau nom de cache pour ne pas réutiliser les anciens `.m4a` issus de `-acodec copy`.
+- [fait] `src-tauri/src/server/mod.rs`: Torii expose aussi `/api/extract-audio/:file` sur le serveur local Axum, avec la même extraction AAC déterministe.
+- [fait] `element_runtime.js`: Torii utilise maintenant la piste audio extraite pour les clips `video_audio`; iOS/AUv3 restent sur le chemin natif host existant.
+- [fait] `hmtracks_native_audio_runtime.js`: Kira natif Tauri peut charger une source préparée par bytes quand il n'existe pas de chemin fichier direct, ce qui permet de lire la piste extraite tout en gardant le moteur de lecture natif.
+- [fait] `eVeIntuition.js`: la génération thumbnail respecte maintenant le type réel de source (`uploads` vs `recordings`) au lieu de forcer `video_recording`.
+- [fait] `eVeIntuition.js`: `seekVideoToTime` retourne immédiatement si la vidéo est déjà au bon temps et évite le seek exact à la fin du média.
+- [fait] `preview_frame_data_runtime.js`: une metadata thumbnail/waveform en erreur est retentée après throttle au lieu de bloquer définitivement.
+- [fait] `eVeIntuition.js`: une génération vidéo sans aucune frame devient une erreur retentable, pas un cache `empty` permanent.
+
+Validation ajoutée:
+
+- [fait] `node src/application/eVe/domains/mtrax/clips/audio_link_policy.test.mjs`: PASS.
+- [fait] `node src/application/eVe/domains/mtrax/audio/hmtracks_session_audio_link_policy.test.mjs`: PASS.
+- [fait] `node src/application/eVe/domains/mtrax/media/element_video_audio_source.test.mjs`: PASS.
+- [fait] `node src/application/eVe/domains/mtrax/media/extracted_audio_auth_source.test.mjs`: PASS.
+- [fait] `node src/application/eVe/domains/mtrax/preview/preview_metadata_retry.test.mjs`: PASS.
+- [fait] `node --check src/application/eVe/intuition/eVeIntuition.js`: PASS.
+- [fait] `node --check server/server.js`: PASS.
+- [fait] `npm run check:syntax`: PASS, `Syntax OK (1078 file(s))`.
+- [fait] `CARGO_TARGET_DIR=/private/tmp/eve-tauri-codex-target cargo check` dans `src-tauri`: PASS.
+- [info] `cargo fmt --check` échoue sur de nombreux fichiers Rust déjà hors format sans rapport avec cette correction; pas de `cargo fmt` global lancé pour éviter du churn massif.
+
+Reste à vérifier manuellement:
+
+1. [à faire][P0] Web/Safari: vidéo avec son en lecture et scrub, sans micro-saut.
+2. [à faire][P0] Torii/Tauri: vidéo avec son en lecture et scrub, sans chemin audio doublé.
+3. [à faire][P0] Web3: non-régression lecture vidéo + son.
+4. [corrigé à valider][P0] Vignettes vidéo instables: normalisation upload/recording et retry d'erreur corrigés; vérifier sur Web, Web3 et Torii.
+5. [à faire][P1] Molécule vidéo non déplaçable après fermeture: reprendre le drag/overlay après correction audio.
+
 ## Critères d'acceptation avant nouvelle feature d'enregistrement
 
 - Les médias ne disparaissent plus après reload.

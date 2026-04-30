@@ -2116,7 +2116,7 @@ async function startServer() {
         if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true });
 
         const baseName = path.basename(target.filePath, ext);
-        const cachedAudio = path.join(cacheDir, `${baseName}.m4a`);
+        const cachedAudio = path.join(cacheDir, `${baseName}.aac.m4a`);
 
         const cacheExists = existsSync(cachedAudio);
         if (!cacheExists) {
@@ -2126,7 +2126,11 @@ async function startServer() {
               '-y',
               '-i', target.filePath,
               '-vn',
-              '-acodec', 'copy',
+              '-map', '0:a:0',
+              '-c:a', 'aac',
+              '-b:a', '192k',
+              '-ac', '2',
+              '-ar', '48000',
               '-movflags', '+faststart',
               cachedAudio
             ], { timeout: 60000 }, (error, _stdout, stderr) => {

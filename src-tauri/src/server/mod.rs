@@ -2655,6 +2655,184 @@ async fn download_upload_handler(
     }
 }
 
+async fn extract_audio_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<MediaTokenQuery>,
+    AxumPath(file): AxumPath<String>,
+) -> impl IntoResponse {
+    let auth_state = match &state.auth_state {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": "Auth state not initialized" })),
+            )
+                .into_response();
+        }
+    };
+
+    let token = extract_bearer_token(&headers).or_else(|| {
+        query
+            .token
+            .as_ref()
+            .filter(|t| !t.trim().is_empty())
+            .map(|t| t.trim().to_string())
+    });
+    let token_user_id =
+        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+    let user_id = if token_user_id != "anonymous" {
+        token_user_id
+    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
+        header_user_id
+    } else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": "Unauthorized" })),
+        )
+            .into_response();
+    };
+
+    let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    let safe_name = sanitize_file_name(&file);
+    let source_path = downloads_dir.join(&safe_name);
+    if fs::metadata(&source_path).await.is_err() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "success": false, "error": "Source file not found", "path": source_path.to_string_lossy() })),
+        )
+            .into_response();
+    }
+
+    let extension = Path::new(&safe_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    if !matches!(
+        extension.as_str(),
+        "mov" | "m4v" | "mp4" | "avi" | "mkv" | "webm"
+    ) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": "Not a video file" })),
+        )
+            .into_response();
+    }
+
+    let cache_dir = downloads_dir.join(".audio_cache");
+    if let Err(err) = fs::create_dir_all(&cache_dir).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "error": format!("Unable to create audio cache: {err}") })),
+        )
+            .into_response();
+    }
+
+    let base_name = Path::new(&safe_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| safe_name.clone());
+    let cached_audio = cache_dir.join(format!("{}.aac.m4a", base_name));
+
+    if fs::metadata(&cached_audio).await.is_err() {
+        let source_path_for_ffmpeg = source_path.clone();
+        let cached_audio_for_ffmpeg = cached_audio.clone();
+        let extract_result = tokio::task::spawn_blocking(move || {
+            let output = Command::new("ffmpeg")
+                .arg("-v")
+                .arg("error")
+                .arg("-y")
+                .arg("-i")
+                .arg(&source_path_for_ffmpeg)
+                .arg("-vn")
+                .arg("-map")
+                .arg("0:a:0")
+                .arg("-c:a")
+                .arg("aac")
+                .arg("-b:a")
+                .arg("192k")
+                .arg("-ac")
+                .arg("2")
+                .arg("-ar")
+                .arg("48000")
+                .arg("-movflags")
+                .arg("+faststart")
+                .arg(&cached_audio_for_ffmpeg)
+                .output()
+                .map_err(|err| format!("ffmpeg_extract_failed: {err}"))?;
+            if output.status.success() {
+                return Ok(());
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!(
+                "ffmpeg_extract_failed: {}",
+                stderr.trim().chars().take(240).collect::<String>()
+            ))
+        })
+        .await
+        .map_err(|err| format!("ffmpeg_task_failed: {err}"))
+        .and_then(|inner| inner);
+
+        if let Err(err) = extract_result {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err })),
+            )
+                .into_response();
+        }
+    }
+
+    let metadata = match fs::metadata(&cached_audio).await {
+        Ok(value) => value,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(
+                    json!({ "success": false, "error": format!("Extracted audio missing: {err}") }),
+                ),
+            )
+                .into_response();
+        }
+    };
+    let modified_epoch = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_secs())
+        .unwrap_or(0);
+    let etag_value = format!("W/\"{}-{}\"", metadata.len(), modified_epoch);
+
+    match serve_file_with_range(
+        &cached_audio,
+        "audio/mp4",
+        &etag_value,
+        &headers,
+        &format!("inline; filename=\"{}.aac.m4a\"", base_name),
+    )
+    .await
+    {
+        Ok(response) => response,
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "error": format!("Unable to serve extracted audio: {err}") })),
+        )
+            .into_response(),
+    }
+}
+
 async fn download_recording_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -3973,6 +4151,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             get(list_uploads_handler).post(upload_handler),
         )
         .route("/api/uploads/:file", get(download_upload_handler))
+        .route("/api/extract-audio/:file", get(extract_audio_handler))
         .route("/api/recordings/:id", get(download_recording_handler))
         .route("/api/user-recordings", post(user_recordings_upload_handler))
         .route("/api/admin/apply-update", post(update_file_handler))
