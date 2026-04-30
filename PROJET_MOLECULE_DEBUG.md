@@ -419,6 +419,8 @@ Corrections appliquées:
 - [fait] `server/server.js`: extraction audio vidéo réencodée systématiquement en AAC stéréo 48 kHz `.aac.m4a`; nouveau nom de cache pour ne pas réutiliser les anciens `.m4a` issus de `-acodec copy`.
 - [fait] `src-tauri/src/server/mod.rs`: Torii expose aussi `/api/extract-audio/:file` sur le serveur local Axum, avec la même extraction AAC déterministe.
 - [fait] `element_runtime.js`: Torii utilise maintenant la piste audio extraite pour les clips `video_audio`; iOS/AUv3 restent sur le chemin natif host existant.
+- [fait] `element_runtime.js`: Web/Safari ne stocke plus le `blob:` temporaire comme source runtime des clips `video_audio`; il garde `/api/extract-audio/:file`, ce qui empêche la session audio de retomber sur la vidéo originale.
+- [fait] Logs ajoutés: `descriptor:audio_payload` expose la source canonique, la source audio runtime, et si un blob n'a servi qu'au calcul de durée; `buildSession.nativeAudioClipDetails` expose si la session reçoit bien `/api/extract-audio`.
 - [fait] `hmtracks_native_audio_runtime.js`: Kira natif Tauri peut charger une source préparée par bytes quand il n'existe pas de chemin fichier direct, ce qui permet de lire la piste extraite tout en gardant le moteur de lecture natif.
 - [fait] `eVeIntuition.js`: la génération thumbnail respecte maintenant le type réel de source (`uploads` vs `recordings`) au lieu de forcer `video_recording`.
 - [fait] `eVeIntuition.js`: `seekVideoToTime` retourne immédiatement si la vidéo est déjà au bon temps et évite le seek exact à la fin du média.
