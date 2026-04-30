@@ -34,6 +34,7 @@ public class MIDIController: NSObject {
     private var lastSourceCountLogged: Int = -1
     private let maxPacketsPerCallback = 256
     private let midiDisabledForStartupIsolation = false
+    private let verboseMIDIEventLogging = false
     
     public override init() {
         super.init()
@@ -46,6 +47,7 @@ public class MIDIController: NSObject {
     // MARK: - MIDI Logging with Rate Limiting (OPTIMIZATION)
     
     private func logMIDIMessage(_ message: String) {
+        guard verboseMIDIEventLogging else { return }
         let currentTime = CACurrentMediaTime()
         if currentTime - lastLogTime >= logInterval {
             logger.info("\(message)")
@@ -119,7 +121,7 @@ public class MIDIController: NSObject {
         
         // Rate-limit the high-frequency packet log to avoid console flood on some hosts
         let nowt = CACurrentMediaTime()
-        if nowt - lastPacketLogTime > packetLogInterval {
+        if verboseMIDIEventLogging && nowt - lastPacketLogTime > packetLogInterval {
             logger.info("📥 MIDI INPUT RECEIVED from AUM - Packets: \(eventList.pointee.numPackets)")
             lastPacketLogTime = nowt
         }
@@ -229,24 +231,25 @@ public class MIDIController: NSObject {
             if data.count >= 3 {
                 let note = data[1]
                 let pressure = data[2]
-                logger.info("👆 Aftertouch - Channel: \(channel), Note: \(note), Pressure: \(pressure)")
+                logMIDIMessage("👆 Aftertouch - Channel: \(channel), Note: \(note), Pressure: \(pressure)")
             }
             
         case 0xD0: // Channel Pressure
             if data.count >= 2 {
                 let pressure = data[1]
-                logger.info("🤏 Channel Pressure - Channel: \(channel), Pressure: \(pressure)")
+                logMIDIMessage("🤏 Channel Pressure - Channel: \(channel), Pressure: \(pressure)")
             }
             
         case 0xF0: // System messages
             handleSystemMessage(data: data)
             
         default:
-            logger.info("❓ Unknown MIDI - Status: 0x\(String(format: "%02X", status)), Data: \(data.dropFirst().map { String(format: "0x%02X", $0) }.joined(separator: ", "))")
+            logMIDIMessage("❓ Unknown MIDI - Status: 0x\(String(format: "%02X", status)), Data: \(data.dropFirst().map { String(format: "0x%02X", $0) }.joined(separator: ", "))")
         }
     }
     
     private func handleSystemMessage(data: [UInt8]) {
+        guard verboseMIDIEventLogging else { return }
         guard data.count >= 1 else { return }
         
         let statusByte = data[0]

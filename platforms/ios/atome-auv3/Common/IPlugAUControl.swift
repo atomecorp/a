@@ -5,6 +5,7 @@ public protocol IPlugAUControl: AnyObject {
     func setMasterGain(_ g: Float)
     func setPlayActive(_ on: Bool)
     func loadLocalFile(_ path: String)
+    func loadLocalFile(_ path: String, startPositionNormalized: Float?)
     func setTestToneActive(_ on: Bool)
     func setDebugCaptureEnabled(_ on: Bool)
     func dumpDebugCapture()

@@ -609,6 +609,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         // Accept either { action:'loadLocalPath', relativePath } or { type:'iplug', action:'loadLocalPath', relativePath }
                         let autoPlay = (action == "loadAndPlay")
                         if let rel = body["relativePath"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                            let startPositionNormalized: Float? = {
+                                if let n = body["positionNormalized"] as? NSNumber { return n.floatValue }
+                                if let d = body["positionNormalized"] as? Double { return Float(d) }
+                                if let f = body["positionNormalized"] as? Float { return f }
+                                if let s = body["positionNormalized"] as? String, let d = Double(s) { return Float(d) }
+                                return nil
+                            }()
                             // Try to resolve relative path using SandboxPathValidator (same as AudioSchemeHandler)
                             let trimmed = rel.trimmingCharacters(in: .whitespacesAndNewlines)
                             var resolved = false
@@ -618,7 +625,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                     sanitized.isEmpty ? root : root.appendingPathComponent(sanitized)
                                 }
                                 if let found = candidates.first(where: { fm.fileExists(atPath: $0.path) }) {
-                                    au.loadLocalFile(found.path)
+                                    au.loadLocalFile(found.path, startPositionNormalized: startPositionNormalized)
                                     resolved = true
                                     if autoPlay { au.setPlayActive(true) }
                                 }
@@ -636,7 +643,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                                 for folder in folderHints {
                                                     let candidate = directory.appendingPathComponent("\(folder)/\(fileName)")
                                                     if fm.fileExists(atPath: candidate.path) {
-                                                        au.loadLocalFile(candidate.path)
+                                                        au.loadLocalFile(candidate.path, startPositionNormalized: startPositionNormalized)
                                                         resolved = true
                                                         if autoPlay { au.setPlayActive(true) }
                                                         break
@@ -652,9 +659,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                 // Fallback: try iCloud base path
                                 if let base = iCloudFileManager.shared.getCurrentStorageURL() {
                                     let full = base.appendingPathComponent(rel)
-                                    au.loadLocalFile(full.path)
+                                    au.loadLocalFile(full.path, startPositionNormalized: startPositionNormalized)
                                 } else {
-                                    au.loadLocalFile(rel) // try raw path
+                                    au.loadLocalFile(rel, startPositionNormalized: startPositionNormalized) // try raw path
                                 }
                                 if autoPlay { au.setPlayActive(true) }
                             }
