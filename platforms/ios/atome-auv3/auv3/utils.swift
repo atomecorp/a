@@ -120,6 +120,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var audioDebugRecordingStartFrame: Int64? = nil
     // File playback (placeholder for iPlug core integration)
     private var loadedFilePath: String? = nil
+    private var pendingScrubPreview: (path: String, position: Float, duration: Double)? = nil
     // Decoded audio buffers (non-interleaved float32, stereo)
     private var fileAudioL: [Float] = []
     private var fileAudioR: [Float] = []
@@ -636,6 +637,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     // MARK: - Simple controls for WebView bridge
     public func setMasterGain(_ g: Float) { self.masterGain = max(0.0, g) }
     public func setPlayActive(_ on: Bool) {
+        if on {
+            pendingScrubPreview = nil
+        }
         self.playActive = on
         // Prefer file playback when a file is loaded; fallback to test tone otherwise
     os_unfair_lock_lock(&fileLock)
@@ -700,6 +704,65 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     let sr = Int(getSampleRate() ?? 44100.0)
     fadeInTotal = max(128, min(sr / 100, 1024))
     fadeInSamplesRemaining = fadeInTotal
+    }
+
+    public func scrubLocalFile(_ path: String, positionNormalized: Float, durationSeconds: Double) {
+        let p = max(0.0, min(0.9999, positionNormalized))
+        let previewDuration = max(0.04, min(0.35, durationSeconds))
+
+        os_unfair_lock_lock(&fileLock)
+        let total = min(fileAudioL.count, fileAudioR.count)
+        let sameFile = loadedFilePath == path || (loadedFilePath?.hasSuffix((path as NSString).lastPathComponent) == true)
+        let ready = sameFile && fileLoaded && total > 0
+        let decodingSameFile = sameFile && isDecodingFile
+        let previewStart = ready ? min(max(0, Int(Double(total) * Double(p))), max(0, total - 1)) : 0
+        let previewFrames = ready ? max(1, min(total - previewStart, Int(previewDuration * max(1.0, fileSampleRate)))) : 0
+        let previewL = ready ? Array(fileAudioL[previewStart..<(previewStart + previewFrames)]) : []
+        let previewR = ready ? Array(fileAudioR[previewStart..<(previewStart + previewFrames)]) : []
+        if ready {
+            pendingScrubPreview = nil
+        }
+        os_unfair_lock_unlock(&fileLock)
+
+        if !ready {
+            pendingScrubPreview = (path: path, position: p, duration: previewDuration)
+            if decodingSameFile {
+                return
+            }
+            loadLocalFile(path)
+            return
+        }
+
+        let frameCount = min(previewL.count, previewR.count)
+        guard frameCount > 0 else { return }
+        var interleaved = [Float](repeating: 0, count: frameCount * 2)
+        let fadeFrames = max(16, min(frameCount / 3, Int((getSampleRate() ?? 44100.0) / 200.0)))
+        for i in 0..<frameCount {
+            var gain: Float = 1.0
+            if i < fadeFrames {
+                gain = Float(i) / Float(max(1, fadeFrames))
+            } else if i >= frameCount - fadeFrames {
+                gain = Float(frameCount - i) / Float(max(1, fadeFrames))
+            }
+            interleaved[i * 2] = previewL[i] * gain
+            interleaved[i * 2 + 1] = previewR[i] * gain
+        }
+        os_unfair_lock_lock(&jsAudioLock)
+        jsAudioBuffer = interleaved
+        jsAudioPlaybackIndex = 0
+        jsAudioSampleRate = fileSampleRate
+        jsAudioActive = true
+        os_unfair_lock_unlock(&jsAudioLock)
+    }
+
+    private func consumePendingScrubPreviewIfNeeded(path: String) {
+        guard let pending = pendingScrubPreview else { return }
+        let sameFile = pending.path == path || pending.path.hasSuffix((path as NSString).lastPathComponent)
+        guard sameFile else { return }
+        pendingScrubPreview = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.scrubLocalFile(pending.path, positionNormalized: pending.position, durationSeconds: pending.duration)
+        }
     }
 
     public func recordStart(sessionId: String, fileName: String, source: String, sampleRate: Double?, channels: UInt32?) {
@@ -1486,7 +1549,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 print("📥 AUv3: decoded file (frames=\(outL.count), sr=\(Int(outSR)))")
             }
             // AVAudioFile path decodes whole file; signal ready now if we have frames
-            if gen == self.currentDecodeGen, self.fileLoaded { self.emitClipReady(path: path) }
+            if gen == self.currentDecodeGen, self.fileLoaded {
+                self.emitClipReady(path: path)
+                self.consumePendingScrubPreviewIfNeeded(path: path)
+            }
         } catch {
             // AVAudioFile often fails in AUv3 extensions (sandbox restrictions); AVAssetReader fallback is the normal path
             print("ℹ️ AUv3: AVAudioFile unavailable (\(error.localizedDescription)) — using AVAssetReader")
@@ -1600,7 +1666,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     DispatchQueue.main.async { print("🚀 AUv3: primed playback (\(outL.count) frames)") }
                     self.isTestToneActive = false
                     // First chunk ready -> notify JS for zero-wait play
-                    if gen == self.currentDecodeGen { self.emitClipReady(path: url.path) }
+                    if gen == self.currentDecodeGen {
+                        self.emitClipReady(path: url.path)
+                        self.consumePendingScrubPreviewIfNeeded(path: url.path)
+                    }
                     // IMPORTANT: clear staging buffers so the next iteration only carries NEW data
                     outL.removeAll(keepingCapacity: true)
                     outR.removeAll(keepingCapacity: true)
@@ -1670,7 +1739,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     self.isTestToneActive = false
                 }
                 self.isDecodingFile = false
-                if gen == self.currentDecodeGen, self.fileLoaded { self.emitClipReady(path: url.path) }
+                if gen == self.currentDecodeGen, self.fileLoaded {
+                    self.emitClipReady(path: url.path)
+                    self.consumePendingScrubPreviewIfNeeded(path: url.path)
+                }
             case .failed:
                 print("❌ AUv3: asset reader failed: \(reader.error?.localizedDescription ?? "unknown error")")
                 self.isDecodingFile = false

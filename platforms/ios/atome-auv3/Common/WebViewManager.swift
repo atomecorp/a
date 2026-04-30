@@ -532,6 +532,79 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         }
                         return
                     }
+                    if action == "scrubPreview" {
+                        if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                            let rel = (body["relativePath"] as? String) ?? ""
+                            let trimmed = rel.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let lookupPath: String = {
+                                if let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                                    let name = url.lastPathComponent
+                                    return name.isEmpty ? trimmed : name
+                                }
+                                if trimmed.hasPrefix("file:///file/") {
+                                    return String(trimmed.dropFirst("file:///file/".count))
+                                }
+                                if trimmed.hasPrefix("file:///") {
+                                    return String(trimmed.dropFirst("file:///".count))
+                                }
+                                if trimmed.hasPrefix("/file/") {
+                                    return String(trimmed.dropFirst("/file/".count))
+                                }
+                                return trimmed
+                            }()
+                            let positionNormalized: Float = {
+                                if let n = body["positionNormalized"] as? NSNumber { return n.floatValue }
+                                if let d = body["positionNormalized"] as? Double { return Float(d) }
+                                if let f = body["positionNormalized"] as? Float { return f }
+                                if let s = body["positionNormalized"] as? String, let d = Double(s) { return Float(d) }
+                                return 0
+                            }()
+                            let durationSeconds: Double = {
+                                if let n = body["durationSeconds"] as? NSNumber { return n.doubleValue }
+                                if let d = body["durationSeconds"] as? Double { return d }
+                                if let f = body["durationSeconds"] as? Float { return Double(f) }
+                                if let s = body["durationSeconds"] as? String, let d = Double(s) { return d }
+                                return 0.12
+                            }()
+                            var resolvedPath: String? = nil
+                            if let sanitized = SandboxPathValidator.sanitizedRelativePath(lookupPath) {
+                                let fm = FileManager.default
+                                let candidates = SandboxPathValidator.allowedRoots().map { root -> URL in
+                                    sanitized.isEmpty ? root : root.appendingPathComponent(sanitized)
+                                }
+                                resolvedPath = candidates.first(where: { fm.fileExists(atPath: $0.path) })?.path
+                            }
+                            if resolvedPath == nil {
+                                let fileName = (lookupPath as NSString).lastPathComponent
+                                if !fileName.isEmpty, let root = iCloudFileManager.shared.getCurrentStorageURL() {
+                                    let fm = FileManager.default
+                                    let folderHints = ["Downloads", "Recordings"]
+                                    if let sanitizedUsers = SandboxPathValidator.sanitizedRelativePath("data/users") {
+                                        let usersURL = root.appendingPathComponent(sanitizedUsers, isDirectory: true)
+                                        if let directories = try? fm.contentsOfDirectory(at: usersURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+                                            for directory in directories {
+                                                for folder in folderHints {
+                                                    let candidate = directory.appendingPathComponent("\(folder)/\(fileName)")
+                                                    if fm.fileExists(atPath: candidate.path) {
+                                                        resolvedPath = candidate.path
+                                                        break
+                                                    }
+                                                }
+                                                if resolvedPath != nil { break }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if resolvedPath == nil, let base = iCloudFileManager.shared.getCurrentStorageURL() {
+                                resolvedPath = base.appendingPathComponent(lookupPath).path
+                            }
+                            if let path = resolvedPath {
+                                au.scrubLocalFile(path, positionNormalized: positionNormalized, durationSeconds: durationSeconds)
+                            }
+                        }
+                        return
+                    }
                     if action == "loadLocalPath" || action == "loadAndPlay" || (body["type"] as? String) == "iplug" {
                         // Accept either { action:'loadLocalPath', relativePath } or { type:'iplug', action:'loadLocalPath', relativePath }
                         let autoPlay = (action == "loadAndPlay")
