@@ -221,13 +221,8 @@ export const isNativeKiraPlayback = (env = globalThis) => (
 // audio goes through the host render callback (mixer) instead of the
 // iOS device speaker.
 //
-// Strategy: fetch the media as ArrayBuffer, decode with WebAudio
-// decodeAudioData, play via AudioBufferSourceNode, and tap the output
-// with ScriptProcessorNode to forward chunks to Swift's
-// injectJavaScriptAudio. Device output is muted with a zero-gain node.
-//
-// This avoids createMediaElementSource which is broken under custom URL
-// schemes in WKWebView (CORS zeroes the output).
+// Strategy: keep the WebView media element muted/visual-only and send a native
+// playback command to Swift. Decoding and audio rendering happen in the host.
 
 const _getAuv3Bridge = (env = globalThis) => {
     if (!isAuv3AudioRuntime(env) || !hasSwiftBridge(env)) return null;
