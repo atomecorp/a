@@ -1203,7 +1203,11 @@ async function startServer() {
 
       const requestPath = String(request.raw?.url || request.url || '').split('?')[0];
       const allowsQueryMediaToken = ['GET', 'HEAD'].includes(String(request.method || '').toUpperCase())
-        && (requestPath.startsWith('/api/uploads/') || requestPath.startsWith('/api/recordings/'));
+        && (
+          requestPath.startsWith('/api/uploads/')
+          || requestPath.startsWith('/api/recordings/')
+          || requestPath.startsWith('/api/extract-audio/')
+        );
       const queryToken = allowsQueryMediaToken
         ? (request.query?.access_token || request.query?.auth_token || request.query?.token)
         : null;
