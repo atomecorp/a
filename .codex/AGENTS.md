@@ -59,20 +59,24 @@ Any request that implies patching, temporary workaround, masking, bypassing, or 
 
 Test and Temporary File Location Policy
 
-All tests and temporary files created by the assistant MUST be placed exclusively under:
- • ./tests
+All temporary files created by the assistant MUST be placed exclusively under:
+ • ./temp
 
 This rule applies to:
- • Test files
  • Probe files
  • Debug scripts
  • Temporary validation scripts
  • Temporary fixtures
+ • Temporary logs
  • Temporary outputs created for verification
 
-The assistant MUST NOT create test or temporary files in the project root, source directories, documentation directories, tool directories, or any other location outside ./tests.
+Formal test files intended to remain part of the repository MUST be placed under:
+ • ./tests
 
-If a requested validation requires temporary files, those files must be created under ./tests or the assistant must stop and request clarification.
+The assistant MUST NOT create temporary files in the project root, source directories, documentation directories, tool directories, or any other location outside ./temp.
+The assistant MUST NOT place temporary probes, scratch scripts, or debug files under ./tools.
+
+If a requested validation requires temporary files, those files must be created under ./temp or the assistant must stop and request clarification.
 
 ⸻
 
