@@ -105,7 +105,21 @@ import {
 
         if (type === 'record_done') {
             if (entry.stop) {
-                entry.stop.resolve(detail);
+                const frameCount = Number(detail.frame_count || detail.frameCount || 0);
+                const sampleRate = Number(detail.sample_rate || detail.sampleRate || entry.sampleRate || 0);
+                entry.stop.resolve({
+                    ...detail,
+                    session_id: sessionId,
+                    file_name: detail.file_name || detail.fileName || entry.fileName || null,
+                    file_path: detail.file_path || detail.path || null,
+                    duration_sec: frameCount > 0 && sampleRate > 0
+                        ? frameCount / sampleRate
+                        : Number(detail.duration_sec || detail.durationSec || 0),
+                    frame_count: frameCount,
+                    sample_rate: sampleRate,
+                    channels: Number(detail.channels || entry.channels || 0),
+                    provider: entry.provider || 'iplug_native_recorder'
+                });
                 entry.stop = null;
             }
             PENDING.delete(sessionId);
@@ -218,6 +232,9 @@ import {
         const pendingEntry = {
             provider: 'iplug_native_recorder',
             transport: 'auv3',
+            fileName,
+            sampleRate: Number(sampleRate) || null,
+            channels: Number(channels) || null,
             start: null,
             stop: null
         };
@@ -249,12 +266,18 @@ import {
                 const result = await invoke('audio_record_stop', {
                     sessionId: sid
                 });
+                const frameCount = Number(result?.frame_count || result?.frameCount || 0);
+                const sampleRate = Number(result?.sample_rate || result?.sampleRate || entry.sampleRate || 0);
                 return {
                     session_id: sid,
                     file_name: entry.fileName,
-                    file_path: result?.file_path || entry.filePath,
-                    duration_sec: Number(result?.duration_sec || 0),
-                    sample_rate: Number(result?.sample_rate || entry.sampleRate || 0),
+                    file_path: entry.filePath,
+                    absolute_file_path: result?.absolute_file_path || result?.file_path || null,
+                    duration_sec: frameCount > 0 && sampleRate > 0
+                        ? frameCount / sampleRate
+                        : Number(result?.duration_sec || 0),
+                    frame_count: frameCount,
+                    sample_rate: sampleRate,
                     channels: Number(result?.channels || entry.channels || 0),
                     provider: entry.provider
                 };

@@ -750,8 +750,26 @@ async function resolveDownloadTarget(fileParam, userId) {
 
   const safeRequestedName = sanitizeFileName(safeParam);
   const userPath = await resolveUserFilePath(projectRoot, userId, safeRequestedName);
-  await fs.access(userPath);
-  return { filePath: userPath, downloadName: safeRequestedName, meta: null };
+  try {
+    await fs.access(userPath);
+    return { filePath: userPath, downloadName: safeRequestedName, meta: null };
+  } catch (error) {
+    const fallbackRoots = ['recordings', 'captures'];
+    for (const rootName of fallbackRoots) {
+      try {
+        const target = await resolveUserAssetPath(
+          projectRoot,
+          { id: userId },
+          path.join(rootName, safeRequestedName)
+        );
+        await fs.access(target.filePath);
+        return { filePath: target.filePath, downloadName: safeRequestedName, meta: null };
+      } catch (_) {
+        // Try the next media storage root.
+      }
+    }
+    throw error;
+  }
 
   return null;
 }
@@ -2085,6 +2103,65 @@ async function startServer() {
         const status = error?.status || 404;
         reply.code(status);
         return { success: false, error: error?.error || error?.message || 'File not found' };
+      }
+    });
+
+    server.get('/api/recordings/:file', async (request, reply) => {
+      try {
+        const { userId } = await resolveUploadIdentity(request);
+        const fileParam = request.params.file || '';
+        const target = await resolveDownloadTarget(fileParam, userId);
+
+        if (!target?.filePath) {
+          const status = target?.status || 404;
+          reply.code(status);
+          return { success: false, error: target?.error || 'Recording not found' };
+        }
+
+        await fs.access(target.filePath);
+        const stat = await fs.stat(target.filePath);
+        const totalSize = stat.size;
+        const ext = path.extname(target.filePath).toLowerCase();
+        const mediaMimeTypes = {
+          '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime',
+          '.webm': 'video/webm', '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska',
+          '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac',
+          '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.flac': 'audio/flac',
+          '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml'
+        };
+        const mimeType = target.meta?.mime_type || mediaMimeTypes[ext] || 'application/octet-stream';
+
+        reply.header('Content-Type', mimeType);
+        reply.header('Accept-Ranges', 'bytes');
+        reply.header('Content-Disposition', `inline; filename="${target.downloadName}"`);
+        reply.header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
+
+        const rangeHeader = request.headers.range;
+        if (rangeHeader) {
+          const match = /^bytes=(\d+)-(\d*)$/.exec(String(rangeHeader));
+          if (match) {
+            const start = parseInt(match[1], 10);
+            const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+            if (start >= totalSize || end >= totalSize || start > end) {
+              reply.code(416);
+              reply.header('Content-Range', `bytes */${totalSize}`);
+              return reply.send('');
+            }
+            reply.code(206);
+            reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+            reply.header('Content-Length', end - start + 1);
+            return reply.send(createReadStream(target.filePath, { start, end }));
+          }
+        }
+
+        reply.header('Content-Length', totalSize);
+        return reply.send(createReadStream(target.filePath));
+      } catch (error) {
+        request.log.error({ err: error }, 'Unable to download recording');
+        const status = error?.status || 404;
+        reply.code(status);
+        return { success: false, error: error?.error || error?.message || 'Recording not found' };
       }
     });
 

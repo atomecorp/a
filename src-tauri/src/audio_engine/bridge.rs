@@ -148,7 +148,8 @@ pub fn audio_record_start(
     Ok(json!({
         "success": true,
         "session_id": session_id,
-        "file_path": abs_path
+        "file_path": file_path,
+        "absolute_file_path": abs_path
     }))
 }
 
@@ -158,8 +159,9 @@ pub fn audio_record_stop(session_id: String) -> Result<Value, String> {
     Ok(json!({
         "success": true,
         "session_id": result.session_id,
-        "file_path": result.file_path,
+        "absolute_file_path": result.file_path,
         "duration_sec": result.duration_sec,
+        "frame_count": result.frame_count,
         "sample_rate": result.sample_rate,
         "channels": result.channels,
         "output_format": result.output_format

@@ -15,7 +15,7 @@ use cpal::{SampleFormat, StreamConfig};
 use hound::{WavSpec, WavWriter};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use super::metering;
@@ -178,6 +178,7 @@ struct RecordingSession {
     sample_rate: u32,
     channels: u16,
     output_format: OutputFormat,
+    frame_count: Arc<AtomicU64>,
 }
 
 static SESSIONS: once_cell::sync::Lazy<Mutex<HashMap<String, RecordingSession>>> =
@@ -188,6 +189,7 @@ pub struct RecordResult {
     pub session_id: String,
     pub file_path: String,
     pub duration_sec: f64,
+    pub frame_count: u64,
     pub sample_rate: u32,
     pub channels: u16,
     pub output_format: String,
@@ -232,6 +234,8 @@ pub fn start_with_options(
     let stop_signal_thread = Arc::clone(&stop_signal);
     let stop_atomic = Arc::new(AtomicBool::new(false));
     let stop_atomic_cb = Arc::clone(&stop_atomic);
+    let frame_count = Arc::new(AtomicU64::new(0));
+    let frame_count_thread = Arc::clone(&frame_count);
     let path_owned = abs_wav_path.to_string();
     let sr = sample_rate;
     let ch = channels;
@@ -275,6 +279,7 @@ pub fn start_with_options(
         let writer_clone = Arc::clone(&writer);
 
         let stop_for_callback = Arc::clone(&stop_atomic_cb);
+        let frame_count_cb = Arc::clone(&frame_count_thread);
         let fmt_cb = fmt;
 
         let sample_format = default_config.sample_format();
@@ -299,6 +304,10 @@ pub fn start_with_options(
                                 }
                             }
                         }
+                        frame_count_cb.fetch_add(
+                            (data.len() / usize::from(actual_ch.max(1))) as u64,
+                            Ordering::Relaxed,
+                        );
                     },
                     err_fn,
                     None,
@@ -307,6 +316,7 @@ pub fn start_with_options(
             SampleFormat::I16 => {
                 let writer_clone2 = Arc::clone(&writer);
                 let stop_for_callback2 = Arc::clone(&stop_atomic_cb);
+                let frame_count_cb2 = Arc::clone(&frame_count_thread);
                 let fmt_cb2 = fmt;
                 device
                     .build_input_stream(
@@ -325,6 +335,10 @@ pub fn start_with_options(
                                     }
                                 }
                             }
+                            frame_count_cb2.fetch_add(
+                                (data.len() / usize::from(actual_ch.max(1))) as u64,
+                                Ordering::Relaxed,
+                            );
                         },
                         err_fn,
                         None,
@@ -367,6 +381,7 @@ pub fn start_with_options(
             sample_rate,
             channels,
             output_format,
+            frame_count,
         },
     );
 
@@ -378,8 +393,6 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
     let mut session = sessions
         .remove(session_id)
         .ok_or(format!("Session '{session_id}' not found"))?;
-
-    let duration_sec = session.start_time.elapsed().as_secs_f64();
 
     // Signal the recording thread to stop — both the atomic (for the audio callback)
     // and the condvar (for the blocking wait)
@@ -394,11 +407,18 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
             Err(_) => return Err("Recording thread panicked".to_string()),
         }
     }
+    let frame_count = session.frame_count.load(Ordering::Relaxed);
+    let duration_sec = if session.sample_rate > 0 {
+        frame_count as f64 / session.sample_rate as f64
+    } else {
+        session.start_time.elapsed().as_secs_f64()
+    };
 
     Ok(RecordResult {
         session_id: session_id.to_string(),
         file_path: session.file_path,
         duration_sec,
+        frame_count,
         sample_rate: session.sample_rate,
         channels: session.channels,
         output_format: format!("{:?}", session.output_format),
