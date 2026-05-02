@@ -156,7 +156,7 @@ export const resolveAudioRuntime = (env = globalThis) => {
             return {
                 runtime: 'ios_app',
                 playback: 'ios_native_kira',
-                record: 'unsupported',
+                record: 'ios_native_kira',
                 preferredFacadeBackendOrder: ['kira'],
                 hasIPlugBridge: hasIPlugBridge(env),
                 hasSwiftBridge: hasSwiftBridge(env),
@@ -203,7 +203,9 @@ export const resolveVoiceCaptureProvider = (env = globalThis) => {
     const explicit = String(env?.__SQUIRREL_RECORD_PROVIDER__ || '').trim().toLowerCase();
     if (explicit) return explicit;
     const runtime = resolveAudioRuntime(env);
-    if (runtime.record === 'tauri_native_kira' || runtime.record === 'ios_auv3_native') {
+    if (runtime.record === 'tauri_native_kira'
+        || runtime.record === 'ios_auv3_native'
+        || runtime.record === 'ios_native_kira') {
         return 'iplug_native_recorder';
     }
     if (runtime.record === 'web_capture') {

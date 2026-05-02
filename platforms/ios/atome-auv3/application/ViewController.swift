@@ -41,9 +41,17 @@ final class AppNativeAudioController: NSObject {
 
     private let queue = DispatchQueue(label: "atome.app.native_audio", qos: .userInitiated)
     private let engine = AVAudioEngine()
+    private let recordingEngine = AVAudioEngine()
     private var clips: [String: ClipEntry] = [:]
     private var voices: [String: VoiceEntry] = [:]
     private var audioSessionReady = false
+    private var activeRecordingSessionId: String?
+    private var activeRecordingFileName: String?
+    private var activeRecordingPath: String?
+    private var activeRecordingFile: AVAudioFile?
+    private var activeRecordingSampleRate: Double = 0
+    private var activeRecordingChannels: Int = 0
+    private var activeRecordingFrames: AVAudioFramePosition = 0
 
     private override init() {
         super.init()
@@ -165,6 +173,181 @@ final class AppNativeAudioController: NSObject {
         try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
         try session.setActive(true)
         audioSessionReady = true
+    }
+
+    private func configureRecordingSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
+        try session.setActive(true)
+        audioSessionReady = true
+    }
+
+    private func requestMicrophonePermission(_ completion: @escaping (Bool) -> Void) {
+        let session = AVAudioSession.sharedInstance()
+        switch session.recordPermission {
+        case .granted:
+            completion(true)
+        case .denied:
+            completion(false)
+        case .undetermined:
+            DispatchQueue.main.async {
+                session.requestRecordPermission { granted in
+                    completion(granted)
+                }
+            }
+        @unknown default:
+            completion(false)
+        }
+    }
+
+    private func mediaOutputURL(fileName: String,
+                                filePath: String,
+                                userId: String,
+                                defaultFolder: String = "recordings") throws -> URL {
+        let safeFileName = fileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "capture_\(Int(Date().timeIntervalSince1970)).dat"
+            : (fileName as NSString).lastPathComponent
+        let relativePath: String
+        if !filePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            relativePath = filePath
+        } else {
+            let safeUserId = userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "anonymous" : userId
+            relativePath = "data/users/\(safeUserId)/\(defaultFolder)/\(safeFileName)"
+        }
+        guard let sanitized = SandboxPathValidator.sanitizedRelativePath(relativePath),
+              let root = SandboxPathValidator.primaryRoot() else {
+            throw NSError(domain: "AppNativeAudioController", code: 20, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid recording path"
+            ])
+        }
+        let url = root.appendingPathComponent(sanitized, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        return url
+    }
+
+    private func startAudioRecording(payload: [String: Any],
+                                     completion: @escaping ([String: Any], String?) -> Void) {
+        print("[AUDIO_NATIVE] audio_record_start request payload_keys=\(Array(payload.keys).sorted())")
+        requestMicrophonePermission { granted in
+            self.queue.async {
+                guard granted else {
+                    print("[AUDIO_NATIVE] audio_record_start denied microphone_permission_denied")
+                    self.complete(completion, payload: ["success": false], error: "microphone_permission_denied")
+                    return
+                }
+                do {
+                    if self.activeRecordingSessionId != nil {
+                        self.complete(completion, payload: ["success": false], error: "audio_recording_in_progress")
+                        return
+                    }
+                    try self.configureRecordingSession()
+                    let sessionId = self.resolveString(payload, ["sessionId", "session_id"])
+                    let fileName = self.resolveString(payload, ["fileName", "file_name"]).isEmpty
+                        ? "audio_\(Int(Date().timeIntervalSince1970)).wav"
+                        : self.resolveString(payload, ["fileName", "file_name"])
+                    let userId = self.resolveString(payload, ["userId", "user_id"])
+                    let filePath = self.resolveString(payload, ["filePath", "file_path", "path"])
+                    let url = try self.mediaOutputURL(fileName: fileName, filePath: filePath, userId: userId)
+                    print("[AUDIO_NATIVE] audio_record_start resolved session=\(sessionId) file=\(fileName) user=\(userId.isEmpty ? "<none>" : userId) request_path=\(filePath.isEmpty ? "<none>" : filePath) absolute=\(url.path)")
+
+                    let input = self.recordingEngine.inputNode
+                    let inputFormat = input.outputFormat(forBus: 0)
+                    guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+                        self.complete(completion, payload: ["success": false], error: "microphone_input_format_unavailable")
+                        return
+                    }
+                    try? input.removeTap(onBus: 0)
+                    let file = try AVAudioFile(forWriting: url, settings: inputFormat.settings)
+                    self.activeRecordingSessionId = sessionId
+                    self.activeRecordingFileName = fileName
+                    self.activeRecordingPath = SandboxPathValidator.sanitizedRelativePath(filePath).flatMap { $0.isEmpty ? nil : $0 }
+                        ?? "data/users/\(userId.isEmpty ? "anonymous" : userId)/recordings/\(fileName)"
+                    self.activeRecordingFile = file
+                    self.activeRecordingSampleRate = inputFormat.sampleRate
+                    self.activeRecordingChannels = Int(inputFormat.channelCount)
+                    self.activeRecordingFrames = 0
+
+                    input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+                        guard let self else { return }
+                        do {
+                            try self.activeRecordingFile?.write(from: buffer)
+                            self.activeRecordingFrames += AVAudioFramePosition(buffer.frameLength)
+                        } catch {
+                            print("[AUDIO_NATIVE] audio_record_start tap write failed: \(error.localizedDescription)")
+                        }
+                    }
+                    self.recordingEngine.prepare()
+                    try self.recordingEngine.start()
+                    print("[AUDIO_NATIVE] audio_record_start OK session=\(sessionId) path=\(url.path)")
+                    self.complete(completion, payload: [
+                        "success": true,
+                        "session_id": sessionId,
+                        "file_name": fileName,
+                        "file_path": self.activeRecordingPath ?? "",
+                        "absolute_file_path": url.path,
+                        "sample_rate": self.activeRecordingSampleRate,
+                        "channels": self.activeRecordingChannels
+                    ])
+                } catch {
+                    print("[AUDIO_NATIVE] audio_record_start ERROR \(error.localizedDescription)")
+                    self.activeRecordingSessionId = nil
+                    self.activeRecordingFileName = nil
+                    self.activeRecordingPath = nil
+                    self.activeRecordingFile = nil
+                    self.recordingEngine.stop()
+                    self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func stopAudioRecording(payload: [String: Any],
+                                    completion: @escaping ([String: Any], String?) -> Void) {
+        let requestedSessionId = resolveString(payload, ["sessionId", "session_id"])
+        guard let sessionId = activeRecordingSessionId else {
+            complete(completion, payload: ["success": false], error: "no_active_audio_recording")
+            return
+        }
+        if !requestedSessionId.isEmpty && requestedSessionId != sessionId {
+            complete(completion, payload: ["success": false], error: "audio_recording_session_mismatch")
+            return
+        }
+        let input = recordingEngine.inputNode
+        try? input.removeTap(onBus: 0)
+        recordingEngine.stop()
+        activeRecordingFile = nil
+        let duration = activeRecordingSampleRate > 0 ? Double(activeRecordingFrames) / activeRecordingSampleRate : 0
+        let path = activeRecordingPath ?? ""
+        let fileName = activeRecordingFileName ?? ""
+        let absolutePath = SandboxPathValidator.candidateURLs(for: path).first(where: { FileManager.default.fileExists(atPath: $0.path) })?.path ?? ""
+        let fileSize = absolutePath.isEmpty
+            ? -1
+            : (((try? FileManager.default.attributesOfItem(atPath: absolutePath))?[.size] as? NSNumber)?.int64Value ?? -1)
+        let sampleRate = activeRecordingSampleRate
+        let channels = activeRecordingChannels
+        let frames = activeRecordingFrames
+        activeRecordingSessionId = nil
+        activeRecordingFileName = nil
+        activeRecordingPath = nil
+        activeRecordingSampleRate = 0
+        activeRecordingChannels = 0
+        activeRecordingFrames = 0
+        print("[AUDIO_NATIVE] audio_record_stop OK session=\(sessionId) file=\(fileName) path=\(path) absolute=\(absolutePath.isEmpty ? "<unknown>" : absolutePath) bytes=\(fileSize) duration=\(duration) frames=\(frames)")
+        complete(completion, payload: [
+            "success": true,
+            "session_id": sessionId,
+            "file_name": fileName,
+            "file_path": path,
+            "duration_sec": duration,
+            "frame_count": Int(frames),
+            "sample_rate": sampleRate,
+            "channels": channels,
+            "absolute_file_path": absolutePath,
+            "size_bytes": fileSize
+        ])
     }
 
     private func ensureAudioEngineRunning(playbackFormat: AVAudioFormat? = nil) throws {
@@ -403,6 +586,12 @@ final class AppNativeAudioController: NSObject {
                     try self.configureAudioSessionIfNeeded()
                     self.complete(completion, payload: ["success": true])
 
+                case "audio_record_start":
+                    self.startAudioRecording(payload: payload, completion: completion)
+
+                case "audio_record_stop":
+                    self.stopAudioRecording(payload: payload, completion: completion)
+
                 case "audio_load_clip":
                     try self.configureAudioSessionIfNeeded()
                     let id = self.resolveString(payload, ["id"])
@@ -610,6 +799,362 @@ final class AppNativeAudioController: NSObject {
     }
 }
 
+final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDelegate, AVCaptureFileOutputRecordingDelegate {
+    static let shared = AppNativeMediaCaptureController()
+
+    private let sessionQueue = DispatchQueue(label: "atome.app.native_media_capture", qos: .userInitiated)
+    private var photoSession: AVCaptureSession?
+    private var photoOutput: AVCapturePhotoOutput?
+    private var photoCompletion: (([String: Any], String?) -> Void)?
+    private var photoOutputURL: URL?
+    private var photoRelativePath: String?
+    private var photoFileName: String?
+
+    private var videoSession: AVCaptureSession?
+    private var movieOutput: AVCaptureMovieFileOutput?
+    private var videoCompletion: (([String: Any], String?) -> Void)?
+    private var videoStopCompletion: (([String: Any], String?) -> Void)?
+    private var videoOutputURL: URL?
+    private var videoRelativePath: String?
+    private var videoFileName: String?
+    private var videoStartedAt: Date?
+
+    static func canHandle(command: String) -> Bool {
+        switch command {
+        case "media_capture_photo", "media_video_record_start", "media_video_record_stop":
+            return true
+        default:
+            return false
+        }
+    }
+
+    func handle(command: String,
+                payload: [String: Any],
+                completion: @escaping ([String: Any], String?) -> Void) {
+        switch command {
+        case "media_capture_photo":
+            capturePhoto(payload: payload, completion: completion)
+        case "media_video_record_start":
+            startVideoRecording(payload: payload, completion: completion)
+        case "media_video_record_stop":
+            stopVideoRecording(completion: completion)
+        default:
+            completion(["success": false], "Unsupported native media command: \(command)")
+        }
+    }
+
+    private func complete(_ completion: @escaping ([String: Any], String?) -> Void,
+                          payload: [String: Any],
+                          error: String? = nil) {
+        DispatchQueue.main.async {
+            completion(payload, error)
+        }
+    }
+
+    private func resolveString(_ payload: [String: Any], _ keys: [String]) -> String {
+        for key in keys {
+            if let value = payload[key] as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return ""
+    }
+
+    private func outputURL(fileName: String,
+                           filePath: String,
+                           userId: String,
+                           folder: String) throws -> (URL, String) {
+        let safeFileName = fileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "capture_\(Int(Date().timeIntervalSince1970))"
+            : (fileName as NSString).lastPathComponent
+        let relativePath: String
+        if !filePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            relativePath = filePath
+        } else {
+            let safeUserId = userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "anonymous" : userId
+            relativePath = "data/users/\(safeUserId)/\(folder)/\(safeFileName)"
+        }
+        guard let sanitized = SandboxPathValidator.sanitizedRelativePath(relativePath),
+              let root = SandboxPathValidator.primaryRoot() else {
+            throw NSError(domain: "AppNativeMediaCaptureController", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid media capture path"
+            ])
+        }
+        let url = root.appendingPathComponent(sanitized, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        return (url, sanitized)
+    }
+
+    private func requestAccess(video: Bool,
+                               audio: Bool,
+                               completion: @escaping (Bool, String?) -> Void) {
+        let group = DispatchGroup()
+        var denied: String?
+        if video {
+            group.enter()
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                if !granted { denied = "camera_permission_denied" }
+                group.leave()
+            }
+        }
+        if audio {
+            group.enter()
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                if !granted { denied = "microphone_permission_denied" }
+                group.leave()
+            }
+        }
+        group.notify(queue: sessionQueue) {
+            completion(denied == nil, denied)
+        }
+    }
+
+    private func makeSession(includeAudio: Bool,
+                             photo: Bool) throws -> (AVCaptureSession, AVCaptureOutput) {
+        let session = AVCaptureSession()
+        session.beginConfiguration()
+        session.sessionPreset = photo ? .photo : .high
+
+        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(for: .video) else {
+            throw NSError(domain: "AppNativeMediaCaptureController", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "camera_unavailable"
+            ])
+        }
+        let videoInput = try AVCaptureDeviceInput(device: videoDevice)
+        guard session.canAddInput(videoInput) else {
+            throw NSError(domain: "AppNativeMediaCaptureController", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "camera_input_unavailable"
+            ])
+        }
+        session.addInput(videoInput)
+
+        if includeAudio, let audioDevice = AVCaptureDevice.default(for: .audio) {
+            let audioInput = try AVCaptureDeviceInput(device: audioDevice)
+            if session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+            }
+        }
+
+        let output: AVCaptureOutput
+        if photo {
+            let photoOutput = AVCapturePhotoOutput()
+            guard session.canAddOutput(photoOutput) else {
+                throw NSError(domain: "AppNativeMediaCaptureController", code: 4, userInfo: [
+                    NSLocalizedDescriptionKey: "photo_output_unavailable"
+                ])
+            }
+            session.addOutput(photoOutput)
+            output = photoOutput
+        } else {
+            let movieOutput = AVCaptureMovieFileOutput()
+            guard session.canAddOutput(movieOutput) else {
+                throw NSError(domain: "AppNativeMediaCaptureController", code: 5, userInfo: [
+                    NSLocalizedDescriptionKey: "video_output_unavailable"
+                ])
+            }
+            session.addOutput(movieOutput)
+            output = movieOutput
+        }
+
+        session.commitConfiguration()
+        return (session, output)
+    }
+
+    private func capturePhoto(payload: [String: Any],
+                              completion: @escaping ([String: Any], String?) -> Void) {
+        print("[MEDIA_NATIVE] photo_start request payload_keys=\(Array(payload.keys).sorted())")
+        requestAccess(video: true, audio: false) { granted, reason in
+            guard granted else {
+                print("[MEDIA_NATIVE] photo_start denied reason=\(reason ?? "camera_permission_denied")")
+                self.complete(completion, payload: ["success": false], error: reason ?? "camera_permission_denied")
+                return
+            }
+            do {
+                if self.photoCompletion != nil {
+                    self.complete(completion, payload: ["success": false], error: "photo_capture_in_progress")
+                    return
+                }
+                let fileName = self.resolveString(payload, ["fileName", "file_name"]).isEmpty
+                    ? "photo_\(Int(Date().timeIntervalSince1970)).jpg"
+                    : self.resolveString(payload, ["fileName", "file_name"])
+                let filePath = self.resolveString(payload, ["filePath", "file_path", "path"])
+                let userId = self.resolveString(payload, ["userId", "user_id"])
+                let (url, relativePath) = try self.outputURL(fileName: fileName, filePath: filePath, userId: userId, folder: "captures")
+                print("[MEDIA_NATIVE] photo_start resolved file=\(fileName) user=\(userId.isEmpty ? "<none>" : userId) request_path=\(filePath.isEmpty ? "<none>" : filePath) relative=\(relativePath) absolute=\(url.path)")
+                let (session, output) = try self.makeSession(includeAudio: false, photo: true)
+                guard let photoOutput = output as? AVCapturePhotoOutput else {
+                    self.complete(completion, payload: ["success": false], error: "photo_output_unavailable")
+                    return
+                }
+                self.photoSession = session
+                self.photoOutput = photoOutput
+                self.photoCompletion = completion
+                self.photoOutputURL = url
+                self.photoRelativePath = relativePath
+                self.photoFileName = fileName
+                session.startRunning()
+                photoOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
+            } catch {
+                print("[MEDIA_NATIVE] photo_start ERROR \(error.localizedDescription)")
+                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func startVideoRecording(payload: [String: Any],
+                                     completion: @escaping ([String: Any], String?) -> Void) {
+        print("[MEDIA_NATIVE] video_start request payload_keys=\(Array(payload.keys).sorted())")
+        requestAccess(video: true, audio: true) { granted, reason in
+            guard granted else {
+                print("[MEDIA_NATIVE] video_start denied reason=\(reason ?? "media_permission_denied")")
+                self.complete(completion, payload: ["success": false], error: reason ?? "media_permission_denied")
+                return
+            }
+            do {
+                if self.movieOutput?.isRecording == true {
+                    self.complete(completion, payload: ["success": false], error: "video_recording_in_progress")
+                    return
+                }
+                let fileName = self.resolveString(payload, ["fileName", "file_name"]).isEmpty
+                    ? "video_\(Int(Date().timeIntervalSince1970)).mov"
+                    : self.resolveString(payload, ["fileName", "file_name"])
+                let filePath = self.resolveString(payload, ["filePath", "file_path", "path"])
+                let userId = self.resolveString(payload, ["userId", "user_id"])
+                let (url, relativePath) = try self.outputURL(fileName: fileName, filePath: filePath, userId: userId, folder: "recordings")
+                print("[MEDIA_NATIVE] video_start resolved file=\(fileName) user=\(userId.isEmpty ? "<none>" : userId) request_path=\(filePath.isEmpty ? "<none>" : filePath) relative=\(relativePath) absolute=\(url.path)")
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+                let (session, output) = try self.makeSession(includeAudio: true, photo: false)
+                guard let movieOutput = output as? AVCaptureMovieFileOutput else {
+                    self.complete(completion, payload: ["success": false], error: "video_output_unavailable")
+                    return
+                }
+                self.videoSession = session
+                self.movieOutput = movieOutput
+                self.videoCompletion = completion
+                self.videoOutputURL = url
+                self.videoRelativePath = relativePath
+                self.videoFileName = fileName
+                self.videoStartedAt = Date()
+                session.startRunning()
+                movieOutput.startRecording(to: url, recordingDelegate: self)
+                self.complete(completion, payload: [
+                    "success": true,
+                    "file_name": fileName,
+                    "file_path": relativePath,
+                    "absolute_file_path": url.path,
+                    "mime_type": "video/quicktime"
+                ])
+                self.videoCompletion = nil
+            } catch {
+                print("[MEDIA_NATIVE] video_start ERROR \(error.localizedDescription)")
+                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func stopVideoRecording(completion: @escaping ([String: Any], String?) -> Void) {
+        sessionQueue.async {
+            guard let output = self.movieOutput, output.isRecording else {
+                self.complete(completion, payload: ["success": false], error: "no_active_video_recording")
+                return
+            }
+            self.videoStopCompletion = completion
+            output.stopRecording()
+        }
+    }
+
+    func photoOutput(_ output: AVCapturePhotoOutput,
+                     didFinishProcessingPhoto photo: AVCapturePhoto,
+                     error: Error?) {
+        sessionQueue.async {
+            defer {
+                self.photoSession?.stopRunning()
+                self.photoSession = nil
+                self.photoOutput = nil
+                self.photoCompletion = nil
+                self.photoOutputURL = nil
+                self.photoRelativePath = nil
+                self.photoFileName = nil
+            }
+            guard let completion = self.photoCompletion else { return }
+            if let error {
+                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+                return
+            }
+            guard let data = photo.fileDataRepresentation(),
+                  let url = self.photoOutputURL else {
+                self.complete(completion, payload: ["success": false], error: "photo_data_unavailable")
+                return
+            }
+            do {
+                try data.write(to: url, options: [.atomic])
+                FileSyncCoordinator.shared.syncAll(force: true)
+                let dimensions = photo.resolvedSettings.photoDimensions
+                print("[MEDIA_NATIVE] photo_done file=\(self.photoFileName ?? url.lastPathComponent) relative=\(self.photoRelativePath ?? "") absolute=\(url.path) bytes=\(data.count) width=\(Int(dimensions.width)) height=\(Int(dimensions.height))")
+                self.complete(completion, payload: [
+                    "success": true,
+                    "file_name": self.photoFileName ?? url.lastPathComponent,
+                    "file_path": self.photoRelativePath ?? "",
+                    "absolute_file_path": url.path,
+                    "mime_type": "image/jpeg",
+                    "width": Int(dimensions.width),
+                    "height": Int(dimensions.height),
+                    "size_bytes": data.count
+                ])
+            } catch {
+                print("[MEDIA_NATIVE] photo_done ERROR \(error.localizedDescription)")
+                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+            }
+        }
+    }
+
+    func fileOutput(_ output: AVCaptureFileOutput,
+                    didFinishRecordingTo outputFileURL: URL,
+                    from connections: [AVCaptureConnection],
+                    error: Error?) {
+        sessionQueue.async {
+            let completion = self.videoStopCompletion
+            defer {
+                self.videoSession?.stopRunning()
+                self.videoSession = nil
+                self.movieOutput = nil
+                self.videoCompletion = nil
+                self.videoStopCompletion = nil
+                self.videoOutputURL = nil
+                self.videoRelativePath = nil
+                self.videoFileName = nil
+                self.videoStartedAt = nil
+            }
+            guard let completion else { return }
+            if let error {
+                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+                return
+            }
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: outputFileURL.path)) ?? [:]
+            let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+            let duration = self.videoStartedAt.map { max(0, Date().timeIntervalSince($0)) } ?? 0
+            FileSyncCoordinator.shared.syncAll(force: true)
+            print("[MEDIA_NATIVE] video_done file=\(self.videoFileName ?? outputFileURL.lastPathComponent) relative=\(self.videoRelativePath ?? "") absolute=\(outputFileURL.path) bytes=\(size) duration=\(duration) error=<none>")
+            self.complete(completion, payload: [
+                "success": true,
+                "file_name": self.videoFileName ?? outputFileURL.lastPathComponent,
+                "file_path": self.videoRelativePath ?? "",
+                "absolute_file_path": outputFileURL.path,
+                "mime_type": "video/quicktime",
+                "duration_sec": duration,
+                "size_bytes": size
+            ])
+        }
+    }
+}
+
 final class FullscreenWebViewController: UIViewController {
     private(set) var webView: WKWebView!
 
@@ -670,7 +1215,11 @@ final class FullscreenWebViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
-            AppNativeAudioController.shared.handle(command: command, payload: payload, completion: completion)
+            if AppNativeMediaCaptureController.canHandle(command: command) {
+                AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
+            } else {
+                AppNativeAudioController.shared.handle(command: command, payload: payload, completion: completion)
+            }
         }
     view.insetsLayoutMarginsFromSafeArea = true
     webView.scrollView.contentInsetAdjustmentBehavior = .automatic

@@ -107,6 +107,11 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var recordingPath: String = ""
     private var recordingInputBuffer: AVAudioPCMBuffer?
     private var recordingChannelPointers: [UnsafePointer<Float>?] = Array(repeating: nil, count: 8)
+    private var micRecordingEngine: AVAudioEngine?
+    private var micRecordingFile: AVAudioFile?
+    private var micRecordingFrames: AVAudioFramePosition = 0
+    private var micRecordingPeak: Float = 0
+    private var micRecordingLock = os_unfair_lock()
     
     // NOUVEAU: JavaScript Audio Injection
     private var jsAudioBuffer: [Float] = []
@@ -826,14 +831,6 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
         let outputFormat = ((_outputBusArray?.count ?? 0) > 0) ? _outputBusArray?[0].format : nil
         let inputFormat = ((_inputBusArray?.count ?? 0) > 0) ? _inputBusArray?[0].format : nil
-        if normalizedSource == "mic" && inputFormat == nil {
-            emitRecordingEvent(type: "record_error", payload: [
-                "session_id": sessionId,
-                "error": "Input bus not available",
-                "file_name": safeName
-            ])
-            return
-        }
         if normalizedSource == "plugin" && outputFormat == nil {
             emitRecordingEvent(type: "record_error", payload: [
                 "session_id": sessionId,
@@ -842,14 +839,14 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             ])
             return
         }
-        let srDefault = (normalizedSource == "mic" ? inputFormat?.sampleRate : outputFormat?.sampleRate) ?? 44100.0
-        let chDefault = (normalizedSource == "mic" ? inputFormat?.channelCount : outputFormat?.channelCount) ?? 1
+        let srDefault = normalizedSource == "mic" ? (sampleRate ?? 44100.0) : (outputFormat?.sampleRate ?? 44100.0)
+        let chDefault = normalizedSource == "mic" ? UInt32(channels ?? 1) : (outputFormat?.channelCount ?? 1)
 
         if let requestedSr = sampleRate, abs(requestedSr - srDefault) > 0.5 {
             // AUv3 must use the host sample rate; ignore the requested rate and continue
             print("ℹ️ AUv3: ignoring requested SR \(requestedSr), using host SR \(srDefault)")
         }
-        if let requestedCh = channels, Int(requestedCh) != Int(chDefault) {
+        if normalizedSource == "plugin", let requestedCh = channels, Int(requestedCh) != Int(chDefault) {
             emitRecordingEvent(type: "record_error", payload: [
                 "session_id": sessionId,
                 "error": "Requested channel count not supported in AUv3",
@@ -861,53 +858,69 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         let sr = srDefault
         let ch = max(1, min(2, Int(chDefault)))
 
-        var errPtr: UnsafeMutablePointer<CChar>? = nil
-        let ok = url.path.withCString { pathPtr in
-            normalizedSource.withCString { srcPtr in
-                squirrel_recorder_core_start(pathPtr, UInt32(sr), UInt16(ch), srcPtr, &errPtr)
+        var actualSampleRate = sr
+        var actualChannels = UInt32(ch)
+        if normalizedSource == "mic" {
+            do {
+                let started = try startMicRecordingEngine(url: url)
+                actualSampleRate = started.sampleRate
+                actualChannels = UInt32(started.channels)
+                print("[AUV3_RECORD] mic_engine_start_ok session=\(sessionId) file=\(safeName) frames=0 peak=0.0")
+            } catch {
+                print("[AUV3_RECORD] mic_engine_start_error session=\(sessionId) file=\(safeName) error=\(error.localizedDescription)")
+                emitRecordingEvent(type: "record_error", payload: [
+                    "session_id": sessionId,
+                    "error": error.localizedDescription,
+                    "file_name": safeName
+                ])
+                return
             }
-        }
+        } else {
+            var errPtr: UnsafeMutablePointer<CChar>? = nil
+            let ok = url.path.withCString { pathPtr in
+                normalizedSource.withCString { srcPtr in
+                    squirrel_recorder_core_start(pathPtr, UInt32(sr), UInt16(ch), srcPtr, &errPtr)
+                }
+            }
 
-        if !ok {
-            var message = "Recorder start failed"
-            if let errPtr {
-                message = String(cString: errPtr)
-                squirrel_string_free(errPtr)
+            if !ok {
+                var message = "Recorder start failed"
+                if let errPtr {
+                    message = String(cString: errPtr)
+                    squirrel_string_free(errPtr)
+                }
+                emitRecordingEvent(type: "record_error", payload: [
+                    "session_id": sessionId,
+                    "error": message,
+                    "file_name": safeName
+                ])
+                return
             }
-            emitRecordingEvent(type: "record_error", payload: [
-                "session_id": sessionId,
-                "error": message,
-                "file_name": safeName
-            ])
-            return
         }
 
         recordingSessionId = sessionId
         recordingSource = normalizedSource
         recordingFileName = safeName
-        recordingSampleRate = sr
-        recordingChannels = UInt32(ch)
+        recordingSampleRate = actualSampleRate
+        recordingChannels = actualChannels
         recordingPath = url.path
         audioDebugRecordingStartFrame = nil
 
-        if normalizedSource == "mic" {
-            if let format = inputFormat {
-                let capacity = max(maximumFramesToRender, 1024)
-                recordingInputBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity)
-            }
-        } else {
-            recordingInputBuffer = nil
-        }
+        recordingInputBuffer = nil
 
         recordingState = .recording
 
+        let relativePath = "recordings/\(safeName)"
+        print("[AUV3_RECORD] start_ok session=\(sessionId) file=\(safeName) source=\(normalizedSource) relative=\(relativePath) absolute=\(url.path) sample_rate=\(actualSampleRate) channels=\(actualChannels)")
         emitRecordingEvent(type: "record_started", payload: [
             "session_id": sessionId,
             "file_name": safeName,
-            "path": url.path,
+            "file_path": relativePath,
+            "absolute_file_path": url.path,
+            "path": relativePath,
             "source": normalizedSource,
-            "sample_rate": sr,
-            "channels": ch
+            "sample_rate": actualSampleRate,
+            "channels": actualChannels
         ])
     }
 
@@ -935,22 +948,36 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         let activeChannels = recordingChannels
         recordingState = .idle
 
-        var errPtr: UnsafeMutablePointer<CChar>? = nil
         var duration: Double = 0
-        let ok = squirrel_recorder_core_stop(&errPtr, &duration)
-        if !ok {
-            var message = "Recorder stop failed"
-            if let errPtr {
-                message = String(cString: errPtr)
-                squirrel_string_free(errPtr)
+        var ok = true
+        var stopErrorMessage = ""
+        if activeSource == "mic" {
+            let stats = stopMicRecordingEngine(sampleRate: activeSampleRate)
+            duration = stats.duration
+            print("[AUV3_RECORD] mic_engine_stop_ok session=\(activeSessionId) file=\(activeFileName) frames=\(stats.frames) peak=\(stats.peak)")
+        } else {
+            var errPtr: UnsafeMutablePointer<CChar>? = nil
+            ok = squirrel_recorder_core_stop(&errPtr, &duration)
+            if !ok {
+                stopErrorMessage = "Recorder stop failed"
+                if let errPtr {
+                    stopErrorMessage = String(cString: errPtr)
+                    squirrel_string_free(errPtr)
+                }
             }
+        }
+        if !ok {
             emitRecordingEvent(type: "record_error", payload: [
                 "session_id": activeSessionId,
-                "error": message,
+                "error": stopErrorMessage,
                 "file_name": activeFileName
             ])
         } else {
             let analysis = analyzeRecordedFile(at: URL(fileURLWithPath: activePath))
+            let fileExists = FileManager.default.fileExists(atPath: activePath)
+            let fileSize = ((try? FileManager.default.attributesOfItem(atPath: activePath))?[.size] as? NSNumber)?.int64Value ?? -1
+            let relativePath = activeFileName.isEmpty ? "" : "recordings/\(activeFileName)"
+            print("[AUV3_RECORD] stop_ok session=\(activeSessionId) file=\(activeFileName) source=\(activeSource) relative=\(relativePath) absolute=\(activePath) exists=\(fileExists) bytes=\(fileSize) duration=\(duration) analysis=\(String(describing: analysis))")
             let playbackStartFrameValue = audioDebugPlaybackStartFrame.map(Int.init)
             let recordingStartFrameValue = audioDebugRecordingStartFrame.map(Int.init)
             let expectedPeakFrameValue = audioDebugExpectedPeakFrame
@@ -972,11 +999,14 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             emitRecordingEvent(type: "record_done", payload: [
                 "session_id": activeSessionId,
                 "file_name": activeFileName,
-                "path": activePath,
+                "file_path": relativePath,
+                "absolute_file_path": activePath,
+                "path": relativePath,
                 "source": activeSource,
                 "sample_rate": activeSampleRate,
                 "channels": activeChannels,
                 "duration_sec": duration,
+                "size_bytes": fileSize,
                 "peak": peakValue,
                 "first_peak_frame": firstPeakValue,
                 "playback_start_frame": playbackFramePayload,
@@ -1026,6 +1056,75 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             return nil
         }
         return recordingsDir.appendingPathComponent(fileName)
+    }
+
+    private func startMicRecordingEngine(url: URL) throws -> (sampleRate: Double, channels: Int) {
+        let engine = AVAudioEngine()
+#if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers])
+        try? session.setActive(true)
+#endif
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw NSError(domain: "AUV3Recording", code: 30, userInfo: [
+                NSLocalizedDescriptionKey: "Microphone input format unavailable"
+            ])
+        }
+        input.removeTap(onBus: 0)
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        os_unfair_lock_lock(&micRecordingLock)
+        micRecordingFrames = 0
+        micRecordingPeak = 0
+        micRecordingFile = file
+        micRecordingEngine = engine
+        os_unfair_lock_unlock(&micRecordingLock)
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            guard let self else { return }
+            do {
+                os_unfair_lock_lock(&self.micRecordingLock)
+                let activeFile = self.micRecordingFile
+                self.micRecordingFrames += AVAudioFramePosition(buffer.frameLength)
+                if let channels = buffer.floatChannelData {
+                    let channelCount = Int(buffer.format.channelCount)
+                    let frames = Int(buffer.frameLength)
+                    var peak = self.micRecordingPeak
+                    for channel in 0..<channelCount {
+                        let ptr = channels[channel]
+                        for frame in 0..<frames {
+                            peak = max(peak, abs(ptr[frame]))
+                        }
+                    }
+                    self.micRecordingPeak = peak
+                }
+                os_unfair_lock_unlock(&self.micRecordingLock)
+                try activeFile?.write(from: buffer)
+            } catch {
+                print("[AUV3_RECORD] mic_engine_write_error file=\(url.lastPathComponent) error=\(error.localizedDescription)")
+            }
+        }
+        engine.prepare()
+        try engine.start()
+        return (format.sampleRate, Int(format.channelCount))
+    }
+
+    private func stopMicRecordingEngine(sampleRate: Double) -> (frames: AVAudioFramePosition, peak: Float, duration: Double) {
+        os_unfair_lock_lock(&micRecordingLock)
+        let engine = micRecordingEngine
+        let frames = micRecordingFrames
+        let peak = micRecordingPeak
+        micRecordingFile = nil
+        micRecordingEngine = nil
+        micRecordingFrames = 0
+        micRecordingPeak = 0
+        os_unfair_lock_unlock(&micRecordingLock)
+        if let input = engine?.inputNode {
+            input.removeTap(onBus: 0)
+        }
+        engine?.stop()
+        let duration = sampleRate > 0 ? Double(frames) / sampleRate : 0
+        return (frames, peak, duration)
     }
 
     private func analyzeRecordedFile(at url: URL) -> [String: Any]? {

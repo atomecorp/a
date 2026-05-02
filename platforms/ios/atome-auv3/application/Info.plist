@@ -55,8 +55,14 @@
         </dict>
     </array>
     
+    <key>NSCameraUsageDescription</key>
+    <string>Atome utilise la caméra pour capturer des photos et enregistrer des vidéos dans vos projets.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Atome utilise le microphone pour enregistrer du son et l'audio des vidéos.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Atome peut accéder aux photos pour charger des samples audio</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Atome peut ajouter les captures créées à votre photothèque si vous le demandez.</string>
     <key>NSDocumentsFolderUsageDescription</key>
     <string>Atome a besoin d'accéder aux documents pour sauvegarder et charger vos projets</string>
     <key>NSFileProviderDomainUsageDescription</key>

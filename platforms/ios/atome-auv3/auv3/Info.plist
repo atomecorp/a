@@ -9,6 +9,15 @@
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
 
+    <key>NSCameraUsageDescription</key>
+    <string>Atome utilise la caméra pour capturer des photos et vidéos depuis son interface.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Atome utilise le microphone pour enregistrer de l'audio depuis son interface.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Atome peut accéder aux médias de la photothèque pour les importer dans vos projets.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Atome peut ajouter les captures créées à votre photothèque si vous le demandez.</string>
+
     <key>NSExtension</key>
     <dict>
 

@@ -15,6 +15,18 @@ import {
     const PENDING = new Map();
     let listenersReady = false;
 
+    function logRecordDiag(event, detail = {}) {
+        try {
+            console.warn('[record_audio_api]', event, {
+                ...detail,
+                provider: window.__SQUIRREL_RECORD_PROVIDER__ || null,
+                host_env: window.__HOST_ENV || null,
+                auv3_mode: window.__AUV3_MODE__ === true,
+                href: window.location?.href || null
+            });
+        } catch (_) { }
+    }
+
     function updateRecordProvider() {
         window.__SQUIRREL_RECORD_PROVIDER__ = resolveVoiceCaptureProvider(window);
         return window.__SQUIRREL_RECORD_PROVIDER__;
@@ -29,6 +41,7 @@ import {
     function detectContext() {
         const runtime = resolveAudioRuntime(window);
         if (runtime.runtime === 'tauri_native') return 'tauri';
+        if (runtime.runtime === 'ios_app') return 'ios_app';
         if (runtime.runtime === 'ios_auv3') return 'auv3';
         return 'browser';
     }
@@ -154,6 +167,15 @@ import {
     }
 
     function sendNativeMessage(msg) {
+        logRecordDiag('send_native_message', {
+            action: msg?.action || null,
+            type: msg?.type || null,
+            session_id: msg?.sessionId || msg?.session_id || null,
+            file_name: msg?.fileName || msg?.file_name || null,
+            source: msg?.source || null,
+            has_to_dsp: typeof window.__toDSP === 'function',
+            has_swift_bridge: !!window.webkit?.messageHandlers?.swiftBridge
+        });
         if (typeof window.__toDSP === 'function') {
             window.__toDSP(msg);
             return true;
@@ -179,9 +201,24 @@ import {
         const type = detail.type || null;
         if (!type) return;
         const sessionId = detail.session_id || detail.sessionId || '';
+        logRecordDiag('native_event', {
+            type,
+            session_id: sessionId || null,
+            file_name: detail.file_name || detail.fileName || null,
+            file_path: detail.file_path || detail.path || null,
+            absolute_file_path: detail.absolute_file_path || null,
+            error: detail.error || detail.message || null,
+            duration_sec: detail.duration_sec || detail.durationSec || null,
+            frame_count: detail.frame_count || detail.frameCount || null,
+            sample_rate: detail.sample_rate || detail.sampleRate || null,
+            channels: detail.channels || null
+        });
         if (!sessionId) return;
         const entry = PENDING.get(sessionId);
-        if (!entry) return;
+        if (!entry) {
+            logRecordDiag('native_event_without_pending_entry', { type, session_id: sessionId });
+            return;
+        }
 
         if (type === 'record_started') {
             if (entry.start) {
@@ -247,10 +284,22 @@ import {
             ? params.channels
             : defaultChannels(context, source);
 
-        if (context === 'tauri') {
+        logRecordDiag('record_start_request', {
+            context,
+            source,
+            session_id: sessionId,
+            file_name: fileName,
+            sample_rate: sampleRate,
+            channels,
+            params_keys: Object.keys(params || {})
+        });
+
+        if (context === 'tauri' || context === 'ios_app') {
             const invoke = getTauriInvoke(window);
             if (typeof invoke !== 'function') {
-                throw new Error('Tauri audio engine bridge is not available');
+                throw new Error(context === 'ios_app'
+                    ? 'iOS native audio recorder bridge is not available'
+                    : 'Tauri audio engine bridge is not available');
             }
             let userId = params.userId || params.user_id || null;
             if (!userId) {
@@ -266,13 +315,22 @@ import {
             const requestedChannels = Number(channels) || 0;
             await invoke('audio_record_start', {
                 sessionId,
+                fileName,
                 filePath,
+                userId,
                 sampleRate: requestedSampleRate,
                 channels: requestedChannels
             });
+            logRecordDiag('record_start_native_invoke_ok', {
+                context,
+                session_id: sessionId,
+                file_name: fileName,
+                file_path: filePath,
+                user_id: userId || null
+            });
             PENDING.set(sessionId, {
                 provider: 'iplug_native_recorder',
-                transport: 'tauri',
+                transport: context,
                 fileName,
                 filePath,
                 sampleRate: requestedSampleRate,
@@ -302,7 +360,7 @@ import {
         }
 
         let userId = params.userId || params.user_id || null;
-        if (!userId && context === 'tauri') {
+        if (!userId && (context === 'tauri' || context === 'ios_app')) {
             userId = await getAdoleUserId();
         }
 
@@ -334,6 +392,7 @@ import {
             pendingEntry.start = { resolve, reject };
             if (!sendNativeMessage(msg)) {
                 PENDING.delete(sessionId);
+                logRecordDiag('record_start_send_failed', { context, session_id: sessionId });
                 reject(new Error('Native recorder bridge is not available'));
             }
         });
@@ -346,15 +405,28 @@ import {
         if (!sid) throw new Error('Missing sessionId');
 
         const entry = PENDING.get(sid);
-        if (entry?.transport === 'tauri') {
+        logRecordDiag('record_stop_request', {
+            session_id: sid,
+            has_entry: !!entry,
+            transport: entry?.transport || null,
+            file_name: entry?.fileName || null,
+            file_path: entry?.filePath || null
+        });
+        if (entry?.transport === 'tauri' || entry?.transport === 'ios_app') {
             const invoke = getTauriInvoke(window);
             if (typeof invoke !== 'function') {
                 PENDING.delete(sid);
-                throw new Error('Tauri audio engine bridge is not available');
+                throw new Error(entry.transport === 'ios_app'
+                    ? 'iOS native audio recorder bridge is not available'
+                    : 'Tauri audio engine bridge is not available');
             }
             try {
                 const result = await invoke('audio_record_stop', {
                     sessionId: sid
+                });
+                logRecordDiag('record_stop_native_invoke_result', {
+                    session_id: sid,
+                    result
                 });
                 const frameCount = Number(result?.frame_count || result?.frameCount || 0);
                 const sampleRate = Number(result?.sample_rate || result?.sampleRate || entry.sampleRate || 0);
@@ -409,6 +481,7 @@ import {
             PENDING.set(sid, pendingEntry);
             if (!sendNativeMessage(msg)) {
                 PENDING.delete(sid);
+                logRecordDiag('record_stop_send_failed', { session_id: sid });
                 reject(new Error('Native recorder bridge is not available'));
             }
         });

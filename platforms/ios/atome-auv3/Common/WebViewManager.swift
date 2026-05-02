@@ -491,6 +491,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         let requestId = body["requestId"] as? String ?? ""
                         let command = body["command"] as? String ?? ""
                         let payload = body["payload"] as? [String: Any] ?? [:]
+                        print("[NATIVE_INVOKE] recv request=\(requestId) command=\(command) payload_keys=\(Array(payload.keys).sorted())")
                         WebViewManager.handleNativeInvokeMessage(requestId: requestId, command: command, payload: payload)
                         return
                     }
@@ -504,14 +505,20 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                 let source = (body["source"] as? String) ?? "mic"
                                 let sampleRate = (body["sampleRate"] as? NSNumber)?.doubleValue
                                 let channels = (body["channels"] as? NSNumber)?.uint32Value
+                                let sampleRateText = sampleRate.map { String($0) } ?? "<nil>"
+                                let channelsText = channels.map { String($0) } ?? "<nil>"
+                                print("[AUV3_RECORD_BRIDGE] record_start session=\(sessionId) file=\(fileName) source=\(source) sampleRate=\(sampleRateText) channels=\(channelsText)")
                                 au.recordStart(sessionId: sessionId,
                                                fileName: fileName,
                                                source: source,
                                                sampleRate: sampleRate,
                                                channels: channels)
                             } else {
+                                print("[AUV3_RECORD_BRIDGE] record_stop session=\(sessionId)")
                                 au.recordStop(sessionId: sessionId)
                             }
+                        } else {
+                            print("[AUV3_RECORD_BRIDGE] missing hostAudioUnit action=\(action) session=\(sessionId)")
                         }
                         return
                     }
@@ -1090,6 +1097,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static func sendNativeInvokeResponse(requestId: String,
                                                  payload: [String: Any]? = nil,
                                                  error: String? = nil) {
+        print("[NATIVE_INVOKE] resolve request=\(requestId) success=\(error == nil) error=\(error ?? "<none>") payload_keys=\(Array((payload ?? [:]).keys).sorted())")
         guard let requestLiteral = jsonLiteral(requestId) else { return }
         let payloadLiteral = payload.flatMap { jsonLiteral($0) } ?? "null"
         let errorLiteral = error.flatMap { jsonLiteral($0) } ?? "null"
@@ -1102,9 +1110,11 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                                   payload: [String: Any]) {
         guard !requestId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard let handler = nativeInvokeHandler else {
+            print("[NATIVE_INVOKE] no_handler request=\(requestId) command=\(command)")
             sendNativeInvokeResponse(requestId: requestId, error: "ios_app_native_invoke_handler_unavailable")
             return
         }
+        print("[NATIVE_INVOKE] dispatch request=\(requestId) command=\(command) payload_keys=\(Array(payload.keys).sorted())")
         handler(command, payload) { response, error in
             sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
         }

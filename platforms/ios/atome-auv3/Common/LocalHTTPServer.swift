@@ -29,6 +29,8 @@ final class LocalHTTPServer {
     private var faststartFailed: Set<String> = []
     private let faststartQueue = DispatchQueue(label: "local.http.server.faststart", qos: .utility)
     private let allowedAudioExtensions: Set<String> = ["m4a", "mp3", "wav"]
+    private let uploadFolderHints = ["Downloads", "downloads", "Recordings", "recordings", "Captures", "captures"]
+    private let recordingFolderHints = ["Recordings", "recordings", "Downloads", "downloads", "Captures", "captures"]
     private var activeAudioKeys: Set<String> = []
     private var pendingAudioWork: [String: [() -> Void]] = [:]
     private var cancelledConnections: Set<ObjectIdentifier> = []
@@ -1135,8 +1137,8 @@ final class LocalHTTPServer {
     private func handleUploadsGet(fileName: String, headers: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
         let userId = resolveUploadUserId(from: headers)
         print("[UPLOAD] \(isHead ? "HEAD" : "GET") file=\(fileName) user=\(userId ?? "<none>") range=\(rangeHeader ?? "<none>")")
-        guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: ["Downloads", "Recordings"]) else {
-            print("[UPLOAD] \(isHead ? "HEAD" : "GET") 404 file=\(fileName)")
+        guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: uploadFolderHints, label: "UPLOAD") else {
+            print("[UPLOAD] \(isHead ? "HEAD" : "GET") 404 file=\(fileName) user=\(userId ?? "<none>")")
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
             return
         }
@@ -1146,8 +1148,8 @@ final class LocalHTTPServer {
     private func handleRecordingGet(fileName: String, headers: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
         let userId = resolveUploadUserId(from: headers)
         print("[RECORDING] \(isHead ? "HEAD" : "GET") file=\(fileName) user=\(userId ?? "<none>") range=\(rangeHeader ?? "<none>")")
-        guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: ["Recordings", "Downloads"]) else {
-            print("[RECORDING] \(isHead ? "HEAD" : "GET") 404 file=\(fileName)")
+        guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: recordingFolderHints, label: "RECORDING") else {
+            print("[RECORDING] \(isHead ? "HEAD" : "GET") 404 file=\(fileName) user=\(userId ?? "<none>")")
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
             return
         }
@@ -1207,26 +1209,51 @@ final class LocalHTTPServer {
         return "data/users/\(userId)/\(folderName)/\(baseName)"
     }
 
-    private func resolveUploadFileURL(fileName: String, userId: String?, folderHints: [String]) -> URL? {
+    private func resolveUploadFileURL(fileName: String, userId: String?, folderHints: [String], label: String) -> URL? {
         let safeName = sanitizeUploadFileName(fileName)
         guard !safeName.isEmpty, let root = iCloudFileManager.shared.getCurrentStorageURL() else { return nil }
-        var candidates: [URL] = []
-        if let userId, !userId.isEmpty {
-            for folder in folderHints {
-                candidates.append(root.appendingPathComponent("data/users/\(userId)/\(folder)/\(safeName)"))
-            }
+        var roots: [URL] = [root]
+        if let groupRoot = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: SharedBus.appGroupSuite)?
+            .appendingPathComponent("Documents", isDirectory: true),
+           !roots.contains(where: { $0.path == groupRoot.path }) {
+            roots.append(groupRoot)
         }
-        if let usersRoot = SandboxPathValidator.sanitizedRelativePath("data/users") {
-            let usersURL = root.appendingPathComponent(usersRoot, isDirectory: true)
-            if let directories = try? FileManager.default.contentsOfDirectory(at: usersURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
-                for directory in directories {
-                    for folder in folderHints {
-                        candidates.append(directory.appendingPathComponent("\(folder)/\(safeName)"))
+        if let visibleRoot = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+           !roots.contains(where: { $0.path == visibleRoot.path }) {
+            roots.append(visibleRoot)
+        }
+        var candidates: [URL] = []
+        for candidateRoot in roots {
+            if let userId, !userId.isEmpty {
+                for folder in folderHints {
+                    candidates.append(candidateRoot.appendingPathComponent("data/users/\(userId)/\(folder)/\(safeName)"))
+                }
+            }
+            if let usersRoot = SandboxPathValidator.sanitizedRelativePath("data/users") {
+                let usersURL = candidateRoot.appendingPathComponent(usersRoot, isDirectory: true)
+                if let directories = try? FileManager.default.contentsOfDirectory(at: usersURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+                    for directory in directories {
+                        for folder in folderHints {
+                            candidates.append(directory.appendingPathComponent("\(folder)/\(safeName)"))
+                        }
                     }
                 }
             }
+            for folder in folderHints {
+                candidates.append(candidateRoot.appendingPathComponent("\(folder)/\(safeName)"))
+            }
+            candidates.append(candidateRoot.appendingPathComponent("recordings/\(safeName)"))
+            candidates.append(candidateRoot.appendingPathComponent("captures/\(safeName)"))
         }
-        return candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+
+        if let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            print("[\(label)] resolve file=\(safeName) found=\(found.path) candidates=\(candidates.count)")
+            return found
+        }
+        let sample = candidates.prefix(10).map(\.path).joined(separator: " | ")
+        print("[\(label)] resolve miss file=\(safeName) user=\(userId ?? "<none>") candidates=\(candidates.count) sample=\(sample)")
+        return nil
     }
 
     private func listUploadEntries(in folderURL: URL, userId: String) throws -> [[String: Any]] {
