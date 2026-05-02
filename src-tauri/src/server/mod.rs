@@ -20,6 +20,7 @@ use std::{
     fs as stdfs,
     io::{Cursor, Read},
     net::SocketAddr,
+    path::Component,
     path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex, OnceLock},
@@ -67,11 +68,20 @@ struct AppState {
     started_at: Arc<std::time::Instant>,
     atome_state: Option<local_atome::LocalAtomeState>,
     auth_state: Option<local_auth::LocalAuthState>,
+    remote_control_enabled: bool,
+    remote_control_token: Option<Arc<String>>,
 }
 
 #[derive(Deserialize, Default)]
 struct MediaTokenQuery {
     token: Option<String>,
+    access_token: Option<String>,
+    auth_token: Option<String>,
+    user_id: Option<String>,
+    #[serde(rename = "userId")]
+    user_id_camel: Option<String>,
+    x_user_id: Option<String>,
+    x_userid: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -128,6 +138,72 @@ struct MailMessageActionRequest {
     message: Option<JsonValue>,
     remote_mailbox: Option<String>,
     credentials: Option<JsonValue>,
+}
+
+#[derive(Deserialize, Default)]
+struct RemoteAudioRecordStartRequest {
+    session_id: Option<String>,
+    #[serde(rename = "sessionId")]
+    session_id_camel: Option<String>,
+    file_path: Option<String>,
+    #[serde(rename = "filePath")]
+    file_path_camel: Option<String>,
+    sample_rate: Option<u32>,
+    #[serde(rename = "sampleRate")]
+    sample_rate_camel: Option<u32>,
+    channels: Option<u16>,
+}
+
+#[derive(Deserialize, Default)]
+struct RemoteAudioRecordStopRequest {
+    session_id: Option<String>,
+    #[serde(rename = "sessionId")]
+    session_id_camel: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct RemoteAudioAnalyzeRequest {
+    file_path: Option<String>,
+    #[serde(rename = "filePath")]
+    file_path_camel: Option<String>,
+    absolute_file_path: Option<String>,
+    #[serde(rename = "absoluteFilePath")]
+    absolute_file_path_camel: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct RemoteAudioPlaybackLoadRequest {
+    id: Option<String>,
+    file_path: Option<String>,
+    #[serde(rename = "filePath")]
+    file_path_camel: Option<String>,
+    absolute_file_path: Option<String>,
+    #[serde(rename = "absoluteFilePath")]
+    absolute_file_path_camel: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct RemoteAudioPlaybackPlayRequest {
+    id: Option<String>,
+    voice_id: Option<String>,
+    #[serde(rename = "voiceId")]
+    voice_id_camel: Option<String>,
+    start_seconds: Option<f64>,
+    #[serde(rename = "startSeconds")]
+    start_seconds_camel: Option<f64>,
+    duration_seconds: Option<f64>,
+    #[serde(rename = "durationSeconds")]
+    duration_seconds_camel: Option<f64>,
+    gain: Option<f64>,
+    rate: Option<f64>,
+}
+
+#[derive(Deserialize, Default)]
+struct RemoteAudioPlaybackStopRequest {
+    id: Option<String>,
+    voice_id: Option<String>,
+    #[serde(rename = "voiceId")]
+    voice_id_camel: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -332,6 +408,46 @@ fn extract_user_id_from_headers(headers: &HeaderMap) -> Option<String> {
     None
 }
 
+fn extract_token_from_media_query(query: &MediaTokenQuery) -> Option<String> {
+    [
+        query.token.as_deref(),
+        query.access_token.as_deref(),
+        query.auth_token.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|value| value.trim())
+    .find(|value| !value.is_empty())
+    .map(|value| value.to_string())
+}
+
+fn extract_user_id_from_media_query(query: &MediaTokenQuery) -> Option<String> {
+    [
+        query.user_id.as_deref(),
+        query.user_id_camel.as_deref(),
+        query.x_user_id.as_deref(),
+        query.x_userid.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|value| sanitize_user_segment(value.trim()))
+    .find(|value| !value.is_empty() && value != "anonymous")
+}
+
+fn resolve_media_authenticated_user(
+    headers: &HeaderMap,
+    query: &MediaTokenQuery,
+    auth_state: &local_auth::LocalAuthState,
+) -> Option<String> {
+    let token = extract_bearer_token(headers).or_else(|| extract_token_from_media_query(query));
+    let token_user_id =
+        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+    if token_user_id != "anonymous" {
+        return extract_user_id_from_media_query(query).or(Some(token_user_id));
+    }
+    extract_user_id_from_headers(headers)
+}
+
 fn resolve_authenticated_user(
     headers: &HeaderMap,
     auth_state: &local_auth::LocalAuthState,
@@ -347,6 +463,184 @@ fn resolve_authenticated_user(
 
 fn json_error(status: StatusCode, message: &str) -> (StatusCode, Json<JsonValue>) {
     (status, Json(json!({ "success": false, "error": message })))
+}
+
+fn env_flag_enabled(name: &str, default_value: bool) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|value| {
+            let normalized = value.trim().to_lowercase();
+            matches!(normalized.as_str(), "1" | "true" | "yes" | "on")
+        })
+        .unwrap_or(default_value)
+}
+
+fn default_remote_control_allowed() -> bool {
+    cfg!(debug_assertions)
+}
+
+fn remote_control_boot_enabled() -> bool {
+    env_flag_enabled("SQUIRREL_TAURI_REMOTE", cfg!(debug_assertions))
+}
+
+fn resolve_remote_control_token() -> Option<String> {
+    if !remote_control_boot_enabled() {
+        return None;
+    }
+    let configured = std::env::var("SQUIRREL_TAURI_REMOTE_TOKEN")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    configured.or_else(|| Some(Uuid::new_v4().to_string()))
+}
+
+fn extract_remote_control_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-squirrel-remote-token")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn remote_control_bool_from_value(value: &JsonValue) -> Option<bool> {
+    match value {
+        JsonValue::Bool(flag) => Some(*flag),
+        JsonValue::String(text) => {
+            let normalized = text.trim().to_lowercase();
+            if matches!(normalized.as_str(), "1" | "true" | "yes" | "on" | "allowed") {
+                Some(true)
+            } else if matches!(normalized.as_str(), "0" | "false" | "no" | "off" | "denied") {
+                Some(false)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn profile_remote_control_allowed(profile: &JsonValue) -> Option<bool> {
+    let candidates = [
+        profile.pointer("/preferences/security/remote_control_allowed"),
+        profile.pointer("/preferences/security/remoteControlAllowed"),
+        profile.pointer("/preferences/remote_control_allowed"),
+        profile.pointer("/preferences/remoteControlAllowed"),
+        profile.pointer("/security/remote_control_allowed"),
+        profile.pointer("/security/remoteControlAllowed"),
+        profile.get("remote_control_allowed"),
+        profile.get("remoteControlAllowed"),
+    ];
+    candidates
+        .into_iter()
+        .flatten()
+        .find_map(remote_control_bool_from_value)
+}
+
+fn parse_profile_particle_value(value: &str) -> Option<JsonValue> {
+    let parsed: JsonValue = serde_json::from_str(value).ok()?;
+    if let JsonValue::String(inner) = parsed {
+        serde_json::from_str(inner.trim()).ok()
+    } else {
+        Some(parsed)
+    }
+}
+
+fn remote_control_allowed_for_user(state: &AppState, user_id: &str) -> Result<bool, String> {
+    let Some(atome_state) = state.atome_state.as_ref() else {
+        return Ok(default_remote_control_allowed());
+    };
+    let db = atome_state
+        .db
+        .lock()
+        .map_err(|error| format!("database lock failed: {error}"))?;
+
+    let state_current_properties = db
+        .query_row(
+            "SELECT properties FROM state_current WHERE atome_id = ?1",
+            params![user_id],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|raw| serde_json::from_str::<JsonValue>(&raw).ok());
+
+    if let Some(properties) = state_current_properties.as_ref() {
+        if let Some(profile) = properties.get("eve_profile") {
+            if let Some(allowed) = profile_remote_control_allowed(profile) {
+                return Ok(allowed);
+            }
+        }
+        if let Some(allowed) = profile_remote_control_allowed(properties) {
+            return Ok(allowed);
+        }
+    }
+
+    let particle_profile = db
+        .query_row(
+            "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = 'eve_profile' LIMIT 1",
+            params![user_id],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|raw| parse_profile_particle_value(&raw));
+
+    if let Some(profile) = particle_profile.as_ref() {
+        if let Some(allowed) = profile_remote_control_allowed(profile) {
+            return Ok(allowed);
+        }
+    }
+
+    Ok(default_remote_control_allowed())
+}
+
+fn require_remote_control(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<Option<String>, (StatusCode, Json<JsonValue>)> {
+    if !state.remote_control_enabled {
+        return Err(json_error(
+            StatusCode::FORBIDDEN,
+            "Tauri remote control is disabled",
+        ));
+    }
+    let expected = state.remote_control_token.as_deref().ok_or_else(|| {
+        json_error(
+            StatusCode::FORBIDDEN,
+            "Tauri remote control token is unavailable",
+        )
+    })?;
+    let provided = extract_remote_control_token(headers)
+        .ok_or_else(|| json_error(StatusCode::UNAUTHORIZED, "Missing remote control token"))?;
+    if provided != expected.as_str() {
+        return Err(json_error(
+            StatusCode::UNAUTHORIZED,
+            "Invalid remote control token",
+        ));
+    }
+
+    let user_id = state
+        .auth_state
+        .as_ref()
+        .and_then(|auth_state| resolve_authenticated_user(headers, auth_state))
+        .or_else(|| extract_user_id_from_headers(headers));
+    if let Some(user_id) = user_id.as_deref() {
+        match remote_control_allowed_for_user(state, user_id) {
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(json_error(
+                    StatusCode::FORBIDDEN,
+                    "Remote control is disabled for this user profile",
+                ));
+            }
+            Err(error) => {
+                return Err(json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    &format!("Remote control profile check failed: {error}"),
+                ));
+            }
+        }
+    }
+
+    Ok(user_id)
 }
 
 fn require_auth_user(
@@ -373,6 +667,538 @@ fn require_atome_state(
             "Atome state not initialized",
         )
     })
+}
+
+fn clean_remote_segment(value: &str, fallback: &str) -> String {
+    let sanitized = sanitize_file_name(value.trim());
+    if sanitized.is_empty() || sanitized == "upload.bin" {
+        fallback.to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn remote_default_recording_path(project_root: &Path, session_id: &str) -> PathBuf {
+    let safe_session = clean_remote_segment(session_id, "remote_session");
+    project_root
+        .join("data")
+        .join("remote")
+        .join("recordings")
+        .join(format!("{safe_session}.wav"))
+}
+
+fn resolve_remote_audio_path(
+    state: &AppState,
+    raw_path: Option<&str>,
+    fallback_session: Option<&str>,
+    must_exist: bool,
+) -> Result<PathBuf, String> {
+    let project_root = state.project_root.as_ref();
+    let Some(raw_path) = raw_path.map(str::trim).filter(|value| !value.is_empty()) else {
+        return fallback_session
+            .map(|session| remote_default_recording_path(project_root, session))
+            .ok_or_else(|| "Missing audio file path".to_string());
+    };
+
+    let cleaned = raw_path.trim_start_matches("file://");
+    let candidate = PathBuf::from(cleaned);
+    let resolved = if candidate.is_absolute() {
+        candidate
+    } else {
+        if candidate.components().any(|part| {
+            matches!(
+                part,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        }) {
+            return Err("Remote audio path must stay inside the project".to_string());
+        }
+        project_root.join(candidate)
+    };
+
+    if resolved
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
+        return Err("Remote audio path must not contain parent directory segments".to_string());
+    }
+
+    let canonical_parent = resolved
+        .parent()
+        .and_then(|parent| parent.canonicalize().ok())
+        .or_else(|| project_root.canonicalize().ok())
+        .unwrap_or_else(|| project_root.to_path_buf());
+    let canonical_root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+    if !canonical_parent.starts_with(&canonical_root) {
+        return Err("Remote audio path is outside the project root".to_string());
+    }
+    if must_exist && !resolved.exists() {
+        return Err(format!("Audio file not found: {}", resolved.display()));
+    }
+
+    Ok(resolved)
+}
+
+fn analyze_wav_file(path: &Path) -> Result<JsonValue, String> {
+    let metadata = stdfs::metadata(path)
+        .map_err(|error| format!("Unable to read audio file metadata: {error}"))?;
+    let mut reader =
+        hound::WavReader::open(path).map_err(|error| format!("Unable to open WAV: {error}"))?;
+    let spec = reader.spec();
+    let channels = usize::from(spec.channels.max(1));
+    let sample_rate = spec.sample_rate.max(1);
+    let total_samples = reader.duration() as usize;
+    let frame_count = total_samples / channels;
+    let duration_sec = frame_count as f64 / sample_rate as f64;
+    let window_frames = ((sample_rate as f64 * 0.1).round() as usize).max(1);
+    let silence_threshold = 0.001_f64;
+
+    let mut sample_count: usize = 0;
+    let mut frame_index: usize = 0;
+    let mut window_sum_sq = 0.0_f64;
+    let mut window_peak = 0.0_f64;
+    let mut window_sample_count = 0usize;
+    let mut sum_sq = 0.0_f64;
+    let mut peak = 0.0_f64;
+    let mut non_silent_window_count = 0usize;
+    let mut silent_window_count = 0usize;
+    let mut first_non_silent_sec: Option<f64> = None;
+    let mut last_non_silent_sec: Option<f64> = None;
+    let mut windows = Vec::new();
+
+    let push_window = |window_start_frame: usize,
+                       window_sample_count: usize,
+                       window_sum_sq: f64,
+                       window_peak: f64,
+                       windows: &mut Vec<JsonValue>,
+                       non_silent_window_count: &mut usize,
+                       silent_window_count: &mut usize,
+                       first_non_silent_sec: &mut Option<f64>,
+                       last_non_silent_sec: &mut Option<f64>| {
+        if window_sample_count == 0 {
+            return;
+        }
+        let rms = (window_sum_sq / window_sample_count as f64).sqrt();
+        let start_sec = window_start_frame as f64 / sample_rate as f64;
+        let frames_in_window = (window_sample_count / channels).max(1);
+        let end_sec = (window_start_frame + frames_in_window) as f64 / sample_rate as f64;
+        let non_silent = rms >= silence_threshold || window_peak >= silence_threshold;
+        if non_silent {
+            *non_silent_window_count += 1;
+            if first_non_silent_sec.is_none() {
+                *first_non_silent_sec = Some(start_sec);
+            }
+            *last_non_silent_sec = Some(end_sec);
+        } else {
+            *silent_window_count += 1;
+        }
+        if windows.len() < 240 {
+            windows.push(json!({
+                "start_sec": start_sec,
+                "end_sec": end_sec,
+                "rms": rms,
+                "peak": window_peak,
+                "non_silent": non_silent
+            }));
+        }
+    };
+
+    match spec.sample_format {
+        hound::SampleFormat::Float => {
+            for sample in reader.samples::<f32>() {
+                let value =
+                    sample.map_err(|error| format!("Unable to read float sample: {error}"))? as f64;
+                let abs = value.abs();
+                peak = peak.max(abs);
+                sum_sq += value * value;
+                window_peak = window_peak.max(abs);
+                window_sum_sq += value * value;
+                sample_count += 1;
+                window_sample_count += 1;
+                if sample_count % channels == 0 {
+                    frame_index += 1;
+                    if frame_index % window_frames == 0 {
+                        let start_frame = frame_index.saturating_sub(window_frames);
+                        push_window(
+                            start_frame,
+                            window_sample_count,
+                            window_sum_sq,
+                            window_peak,
+                            &mut windows,
+                            &mut non_silent_window_count,
+                            &mut silent_window_count,
+                            &mut first_non_silent_sec,
+                            &mut last_non_silent_sec,
+                        );
+                        window_sum_sq = 0.0;
+                        window_peak = 0.0;
+                        window_sample_count = 0;
+                    }
+                }
+            }
+        }
+        hound::SampleFormat::Int => {
+            let scale =
+                ((1_i64 << (u32::from(spec.bits_per_sample).saturating_sub(1))) - 1).max(1) as f64;
+            for sample in reader.samples::<i32>() {
+                let raw =
+                    sample.map_err(|error| format!("Unable to read integer sample: {error}"))?;
+                let value = raw as f64 / scale;
+                let abs = value.abs();
+                peak = peak.max(abs);
+                sum_sq += value * value;
+                window_peak = window_peak.max(abs);
+                window_sum_sq += value * value;
+                sample_count += 1;
+                window_sample_count += 1;
+                if sample_count % channels == 0 {
+                    frame_index += 1;
+                    if frame_index % window_frames == 0 {
+                        let start_frame = frame_index.saturating_sub(window_frames);
+                        push_window(
+                            start_frame,
+                            window_sample_count,
+                            window_sum_sq,
+                            window_peak,
+                            &mut windows,
+                            &mut non_silent_window_count,
+                            &mut silent_window_count,
+                            &mut first_non_silent_sec,
+                            &mut last_non_silent_sec,
+                        );
+                        window_sum_sq = 0.0;
+                        window_peak = 0.0;
+                        window_sample_count = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    if window_sample_count > 0 {
+        let start_frame = frame_index.saturating_sub(window_sample_count / channels);
+        push_window(
+            start_frame,
+            window_sample_count,
+            window_sum_sq,
+            window_peak,
+            &mut windows,
+            &mut non_silent_window_count,
+            &mut silent_window_count,
+            &mut first_non_silent_sec,
+            &mut last_non_silent_sec,
+        );
+    }
+
+    let rms = if sample_count > 0 {
+        (sum_sq / sample_count as f64).sqrt()
+    } else {
+        0.0
+    };
+
+    Ok(json!({
+        "path": path.to_string_lossy(),
+        "file_size": metadata.len(),
+        "sample_rate": spec.sample_rate,
+        "channels": spec.channels,
+        "bits_per_sample": spec.bits_per_sample,
+        "sample_format": format!("{:?}", spec.sample_format),
+        "sample_count": sample_count,
+        "frame_count": frame_count,
+        "duration_sec": duration_sec,
+        "rms": rms,
+        "peak": peak,
+        "silence_threshold": silence_threshold,
+        "non_silent_window_count": non_silent_window_count,
+        "silent_window_count": silent_window_count,
+        "first_non_silent_sec": first_non_silent_sec,
+        "last_non_silent_sec": last_non_silent_sec,
+        "windows_truncated": frame_count > window_frames * 240,
+        "windows": windows
+    }))
+}
+
+async fn remote_status_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let auth = require_remote_control(&headers, &state);
+    let authorized = auth.is_ok();
+    let user_id = auth.ok().flatten();
+    (
+        if authorized {
+            StatusCode::OK
+        } else {
+            StatusCode::UNAUTHORIZED
+        },
+        Json(json!({
+            "success": authorized,
+            "runtime": "tauri",
+            "enabled": state.remote_control_enabled,
+            "token_required": state.remote_control_token.is_some(),
+            "user_id": user_id,
+            "error": if authorized { JsonValue::Null } else { JsonValue::String("remote_control_unauthorized".to_string()) }
+        })),
+    )
+}
+
+async fn remote_audio_record_start_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RemoteAudioRecordStartRequest>,
+) -> impl IntoResponse {
+    let user_id = match require_remote_control(&headers, &state) {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let session_id = payload
+        .session_id
+        .or(payload.session_id_camel)
+        .map(|value| clean_remote_segment(&value, "remote_session"))
+        .unwrap_or_else(|| format!("remote_{}", Uuid::new_v4()));
+    let requested_path = payload.file_path.or(payload.file_path_camel);
+    let path = match resolve_remote_audio_path(
+        &state,
+        requested_path.as_deref(),
+        Some(&session_id),
+        false,
+    ) {
+        Ok(path) => path,
+        Err(error) => return json_error(StatusCode::BAD_REQUEST, &error).into_response(),
+    };
+    let sample_rate = payload
+        .sample_rate
+        .or(payload.sample_rate_camel)
+        .unwrap_or(0);
+    let channels = payload.channels.unwrap_or(0);
+
+    crate::audio_engine::metering::reset();
+    let path_string = path.to_string_lossy().to_string();
+    match crate::audio_engine::recorder::start(&session_id, &path_string, sample_rate, channels) {
+        Ok(()) => {
+            println!(
+                "[TauriRemote] audio record start session={} user={:?} path={} sr={} ch={}",
+                session_id, user_id, path_string, sample_rate, channels
+            );
+            Json(json!({
+                "success": true,
+                "runtime": "tauri",
+                "session_id": session_id,
+                "absolute_file_path": path_string,
+                "sample_rate_requested": sample_rate,
+                "channels_requested": channels,
+                "user_id": user_id
+            }))
+            .into_response()
+        }
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response(),
+    }
+}
+
+async fn remote_audio_record_stop_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RemoteAudioRecordStopRequest>,
+) -> impl IntoResponse {
+    let user_id = match require_remote_control(&headers, &state) {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let session_id = payload
+        .session_id
+        .or(payload.session_id_camel)
+        .map(|value| clean_remote_segment(&value, "remote_session"))
+        .unwrap_or_else(|| "remote_session".to_string());
+    match crate::audio_engine::recorder::stop(&session_id) {
+        Ok(result) => {
+            let analysis = analyze_wav_file(Path::new(&result.file_path))
+                .unwrap_or_else(|error| json!({ "success": false, "error": error }));
+            println!(
+                "[TauriRemote] audio record stop session={} user={:?} path={} duration={} frames={}",
+                result.session_id, user_id, result.file_path, result.duration_sec, result.frame_count
+            );
+            Json(json!({
+                "success": true,
+                "runtime": "tauri",
+                "session_id": result.session_id,
+                "absolute_file_path": result.file_path,
+                "duration_sec": result.duration_sec,
+                "frame_count": result.frame_count,
+                "sample_rate": result.sample_rate,
+                "channels": result.channels,
+                "output_format": result.output_format,
+                "analysis": analysis,
+                "user_id": user_id
+            }))
+            .into_response()
+        }
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response(),
+    }
+}
+
+async fn remote_audio_analyze_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RemoteAudioAnalyzeRequest>,
+) -> impl IntoResponse {
+    let user_id = match require_remote_control(&headers, &state) {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let requested_path = payload
+        .absolute_file_path
+        .or(payload.absolute_file_path_camel)
+        .or(payload.file_path)
+        .or(payload.file_path_camel);
+    let path = match resolve_remote_audio_path(&state, requested_path.as_deref(), None, true) {
+        Ok(path) => path,
+        Err(error) => return json_error(StatusCode::BAD_REQUEST, &error).into_response(),
+    };
+    match analyze_wav_file(&path) {
+        Ok(analysis) => Json(json!({
+            "success": true,
+            "runtime": "tauri",
+            "analysis": analysis,
+            "user_id": user_id
+        }))
+        .into_response(),
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response(),
+    }
+}
+
+async fn remote_audio_playback_load_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RemoteAudioPlaybackLoadRequest>,
+) -> impl IntoResponse {
+    let user_id = match require_remote_control(&headers, &state) {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let id = payload
+        .id
+        .map(|value| clean_remote_segment(&value, "remote_clip"))
+        .unwrap_or_else(|| format!("remote_clip_{}", Uuid::new_v4()));
+    let requested_path = payload
+        .absolute_file_path
+        .or(payload.absolute_file_path_camel)
+        .or(payload.file_path)
+        .or(payload.file_path_camel);
+    let path = match resolve_remote_audio_path(&state, requested_path.as_deref(), None, true) {
+        Ok(path) => path,
+        Err(error) => return json_error(StatusCode::BAD_REQUEST, &error).into_response(),
+    };
+    let path_string = path.to_string_lossy().to_string();
+    if let Err(error) = crate::audio_engine::playback::init() {
+        return json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response();
+    }
+    match crate::audio_engine::playback::load_clip(&id, &path_string) {
+        Ok(()) => {
+            println!(
+                "[TauriRemote] audio playback load id={} user={:?} path={}",
+                id, user_id, path_string
+            );
+            Json(json!({
+                "success": true,
+                "runtime": "tauri",
+                "id": id,
+                "absolute_file_path": path_string,
+                "user_id": user_id
+            }))
+            .into_response()
+        }
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response(),
+    }
+}
+
+async fn remote_audio_playback_play_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RemoteAudioPlaybackPlayRequest>,
+) -> impl IntoResponse {
+    let user_id = match require_remote_control(&headers, &state) {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let id = payload
+        .id
+        .map(|value| clean_remote_segment(&value, "remote_clip"))
+        .unwrap_or_else(|| "remote_clip".to_string());
+    let voice_id = payload
+        .voice_id
+        .or(payload.voice_id_camel)
+        .map(|value| clean_remote_segment(&value, &id))
+        .unwrap_or_else(|| id.clone());
+    let start_seconds = payload
+        .start_seconds
+        .or(payload.start_seconds_camel)
+        .unwrap_or(0.0);
+    let duration_seconds = payload.duration_seconds.or(payload.duration_seconds_camel);
+    let gain = payload.gain.unwrap_or(1.0);
+    let rate = payload.rate.unwrap_or(1.0);
+    match crate::audio_engine::playback::play_instance(
+        &id,
+        &voice_id,
+        start_seconds,
+        duration_seconds,
+        gain,
+        rate,
+        None,
+        None,
+    ) {
+        Ok(()) => {
+            println!(
+                "[TauriRemote] audio playback play id={} voice={} user={:?} start={} duration={:?}",
+                id, voice_id, user_id, start_seconds, duration_seconds
+            );
+            Json(json!({
+                "success": true,
+                "runtime": "tauri",
+                "id": id,
+                "voice_id": voice_id,
+                "start_seconds": start_seconds,
+                "duration_seconds": duration_seconds,
+                "gain": gain,
+                "rate": rate,
+                "user_id": user_id
+            }))
+            .into_response()
+        }
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response(),
+    }
+}
+
+async fn remote_audio_playback_stop_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RemoteAudioPlaybackStopRequest>,
+) -> impl IntoResponse {
+    let user_id = match require_remote_control(&headers, &state) {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let id = payload
+        .id
+        .map(|value| clean_remote_segment(&value, "remote_clip"))
+        .unwrap_or_else(|| "remote_clip".to_string());
+    let voice_id = payload
+        .voice_id
+        .or(payload.voice_id_camel)
+        .map(|value| clean_remote_segment(&value, &id))
+        .unwrap_or_else(|| id.clone());
+    match crate::audio_engine::playback::stop_instance(&voice_id) {
+        Ok(()) => Json(json!({
+            "success": true,
+            "runtime": "tauri",
+            "id": id,
+            "voice_id": voice_id,
+            "user_id": user_id
+        }))
+        .into_response(),
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response(),
+    }
 }
 
 fn ws_events_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValue>) {
@@ -2432,7 +3258,10 @@ fn serve_bytes_with_range(
     (StatusCode::OK, h, bytes).into_response()
 }
 
-fn parse_http_range(request_headers: &HeaderMap, total: usize) -> Option<Result<(usize, usize), HeaderMap>> {
+fn parse_http_range(
+    request_headers: &HeaderMap,
+    total: usize,
+) -> Option<Result<(usize, usize), HeaderMap>> {
     let range_header = request_headers
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())?
@@ -2532,26 +3361,16 @@ async fn download_upload_handler(
         }
     };
 
-    let token = extract_bearer_token(&headers).or_else(|| {
-        query
-            .token
-            .as_ref()
-            .filter(|t| !t.trim().is_empty())
-            .map(|t| t.trim().to_string())
-    });
-    let token_user_id =
-        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
-    let user_id = if token_user_id != "anonymous" {
-        token_user_id
-    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
-        header_user_id
-    } else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "success": false, "error": "Unauthorized" })),
-        )
-            .into_response();
-    };
+    let user_id =
+        if let Some(value) = resolve_media_authenticated_user(&headers, &query, auth_state) {
+            value
+        } else {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "success": false, "error": "Unauthorized" })),
+            )
+                .into_response();
+        };
 
     let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
         Ok(dir) => dir,
@@ -2632,10 +3451,7 @@ async fn download_upload_handler(
     {
         Ok(response) => {
             if verbose_logs {
-                println!(
-                    "[download_upload_handler] ✅ Serving file: {:?}",
-                    file_path
-                );
+                println!("[download_upload_handler] ✅ Serving file: {:?}", file_path);
             }
             response
         }
@@ -2672,26 +3488,16 @@ async fn extract_audio_handler(
         }
     };
 
-    let token = extract_bearer_token(&headers).or_else(|| {
-        query
-            .token
-            .as_ref()
-            .filter(|t| !t.trim().is_empty())
-            .map(|t| t.trim().to_string())
-    });
-    let token_user_id =
-        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
-    let user_id = if token_user_id != "anonymous" {
-        token_user_id
-    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
-        header_user_id
-    } else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "success": false, "error": "Unauthorized" })),
-        )
-            .into_response();
-    };
+    let user_id =
+        if let Some(value) = resolve_media_authenticated_user(&headers, &query, auth_state) {
+            value
+        } else {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "success": false, "error": "Unauthorized" })),
+            )
+                .into_response();
+        };
 
     let downloads_dir = match resolve_user_downloads_dir(&state, &user_id).await {
         Ok(dir) => dir,
@@ -2703,16 +3509,37 @@ async fn extract_audio_handler(
                 .into_response();
         }
     };
+    let recordings_dir =
+        match resolve_user_storage_dir(&state, &user_id, LocalStorageRoot::Recordings).await {
+            Ok(dir) => dir,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "success": false, "error": err.to_string() })),
+                )
+                    .into_response();
+            }
+        };
 
     let safe_name = sanitize_file_name(&file);
-    let source_path = downloads_dir.join(&safe_name);
-    if fs::metadata(&source_path).await.is_err() {
+    let recordings_path = recordings_dir.join(&safe_name);
+    let downloads_path = downloads_dir.join(&safe_name);
+    let (source_path, source_dir) = if fs::metadata(&recordings_path).await.is_ok() {
+        (recordings_path, recordings_dir)
+    } else if fs::metadata(&downloads_path).await.is_ok() {
+        (downloads_path, downloads_dir)
+    } else {
         return (
             StatusCode::NOT_FOUND,
-            Json(json!({ "success": false, "error": "Source file not found", "path": source_path.to_string_lossy() })),
+            Json(json!({
+                "success": false,
+                "error": "Source file not found",
+                "recordings_path": recordings_path.to_string_lossy(),
+                "downloads_path": downloads_path.to_string_lossy()
+            })),
         )
             .into_response();
-    }
+    };
 
     let extension = Path::new(&safe_name)
         .extension()
@@ -2730,7 +3557,7 @@ async fn extract_audio_handler(
             .into_response();
     }
 
-    let cache_dir = downloads_dir.join(".audio_cache");
+    let cache_dir = source_dir.join(".audio_cache");
     if let Err(err) = fs::create_dir_all(&cache_dir).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -2858,27 +3685,16 @@ async fn download_recording_handler(
         }
     };
 
-    let token_from_header = extract_bearer_token(&headers);
-    let token = token_from_header.as_deref().or_else(|| {
-        query
-            .token
-            .as_ref()
-            .map(|t| t.trim())
-            .filter(|t| !t.is_empty())
-    });
-
-    let token_user_id = local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token);
-    let user_id = if token_user_id != "anonymous" {
-        token_user_id
-    } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
-        header_user_id
-    } else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "success": false, "error": "Unauthorized" })),
-        )
-            .into_response();
-    };
+    let user_id =
+        if let Some(value) = resolve_media_authenticated_user(&headers, &query, auth_state) {
+            value
+        } else {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "success": false, "error": "Unauthorized" })),
+            )
+                .into_response();
+        };
 
     // First, try to find the file directly in the user's recordings directory (like downloads)
     // This handles recordings synced from Fastify that may not be in the local DB
@@ -2935,7 +3751,9 @@ async fn download_recording_handler(
         if downloads_path.exists() {
             let ct = guess_mime_from_ext(&safe_name);
             let disposition = format!("inline; filename=\"{}\"", safe_name);
-            if let Ok(response) = serve_file_with_range(&downloads_path, ct, "", &headers, &disposition).await {
+            if let Ok(response) =
+                serve_file_with_range(&downloads_path, ct, "", &headers, &disposition).await
+            {
                 println!(
                     "[download_recording_handler] ✅ Serving recording from downloads secondary: {:?}",
                     downloads_path
@@ -4050,7 +4868,26 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         started_at: Arc::new(std::time::Instant::now()),
         atome_state: Some(atome_state),
         auth_state: Some(auth_state),
+        remote_control_enabled: remote_control_boot_enabled(),
+        remote_control_token: resolve_remote_control_token().map(Arc::new),
     };
+    if state.remote_control_enabled {
+        println!(
+            "🔐 Tauri remote control enabled on localhost. Token source: {}",
+            if std::env::var("SQUIRREL_TAURI_REMOTE_TOKEN")
+                .ok()
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false)
+            {
+                "SQUIRREL_TAURI_REMOTE_TOKEN"
+            } else {
+                "generated"
+            }
+        );
+        if let Some(token) = state.remote_control_token.as_deref() {
+            println!("🔐 Tauri remote control token: {}", token);
+        }
+    }
 
     let sync_remote_enabled = std::env::var("SQUIRREL_SYNC_REMOTE")
         .map(|v| v != "0")
@@ -4106,6 +4943,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             HeaderName::from_static("x-user-name"),
             HeaderName::from_static("x-phone"),
             HeaderName::from_static("x-user-phone"),
+            HeaderName::from_static("x-squirrel-remote-token"),
         ])
         .expose_headers([
             header::CONTENT_RANGE,
@@ -4157,6 +4995,31 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))
         .route("/api/admin/sync-from-zip", post(sync_from_zip_handler))
+        .route("/__tauri_remote/status", get(remote_status_handler))
+        .route(
+            "/__tauri_remote/audio/record/start",
+            post(remote_audio_record_start_handler),
+        )
+        .route(
+            "/__tauri_remote/audio/record/stop",
+            post(remote_audio_record_stop_handler),
+        )
+        .route(
+            "/__tauri_remote/audio/analyze",
+            post(remote_audio_analyze_handler),
+        )
+        .route(
+            "/__tauri_remote/audio/playback/load",
+            post(remote_audio_playback_load_handler),
+        )
+        .route(
+            "/__tauri_remote/audio/playback/play",
+            post(remote_audio_playback_play_handler),
+        )
+        .route(
+            "/__tauri_remote/audio/playback/stop",
+            post(remote_audio_playback_stop_handler),
+        )
         // WebSocket endpoints for API and sync (ADOLE v3.0)
         .route("/ws/api", get(ws_api_handler))
         .route("/ws/sync", get(ws_sync_handler))

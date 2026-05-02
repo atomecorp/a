@@ -286,6 +286,13 @@ fn gain_to_decibels(gain: f64) -> Decibels {
     Decibels((20.0 * clamped.log10()) as f32)
 }
 
+fn sound_duration_seconds(data: &StaticSoundData) -> Result<f64, String> {
+    if data.sample_rate == 0 {
+        return Err("Clip sample rate is zero".to_string());
+    }
+    Ok(data.frames.len() as f64 / data.sample_rate as f64)
+}
+
 pub fn play_instance(
     asset_id: &str,
     voice_id: &str,
@@ -309,13 +316,27 @@ pub fn play_instance(
     }
 
     let mut sound_data: StaticSoundData = sound_data_template;
-    let start = start_seconds.max(0.0);
+    let source_duration = sound_duration_seconds(&sound_data)?;
+    if source_duration <= 0.0 {
+        return Err(format!("Clip '{asset_id}' has no playable duration"));
+    }
+    let frame_duration = 1.0 / sound_data.sample_rate.max(1) as f64;
+    let min_region_duration = frame_duration.max(0.0005);
+    let start = start_seconds
+        .max(0.0)
+        .min((source_duration - min_region_duration).max(0.0));
     let requested_rate = rate.max(0.0001);
+    let max_duration = (source_duration - start).max(0.0);
     let duration = duration_seconds
         .filter(|value| value.is_finite() && *value > 0.0)
-        .map(|value| value.max(0.001));
-    let loop_start = loop_start_seconds.filter(|value| value.is_finite() && *value >= 0.0);
-    let loop_end = loop_end_seconds.filter(|value| value.is_finite() && *value > 0.0);
+        .map(|value| value.clamp(min_region_duration, max_duration))
+        .filter(|value| *value >= min_region_duration && *value < max_duration);
+    let loop_start = loop_start_seconds
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .map(|value| value.min(source_duration));
+    let loop_end = loop_end_seconds
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.min(source_duration));
 
     if let Some(duration) = duration {
         let slice_end = start + duration;
@@ -325,11 +346,15 @@ pub fn play_instance(
     }
 
     if let (Some(loop_start), Some(loop_end)) = (loop_start, loop_end) {
-        if loop_end > loop_start {
+        if loop_end - loop_start >= min_region_duration {
             if duration.is_some() {
                 let relative_loop_start = (loop_start - start).max(0.0);
-                let relative_loop_end = (loop_end - start).max(relative_loop_start + 0.0001);
-                sound_data = sound_data.loop_region(relative_loop_start..relative_loop_end);
+                let relative_loop_end = (loop_end - start)
+                    .max(relative_loop_start + min_region_duration)
+                    .min(duration.unwrap_or(max_duration));
+                if relative_loop_end - relative_loop_start >= min_region_duration {
+                    sound_data = sound_data.loop_region(relative_loop_start..relative_loop_end);
+                }
             } else {
                 sound_data = sound_data.loop_region(loop_start..loop_end);
             }

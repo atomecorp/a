@@ -34,12 +34,10 @@ import {
     }
 
     function defaultSampleRate(context, source) {
-        if (context === 'tauri' && source === 'mic') return 16000;
         return null;
     }
 
     function defaultChannels(context, source) {
-        if (context === 'tauri' && source === 'mic') return 1;
         return null;
     }
 
@@ -52,16 +50,106 @@ import {
         return `${source}_${Date.now()}.wav`;
     }
 
-    function getAdoleUserId() {
+    function extractUserId(value) {
+        if (!value) return null;
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            return trimmed && trimmed !== 'anonymous' ? trimmed : null;
+        }
+        if (typeof value !== 'object') return null;
+        const user = value.logged && value.user ? value.user : value;
+        const nested = user.user || user.currentUser || user.current_user || null;
+        return extractUserId(user.user_id)
+            || extractUserId(user.userId)
+            || extractUserId(user.atome_id)
+            || extractUserId(user.atomeId)
+            || extractUserId(user.id)
+            || extractUserId(nested);
+    }
+
+    function readStoredUserId(storage) {
+        if (!storage || typeof storage.getItem !== 'function') return null;
+        const keys = [
+            'current_user',
+            'currentUser',
+            'adole_current_user',
+            'auth_user',
+            'user',
+            'user_id',
+            'userId'
+        ];
+        for (const key of keys) {
+            let raw = null;
+            try { raw = storage.getItem(key); } catch (_) { raw = null; }
+            if (!raw) continue;
+            const trimmed = String(raw || '').trim();
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    const parsedId = extractUserId(parsed);
+                    if (parsedId) return parsedId;
+                } catch (_) { }
+            } else {
+                const direct = extractUserId(trimmed);
+                if (direct) return direct;
+            }
+        }
+        return null;
+    }
+
+    function resolveUserIdSync() {
+        const api = window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null);
+        return extractUserId(window.__currentUser)
+            || extractUserId(window.__CURRENT_USER__)
+            || extractUserId(window.currentUser)
+            || extractUserId(api?.auth?.currentUser)
+            || extractUserId(api?.auth?.user)
+            || readStoredUserId(window.localStorage)
+            || readStoredUserId(window.sessionStorage)
+            || null;
+    }
+
+    function withTimeout(promise, ms) {
+        return new Promise((resolve) => {
+            let done = false;
+            const timer = setTimeout(() => {
+                if (done) return;
+                done = true;
+                resolve(null);
+            }, ms);
+            Promise.resolve(promise).then((value) => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                resolve(value);
+            }).catch(() => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                resolve(null);
+            });
+        });
+    }
+
+    async function getAdoleUserId() {
+        const syncUserId = resolveUserIdSync();
+        if (syncUserId) return syncUserId;
         try {
             const api = window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null);
-            if (!api || !api.auth || typeof api.auth.current !== 'function') return Promise.resolve(null);
-            return api.auth.current().then((res) => {
-                const user = res && res.logged ? res.user : null;
-                return user ? (user.user_id || user.atome_id || user.id || null) : null;
-            }).catch(() => null);
+            if (!api || !api.auth) return null;
+            if (typeof api.auth.getCurrentUser === 'function') {
+                const user = await withTimeout(api.auth.getCurrentUser(), 1500);
+                const userId = extractUserId(user);
+                if (userId) return userId;
+            }
+            if (typeof api.auth.current === 'function') {
+                const res = await withTimeout(api.auth.current(), 1500);
+                const userId = extractUserId(res);
+                if (userId) return userId;
+            }
+            return null;
         } catch (_) {
-            return Promise.resolve(null);
+            return null;
         }
     }
 
@@ -174,19 +262,21 @@ import {
             const filePath = (typeof params.filePath === 'string' && params.filePath.trim())
                 ? params.filePath.trim()
                 : `data/users/${userId}/recordings/${fileName}`;
+            const requestedSampleRate = Number(sampleRate) || 0;
+            const requestedChannels = Number(channels) || 0;
             await invoke('audio_record_start', {
                 sessionId,
                 filePath,
-                sampleRate: Number(sampleRate) || defaultSampleRate(context, source) || 16000,
-                channels: Number(channels) || defaultChannels(context, source) || 1
+                sampleRate: requestedSampleRate,
+                channels: requestedChannels
             });
             PENDING.set(sessionId, {
                 provider: 'iplug_native_recorder',
                 transport: 'tauri',
                 fileName,
                 filePath,
-                sampleRate: Number(sampleRate) || defaultSampleRate(context, source) || 16000,
-                channels: Number(channels) || defaultChannels(context, source) || 1
+                sampleRate: requestedSampleRate,
+                channels: requestedChannels
             });
             window.__SQUIRREL_RECORD_PROVIDER__ = 'iplug_native_recorder';
             return sessionId;

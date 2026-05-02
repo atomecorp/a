@@ -16,7 +16,7 @@ use hound::{WavSpec, WavWriter};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 
 use super::metering;
 
@@ -98,9 +98,7 @@ impl OutputFormat {
                 // Scale i16 → i24 range
                 writer.write_sample((sample as i32) << 8)
             }
-            Self::Float32 => {
-                writer.write_sample(sample as f32 / 32768.0)
-            }
+            Self::Float32 => writer.write_sample(sample as f32 / 32768.0),
         }
     }
 }
@@ -224,6 +222,22 @@ pub fn start_with_options(
         return Err(format!("Session '{session_id}' already active"));
     }
 
+    let default_input_config = cpal::default_host()
+        .default_input_device()
+        .ok_or("No default input (microphone) device found")?
+        .default_input_config()
+        .map_err(|e| format!("No default input config: {e}"))?;
+    let actual_sample_rate = if sample_rate > 0 {
+        sample_rate
+    } else {
+        default_input_config.sample_rate().0
+    };
+    let actual_channels = if channels > 0 {
+        channels
+    } else {
+        default_input_config.channels()
+    };
+
     // Ensure parent directory exists
     if let Some(parent) = Path::new(abs_wav_path).parent() {
         std::fs::create_dir_all(parent)
@@ -237,105 +251,76 @@ pub fn start_with_options(
     let frame_count = Arc::new(AtomicU64::new(0));
     let frame_count_thread = Arc::clone(&frame_count);
     let path_owned = abs_wav_path.to_string();
-    let sr = sample_rate;
-    let ch = channels;
+    let sr = actual_sample_rate;
+    let ch = actual_channels;
     let fmt = output_format;
     let buf_hint = buffer_hint;
+    let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
 
     // Spawn a thread that owns the CPAL stream (Stream is !Send, so it must
     // be created and dropped on the same thread).
     let thread_handle = std::thread::spawn(move || -> Result<f64, String> {
-        let host = cpal::default_host();
-        let device = host
-            .default_input_device()
-            .ok_or("No default input (microphone) device found")?;
+        let init_result = (|| {
+            let host = cpal::default_host();
+            let device = host
+                .default_input_device()
+                .ok_or("No default input (microphone) device found")?;
 
-        let default_config = device
-            .default_input_config()
-            .map_err(|e| format!("No default input config: {e}"))?;
+            let default_config = device
+                .default_input_config()
+                .map_err(|e| format!("No default input config: {e}"))?;
 
-        let actual_sr = if sr > 0 { sr } else { default_config.sample_rate().0 };
-        let actual_ch = if ch > 0 { ch } else { default_config.channels() };
+            let actual_sr = sr;
+            let actual_ch = ch;
 
-        // Validate sample rate range
-        if actual_sr < 8000 || actual_sr > 384000 {
-            eprintln!(
-                "[audio_engine::recorder] Warning: unusual sample rate {actual_sr} Hz — \
-                 typical values are 16000, 44100, 48000, 96000"
-            );
-        }
+            // Validate sample rate range
+            if actual_sr < 8000 || actual_sr > 384000 {
+                eprintln!(
+                    "[audio_engine::recorder] Warning: unusual sample rate {actual_sr} Hz — \
+                     typical values are 16000, 44100, 48000, 96000"
+                );
+            }
 
-        let stream_config = StreamConfig {
-            channels: actual_ch,
-            sample_rate: cpal::SampleRate(actual_sr),
-            buffer_size: buf_hint.to_cpal(),
-        };
+            let stream_config = StreamConfig {
+                channels: actual_ch,
+                sample_rate: cpal::SampleRate(actual_sr),
+                buffer_size: buf_hint.to_cpal(),
+            };
 
-        let wav_spec = fmt.wav_spec(actual_sr, actual_ch);
+            let wav_spec = fmt.wav_spec(actual_sr, actual_ch);
 
-        let writer = WavWriter::create(&path_owned, wav_spec)
-            .map_err(|e| format!("Failed to create WAV file {path_owned}: {e}"))?;
-        let writer = Arc::new(Mutex::new(Some(writer)));
-        let writer_clone = Arc::clone(&writer);
+            let writer = WavWriter::create(&path_owned, wav_spec)
+                .map_err(|e| format!("Failed to create WAV file {path_owned}: {e}"))?;
+            let writer = Arc::new(Mutex::new(Some(writer)));
+            let writer_clone = Arc::clone(&writer);
 
-        let stop_for_callback = Arc::clone(&stop_atomic_cb);
-        let frame_count_cb = Arc::clone(&frame_count_thread);
-        let fmt_cb = fmt;
+            let stop_for_callback = Arc::clone(&stop_atomic_cb);
+            let frame_count_cb = Arc::clone(&frame_count_thread);
+            let fmt_cb = fmt;
 
-        let sample_format = default_config.sample_format();
+            let sample_format = default_config.sample_format();
 
-        let err_fn = |err: cpal::StreamError| {
-            eprintln!("[audio_engine::recorder] Stream error: {err}");
-        };
+            let err_fn = |err: cpal::StreamError| {
+                eprintln!("[audio_engine::recorder] Stream error: {err}");
+            };
 
-        let stream = match sample_format {
-            SampleFormat::F32 => device
-                .build_input_stream(
-                    &stream_config,
-                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                        if stop_for_callback.load(Ordering::Relaxed) {
-                            return;
-                        }
-                        metering::push_samples(data);
-                        if let Ok(mut guard) = writer_clone.lock() {
-                            if let Some(ref mut w) = *guard {
-                                for &sample in data {
-                                    let _ = fmt_cb.write_f32_sample(w, sample);
-                                }
-                            }
-                        }
-                        frame_count_cb.fetch_add(
-                            (data.len() / usize::from(actual_ch.max(1))) as u64,
-                            Ordering::Relaxed,
-                        );
-                    },
-                    err_fn,
-                    None,
-                )
-                .map_err(|e| format!("Failed to build input stream: {e}"))?,
-            SampleFormat::I16 => {
-                let writer_clone2 = Arc::clone(&writer);
-                let stop_for_callback2 = Arc::clone(&stop_atomic_cb);
-                let frame_count_cb2 = Arc::clone(&frame_count_thread);
-                let fmt_cb2 = fmt;
-                device
+            let stream = match sample_format {
+                SampleFormat::F32 => device
                     .build_input_stream(
                         &stream_config,
-                        move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                            if stop_for_callback2.load(Ordering::Relaxed) {
+                        move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                            if stop_for_callback.load(Ordering::Relaxed) {
                                 return;
                             }
-                            let floats: Vec<f32> =
-                                data.iter().map(|&s| s as f32 / 32768.0).collect();
-                            metering::push_samples(&floats);
-                            if let Ok(mut guard) = writer_clone2.lock() {
+                            metering::push_samples(data);
+                            if let Ok(mut guard) = writer_clone.lock() {
                                 if let Some(ref mut w) = *guard {
                                     for &sample in data {
-                                        let _ = fmt_cb2.write_i16_sample(w, sample);
+                                        let _ = fmt_cb.write_f32_sample(w, sample);
                                     }
                                 }
                             }
-                            frame_count_cb2.fetch_add(
+                            frame_count_cb.fetch_add(
                                 (data.len() / usize::from(actual_ch.max(1))) as u64,
                                 Ordering::Relaxed,
                             );
@@ -343,16 +328,61 @@ pub fn start_with_options(
                         err_fn,
                         None,
                     )
-                    .map_err(|e| format!("Failed to build input stream (i16): {e}"))?
+                    .map_err(|e| format!("Failed to build input stream: {e}"))?,
+                SampleFormat::I16 => {
+                    let writer_clone2 = Arc::clone(&writer);
+                    let stop_for_callback2 = Arc::clone(&stop_atomic_cb);
+                    let frame_count_cb2 = Arc::clone(&frame_count_thread);
+                    let fmt_cb2 = fmt;
+                    device
+                        .build_input_stream(
+                            &stream_config,
+                            move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                                if stop_for_callback2.load(Ordering::Relaxed) {
+                                    return;
+                                }
+                                let floats: Vec<f32> =
+                                    data.iter().map(|&s| s as f32 / 32768.0).collect();
+                                metering::push_samples(&floats);
+                                if let Ok(mut guard) = writer_clone2.lock() {
+                                    if let Some(ref mut w) = *guard {
+                                        for &sample in data {
+                                            let _ = fmt_cb2.write_i16_sample(w, sample);
+                                        }
+                                    }
+                                }
+                                frame_count_cb2.fetch_add(
+                                    (data.len() / usize::from(actual_ch.max(1))) as u64,
+                                    Ordering::Relaxed,
+                                );
+                            },
+                            err_fn,
+                            None,
+                        )
+                        .map_err(|e| format!("Failed to build input stream (i16): {e}"))?
+                }
+                _ => {
+                    return Err(format!("Unsupported sample format: {:?}", sample_format));
+                }
+            };
+
+            stream
+                .play()
+                .map_err(|e| format!("Failed to start recording stream: {e}"))?;
+
+            Ok((stream, writer))
+        })();
+
+        let (stream, writer) = match init_result {
+            Ok(value) => {
+                let _ = ready_tx.send(Ok(()));
+                value
             }
-            _ => {
-                return Err(format!("Unsupported sample format: {:?}", sample_format));
+            Err(err) => {
+                let _ = ready_tx.send(Err(err.clone()));
+                return Err(err);
             }
         };
-
-        stream
-            .play()
-            .map_err(|e| format!("Failed to start recording stream: {e}"))?;
 
         // Block this thread until stop signal — uses condvar (zero CPU when waiting)
         stop_signal_thread.wait();
@@ -370,6 +400,28 @@ pub fn start_with_options(
         Ok(0.0) // duration computed from Instant in stop()
     });
 
+    match ready_rx.recv_timeout(std::time::Duration::from_secs(8)) {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            let _ = thread_handle.join();
+            return Err(err);
+        }
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            stop_atomic.store(true, Ordering::Relaxed);
+            stop_signal.stop();
+            return Err(
+                "Recording start timed out before the input stream became ready".to_string(),
+            );
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            return match thread_handle.join() {
+                Ok(Ok(_)) => Err("Recording thread exited before reporting readiness".to_string()),
+                Ok(Err(err)) => Err(err),
+                Err(_) => Err("Recording thread panicked before reporting readiness".to_string()),
+            };
+        }
+    }
+
     sessions.insert(
         session_id.to_string(),
         RecordingSession {
@@ -378,8 +430,8 @@ pub fn start_with_options(
             thread_handle: Some(thread_handle),
             start_time: std::time::Instant::now(),
             file_path: abs_wav_path.to_string(),
-            sample_rate,
-            channels,
+            sample_rate: actual_sample_rate,
+            channels: actual_channels,
             output_format,
             frame_count,
         },
