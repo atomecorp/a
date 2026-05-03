@@ -97,8 +97,13 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
    * Load a clip from a URL. Returns a Promise so the caller can track completion.
    */
   function loadClipFromUrl(id, url) {
-    if (mode === 'tauri' && isAuv3NativeRuntime() && postAuv3LocalClipLoad(url)) {
-      return Promise.resolve(true);
+    if (mode === 'tauri' && isAuv3NativeRuntime()) {
+      if (postAuv3LocalClipLoad(url)) {
+        return Promise.resolve(true);
+      }
+      const error = new Error('[backend.kira] AUv3 native playback requires a local media path');
+      emitError('load_url_requires_local_path(' + id + ')', error);
+      return Promise.reject(error);
     }
     return fetch(url)
       .then(function (r) {
@@ -185,6 +190,11 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
         });
       }
       if ((mode === 'tauri' || mode === 'wasm') && bytes) {
+        if (mode === 'tauri' && isAuv3NativeRuntime()) {
+          var auv3BytesError = new Error('[backend.kira] AUv3 native playback does not support byte-loaded clips');
+          emitError('load_clip_from_bytes(' + id + ')', auv3BytesError);
+          return Promise.reject(auv3BytesError);
+        }
         if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
           try { wasm.audio_load_clip_from_bytes(id, bytes); return true; }
           catch (e) { emitError('wasm load(' + id + ')', e); throw e; }

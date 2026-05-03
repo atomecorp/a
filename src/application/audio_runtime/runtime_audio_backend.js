@@ -37,7 +37,9 @@ export const getTauriInvoke = (env = globalThis) => {
 
 const isNativeKiraPlaybackValue = (value) => {
     const playback = String(value || '').trim().toLowerCase();
-    return playback === 'tauri_native_kira' || playback === 'ios_native_kira';
+    return playback === 'tauri_native_kira'
+        || playback === 'ios_native_kira'
+        || playback === 'ios_auv3_native';
 };
 
 export const isAuv3AudioRuntime = (env = globalThis) => {

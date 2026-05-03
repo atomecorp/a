@@ -1290,6 +1290,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
 
     private static func recordInboundMessage(source: String) {
         guard runningInExtension else { return }
+        if source == "swiftBridge" || source == "console" { return }
         let now = CACurrentMediaTime()
         inboundQueue.async {
             inboundSamples.append(now)
