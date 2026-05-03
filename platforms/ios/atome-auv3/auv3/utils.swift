@@ -618,8 +618,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
             }
             
-            // PERFORMANCE: Ultra-throttle transport checks to 5 FPS (instead of 10 FPS)
-            if currentTime - strongSelf.lastTransportCheck >= 0.2 {
+            // Keep AUv3 host transport fresh enough for timeline and loop sync.
+            if currentTime - strongSelf.lastTransportCheck >= 0.05 {
                 if strongSelf.shouldPollTransport() { // nouvelle condition unifiée
                     strongSelf.checkHostTransport()
                 }

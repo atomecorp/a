@@ -1357,7 +1357,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static func startHostTimeStream(format: String?) {
         stopHostTimeStream()
         hostTimeStreamActiveFlag = true
-        hostTimeTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
+        hostTimeTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             let isPlaying = lastIsPlaying
             let playhead = lastPlayheadSeconds
             let tempo = cachedTempo
@@ -1391,7 +1391,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         lastSentTransportPlaying = lastIsPlaying
         lastSentTransportPosition = lastPlayheadSeconds
         // Poll cached values (updated by auv3 utils) and emit only on changes
-        hostStateTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
+        hostStateTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             let playing = lastIsPlaying
             let pos = lastPlayheadSeconds
             var shouldSend = false

@@ -315,6 +315,18 @@ const _extractFilenameFromSource = (src) => {
     return null;
 };
 
+const _resolveAuv3PositionNormalized = (node) => {
+    const currentTime = Number.isFinite(Number(node?.dataset?.eveAuv3PlaybackTime))
+        ? Number(node.dataset.eveAuv3PlaybackTime)
+        : Number(node?.currentTime);
+    const duration = Number.isFinite(Number(node?.duration)) && Number(node.duration) > 0
+        ? Number(node.duration)
+        : Number(node?.dataset?.eveAuv3PlaybackDuration);
+    if (!Number.isFinite(currentTime) || currentTime < 0) return null;
+    if (!Number.isFinite(duration) || duration <= 0) return null;
+    return Math.max(0, Math.min(0.999999, currentTime / duration));
+};
+
 export const auv3PlayMedia = (node, env = globalThis) => {
     const bridge = _getAuv3Bridge(env);
     if (!bridge || !node) return false;
@@ -354,10 +366,15 @@ export const auv3PlayMedia = (node, env = globalThis) => {
 
     if (relativePath) {
         // Send the file path/name to Swift for native decode + auto-play
-        bridge.postMessage({
+        const payload = {
             action: 'loadAndPlay',
             relativePath: relativePath
-        });
+        };
+        const positionNormalized = _resolveAuv3PositionNormalized(node);
+        if (positionNormalized != null) {
+            payload.positionNormalized = positionNormalized;
+        }
+        bridge.postMessage(payload);
     } else {
         // No identifiable source: toggle play state directly
         // Swift will play whatever file is already loaded, or test tone
