@@ -10,7 +10,7 @@ import OSLog
 import QuartzCore
 import AudioToolbox
 
-public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     typealias NativeInvokeHandler = (_ command: String, _ payload: [String: Any], _ completion: @escaping ([String: Any], String?) -> Void) -> Void
 
     static let shared = WebViewManager()
@@ -90,6 +90,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         self.audioController = audioController
         // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
         webView.navigationDelegate = WebViewManager.shared
+        webView.uiDelegate = WebViewManager.shared
 
         // Detect execution environment (App vs AUv3 extension) and log explicitly
         let isExtension: Bool = {
@@ -152,7 +153,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 // Inject host environment flag early for UI logic
                 try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
                 \(localPortBootstrap)
-                \(isExtension ? "" : """
                 (function(){
                     if(window.__ATOME_IOS_NATIVE_INVOKE) return;
                     if(!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge)) return;
@@ -187,7 +187,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         });
                     };
                 })();
-                """)
                 window.onerror = function(m, s, l, c, e) {
             var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
             try {
@@ -985,6 +984,24 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         }
         let jsCode = "if (typeof \(function) === 'function') { \(function)(\(jsValue)); }"
         evaluateJS(jsCode, label: "fn.\(function)", priority: priority)
+    }
+
+    // MARK: - WKUIDelegate (media capture)
+
+    // WebKit shows its own per-origin permission prompt on top of the AVFoundation
+    // system prompt when the page calls `navigator.mediaDevices.getUserMedia`.
+    // We grant immediately: AVFoundation already enforces the underlying iOS
+    // permission (driven by Info.plist NSCameraUsageDescription /
+    // NSMicrophoneUsageDescription). Without this delegate the user would see
+    // a duplicate WebKit dialog whose dismissal is decoupled from the gesture
+    // that triggered the request.
+    @available(iOS 15.0, *)
+    public func webView(_ webView: WKWebView,
+                        requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                        initiatedByFrame frame: WKFrameInfo,
+                        type: WKMediaCaptureType,
+                        decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(.grant)
     }
 
     // MARK: - WKNavigationDelegate

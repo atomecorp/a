@@ -62,6 +62,18 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         ])
         
         WebViewManager.setupWebView(for: webView, audioController: self)
+    // Wire native media capture (camera, mic, video record, photo) so the
+    // AUv3 extension exposes the same `media_*` commands as the standalone
+    // app. Same controller class, same JS bridge: AUv3 video record now goes
+    // through `media_video_record_start` exactly like the app.
+    WebViewManager.setNativeInvokeHandler { command, payload, completion in
+        if AppNativeMediaCaptureController.canHandle(command: command) {
+            AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
+        } else {
+            completion(["success": false], "Unsupported native invoke command in AUv3: \(command)")
+        }
+    }
+    AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
     // Register JS -> Swift handler for safe URL launching (idempotent)
     let cc = webView.configuration.userContentController
     cc.removeScriptMessageHandler(forName: "squirrel.openURL")
