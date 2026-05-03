@@ -830,7 +830,6 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 #endif
 
         let outputFormat = ((_outputBusArray?.count ?? 0) > 0) ? _outputBusArray?[0].format : nil
-        let inputFormat = ((_inputBusArray?.count ?? 0) > 0) ? _inputBusArray?[0].format : nil
         if normalizedSource == "plugin" && outputFormat == nil {
             emitRecordingEvent(type: "record_error", payload: [
                 "session_id": sessionId,

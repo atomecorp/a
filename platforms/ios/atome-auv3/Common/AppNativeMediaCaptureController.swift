@@ -5,11 +5,8 @@
 //  set of `media_*` commands dispatched through the WKWebView native invoke
 //  bridge (`window.__ATOME_IOS_NATIVE_INVOKE`).
 //
-//  The previous in-process preview pipeline (`media_camera_preview_show/hide/update`)
-//  remains exported for backwards compatibility but is no longer invoked from
-//  the JS layer: previews are driven by `navigator.mediaDevices.getUserMedia`
-//  directly inside the WebView. Only the recording path (`media_video_record_*`,
-//  `media_capture_photo`) is on the active code path.
+//  The native preview pipeline (`media_camera_preview_show/hide/update`) is
+//  used by AUv3 where WebKit getUserMedia can be unavailable or render black.
 //
 
 import UIKit
@@ -53,6 +50,7 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
     static func canHandle(command: String) -> Bool {
         switch command {
         case "media_capture_photo",
+             "media_capture_permissions_prepare",
              "media_video_record_start",
              "media_video_record_stop",
              "media_camera_switch",
@@ -77,6 +75,8 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
         switch command {
         case "media_capture_photo":
             capturePhoto(payload: payload, completion: completion)
+        case "media_capture_permissions_prepare":
+            prepareCapturePermissions(payload: payload, completion: completion)
         case "media_video_record_start":
             startVideoRecording(payload: payload, completion: completion)
         case "media_video_record_stop":
@@ -220,27 +220,115 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
         return (url, sanitized)
     }
 
+    private func authorizationStatusName(_ status: AVAuthorizationStatus) -> String {
+        switch status {
+        case .authorized:
+            return "authorized"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .notDetermined:
+            return "not_determined"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    private func permissionPayload(video: Bool, audio: Bool) -> [String: Any] {
+        var payload: [String: Any] = [
+            "success": true,
+            "video_requested": video,
+            "audio_requested": audio
+        ]
+        if video {
+            let status = AVCaptureDevice.authorizationStatus(for: .video)
+            payload["camera_status"] = authorizationStatusName(status)
+            payload["camera_granted"] = status == .authorized
+        }
+        if audio {
+            let status = AVCaptureDevice.authorizationStatus(for: .audio)
+            payload["microphone_status"] = authorizationStatusName(status)
+            payload["microphone_granted"] = status == .authorized
+        }
+        return payload
+    }
+
+    private func deniedReason(video: Bool, audio: Bool) -> String? {
+        if video {
+            let status = AVCaptureDevice.authorizationStatus(for: .video)
+            if status == .denied || status == .restricted {
+                return "camera_permission_denied"
+            }
+        }
+        if audio {
+            let status = AVCaptureDevice.authorizationStatus(for: .audio)
+            if status == .denied || status == .restricted {
+                return "microphone_permission_denied"
+            }
+        }
+        return nil
+    }
+
+    private func prepareCapturePermissions(payload: [String: Any],
+                                           completion: @escaping ([String: Any], String?) -> Void) {
+        let wantsVideo = (payload["video"] as? Bool) != false
+        let wantsAudio = (payload["audio"] as? Bool) != false
+        let reason = resolveString(payload, ["reason"])
+        print("[AUV3_PERM] prepare request reason=\(reason.isEmpty ? "<none>" : reason) video=\(wantsVideo) audio=\(wantsAudio) camera_status=\(authorizationStatusName(AVCaptureDevice.authorizationStatus(for: .video))) microphone_status=\(authorizationStatusName(AVCaptureDevice.authorizationStatus(for: .audio)))")
+        requestAccess(video: wantsVideo, audio: wantsAudio) { granted, denied in
+            var result = self.permissionPayload(video: wantsVideo, audio: wantsAudio)
+            result["success"] = granted
+            result["reason"] = reason
+            if let denied {
+                result["error"] = denied
+            }
+            print("[AUV3_PERM] prepare result success=\(granted) error=\(denied ?? "<none>") camera_status=\(result["camera_status"] ?? "<skip>") microphone_status=\(result["microphone_status"] ?? "<skip>")")
+            self.complete(completion, payload: result, error: granted ? nil : denied)
+        }
+    }
+
     private func requestAccess(video: Bool,
                                audio: Bool,
                                completion: @escaping (Bool, String?) -> Void) {
         let group = DispatchGroup()
         var denied: String?
         if video {
-            group.enter()
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                if !granted { denied = "camera_permission_denied" }
-                group.leave()
+            let status = AVCaptureDevice.authorizationStatus(for: .video)
+            switch status {
+            case .authorized:
+                break
+            case .denied, .restricted:
+                denied = denied ?? "camera_permission_denied"
+            case .notDetermined:
+                group.enter()
+                AVCaptureDevice.requestAccess(for: .video) { granted in
+                    if !granted { denied = denied ?? "camera_permission_denied" }
+                    group.leave()
+                }
+            @unknown default:
+                denied = denied ?? "camera_permission_unknown"
             }
         }
         if audio {
-            group.enter()
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                if !granted { denied = "microphone_permission_denied" }
-                group.leave()
+            let status = AVCaptureDevice.authorizationStatus(for: .audio)
+            switch status {
+            case .authorized:
+                break
+            case .denied, .restricted:
+                denied = denied ?? "microphone_permission_denied"
+            case .notDetermined:
+                group.enter()
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    if !granted { denied = denied ?? "microphone_permission_denied" }
+                    group.leave()
+                }
+            @unknown default:
+                denied = denied ?? "microphone_permission_unknown"
             }
         }
         group.notify(queue: sessionQueue) {
-            completion(denied == nil, denied)
+            completion(self.deniedReason(video: video, audio: audio) == nil && denied == nil, denied ?? self.deniedReason(video: video, audio: audio))
         }
     }
 
@@ -625,6 +713,17 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
                 print("[MEDIA_NATIVE] video_start resolved file=\(fileName) user=\(userId.isEmpty ? "<none>" : userId) camera=\(self.cameraPositionName(cameraPosition)) request_path=\(filePath.isEmpty ? "<none>" : filePath) relative=\(relativePath) absolute=\(url.path)")
                 if FileManager.default.fileExists(atPath: url.path) {
                     try FileManager.default.removeItem(at: url)
+                }
+                if self.previewSession != nil {
+                    print("[MEDIA_NATIVE] video_start stopping_preview_before_record camera=\(self.cameraPositionName(self.previewCameraPosition))")
+                    self.previewVisible = false
+                    self.stopPreviewSessionLocked()
+                    DispatchQueue.main.async {
+                        self.previewLayer?.removeFromSuperlayer()
+                        self.previewLayer = nil
+                        self.previewView?.removeFromSuperview()
+                        self.previewView = nil
+                    }
                 }
                 let session: AVCaptureSession
                 let movieOutput: AVCaptureMovieFileOutput

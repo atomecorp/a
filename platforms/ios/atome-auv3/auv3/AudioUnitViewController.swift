@@ -69,6 +69,25 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     WebViewManager.setNativeInvokeHandler { command, payload, completion in
         if AppNativeMediaCaptureController.canHandle(command: command) {
             AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
+        } else if command == "audio_init" {
+            let sampleRate: Double
+            let channels: UInt32
+            if let au = self.audioUnit as? auv3Utils,
+               au.outputBusses.count > 0 {
+                let outputFormat = au.outputBusses[0].format
+                sampleRate = outputFormat.sampleRate
+                channels = outputFormat.channelCount
+            } else {
+                sampleRate = 0
+                channels = 0
+            }
+            print("[AUV3_AUDIO_INIT] success sample_rate=\(sampleRate) channels=\(channels)")
+            completion([
+                "success": true,
+                "runtime": "ios_auv3",
+                "sample_rate": sampleRate,
+                "channels": channels
+            ], nil)
         } else {
             completion(["success": false], "Unsupported native invoke command in AUv3: \(command)")
         }

@@ -38,6 +38,43 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
     }
   }
 
+  function isAuv3NativeRuntime() {
+    var runtime = resolveAudioRuntime(window);
+    return runtime.playback === 'ios_auv3_native' || runtime.record === 'ios_auv3_native' || runtime.runtime === 'ios_auv3';
+  }
+
+  function normalizeAuv3LocalPath(source) {
+    if (!source) return '';
+    var value = String(source).trim();
+    if (!value || value.startsWith('blob:') || value.startsWith('data:')) return '';
+    try {
+      var parsed = new URL(value, 'atome:///');
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'atome:' || parsed.protocol === 'file:') {
+        value = parsed.pathname || value;
+      }
+    } catch (_) { }
+    value = value
+      .replace(/^file:\/\/\/file\//, '')
+      .replace(/^file:\/\//, '')
+      .replace(/^\/file\//, '')
+      .replace(/^\/+/, '');
+    if (value.startsWith('api/recordings/')) return 'recordings/' + value.slice('api/recordings/'.length);
+    if (value.startsWith('api/uploads/')) return value.slice('api/uploads/'.length);
+    return value;
+  }
+
+  function postAuv3LocalClipLoad(source) {
+    var relativePath = normalizeAuv3LocalPath(source);
+    var bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.atome;
+    if (!relativePath || !bridge || typeof bridge.postMessage !== 'function') return false;
+    bridge.postMessage({
+      type: 'iplug',
+      action: 'loadLocalPath',
+      relativePath: relativePath
+    });
+    return true;
+  }
+
   function invoke(cmd, args) {
     if (mode === 'tauri') {
       const tauriInvoke = getTauriInvoke(window);
@@ -60,6 +97,9 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
    * Load a clip from a URL. Returns a Promise so the caller can track completion.
    */
   function loadClipFromUrl(id, url) {
+    if (mode === 'tauri' && isAuv3NativeRuntime() && postAuv3LocalClipLoad(url)) {
+      return Promise.resolve(true);
+    }
     return fetch(url)
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + url);
@@ -138,6 +178,7 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
       }
 
       if (mode === 'tauri' && path) {
+        if (isAuv3NativeRuntime() && postAuv3LocalClipLoad(path)) return true;
         return invoke('audio_load_clip', { id: id, path: path }).catch(function (e) {
           emitError('load_clip(' + id + ')', e);
           throw e;

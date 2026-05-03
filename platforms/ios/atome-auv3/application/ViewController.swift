@@ -259,7 +259,7 @@ final class AppNativeAudioController: NSObject {
                         self.complete(completion, payload: ["success": false], error: "microphone_input_format_unavailable")
                         return
                     }
-                    try? input.removeTap(onBus: 0)
+                    input.removeTap(onBus: 0)
                     let file = try AVAudioFile(forWriting: url, settings: inputFormat.settings)
                     self.activeRecordingSessionId = sessionId
                     self.activeRecordingFileName = fileName
@@ -316,7 +316,7 @@ final class AppNativeAudioController: NSObject {
             return
         }
         let input = recordingEngine.inputNode
-        try? input.removeTap(onBus: 0)
+        input.removeTap(onBus: 0)
         recordingEngine.stop()
         activeRecordingFile = nil
         let duration = activeRecordingSampleRate > 0 ? Double(activeRecordingFrames) / activeRecordingSampleRate : 0

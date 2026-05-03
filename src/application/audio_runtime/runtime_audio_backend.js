@@ -265,7 +265,19 @@ const _extractRelativePath = (src) => {
         if (path.startsWith('/audio/')) {
             return path.slice('/audio/'.length);
         }
+        if (path.startsWith('/api/recordings/')) {
+            return `recordings/${decodeURIComponent(path.slice('/api/recordings/'.length))}`;
+        }
+        if (path.startsWith('/api/uploads/')) {
+            return decodeURIComponent(path.slice('/api/uploads/'.length));
+        }
         if (path.startsWith('/')) path = path.slice(1);
+        if (path.startsWith('api/recordings/')) {
+            return `recordings/${decodeURIComponent(path.slice('api/recordings/'.length))}`;
+        }
+        if (path.startsWith('api/uploads/')) {
+            return decodeURIComponent(path.slice('api/uploads/'.length));
+        }
         return path || null;
     } catch (_) {
         // URL parse failed; try regex
