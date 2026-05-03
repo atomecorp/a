@@ -999,7 +999,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - Transport Data Communication
     
     public static func sendTransportDataToJS(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
-        updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadPosition)
+        let playheadSeconds = sampleRate > 0 ? playheadPosition / sampleRate : playheadPosition
+        updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadSeconds)
         let jsCode = "if (typeof updateTransportFromSwift === 'function') { updateTransportFromSwift({\"isPlaying\": \(isPlaying ? "true" : "false"), \"playheadPosition\": \(Int(playheadPosition)), \"sampleRate\": \(Int(sampleRate))}); }"
         evaluateJS(jsCode, label: "transport", priority: .critical)
     }
