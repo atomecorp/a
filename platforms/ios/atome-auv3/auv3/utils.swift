@@ -1326,18 +1326,42 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         guard let tsBlock = self.transportStateBlock else { return }
         var flags = AUHostTransportStateFlags(rawValue: 0)
         var currentSampleTime: Double = 0
-        if tsBlock(&flags, &currentSampleTime, nil, nil) {
+        var cycleStartBeat: Double = 0
+        var cycleEndBeat: Double = 0
+        if tsBlock(&flags, &currentSampleTime, &cycleStartBeat, &cycleEndBeat) {
             let isPlaying = (flags.rawValue & AUHostTransportStateFlags.moving.rawValue) != 0
             let sr = getSampleRate() ?? 44100.0
+            var playheadSeconds = currentSampleTime / sr
+            var displaySampleTime = currentSampleTime
+            if let musicalBlock = self.musicalContextBlock {
+                var tempo: Double = 0
+                var numerator: Double = 0
+                var denominator: Int = 0
+                var beatPosition: Double = 0
+                var sampleOffsetToNextBeat: Int = 0
+                var measureDownbeat: Double = 0
+                if musicalBlock(&tempo,
+                                &numerator,
+                                &denominator,
+                                &beatPosition,
+                                &sampleOffsetToNextBeat,
+                                &measureDownbeat),
+                   tempo > 0,
+                   beatPosition.isFinite {
+                    WebViewManager.updateCachedTempo(tempo)
+                    playheadSeconds = max(0, beatPosition * 60.0 / tempo)
+                    displaySampleTime = playheadSeconds * sr
+                }
+            }
             // Met à jour le cache central utilisé par les streams hostTimeUpdate / hostTransport
-            WebViewManager.updateTransportCache(isPlaying: isPlaying, playheadSeconds: currentSampleTime / sr)
+            WebViewManager.updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadSeconds)
             // Fallback direct pour Lyrix si les streams JS (ios_apis.js) ne sont pas présents
             DispatchQueue.main.async { [weak self] in
-                let js = "(function(){if(typeof displayTransportInfo==='function'){try{displayTransportInfo(\(isPlaying ? "true":"false"),\(currentSampleTime),\(sr));}catch(e){}}else if(typeof updateTimecode==='function'){try{updateTimecode(\(currentSampleTime / sr * 1000.0));}catch(e){}}})();"
+                let js = "(function(){if(typeof displayTransportInfo==='function'){try{displayTransportInfo(\(isPlaying ? "true":"false"),\(displaySampleTime),\(sr));}catch(e){}}else if(typeof updateTimecode==='function'){try{updateTimecode(\(playheadSeconds * 1000.0));}catch(e){}}})();"
                 WebViewManager.evaluateJS(js,
                                           label: "auv3.transportFallback",
                                           priority: WebViewManager.IPCPriority.critical)
-                self?.transportDataDelegate?.didReceiveTransportData(isPlaying: isPlaying, playheadPosition: currentSampleTime, sampleRate: sr)
+                self?.transportDataDelegate?.didReceiveTransportData(isPlaying: isPlaying, playheadPosition: displaySampleTime, sampleRate: sr)
             }
         }
     }

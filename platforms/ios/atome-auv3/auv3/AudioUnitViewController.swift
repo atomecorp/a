@@ -88,6 +88,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
                 "sample_rate": sampleRate,
                 "channels": channels
             ], nil)
+        } else if command == "audio_load_clip_from_bytes" {
+            self.handleAudioLoadClipFromBytes(payload: payload, completion: completion)
         } else {
             completion(["success": false], "Unsupported native invoke command in AUv3: \(command)")
         }
@@ -99,6 +101,74 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     cc.add(self, name: "squirrel.openURL")
     // Do not load a custom-scheme minimal index here; WebViewManager.setupWebView
     // will load the real bundled 'src/index.html' after the placeholder.
+    }
+
+    private func audioBytes(from payload: [String: Any]) -> Data? {
+        if let data = payload["bytes"] as? Data {
+            return data
+        }
+        if let numbers = payload["bytes"] as? [NSNumber] {
+            return Data(numbers.map { UInt8(truncating: $0) })
+        }
+        if let ints = payload["bytes"] as? [Int] {
+            return Data(ints.map { UInt8(truncatingIfNeeded: $0) })
+        }
+        if let doubles = payload["bytes"] as? [Double] {
+            return Data(doubles.map { UInt8(truncatingIfNeeded: Int($0)) })
+        }
+        return nil
+    }
+
+    private func inferredAudioExtension(for data: Data) -> String {
+        let prefix = Array(data.prefix(12))
+        if prefix.count >= 4,
+           prefix[0] == 0x52, prefix[1] == 0x49, prefix[2] == 0x46, prefix[3] == 0x46 {
+            return "wav"
+        }
+        if prefix.count >= 8,
+           prefix[4] == 0x66, prefix[5] == 0x74, prefix[6] == 0x79, prefix[7] == 0x70 {
+            return "m4a"
+        }
+        if prefix.count >= 4,
+           prefix[0] == 0x4f, prefix[1] == 0x67, prefix[2] == 0x67, prefix[3] == 0x53 {
+            return "ogg"
+        }
+        return "wav"
+    }
+
+    private func sanitizedAudioClipId(_ value: Any?) -> String {
+        let raw = String(describing: value ?? "clip").trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        let sanitized = raw.unicodeScalars.map { allowed.contains($0) ? String($0) : "_" }.joined()
+        let id = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "._-"))
+        return id.isEmpty ? "clip" : id
+    }
+
+    private func handleAudioLoadClipFromBytes(payload: [String: Any],
+                                             completion: @escaping ([String: Any], String?) -> Void) {
+        guard let data = audioBytes(from: payload), !data.isEmpty else {
+            completion(["success": false], "audio_load_clip_from_bytes missing bytes")
+            return
+        }
+        let id = sanitizedAudioClipId(payload["id"])
+        let ext = inferredAudioExtension(for: data)
+        do {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("atome-auv3-clips", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url = directory.appendingPathComponent("\(id).\(ext)")
+            try data.write(to: url, options: [.atomic])
+            if let au = self.audioUnit as? auv3Utils {
+                au.loadLocalFile(url.path)
+            }
+            completion([
+                "success": true,
+                "id": id,
+                "path": url.path,
+                "bytes": data.count
+            ], nil)
+        } catch {
+            completion(["success": false, "id": id], "audio_load_clip_from_bytes failed: \(error.localizedDescription)")
+        }
     }
 
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {

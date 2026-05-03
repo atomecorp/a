@@ -1398,6 +1398,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             if lastSentTransportPlaying == nil || playing != lastSentTransportPlaying { shouldSend = true }
             // Optionally also send if position jumps significantly while stopped (e.g. user scrub) (> 0.05s)
             if !playing && abs(pos - lastSentTransportPosition) > 0.05 { shouldSend = true }
+            // While playing, AUv3 hosts can jump or loop without changing play state.
+            // Emit continuous positions so JS can resync against real host timecode.
+            if playing && abs(pos - lastSentTransportPosition) > 0.015 { shouldSend = true }
             if shouldSend {
                 let payload: [String: Any] = [
                     "action": "hostTransport",
