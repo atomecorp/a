@@ -374,6 +374,19 @@ export const auv3PlayMedia = (node, env = globalThis) => {
         if (positionNormalized != null) {
             payload.positionNormalized = positionNormalized;
         }
+        const playbackReason = String(node?.dataset?.eveAuv3PlaybackReason || '').trim();
+        if (playbackReason) payload.reason = playbackReason;
+        if (positionNormalized != null && playbackReason && playbackReason !== 'frame') {
+            try {
+                console.warn('[AUV3_PLAYBACK_POST]', {
+                    reason: playbackReason,
+                    relativePath,
+                    positionNormalized,
+                    currentTime: Number(node?.dataset?.eveAuv3PlaybackTime || node?.currentTime || 0),
+                    duration: Number(node?.dataset?.eveAuv3PlaybackDuration || node?.duration || 0)
+                });
+            } catch (_) { }
+        }
         bridge.postMessage(payload);
     } else {
         // No identifiable source: toggle play state directly
