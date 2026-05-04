@@ -653,8 +653,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                             }()
                             // Try to resolve relative path using SandboxPathValidator (same as AudioSchemeHandler)
                             let trimmed = WebViewManager.normalizedLocalMediaPath(rel)
-                            let reason = (body["reason"] as? String) ?? ""
-                            print("[AUV3_PLAYBACK_BRIDGE] action=\(action) rel=\(rel) normalized=\(trimmed) autoPlay=\(autoPlay) position=\(startPositionNormalized.map { String(format: "%.6f", $0) } ?? "<nil>") reason=\(reason)")
                             var resolved = false
                             if let sanitized = SandboxPathValidator.sanitizedRelativePath(trimmed) {
                                 let fm = FileManager.default
