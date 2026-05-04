@@ -170,14 +170,7 @@ final class AppNativeAudioController: NSObject {
     private func configureAudioSessionIfNeeded() throws {
         if audioSessionReady { return }
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
-        try session.setActive(true)
-        audioSessionReady = true
-    }
-
-    private func configureRecordingSession() throws {
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
+        try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothA2DP])
         try session.setActive(true)
         audioSessionReady = true
     }
@@ -243,7 +236,7 @@ final class AppNativeAudioController: NSObject {
                         self.complete(completion, payload: ["success": false], error: "audio_recording_in_progress")
                         return
                     }
-                    try self.configureRecordingSession()
+                    try self.configureAudioSessionIfNeeded()
                     let sessionId = self.resolveString(payload, ["sessionId", "session_id"])
                     let fileName = self.resolveString(payload, ["fileName", "file_name"]).isEmpty
                         ? "audio_\(Int(Date().timeIntervalSince1970)).wav"
