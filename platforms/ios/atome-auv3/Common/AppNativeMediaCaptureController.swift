@@ -6,7 +6,7 @@
 //  bridge (`window.__ATOME_IOS_NATIVE_INVOKE`).
 //
 //  The native preview pipeline (`media_camera_preview_show/hide/update`) is
-//  used by AUv3 where WebKit getUserMedia can be unavailable or render black.
+//  currently disabled on iOS because it interferes with video recording.
 //
 
 import UIKit
@@ -32,6 +32,7 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
     private var videoRelativePath: String?
     private var videoFileName: String?
     private var videoStartedAt: Date?
+    private var videoAddedAudioInput: AVCaptureDeviceInput?
     private var completedVideoPayload: [String: Any]?
     private var completedVideoError: String?
     private var activeCameraPosition: AVCaptureDevice.Position = .back
@@ -433,6 +434,33 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
         return (session, movieOutput, photoOutput)
     }
 
+    private func sessionHasAudioInput(_ session: AVCaptureSession) -> Bool {
+        return session.inputs.contains { input in
+            guard let deviceInput = input as? AVCaptureDeviceInput else { return false }
+            return deviceInput.device.hasMediaType(.audio)
+        }
+    }
+
+    private func ensureAudioInputIfNeeded(_ session: AVCaptureSession, includeAudio: Bool) throws -> AVCaptureDeviceInput? {
+        guard includeAudio, !sessionHasAudioInput(session),
+              let audioDevice = AVCaptureDevice.default(for: .audio) else {
+            return nil
+        }
+        let audioInput = try AVCaptureDeviceInput(device: audioDevice)
+        guard session.canAddInput(audioInput) else { return nil }
+        session.beginConfiguration()
+        session.addInput(audioInput)
+        session.commitConfiguration()
+        return audioInput
+    }
+
+    private func configureVideoRecordingAudioSession(includeAudio: Bool) throws {
+        guard includeAudio else { return }
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .videoRecording, options: [.defaultToSpeaker])
+        try session.setActive(true)
+    }
+
     private func cgFloatValue(_ value: Any?, fallback: CGFloat = 0) -> CGFloat {
         if let number = value as? NSNumber {
             return CGFloat(number.doubleValue)
@@ -509,41 +537,21 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
 
     private func showCameraPreview(payload: [String: Any],
                                    completion: @escaping ([String: Any], String?) -> Void) {
-        let wantsAudio = (payload["audio"] as? Bool) != false
-        requestAccess(video: true, audio: wantsAudio) { granted, reason in
-            guard granted else {
-                self.complete(completion, payload: ["success": false], error: reason ?? "media_permission_denied")
-                return
-            }
-            do {
-                let frame = self.resolvePreviewFrame(from: payload)
-                let cameraPosition = self.resolveCameraPosition(from: payload)
-                if self.previewSession == nil || self.previewCameraPosition != cameraPosition {
-                    self.stopPreviewSessionLocked()
-                    let (session, movieOutput, photoOutput) = try self.makePreviewSession(includeAudio: wantsAudio, position: cameraPosition)
-                    self.previewSession = session
-                    self.previewMovieOutput = movieOutput
-                    self.previewPhotoOutput = photoOutput
-                    self.previewCameraPosition = cameraPosition
-                    self.activeCameraPosition = cameraPosition
-                    session.startRunning()
-                }
-                guard let session = self.previewSession else {
-                    self.complete(completion, payload: ["success": false], error: "camera_preview_session_unavailable")
-                    return
-                }
-                self.previewFrame = frame
-                self.ensureNativePreviewView(frame: frame, session: session, position: cameraPosition) { ok in
-                    if ok {
-                        print("[MEDIA_NATIVE] preview_show camera=\(self.cameraPositionName(cameraPosition)) frame=\(Int(frame.origin.x)),\(Int(frame.origin.y)),\(Int(frame.width)),\(Int(frame.height))")
-                    }
-                    self.complete(completion, payload: [
-                        "success": ok,
-                        "camera_position": self.cameraPositionName(cameraPosition)
-                    ], error: ok ? nil : "camera_preview_host_unavailable")
-                }
-            } catch {
-                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+        sessionQueue.async {
+            let cameraPosition = self.resolveCameraPosition(from: payload)
+            self.previewVisible = false
+            self.stopPreviewSessionLocked()
+            DispatchQueue.main.async {
+                self.previewLayer?.removeFromSuperlayer()
+                self.previewLayer = nil
+                self.previewView?.removeFromSuperview()
+                self.previewView = nil
+                print("[MEDIA_NATIVE] preview_show disabled camera=\(self.cameraPositionName(cameraPosition))")
+                completion([
+                    "success": true,
+                    "camera_position": self.cameraPositionName(cameraPosition),
+                    "preview_disabled": true
+                ], nil)
             }
         }
     }
@@ -551,15 +559,15 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
     private func updateCameraPreview(payload: [String: Any],
                                      completion: @escaping ([String: Any], String?) -> Void) {
         sessionQueue.async {
-            guard let session = self.previewSession else {
-                self.complete(completion, payload: ["success": false], error: "camera_preview_session_unavailable")
-                return
-            }
-            let frame = self.resolvePreviewFrame(from: payload)
-            self.previewFrame = frame
-            let position = self.previewCameraPosition
-            self.ensureNativePreviewView(frame: frame, session: session, position: position) { ok in
-                self.complete(completion, payload: ["success": ok], error: ok ? nil : "camera_preview_host_unavailable")
+            self.previewVisible = false
+            self.stopPreviewSessionLocked()
+            DispatchQueue.main.async {
+                self.previewLayer?.removeFromSuperlayer()
+                self.previewLayer = nil
+                self.previewView?.removeFromSuperview()
+                self.previewView = nil
+                print("[MEDIA_NATIVE] preview_update disabled")
+                completion(["success": true, "preview_disabled": true], nil)
             }
         }
     }
@@ -596,18 +604,13 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
             }
             self.activeCameraPosition = next
             if self.previewVisible {
-                do {
-                    self.stopPreviewSessionLocked()
-                    let (session, movieOutput, photoOutput) = try self.makePreviewSession(includeAudio: true, position: next)
-                    self.previewSession = session
-                    self.previewMovieOutput = movieOutput
-                    self.previewPhotoOutput = photoOutput
-                    self.previewCameraPosition = next
-                    session.startRunning()
-                    self.ensureNativePreviewView(frame: self.previewFrame, session: session, position: next) { _ in }
-                } catch {
-                    self.complete(completion, payload: ["success": false], error: error.localizedDescription)
-                    return
+                self.previewVisible = false
+                self.stopPreviewSessionLocked()
+                DispatchQueue.main.async {
+                    self.previewLayer?.removeFromSuperlayer()
+                    self.previewLayer = nil
+                    self.previewView?.removeFromSuperview()
+                    self.previewView = nil
                 }
             }
             print("[MEDIA_NATIVE] camera_switch position=\(self.cameraPositionName(next))")
@@ -682,7 +685,8 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
     private func startVideoRecording(payload: [String: Any],
                                      completion: @escaping ([String: Any], String?) -> Void) {
         print("[MEDIA_NATIVE] video_start request payload_keys=\(Array(payload.keys).sorted())")
-        requestAccess(video: true, audio: true) { granted, reason in
+        let wantsAudio = (payload["audio"] as? Bool) != false
+        requestAccess(video: true, audio: wantsAudio) { granted, reason in
             guard granted else {
                 print("[MEDIA_NATIVE] video_start denied reason=\(reason ?? "media_permission_denied")")
                 self.complete(completion, payload: ["success": false], error: reason ?? "media_permission_denied")
@@ -702,6 +706,7 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
                 self.photoOutputURL = nil
                 self.photoRelativePath = nil
                 self.photoFileName = nil
+                try self.configureVideoRecordingAudioSession(includeAudio: wantsAudio)
                 let fileName = self.resolveString(payload, ["fileName", "file_name"]).isEmpty
                     ? "video_\(Int(Date().timeIntervalSince1970)).mov"
                     : self.resolveString(payload, ["fileName", "file_name"])
@@ -727,22 +732,15 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
                 }
                 let session: AVCaptureSession
                 let movieOutput: AVCaptureMovieFileOutput
-                if let previewSession = self.previewSession,
-                   let previewMovieOutput = self.previewMovieOutput,
-                   self.previewCameraPosition == cameraPosition {
-                    session = previewSession
-                    movieOutput = previewMovieOutput
-                    self.videoUsesPreviewSession = true
-                } else {
-                    let made = try self.makeSession(includeAudio: true, photo: false, position: cameraPosition)
-                    guard let madeMovieOutput = made.1 as? AVCaptureMovieFileOutput else {
-                        self.complete(completion, payload: ["success": false], error: "video_output_unavailable")
-                        return
-                    }
-                    session = made.0
-                    movieOutput = madeMovieOutput
-                    self.videoUsesPreviewSession = false
+                let made = try self.makeSession(includeAudio: wantsAudio, photo: false, position: cameraPosition)
+                guard let madeMovieOutput = made.1 as? AVCaptureMovieFileOutput else {
+                    self.complete(completion, payload: ["success": false], error: "video_output_unavailable")
+                    return
                 }
+                session = made.0
+                movieOutput = madeMovieOutput
+                self.videoUsesPreviewSession = false
+                self.videoAddedAudioInput = nil
                 self.configureVideoConnection(movieOutput.connection(with: .video), position: cameraPosition)
                 self.videoSession = session
                 self.movieOutput = movieOutput
@@ -872,9 +870,16 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
             defer {
                 if !self.videoUsesPreviewSession {
                     self.videoSession?.stopRunning()
+                } else if let session = self.videoSession,
+                          let addedAudioInput = self.videoAddedAudioInput,
+                          session.inputs.contains(where: { $0 === addedAudioInput }) {
+                    session.beginConfiguration()
+                    session.removeInput(addedAudioInput)
+                    session.commitConfiguration()
                 }
                 self.videoSession = nil
                 self.movieOutput = nil
+                self.videoAddedAudioInput = nil
                 self.videoCompletion = nil
                 self.videoStopCompletion = nil
                 self.videoOutputURL = nil
