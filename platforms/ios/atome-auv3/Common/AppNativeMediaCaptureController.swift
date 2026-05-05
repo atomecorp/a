@@ -5,8 +5,9 @@
 //  set of `media_*` commands dispatched through the WKWebView native invoke
 //  bridge (`window.__ATOME_IOS_NATIVE_INVOKE`).
 //
-//  The native preview pipeline (`media_camera_preview_show/hide/update`) is
-//  currently disabled on iOS because it interferes with video recording.
+//  The native preview pipeline (`media_camera_preview_show/hide/update`) is used
+//  by eVe's iOS preview tool. Video recording stops that preview before starting
+//  its own capture session so preview and recording never compete for the camera.
 //
 
 import UIKit
@@ -481,6 +482,15 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
         return CGRect(x: x, y: y, width: max(1, width), height: max(1, height))
     }
 
+    private func previewSourceName(from payload: [String: Any]) -> String {
+        let source = resolveString(payload, ["source", "previewSource", "preview_source"])
+        return source.isEmpty ? "unknown" : source
+    }
+
+    private func frameDescription(_ frame: CGRect) -> String {
+        return "\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width)),\(Int(frame.height))"
+    }
+
     private func ensureNativePreviewView(frame: CGRect,
                                          session: AVCaptureSession,
                                          position: AVCaptureDevice.Position,
@@ -498,9 +508,9 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
             previewView.clipsToBounds = true
             if previewView.superview !== container {
                 previewView.removeFromSuperview()
-                container.insertSubview(previewView, belowSubview: webView)
+                container.insertSubview(previewView, aboveSubview: webView)
             } else {
-                container.insertSubview(previewView, belowSubview: webView)
+                container.bringSubviewToFront(previewView)
             }
 
             let webFrame = webView.frame
@@ -537,21 +547,66 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
 
     private func showCameraPreview(payload: [String: Any],
                                    completion: @escaping ([String: Any], String?) -> Void) {
-        sessionQueue.async {
-            let cameraPosition = self.resolveCameraPosition(from: payload)
-            self.previewVisible = false
-            self.stopPreviewSessionLocked()
-            DispatchQueue.main.async {
-                self.previewLayer?.removeFromSuperlayer()
-                self.previewLayer = nil
-                self.previewView?.removeFromSuperview()
-                self.previewView = nil
-                print("[MEDIA_NATIVE] preview_show disabled camera=\(self.cameraPositionName(cameraPosition))")
-                completion([
-                    "success": true,
-                    "camera_position": self.cameraPositionName(cameraPosition),
-                    "preview_disabled": true
-                ], nil)
+        requestAccess(video: true, audio: false) { granted, reason in
+            guard granted else {
+                self.complete(completion, payload: ["success": false], error: reason ?? "camera_permission_denied")
+                return
+            }
+            do {
+                let frame = self.resolvePreviewFrame(from: payload)
+                let source = self.previewSourceName(from: payload)
+                let requestedPosition = self.resolveCameraPosition(from: payload)
+
+                if let activeSession = self.videoSession,
+                   self.movieOutput?.isRecording == true {
+                    let position = self.activeCameraPosition
+                    self.previewFrame = frame
+                    self.previewCameraPosition = position
+                    self.ensureNativePreviewView(frame: frame, session: activeSession, position: position) { ok in
+                        if ok {
+                            let actual = self.previewView?.frame ?? .zero
+                            print("[MEDIA_NATIVE] preview_show source=\(source) session=recording camera=\(self.cameraPositionName(position)) requested=\(self.frameDescription(frame)) actual=\(self.frameDescription(actual))")
+                        }
+                        self.complete(completion, payload: [
+                            "success": ok,
+                            "camera_position": self.cameraPositionName(position),
+                            "preview_native": true,
+                            "recording_session": true
+                        ], error: ok ? nil : "camera_preview_host_unavailable")
+                    }
+                    return
+                }
+
+                if self.previewSession == nil || self.previewCameraPosition != requestedPosition {
+                    self.stopPreviewSessionLocked()
+                    let (session, movieOutput, photoOutput) = try self.makePreviewSession(includeAudio: false, position: requestedPosition)
+                    self.previewSession = session
+                    self.previewMovieOutput = movieOutput
+                    self.previewPhotoOutput = photoOutput
+                    self.previewCameraPosition = requestedPosition
+                    self.activeCameraPosition = requestedPosition
+                    session.startRunning()
+                }
+
+                guard let session = self.previewSession else {
+                    self.complete(completion, payload: ["success": false], error: "camera_preview_session_unavailable")
+                    return
+                }
+
+                self.previewFrame = frame
+                self.ensureNativePreviewView(frame: frame, session: session, position: requestedPosition) { ok in
+                    if ok {
+                        let actual = self.previewView?.frame ?? .zero
+                        print("[MEDIA_NATIVE] preview_show source=\(source) session=preview camera=\(self.cameraPositionName(requestedPosition)) requested=\(self.frameDescription(frame)) actual=\(self.frameDescription(actual))")
+                    }
+                    self.complete(completion, payload: [
+                        "success": ok,
+                        "camera_position": self.cameraPositionName(requestedPosition),
+                        "preview_native": true
+                    ], error: ok ? nil : "camera_preview_host_unavailable")
+                }
+            } catch {
+                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
             }
         }
     }
@@ -559,15 +614,38 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
     private func updateCameraPreview(payload: [String: Any],
                                      completion: @escaping ([String: Any], String?) -> Void) {
         sessionQueue.async {
-            self.previewVisible = false
-            self.stopPreviewSessionLocked()
-            DispatchQueue.main.async {
-                self.previewLayer?.removeFromSuperlayer()
-                self.previewLayer = nil
-                self.previewView?.removeFromSuperview()
-                self.previewView = nil
-                print("[MEDIA_NATIVE] preview_update disabled")
-                completion(["success": true, "preview_disabled": true], nil)
+            let frame = self.resolvePreviewFrame(from: payload)
+            let source = self.previewSourceName(from: payload)
+            self.previewFrame = frame
+            if let activeSession = self.videoSession,
+               self.movieOutput?.isRecording == true {
+                let position = self.activeCameraPosition
+                self.previewCameraPosition = position
+                self.ensureNativePreviewView(frame: frame, session: activeSession, position: position) { ok in
+                    if ok {
+                        print("[MEDIA_NATIVE] preview_update source=\(source) session=recording requested=\(self.frameDescription(frame))")
+                    }
+                    self.complete(completion, payload: [
+                        "success": ok,
+                        "preview_native": true,
+                        "recording_session": true
+                    ], error: ok ? nil : "camera_preview_host_unavailable")
+                }
+                return
+            }
+            guard let session = self.previewSession else {
+                self.complete(completion, payload: ["success": false], error: "camera_preview_session_unavailable")
+                return
+            }
+            let position = self.previewCameraPosition
+            self.ensureNativePreviewView(frame: frame, session: session, position: position) { ok in
+                if ok {
+                    print("[MEDIA_NATIVE] preview_update source=\(source) session=preview requested=\(self.frameDescription(frame))")
+                }
+                self.complete(completion, payload: [
+                    "success": ok,
+                    "preview_native": true
+                ], error: ok ? nil : "camera_preview_host_unavailable")
             }
         }
     }
@@ -581,7 +659,6 @@ final class AppNativeMediaCaptureController: NSObject, AVCapturePhotoCaptureDele
                 self.previewLayer = nil
                 self.previewView?.removeFromSuperview()
                 self.previewView = nil
-                print("[MEDIA_NATIVE] preview_hide")
                 completion(["success": true], nil)
             }
         }
