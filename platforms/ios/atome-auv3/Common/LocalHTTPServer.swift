@@ -37,6 +37,7 @@ final class LocalHTTPServer {
     private var wsConnections: [ObjectIdentifier: NWConnection] = [:]
     private var wsStates: [ObjectIdentifier: WebSocketState] = [:]
     private var httpStates: [ObjectIdentifier: HTTPRequestState] = [:]
+    private var mediaHTTPDiag = MediaHTTPDiagnosticWindow()
 
     private struct WebSocketState {
         var buffer = Data()
@@ -46,6 +47,18 @@ final class LocalHTTPServer {
     private struct HTTPRequestState {
         var buffer = Data()
         var expectedLength: Int?
+    }
+
+    private struct MediaHTTPDiagnosticWindow {
+        var startedAt = Date()
+        var requestCount = 0
+        var rangeCount = 0
+        var fullCount = 0
+        var totalBytes: UInt64 = 0
+        var largestBytes: UInt64 = 0
+        var largestFile = ""
+        var files: Set<String> = []
+        var emittedLargeFullLoads: Set<String> = []
     }
 
     func start(preferredPort: UInt16? = nil) {
@@ -679,7 +692,7 @@ final class LocalHTTPServer {
         // Video/audio types need Range request support for <video>/<audio> tags
         let needsRange = mime.hasPrefix("video/") || mime.hasPrefix("audio/")
         if needsRange {
-            serveFileWithRange(url: url, mime: mime, rangeHeader: rangeHeader, on: connection)
+            serveFileWithRange(url: url, mime: mime, rangeHeader: rangeHeader, label: "FILE", fileName: name, on: connection)
         } else {
             do {
                 let data = try Data(contentsOf: url)
@@ -691,7 +704,7 @@ final class LocalHTTPServer {
     }
 
     /// Serve a file with HTTP Range support (206 Partial Content) for video/audio tags
-    private func serveFileWithRange(url: URL, mime: String, rangeHeader: String?, on connection: NWConnection) {
+    private func serveFileWithRange(url: URL, mime: String, rangeHeader: String?, label: String = "FILE", fileName: String? = nil, on connection: NWConnection) {
         let fileHandle: FileHandle
         do { fileHandle = try FileHandle(forReadingFrom: url) } catch {
             sendSimple(status: 500, reason: "Internal Server Error", body: "Open failed", on: connection); return
@@ -716,6 +729,16 @@ final class LocalHTTPServer {
             if !(rangeStart == 0 && rangeEnd == totalLen - 1) { isPartial = true }
         }
         let readLen = Int(rangeEnd - rangeStart + 1)
+        recordMediaHTTPDiagnostic(
+            label: label,
+            fileName: fileName ?? url.lastPathComponent,
+            mime: mime,
+            rangeHeader: rangeHeader,
+            rangeStart: rangeStart,
+            rangeEnd: rangeEnd,
+            totalLength: totalLen,
+            isPartial: isPartial
+        )
         do {
             try fileHandle.seek(toOffset: rangeStart)
             let chunk = fileHandle.readData(ofLength: readLen)
@@ -740,6 +763,42 @@ final class LocalHTTPServer {
             connection.send(content: response, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
         } catch {
             sendSimple(status: 500, reason: "Internal Server Error", body: "Read failed", on: connection)
+        }
+    }
+
+    private func recordMediaHTTPDiagnostic(
+        label: String,
+        fileName: String,
+        mime: String,
+        rangeHeader: String?,
+        rangeStart: UInt64,
+        rangeEnd: UInt64,
+        totalLength: UInt64,
+        isPartial: Bool
+    ) {
+        guard mime.hasPrefix("video/") || mime.hasPrefix("audio/") else { return }
+        let servedBytes = rangeEnd >= rangeStart ? (rangeEnd - rangeStart + 1) : 0
+        mediaHTTPDiag.requestCount += 1
+        mediaHTTPDiag.totalBytes += servedBytes
+        mediaHTTPDiag.files.insert(fileName)
+        if isPartial {
+            mediaHTTPDiag.rangeCount += 1
+        } else {
+            mediaHTTPDiag.fullCount += 1
+        }
+        if servedBytes > mediaHTTPDiag.largestBytes {
+            mediaHTTPDiag.largestBytes = servedBytes
+            mediaHTTPDiag.largestFile = fileName
+        }
+        let largeFullThreshold: UInt64 = 12 * 1024 * 1024
+        if !isPartial && servedBytes >= largeFullThreshold && !mediaHTTPDiag.emittedLargeFullLoads.contains(fileName) {
+            mediaHTTPDiag.emittedLargeFullLoads.insert(fileName)
+        }
+        let elapsed = Date().timeIntervalSince(mediaHTTPDiag.startedAt)
+        if elapsed >= 1.5 {
+            let emitted = mediaHTTPDiag.emittedLargeFullLoads
+            mediaHTTPDiag = MediaHTTPDiagnosticWindow()
+            mediaHTTPDiag.emittedLargeFullLoads = emitted
         }
     }
 
@@ -1136,7 +1195,6 @@ final class LocalHTTPServer {
 
     private func handleUploadsGet(fileName: String, headers: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
         let userId = resolveUploadUserId(from: headers)
-        print("[UPLOAD] \(isHead ? "HEAD" : "GET") file=\(fileName) user=\(userId ?? "<none>") range=\(rangeHeader ?? "<none>")")
         guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: uploadFolderHints, label: "UPLOAD") else {
             print("[UPLOAD] \(isHead ? "HEAD" : "GET") 404 file=\(fileName) user=\(userId ?? "<none>")")
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
@@ -1147,7 +1205,6 @@ final class LocalHTTPServer {
 
     private func handleRecordingGet(fileName: String, headers: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
         let userId = resolveUploadUserId(from: headers)
-        print("[RECORDING] \(isHead ? "HEAD" : "GET") file=\(fileName) user=\(userId ?? "<none>") range=\(rangeHeader ?? "<none>")")
         guard let fileURL = resolveUploadFileURL(fileName: fileName, userId: userId, folderHints: recordingFolderHints, label: "RECORDING") else {
             print("[RECORDING] \(isHead ? "HEAD" : "GET") 404 file=\(fileName) user=\(userId ?? "<none>")")
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
@@ -1160,7 +1217,9 @@ final class LocalHTTPServer {
         let mime = mimeType(for: fileURL.lastPathComponent)
         let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
         let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
-        print("[\(label)] \(isHead ? "HEAD" : "GET") 200 file=\(fileName) path=\(fileURL.path) bytes=\(size) mime=\(mime)")
+        if isHead || (!mime.hasPrefix("video/") && !mime.hasPrefix("audio/")) {
+            print("[\(label)] \(isHead ? "HEAD" : "GET") 200 file=\(fileName) bytes=\(size) mime=\(mime)")
+        }
         if isHead {
             sendRaw(status: 200, reason: "OK", headers: [
                 "Content-Type": mime,
@@ -1170,7 +1229,7 @@ final class LocalHTTPServer {
             return
         }
         if mime.hasPrefix("video/") || mime.hasPrefix("audio/") || rangeHeader != nil {
-            serveFileWithRange(url: fileURL, mime: mime, rangeHeader: rangeHeader, on: connection)
+            serveFileWithRange(url: fileURL, mime: mime, rangeHeader: rangeHeader, label: label, fileName: fileName, on: connection)
             return
         }
         do {
@@ -1212,16 +1271,19 @@ final class LocalHTTPServer {
     private func resolveUploadFileURL(fileName: String, userId: String?, folderHints: [String], label: String) -> URL? {
         let safeName = sanitizeUploadFileName(fileName)
         guard !safeName.isEmpty, let root = iCloudFileManager.shared.getCurrentStorageURL() else { return nil }
-        var roots: [URL] = [root]
-        if let groupRoot = FileManager.default
+        let groupRoot = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: SharedBus.appGroupSuite)?
-            .appendingPathComponent("Documents", isDirectory: true),
-           !roots.contains(where: { $0.path == groupRoot.path }) {
-            roots.append(groupRoot)
-        }
-        if let visibleRoot = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-           !roots.contains(where: { $0.path == visibleRoot.path }) {
-            roots.append(visibleRoot)
+            .appendingPathComponent("Documents", isDirectory: true)
+        let visibleRoot = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        let preferredRoots = label == "RECORDING"
+            ? [groupRoot, root, visibleRoot]
+            : [root, groupRoot, visibleRoot]
+        var roots: [URL] = []
+        for candidate in preferredRoots {
+            guard let candidate = candidate else { continue }
+            if !roots.contains(where: { $0.path == candidate.path }) {
+                roots.append(candidate)
+            }
         }
         var candidates: [URL] = []
         for candidateRoot in roots {
@@ -1248,7 +1310,6 @@ final class LocalHTTPServer {
         }
 
         if let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-            print("[\(label)] resolve file=\(safeName) found=\(found.path) candidates=\(candidates.count)")
             return found
         }
         let sample = candidates.prefix(10).map(\.path).joined(separator: " | ")

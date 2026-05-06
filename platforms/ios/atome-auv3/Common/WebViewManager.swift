@@ -1041,6 +1041,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         initiatedByFrame frame: WKFrameInfo,
                         type: WKMediaCaptureType,
                         decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        // DEBUG VIDEO TOOL - START
+        print("[DEBUG_VIDEO_TOOL] wk_media_capture_permission origin=\(origin.protocol)://\(origin.host):\(origin.port) type=\(type) main_frame=\(frame.isMainFrame)")
+        // DEBUG VIDEO TOOL - END
         decisionHandler(.grant)
     }
 

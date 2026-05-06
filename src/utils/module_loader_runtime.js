@@ -1,5 +1,13 @@
 import { perfElapsedMs, perfNowMs } from './perf_runtime.js';
 
+const logModuleLoad = (logPrefix, event, detail = {}) => {
+    try {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+            console.warn(`${logPrefix} ${event}`, detail);
+        }
+    } catch (_) { }
+};
+
 export const loadModulesSequentially = async ({
     modules = [],
     baseUrl,
@@ -26,7 +34,6 @@ export const loadModulesSequentially = async ({
             const totalMs = perfElapsedMs(moduleStart);
 
             loadedModules[moduleId] = moduleNamespace;
-
             if (typeof onModuleLoaded === 'function') {
                 onModuleLoaded({
                     descriptor,
@@ -38,6 +45,11 @@ export const loadModulesSequentially = async ({
             }
         } catch (error) {
             const totalMs = perfElapsedMs(moduleStart);
+            logModuleLoad(logPrefix, 'module_error', {
+                moduleId,
+                totalMs: Math.round(totalMs),
+                error: String(error?.message || error || 'module_load_failed')
+            });
 
             if (typeof onModuleError === 'function') {
                 onModuleError({

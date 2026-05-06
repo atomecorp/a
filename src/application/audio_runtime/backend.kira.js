@@ -4,7 +4,11 @@ import {
   normalizeKiraPlayInstancePayload,
   normalizeKiraStopInstancePayload
 } from './kira_audio_commands.js';
-import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js';
+import {
+  getTauriInvoke,
+  isIosHostAppRuntime,
+  resolveAudioRuntime
+} from './runtime_audio_backend.js';
 
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
@@ -41,6 +45,12 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
   function isAuv3NativeRuntime() {
     var runtime = resolveAudioRuntime(window);
     return runtime.playback === 'ios_auv3_native' || runtime.record === 'ios_auv3_native' || runtime.runtime === 'ios_auv3';
+  }
+
+  function rejectIosHostAppBytesLoad(context) {
+    var error = new Error('[backend.kira] iOS host app native playback requires a local media path');
+    emitError(context, error);
+    return Promise.reject(error);
   }
 
   function normalizeAuv3LocalPath(source) {
@@ -97,6 +107,9 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
    * Load a clip from a URL. Returns a Promise so the caller can track completion.
    */
   function loadClipFromUrl(id, url) {
+    if (mode === 'tauri' && isIosHostAppRuntime(window)) {
+      return rejectIosHostAppBytesLoad('load_url_requires_local_path(' + id + ')');
+    }
     if (mode === 'tauri' && isAuv3NativeRuntime()) {
       if (postAuv3LocalClipLoad(url)) {
         return Promise.resolve(true);
@@ -190,6 +203,9 @@ import { getTauriInvoke, resolveAudioRuntime } from './runtime_audio_backend.js'
         });
       }
       if ((mode === 'tauri' || mode === 'wasm') && bytes) {
+        if (mode === 'tauri' && isIosHostAppRuntime(window)) {
+          return rejectIosHostAppBytesLoad('load_clip_from_bytes(' + id + ')');
+        }
         if (mode === 'tauri' && isAuv3NativeRuntime()) {
           var auv3BytesError = new Error('[backend.kira] AUv3 native playback does not support byte-loaded clips');
           emitError('load_clip_from_bytes(' + id + ')', auv3BytesError);
