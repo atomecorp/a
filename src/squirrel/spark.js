@@ -292,4 +292,4 @@ const bootstrapSpark = async () => {
   });
 };
 
-bootstrapSpark().catch(() => {});
+bootstrapSpark().catch(() => { });
