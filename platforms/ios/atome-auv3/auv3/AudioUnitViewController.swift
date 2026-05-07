@@ -69,10 +69,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     WebViewManager.setNativeInvokeHandler { command, payload, completion in
         if AppNativeMediaCaptureController.canHandle(command: command) {
             AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
-        // DEBUG VIDEO TOOL - START
-        } else if DebugVideoRecorderTool.canHandle(command: command) {
-            DebugVideoRecorderTool.shared.handle(command: command, payload: payload, completion: completion)
-        // DEBUG VIDEO TOOL - END
         } else if command == "audio_init" {
             let sampleRate: Double
             let channels: UInt32
@@ -99,9 +95,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         }
     }
     AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
-    // DEBUG VIDEO TOOL - START
-    DebugVideoRecorderTool.shared.attach(webView: webView)
-    // DEBUG VIDEO TOOL - END
     // Register JS -> Swift handler for safe URL launching (idempotent)
     let cc = webView.configuration.userContentController
     cc.removeScriptMessageHandler(forName: "squirrel.openURL")

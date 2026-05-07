@@ -854,18 +854,11 @@ final class FullscreenWebViewController: UIViewController {
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
             if AppNativeMediaCaptureController.canHandle(command: command) {
                 AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
-            // DEBUG VIDEO TOOL - START
-            } else if DebugVideoRecorderTool.canHandle(command: command) {
-                DebugVideoRecorderTool.shared.handle(command: command, payload: payload, completion: completion)
-            // DEBUG VIDEO TOOL - END
             } else {
                 AppNativeAudioController.shared.handle(command: command, payload: payload, completion: completion)
             }
         }
     AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
-    // DEBUG VIDEO TOOL - START
-    DebugVideoRecorderTool.shared.attach(webView: webView)
-    // DEBUG VIDEO TOOL - END
     view.insetsLayoutMarginsFromSafeArea = true
     webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         webView.scrollView.contentInset = .zero
