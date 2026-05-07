@@ -34,14 +34,12 @@
 
     const invoke = getInvoke();
     if (!invoke) {
-        console.warn('[tauri_stt_bridge] Tauri invoke() not available; native STT bridge disabled.');
         return;
     }
 
     const listen = getEventListen();
     const wrapListener = async (eventName, handler) => {
         if (typeof listen !== 'function') {
-            console.warn(`[tauri_stt_bridge] Event listen() unavailable; ${eventName} will not stream.`);
             return () => {};
         }
         const unlisten = await listen(eventName, (event) => {

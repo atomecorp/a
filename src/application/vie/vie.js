@@ -97,7 +97,6 @@ import('./values.js').then(() => {
 
 
   function fct_to_trig(state) {
-    console.log('trig: ' + state);
     grab('save_button').$({
       css: {      
         width: '56px',

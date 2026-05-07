@@ -44,12 +44,10 @@ const wrapAsyncHandler = (fn) => {
       // Si le handler retourne une promesse, capturer les erreurs
       if (result && typeof result.then === 'function') {
         result.catch(err => {
-          console.error('[Squirrel] Async event handler error:', err);
         });
       }
       return result;
     } catch (err) {
-      console.error('[Squirrel] Event handler error:', err);
     }
   };
 };
@@ -114,7 +112,6 @@ const $ = (id, props = {}) => {
         element.innerHTML = svgContent;
       })
       .catch(error => {
-        console.error(`Erreur lors du chargement du SVG ${merged.svgSrc}:`, error);
       });
   }
 
@@ -184,7 +181,6 @@ const $ = (id, props = {}) => {
           element.innerHTML = svgContent;
         })
         .catch(error => {
-          console.error(`Erreur lors du chargement du SVG ${updateProps.svgSrc}:`, error);
         });
     }
 
@@ -282,7 +278,6 @@ const $ = (id, props = {}) => {
       }
       attempts += 1;
       if (attempts >= 120) {
-        console.warn(`Parent selector "${parent}" not found`);
         element._parentAttachPending = false;
         window.removeEventListener('squirrel:ready', retry, true);
         document.removeEventListener('DOMContentLoaded', retry, true);
@@ -363,7 +358,6 @@ const batch = (...ops) => {
       try {
         op();
       } catch (error) {
-        console.error('Batch operation failed:', error);
       }
     });
   });

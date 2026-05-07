@@ -40,7 +40,6 @@ import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 try {
   auth.tryAutoLogin();
 } catch (error) {
-  console.warn('[AdoleAPI] auth bootstrap failed:', error);
 }
 
 const isAnonymousMode = () => getSessionState().mode === 'anonymous';

@@ -20,7 +20,7 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
     const set = listeners.get(type);
     if (set) {
       for (const fn of set) {
-        try { fn(payload); } catch (e) { console.warn('[audio.facade] event handler error:', e); }
+        try { fn(payload); } catch { }
       }
     }
   }
@@ -49,7 +49,6 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
     try {
       backends[active].dispatch_batch(batch);
     } catch (e) {
-      console.warn('[audio.facade] dispatch_batch error:', e);
     }
   }
 
@@ -65,11 +64,11 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   const immediateNames = new Set(['create_clip', 'destroy_clip', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param']);
   const proxyCall = (name) => (arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
-      console.warn('[audio.facade] No backend for', name); return false;
+      return false;
     }
     // low-latency calls go immediately
     if (immediateNames.has(name)) {
-      try { return backends[active][name](arg); } catch (e) { console.warn('[audio.facade] immediate call failed:', e); return false; }
+      try { return backends[active][name](arg); } catch { return false; }
     }
     // batch others UI->DSP calls
     enqueue({ name, arg });

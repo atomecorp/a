@@ -23,7 +23,6 @@ import {
 (function () {
   const audio = window.Squirrel && window.Squirrel.av && window.Squirrel.av.audio;
   if (!audio) {
-    console.warn('[backend.kira] Squirrel.av.audio not found; load audio.facade.js first');
     return;
   }
 
@@ -36,7 +35,6 @@ import {
   }
 
   function emitError(context, error) {
-    console.warn('[backend.kira] ' + context + ':', error);
     if (audio.__emit) {
       audio.__emit('error', { backend: 'kira', context: context, error: error });
     }
@@ -159,7 +157,6 @@ import {
       ) {
         mode = 'tauri';
         await invoke('audio_init');
-        console.log('[backend.kira] Initialized via native invoke bridge');
         return;
       }
       if (runtime.playback === 'web_wasm_kira') {
@@ -169,11 +166,9 @@ import {
           await mod.default();
           wasm = mod;
           wasm.audio_init();
-          console.log('[backend.kira] Initialized via WASM (CPAL + Kira)');
           return;
         } catch (e) {
           mode = null;
-          console.warn('[backend.kira] WASM module not available:', e.message);
           throw e;
         }
       }
@@ -377,12 +372,6 @@ import {
         || runtime.playback === 'tauri_native_kira'
         || runtime.playback === 'ios_native_kira'
         || runtime.playback === 'ios_auv3_native';
-      console.warn('[backend.kira] init failed:', error && error.message ? error.message : error, {
-        runtime: runtime.runtime,
-        playback: runtime.playback,
-        host_env: hostEnv || null,
-        strict_native_kira: strictNativeKira
-      });
       if (!strictNativeKira && typeof audio.detect_and_set_backend === 'function') {
         audio.detect_and_set_backend();
       }

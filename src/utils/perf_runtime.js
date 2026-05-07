@@ -24,10 +24,7 @@ export const perfEventsEnabled = () => (
     || readPerfFlag('__SQUIRREL_PERF_EVENTS__')
 );
 
-export const perfLog = (...args) => {
-    if (!perfLogsEnabled()) return;
-    console.log(...args);
-};
+export const perfLog = () => { };
 
 export const emitPerfEvent = (name, detail = {}) => {
     if (!perfEventsEnabled()) return false;

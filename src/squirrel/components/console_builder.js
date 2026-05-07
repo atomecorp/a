@@ -616,7 +616,6 @@ const createConsole = (config = {}) => {
           // Feedback visuel
           showCopyFeedback(true);
         }).catch(err => {
-          console.error('Erreur lors de la copie:', err);
           fallbackCopy(textToCopy);
         });
       } else {
@@ -624,7 +623,6 @@ const createConsole = (config = {}) => {
         fallbackCopy(textToCopy);
       }
     } catch (error) {
-      console.error('Erreur lors de la copie du contenu:', error);
       showCopyFeedback(false);
     }
   }
@@ -647,7 +645,6 @@ const createConsole = (config = {}) => {
       
       showCopyFeedback(successful);
     } catch (err) {
-      console.error('Fallback copy failed:', err);
       showCopyFeedback(false);
     }
   }

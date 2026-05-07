@@ -467,7 +467,6 @@ class Slice {
         contentEvents.onClick(this, e);
       } else if (this.config.behaviors.createOnContentClick) {
         this.addObject();
-        console.log('✅ Objet créé par clic sur contenu');
       }
     });
     
@@ -671,7 +670,6 @@ class Slice {
       this.contentZone.scrollTop = this.contentZone.scrollHeight;
     }
     
-    console.log(`✨ Objet ${this.objectCounter} ajouté à la slice`);
   }
   
   setupObjectEvents(objectElement) {
@@ -699,7 +697,6 @@ class Slice {
       if (events.onDoubleClick) {
         events.onDoubleClick(objectElement, index, this);
       }
-      console.log(`🎯🎯 Double clic sur objet ${index}`);
     });
     
     // Mouse down/up
@@ -707,14 +704,12 @@ class Slice {
       if (events.onMouseDown) {
         events.onMouseDown(objectElement, index, this, e);
       }
-      console.log(`⬇️ Mouse down sur objet ${index}`);
     });
     
     objectElement.addEventListener('mouseup', (e) => {
       if (events.onMouseUp) {
         events.onMouseUp(objectElement, index, this, e);
       }
-      console.log(`⬆️ Mouse up sur objet ${index}`);
     });
     
     // Clic droit
@@ -725,7 +720,6 @@ class Slice {
       if (events.onRightClick) {
         events.onRightClick(objectElement, index, this, e);
       }
-      console.log(`🖱️ Clic droit sur objet ${index}`);
     });
     
     // Hover
@@ -768,7 +762,6 @@ class Slice {
       if (events.onRemoved) {
         events.onRemoved(index, this);
       }
-      console.log(`🗑️ Objet ${index} supprimé`);
     }, duration);
   }
   
@@ -953,7 +946,6 @@ function createDropZoneSlice(options = {}) {
         enabled: true,
         acceptTypes: ['slice'],
         onDrop: (slice, transferData, event) => {
-          console.log('✅ Drop reçu:', transferData);
           slice.addObject();
           const newObj = slice.contentZone.lastElementChild;
           if (newObj && transferData.text) {
@@ -984,7 +976,6 @@ function createDragDropSlice(options = {}) {
         enabled: true,
         acceptTypes: ['slice'],
         onDrop: (slice, transferData, event) => {
-          console.log('🔄 Drop reçu dans slice hybride:', transferData);
           slice.addObject();
           const newObj = slice.contentZone.lastElementChild;
           if (newObj && transferData.content) {

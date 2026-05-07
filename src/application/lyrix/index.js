@@ -38,7 +38,6 @@
 //         if (raw.includes('auv3')) return 'AUv3';
 //         if (raw.includes('host') || raw.includes('app')) return 'Host';
 //     } catch (error) {
-//         console.warn('[dev-tools] Failed to resolve execution mode', error);
 //     }
 //     return 'Unknown';
 // }
@@ -233,7 +232,6 @@ function applyInitialSettings() {
         }
 
     } catch (error) {
-        console.error('❌ Error applying initial settings:', error);
     }
 }
 
@@ -269,9 +267,7 @@ function initializeLyrix() {
                     }
                 });
                 localStorage.setItem(MIGRATION_KEY, 'done');
-                console.log(`🎵 Migration audio paths v1: ${changed} entrées mises à jour`);
             } catch (e) {
-                console.error('Migration audio paths v1 failed', e);
             }
         })();
 
@@ -303,7 +299,6 @@ function initializeLyrix() {
                     (now - lyricsDisplay.lastUpdateTimes.host) < 500;
 
                 if (hostRecentlyActive) {
-                    console.log('🎯 Local audio defers to active host timecode');
                     // Still send the update but mark it as local - the display will handle priority
                 }
 
@@ -358,21 +353,18 @@ function initializeLyrix() {
             if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleEditMode === 'function') {
                 window.lyricsDisplay.toggleEditMode();
             } else {
-                console.warn('❌ toggleEditMode indisponible (lyricsDisplay non initialisé)');
             }
         };
         window.createNewEmptySong = () => {
             if (window.lyricsDisplay && typeof window.lyricsDisplay.createNewEmptySong === 'function') {
                 window.lyricsDisplay.createNewEmptySong();
             } else {
-                console.warn('❌ createNewEmptySong indisponible (lyricsDisplay non initialisé)');
             }
         };
         window.toggleLyricsRecordMode = () => {
             if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleRecordMode === 'function') {
                 window.lyricsDisplay.toggleRecordMode();
             } else {
-                console.warn('❌ toggleRecordMode indisponible (lyricsDisplay non initialisé)');
             }
         };
         window.currentSong = currentSong;
@@ -434,7 +426,6 @@ function initializeLyrix() {
                                 }
                                 if (!window.__lyrixHostSync) window.__lyrixHostSync = { lastTime: 0, started: false, lastAdvanceTs: 0 };
                                 window.__lyrixHostSync.started = false;
-                                console.log('🧵 AUv3 host watchdog idle ' + idleFor.toFixed(0) + 'ms -> force pause & re-arm');
                             }
                         }
                     } catch (err) {
@@ -442,7 +433,6 @@ function initializeLyrix() {
                     }
                 }, POLL_MS);
             } catch (e) {
-                console.warn('⚠️ AUv3 host watchdog init failed', e);
             }
         })();
         // -----------------------------------------------------------------------------
@@ -588,20 +578,17 @@ function initializeLyrix() {
         }
 
     } catch (error) {
-        console.error('❌ Error initializing Lyrix:', error);
     }
 }
 
 // Export songs to LRX format
 function exportAllSongsToLRX() {
     if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary non disponible');
         return;
     }
 
     const songSummaries = lyricsLibrary.getAllSongs();
     if (songSummaries.length === 0) {
-        console.warn('❌ No songs available to export');
         return;
     }
 
@@ -737,7 +724,6 @@ function showMobileExportModal(dataString, filename, fileType) {
                 }, 2000);
             }
         } catch (err) {
-            console.error('Failed to copy to clipboard:', err);
             copyButton.textContent = '❌ Copy failed';
             copyButton.style.backgroundColor = '#e74c3c';
             setTimeout(() => {
@@ -807,7 +793,6 @@ function showMobileExportModal(dataString, filename, fileType) {
                 }, 2000);
             }
         } catch (err) {
-            console.error('Failed to share:', err);
             shareButton.textContent = '❌ Share failed';
             shareButton.style.backgroundColor = '#e74c3c';
             setTimeout(() => {
@@ -1085,13 +1070,11 @@ function showContentViewModal(dataString, filename, fileType) {
 function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
 
     if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary non disponible');
         return;
     }
 
     const songs = lyricsLibrary.getAllSongs();
     if (songs.length === 0) {
-        console.warn('❌ No songs available to export');
         return;
     }
 
@@ -1107,7 +1090,6 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
 
                 // Verify that audioPath is just a filename (not a full URL)
                 if (song.audioPath.startsWith('http://') || song.audioPath.startsWith('https://') || song.audioPath.includes('assets/audios/')) {
-                    console.warn(`⚠️ Warning: audioPath contains full URL instead of just filename: ${song.audioPath}`);
                 }
             }
 
@@ -1207,7 +1189,6 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
                 throw new Error('Popup blocked or failed to open new window');
             }
         } catch (error) {
-            console.error('❌ Safari new window method failed:', error);
             // Ultimate fallback: try the simple data URI method
             const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(jsonString)}`;
             const saveLink = document.createElement('a');
@@ -1375,7 +1356,6 @@ function importFromLRX(file) {
             }
 
         } catch (error) {
-            console.error('❌ Error importing LRX file:', error);
             Modal({
                 title: '❌ Import Error',
                 content: `<p>Failed to import LRX file: ${error.message}</p>`,
@@ -1390,13 +1370,11 @@ function importFromLRX(file) {
 // Export selected songs as text
 function exportSelectedSongsAsText() {
     if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary non disponible');
         return;
     }
 
     const songs = lyricsLibrary.getAllSongs();
     if (songs.length === 0) {
-        console.warn('❌ No songs available to export');
         return;
     }
 
@@ -1547,7 +1525,6 @@ function exportSelectedSongsAsText() {
 // Export selected songs as text with folder dialog
 function exportSelectedSongsAsTextWithFolderDialog() {
     if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary non disponible');
         return;
     }
 
@@ -1565,7 +1542,6 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     // Get all summary song objects
     const songSummaries = lyricsLibrary.getAllSongs();
     if (songSummaries.length === 0) {
-        console.warn('❌ No songs available to export');
         return;
     }
 
@@ -1783,13 +1759,11 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
 // Function to export songs as separate files
 function exportSongsAsSeparateFiles(selectedSongIds) {
-    console.log('🔧 Exporting songs as separate files');
 
     // Check if we're on iOS/AUv3
     const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
 
     if (isAUv3) {
-        console.log('🔧 iOS/AUv3 detected - using iOS save dialogs for separate files');
 
         // For iOS, export each file using the native save dialog
         selectedSongIds.forEach((songId, index) => {
@@ -1821,14 +1795,12 @@ function exportSongsAsSeparateFiles(selectedSongIds) {
                         encoding: 'utf8'
                     };
 
-                    console.log(`🔧 Sending file ${index + 1}/${selectedSongIds.length} to Swift bridge: ${safeTitle}.txt`);
                     window.webkit.messageHandlers.swiftBridge.postMessage(payload);
                 }, index * 1000); // 1 second delay between iOS save dialogs
             }
         });
 
     } else {
-        console.log('🔧 Desktop/Web detected - using HTML5 downloads for separate files');
 
         // Desktop/Web: Original logic with HTML5 downloads
         let downloadCount = 0;
@@ -1870,7 +1842,6 @@ function exportSongsAsSeparateFiles(selectedSongIds) {
 
                     downloadCount++;
                     if (downloadCount === selectedSongIds.length) {
-                        console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
                     }
                 }, index * 500); // 500ms delay between downloads
             }
@@ -1910,7 +1881,6 @@ function exportSongsAsSingleFile(selectedSongIds) {
     const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
 
     if (isAUv3) {
-        console.log('🔧 iOS/AUv3 detected - using iOS save dialog for single file');
 
         // Use iOS native save dialog
         const currentDate = new Date().toISOString().split('T')[0];
@@ -1924,11 +1894,9 @@ function exportSongsAsSingleFile(selectedSongIds) {
             encoding: 'utf8'
         };
 
-        console.log(`🔧 Sending single file to Swift bridge: ${fileName}`);
         window.webkit.messageHandlers.swiftBridge.postMessage(payload);
 
     } else {
-        console.log('🔧 Desktop/Web detected - using HTML5 download for single file');
 
         // Desktop/Web: Use download method that works on all browsers including Safari
         const blob = new Blob([exportText], { type: 'text/plain' });
@@ -1947,7 +1915,6 @@ function exportSongsAsSingleFile(selectedSongIds) {
             URL.revokeObjectURL(saveLink.href);
         }, 100);
 
-        console.log(`✅ Single file download initiated`);
     }
 
 }
@@ -1955,7 +1922,6 @@ function exportSongsAsSingleFile(selectedSongIds) {
 // Helper function to load and display a song
 function loadAndDisplaySong(songKey) {
     if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary not initialized');
         return false;
     }
 
@@ -2142,7 +2108,6 @@ function navigateToNextSong() {
 function updateTimecode(timeMs) {
     // Emergency host blocking system
     if (window.blockAllHostUpdates) {
-        console.log('🛑 Host update blocked by emergency blocking system');
         return;
     }
 
@@ -2161,16 +2126,13 @@ function updateTimecode(timeMs) {
             // Throttle parasitic reset logging to avoid spam (every 5 seconds)
             const now = Date.now();
             if (!window.lastParasiticResetLog || (now - window.lastParasiticResetLog) > 5000) {
-                console.log(`🚨 Blocking parasitic host resets (${window.parasiticResetCount} total blocked, logged every 5s)`);
                 window.lastParasiticResetLog = now;
 
                 // Also log details to help identify the pattern
                 const localTime = audioController && audioController.getCurrentTime ? audioController.getCurrentTime() : 0;
-                console.log(`📊 Current state: Local audio playing=${localAudioPlaying}, Local time=${localTime.toFixed(3)}s, Host sending=0s`);
 
                 // Auto-suggest host blocking if too many resets
                 if (window.parasiticResetCount > 100) {
-                    console.log('💡 Suggestion: Run toggleHostBlocking(true) to stop all host updates if this continues');
                 }
             }
             return;
@@ -2183,7 +2145,6 @@ function updateTimecode(timeMs) {
 
     // If local audio is playing and host time is significantly different, log the conflict
     if (localAudioPlaying && timeMs > 0 && Math.abs(timeMs - localCurrentTime) > 200) {
-        console.log(`🎯 Host/Local conflict detected: Host=${(timeMs / 1000).toFixed(3)}s, Local=${(localCurrentTime / 1000).toFixed(3)}s - Host takes priority`);
     }
 
     // This function can be used by external hosts to update timecode
@@ -2215,11 +2176,10 @@ function updateTimecode(timeMs) {
                     try {
                         audioController.setCurrentTime(timeMs / 1000);
                     } catch (e) { /* ignore */ }
-                    try { audioController.play(); } catch (e) { console.warn('⚠️ host sync play failed', e); }
+                    try { audioController.play(); } catch (e) { }
                     if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white';
                     btn.classList.remove('auv3-armed');
                     btn.dataset.state = 'playingHost';
-                    console.log('▶️ AUv3 host-synced playback started at', (timeMs / 1000).toFixed(3), 's');
                 }
             }
             // Host stop detection: conditions
@@ -2243,7 +2203,6 @@ function updateTimecode(timeMs) {
                     btn.classList.add('auv3-armed');
                     if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor = '';
                 }
-                console.log(`🔁 AUv3 host stop detected (${hostStoppedByZero ? 'zero' : ''}${hostWentBackwards ? ' rewind' : ''}${hostInactive ? ' idle' : ''}) -> re-armed`);
             }
             // Safety fallback: if host time not advancing (idle) for >750ms and audio still playing in host mode, force pause & re-arm
             if (btnState === 'playingHost' && audioController && audioController.isPlaying && audioController.isPlaying()) {
@@ -2251,7 +2210,6 @@ function updateTimecode(timeMs) {
                 if (idleFor > 750) {
                     try { audioController.pause(); } catch (e) { }
                     if (typeof window.__lyrixArmButton === 'function') window.__lyrixArmButton(btn); else { btn.dataset.state = 'armed'; btn.classList.add('auv3-armed'); }
-                    console.log('🛑 AUv3 host idle fallback (>750ms) -> force pause & re-arm');
                 }
             }
         }
@@ -2270,7 +2228,6 @@ window.getParasiticResetStats = function () {
         displayCurrentTime: lyricsDisplay ? lyricsDisplay.currentTime : 0,
         hostBlockingActive: window.blockAllHostUpdates || false
     };
-    console.log('📊 Parasitic Reset Statistics:', stats);
     return stats;
 };
 
@@ -2278,7 +2235,6 @@ window.getParasiticResetStats = function () {
 window.resetParasiticResetCounter = function () {
     window.parasiticResetCount = 0;
     window.lastParasiticResetLog = 0;
-    console.log('🔄 Parasitic reset counter reset');
 };
 
 // Emergency function to block ALL host updates (available in console)
@@ -2291,10 +2247,8 @@ window.toggleHostBlocking = function (block = null) {
     }
 
     const status = window.blockAllHostUpdates ? 'ENABLED' : 'DISABLED';
-    console.log(`🛑 Host update blocking ${status}`);
 
     if (window.blockAllHostUpdates) {
-        console.log('⚠️ ALL host timecode updates will be ignored until you run toggleHostBlocking(false)');
     }
 
     return window.blockAllHostUpdates;
@@ -2302,30 +2256,6 @@ window.toggleHostBlocking = function (block = null) {
 
 // Helper function to show available console commands
 window.help = function () {
-    console.log(`
-🆘 Lyrix Console Commands:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📊 DIAGNOSTICS:
-• getParasiticResetStats() - Show reset blocking statistics
-• resetParasiticResetCounter() - Reset the counter to zero
-
-🛑 HOST CONTROL:
-• toggleHostBlocking() - Toggle ALL host timecode blocking
-• toggleHostBlocking(true) - Block ALL host updates
-• toggleHostBlocking(false) - Allow host updates again
-
-🎵 AUDIO CONTROL:
-• audioController.play() - Start local audio
-• audioController.pause() - Pause local audio
-• audioController.getCurrentTime() - Get current time
-
-📝 LYRICS:
-• lyricsDisplay.currentTime - Current display time
-• lyricsDisplay.currentLineIndex - Current line index
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`);
 };
 
 // Create main interface
@@ -2426,22 +2356,18 @@ function createMainInterface() {
                         if (state === 'idle') {
                             // Arm playback (wait for host start)
                             armAuv3Playback(playButton);
-                            console.log('🟡 AUv3 playback armed (waiting host start)');
                         } else if (state === 'armed') {
                             // Disarm
                             disarmAuv3Playback(playButton);
-                            console.log('⚪️ AUv3 playback disarmed');
                         } else if (state === 'playingHost' || state === 'forced') {
                             // Pause current playback
                             audioController.pause();
                             if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
                             playButton.dataset.state = 'idle';
-                            console.log('⏸️ AUv3 playback paused');
                         } else {
                             // Fallback toggle
                             audioController.play();
                             playButton.dataset.state = 'playingHost';
-                            console.log('▶️ AUv3 fallback play');
                         }
                     } else {
                         // Application mode: original behavior
@@ -2454,7 +2380,6 @@ function createMainInterface() {
                         }
                     }
                 } catch (error) {
-                    console.error('❌ ERREUR Play/Pause:', error);
                 }
             },
             css: {
@@ -2484,7 +2409,7 @@ function createMainInterface() {
         function forceImmediatePlayback(btn) {
             btn.classList.remove('auv3-armed');
             btn.dataset.state = 'forced';
-            try { audioController.play(); } catch (e) { console.warn('⚠️ force play failed', e); }
+            try { audioController.play(); } catch (e) { }
             if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white';
         }
         // Expose arming helper globally so updateTimecode can reuse
@@ -2515,7 +2440,6 @@ function createMainInterface() {
                     if (playButton.dataset.state === 'armed' || playButton.dataset.state === 'idle') {
                         forceImmediatePlayback(playButton);
                         playButton._longPressTriggered = true; // guard
-                        console.log('⚡️ AUv3 long press forced playback');
                     }
                 }, longPressMs);
             };
@@ -2575,7 +2499,6 @@ function createMainInterface() {
                         if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
                     }
                 } catch (error) {
-                    console.error('❌ ERREUR Stop:', error);
                 }
             },
             css: {
@@ -2630,7 +2553,6 @@ function createMainInterface() {
                 audioController._uiSyncBound = true;
             }
         } catch (e) {
-            console.warn('⚠️ Failed to bind audioController UI sync listeners', e);
         }
 
         // Add data attribute for identification
@@ -2721,7 +2643,6 @@ function createMainInterface() {
 
                     // Check for valid duration to prevent NaN/Infinity
                     if (!isFinite(duration) || duration <= 0) {
-                        console.warn('⚠️ Invalid audio duration:', duration);
                         return;
                     }
 
@@ -2729,7 +2650,6 @@ function createMainInterface() {
 
                     // Check for valid target time
                     if (!isFinite(targetTime) || targetTime < 0) {
-                        console.warn('⚠️ Invalid target time:', targetTime);
                         return;
                     }
 
@@ -2775,7 +2695,6 @@ function createMainInterface() {
                     progEl.style.border = 'none';
                 }
             } catch (e) {
-                console.warn('Scrub slider post-style failed', e);
             }
         }, 0);
 
@@ -2962,23 +2881,19 @@ function createMainInterface() {
 
             // Primary event - when audio metadata (including duration) is loaded
             audioController.on('loaded', (duration) => {
-                console.log(`📏 Audio loaded event - duration: ${duration}s`);
                 updateSliderDuration();
             });
 
             audioController.on('loadedmetadata', () => {
-                console.log('📏 Loadedmetadata event triggered');
                 updateSliderDuration();
             });
 
             // Also listen for loadeddata and canplay events as fallbacks
             audioController.on('loadeddata', () => {
-                console.log('📏 Loadeddata event triggered');
                 updateSliderDuration();
             });
 
             audioController.on('canplay', () => {
-                console.log('📏 Canplay event triggered');
                 updateSliderDuration();
             });
         }
@@ -3013,7 +2928,6 @@ function setupDeferredAudioRebind() {
         if (attempts < maxAttempts) {
             setTimeout(tryBind, intervalMs);
         } else {
-            console.log("⏱️ End of audio rebind attempts (port or file unavailable)");
         }
     }
     setTimeout(tryBind, intervalMs);
@@ -3054,14 +2968,11 @@ function loadLastSong() {
                 if (audioController && audioController.loadAudio) {
                     const ok = audioController.loadAudio(fileName);
                     if (!ok) {
-                        console.warn('⚠️ Impossible to load audio at startup:', fileName);
                     }
                 }
             } else {
-                console.log('ℹ️ Last song has no audio file, but loaded lyrics successfully');
             }
         } else {
-            console.warn('⚠️ Last song not found in library, clearing from storage');
             StorageManager.clearLastOpenedSong();
         }
     } else {
@@ -3088,7 +2999,6 @@ function seekToPendingTime() {
 
 
         } catch (error) {
-            console.error('❌ Error seeking audio:', error);
             pendingSeekTime = null;
         }
     }
@@ -3199,14 +3109,10 @@ function updateScrubSliderDisplay(currentTime) {
 function updateSliderDuration() {
     const totalTimeLabel = document.getElementById('total_time_label');
 
-    console.log('📏 updateSliderDuration() called');
 
     if (totalTimeLabel && audioController && audioController.audioPlayer) {
         const duration = audioController.audioPlayer.duration || 0;
 
-        console.log(`📏 Audio duration found: ${duration}s`);
-        console.log(`📏 Audio player ready state: ${audioController.audioPlayer.readyState}`);
-        console.log(`📏 Audio player src: ${audioController.audioPlayer.src ? audioController.audioPlayer.src.substring(0, 50) + '...' : 'empty'}`);
 
         if (duration > 0 && isFinite(duration)) {
             const durationMin = Math.floor(duration / 60);
@@ -3214,26 +3120,20 @@ function updateSliderDuration() {
             const timeString = `${durationMin}:${durationSec.toString().padStart(2, '0')}`;
             totalTimeLabel.textContent = timeString;
 
-            console.log(`📏 ✅ Updated total_time_label to: ${timeString}`);
         } else {
-            console.log(`📏 ⚠️ Duration is ${duration} (invalid), will retry...`);
             // Try again after a short delay if duration isn't available yet
             setTimeout(() => {
                 if (audioController && audioController.audioPlayer) {
                     const retryDuration = audioController.audioPlayer.duration;
-                    console.log(`📏 🔄 Retrying - new duration: ${retryDuration}s, readyState: ${audioController.audioPlayer.readyState}`);
                     if (retryDuration > 0) {
-                        console.log('📏 🔄 Retrying updateSliderDuration...');
                         updateSliderDuration();
                     }
                 }
             }, 250);
         }
     } else {
-        console.log('📏 ❌ Missing elements - totalTimeLabel: ' + !!totalTimeLabel + ', audioController: ' + !!audioController + ', audioPlayer: ' + !!(audioController && audioController.audioPlayer));
 
         if (audioController && audioController.audioPlayer) {
-            console.log(`📏 Audio player details - src: ${audioController.audioPlayer.src ? 'present' : 'empty'}, readyState: ${audioController.audioPlayer.readyState}`);
         }
     }
 }
@@ -3257,14 +3157,12 @@ function bootstrapLyrix() {
     try {
         StorageIntegrity.init();
     } catch (error) {
-        console.error('Lyrix storage integrity init failed', error);
     }
     initializeLyrix();
     if (LowTrafficMode && typeof LowTrafficMode.markAppReady === 'function') {
         try {
             LowTrafficMode.markAppReady();
         } catch (error) {
-            console.warn('LowTrafficMode markAppReady failed', error);
         }
     }
 }
@@ -3312,10 +3210,8 @@ function showFileImportDialog() {
                 if (dragDropManager) {
                     await dragDropManager.processFile(file);
                 } else {
-                    console.error('❌ DragDropManager not available');
                 }
             } catch (error) {
-                console.error('❌ Error processing file:', error);
                 Modal({
                     title: '❌ File Import Error',
                     content: `<p>Failed to import file: ${error.message}</p>`,
@@ -3364,7 +3260,6 @@ window.Lyrix = {
         if (midiUtilities) {
             midiUtilities.testMidiData();
         } else {
-            console.error('❌ MIDI utilities not available');
         }
     },
     CONSTANTS,
@@ -3405,7 +3300,6 @@ export {
 const mainArea = document.getElementById('display-container');
 
 mainArea.style.top = '52px'
-//console.log('patched mainArea top to 120px')
 // }, 1500);
 
 
@@ -3441,7 +3335,6 @@ if (getExecutionModeLabel() === 'AUv3') {
 
 // function readLyrixSongsFromLocalStorage() {
 //     if (typeof localStorage === 'undefined') {
-//         console.warn('localStorage unavailable: cannot inspect Lyrix songs.');
 //         return [];
 //     }
 
@@ -3473,7 +3366,6 @@ if (getExecutionModeLabel() === 'AUv3') {
 //                 data: parsed
 //             });
 //         } catch (error) {
-//             console.warn(`[checker2] Failed to parse song stored under "${key}"`, error);
 //         }
 //     }
 
@@ -3502,14 +3394,11 @@ if (getExecutionModeLabel() === 'AUv3') {
 //                 spanEl.textContent = `write (${modeLabel})`;
 //             }
 //             if (typeof localStorage === 'undefined') {
-//                 console.warn('localStorage unavailable: cannot save intuition content payload.');
 //                 return;
 //             }
 //             localStorage.setItem('intuition_content_payload', 'hello');
 //             const stored = localStorage.getItem('intuition_content_payload');
-//             console.log('[checker] Saved payload ->', stored, '| mode ->', modeLabel);
 //         } catch (error) {
-//             console.error('[checker] Failed to persist payload:', error);
 //         }
 //     }
 
@@ -3535,7 +3424,6 @@ if (getExecutionModeLabel() === 'AUv3') {
 //         try {
 //             const songs = readLyrixSongsFromLocalStorage();
 //             if (!songs.length) {
-//                 console.warn('[checker2] Aucun song Lyrix trouvé dans localStorage.');
 //                 return;
 //             }
 
@@ -3550,16 +3438,12 @@ if (getExecutionModeLabel() === 'AUv3') {
 //                 lastModified
 //             }));
 
-//             if (typeof console.table === 'function') {
-//                 console.table(summary);
+//             if (false) {
 //             } else {
-//                 console.log('[checker2] Lyrix songs summary ->', summary);
 //             }
 
 //             const payloads = songs.map(({ key, data }) => ({ key, data }));
-//             console.log('[checker2] Full Lyrix song payloads:', payloads);
 //         } catch (error) {
-//             console.error('[checker2] Failed to read Lyrix songs from localStorage:', error);
 //         }
 //     },
 

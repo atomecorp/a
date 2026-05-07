@@ -47,7 +47,6 @@ function createUnitsFromJSON(jsonData) {
             targetConnectorId
           );
 
-          console.log(`✅ Connexion: ${sourceUnit.name} → ${targetUnit.name}`);
         }
       }
     });

@@ -156,7 +156,6 @@ async function verifySignature(publicKeyPem, data, signatureBase64) {
         return isValid;
 
     } catch (err) {
-        console.error('[serverVerification] Signature verification error:', err);
         return false;
     }
 }
@@ -184,7 +183,6 @@ export async function verifyServer(serverUrl, options = {}) {
     if (!forceRefresh) {
         const cached = verificationCache.get(normalizedUrl);
         if (cached && Date.now() - cached.timestamp < VERIFICATION_SETTINGS.cacheDurationMs) {
-            console.log('[serverVerification] Using cached result for', normalizedUrl);
             return cached.result;
         }
     }
@@ -210,7 +208,6 @@ export async function verifyServer(serverUrl, options = {}) {
         if (isDevelopmentMode() && VERIFICATION_SETTINGS.trustLocalhostInDev) {
             const isLocalhost = normalizedUrl.includes('localhost') || normalizedUrl.includes('127.0.0.1');
             if (isLocalhost && trustedByUrl?.trustWithoutVerification) {
-                console.log('[serverVerification] Development mode: trusting localhost');
                 result.success = true;
                 result.verified = true;
                 result.official = false;
@@ -221,7 +218,6 @@ export async function verifyServer(serverUrl, options = {}) {
         }
 
         // Step 1: Get server identity
-        console.log('[serverVerification] Fetching server identity from', normalizedUrl);
 
         const identityController = new AbortController();
         const identityTimeout = setTimeout(() => identityController.abort(), timeout);
@@ -273,7 +269,6 @@ export async function verifyServer(serverUrl, options = {}) {
         }
 
         // Step 3: Challenge-response verification
-        console.log('[serverVerification] Sending challenge to server');
 
         const challenge = generateChallenge(VERIFICATION_SETTINGS.minChallengeLength);
 
@@ -322,7 +317,6 @@ export async function verifyServer(serverUrl, options = {}) {
             return cacheResult(normalizedUrl, result);
         }
 
-        console.log('[serverVerification] Verifying signature');
 
         const signatureValid = await verifySignature(
             keyToUse,
@@ -366,7 +360,6 @@ export async function verifyServer(serverUrl, options = {}) {
         result.success = true;
         result.verified = true;
 
-        console.log('[serverVerification] Server verified:', result);
 
         return cacheResult(normalizedUrl, result);
 
@@ -377,7 +370,6 @@ export async function verifyServer(serverUrl, options = {}) {
             result.error = `Verification failed: ${err.message}`;
         }
 
-        console.error('[serverVerification] Error:', err);
 
         // Allow connection with warning if settings permit
         if (VERIFICATION_SETTINGS.allowUnofficialServers) {

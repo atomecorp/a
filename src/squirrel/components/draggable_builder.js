@@ -71,7 +71,6 @@ function makeDropZone(element, options = {}) {
         Object.assign(transferData, JSON.parse(jsonData));
       }
     } catch (err) {
-      console.warn('Erreur parsing des données de drop:', err);
     }
 
     // Récupérer les données texte
@@ -93,7 +92,6 @@ function makeDropZone(element, options = {}) {
         sourceElement._markDropSuccessful();
       }
 
-      console.log('🎯 Marked source element as successfully dropped');
     }
 
     // Appeler la fonction de drop
@@ -200,7 +198,6 @@ function makeDraggableWithDrop(element, options = {}) {
 
       // Si le drop est réussi, on ignore complètement dragend
       if (isDropSuccessful || element.getAttribute('data-drop-successful') === 'true') {
-        console.log('Drop successful - ignoring dragend completely');
         // Nettoyer et sortir immédiatement
         element.removeAttribute('data-dragging');
         element.removeAttribute('data-drag-id');
@@ -210,7 +207,6 @@ function makeDraggableWithDrop(element, options = {}) {
       }
 
       // Si pas de drop réussi, restaurer normalement
-      console.log('No successful drop - restoring element');
       element.removeAttribute('data-dragging');
       element.removeAttribute('data-drag-id');
       element.removeAttribute('data-moved');

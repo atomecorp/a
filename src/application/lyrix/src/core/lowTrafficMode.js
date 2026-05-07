@@ -194,7 +194,6 @@ class LowTrafficModeController {
                 }
             } catch (error) {
                 if (!force) {
-                    console.warn('[LowTrafficMode] storage flush failed, retrying later:', error);
                     this.enqueueStorageOperation(operation);
                 }
             }
@@ -242,7 +241,6 @@ class LowTrafficModeController {
                 try {
                     listener(next);
                 } catch (error) {
-                    console.error('[LowTrafficMode] storage listener failed', error);
                 }
                 if (queue.length) {
                     window.setTimeout(process, gap);
@@ -279,7 +277,6 @@ class LowTrafficModeController {
                 try {
                     original(payload);
                 } catch (error) {
-                    console.error('[LowTrafficMode] postMessage failed', error);
                 }
                 window.setTimeout(pump, interval);
             };
@@ -356,7 +353,6 @@ class LowTrafficModeController {
                 try {
                     observer.__native.observe(target, options);
                 } catch (error) {
-                    console.warn('[LowTrafficMode] failed to resume observer', error);
                 }
             });
             observer.__pending.length = 0;

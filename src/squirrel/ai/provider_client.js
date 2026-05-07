@@ -443,25 +443,6 @@ export const normalizeAiProviderError = (error) => {
     const classify = (code) => {
         // Log raw provider data + final decision for debugging
         if (typeof console?.warn === 'function') {
-            console.warn(
-                '[eVe:ai] normalizeAiProviderError',
-                JSON.stringify({
-                    classified_as: code,
-                    raw_message: raw,
-                    http_status: httpStatus,
-                    provider_code: providerCode,
-                    provider_message: providerMessage,
-                    has_structured_data: hasStructuredData,
-                    flags: {
-                        isHttp429,
-                        isHttp402,
-                        hasHardQuotaSignal,
-                        hasSoftQuotaSignal,
-                        hasRateLimitSignal,
-                        hasBillingSignal
-                    }
-                })
-            );
         }
         return code;
     };

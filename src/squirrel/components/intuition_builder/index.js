@@ -2534,7 +2534,6 @@ function openMenu(parent) {
                     created.push(itemEl);
                 }
             } else {
-                console.warn(`Function ${fct_exec} not found`);
             }
         });
         // Add a green overflow-forcing item when opening the menu
@@ -2581,7 +2580,7 @@ function intuitionCommon(cfg) {
     el.click = cfg.click;
     if (typeof cfg.click === 'function') {
         el.addEventListener('click', function (e) {
-            try { cfg.click.call(el, e); } catch (err) { console.error(err); }
+            try { cfg.click.call(el, e); } catch (err) {}
         });
     }
 
@@ -3116,7 +3115,6 @@ function runContentHandler(def, handlerName, payload = {}) {
             fn(el, event, kind, nameKey, window.updateParticleValue, currentTheme, payload.value);
         }
     } catch (err) {
-        console.error(`Error in content handler '${handlerName}' code '${code}':`, err);
 
     } finally {
         setActiveContentHandlerContext(prevHandlerContext);
@@ -6663,7 +6661,6 @@ function ensureMenuParentChildren(parentKey) {
     if (!parentKey) return null;
     const parentNode = intuition_content[parentKey];
     if (!parentNode || typeof parentNode !== 'object') {
-        console.warn(`[Intuition] new_menu.add: parent '${parentKey}' introuvable`);
         return null;
     }
     if (!Array.isArray(parentNode.children)) {
@@ -6790,7 +6787,6 @@ function applyMenuAdditionEntries(entries, options = {}) {
         try {
             options.afterApply({ addedKeys, parent: defaultParent });
         } catch (err) {
-            console.warn('[Intuition] menu afterApply callback error', err);
         }
     }
 
@@ -6848,7 +6844,6 @@ function attachMenuAddMethodToElement(element, resolver) {
         const context = typeof resolver === 'function' ? resolver(element) : (resolver || {});
         const entries = normalizeMenuAdditionEntries(payload);
         if (!entries.length) {
-            console.warn('[Intuition] add: payload vide ou invalide');
             return;
         }
         const applyOptions = context && context.applyOptions ? { ...context.applyOptions } : {};
@@ -6860,7 +6855,6 @@ function attachMenuAddMethodToElement(element, resolver) {
             try {
                 context.afterApply({ addedKeys, entries });
             } catch (err) {
-                console.warn('[Intuition] add afterApply error', err);
             }
         }
         return addedKeys;
@@ -6935,7 +6929,6 @@ function attachMenuRemoveMethodToElement(element, resolver) {
             try {
                 context.afterRemove({ removedKeys });
             } catch (err) {
-                console.warn('[Intuition] remove afterRemove error', err);
             }
         }
 
@@ -6996,7 +6989,6 @@ function registerMenuAdditionAPI() {
     window.new_menu.add = (payload) => {
         const entries = normalizeMenuAdditionEntries(payload);
         if (!entries.length) {
-            console.warn('[Intuition] new_menu.add: payload vide ou invalide');
             return [];
         }
         return applyMenuAdditionEntries(entries);

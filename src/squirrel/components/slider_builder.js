@@ -684,10 +684,8 @@ const createSlider = (config = {}) => {
   
   // Validation des zones de drag
   if (effectiveDragMin < min) {
-    console.warn(`dragMin (${effectiveDragMin}) ne peut pas être inférieur à min (${min})`);
   }
   if (effectiveDragMax > max) {
-    console.warn(`dragMax (${effectiveDragMax}) ne peut pas être supérieur à max (${max})`);
   }
 
   // Gestionnaires d'événements

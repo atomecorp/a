@@ -566,7 +566,6 @@ function combineBindings(...bindings) {
                 try {
                     binding.cleanup();
                 } catch (error) {
-                    console.error('[Atome] event cleanup failed:', error);
                 }
             });
         }
@@ -981,7 +980,6 @@ function bindResizableEvents(instance, groupName, config) {
                         try {
                             handle.style[key] = value;
                         } catch (error) {
-                            console.warn('[Atome] unsupported resize handle style key:', key, error);
                         }
                     }
                 }
@@ -1222,7 +1220,6 @@ function bindResizableEvents(instance, groupName, config) {
                     try {
                         fn();
                     } catch (error) {
-                        console.error('[Atome] resizable cleanup failed:', error);
                     }
                 }
             }

@@ -72,11 +72,8 @@ class Matrix {
       this.isInitialized = true;
 
       if (this.config.debug) {
-        // console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
-        // console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
       }
     } catch (error) {
-      console.error(`❌ Erreur lors de l'initialisation de Matrix "${this.config.id}":`, error);
     }
   }
 
@@ -595,7 +592,6 @@ class Matrix {
     this.updateCellSizes();
 
     if (this.config.debug) {
-      // console.log(`📐 Matrix "${this.config.id}" redimensionnée à ${this.config.size.width}x${this.config.size.height}px`);
     }
   }
 
@@ -638,7 +634,6 @@ class Matrix {
       : parentElement;
 
     if (!parent) {
-      console.error('❌ Élément parent non trouvé');
       return;
     }
 
@@ -700,7 +695,6 @@ class Matrix {
     });
 
     if (this.config.debug) {
-      // console.log(`📏 Auto-dimensionnement des cellules effectué`);
     }
   }
 
@@ -755,7 +749,6 @@ class Matrix {
     const { width, height } = entry.contentRect;
 
     if (this.config.debug) {
-      // console.log(`🔄 Matrix "${this.config.id}" - Redimensionnement détecté:`, { width, height });
     }
 
     // Mise à jour de la configuration interne
@@ -809,7 +802,6 @@ class Matrix {
     }
 
     if (this.config.debug) {
-      // console.log(`📐 Taille des cellules: ${cellWidth.toFixed(1)}x${cellHeight.toFixed(1)}px`);
     }
   }
 
@@ -1364,9 +1356,7 @@ class Matrix {
       // Reset des callbacks
       this.callbacks = {};
 
-      // console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
     } catch (error) {
-      console.error(`❌ Erreur lors de la destruction de Matrix "${this.config.id}":`, error);
     }
   }
 }

@@ -27,7 +27,6 @@
 
     const invoke = getInvoke();
     if (!invoke) {
-        console.warn('[tauri_audio_bridge] Tauri invoke() not available; native audio bridge disabled.');
         return;
     }
 
@@ -44,7 +43,6 @@
                 window.__fromDSP({ type, payload });
             }
         } catch (e) {
-            console.warn('[tauri_audio_bridge] __fromDSP handler failed:', e && e.message ? e.message : e);
         }
 
         // Also dispatch the recorder-specific CustomEvent used by recorder API
@@ -92,10 +90,8 @@
                 ensurePollingStarted();
                 // Fire-and-forget (do not await on UI path)
                 invoke('iplug_send', { msg: msg }).catch((e) => {
-                    console.warn('[tauri_audio_bridge] iplug_send failed:', e && e.message ? e.message : e);
                 });
             } catch (e) {
-                console.warn('[tauri_audio_bridge] __toDSP failed:', e && e.message ? e.message : e);
             }
         };
     }

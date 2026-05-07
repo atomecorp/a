@@ -59,7 +59,6 @@ function createNewSongFromMenu() {
         window.lyricsDisplay.createNewEmptySong();
         window.toggleLyricsEditMode()
     } else {
-        console.warn('❌ Impossible de créer une chanson : createNewEmptySong non disponible');
     }
 }
 
@@ -135,7 +134,6 @@ function getExecutionModeLabel() {
         if (raw.includes('auv3')) return 'AUv3';
         if (raw.includes('host') || raw.includes('app')) return 'Host';
     } catch (error) {
-        console.warn('[dev-tools] Failed to resolve execution mode', error);
     }
     return 'Unknown';
 }

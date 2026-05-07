@@ -130,10 +130,8 @@ class StorageIntegrityMonitor {
                 try {
                     original(msg);
                 } catch (error) {
-                    console.error('Lyrix integrity forwarding failed', error);
                 }
             } else if (!handled && typeof msg === 'object' && msg && msg.action && String(msg.action).startsWith('lyrix')) {
-                console.warn('Unhandled Lyrix message', msg);
             }
         };
         bridge._lyrixIntegrityHookInstalled = true;
@@ -192,7 +190,6 @@ class StorageIntegrityMonitor {
 
     log(message) {
         try {
-            console.log(`[LyrixStorageIntegrity] ${message}`);
         } catch (_) {
             // ignore
         }

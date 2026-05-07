@@ -557,7 +557,6 @@ export class MidiUtilities {
         } else if (typeof window.fullscreenMode === 'function') {
             window.fullscreenMode();
         } else {
-            console.warn('[midi] Unable to enter fullscreen – helper not available');
         }
     }
 
@@ -579,7 +578,6 @@ export class MidiUtilities {
         } else if (typeof window.fullscreenMode === 'function') {
             window.fullscreenMode();
         } else {
-            console.warn('[midi] Unable to exit fullscreen – helper not available');
         }
     }
 
@@ -633,7 +631,6 @@ export class MidiUtilities {
             window.lyricsDisplay.toggleFullscreen();
             setTimeout(() => window.lyricsDisplay.toggleFullscreen(), 3000);
         } else {
-            console.warn('[midi] Unable to test fullscreen manually—no handler found');
         }
     }
 

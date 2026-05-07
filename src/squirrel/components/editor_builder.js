@@ -388,7 +388,6 @@ const createEditor = (config = {}) => {
             try {
                 await onClick();
             } catch (err) {
-                console.error('[Editor Button] Error:', err);
             }
             return false;
         });
@@ -673,7 +672,6 @@ const createEditor = (config = {}) => {
                 timestamp: Date.now()
             }));
         } catch (e) {
-            console.warn('[Editor] localStorage save failed:', e);
         }
 
         updateStatus('Auto-saved');
@@ -681,10 +679,8 @@ const createEditor = (config = {}) => {
     }
 
     async function validateContent() {
-        console.log('[Editor] validateContent() called at:', new Date().toISOString());
 
         if (!state.editorView || state.isSaving) {
-            console.log('[Editor] Early return - editorView:', !!state.editorView, 'isSaving:', state.isSaving);
             return;
         }
 
@@ -694,14 +690,11 @@ const createEditor = (config = {}) => {
         const content = state.editorView.state.doc.toString();
 
         try {
-            console.log('[Editor] Loading AdoleAPI...');
             const adoleApi = await loadAdoleApi();
             const authenticated = isAdoleAuthenticated(adoleApi);
-            console.log('[Editor] isAuthenticated:', authenticated);
 
             if (!authenticated) {
                 // Save to localStorage only - NO network calls
-                console.log('[Editor] Not authenticated, saving to localStorage only');
                 const localKey = `editor_file_${state.fileName}_${Date.now()}`;
                 const localData = {
                     id: localKey,
@@ -715,7 +708,6 @@ const createEditor = (config = {}) => {
                 try {
                     localFiles = JSON.parse(localStorage.getItem('editor_local_files') || '[]');
                 } catch (error) {
-                    console.warn('[Editor] local file index parse failed:', error);
                 }
 
                 const existingIndex = localFiles.findIndex(f => f.fileName === state.fileName);
@@ -736,7 +728,6 @@ const createEditor = (config = {}) => {
             }
 
             // Authenticated - save to server with ADOLE-compliant format
-            console.log('[Editor] Authenticated, calling AdoleAPI.atomes.create...');
             const atomeData = {
                 type: 'code_file',
                 properties: {
@@ -750,7 +741,6 @@ const createEditor = (config = {}) => {
             };
 
             const result = await adoleApi.atomes.create(atomeData);
-            console.log('[Editor] create result:', result);
 
             if (adoleOperationSucceeded(result)) {
                 state.fileId = extractCreatedAtomeId(result) || state.fileId;
@@ -761,12 +751,10 @@ const createEditor = (config = {}) => {
                 onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content });
             } else {
                 const error = result?.tauri?.error || result?.fastify?.error || result?.error || 'Unknown error';
-                console.warn('[Editor] Save failed:', error);
                 updateStatus('✗ Save failed: ' + error);
             }
 
         } catch (error) {
-            console.error('[Editor] Save failed:', error);
             updateStatus('✗ Failed: ' + error.message);
             onError?.(error);
         } finally {
@@ -799,16 +787,12 @@ const createEditor = (config = {}) => {
                     });
                 });
             } catch (error) {
-                console.warn('[LoadDialog] local file index parse failed:', error);
             }
 
             // Get database files if authenticated
             if (isAdoleAuthenticated(adoleApi)) {
-                console.log('[LoadDialog] User is authenticated, fetching code_file atomes...');
                 const files = await listCodeFileAtomes(adoleApi);
-                console.log('[LoadDialog] AdoleAPI.atomes.list result:', files);
                 if (files.length) {
-                    console.log('[LoadDialog] Found', files.length, 'files in database');
                     files.forEach(f => {
                         allFiles.push({
                             ...f,
@@ -816,10 +800,8 @@ const createEditor = (config = {}) => {
                         });
                     });
                 } else {
-                    console.log('[LoadDialog] No files found');
                 }
             } else {
-                console.log('[LoadDialog] User is NOT authenticated, skipping database fetch');
             }
 
             if (!allFiles.length) {
@@ -927,7 +909,6 @@ const createEditor = (config = {}) => {
 
             updateStatus('Ready');
         } catch (error) {
-            console.error('[Editor] Load dialog failed:', error);
             updateStatus('Load failed');
             onError?.(error);
         }
@@ -1077,7 +1058,6 @@ const createEditor = (config = {}) => {
                     updateStatus(`Dropped: ${file.name}`);
                     onDrop?.(file, content);
                 } catch (error) {
-                    console.error('[Editor] File read failed:', error);
                     updateStatus('Failed to read file');
                     onError?.(error);
                 }
@@ -1200,7 +1180,6 @@ const createEditor = (config = {}) => {
                 try {
                     return JSON.stringify(arg, null, 2);
                 } catch (error) {
-                    console.warn('[Editor] output serialization failed:', error);
                     return String(arg);
                 }
             }
@@ -1301,7 +1280,6 @@ const createEditor = (config = {}) => {
                             };
                             script3.onerror = () => {
                                 // Bridge is optional, continue anyway
-                                console.warn('[EditorBuilder] opal-squirrel.js not found, continuing without bridge');
                                 window._opalLoading = null;
                                 res();
                             };
@@ -1503,7 +1481,6 @@ createEditor.loadFile = async (options = {}) => {
             });
         }
     } catch (error) {
-        console.error('[EditorBuilder] loadFile failed:', error);
     }
 
     return null;
@@ -1514,7 +1491,6 @@ createEditor.listFiles = async (options = {}) => {
         const adoleApi = await loadAdoleApi();
         return listCodeFileAtomes(adoleApi, { kind: 'code_file', ...options });
     } catch (error) {
-        console.error('[EditorBuilder] listFiles failed:', error);
         return [];
     }
 };

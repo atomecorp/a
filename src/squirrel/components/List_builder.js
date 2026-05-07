@@ -6,27 +6,26 @@
 
 class List {
   constructor(options = {}) {
-    // console.log('🏗️ Création du composant List avec options:', options);
-    
+
     // Configuration par défaut Material Design
     this.config = {
       id: options.id || `list-${Date.now()}`,
       items: options.items || [],
       position: { x: 0, y: 0, ...options.position },
       size: { width: 300, height: 400, ...options.size },
-      
+
       // Espacement ultra-personnalisable
-      spacing: { 
+      spacing: {
         vertical: options.spacing?.vertical ?? 4,        // Espace entre les éléments
         horizontal: options.spacing?.horizontal ?? 0,    // Marge horizontale
         itemPadding: options.spacing?.itemPadding ?? 16, // Padding interne des éléments
         marginTop: options.spacing?.marginTop ?? 0,      // Marge avant chaque élément
         marginBottom: options.spacing?.marginBottom ?? 0, // Marge après chaque élément
-        ...options.spacing 
+        ...options.spacing
       },
-      
+
       attach: options.attach || 'body',
-      
+
       // Configuration Material Design des éléments
       itemStyle: {
         fontSize: options.itemStyle?.fontSize ?? '14px',
@@ -37,7 +36,7 @@ class List {
         borderRadius: options.itemStyle?.borderRadius ?? '8px',
         ...options.itemStyle
       },
-      
+
       states: {
         hover: {
           backgroundColor: '#f5f5f5',
@@ -54,15 +53,15 @@ class List {
         },
         ...options.states
       },
-      
+
       containerStyle: options.containerStyle || {},
-      
+
       // Options Material Design
       selectable: options.selectable !== false,
       multiSelect: options.multiSelect || false,
       elevation: options.elevation ?? 2,
       rippleEffect: options.rippleEffect !== false,
-      
+
       // Debug
       debug: options.debug || false
     };
@@ -95,24 +94,20 @@ class List {
 
   init() {
     try {
-// console.log(`🚀 Initialisation de la liste "${this.config.id}"...`);
       this.createContainer();
       this.createItems();
       this.setupEventListeners();
       this.isInitialized = true;
 
       if (this.config.debug) {
-// console.log(`✅ List "${this.config.id}" initialisée avec succès`);
-// console.log(`📝 ${this.config.items.length} éléments créés`);
       }
     } catch (error) {
-      console.error(`❌ Erreur lors de l'initialisation de List "${this.config.id}":`, error);
     }
   }
 
   createContainer() {
-    const attachPoint = typeof this.config.attach === 'string' 
-      ? document.querySelector(this.config.attach) 
+    const attachPoint = typeof this.config.attach === 'string'
+      ? document.querySelector(this.config.attach)
       : this.config.attach;
 
     if (!attachPoint) {
@@ -122,19 +117,15 @@ class List {
     this.container = document.createElement('div');
     this.container.id = this.config.id;
     this.container.className = 'list-container';
-    
+
     this.applyContainerStyles();
     attachPoint.appendChild(this.container);
-    
-// console.log(`📦 Container créé et attaché à "${this.config.attach}"`);
-// console.log(`🔍 Container dans le DOM:`, this.container);
-// console.log(`📐 Dimensions:`, this.container.style.width, 'x', this.container.style.height);
-// console.log(`📍 Position:`, this.container.style.left, this.container.style.top);
+
   }
 
   applyContainerStyles() {
     const elevation = this.getElevationShadow(this.config.elevation);
-    
+
     const defaultStyles = {
       position: 'absolute',
       left: `${this.config.position.x}px`,
@@ -167,7 +158,6 @@ class List {
   }
 
   createItems() {
-// console.log(`📋 Création de ${this.config.items.length} éléments...`);
     this.config.items.forEach((itemData, index) => {
       const itemElement = this.createItem(itemData, index);
       this.container.appendChild(itemElement);
@@ -177,19 +167,19 @@ class List {
   createItem(itemData, index) {
     const itemElement = document.createElement('div');
     const itemId = itemData.id || `item-${index}`;
-    
+
     itemElement.id = itemId;
     itemElement.className = 'list-item';
     itemElement.textContent = itemData.content || itemData.text || `Élément ${index + 1}`;
-    
+
     // Stockage des données
     this.itemsMap.set(itemId, itemData);
     this.itemElements.set(itemId, itemElement);
     this.itemStates.set(itemId, 'default');
-    
+
     // Application des styles Material Design
     this.applyItemStyles(itemElement, itemData);
-    
+
     return itemElement;
   }
 
@@ -202,20 +192,20 @@ class List {
       marginBottom: `${this.config.spacing.vertical}px`,
       marginLeft: `${this.config.spacing.horizontal}px`,
       marginRight: `${this.config.spacing.horizontal}px`,
-      
+
       // Texte personnalisable
       fontSize: this.config.itemStyle.fontSize,
       fontWeight: this.config.itemStyle.fontWeight,
       lineHeight: this.config.itemStyle.lineHeight,
       color: this.config.itemStyle.textColor,
       fontFamily: 'inherit',
-      
+
       // Style Material Design
       background: this.config.itemStyle.backgroundColor,
       borderRadius: this.config.itemStyle.borderRadius,
       border: 'none',
       boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-      
+
       // Interactions
       cursor: 'pointer',
       transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
@@ -228,9 +218,9 @@ class List {
     const componentStyles = this.config.itemStyle.default || {};
     const itemSpecificStyles = itemData.style || {};
     const finalStyles = { ...defaultStyles, ...componentStyles, ...itemSpecificStyles };
-    
+
     Object.assign(element.style, finalStyles);
-    
+
     // Ajouter l'effet ripple si activé
     if (this.config.rippleEffect) {
       this.addRippleEffect(element);
@@ -244,7 +234,7 @@ class List {
       const size = Math.max(rect.width, rect.height);
       const x = e.clientX - rect.left - size / 2;
       const y = e.clientY - rect.top - size / 2;
-      
+
       ripple.style.cssText = `
         position: absolute;
         width: ${size}px;
@@ -258,7 +248,7 @@ class List {
         pointer-events: none;
         z-index: 1;
       `;
-      
+
       // Ajouter l'animation CSS si elle n'existe pas
       if (!document.getElementById('ripple-styles')) {
         const style = document.createElement('style');
@@ -273,7 +263,7 @@ class List {
         `;
         document.head.appendChild(style);
       }
-      
+
       element.appendChild(ripple);
       setTimeout(() => ripple.remove(), 600);
     });
@@ -333,7 +323,7 @@ class List {
   handleItemLeave(element) {
     const itemId = element.id;
     const currentState = this.itemStates.get(itemId);
-    
+
     if (currentState === 'hover') {
       const isSelected = this.selectedItems.has(itemId);
       this.applyState(itemId, isSelected ? 'selected' : 'default');
@@ -354,7 +344,7 @@ class List {
     if (!element) return;
 
     const stateStyles = this.config.states[stateName] || {};
-    
+
     if (stateName === 'default') {
       const itemData = this.itemsMap.get(itemId);
       this.applyItemStyles(element, itemData);
@@ -396,10 +386,10 @@ class List {
   addItem(itemData) {
     const index = this.config.items.length;
     this.config.items.push(itemData);
-    
+
     const itemElement = this.createItem(itemData, index);
     this.container.appendChild(itemElement);
-    
+
     return itemData.id || `item-${index}`;
   }
 
@@ -449,12 +439,12 @@ class List {
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
     }
-    
+
     this.itemsMap.clear();
     this.itemElements.clear();
     this.itemStates.clear();
     this.selectedItems.clear();
-    
+
     this.isInitialized = false;
   }
 }

@@ -1802,7 +1802,6 @@ function addResizeListeners(panel, grip, storageKey) {
                             if (settingsPanel) availableHeight -= settingsPanel.offsetHeight;
 
                             lyricsContentArea.style.height = `${Math.max(200, availableHeight)}px`;
-                            console.log('🔄 Updated lyrics content area height:', lyricsContentArea.style.height);
                         }
                     });
                 }

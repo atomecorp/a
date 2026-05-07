@@ -1324,7 +1324,6 @@ function createBlockWrapper(type, container, classNameFn, css = {}) {
 
 function registerBlockType(type, renderer) {
     if (typeof type !== 'string' || !type.trim() || typeof renderer !== 'function') {
-        console.warn('[ModularBlocks] Impossible de créer le type "' + type + '"');
         return;
     }
     BLOCK_RENDERERS.set(type.trim(), renderer);
@@ -1334,7 +1333,6 @@ function renderBlock(container, definition, theme, context) {
     if (!definition || !definition.type) return null;
     const renderer = BLOCK_RENDERERS.get(definition.type);
     if (!renderer) {
-        console.warn('[ModularBlocks] Type de bloc inconnu:', definition.type);
         return null;
     }
     return renderer({
@@ -1921,7 +1919,6 @@ function setupAudioCardWaveform({
             currentSamples = samples;
             drawWaveform(canvas, samples, accentColor);
         } catch (error) {
-            console.warn('[ModularBlocks] Impossible de dessiner la waveform', error);
             showFallback('Waveform non disponible (format ou navigateur non supporté).');
             isDrawing = false;
         }
@@ -2128,14 +2125,13 @@ function renderAudioWave({ container, data, context }) {
             errorLabel.textContent = '';
             const audioCtx = getSharedAudioContext();
             if (audioCtx && audioCtx.state === 'suspended') {
-                try { await audioCtx.resume(); } catch (resumeError) { console.warn(resumeError); }
+                try { await audioCtx.resume(); } catch (resumeError) {}
             }
             if (audioEl.paused) {
                 try {
                     await audioEl.play();
                     playBtn.textContent = 'Pause';
                 } catch (error) {
-                    console.warn('[ModularBlocks][Audio] play error', error);
                     if (error && error.name === 'NotSupportedError') {
                         errorLabel.textContent = 'Lecture impossible : format non supporté par ce navigateur.';
                     } else {
@@ -2286,7 +2282,6 @@ function renderContactModule({ container, data, context }) {
             if (typeof data.onSubmit === 'function') {
                 data.onSubmit(payload);
             } else {
-                console.log('[ModularBlocks][Contact]', payload);
             }
             if (messageLabel) {
                 messageLabel.textContent = data.successMessage || 'Merci pour votre message !';

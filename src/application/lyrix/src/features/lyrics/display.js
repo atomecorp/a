@@ -11,7 +11,6 @@ const setElementDisplay = (id, displayValue) => {
             target.style.display = displayValue;
         }
     } catch (error) {
-        console.warn('[lyricsDisplay] Failed to toggle display for', id, error);
     }
 };
 
@@ -596,7 +595,6 @@ export class LyricsDisplay {
             displayContainer.style.top = '52px';
         }
 
-        // console.log('🔄 Updated display container height:', availableHeight, 'px, settings height:', settingsHeight, 'px');
     }
 
     // Handle keyboard shortcuts
@@ -1017,14 +1015,12 @@ export class LyricsDisplay {
         const titleInput = document.getElementById('edit_title_input');
         if (titleInput) {
             titleInput.value = this.currentLyrics.metadata.title || '';
-            console.log('🔄 Updated title input:', titleInput.value);
         }
 
         // Update artist input
         const artistInput = document.getElementById('edit_artist_input');
         if (artistInput) {
             artistInput.value = this.currentLyrics.metadata.artist || '';
-            console.log('🔄 Updated artist input:', artistInput.value);
         }
 
         // Update time offset input if it exists
@@ -1035,7 +1031,6 @@ export class LyricsDisplay {
                 this.currentLyrics.metadata.timeOffset = 0;
             }
             offsetInput.value = (this.currentLyrics.metadata.timeOffset / 1000).toFixed(2);
-            console.log('🔄 Updated offset input:', offsetInput.value);
         }
     }
 
@@ -1139,19 +1134,15 @@ export class LyricsDisplay {
             // Ensure metadata exists and has timeOffset property - FORCE INIT
             if (!this.currentLyrics.metadata) {
                 this.currentLyrics.metadata = {};
-                console.log('🔧 Created empty metadata object');
             }
             if (this.currentLyrics.metadata.timeOffset === undefined ||
                 this.currentLyrics.metadata.timeOffset === null ||
                 isNaN(this.currentLyrics.metadata.timeOffset)) {
                 this.currentLyrics.metadata.timeOffset = 0;
-                console.log('🔧 Set timeOffset to 0');
             }
             let storedOffset = this.currentLyrics.metadata.timeOffset;
 
             // DEBUG: Log all metadata to see what's actually stored
-            console.log('🔍 Full metadata at render:', JSON.stringify(this.currentLyrics.metadata, null, 2));
-            console.log('🔍 Song ID:', this.currentLyrics.songId);
 
             // Try to reload from storage if offset is 0 (maybe metadata wasn't loaded properly)
             if (storedOffset === 0 && this.currentLyrics.songId) {
@@ -1159,7 +1150,6 @@ export class LyricsDisplay {
                 if (reloadedSong && reloadedSong.metadata && reloadedSong.metadata.timeOffset !== undefined) {
                     storedOffset = reloadedSong.metadata.timeOffset;
                     this.currentLyrics.metadata.timeOffset = storedOffset;
-                    console.log('🔄 Reloaded offset from storage:', storedOffset);
                 }
             }
 
@@ -1167,10 +1157,8 @@ export class LyricsDisplay {
             if (storedOffset === undefined || storedOffset === null || isNaN(storedOffset)) {
                 storedOffset = 0;
                 this.currentLyrics.metadata.timeOffset = 0;
-                console.log('🔧 EMERGENCY: Forced offset to 0');
             }
 
-            console.log('🎯 Final offset value:', storedOffset, typeof storedOffset);
 
             const offsetInput = $('input', {
                 id: 'time_offset_input',
@@ -1226,9 +1214,7 @@ export class LyricsDisplay {
             setTimeout(() => {
                 if (offsetInput.value === '' || offsetInput.value === 'undefined' || offsetInput.value === 'null') {
                     offsetInput.value = storedOffset.toFixed(2);
-                    console.log('🎯 Force fixed empty input to:', storedOffset.toFixed(2));
                 } else {
-                    console.log('🎯 Input already has value:', offsetInput.value, '- no need to force fix');
                 }
             }, 10);
 
@@ -1248,7 +1234,6 @@ export class LyricsDisplay {
                     const value = parseFloat(e.target.value) || 0;
                     // Just update the current offset, don't save yet (save on Enter or blur)
                     this.currentTimeOffset = value;
-                    console.log('🎯 Input changed:', value);
                 }
             });
 
@@ -1277,7 +1262,6 @@ export class LyricsDisplay {
                     StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 }
 
-                console.log('🎯 Blur event, stored offset:', value, 'in song:', this.currentLyrics.songId);
 
                 // If empty when focus lost, reset to current stored value
                 if (e.target.value === '') {
@@ -1304,7 +1288,6 @@ export class LyricsDisplay {
                         StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                     }
 
-                    console.log('🎯 Enter pressed, stored offset:', value, 'in song:', this.currentLyrics.songId);
                     e.target.blur(); // Remove focus after saving
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
@@ -2004,7 +1987,6 @@ export class LyricsDisplay {
                         block: 'center'
                     });
                     if (this.recordMode && isManual) {
-                        console.log(`🔧 Ligne ${index} recentrée en mode record (setActiveLineIndex)`);
                     }
                 }
             }
@@ -2074,7 +2056,6 @@ export class LyricsDisplay {
     createNewEmptySong() {
         // Import SyncedLyrics if not available
         if (!window.Lyrix || !window.Lyrix.SyncedLyrics) {
-            console.error('❌ SyncedLyrics not available');
             return;
         }
 
@@ -2109,7 +2090,6 @@ export class LyricsDisplay {
             this.currentLyrics = newSong;
         }
 
-        console.log('✅ Created new empty song for editing');
     }
 
 
@@ -3802,7 +3782,6 @@ export class LyricsDisplay {
 
         // If both are active and this is a local update, ignore it to give priority to host
         if (hostActive && localActive && source === 'local') {
-            console.log('🎯 Host priority: ignoring local update while host is active');
             return;
         }
 
@@ -3819,7 +3798,6 @@ export class LyricsDisplay {
         // This prevents the timecode display from jumping to 0 when host sends resets
         if (timeMs === 0 && this.currentTime > 1000 && source === 'host') {
             // Host is sending a zero reset but we have valid content - skip timecode display update
-            console.log(`🚨 Blocking timecode display reset to zero (current: ${(this.currentTime / 1000).toFixed(3)}s)`);
             // Still update scroll/lyrics but skip the timecode and currentTime update
         } else {
             // Normal update: update both currentTime and timecode display
@@ -3858,7 +3836,6 @@ export class LyricsDisplay {
             if (timeMs === 0 && this.lastValidTimecodeUpdate && (Date.now() - this.lastValidTimecodeUpdate) < 2000) {
                 // Throttle protection logging to avoid spam
                 if (!this.lastProtectionLog || (Date.now() - this.lastProtectionLog) > 3000) {
-                    console.log(`🛡️ Protecting timecode display from resets (last valid: ${(this.lastValidTimecode / 1000).toFixed(3)}s)`);
                     this.lastProtectionLog = Date.now();
                 }
                 return; // Keep the current display value
@@ -4239,7 +4216,6 @@ export class LyricsDisplay {
                     StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 }
 
-                console.log('🎯 Drag ended, stored offset:', finalValue, 'in song:', this.currentLyrics.songId);
             }
             mouseIsDown = false;
         });
@@ -4289,7 +4265,6 @@ export class LyricsDisplay {
                     StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 }
 
-                console.log('🎯 Touch ended, stored offset:', finalValue, 'in song:', this.currentLyrics.songId);
             }
         });
     }
@@ -4359,7 +4334,6 @@ export class LyricsDisplay {
                 });
             });
 
-            console.log(`Applied time offset of ${offsetSeconds}s to ${appliedCount} lines`);
         }
     }
 

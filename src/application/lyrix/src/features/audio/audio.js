@@ -242,7 +242,6 @@ export class AudioController {
             try {
                 callback(...args);
             } catch (error) {
-                console.warn('[AudioController] Event handler error (' + event + '):', error);
             }
         });
     }
@@ -496,7 +495,6 @@ export class AudioController {
         player.addEventListener('error', (e) => {
             const err = e.target.error;
             if (err) {
-                console.warn('[AudioController] Media error:', err.code, err.message);
             }
             this.emit('error', err);
         }, { signal });
@@ -537,7 +535,6 @@ export class AudioController {
                             this.audioPlayer.currentTime = time;
                         }
                     } catch (retryError) {
-                        console.warn('[AudioController] iOS seek retry failed:', retryError);
                     }
                 }, 100);
             }
@@ -597,7 +594,6 @@ export class AudioController {
                 } else if (error.name === 'AbortError') {
                     // play() interrupted by pause() or new load — not a real error
                 } else {
-                    console.warn('[AudioController] play() failed:', error.name, error.message);
                 }
                 this.emit('error', error);
             });
@@ -667,7 +663,6 @@ export class AudioController {
                     try {
                         this.audioPlayer.volume = Math.max(0, Math.min(1, value));
                     } catch (error) {
-                        console.warn('[AudioController] volume set failed:', error);
                         return false;
                     }
                 }
@@ -761,7 +756,6 @@ export class AudioController {
             return true;
 
         } catch (error) {
-            console.warn('[AudioController] loadFromUrl failed:', error);
             if (isIOS) {
                 this.handleIOSAudioError(error, 'URL loading');
             }
@@ -879,7 +873,6 @@ export class AudioController {
                     this.audioPlayer.src = '';
                     this.audioPlayer.load();
                 } catch (error) {
-                    console.warn('[AudioController] iOS cleanup error:', error);
                 }
             }
 
@@ -907,7 +900,6 @@ export class AudioController {
             const limitMB = Math.round(memoryInfo.jsHeapSizeLimit / 1024 / 1024);
 
             if (usedMB > limitMB * 0.8) {
-                console.warn('[AudioController] High memory usage:', usedMB + '/' + limitMB + ' MB');
                 return false;
             }
         }

@@ -173,11 +173,7 @@ export const createGlobalVoiceApi = ({
                 .then((service) => {
                     unsubscribe = service.runtime.subscribe(listener);
                 })
-                .catch((error) => {
-                    if (env?.console?.warn) {
-                        env.console.warn('[voice.bootstrap] Voice subscription failed:', error?.message || error);
-                    }
-                });
+                .catch(() => { });
             return () => unsubscribe();
         },
         async listen(options = {}) {
@@ -263,11 +259,7 @@ export const bootstrapGlobalVoice = ({
     if (env?.document && shouldEnableVoicePanel(env)) {
         bootstrapVoicePanel({ env, voiceApi: api });
     }
-    api.ensureReady().catch((error) => {
-        if (env?.console?.warn) {
-            env.console.warn('[voice.bootstrap] Voice bootstrap failed:', error?.message || error);
-        }
-    });
+    api.ensureReady().catch(() => { });
     return api;
 };
 

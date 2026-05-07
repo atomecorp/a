@@ -130,25 +130,25 @@ const collectSpeechHints = (env, sessionRuntime, sessionId, options = {}) => {
 
     const workingMemory = sessionRuntime?.workingMemory || null;
     if (workingMemory) {
-        
-            appendSpeechHintsFromValue(hints, workingMemory.getSessionPreferences?.());
-        
-        
-            appendSpeechHintsFromValue(hints, workingMemory.listActiveEntities?.());
-        
+
+        appendSpeechHintsFromValue(hints, workingMemory.getSessionPreferences?.());
+
+
+        appendSpeechHintsFromValue(hints, workingMemory.listActiveEntities?.());
+
         for (const domain of ['atome', 'mail', 'contacts', 'calendar']) {
-            
-                appendSpeechHintsFromValue(hints, workingMemory.getCurrentItem?.(domain));
-            
+
+            appendSpeechHintsFromValue(hints, workingMemory.getCurrentItem?.(domain));
+
         }
     }
 
     if (sessionRuntime && sessionId) {
-        
-            const snapshot = sessionRuntime.getSession(sessionId);
-            appendSpeechHintsFromValue(hints, snapshot?.conversation?.active_intent);
-            appendSpeechHintsFromValue(hints, snapshot?.conversation?.last_user_text);
-        
+
+        const snapshot = sessionRuntime.getSession(sessionId);
+        appendSpeechHintsFromValue(hints, snapshot?.conversation?.active_intent);
+        appendSpeechHintsFromValue(hints, snapshot?.conversation?.last_user_text);
+
     }
 
     return Array.from(hints)
@@ -454,11 +454,7 @@ export const createVoiceService = ({
     if (!existingToolRouter && hasExplicitConnectorHost && typeof orchestrator.initToolRouter === 'function') {
         orchestrator.initToolRouter({
             workingMemory: sessionRuntime?.workingMemory ?? null
-        }).catch((err) => {
-            if (env?.console?.warn) {
-                env.console.warn('[voice:service] initToolRouter failed:', err?.message || err);
-            }
-        });
+        }).catch(() => { });
     }
 
     const resolveResponseLocale = (response = {}, options = {}) => {

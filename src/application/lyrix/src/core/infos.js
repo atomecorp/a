@@ -47,4 +47,3 @@ export function getBuildInfo() {
     };
 }
 
-console.log(`🎵 ${getFullVersionInfo()} initialized`);

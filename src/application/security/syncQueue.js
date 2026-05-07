@@ -86,7 +86,6 @@ function decryptFromStorage(encrypted) {
         }
         return JSON.parse(result);
     } catch (e) {
-        console.warn('[syncQueue] Failed to decrypt:', e.message);
         return null;
     }
 }
@@ -105,7 +104,6 @@ export function getQueue() {
         if (!encrypted) return [];
         return decryptFromStorage(encrypted) || [];
     } catch (e) {
-        console.warn('[syncQueue] Failed to load queue:', e.message);
         return [];
     }
 }
@@ -119,7 +117,6 @@ function saveQueue(queue) {
         const encrypted = encryptForStorage(queue);
         localStorage.setItem(QUEUE_STORAGE_KEY, encrypted);
     } catch (e) {
-        console.error('[syncQueue] Failed to save queue:', e.message);
     }
 }
 
@@ -161,10 +158,8 @@ export function addToQueue(action) {
     if (existingIndex >= 0) {
         // Update existing action instead of adding duplicate
         queue[existingIndex] = { ...queue[existingIndex], ...queueItem, id: queue[existingIndex].id };
-        console.log(`[syncQueue] Updated existing action: ${queue[existingIndex].id}`);
     } else {
         queue.push(queueItem);
-        console.log(`[syncQueue] Added action: ${actionId} (${action.type})`);
     }
 
     saveQueue(queue);
@@ -179,7 +174,6 @@ export function removeFromQueue(actionId) {
     const queue = getQueue();
     const newQueue = queue.filter(q => q.id !== actionId);
     saveQueue(newQueue);
-    console.log(`[syncQueue] Removed action: ${actionId}`);
 }
 
 /**
@@ -237,7 +231,6 @@ export function cleanupOldActions(days = 7) {
 
     if (newQueue.length !== queue.length) {
         saveQueue(newQueue);
-        console.log(`[syncQueue] Cleaned up ${queue.length - newQueue.length} old actions`);
     }
 }
 
@@ -266,9 +259,7 @@ export function storeCredentialsForSync(userId, password, enableAutoSync = true)
 
         const encrypted = encryptForStorage(allCredentials);
         localStorage.setItem(CREDENTIALS_STORAGE_KEY, encrypted);
-        console.log(`[syncQueue] Credentials stored for user: ${userId}`);
     } catch (e) {
-        console.error('[syncQueue] Failed to store credentials:', e.message);
     }
 }
 
@@ -310,7 +301,6 @@ export function removeCredentials(userId) {
         const encrypted = encryptForStorage(allCredentials);
         localStorage.setItem(CREDENTIALS_STORAGE_KEY, encrypted);
     }
-    console.log(`[syncQueue] Credentials removed for user: ${userId}`);
 }
 
 /**
@@ -364,7 +354,6 @@ export function saveSyncConfig(config) {
         const updated = { ...current, ...config };
         localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(updated));
     } catch (e) {
-        console.error('[syncQueue] Failed to save config:', e.message);
     }
 }
 
@@ -388,7 +377,6 @@ export async function isCloudServerAvailable(serverUrl) {
         });
         return response.ok;
     } catch (e) {
-        console.log('[syncQueue] Server availability check failed:', e.message);
         return false;
     }
 }
@@ -439,13 +427,10 @@ export async function processAction(action, cloudServerUrl) {
 
         if (result.success) {
             updateActionStatus(action.id, ActionStatus.COMPLETED);
-            console.log(`[syncQueue] Action completed: ${action.id}`);
         } else if (action.retryCount < action.maxRetries) {
             updateActionStatus(action.id, ActionStatus.RETRY, result.error);
-            console.log(`[syncQueue] Action will retry: ${action.id} (attempt ${action.retryCount + 1})`);
         } else {
             updateActionStatus(action.id, ActionStatus.FAILED, result.error);
-            console.log(`[syncQueue] Action failed permanently: ${action.id}`);
         }
 
         return result;
@@ -596,7 +581,6 @@ export async function processAllPendingActions(cloudServerUrl = null) {
         return { success: true, message: 'No pending actions', processed: 0 };
     }
 
-    console.log(`[syncQueue] Processing ${pending.length} pending actions...`);
 
     const results = {
         success: true,
@@ -632,7 +616,6 @@ export async function processAllPendingActions(cloudServerUrl = null) {
         lastSuccessfulSync: results.failed === 0 ? new Date().toISOString() : config.lastSuccessfulSync
     });
 
-    console.log(`[syncQueue] Sync complete: ${results.succeeded} succeeded, ${results.failed} failed, ${results.requiresManual} need manual sync`);
 
     return results;
 }
@@ -650,7 +633,6 @@ export function startAutoSync() {
     const config = getSyncConfig();
 
     if (!config.autoSyncEnabled || !config.cloudServerUrl) {
-        console.log('[syncQueue] Auto-sync not enabled or no server configured');
         return;
     }
 
@@ -659,17 +641,15 @@ export function startAutoSync() {
 
     // Sync immediately on startup if configured
     if (config.syncOnStartup) {
-        console.log('[syncQueue] Running startup sync...');
-        processAllPendingActions().catch(e => console.warn('[syncQueue] Startup sync error:', e));
+        processAllPendingActions().catch(() => { });
     }
 
     // Set up interval
     const intervalMs = (config.syncIntervalMinutes || 5) * 60 * 1000;
     syncIntervalId = setInterval(() => {
-        processAllPendingActions().catch(e => console.warn('[syncQueue] Scheduled sync error:', e));
+        processAllPendingActions().catch(() => { });
     }, intervalMs);
 
-    console.log(`[syncQueue] Auto-sync started (every ${config.syncIntervalMinutes} minutes)`);
 }
 
 /**
@@ -679,7 +659,6 @@ export function stopAutoSync() {
     if (syncIntervalId) {
         clearInterval(syncIntervalId);
         syncIntervalId = null;
-        console.log('[syncQueue] Auto-sync stopped');
     }
 }
 
@@ -700,12 +679,10 @@ export function initSyncQueue() {
     // Listen for online events
     if (typeof window !== 'undefined') {
         window.addEventListener('online', () => {
-            console.log('[syncQueue] Network online - triggering sync');
-            processAllPendingActions().catch(e => console.warn('[syncQueue] Online sync error:', e));
+            processAllPendingActions().catch(() => { });
         });
     }
 
-    console.log('[syncQueue] Sync queue initialized');
 }
 
 // =============================================================================

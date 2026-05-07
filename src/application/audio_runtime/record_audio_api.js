@@ -17,13 +17,6 @@ import {
 
     function logRecordDiag(event, detail = {}) {
         try {
-            console.warn('[record_audio_api]', event, {
-                ...detail,
-                provider: window.__SQUIRREL_RECORD_PROVIDER__ || null,
-                host_env: window.__HOST_ENV || null,
-                auv3_mode: window.__AUV3_MODE__ === true,
-                href: window.location?.href || null
-            });
         } catch (_) { }
     }
 

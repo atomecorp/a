@@ -629,7 +629,6 @@ async function createUploadAtome({ fileName, originalName, relPath, mimeType, si
         const ok = okTauri || okFastify;
         const fastifyError = res?.fastify?.error || null;
         if (!ok) {
-            console.warn('[aBox] Atome create failed:', res?.tauri?.error || res?.fastify?.error || res);
         }
         return {
             ok,
@@ -641,7 +640,6 @@ async function createUploadAtome({ fileName, originalName, relPath, mimeType, si
             res
         };
     } catch (error) {
-        console.warn('[aBox] Atome create failed:', error?.message || error);
         return { ok: false, id: resolvedId, type: atomeType, filePath: relativePath, fastifyOk: false, fastifyDeferred: false };
     }
 }
@@ -897,7 +895,6 @@ function renderUploadsList(files) {
                     const added = addShareSelection(itemKey, relatedIds, metaById);
                     if (!added) puts('[aBox] Aucun atome associe pour ce fichier.');
                 } catch (error) {
-                    console.warn('[aBox] Selection failed:', error);
                 } finally {
                     buttonEl.disabled = false;
                     applyShareButtonState(buttonEl, isShareSelectionActive(itemKey));
@@ -1086,7 +1083,6 @@ async function refreshUploadsList() {
             renderUploadsList([]);
             return;
         }
-        console.error('Unable to refresh uploads list:', error);
         const container = document.getElementById(uploadsListBodyId);
         if (container) {
             container.innerHTML = '';
@@ -1163,7 +1159,6 @@ async function downloadUpload(fileId, fileName) {
             }, 0);
             return;
         } catch (error) {
-            console.error('Download error:', error);
             puts(`[download] échec pour ${fileName || fileId || 'fichier'} : ${error.message}`);
         }
     }
@@ -1265,7 +1260,6 @@ async function uploadDroppedFiles(fileList) {
         try {
             await sendFileToServer(entry);
         } catch (error) {
-            console.error('Upload error:', error);
             puts(`[upload] échec pour ${entry && entry.name ? entry.name : 'inconnu'} : ${error.message}`);
         }
     }

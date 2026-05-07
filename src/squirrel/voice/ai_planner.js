@@ -515,18 +515,6 @@ export const createVoiceAiPlanner = ({
         } catch (error) {
             const normalized = normalizeAiProviderError(error);
             if (typeof console?.warn === 'function') {
-                console.warn(
-                    '[eVe:voice:ai_planner] AI provider error',
-                    JSON.stringify({
-                        classified_code: normalized.code,
-                        provider_id: providerConfig.providerId,
-                        model: providerConfig.model,
-                        message: normalized.message,
-                        provider_code: normalized.provider_code || null,
-                        provider_message: normalized.provider_message || null,
-                        raw_body: (normalized.raw_body || '').slice(0, 500)
-                    })
-                );
             }
             usageTracker.recordIncident({
                 provider: providerConfig.providerId,

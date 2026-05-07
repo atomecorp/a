@@ -58,19 +58,12 @@ const isRealtimeDedupDebugEnabled = () => {
     if (window.__EVE_DEBUG_REALTIME_DEDUP__ === true) return true;
     try {
         return window.localStorage?.getItem('eve.debug.realtime_dedup') === '1';
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+    } catch {
         return false;
     }
 };
 
-const logRealtimeDedup = (stage, detail = {}) => {
-    if (!isRealtimeDedupDebugEnabled()) return;
-    try {
-        console.log('[eVe:realtime_dedup]', stage, detail);
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
-};
+const logRealtimeDedup = () => { };
 
 const parseFiniteRealtimeNumber = (value) => {
     const normalized = normalizeValue(value);
@@ -175,8 +168,7 @@ const getCurrentUserId = () => {
             const info = api.auth.getCurrentInfo();
             return info?.user_id || info?.userId || info?.id || info?.atome_id || null;
         }
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+    } catch { }
     return null;
 };
 

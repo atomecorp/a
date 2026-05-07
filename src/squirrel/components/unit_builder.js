@@ -1014,7 +1014,6 @@ class Unit {
     this.element.style.minHeight = `${totalHeight}px`;
 
     // Optionnel: Log pour debug
-    console.log(`📏 Unit ${this.name}: ${maxConnectors} connecteurs max → hauteur ${totalHeight}px`);
   }
 
   select() {

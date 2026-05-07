@@ -75,7 +75,6 @@ function createMenu(options = {}) {
     // Point d'attachement
     const attachPoint = document.querySelector(config.attach);
     if (!attachPoint) {
-      console.error(`❌ Point d'attachement "${config.attach}" introuvable`);
       return null;
     }
 
@@ -84,7 +83,6 @@ function createMenu(options = {}) {
     attachPoint.appendChild(container);
     
     if (config.debug) {
-      console.log(`📦 Container menu créé et attaché à "${config.attach}"`);
     }
     
     return container;
@@ -463,7 +461,6 @@ function createMenu(options = {}) {
   });
 
   if (config.debug) {
-    console.log(`✅ Menu "${config.id}" créé avec succès`);
   }
 
   // Retourner l'élément DOM du container

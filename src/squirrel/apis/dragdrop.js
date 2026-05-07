@@ -167,7 +167,7 @@ export function createDropZone(target, options = {}) {
         if (!opts.multiple && normalized.length > 1) normalized = [normalized[0]];
 
         if (typeof opts.onDrop === 'function') {
-            try { opts.onDrop(normalized, e); } catch (err) { console.error('onDrop callback error', err); }
+            try { opts.onDrop(normalized, e); } catch (err) {}
         }
     };
 

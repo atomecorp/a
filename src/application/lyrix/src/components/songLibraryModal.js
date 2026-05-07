@@ -39,9 +39,7 @@ function exportSongLibraryAsLRX() {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
-        console.log('Export LRX triggered');
     } catch (error) {
-        console.error('❌ Export LRX failed', error);
     }
 }
 window.exportSongLibraryAsLRX = exportSongLibraryAsLRX;
@@ -429,9 +427,7 @@ export function showSongLibrary() {
                 a.href = url; a.download = name; a.style.display = 'none';
                 document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
             }
-            console.log('Export LRX triggered');
         } catch (error) {
-            console.error('❌ Export LRX failed', error);
         }
     }
     // const exportLRXButton = makeMiniBtn({
@@ -657,7 +653,6 @@ export function showSongLibrary() {
                 window.lyricsDisplay.createNewEmptySong();
                 if (window.toggleLyricsEditMode) window.toggleLyricsEditMode();
             } else {
-                console.warn('❌ Impossible de créer une chanson : createNewEmptySong non disponible');
             }
         }
     });
@@ -727,7 +722,6 @@ export function showSongLibrary() {
             try {
                 sortSongsAlphabetically();
             } catch (e) {
-                console.warn('Sort A-Z failed:', e);
             }
         }
     });

@@ -74,7 +74,6 @@ export async function syncToCloud(options) {
     try {
         // Step 1: Verify server identity (unless skipped)
         if (shouldVerify) {
-            console.log('🔐 Verifying cloud server identity...');
             const verification = await verifyServer(cloudServerUrl);
 
             if (!verification.verified) {
@@ -86,14 +85,11 @@ export async function syncToCloud(options) {
 
             if (!verification.isOfficial) {
                 // Warning but allow if user explicitly requests
-                console.warn('⚠️ Syncing to unofficial server:', verification.serverName);
             }
 
-            console.log('✅ Server verified:', verification.serverName);
         }
 
         // Step 2: Check if account already exists on cloud
-        console.log('🔍 Checking for existing cloud account...');
 
         const checkResponse = await fetch(`${cloudServerUrl}/api/auth/check-phone`, {
             method: 'POST',
@@ -107,7 +103,6 @@ export async function syncToCloud(options) {
 
         if (checkData.exists) {
             // Account exists - try to link by logging in
-            console.log('📱 Phone number found on cloud, attempting to link...');
 
             const loginResponse = await fetch(`${cloudServerUrl}/api/auth/login`, {
                 method: 'POST',
@@ -142,7 +137,6 @@ export async function syncToCloud(options) {
         }
 
         // Step 3: Create new cloud account
-        console.log('☁️ Creating new cloud account...');
 
         const registerResponse = await fetch(`${cloudServerUrl}/api/auth/register`, {
             method: 'POST',
@@ -192,7 +186,6 @@ async function updateLocalAccountCloudId(localToken, cloudId) {
 
     // Skip if no local server (pure browser mode)
     if (!localServerUrl) {
-        console.log('[cloudSync] Skipping local update - no local server available');
         return;
     }
 
@@ -208,10 +201,8 @@ async function updateLocalAccountCloudId(localToken, cloudId) {
         });
 
         if (!response.ok) {
-            console.warn('Failed to update local account with cloud ID');
         }
     } catch (err) {
-        console.warn('Failed to update local account:', err.message);
     }
 }
 

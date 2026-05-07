@@ -51,7 +51,6 @@ export function create_svg(cfg) {
                 return waitNextFrames(2).then(() => svgId);
             })
             .catch((err) => {
-                console.error(`Erreur (create_svg):${icon}, ${err}`);
                 return null;
             });
     }

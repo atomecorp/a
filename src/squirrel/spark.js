@@ -292,6 +292,4 @@ const bootstrapSpark = async () => {
   });
 };
 
-bootstrapSpark().catch((error) => {
-  console.error('❌ Spark bootstrap error:', error);
-});
+bootstrapSpark().catch(() => {});

@@ -544,7 +544,7 @@ const JEEZS_DEMO_BLOCKS = [
         { label: tx('banner.actions.start', 'Commencer'), href: '#', target: '_self' },
         {
           label: tx('banner.actions.add', 'Ajouter un bloc'),
-          onClick: () => console.log(i18n.t('demo.banner.actions.add', 'Ajouter un bloc'))
+          onClick: () => void 0
         }
       ],
       media: {
@@ -667,7 +667,6 @@ const JEEZS_DEMO_BLOCKS = [
       successMessage: tx('contact.successMessage', 'Votre message est bien envoyé. À très vite !'),
       helperText: tx('contact.helperText', 'Nous lisons chaque message avec attention.'),
       onSubmit: (payload) => {
-        console.log('[Jeezs Demo][Contact]', payload);
       }
     }
   },

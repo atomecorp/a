@@ -65,7 +65,6 @@ function createTemplate(options = {}) {
     }
 
     if (!attachPoint) {
-      console.warn(`⚠️ Point d'attachement "${config.attach}" non trouvé, utilisation de body`);
       attachPoint = document.body;
     }
 
@@ -97,7 +96,6 @@ function createTemplate(options = {}) {
     attachPoint.appendChild(container);
     
     if (config.debug) {
-      console.log(`📦 Template component créé et attaché à "${config.attach}"`);
     }
 
     return container;

@@ -96,13 +96,10 @@ window.currentTheme = {
 
 // Add the puts method to display in the console
 window.puts = function puts(val) {
-  console.log(val);
 };
 
 // Add the print method to display in the console without newline (Ruby-like)
 window.print = function print(val) {
-  // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
-  console.log('[PRINT]', val);
 };
 
 // Add the grab method to retrieve DOM elements
@@ -117,20 +114,20 @@ window.grab = (function () {
   };
 
   const resolveSelectableId = (thing, fallbackId = null) => {
-    
-      if (!thing) return null;
-      if (typeof thing === 'string') return thing;
 
-      // DOM element id conventions
-      const elId = thing.id ? String(thing.id) : '';
-      if (elId.startsWith('atome_')) return elId.slice('atome_'.length);
-      if (elId.startsWith('project_view_')) return elId.slice('project_view_'.length);
-      if (looksLikeUuid(elId)) return elId;
+    if (!thing) return null;
+    if (typeof thing === 'string') return thing;
 
-      // Common object id fields
-      const candidate = thing.atome_id || thing.object_id || thing.id || null;
-      if (candidate && looksLikeUuid(candidate)) return String(candidate);
-    
+    // DOM element id conventions
+    const elId = thing.id ? String(thing.id) : '';
+    if (elId.startsWith('atome_')) return elId.slice('atome_'.length);
+    if (elId.startsWith('project_view_')) return elId.slice('project_view_'.length);
+    if (looksLikeUuid(elId)) return elId;
+
+    // Common object id fields
+    const candidate = thing.atome_id || thing.object_id || thing.id || null;
+    if (candidate && looksLikeUuid(candidate)) return String(candidate);
+
 
     if (fallbackId && looksLikeUuid(fallbackId)) return String(fallbackId);
     return fallbackId ? String(fallbackId) : null;
@@ -143,11 +140,11 @@ window.grab = (function () {
     let _last = null;
 
     const publish = () => {
-      
-        window.__selectedAtomeId = _last;
-        window.__selectedAtomeIds = Array.from(_selected);
-        window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: _last, selected: Array.from(_selected) } }));
-      
+
+      window.__selectedAtomeId = _last;
+      window.__selectedAtomeIds = Array.from(_selected);
+      window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: _last, selected: Array.from(_selected) } }));
+
     };
 
     window.SelectionAPI = {
@@ -195,25 +192,25 @@ window.grab = (function () {
   const enhanceSelectable = (obj, fallbackId = null) => {
     if (!obj) return obj;
     if (obj._enhancedSelection) return obj;
-    
-      Object.defineProperty(obj, '_enhancedSelection', { value: true, enumerable: false });
 
-      Object.defineProperty(obj, 'select', {
-        value: function (options = {}) {
-          const api = ensureSelectionApi();
-          return api.select(this, { ...options, fallbackId });
-        },
-        enumerable: false
-      });
+    Object.defineProperty(obj, '_enhancedSelection', { value: true, enumerable: false });
 
-      Object.defineProperty(obj, 'selected', {
-        value: function () {
-          const api = ensureSelectionApi();
-          return api.selected();
-        },
-        enumerable: false
-      });
-    
+    Object.defineProperty(obj, 'select', {
+      value: function (options = {}) {
+        const api = ensureSelectionApi();
+        return api.select(this, { ...options, fallbackId });
+      },
+      enumerable: false
+    });
+
+    Object.defineProperty(obj, 'selected', {
+      value: function () {
+        const api = ensureSelectionApi();
+        return api.selected();
+      },
+      enumerable: false
+    });
+
     return obj;
   };
 

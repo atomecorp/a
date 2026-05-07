@@ -136,7 +136,6 @@ export class UIManager {
                 return svgElement;
             })
             .catch(error => {
-                console.error('Error loading SVG:', error);
                 return document.createTextNode('⚙️'); // Fallback to emoji
             });
     }

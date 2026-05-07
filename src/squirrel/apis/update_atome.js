@@ -66,7 +66,6 @@ const AtomeUpdater = (function () {
      * Log with prefix
      */
     function log(message, ...args) {
-        console.log(`[AtomeUpdater] ${message}`, ...args);
     }
 
     /**

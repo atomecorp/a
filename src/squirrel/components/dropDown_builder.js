@@ -285,7 +285,7 @@ function dropDown(config) {
     }
     // Fire callback
     if (typeof onChange === 'function') {
-      try { onChange(value, label, i); } catch (err) { console.error('dropDown onChange error', err); }
+      try { onChange(value, label, i); } catch (err) {}
     }
     // Fire DOM event for external listeners
     try {
@@ -319,7 +319,7 @@ function dropDown(config) {
       updateHighlight();
       if (typeof onHover === 'function') {
         const opt = opts[i];
-        try { onHover(opt.value, opt.label, i); } catch (err) { console.error('dropDown onHover error', err); }
+        try { onHover(opt.value, opt.label, i); } catch (err) {}
       }
     });
 

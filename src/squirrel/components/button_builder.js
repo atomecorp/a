@@ -270,7 +270,6 @@ const buttonTemplates = {
 const applyTemplate = (config, templateName) => {
   const template = buttonTemplates[templateName];
   if (!template) {
-    console.warn(`Template "${templateName}" non trouvé. Templates disponibles:`, Object.keys(buttonTemplates));
     return config;
   }
 
@@ -794,18 +793,15 @@ const createButton = (config = {}) => {
       // Exécuter l'action appropriée (with async error handling)
       if (currentToggleState && button._handlers.onAction) {
         Promise.resolve(button._handlers.onAction(currentToggleState, button)).catch(err => {
-          console.error('[Button] onAction error:', err);
         });
       } else if (!currentToggleState && button._handlers.offAction) {
         Promise.resolve(button._handlers.offAction(currentToggleState, button)).catch(err => {
-          console.error('[Button] offAction error:', err);
         });
       }
 
       // Callback de changement d'état
       if (onStateChange) {
         Promise.resolve(onStateChange(currentToggleState, button)).catch(err => {
-          console.error('[Button] onStateChange error:', err);
         });
       }
 
@@ -838,14 +834,12 @@ const createButton = (config = {}) => {
       // Exécuter l'action de l'état (with async error handling)
       if (newState.action) {
         Promise.resolve(newState.action(newState, currentStateIndex, button)).catch(err => {
-          console.error('[Button] state action error:', err);
         });
       }
 
       // Callback de changement d'état
       if (onStateChange) {
         Promise.resolve(onStateChange(newState, currentStateIndex, button)).catch(err => {
-          console.error('[Button] onStateChange error:', err);
         });
       }
 
@@ -853,14 +847,12 @@ const createButton = (config = {}) => {
       // Mode bouton classique (with async error handling)
       if (button._handlers.onClick) {
         Promise.resolve(button._handlers.onClick(event, button)).catch(err => {
-          console.error('[Button] onClick error:', err);
         });
       }
     }
   };
 
   // Création du conteneur principal
-  // console.log('🔍 CSS final avant création DOM:', { backgroundColor: containerStyles.backgroundColor, color: containerStyles.color });
 
   // ✅ Nettoyer les styles CSS pour éviter les propriétés parasites
   const cleanStyles = {};
@@ -871,7 +863,6 @@ const createButton = (config = {}) => {
     }
   });
 
-  // console.log('🔍 cleanStyles:', { backgroundColor: cleanStyles.backgroundColor, color: cleanStyles.color });
 
   const button = $('button-container', {
     id: buttonId,
@@ -903,7 +894,6 @@ const createButton = (config = {}) => {
   });
 
   // ✅ Debug: vérifier les styles appliqués dans le DOM
-  // console.log('🔍 Styles appliqués au DOM:', button.style.cssText);
 
   // Stocker la config pour référence
   button._config = processedConfig;
@@ -1168,7 +1158,6 @@ const createButton = (config = {}) => {
     },
     set(newHandler) {
       this._handlers.onClick = newHandler;
-      console.log('✅ onClick handler mis à jour');
     },
     enumerable: true,
     configurable: true
@@ -1181,7 +1170,6 @@ const createButton = (config = {}) => {
     },
     set(newHandler) {
       this._handlers.onAction = newHandler;
-      console.log('✅ onAction handler mis à jour');
     },
     enumerable: true,
     configurable: true
@@ -1194,7 +1182,6 @@ const createButton = (config = {}) => {
     },
     set(newHandler) {
       this._handlers.offAction = newHandler;
-      console.log('✅ offAction handler mis à jour');
     },
     enumerable: true,
     configurable: true
@@ -1312,27 +1299,17 @@ createButton.getTemplateList = () => Object.keys(buttonTemplates);
 createButton.getTemplate = (name) => buttonTemplates[name];
 createButton.addTemplate = (name, template) => {
   buttonTemplates[name] = template;
-  // console.log(`✅ Template "${name}" ajouté`);
   return createButton;
 };
 
 createButton.listTemplates = () => {
-  console.table(
-    Object.entries(buttonTemplates).map(([key, value]) => ({
-      nom: key,
-      description: value.description || 'Aucune description',
-      famille: value.name || key
-    }))
-  );
   return createButton;
 };
 
 createButton.removeTemplate = (name) => {
   if (buttonTemplates[name]) {
     delete buttonTemplates[name];
-    // console.log(`✅ Template "${name}" supprimé`);
   } else {
-    console.warn(`⚠️ Template "${name}" introuvable`);
   }
   return createButton;
 };

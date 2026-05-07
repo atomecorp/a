@@ -1,12 +1,6 @@
 import { perfElapsedMs, perfNowMs } from './perf_runtime.js';
 
-const logModuleLoad = (logPrefix, event, detail = {}) => {
-    try {
-        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-            console.warn(`${logPrefix} ${event}`, detail);
-        }
-    } catch (_) { }
-};
+const logModuleLoad = () => { };
 
 export const loadModulesSequentially = async ({
     modules = [],

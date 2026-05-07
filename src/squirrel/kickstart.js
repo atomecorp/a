@@ -4,7 +4,6 @@
 function initKickstart() {
   // Verify that the global helper functions are available
   if (typeof window.$ !== 'function' || typeof window.define !== 'function') {
-    console.error('❌ Kickstart: Fonctions $ ou define non disponibles');
     return;
   }
 
@@ -95,9 +94,6 @@ function applyRuntimeVersions({ atomeVersion = 'unknown', eveVersion = 'unknown'
 }
 
 function getStartupConsole() {
-  if (typeof window === 'undefined') return console;
-  const originalConsole = window.__SQUIRREL_ORIGINAL_CONSOLE__;
-  if (originalConsole && typeof originalConsole.log === 'function') return originalConsole;
   return console;
 }
 
@@ -137,14 +133,14 @@ async function fetchTextVersion(endpoint) {
 
 function resolveVersionAssetBases() {
   const bases = [''];
-  
-    const platform = typeof current_platform === 'function' ? current_platform() : '';
-    const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-    const localAxumLikePage = kickstartIsLocalAxumLikePage();
-    if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
-      bases.push('http://127.0.0.1:3000');
-    }
-  
+
+  const platform = typeof current_platform === 'function' ? current_platform() : '';
+  const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+  const localAxumLikePage = kickstartIsLocalAxumLikePage();
+  if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
+    bases.push('http://127.0.0.1:3000');
+  }
+
   return Array.from(new Set(bases.filter(Boolean)));
 }
 
@@ -161,19 +157,19 @@ async function resolveEveVersion() {
 async function resolveServerVersions(apiBases) {
   for (const base of apiBases) {
     const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
-    
-      const res = await fetch(endpoint, { cache: 'no-store' });
-      if (!res || !res.ok) {
-        continue;
-      }
-      const data = await res.json();
-      if (data && data.success) {
-        return {
-          atome: normalizeRuntimeVersion(data.atomeVersion || data.version || 'unknown'),
-          eve: normalizeRuntimeVersion(data.eveVersion || 'unknown')
-        };
-      }
-    
+
+    const res = await fetch(endpoint, { cache: 'no-store' });
+    if (!res || !res.ok) {
+      continue;
+    }
+    const data = await res.json();
+    if (data && data.success) {
+      return {
+        atome: normalizeRuntimeVersion(data.atomeVersion || data.version || 'unknown'),
+        eve: normalizeRuntimeVersion(data.eveVersion || 'unknown')
+      };
+    }
+
   }
   return null;
 }
@@ -205,14 +201,14 @@ async function loadRuntimeVersions(force = false) {
   }
 
   const resolveApiBases = () => {
-    
-      const platform = typeof current_platform === 'function' ? current_platform() : '';
-      const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-      const localAxumLikePage = kickstartIsLocalAxumLikePage();
-      if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
-        return ['http://127.0.0.1:3000'];
-      }
-    
+
+    const platform = typeof current_platform === 'function' ? current_platform() : '';
+    const hasTauriRuntime = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+    const localAxumLikePage = kickstartIsLocalAxumLikePage();
+    if (hasTauriRuntime || localAxumLikePage || (typeof platform === 'string' && platform.toLowerCase().includes('taur'))) {
+      return ['http://127.0.0.1:3000'];
+    }
+
     return [''];
   };
 

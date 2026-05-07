@@ -109,7 +109,6 @@ const loginBackend = async (backend, { phone, password }) => {
         ok = false;
         user = null;
         adapter?.clearToken?.();
-        console.warn(`[Auth] Login phone mismatch on ${backend}: expected ${String(phone || '').slice(0, 4)}***`);
         error = 'phone_mismatch';
     }
     return {
@@ -350,13 +349,6 @@ export const auth = {
         const secondary = getSecondaryBackend();
 
         
-            console.log('[Auth][register] start', {
-                phone: maskPhoneForLog(cleanPhone),
-                primary,
-                secondary,
-                visibility,
-                availability
-            });
         
 
         const prevSession = getSessionState();
@@ -369,10 +361,6 @@ export const auth = {
             visibility
         });
         
-            console.log('[Auth][register] primary-result', {
-                backend: primary,
-                ...summarizeBackendAttempt(primaryResult)
-            });
         
         let fallbackResult = null;
         let activeBackend = primary;
@@ -403,10 +391,6 @@ export const auth = {
                 visibility
             });
             
-                console.log('[Auth][register] secondary-result', {
-                    backend: secondary,
-                    ...summarizeBackendAttempt(fallbackResult)
-                });
             
             response[secondary] = {
                 success: fallbackResult.ok,
@@ -432,10 +416,6 @@ export const auth = {
                 visibility
             });
             
-                console.log('[Auth][register] mirror-result', {
-                    backend: secondary,
-                    ...summarizeBackendAttempt(secondaryResult)
-                });
             
             response[secondary] = {
                 success: secondaryResult.ok || secondaryResult.error === 'user_exists',
@@ -463,13 +443,6 @@ export const auth = {
         }
 
         
-            console.log('[Auth][register] done', {
-                phone: maskPhoneForLog(cleanPhone),
-                activeBackend,
-                active: summarizeBackendAttempt(activeResult),
-                sessionMode: getSessionState()?.mode || null,
-                sessionUserId: getSessionState()?.user?.id || null
-            });
         
 
         return response;
