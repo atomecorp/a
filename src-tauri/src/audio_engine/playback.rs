@@ -50,6 +50,30 @@ struct ClipEntry {
     data: Arc<StaticSoundData>,
 }
 
+#[derive(Clone, Debug)]
+pub struct ClipMetadata {
+    pub sample_rate: u32,
+    pub frame_count: usize,
+    pub duration_seconds: f64,
+}
+
+impl ClipMetadata {
+    fn from_data(data: &StaticSoundData) -> Result<Self, String> {
+        if data.sample_rate == 0 {
+            return Err("Clip sample rate is zero".to_string());
+        }
+        let frame_count = data.frames.len();
+        if frame_count == 0 {
+            return Err("Clip has no decoded frames".to_string());
+        }
+        Ok(Self {
+            sample_rate: data.sample_rate,
+            frame_count,
+            duration_seconds: frame_count as f64 / data.sample_rate as f64,
+        })
+    }
+}
+
 struct VoiceEntry {
     handle: StaticSoundHandle,
 }
@@ -247,7 +271,7 @@ pub fn init_with_config(tween_config: TweenConfig) -> Result<(), String> {
     Ok(())
 }
 
-pub fn load_clip(id: &str, path: &str) -> Result<(), String> {
+pub fn load_clip(id: &str, path: &str) -> Result<ClipMetadata, String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
     // Decode from owned bytes even for file-backed assets so MP4-family media
@@ -255,26 +279,28 @@ pub fn load_clip(id: &str, path: &str) -> Result<(), String> {
     let bytes = fs::read(path).map_err(|e| format!("Failed to read audio file {path}: {e}"))?;
     let extension_hint = clip_extension_hint(path);
     let data = decode_static_sound_data(bytes, extension_hint.as_deref(), path)?;
+    let metadata = ClipMetadata::from_data(&data)?;
     engine.clips.insert(
         id.to_string(),
         ClipEntry {
             data: Arc::new(data),
         },
     );
-    Ok(())
+    Ok(metadata)
 }
 
-pub fn load_clip_from_bytes(id: &str, bytes: Vec<u8>) -> Result<(), String> {
+pub fn load_clip_from_bytes(id: &str, bytes: Vec<u8>) -> Result<ClipMetadata, String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
     let data = decode_static_sound_data(bytes, None, "audio bytes")?;
+    let metadata = ClipMetadata::from_data(&data)?;
     engine.clips.insert(
         id.to_string(),
         ClipEntry {
             data: Arc::new(data),
         },
     );
-    Ok(())
+    Ok(metadata)
 }
 
 pub fn play(id: &str) -> Result<(), String> {

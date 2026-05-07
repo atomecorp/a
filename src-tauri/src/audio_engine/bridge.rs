@@ -5,6 +5,14 @@ use super::{metering, playback, recorder};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
+fn clip_metadata_json(metadata: &playback::ClipMetadata) -> Value {
+    json!({
+        "sample_rate": metadata.sample_rate,
+        "frame_count": metadata.frame_count,
+        "duration_seconds": metadata.duration_seconds
+    })
+}
+
 fn resolve_audio_clip_path(project_root: &Path, clip_path: &str) -> Result<PathBuf, String> {
     let raw = String::from(clip_path).trim().to_string();
     if raw.is_empty() {
@@ -42,13 +50,17 @@ pub fn audio_load_clip(
     path: String,
 ) -> Result<Value, String> {
     let resolved_path = resolve_audio_clip_path(&paths.project_root, &path)?;
-    playback::load_clip(&id, &resolved_path.to_string_lossy())?;
+    let metadata = playback::load_clip(&id, &resolved_path.to_string_lossy())?;
     Ok(json!({
         "success": true,
         "id": id,
         "path": resolved_path.to_string_lossy().to_string(),
         "input_path": path,
-        "input_path_was_absolute": Path::new(&path).is_absolute()
+        "input_path_was_absolute": Path::new(&path).is_absolute(),
+        "metadata": clip_metadata_json(&metadata),
+        "sample_rate": metadata.sample_rate,
+        "frame_count": metadata.frame_count,
+        "duration_seconds": metadata.duration_seconds
     }))
 }
 
@@ -56,8 +68,16 @@ pub fn audio_load_clip(
 pub fn audio_load_clip_from_bytes(id: String, bytes: Vec<u8>) -> Result<Value, String> {
     let byte_len = bytes.len();
     // Pass owned Vec to avoid an extra .to_vec() copy inside playback
-    playback::load_clip_from_bytes(&id, bytes)?;
-    Ok(json!({ "success": true, "id": id, "bytes_len": byte_len }))
+    let metadata = playback::load_clip_from_bytes(&id, bytes)?;
+    Ok(json!({
+        "success": true,
+        "id": id,
+        "bytes_len": byte_len,
+        "metadata": clip_metadata_json(&metadata),
+        "sample_rate": metadata.sample_rate,
+        "frame_count": metadata.frame_count,
+        "duration_seconds": metadata.duration_seconds
+    }))
 }
 
 #[tauri::command]

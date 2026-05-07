@@ -11,6 +11,7 @@ use axum::{
     routing::{get, get_service, post},
     Json, Router,
 };
+use base64::{engine::general_purpose, Engine as _};
 use futures_util::{SinkExt, StreamExt};
 use rusqlite::params;
 use serde::Deserialize;
@@ -28,7 +29,7 @@ use std::{
 };
 use tokio::{
     fs,
-    io::{AsyncReadExt, AsyncSeekExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
     net::TcpStream,
     sync::broadcast,
     time::{timeout, Duration},
@@ -77,6 +78,7 @@ struct MediaTokenQuery {
     token: Option<String>,
     access_token: Option<String>,
     auth_token: Option<String>,
+    media_user_id: Option<String>,
     user_id: Option<String>,
     #[serde(rename = "userId")]
     user_id_camel: Option<String>,
@@ -273,6 +275,21 @@ fn sanitize_file_name(name: &str) -> String {
     }
 }
 
+fn sanitize_upload_id(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
+}
+
 fn download_verbose_logs_enabled() -> bool {
     static DOWNLOAD_VERBOSE_LOGS: OnceLock<bool> = OnceLock::new();
     *DOWNLOAD_VERBOSE_LOGS.get_or_init(|| {
@@ -423,6 +440,7 @@ fn extract_token_from_media_query(query: &MediaTokenQuery) -> Option<String> {
 
 fn extract_user_id_from_media_query(query: &MediaTokenQuery) -> Option<String> {
     [
+        query.media_user_id.as_deref(),
         query.user_id.as_deref(),
         query.user_id_camel.as_deref(),
         query.x_user_id.as_deref(),
@@ -430,8 +448,16 @@ fn extract_user_id_from_media_query(query: &MediaTokenQuery) -> Option<String> {
     ]
     .into_iter()
     .flatten()
-    .map(|value| sanitize_user_segment(value.trim()))
-    .find(|value| !value.is_empty() && value != "anonymous")
+    .map(|value| value.trim())
+    .filter(|value| !value.is_empty())
+    .find_map(|value| {
+        let sanitized = sanitize_user_segment(value);
+        if sanitized == "anonymous" {
+            None
+        } else {
+            Some(sanitized)
+        }
+    })
 }
 
 fn resolve_media_authenticated_user(
@@ -443,9 +469,11 @@ fn resolve_media_authenticated_user(
     let token_user_id =
         local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
     if token_user_id != "anonymous" {
-        return extract_user_id_from_media_query(query).or(Some(token_user_id));
+        return extract_user_id_from_media_query(query)
+            .or_else(|| extract_user_id_from_headers(headers))
+            .or(Some(token_user_id));
     }
-    extract_user_id_from_headers(headers)
+    extract_user_id_from_headers(headers).or_else(|| extract_user_id_from_media_query(query))
 }
 
 fn resolve_authenticated_user(
@@ -1095,16 +1123,24 @@ async fn remote_audio_playback_load_handler(
         return json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response();
     }
     match crate::audio_engine::playback::load_clip(&id, &path_string) {
-        Ok(()) => {
+        Ok(metadata) => {
             println!(
-                "[TauriRemote] audio playback load id={} user={:?} path={}",
-                id, user_id, path_string
+                "[TauriRemote] audio playback load id={} user={:?} path={} duration={}s",
+                id, user_id, path_string, metadata.duration_seconds
             );
             Json(json!({
                 "success": true,
                 "runtime": "tauri",
                 "id": id,
                 "absolute_file_path": path_string,
+                "metadata": {
+                    "sample_rate": metadata.sample_rate,
+                    "frame_count": metadata.frame_count,
+                    "duration_seconds": metadata.duration_seconds
+                },
+                "sample_rate": metadata.sample_rate,
+                "frame_count": metadata.frame_count,
+                "duration_seconds": metadata.duration_seconds,
                 "user_id": user_id
             }))
             .into_response()
@@ -1410,7 +1446,10 @@ fn redact_sensitive_query_params(uri: &str) -> String {
         .split('&')
         .map(|part| {
             let key = part.split_once('=').map(|(key, _)| key).unwrap_or(part);
-            if matches!(key, "access_token" | "auth_token" | "token") {
+            if matches!(
+                key,
+                "access_token" | "auth_token" | "token" | "media_user_id" | "user_id" | "userId" | "x_user_id" | "x_userid"
+            ) {
                 format!("{key}=<redacted>")
             } else {
                 part.to_string()
@@ -3738,32 +3777,12 @@ async fn download_recording_handler(
             }
             Err(err) => {
                 println!("[download_recording_handler] Direct read failed: {}", err);
-                // Fall through to downloads dir secondary, then DB lookup
+                // Fall through to the canonical recording metadata lookup.
             }
         }
     }
 
-    // Secondary: file may have been stored in downloads/uploads dir instead of recordings.
-    // This happens when a file is uploaded via the regular upload endpoint but the clip
-    // source references /api/recordings/ (e.g. after a sync from another device).
-    if let Ok(downloads_dir) = resolve_user_downloads_dir(&state, &user_id).await {
-        let downloads_path = downloads_dir.join(&safe_name);
-        if downloads_path.exists() {
-            let ct = guess_mime_from_ext(&safe_name);
-            let disposition = format!("inline; filename=\"{}\"", safe_name);
-            if let Ok(response) =
-                serve_file_with_range(&downloads_path, ct, "", &headers, &disposition).await
-            {
-                println!(
-                    "[download_recording_handler] ✅ Serving recording from downloads secondary: {:?}",
-                    downloads_path
-                );
-                return response;
-            }
-        }
-    }
-
-    // Secondary: Try to find via database (original logic for locally-created recordings)
+    // Secondary: find the canonical persisted recording metadata.
     let rel = {
         let atome_state = match &state.atome_state {
             Some(s) => s,
@@ -4427,6 +4446,293 @@ async fn sync_from_zip_handler(
 // WEBSOCKET HANDLERS
 // =============================================================================
 
+fn json_string_field(data: &JsonValue, key: &str) -> Option<String> {
+    data.get(key)
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn json_number_field(data: &JsonValue, key: &str) -> Option<i64> {
+    data.get(key).and_then(|value| {
+        value
+            .as_i64()
+            .or_else(|| value.as_str().and_then(|raw| raw.trim().parse::<i64>().ok()))
+    })
+}
+
+fn ws_file_response(request_id: Option<String>, payload: JsonValue) -> JsonValue {
+    let mut response = JsonMap::new();
+    response.insert("type".to_string(), json!("file-response"));
+    if let Some(id) = request_id {
+        response.insert("requestId".to_string(), json!(id.clone()));
+        response.insert("request_id".to_string(), json!(id));
+    }
+    if let Some(map) = payload.as_object() {
+        for (key, value) in map {
+            response.insert(key.clone(), value.clone());
+        }
+    }
+    JsonValue::Object(response)
+}
+
+fn resolve_ws_file_user_id(data: &JsonValue, state: &AppState) -> Result<String, String> {
+    let explicit_user = json_string_field(data, "user_id")
+        .or_else(|| json_string_field(data, "userId"))
+        .or_else(|| json_string_field(data, "owner_id"))
+        .map(|value| sanitize_user_segment(&value))
+        .filter(|value| value != "anonymous");
+
+    let token_user = state.auth_state.as_ref().map(|auth_state| {
+        let token = json_string_field(data, "token");
+        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref())
+    });
+
+    if let Some(user_id) = explicit_user {
+        return Ok(user_id);
+    }
+    if let Some(user_id) = token_user.filter(|value| value != "anonymous") {
+        return Ok(user_id);
+    }
+    Err("Unauthorized".to_string())
+}
+
+async fn resolve_ws_upload_target(
+    state: &AppState,
+    user_id: &str,
+    raw_file_name: &str,
+    raw_file_path: &str,
+) -> Result<(String, PathBuf, String), String> {
+    if !raw_file_path.trim().is_empty() {
+        let (root, relative) = normalize_local_relative_path(raw_file_path, user_id)
+            .ok_or_else(|| "Invalid file path".to_string())?;
+        if relative.trim().is_empty() {
+            return Err("Missing file path".to_string());
+        }
+        let base_dir = resolve_user_storage_dir(state, user_id, root)
+            .await
+            .map_err(|err| err.to_string())?;
+        let file_path = base_dir.join(&relative);
+        let file_name = file_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("file")
+            .to_string();
+        let relative_path = match root {
+            LocalStorageRoot::Downloads => format!("Downloads/{}", relative),
+            LocalStorageRoot::Recordings => format!("recordings/{}", relative),
+        };
+        return Ok((file_name, file_path, relative_path));
+    }
+
+    let (file_name, file_path) = resolve_user_upload_path(state, user_id, raw_file_name)
+        .await
+        .map_err(|err| err.to_string())?;
+    Ok((
+        file_name.clone(),
+        file_path,
+        format!("Downloads/{}", file_name),
+    ))
+}
+
+async fn handle_ws_file_message(data: JsonValue, state: &AppState) -> JsonValue {
+    let request_id =
+        json_string_field(&data, "requestId").or_else(|| json_string_field(&data, "request_id"));
+    let action = json_string_field(&data, "action").unwrap_or_default();
+    let user_id = match resolve_ws_file_user_id(&data, state) {
+        Ok(value) => value,
+        Err(error) => {
+            return ws_file_response(request_id, json!({ "success": false, "error": error }));
+        }
+    };
+
+    if action == "upload-chunk" {
+        let upload_id = match json_string_field(&data, "upload_id")
+            .or_else(|| json_string_field(&data, "uploadId"))
+            .and_then(|value| sanitize_upload_id(&value))
+        {
+            Some(value) => value,
+            None => {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": "Missing or invalid uploadId" }),
+                );
+            }
+        };
+        let chunk_index = match json_number_field(&data, "chunk_index")
+            .or_else(|| json_number_field(&data, "chunkIndex"))
+            .filter(|value| *value >= 0)
+        {
+            Some(value) => value,
+            None => {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": "Invalid chunk index" }),
+                );
+            }
+        };
+        let chunk_count = json_number_field(&data, "chunk_count")
+            .or_else(|| json_number_field(&data, "chunkCount"))
+            .unwrap_or(0);
+        let Some(chunk_base64) = json_string_field(&data, "chunk_base64")
+            .or_else(|| json_string_field(&data, "chunkBase64"))
+            .or_else(|| json_string_field(&data, "chunk"))
+        else {
+            return ws_file_response(
+                request_id,
+                json!({ "success": false, "error": "Missing chunk data" }),
+            );
+        };
+        let bytes = match general_purpose::STANDARD.decode(chunk_base64.as_bytes()) {
+            Ok(value) => value,
+            Err(error) => {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": error.to_string() }),
+                );
+            }
+        };
+        let upload_dir = state
+            .project_root
+            .join("data")
+            .join("uploads_tmp")
+            .join(&upload_id);
+        if let Err(error) = fs::create_dir_all(&upload_dir).await {
+            return ws_file_response(
+                request_id,
+                json!({ "success": false, "error": error.to_string() }),
+            );
+        }
+        let chunk_path = upload_dir.join(format!("{}.part", chunk_index));
+        if let Err(error) = fs::write(&chunk_path, &bytes).await {
+            return ws_file_response(
+                request_id,
+                json!({ "success": false, "error": error.to_string() }),
+            );
+        }
+        return ws_file_response(
+            request_id,
+            json!({
+                "success": true,
+                "action": action,
+                "upload_id": upload_id,
+                "chunk_index": chunk_index,
+                "chunk_count": chunk_count,
+                "size_bytes": bytes.len()
+            }),
+        );
+    }
+
+    if action == "upload-complete" {
+        let upload_id = match json_string_field(&data, "upload_id")
+            .or_else(|| json_string_field(&data, "uploadId"))
+            .and_then(|value| sanitize_upload_id(&value))
+        {
+            Some(value) => value,
+            None => {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": "Missing or invalid uploadId" }),
+                );
+            }
+        };
+        let chunk_count = match json_number_field(&data, "chunk_count")
+            .or_else(|| json_number_field(&data, "chunkCount"))
+            .filter(|value| *value >= 0)
+        {
+            Some(value) => value,
+            None => {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": "Invalid chunk count" }),
+                );
+            }
+        };
+        let raw_file_name = json_string_field(&data, "file_name")
+            .or_else(|| json_string_field(&data, "fileName"))
+            .unwrap_or_else(|| "upload.bin".to_string());
+        let raw_file_path = json_string_field(&data, "file_path")
+            .or_else(|| json_string_field(&data, "filePath"))
+            .unwrap_or_default();
+
+        let (file_name, file_path, relative_path) =
+            match resolve_ws_upload_target(state, &user_id, &raw_file_name, &raw_file_path).await {
+                Ok(value) => value,
+                Err(error) => {
+                    return ws_file_response(
+                        request_id,
+                        json!({ "success": false, "error": error }),
+                    );
+                }
+            };
+
+        if let Some(parent) = file_path.parent() {
+            if let Err(error) = fs::create_dir_all(parent).await {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": error.to_string() }),
+                );
+            }
+        }
+
+        let upload_dir = state
+            .project_root
+            .join("data")
+            .join("uploads_tmp")
+            .join(&upload_id);
+        let mut output = match fs::File::create(&file_path).await {
+            Ok(file) => file,
+            Err(error) => {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": error.to_string() }),
+                );
+            }
+        };
+        for idx in 0..chunk_count {
+            let chunk_path = upload_dir.join(format!("{}.part", idx));
+            let chunk = match fs::read(&chunk_path).await {
+                Ok(value) => value,
+                Err(error) => {
+                    return ws_file_response(
+                        request_id,
+                        json!({ "success": false, "error": error.to_string() }),
+                    );
+                }
+            };
+            if let Err(error) = output.write_all(&chunk).await {
+                return ws_file_response(
+                    request_id,
+                    json!({ "success": false, "error": error.to_string() }),
+                );
+            }
+        }
+        if let Err(error) = output.flush().await {
+            return ws_file_response(
+                request_id,
+                json!({ "success": false, "error": error.to_string() }),
+            );
+        }
+        let _ = fs::remove_dir_all(&upload_dir).await;
+        return ws_file_response(
+            request_id,
+            json!({
+                "success": true,
+                "action": action,
+                "file_name": file_name,
+                "owner_id": user_id,
+                "file_path": relative_path,
+                "path": format!("data/users/{}/{}", user_id, relative_path)
+            }),
+        );
+    }
+
+    ws_file_response(
+        request_id,
+        json!({ "success": false, "error": format!("Unknown file action: {}", action) }),
+    )
+}
+
 /// WebSocket handler for API calls (replaces HTTP fetch for silent connection detection)
 async fn ws_api_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_ws_api(socket, state))
@@ -4578,6 +4884,12 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                             ))
                             .await;
                     }
+                    continue;
+                }
+
+                if msg_type == "file" {
+                    let response = handle_ws_file_message(data, &state).await;
+                    let _ = socket.send(Message::Text(response.to_string())).await;
                     continue;
                 }
 
