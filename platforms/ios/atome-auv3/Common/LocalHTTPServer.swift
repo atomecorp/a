@@ -37,7 +37,7 @@ final class LocalHTTPServer {
     private var wsConnections: [ObjectIdentifier: NWConnection] = [:]
     private var wsStates: [ObjectIdentifier: WebSocketState] = [:]
     private var httpStates: [ObjectIdentifier: HTTPRequestState] = [:]
-    private var mediaHTTPDiag = MediaHTTPDiagnosticWindow()
+    private let mediaChunkSize = 512 * 1024
 
     private struct WebSocketState {
         var buffer = Data()
@@ -47,18 +47,6 @@ final class LocalHTTPServer {
     private struct HTTPRequestState {
         var buffer = Data()
         var expectedLength: Int?
-    }
-
-    private struct MediaHTTPDiagnosticWindow {
-        var startedAt = Date()
-        var requestCount = 0
-        var rangeCount = 0
-        var fullCount = 0
-        var totalBytes: UInt64 = 0
-        var largestBytes: UInt64 = 0
-        var largestFile = ""
-        var files: Set<String> = []
-        var emittedLargeFullLoads: Set<String> = []
     }
 
     func start(preferredPort: UInt16? = nil) {
@@ -692,7 +680,7 @@ final class LocalHTTPServer {
         // Video/audio types need Range request support for <video>/<audio> tags
         let needsRange = mime.hasPrefix("video/") || mime.hasPrefix("audio/")
         if needsRange {
-            serveFileWithRange(url: url, mime: mime, rangeHeader: rangeHeader, label: "FILE", fileName: name, on: connection)
+            serveFileWithRange(url: url, mime: mime, rangeHeader: rangeHeader, on: connection)
         } else {
             do {
                 let data = try Data(contentsOf: url)
@@ -704,102 +692,124 @@ final class LocalHTTPServer {
     }
 
     /// Serve a file with HTTP Range support (206 Partial Content) for video/audio tags
-    private func serveFileWithRange(url: URL, mime: String, rangeHeader: String?, label: String = "FILE", fileName: String? = nil, on connection: NWConnection) {
+    private func serveFileWithRange(url: URL, mime: String, rangeHeader: String?, on connection: NWConnection) {
         let fileHandle: FileHandle
         do { fileHandle = try FileHandle(forReadingFrom: url) } catch {
             sendSimple(status: 500, reason: "Internal Server Error", body: "Open failed", on: connection); return
         }
-        defer { try? fileHandle.close() }
         let totalLen: UInt64
         do {
             let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
             totalLen = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
         } catch { totalLen = 0 }
-        if totalLen == 0 { sendSimple(status: 500, reason: "Internal Server Error", body: "Empty file", on: connection); return }
-
-        var rangeStart: UInt64 = 0
-        var rangeEnd: UInt64 = totalLen - 1
-        var isPartial = false
-        if let rh = rangeHeader?.lowercased(), rh.hasPrefix("bytes=") {
-            let spec = rh.dropFirst("bytes=".count)
-            let comps = spec.split(separator: "-")
-            if let first = comps.first, let start = UInt64(first) { rangeStart = start }
-            if comps.count > 1, let lastStr = comps.last, !lastStr.isEmpty, let last = UInt64(lastStr) { rangeEnd = min(last, totalLen - 1) }
-            if rangeStart >= totalLen { rangeStart = 0 }
-            if !(rangeStart == 0 && rangeEnd == totalLen - 1) { isPartial = true }
+        if totalLen == 0 {
+            try? fileHandle.close()
+            sendSimple(status: 500, reason: "Internal Server Error", body: "Empty file", on: connection)
+            return
         }
-        let readLen = Int(rangeEnd - rangeStart + 1)
-        recordMediaHTTPDiagnostic(
-            label: label,
-            fileName: fileName ?? url.lastPathComponent,
+
+        sendMediaFileStream(
+            fileHandle: fileHandle,
+            totalLength: totalLen,
             mime: mime,
             rangeHeader: rangeHeader,
-            rangeStart: rangeStart,
-            rangeEnd: rangeEnd,
-            totalLength: totalLen,
-            isPartial: isPartial
+            on: connection
         )
+    }
+
+    private func sendMediaFileStream(fileHandle: FileHandle, totalLength: UInt64, mime: String, rangeHeader: String?, on connection: NWConnection) {
+        guard let range = parseHTTPByteRange(rangeHeader, totalLength: totalLength) else {
+            try? fileHandle.close()
+            sendRaw(status: 416, reason: "Range Not Satisfiable", headers: [
+                "Content-Type": "text/plain; charset=utf-8",
+                "Content-Range": "bytes */\(totalLength)"
+            ], body: Data("Range Not Satisfiable".utf8), on: connection)
+            return
+        }
+        let rangeStart = range.start
+        let rangeEnd = range.end
         do {
             try fileHandle.seek(toOffset: rangeStart)
-            let chunk = fileHandle.readData(ofLength: readLen)
             var headers: [String] = []
             let statusLine: String
-            if isPartial {
+            if range.requested {
                 statusLine = "HTTP/1.1 206 Partial Content"
-                headers.append("Content-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalLen)")
+                headers.append("Content-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalLength)")
             } else {
                 statusLine = "HTTP/1.1 200 OK"
             }
             headers.append("Content-Type: \(mime)")
             headers.append("Accept-Ranges: bytes")
-            headers.append("Content-Length: \(chunk.count)")
+            headers.append("Content-Length: \(rangeEnd - rangeStart + 1)")
             headers.append("Access-Control-Allow-Origin: *")
             headers.append("Access-Control-Allow-Headers: *")
             headers.append("Access-Control-Expose-Headers: Content-Range, Accept-Ranges, Content-Length")
             headers.append("Connection: close")
             let headerStr = statusLine + "\r\n" + headers.joined(separator: "\r\n") + "\r\n\r\n"
-            var response = Data(headerStr.utf8)
-            response.append(chunk)
-            connection.send(content: response, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
+            connection.send(content: Data(headerStr.utf8), completion: .contentProcessed { [weak self] error in
+                guard let self = self else { return }
+                if error != nil {
+                    try? fileHandle.close()
+                    self.requestCancel(connection)
+                    return
+                }
+                self.streamFileBody(fileHandle: fileHandle, remaining: rangeEnd - rangeStart + 1, on: connection)
+            })
         } catch {
+            try? fileHandle.close()
             sendSimple(status: 500, reason: "Internal Server Error", body: "Read failed", on: connection)
         }
     }
 
-    private func recordMediaHTTPDiagnostic(
-        label: String,
-        fileName: String,
-        mime: String,
-        rangeHeader: String?,
-        rangeStart: UInt64,
-        rangeEnd: UInt64,
-        totalLength: UInt64,
-        isPartial: Bool
-    ) {
-        guard mime.hasPrefix("video/") || mime.hasPrefix("audio/") else { return }
-        let servedBytes = rangeEnd >= rangeStart ? (rangeEnd - rangeStart + 1) : 0
-        mediaHTTPDiag.requestCount += 1
-        mediaHTTPDiag.totalBytes += servedBytes
-        mediaHTTPDiag.files.insert(fileName)
-        if isPartial {
-            mediaHTTPDiag.rangeCount += 1
+    private func parseHTTPByteRange(_ rangeHeader: String?, totalLength: UInt64) -> (start: UInt64, end: UInt64, requested: Bool)? {
+        var start: UInt64 = 0
+        var end = totalLength - 1
+        guard let header = rangeHeader?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              header.hasPrefix("bytes=") else {
+            return (start, end, false)
+        }
+
+        let spec = header.dropFirst("bytes=".count)
+        if spec.contains(",") { return nil }
+        let parts = spec.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+        if parts.count != 2 { return nil }
+        if parts[0].isEmpty {
+            guard let suffixLength = UInt64(parts[1]), suffixLength > 0 else { return nil }
+            start = suffixLength >= totalLength ? 0 : totalLength - suffixLength
         } else {
-            mediaHTTPDiag.fullCount += 1
+            guard let value = UInt64(parts[0]) else { return nil }
+            start = value
+            if !parts[1].isEmpty {
+                guard let value = UInt64(parts[1]) else { return nil }
+                end = min(value, totalLength - 1)
+            }
         }
-        if servedBytes > mediaHTTPDiag.largestBytes {
-            mediaHTTPDiag.largestBytes = servedBytes
-            mediaHTTPDiag.largestFile = fileName
+        if start >= totalLength || start > end { return nil }
+        return (start, end, true)
+    }
+
+    private func streamFileBody(fileHandle: FileHandle, remaining: UInt64, on connection: NWConnection) {
+        if remaining == 0 {
+            try? fileHandle.close()
+            requestCancel(connection)
+            return
         }
-        let largeFullThreshold: UInt64 = 12 * 1024 * 1024
-        if !isPartial && servedBytes >= largeFullThreshold && !mediaHTTPDiag.emittedLargeFullLoads.contains(fileName) {
-            mediaHTTPDiag.emittedLargeFullLoads.insert(fileName)
+        let count = Int(min(UInt64(mediaChunkSize), remaining))
+        let chunk = fileHandle.readData(ofLength: count)
+        if chunk.isEmpty {
+            try? fileHandle.close()
+            requestCancel(connection)
+            return
         }
-        let elapsed = Date().timeIntervalSince(mediaHTTPDiag.startedAt)
-        if elapsed >= 1.5 {
-            let emitted = mediaHTTPDiag.emittedLargeFullLoads
-            mediaHTTPDiag = MediaHTTPDiagnosticWindow()
-            mediaHTTPDiag.emittedLargeFullLoads = emitted
-        }
+        connection.send(content: chunk, completion: .contentProcessed { [weak self] error in
+            guard let self = self else { return }
+            if error != nil {
+                try? fileHandle.close()
+                self.requestCancel(connection)
+                return
+            }
+            self.streamFileBody(fileHandle: fileHandle, remaining: remaining - UInt64(chunk.count), on: connection)
+        })
     }
 
     private func candidateFileURLs(for name: String) -> [URL] {
@@ -899,7 +909,6 @@ final class LocalHTTPServer {
             sendSimple(status: 500, reason: "Internal Server Error", body: "Open failed", on: connection)
             return
         }
-        defer { try? fileHandle.close() }
         let totalLen: UInt64
         if let cached = lengthCache[path] { totalLen = cached } else {
             do {
@@ -908,30 +917,18 @@ final class LocalHTTPServer {
                 lengthCache[path] = totalLen
             } catch { totalLen = 0 }
         }
-        if totalLen == 0 { sendSimple(status: 500, reason: "Internal Server Error", body: "Empty file", on: connection); return }
-
-        var rangeStart: UInt64 = 0
-        var rangeEnd:   UInt64 = totalLen - 1
-        var isPartial = false
-        if let rangeHeader = rangeHeader?.lowercased(),
-           let bytesPart = rangeHeader.split(separator: ":").dropFirst().first?.trimmingCharacters(in: .whitespaces),
-           bytesPart.hasPrefix("bytes=") {
-            let spec = bytesPart.dropFirst("bytes=".count)
-            let comps = spec.split(separator: "-")
-            if let first = comps.first, let start = UInt64(first) { rangeStart = start }
-            if comps.count > 1, let lastStr = comps.last, !lastStr.isEmpty, let last = UInt64(lastStr) { rangeEnd = min(last, totalLen - 1) }
-            if rangeStart >= totalLen { rangeStart = 0 }
-            // Only partial if not the whole file
-            if !(rangeStart == 0 && rangeEnd == totalLen - 1) { isPartial = true }
+        if totalLen == 0 {
+            try? fileHandle.close()
+            sendSimple(status: 500, reason: "Internal Server Error", body: "Empty file", on: connection)
+            return
         }
-        let readLen = Int(rangeEnd - rangeStart + 1)
-        do {
-            try fileHandle.seek(toOffset: rangeStart)
-            let chunk = fileHandle.readData(ofLength: readLen)
-            sendAudioResponse(data: chunk, totalLength: totalLen, start: rangeStart, end: rangeEnd, partial: isPartial, on: connection)
-        } catch {
-            sendSimple(status: 500, reason: "Internal Server Error", body: "Read failed", on: connection)
-        }
+        sendMediaFileStream(
+            fileHandle: fileHandle,
+            totalLength: totalLen,
+            mime: "audio/mp4",
+            rangeHeader: rangeHeader,
+            on: connection
+        )
     }
 
     // Provide raw header info for diagnostics without streaming whole file
@@ -1008,29 +1005,6 @@ final class LocalHTTPServer {
         let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
         var data = Data(head.utf8); data.append(payload)
         connection.send(content: data, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
-    }
-
-    private func sendAudioResponse(data: Data, totalLength: UInt64, start: UInt64, end: UInt64, partial: Bool, on connection: NWConnection) {
-        var headers: [String] = []
-        let statusLine: String
-        if partial {
-            statusLine = "HTTP/1.1 206 Partial Content"
-            headers.append("Content-Range: bytes \(start)-\(end)/\(totalLength)")
-        } else {
-            statusLine = "HTTP/1.1 200 OK"
-        }
-        headers.append("Content-Type: audio/mp4")
-        headers.append("Accept-Ranges: bytes")
-        headers.append("Content-Length: \(data.count)")
-        headers.append("Access-Control-Allow-Origin: *")
-        headers.append("Access-Control-Allow-Headers: *")
-        headers.append("Connection: close")
-        let headerStr = statusLine + "\r\n" + headers.joined(separator: "\r\n") + "\r\n\r\n"
-        var response = Data(headerStr.utf8)
-        response.append(data)
-        connection.send(content: response, completion: .contentProcessed { [weak self] _ in
-            self?.requestCancel(connection)
-        })
     }
 
     private func sendSimple(status: Int, reason: String, body: String, on connection: NWConnection) {
@@ -1229,7 +1203,7 @@ final class LocalHTTPServer {
             return
         }
         if mime.hasPrefix("video/") || mime.hasPrefix("audio/") || rangeHeader != nil {
-            serveFileWithRange(url: fileURL, mime: mime, rangeHeader: rangeHeader, label: label, fileName: fileName, on: connection)
+            serveFileWithRange(url: fileURL, mime: mime, rangeHeader: rangeHeader, on: connection)
             return
         }
         do {
