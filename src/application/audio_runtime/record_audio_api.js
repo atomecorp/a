@@ -3,6 +3,7 @@ import {
     resolveAudioRuntime,
     resolveVoiceCaptureProvider
 } from './runtime_audio_backend.js';
+import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
 
 // Unified recorder API (Tauri + AUv3 + browser fallback)
 // Contract:
@@ -16,8 +17,7 @@ import {
     let listenersReady = false;
 
     function logRecordDiag(event, detail = {}) {
-        try {
-        } catch (_) { }
+        emitIosAudioDiagnostic(`record_api:${event}`, detail);
     }
 
     function updateRecordProvider() {
@@ -419,7 +419,13 @@ import {
                 });
                 logRecordDiag('record_stop_native_invoke_result', {
                     session_id: sid,
-                    result
+                    result,
+                    returned_file_path: result?.file_path || result?.path || null,
+                    returned_absolute_file_path: result?.absolute_file_path || null,
+                    returned_size_bytes: result?.size_bytes || null,
+                    returned_duration_sec: result?.duration_sec || null,
+                    returned_frame_count: result?.frame_count || result?.frameCount || null,
+                    returned_sample_rate: result?.sample_rate || result?.sampleRate || null
                 });
                 const frameCount = Number(result?.frame_count || result?.frameCount || 0);
                 const sampleRate = Number(result?.sample_rate || result?.sampleRate || entry.sampleRate || 0);
