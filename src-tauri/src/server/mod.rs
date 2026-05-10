@@ -275,6 +275,116 @@ fn sanitize_file_name(name: &str) -> String {
     }
 }
 
+fn lower_file_extension(name: &str) -> String {
+    Path::new(name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn replace_file_extension(name: &str, extension: &str) -> String {
+    let clean_extension = extension.trim().trim_start_matches('.');
+    let path = Path::new(name);
+    let stem = path.file_stem().and_then(|value| value.to_str()).unwrap_or(name);
+    sanitize_file_name(&format!("{}.{}", stem, clean_extension))
+}
+
+fn should_transcode_recording_upload_to_mp4(file_name: &str, mime_type: &str) -> bool {
+    lower_file_extension(file_name) == "webm"
+        && mime_type.trim().to_ascii_lowercase().starts_with("video/")
+}
+
+fn should_serve_webm_video_as_mp4(file_name: &str) -> bool {
+    let lower = file_name.trim().to_ascii_lowercase();
+    lower_file_extension(file_name) == "webm"
+        && !lower.starts_with("audio_")
+        && !lower.starts_with("audio_recording_")
+}
+
+fn video_cache_path(source_path: &Path, file_name: &str) -> Result<(PathBuf, String), String> {
+    let parent = source_path
+        .parent()
+        .ok_or_else(|| format!("Missing parent directory for {}", source_path.display()))?;
+    let cache_dir = parent.join(".video_cache");
+    let cached_name = replace_file_extension(file_name, "mp4");
+    Ok((cache_dir.join(&cached_name), cached_name))
+}
+
+async fn transcode_video_to_mp4(
+    source_path: &Path,
+    output_path: &Path,
+) -> Result<(), String> {
+    let source = source_path.to_path_buf();
+    let output = output_path.to_path_buf();
+    let ffmpeg_result = tokio::task::spawn_blocking(move || {
+        Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-i")
+            .arg(&source)
+            .arg("-map")
+            .arg("0:v:0")
+            .arg("-map")
+            .arg("0:a?")
+            .arg("-c:v")
+            .arg("libx264")
+            .arg("-pix_fmt")
+            .arg("yuv420p")
+            .arg("-profile:v")
+            .arg("baseline")
+            .arg("-level")
+            .arg("3.1")
+            .arg("-movflags")
+            .arg("+faststart")
+            .arg("-c:a")
+            .arg("aac")
+            .arg("-b:a")
+            .arg("128k")
+            .arg(&output)
+            .output()
+    })
+    .await
+    .map_err(|err| format!("recording_transcode_task_failed: {err}"))?
+    .map_err(|err| format!("recording_transcode_spawn_failed: {err}"))?;
+
+    if !ffmpeg_result.status.success() {
+        let stderr = String::from_utf8_lossy(&ffmpeg_result.stderr).trim().to_string();
+        return Err(format!(
+            "recording_transcode_failed: {}",
+            if stderr.is_empty() { "ffmpeg exited without details" } else { stderr.as_str() }
+        ));
+    }
+    Ok(())
+}
+
+async fn resolve_playback_media_file(
+    source_path: &Path,
+    file_name: &str,
+) -> Result<(PathBuf, &'static str, String), String> {
+    if !should_serve_webm_video_as_mp4(file_name) {
+        return Ok((
+            source_path.to_path_buf(),
+            guess_mime_from_ext(file_name),
+            sanitize_file_name(file_name),
+        ));
+    }
+
+    let (cached_path, cached_name) = video_cache_path(source_path, file_name)?;
+    if let Some(parent) = cached_path.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .map_err(|err| format!("video_cache_create_failed: {err}"))?;
+    }
+    if fs::metadata(&cached_path).await.is_err() {
+        transcode_video_to_mp4(source_path, &cached_path).await?;
+    }
+    Ok((cached_path, "video/mp4", cached_name))
+}
+
 fn sanitize_upload_id(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -304,42 +414,6 @@ fn download_verbose_logs_enabled() -> bool {
             })
             .unwrap_or(false)
     })
-}
-
-fn guess_content_type_from_name(file_name: &str) -> &'static str {
-    let lower_name = file_name.trim().to_lowercase();
-    let ext = Path::new(file_name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.trim().to_lowercase())
-        .unwrap_or_default();
-    if ext == "webm"
-        && (lower_name.starts_with("audio_recording_") || lower_name.starts_with("audio_"))
-    {
-        return "audio/webm";
-    }
-    match ext.as_str() {
-        "mp4" => "video/mp4",
-        "m4v" => "video/x-m4v",
-        "mov" => "video/quicktime",
-        "weba" => "audio/webm",
-        "webm" => "video/webm",
-        "mkv" => "video/x-matroska",
-        "avi" => "video/x-msvideo",
-        "mp3" => "audio/mpeg",
-        "wav" => "audio/wav",
-        "ogg" => "audio/ogg",
-        "opus" => "audio/opus",
-        "m4a" => "audio/mp4",
-        "aac" => "audio/aac",
-        "flac" => "audio/flac",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        "gif" => "image/gif",
-        "svg" => "image/svg+xml",
-        _ => "application/octet-stream",
-    }
 }
 
 fn sanitize_user_segment(value: &str) -> String {
@@ -2648,15 +2722,53 @@ async fn upload_handler(
         );
     }
 
-    let rel_path = file_path
+    let mut stored_file_name = file_name;
+    let mut stored_file_path = file_path;
+    let mut converted_from: Option<String> = None;
+    if should_serve_webm_video_as_mp4(&stored_file_name) {
+        let output_name = replace_file_extension(&stored_file_name, "mp4");
+        let output_path = stored_file_path.with_file_name(&output_name);
+        if let Err(error) = transcode_video_to_mp4(&stored_file_path, &output_path).await {
+            let _ = fs::remove_file(&stored_file_path).await;
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": error })),
+            );
+        }
+        if let Err(error) = fs::remove_file(&stored_file_path).await {
+            eprintln!(
+                "Erreur suppression source WebM après transcodage {:?}: {}",
+                stored_file_path, error
+            );
+        }
+        converted_from = Some(stored_file_name);
+        stored_file_name = output_name;
+        stored_file_path = output_path;
+    }
+
+    let rel_path = stored_file_path
         .strip_prefix(&*state.project_root)
         .ok()
         .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_else(|| file_path.to_string_lossy().replace('\\', "/"));
+        .unwrap_or_else(|| stored_file_path.to_string_lossy().replace('\\', "/"));
+    let size = fs::metadata(&stored_file_path)
+        .await
+        .ok()
+        .map(|metadata| metadata.len())
+        .unwrap_or(body.len() as u64);
+    let stored_mime_type = guess_mime_from_ext(&stored_file_name);
 
     (
         StatusCode::OK,
-        Json(json!({ "success": true, "file": file_name, "owner": user_id, "path": rel_path })),
+        Json(json!({
+            "success": true,
+            "file": stored_file_name,
+            "owner": user_id,
+            "path": rel_path,
+            "mime_type": stored_mime_type,
+            "size": size,
+            "converted_from": converted_from
+        })),
     )
 }
 
@@ -3070,6 +3182,12 @@ async fn user_recordings_upload_handler(
     let decoded: Cow<'_, str> =
         urlencoding::decode(file_name_raw).unwrap_or_else(|_| Cow::from(file_name_raw));
     let safe_name = sanitize_file_name(decoded.as_ref());
+    let mime_type = headers
+        .get("x-mime-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .trim()
+        .to_string();
 
     let user_id = match require_auth_user(&headers, &state) {
         Ok(user_id) => user_id,
@@ -3103,10 +3221,54 @@ async fn user_recordings_upload_handler(
         );
     }
 
-    let rel_path = format!("data/users/{}/recordings/{}", user_id, safe_name);
+    let mut stored_name = safe_name.clone();
+    let mut stored_path = file_path;
+    let mut stored_mime_type = if mime_type.is_empty() {
+        guess_mime_from_ext(&safe_name).to_string()
+    } else {
+        mime_type.clone()
+    };
+    let mut converted_from: Option<String> = None;
+
+    if should_transcode_recording_upload_to_mp4(&safe_name, &stored_mime_type) {
+        let output_name = replace_file_extension(&safe_name, "mp4");
+        let output_path = recordings_dir.join(&output_name);
+        if let Err(error) = transcode_video_to_mp4(&stored_path, &output_path).await {
+            let _ = fs::remove_file(&stored_path).await;
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": error })),
+            );
+        }
+        if let Err(error) = fs::remove_file(&stored_path).await {
+            eprintln!(
+                "Erreur suppression source WebM après transcodage {:?}: {}",
+                stored_path, error
+            );
+        }
+        converted_from = Some(stored_name);
+        stored_name = output_name;
+        stored_path = output_path;
+        stored_mime_type = "video/mp4".to_string();
+    }
+
+    let size = fs::metadata(&stored_path)
+        .await
+        .ok()
+        .map(|metadata| metadata.len())
+        .unwrap_or(body.len() as u64);
+    let rel_path = format!("data/users/{}/recordings/{}", user_id, stored_name);
     (
         StatusCode::OK,
-        Json(json!({ "success": true, "file": safe_name, "path": rel_path, "owner": user_id })),
+        Json(json!({
+            "success": true,
+            "file": stored_name,
+            "path": rel_path,
+            "owner": user_id,
+            "mime_type": stored_mime_type,
+            "size": size,
+            "converted_from": converted_from
+        })),
     )
 }
 
@@ -3437,18 +3599,44 @@ async fn download_upload_handler(
         );
     }
 
-    let metadata = match fs::metadata(&file_path).await {
+    if let Err(err) = fs::metadata(&file_path).await {
+        if verbose_logs {
+            println!(
+                "[download_upload_handler] ❌ Metadata not found: {:?}, error: {}",
+                file_path, err
+            );
+        }
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "success": false, "error": "File not found", "path": file_path.to_string_lossy() })),
+        )
+            .into_response();
+    }
+
+    let (served_path, content_type, served_name) =
+        match resolve_playback_media_file(&file_path, &safe_name).await {
+            Ok(value) => value,
+            Err(err) => {
+                if verbose_logs {
+                    println!(
+                        "[download_upload_handler] ❌ Playback media resolution failed: {:?}, error: {}",
+                        file_path, err
+                    );
+                }
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "success": false, "error": err })),
+                )
+                    .into_response();
+            }
+        };
+
+    let metadata = match fs::metadata(&served_path).await {
         Ok(value) => value,
         Err(err) => {
-            if verbose_logs {
-                println!(
-                    "[download_upload_handler] ❌ Metadata not found: {:?}, error: {}",
-                    file_path, err
-                );
-            }
             return (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "success": false, "error": "File not found", "path": file_path.to_string_lossy() })),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": format!("Playback file missing: {err}") })),
             )
                 .into_response();
         }
@@ -3480,17 +3668,17 @@ async fn download_upload_handler(
     }
 
     match serve_file_with_range(
-        &file_path,
-        guess_content_type_from_name(&safe_name),
+        &served_path,
+        content_type,
         &etag_value,
         &headers,
-        &format!("inline; filename=\"{}\"", safe_name),
+        &format!("inline; filename=\"{}\"", served_name),
     )
     .await
     {
         Ok(response) => {
             if verbose_logs {
-                println!("[download_upload_handler] ✅ Serving file: {:?}", file_path);
+                println!("[download_upload_handler] ✅ Serving file: {:?}", served_path);
             }
             response
         }
@@ -3498,12 +3686,12 @@ async fn download_upload_handler(
             if verbose_logs {
                 println!(
                     "[download_upload_handler] ❌ File not found: {:?}, error: {}",
-                    file_path, err
+                    served_path, err
                 );
             }
             (
                 StatusCode::NOT_FOUND,
-                Json(json!({ "success": false, "error": "File not found", "path": file_path.to_string_lossy() })),
+                Json(json!({ "success": false, "error": "File not found", "path": served_path.to_string_lossy() })),
             )
                 .into_response()
         }
@@ -3765,13 +3953,24 @@ async fn download_recording_handler(
     );
 
     if direct_path.exists() {
-        let ct = guess_mime_from_ext(&safe_name);
-        let disposition = format!("attachment; filename=\"{}\"", safe_name);
-        match serve_file_with_range(&direct_path, ct, "", &headers, &disposition).await {
+        let (served_path, content_type, served_name) =
+            match resolve_playback_media_file(&direct_path, &safe_name).await {
+                Ok(value) => value,
+                Err(err) => {
+                    println!("[download_recording_handler] Playback media resolution failed: {}", err);
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "success": false, "error": err })),
+                    )
+                        .into_response();
+                }
+            };
+        let disposition = format!("inline; filename=\"{}\"", served_name);
+        match serve_file_with_range(&served_path, content_type, "", &headers, &disposition).await {
             Ok(response) => {
                 println!(
                     "[download_recording_handler] ✅ Serving recording (direct): {:?}",
-                    direct_path
+                    served_path
                 );
                 return response;
             }
@@ -3924,24 +4123,43 @@ async fn download_recording_handler(
         target_path.exists()
     );
 
-    let ct = guess_mime_from_ext(&rel);
-    let disposition = format!("attachment; filename=\"{}\"", sanitize_file_name(&rel));
-    match serve_file_with_range(&target_path, ct, "", &headers, &disposition).await {
+    let target_name = Path::new(&rel)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(sanitize_file_name)
+        .unwrap_or_else(|| sanitize_file_name(&rel));
+    let (served_path, content_type, served_name) =
+        match resolve_playback_media_file(&target_path, &target_name).await {
+            Ok(value) => value,
+            Err(err) => {
+                println!(
+                    "[download_recording_handler] ❌ Playback media resolution failed: {:?}, error: {}",
+                    target_path, err
+                );
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "success": false, "error": err })),
+                )
+                    .into_response();
+            }
+        };
+    let disposition = format!("inline; filename=\"{}\"", served_name);
+    match serve_file_with_range(&served_path, content_type, "", &headers, &disposition).await {
         Ok(response) => {
             println!(
                 "[download_recording_handler] ✅ Serving recording: {:?}",
-                target_path
+                served_path
             );
             response
         }
         Err(err) => {
             println!(
                 "[download_recording_handler] ❌ File not found: {:?}, error: {}",
-                target_path, err
+                served_path, err
             );
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({ "success": false, "error": "File not found", "path": target_path.to_string_lossy() })),
+                Json(json!({ "success": false, "error": "File not found", "path": served_path.to_string_lossy() })),
             )
                 .into_response();
         }
@@ -5099,6 +5317,12 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
 pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
+    let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
+    let project_root = static_dir_abs
+        .parent()
+        .unwrap_or(&static_dir_abs)
+        .to_path_buf();
+
     let serve_dir_root = ServeDir::new(base_dir.clone()).append_index_html_on_directories(true);
     let root_service = get_service(serve_dir_root).handle_error(|error| async move {
         println!("Erreur serveur statique: {:?}", error);
@@ -5108,8 +5332,9 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         )
     });
 
-    // Service fichiers (correspond à dataFetcher: /file/<path>)
-    let serve_dir_file = ServeDir::new(base_dir.clone());
+    // Service fichiers (correspond à dataFetcher: /file/<path>).
+    // User media is project-relative (data/users/...), not static-dir-relative.
+    let serve_dir_file = ServeDir::new(project_root.clone());
     let file_service = get_service(serve_dir_file).handle_error(|error| async move {
         println!("Erreur /file: {:?}", error);
         (
@@ -5140,10 +5365,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     println!("📦 Version applicative: {}", version);
     println!("📦 eVe version: {}", eve_version);
 
-    // Canonicalize static_dir to get absolute path for file updates
-    let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
-    println!("📂 Static dir (absolute): {:?}", static_dir_abs);
-
     let data_dir = {
         if let Err(e) = std::fs::create_dir_all(&data_dir) {
             eprintln!("⚠️ Could not create data directory {:?}: {}", data_dir, e);
@@ -5157,20 +5378,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     // Initialize local atome and auth states (ADOLE v3.0 WebSocket-based)
     let atome_state = local_atome::create_state(data_dir.clone());
     let auth_state = local_auth::create_state(&atome_state, &data_dir);
-
-    let project_root = static_dir_abs
-        .parent()
-        .unwrap_or(&static_dir_abs)
-        .to_path_buf();
-
-    // Log the project root for debugging media path issues
-    println!("📂 Project root for media files: {:?}", project_root);
-    let expected_data_path = project_root.join("data").join("users");
-    println!(
-        "📂 Expected user data directory: {:?} (exists: {})",
-        expected_data_path,
-        expected_data_path.exists()
-    );
 
     let state = AppState {
         static_dir: Arc::new(static_dir_abs),

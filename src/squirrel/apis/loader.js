@@ -6,7 +6,7 @@
  * - Provides SVG rendering helpers for UI.
  */
 import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
-import { getLocalServerUrl } from './serverUrls.js';
+import { getLocalServerUrl, isLocalAxumPage } from './serverUrls.js';
 
 const normalizeNoTrailingSlash = (value) => {
   if (typeof value !== 'string') return '';
@@ -162,9 +162,16 @@ function dataFetcher(path, opts = {}) {
       if (!candidate || serverPathCandidates.includes(candidate)) return;
       serverPathCandidates.push(candidate);
     };
+    const projectRootAssetPath = canonicalAssetPath.replace(/^assets\//, 'src/assets/');
+    if (isLocalAxumPage()) {
+      pushServerPathCandidate(projectRootAssetPath);
+    }
     pushServerPathCandidate(canonicalAssetPath);
     pushServerPathCandidate(cleanPath);
     pushServerPathCandidate(assetPath);
+    if (!isLocalAxumPage()) {
+      pushServerPathCandidate(projectRootAssetPath);
+    }
 
     const serverCandidates = [];
     const pushServerCandidate = (base, routePath) => {

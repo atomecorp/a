@@ -233,6 +233,19 @@
         return mode === 'audio' ? 'weba' : 'webm';
     }
 
+    function recordingMimeCandidates(mode) {
+        if (mode === 'audio') {
+            return isTauriRuntime()
+                ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
+                : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+        }
+        const mp4Candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4'];
+        const webmCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+        return isTauriRuntime()
+            ? [...mp4Candidates, ...webmCandidates]
+            : [...webmCandidates, ...mp4Candidates];
+    }
+
     async function camera(options = {}) {
         if (!isBrowser()) throw new Error('camera() is only available in the browser');
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
@@ -339,7 +352,7 @@
         }
     }
 
-    async function saveToTauriRecordings({ fileName, bytes }) {
+    async function saveToTauriRecordings({ fileName, bytes, mimeType }) {
         const base = getTauriHttpBaseUrl();
         if (!base) throw new Error('Tauri HTTP base URL is not configured');
         const token = getLocalAuthToken();
@@ -347,7 +360,10 @@
         const res = await fetch(`${base}/api/user-recordings`, {
             method: 'POST',
             headers: {
-                ...buildLocalAuthHeaders({ 'X-Filename': encodeURIComponent(fileName) })
+                ...buildLocalAuthHeaders({
+                    'X-Filename': encodeURIComponent(fileName),
+                    'X-Mime-Type': mimeType || ''
+                })
             },
             body: bytes
         });
@@ -451,10 +467,14 @@
             throw new Error('AdoleAPI.atomes.create() is not available');
         }
         const atomeId = `${atomeType}_${randomId()}`;
+        const mediaUrl = `/api/recordings/${encodeURIComponent(fileName)}`;
         const particles = {
             kind: atomeType,
+            type: atomeType,
             file_name: fileName,
             file_path: relPath || null,
+            media_url: mediaUrl,
+            src: mediaUrl,
             mime_type: mimeType || '',
             duration_sec: durationSec || null,
             size_bytes: sizeBytes || null,
@@ -491,16 +511,37 @@
         if (!userInfo.ok) throw new Error(userInfo.error || 'Unable to resolve current user');
         const ownerId = userInfo.user.user_id;
         const atomeType = mode === 'audio' ? 'audio_recording' : 'video_recording';
-        const targetPath = `data/users/${ownerId}/recordings/${fileName}`;
+        let storedFileName = fileName;
+        let storedMimeType = mimeType;
+        let storedBytes = bytes;
+        let storedSize = bytes.length;
+        let targetPath = `data/users/${ownerId}/recordings/${storedFileName}`;
         let relPath = null;
 
         if (isTauriRuntime()) {
-            const saved = await saveToTauriRecordings({ fileName, bytes });
+            const saved = await saveToTauriRecordings({ fileName, bytes, mimeType });
+            storedFileName = (saved && typeof saved.file === 'string' && saved.file) ? saved.file : storedFileName;
+            storedMimeType = (saved && typeof saved.mime_type === 'string' && saved.mime_type) ? saved.mime_type : storedMimeType;
+            storedSize = Number.isFinite(Number(saved?.size)) ? Number(saved.size) : storedSize;
+            targetPath = `data/users/${ownerId}/recordings/${storedFileName}`;
             relPath = saved && typeof saved.path === 'string' ? saved.path : targetPath;
             const cloudToken = getCloudAuthToken();
             if (cloudToken && getFastifyBaseUrl()) {
                 try {
-                    await uploadToFastify({ fileName, bytes, mimeType, filePath: targetPath });
+                    if (storedFileName !== fileName || storedMimeType !== mimeType) {
+                        const download = await fetch(`${getTauriHttpBaseUrl()}/api/recordings/${encodeURIComponent(storedFileName)}`, {
+                            headers: buildLocalAuthHeaders()
+                        });
+                        if (!download.ok) throw new Error(`Unable to read local recording (${download.status})`);
+                        storedBytes = new Uint8Array(await download.arrayBuffer());
+                        storedSize = storedBytes.length;
+                    }
+                    await uploadToFastify({
+                        fileName: storedFileName,
+                        bytes: storedBytes,
+                        mimeType: storedMimeType,
+                        filePath: targetPath
+                    });
                 } catch (_) {
                     // Keep local save even if cloud upload fails.
                 }
@@ -513,11 +554,11 @@
         const atome = await createRecordingAtome({
             ownerId,
             atomeType,
-            fileName,
+            fileName: storedFileName,
             relPath,
             durationSec,
-            sizeBytes: bytes.length,
-            mimeType,
+            sizeBytes: storedSize,
+            mimeType: storedMimeType,
             width,
             height
         });
@@ -529,7 +570,7 @@
             }
         } catch (_) { }
 
-        return { ok: true, atomeId: atome.atomeId, path: relPath };
+        return { ok: true, atomeId: atome.atomeId, path: relPath, fileName: storedFileName, mimeType: storedMimeType };
     }
 
     async function record_video(filename, path, options = {}) {
@@ -547,17 +588,9 @@
         const stopExternalStream = options.stopExternalStream === true;
         const constraints = buildConstraints(options, mode);
 
-        const audioCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
-        const videoCandidates = [
-            'video/webm;codecs=vp9,opus',
-            'video/webm;codecs=vp8,opus',
-            'video/webm',
-            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-            'video/mp4'
-        ];
-        const candidates = mode === 'audio' ? audioCandidates : videoCandidates;
+        const candidates = recordingMimeCandidates(mode);
         if (mode === 'video' && typeof MediaRecorder.isTypeSupported === 'function') {
-            const supportsVideo = videoCandidates.some((candidate) => MediaRecorder.isTypeSupported(candidate));
+            const supportsVideo = candidates.some((candidate) => MediaRecorder.isTypeSupported(candidate));
             if (!supportsVideo) {
                 throw new Error('Video recording is not supported in this environment');
             }
@@ -661,7 +694,7 @@
                             width,
                             height
                         });
-                        resolve({ ok: true, ...saved, fileName: safeFileName });
+                        resolve({ ok: true, ...saved, fileName: saved.fileName || safeFileName });
                     } catch (e) {
                         reject(e);
                     }
