@@ -9,7 +9,6 @@ import {
   isIosHostAppRuntime,
   resolveAudioRuntime
 } from './runtime_audio_backend.js';
-import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
 
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
@@ -36,10 +35,6 @@ import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
   }
 
   function emitError(context, error) {
-    emitIosAudioDiagnostic('kira_backend:error', {
-      context: String(context || ''),
-      error
-    }, 'error');
     if (audio.__emit) {
       audio.__emit('error', { backend: 'kira', context: context, error: error });
     }
@@ -89,10 +84,6 @@ import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
   }
 
   function invoke(cmd, args) {
-    emitIosAudioDiagnostic('kira_backend:invoke_request', {
-      command: cmd,
-      args
-    });
     if (mode === 'tauri') {
       const tauriInvoke = getTauriInvoke(window);
       if (!tauriInvoke) {
@@ -114,10 +105,6 @@ import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
    * Load a clip from a URL. Returns a Promise so the caller can track completion.
    */
   function loadClipFromUrl(id, url) {
-    emitIosAudioDiagnostic('kira_backend:load_clip_from_url', {
-      id,
-      url
-    });
     if (mode === 'tauri' && isIosHostAppRuntime(window)) {
       return rejectIosHostAppBytesLoad('load_url_requires_local_path(' + id + ')');
     }
@@ -204,11 +191,6 @@ import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
       }
 
       if (mode === 'tauri' && path) {
-        emitIosAudioDiagnostic('kira_backend:create_clip_path', {
-          id,
-          path,
-          runtime: resolveAudioRuntime(window)
-        });
         if (isAuv3NativeRuntime() && postAuv3LocalClipLoad(path)) return true;
         return invoke('audio_load_clip', { id: id, path: path }).catch(function (e) {
           emitError('load_clip(' + id + ')', e);
@@ -250,7 +232,6 @@ import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
 
     play(arg) {
       var id = resolveClipId(arg);
-      emitIosAudioDiagnostic('kira_backend:play_request', { id });
       if (id) invoke('audio_play', { id: id }).catch(function (e) {
         emitError('play(' + id + ')', e);
       });
@@ -260,7 +241,6 @@ import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
       if (!arg) return;
       var payload = normalizeKiraPlayInstancePayload(arg);
       if (!payload.assetId || !payload.voiceId) return;
-      emitIosAudioDiagnostic('kira_backend:play_instance_request', payload);
       return invoke(
         KIRA_AUDIO_COMMANDS.PLAY_INSTANCE,
         buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload)

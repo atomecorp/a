@@ -3,7 +3,6 @@ import {
     resolveAudioRuntime,
     resolveVoiceCaptureProvider
 } from './runtime_audio_backend.js';
-import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
 
 // Unified recorder API (Tauri + AUv3 + browser fallback)
 // Contract:
@@ -16,9 +15,7 @@ import { emitIosAudioDiagnostic } from './ios_audio_diagnostics.js';
     const PENDING = new Map();
     let listenersReady = false;
 
-    function logRecordDiag(event, detail = {}) {
-        emitIosAudioDiagnostic(`record_api:${event}`, detail);
-    }
+    function logRecordDiag() { }
 
     function updateRecordProvider() {
         window.__SQUIRREL_RECORD_PROVIDER__ = resolveVoiceCaptureProvider(window);
