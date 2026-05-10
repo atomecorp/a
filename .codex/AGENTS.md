@@ -578,3 +578,33 @@ Never guess.
 Never patch.
 Never bypass architecture.
 Never sacrifice determinism for convenience.
+
+For every modification, repair, refactor, or cleanup operation, the assistant MUST:
+
+- maximize factorization;
+
+- structure the code in the cleanest and most coherent way possible;
+
+- remove unnecessary complexity;
+
+- clean the implementation thoroughly;
+
+- delete every non-essential file only after verifying that it is not used anywhere else in the framework;
+
+- verify all direct usages;
+
+- verify all indirect usages;
+
+- verify runtime dependencies;
+
+- verify synchronization dependencies;
+
+- verify rendering dependencies;
+
+- verify API, MCP, history, and replay dependencies.
+
+Any fallback, patch, workaround, compatibility shim, bypass, temporary adapter, duplicated compatibility layer, or proxy layer discovered during the work MUST be removed.
+
+It MUST be replaced with clean, professional, source-level, architecture-compliant code.
+
+The assistant MUST never preserve a fallback or patch for convenience, speed, or backward compatibility unless it is one of the explicitly allowed fallback exceptions defined in this document.
