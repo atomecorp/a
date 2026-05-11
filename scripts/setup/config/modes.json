@@ -1,0 +1,25 @@
+{
+  "defaultMode": "dev-minimal",
+  "modes": [
+    {
+      "id": "dev-minimal",
+      "description": "Install missing JavaScript dependencies and run the app in development mode"
+    },
+    {
+      "id": "dev-full",
+      "description": "Reserved for full desktop toolchain setup"
+    },
+    {
+      "id": "build-desktop",
+      "description": "Reserved for desktop production build workflow"
+    },
+    {
+      "id": "server-prod",
+      "description": "Reserved for production server setup workflow"
+    },
+    {
+      "id": "audit-only",
+      "description": "Read-only diagnostics without mutating the environment"
+    }
+  ]
+}

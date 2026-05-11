@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::process::Command;
 
 #[cfg(target_os = "macos")]
@@ -108,6 +109,85 @@ try {
 JSON.stringify(payload);
 "#;
 
+#[cfg(target_os = "windows")]
+const WINDOWS_CONTACTS_POWERSHELL: &str = r#"
+$payload = @{
+  ok = $true
+  fetched_at = (Get-Date).ToString('o')
+  contacts = @()
+}
+
+try {
+  $outlook = New-Object -ComObject Outlook.Application
+  $namespace = $outlook.GetNameSpace('MAPI')
+  $contactsFolder = $namespace.GetDefaultFolder(10)
+  $items = $contactsFolder.Items
+
+  foreach ($item in $items) {
+    if ($null -eq $item) { continue }
+    if ($item.Class -ne 40) { continue }
+
+    $phones = @()
+    if ($item.MobileTelephoneNumber) { $phones += @{ label = 'mobile'; value = [string]$item.MobileTelephoneNumber } }
+    if ($item.BusinessTelephoneNumber) { $phones += @{ label = 'work'; value = [string]$item.BusinessTelephoneNumber } }
+    if ($item.HomeTelephoneNumber) { $phones += @{ label = 'home'; value = [string]$item.HomeTelephoneNumber } }
+
+    $emails = @()
+    if ($item.Email1Address) { $emails += @{ label = 'email1'; value = [string]$item.Email1Address } }
+    if ($item.Email2Address) { $emails += @{ label = 'email2'; value = [string]$item.Email2Address } }
+    if ($item.Email3Address) { $emails += @{ label = 'email3'; value = [string]$item.Email3Address } }
+
+    $first = [string]$item.FirstName
+    $last = [string]$item.LastName
+    $middle = [string]$item.MiddleName
+    $full = [string]$item.FullName
+    $company = [string]$item.CompanyName
+    $nickname = [string]$item.NickName
+
+    $name = $full.Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) {
+      $name = (($first + ' ' + $middle + ' ' + $last).Trim())
+    }
+    if ([string]::IsNullOrWhiteSpace($name)) {
+      $name = $nickname
+    }
+    if ([string]::IsNullOrWhiteSpace($name)) {
+      $name = $company
+    }
+    if ([string]::IsNullOrWhiteSpace($name)) {
+      if ($phones.Count -gt 0) {
+        $name = [string]$phones[0].value
+      } elseif ($emails.Count -gt 0) {
+        $name = [string]$emails[0].value
+      } else {
+        $name = 'Contact'
+      }
+    }
+
+    $payload.contacts += @{
+      id = [string]$item.EntryID
+      name = [string]$name
+      first_name = [string]$first
+      last_name = [string]$last
+      middle_name = [string]$middle
+      nickname = [string]$nickname
+      organization = [string]$company
+      note = [string]$item.Body
+      phones = $phones
+      emails = $emails
+    }
+  }
+} catch {
+  $payload = @{
+    ok = $false
+    error = 'windows_contacts_access_failed'
+    message = [string]$_.Exception.Message
+  }
+}
+
+$payload | ConvertTo-Json -Depth 8 -Compress
+"#;
+
 #[tauri::command]
 pub fn macos_contacts_snapshot() -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
@@ -141,7 +221,45 @@ pub fn macos_contacts_snapshot() -> Result<serde_json::Value, String> {
             .map_err(|error| format!("macos_contacts_json_failed:{}", error));
     }
 
-    #[cfg(not(target_os = "macos"))]
+      #[cfg(target_os = "windows")]
+      {
+        let output = Command::new("powershell")
+          .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            WINDOWS_CONTACTS_POWERSHELL,
+          ])
+          .output()
+          .map_err(|error| format!("windows_contacts_command_failed:{}", error))?;
+
+        if !output.status.success() {
+          let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+          let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+          let message = if !stderr.is_empty() {
+            stderr
+          } else if !stdout.is_empty() {
+            stdout
+          } else {
+            "unknown_powershell_failure".to_string()
+          };
+          return Err(format!("windows_contacts_command_failed:{}", message));
+        }
+
+        let stdout = String::from_utf8(output.stdout)
+          .map_err(|error| format!("windows_contacts_utf8_failed:{}", error))?;
+        let trimmed = stdout.trim();
+        if trimmed.is_empty() {
+          return Err("windows_contacts_empty_output".to_string());
+        }
+
+        return serde_json::from_str(trimmed)
+          .map_err(|error| format!("windows_contacts_json_failed:{}", error));
+      }
+
+      #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Err("macos_contacts_unsupported".to_string())
     }

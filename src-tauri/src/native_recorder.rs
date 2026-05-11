@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use std::ffi::{CStr, CString};
 
 #[cfg(target_os = "macos")]
@@ -117,7 +118,18 @@ pub fn start(abs_wav_path: &str, sample_rate: u32, channels: u16, source: &str) 
         return macos::start(abs_wav_path, sample_rate, channels, source);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let _ = source;
+        return crate::audio_engine::recorder::start(
+            "native_recorder_windows",
+            abs_wav_path,
+            sample_rate,
+            channels,
+        );
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (abs_wav_path, sample_rate, channels, source);
         Err("Native recorder is only implemented on macOS in this build".to_string())
@@ -130,7 +142,13 @@ pub fn stop() -> Result<f64, String> {
         return macos::stop();
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        return crate::audio_engine::recorder::stop("native_recorder_windows")
+            .map(|result| result.duration_sec);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Err("Native recorder is only implemented on macOS in this build".to_string())
     }
