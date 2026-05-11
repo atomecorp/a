@@ -137,21 +137,17 @@ export function startFileSyncWatcher(options = {}) {
         ? parsedHashLimit
         : MAX_HASH_BYTES;
 
-    const hasAbsolutePatterns = watched.some((pattern) => path.isAbsolute(pattern));
     const watcherOptions = {
         ignored,
         ignoreInitial: false,
         followSymlinks: true,
         persistent: true,
+        cwd: projectRoot,
         awaitWriteFinish: {
             stabilityThreshold: 200,
             pollInterval: 100
         }
     };
-
-    if (!hasAbsolutePatterns) {
-        watcherOptions.cwd = projectRoot;
-    }
 
     const watcher = chokidar.watch(watched, watcherOptions);
 
