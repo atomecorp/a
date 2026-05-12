@@ -171,6 +171,53 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         let scriptSource = """
                 // Pre-paint background black ASAP to avoid white flash (especially on app launch)
                 (function(){try{document.documentElement.style.background='#000';}catch(e){}; try{if(document.body){document.body.style.background='#000';}}catch(e){}})();
+                (function(){
+                    if(window.__ATOME_XCODE_CONSOLE_BRIDGE__) return;
+                    window.__ATOME_XCODE_CONSOLE_BRIDGE__ = true;
+                    var bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console;
+                    if(!bridge || !window.console) return;
+                    function stringify(value, depth) {
+                        if(depth > 2) return '[depth-limit]';
+                        if(value === null) return 'null';
+                        if(value === undefined) return 'undefined';
+                        if(value instanceof Error) return value.stack || value.message || String(value);
+                        var type = typeof value;
+                        if(type === 'string') return value;
+                        if(type === 'number' || type === 'boolean' || type === 'bigint') return String(value);
+                        if(type === 'function') return '[function ' + (value.name || 'anonymous') + ']';
+                        try {
+                            return JSON.stringify(value, function(key, item) {
+                                if(item instanceof Error) return item.stack || item.message || String(item);
+                                if(typeof item === 'function') return '[function ' + (item.name || 'anonymous') + ']';
+                                return item;
+                            });
+                        } catch(error) {
+                            try { return String(value); } catch(_) { return '[unserializable]'; }
+                        }
+                    }
+                    function limit(text) {
+                        text = String(text || '');
+                        return text.length > 4000 ? text.slice(0, 4000) + '…[truncated]' : text;
+                    }
+                    ['log','info','warn','error','debug'].forEach(function(level) {
+                        var original = typeof window.console[level] === 'function'
+                            ? window.console[level].bind(window.console)
+                            : function(){};
+                        window.console[level] = function() {
+                            var args = Array.prototype.slice.call(arguments || []);
+                            var rendered = args.slice(0, 8).map(function(item) { return limit(stringify(item, 0)); });
+                            try {
+                                bridge.postMessage({
+                                    source: 'js_console',
+                                    level: level,
+                                    message: rendered.join(' '),
+                                    payload: rendered
+                                });
+                            } catch(_) { }
+                            return original.apply(window.console, args);
+                        };
+                    });
+                })();
                 // Ensure proper mobile viewport for full edge-to-edge content
                 (function(){
                     try {
