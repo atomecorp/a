@@ -64,10 +64,10 @@ export const isTauriAudioRuntime = (env = globalThis) => {
     const protocol = String(env?.location?.protocol || '').toLowerCase();
     const host = String(env?.location?.hostname || '').toLowerCase();
     const hostEnv = readHostEnv(env);
-    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
-    if (host === 'tauri.localhost') return true;
     if (isIosHostAppRuntime(env)) return false;
     if (hostEnv === 'app') return false;
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
+    if (host === 'tauri.localhost') return true;
     return !!tauriInvoke;
 };
 
@@ -86,7 +86,9 @@ export const describeAudioRuntimeEnvironment = (env = globalThis) => {
         catch (_) { return false; }
     })();
     const tauriInvokeAvailable = typeof getTauriInvoke(env) === 'function';
-    const nativeKiraRequired = isAuv3AudioRuntime(env) || isIosHostAppRuntime(env);
+    const nativeKiraRequired = isAuv3AudioRuntime(env)
+        || isIosHostAppRuntime(env)
+        || isTauriAudioRuntime(env);
     const nativeKiraAvailable = isAuv3AudioRuntime(env)
         || ((isTauriAudioRuntime(env) || isIosHostAppRuntime(env)) && tauriInvokeAvailable);
     const nativeKiraMissingReason = (() => {
@@ -149,7 +151,21 @@ export const resolveAudioRuntime = (env = globalThis) => {
             preferredFacadeBackendOrder: ['kira'],
             hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: false,
-            tauriInvoke
+            tauriInvoke,
+            native_kira_required: true
+        };
+    }
+
+    if (isTauriAudioRuntime(env)) {
+        return {
+            runtime: 'tauri_native',
+            playback: 'unsupported',
+            record: 'unsupported',
+            preferredFacadeBackendOrder: ['kira'],
+            hasIPlugBridge: hasIPlugBridge(env),
+            hasSwiftBridge: false,
+            tauriInvoke: null,
+            native_kira_required: true
         };
     }
 
@@ -219,6 +235,165 @@ export const resolveVoiceCaptureProvider = (env = globalThis) => {
 export const isNativeKiraPlayback = (env = globalThis) => (
     isNativeKiraPlaybackValue(resolveAudioRuntime(env)?.playback)
 );
+
+export const MTRACK_FILE_TRACE_TAG = 'MTRACK_FILE_TRACE_V1';
+
+const sanitizeFileTraceValue = (value, depth = 0, seen = new WeakSet()) => {
+    if (value == null) return value;
+    if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value * 10000) / 10000 : null;
+    if (typeof value === 'string' || typeof value === 'boolean') return value;
+    if (typeof value === 'bigint') return String(value);
+    if (value instanceof Error) {
+        return { name: value.name || 'Error', message: value.message || String(value) };
+    }
+    if (depth >= 3) return Array.isArray(value) ? `[Array:${value.length}]` : '[Object]';
+    if (typeof value !== 'object') return String(value);
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+    if (Array.isArray(value)) {
+        return value.slice(0, 12).map((entry) => sanitizeFileTraceValue(entry, depth + 1, seen));
+    }
+    const result = {};
+    Object.entries(value).slice(0, 48).forEach(([key, entryValue]) => {
+        result[key] = sanitizeFileTraceValue(entryValue, depth + 1, seen);
+    });
+    return result;
+};
+
+export const traceMtrackFile = (stage = '', detail = {}, env = globalThis) => {
+    const payload = {
+        tag: MTRACK_FILE_TRACE_TAG,
+        ts: new Date().toISOString(),
+        stage: String(stage || 'trace'),
+        trace_id: String(detail?.trace_id || detail?.traceId || detail?.clip_id || detail?.id || '').trim() || null,
+        detail: sanitizeFileTraceValue(detail && typeof detail === 'object' ? detail : { value: detail })
+    };
+    const line = `[${MTRACK_FILE_TRACE_TAG}] ${payload.stage} ${JSON.stringify(payload)}`;
+    try {
+        const consoleRef = env?.console || (typeof console !== 'undefined' ? console : null);
+        if (consoleRef && typeof consoleRef.warn === 'function') {
+            consoleRef.warn(line);
+        } else if (consoleRef && typeof consoleRef.log === 'function') {
+            consoleRef.log(line);
+        }
+    } catch (_) { }
+    try {
+        const bridge = env?.webkit?.messageHandlers?.console;
+        if (bridge && typeof bridge.postMessage === 'function') {
+            bridge.postMessage(line);
+        }
+    } catch (_) { }
+    try {
+        const invoke = getTauriInvoke(env);
+        if (typeof invoke === 'function') {
+            void invoke('log_from_webview', {
+                level: 'warn',
+                source: 'mtrack_file_trace',
+                component: 'mtrack',
+                message: `${MTRACK_FILE_TRACE_TAG}:${payload.stage}`,
+                data: payload
+            }).catch(() => { });
+        }
+    } catch (_) { }
+    return payload;
+};
+
+export const isStrictNativeKiraPlaybackRuntime = (env = globalThis) => (
+    isNativeKiraPlayback(env)
+    || isIosHostAppRuntime(env)
+    || isAuv3AudioRuntime(env)
+    || isTauriAudioRuntime(env)
+);
+
+export const resolveNativeMediaLocalPath = (...values) => {
+    for (const value of values) {
+        const raw = String(value ?? '').trim();
+        if (!raw || raw.startsWith('blob:') || raw.startsWith('data:')) continue;
+        const decoded = (() => {
+            try { return decodeURIComponent(raw); }
+            catch (_) { return raw; }
+        })();
+        if (/^(?:\/var\/|\/private\/var\/|data\/users\/|recordings\/)/i.test(decoded)) {
+            return decoded;
+        }
+        if (/^\//.test(decoded) && !/^\/api\//i.test(decoded)) {
+            return decoded;
+        }
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(decoded) && /^[^?#]+\.[a-z0-9]{2,8}$/i.test(decoded)) {
+            return decoded.replace(/^\/+/, '');
+        }
+        let parsed = null;
+        try {
+            parsed = new URL(raw, 'atome:///');
+        } catch (_) {
+            parsed = null;
+        }
+        const pathname = parsed ? String(parsed.pathname || '').trim() : raw;
+        const normalizedPath = (() => {
+            try { return decodeURIComponent(pathname); }
+            catch (_) { return pathname; }
+        })()
+            .replace(/^file:\/\/\/file\//i, '')
+            .replace(/^file:\/\//i, '')
+            .replace(/^\/file\//i, '')
+            .replace(/^file\//i, '');
+        if (/^(?:\/var\/|\/private\/var\/|data\/users\/|recordings\/)/i.test(normalizedPath)) {
+            return normalizedPath;
+        }
+        if (/^\//.test(normalizedPath) && !/^\/api\//i.test(normalizedPath)) {
+            return normalizedPath;
+        }
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(raw) && /^[^?#]+\.[a-z0-9]{2,8}$/i.test(normalizedPath)) {
+            return normalizedPath.replace(/^\/+/, '');
+        }
+        if (parsed && parsed.protocol === 'atome:') {
+            const atomePath = normalizedPath.replace(/^\/+/, '');
+            if (/^api\//i.test(atomePath)) continue;
+            if (atomePath) return atomePath;
+        }
+    }
+    return '';
+};
+
+export const resolveNativeMediaLocalPathFromObject = (source = {}, extra = {}) => {
+    const object = source && typeof source === 'object' ? source : {};
+    const meta = object.meta && typeof object.meta === 'object' ? object.meta : {};
+    const extras = object.extras && typeof object.extras === 'object' ? object.extras : {};
+    const extrasMeta = extras.meta && typeof extras.meta === 'object' ? extras.meta : {};
+    const extraObject = extra && typeof extra === 'object' ? extra : {};
+    return resolveNativeMediaLocalPath(
+        object.native_audio_path,
+        object.nativeAudioPath,
+        object.local_path,
+        object.localPath,
+        object.file_path,
+        object.filePath,
+        meta.native_audio_path,
+        meta.nativeAudioPath,
+        meta.local_path,
+        meta.localPath,
+        meta.file_path,
+        meta.filePath,
+        extras.native_audio_path,
+        extras.nativeAudioPath,
+        extras.local_path,
+        extras.localPath,
+        extras.file_path,
+        extras.filePath,
+        extrasMeta.native_audio_path,
+        extrasMeta.nativeAudioPath,
+        extrasMeta.local_path,
+        extrasMeta.localPath,
+        extrasMeta.file_path,
+        extrasMeta.filePath,
+        extraObject.native_audio_path,
+        extraObject.nativeAudioPath,
+        extraObject.local_path,
+        extraObject.localPath,
+        extraObject.file_path,
+        extraObject.filePath
+    );
+};
 
 // ─── AUv3 host-routed media playback helpers ────────────────────────
 // These must be used instead of HTMLMediaElement.play() in AUv3 so that
