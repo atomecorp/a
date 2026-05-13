@@ -45,6 +45,7 @@ If the async chain took 22ms, the next display update was scheduled at 22 + 16.6
 **Change**: Raised the seek threshold from 0.20s to **2.0s** on Tauri for playing muted video.
 
 Key constants affected:
+
 ```javascript
 // Before
 const GPU_VIDEO_RATE_SYNC_SEEK_THRESHOLD_TAURI_S = 0.60; // (was 0.20 originally)
@@ -54,6 +55,7 @@ const GPU_VIDEO_RATE_SYNC_SEEK_THRESHOLD_TAURI_S = 2.0;
 ```
 
 Key logic in `syncVideoPlayback()`:
+
 ```javascript
 const useRateSync = isTauriRuntime() && playing && !warmup && !prewarm && !forceSeek;
 
@@ -154,6 +156,7 @@ If the stutter returns, check in this order:
 A frame-by-frame validation probe is available at `temp/tauri_video_frame_probe.mjs`.
 
 Usage:
+
 ```bash
 PROBE_URL="http://localhost:3000" PROBE_DURATION_MS=5000 PROBE_INTERVAL_MS=80 node temp/tauri_video_frame_probe.mjs
 ```
