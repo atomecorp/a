@@ -73,40 +73,6 @@ struct AppState {
     remote_control_token: Option<Arc<String>>,
 }
 
-const MTRACK_FILE_TRACE_TAG: &str = "MTRACK_FILE_TRACE_V1";
-
-fn file_trace_probe(path: &Path) -> JsonValue {
-    let metadata = stdfs::metadata(path).ok();
-    let signature = stdfs::File::open(path)
-        .ok()
-        .and_then(|mut file| {
-            let mut buffer = [0u8; 16];
-            file.read(&mut buffer)
-                .ok()
-                .map(|count| buffer[..count].to_vec())
-        })
-        .unwrap_or_default()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join("");
-    json!({
-        "exists": path.exists(),
-        "is_file": metadata.as_ref().map(|m| m.is_file()).unwrap_or(false),
-        "size": metadata.as_ref().map(|m| m.len()).unwrap_or(0),
-        "extension": path.extension().and_then(|value| value.to_str()).unwrap_or(""),
-        "signature": signature
-    })
-}
-
-fn trace_media_file(stage: &str, data: JsonValue) {
-    warn!(
-        message = MTRACK_FILE_TRACE_TAG,
-        stage = stage,
-        data = ?data
-    );
-}
-
 #[derive(Deserialize, Default)]
 struct MediaTokenQuery {
     token: Option<String>,
@@ -2747,17 +2713,6 @@ async fn upload_handler(
                 );
             }
         };
-    trace_media_file(
-        "tauri_upload_before_write",
-        json!({
-            "trace_id": &file_name,
-            "user_id": &user_id,
-            "file_name": &file_name,
-            "target_path": file_path.to_string_lossy().to_string(),
-            "body_size": body.len(),
-            "project_root": state.project_root.to_string_lossy().to_string()
-        }),
-    );
 
     if let Err(err) = fs::write(&file_path, &body).await {
         eprintln!("Erreur écriture upload {:?}: {}", file_path, err);
@@ -2766,16 +2721,6 @@ async fn upload_handler(
             Json(json!({ "success": false, "error": err.to_string() })),
         );
     }
-    trace_media_file(
-        "tauri_upload_after_write",
-        json!({
-            "trace_id": &file_name,
-            "user_id": &user_id,
-            "file_name": &file_name,
-            "target_path": file_path.to_string_lossy().to_string(),
-            "probe": file_trace_probe(&file_path)
-        }),
-    );
 
     let mut stored_file_name = file_name;
     let mut stored_file_path = file_path;
@@ -2783,18 +2728,6 @@ async fn upload_handler(
     if should_serve_webm_video_as_mp4(&stored_file_name) {
         let output_name = replace_file_extension(&stored_file_name, "mp4");
         let output_path = stored_file_path.with_file_name(&output_name);
-        trace_media_file(
-            "tauri_upload_before_conversion",
-            json!({
-                "trace_id": &stored_file_name,
-                "user_id": &user_id,
-                "input_name": &stored_file_name,
-                "input_path": stored_file_path.to_string_lossy().to_string(),
-                "output_name": &output_name,
-                "output_path": output_path.to_string_lossy().to_string(),
-                "input_probe": file_trace_probe(&stored_file_path)
-            }),
-        );
         if let Err(error) = transcode_video_to_mp4(&stored_file_path, &output_path).await {
             let _ = fs::remove_file(&stored_file_path).await;
             return (
@@ -2811,17 +2744,6 @@ async fn upload_handler(
         converted_from = Some(stored_file_name);
         stored_file_name = output_name;
         stored_file_path = output_path;
-        trace_media_file(
-            "tauri_upload_after_conversion",
-            json!({
-                "trace_id": &stored_file_name,
-                "user_id": &user_id,
-                "converted_from": &converted_from,
-                "stored_file_name": &stored_file_name,
-                "stored_file_path": stored_file_path.to_string_lossy().to_string(),
-                "stored_probe": file_trace_probe(&stored_file_path)
-            }),
-        );
     }
 
     let rel_path = stored_file_path
@@ -2835,19 +2757,6 @@ async fn upload_handler(
         .map(|metadata| metadata.len())
         .unwrap_or(body.len() as u64);
     let stored_mime_type = guess_mime_from_ext(&stored_file_name);
-    trace_media_file(
-        "tauri_upload_response",
-        json!({
-            "trace_id": &stored_file_name,
-            "user_id": &user_id,
-            "stored_file_name": &stored_file_name,
-            "stored_file_path": stored_file_path.to_string_lossy().to_string(),
-            "response_path": &rel_path,
-            "mime_type": stored_mime_type,
-            "size": size,
-            "converted_from": &converted_from
-        }),
-    );
 
     (
         StatusCode::OK,
@@ -3304,18 +3213,6 @@ async fn user_recordings_upload_handler(
     }
 
     let file_path = recordings_dir.join(&safe_name);
-    trace_media_file(
-        "tauri_recording_upload_before_write",
-        json!({
-            "trace_id": &safe_name,
-            "user_id": &user_id,
-            "file_name": &safe_name,
-            "target_path": file_path.to_string_lossy().to_string(),
-            "body_size": body.len(),
-            "mime_type": &mime_type,
-            "project_root": state.project_root.to_string_lossy().to_string()
-        }),
-    );
     if let Err(err) = fs::write(&file_path, &body).await {
         eprintln!("Erreur écriture recording {:?}: {}", file_path, err);
         return (
@@ -3323,16 +3220,6 @@ async fn user_recordings_upload_handler(
             Json(json!({ "success": false, "error": err.to_string() })),
         );
     }
-    trace_media_file(
-        "tauri_recording_upload_after_write",
-        json!({
-            "trace_id": &safe_name,
-            "user_id": &user_id,
-            "file_name": &safe_name,
-            "target_path": file_path.to_string_lossy().to_string(),
-            "probe": file_trace_probe(&file_path)
-        }),
-    );
 
     let mut stored_name = safe_name.clone();
     let mut stored_path = file_path;
@@ -3346,18 +3233,6 @@ async fn user_recordings_upload_handler(
     if should_transcode_recording_upload_to_mp4(&safe_name, &stored_mime_type) {
         let output_name = replace_file_extension(&safe_name, "mp4");
         let output_path = recordings_dir.join(&output_name);
-        trace_media_file(
-            "tauri_recording_upload_before_conversion",
-            json!({
-                "trace_id": &safe_name,
-                "user_id": &user_id,
-                "input_name": &safe_name,
-                "input_path": stored_path.to_string_lossy().to_string(),
-                "output_name": &output_name,
-                "output_path": output_path.to_string_lossy().to_string(),
-                "input_probe": file_trace_probe(&stored_path)
-            }),
-        );
         if let Err(error) = transcode_video_to_mp4(&stored_path, &output_path).await {
             let _ = fs::remove_file(&stored_path).await;
             return (
@@ -3375,17 +3250,6 @@ async fn user_recordings_upload_handler(
         stored_name = output_name;
         stored_path = output_path;
         stored_mime_type = "video/mp4".to_string();
-        trace_media_file(
-            "tauri_recording_upload_after_conversion",
-            json!({
-                "trace_id": &stored_name,
-                "user_id": &user_id,
-                "converted_from": &converted_from,
-                "stored_file_name": &stored_name,
-                "stored_file_path": stored_path.to_string_lossy().to_string(),
-                "stored_probe": file_trace_probe(&stored_path)
-            }),
-        );
     }
 
     let size = fs::metadata(&stored_path)
@@ -3394,19 +3258,6 @@ async fn user_recordings_upload_handler(
         .map(|metadata| metadata.len())
         .unwrap_or(body.len() as u64);
     let rel_path = format!("data/users/{}/recordings/{}", user_id, stored_name);
-    trace_media_file(
-        "tauri_recording_upload_response",
-        json!({
-            "trace_id": &stored_name,
-            "user_id": &user_id,
-            "stored_file_name": &stored_name,
-            "stored_file_path": stored_path.to_string_lossy().to_string(),
-            "response_path": &rel_path,
-            "mime_type": &stored_mime_type,
-            "size": size,
-            "converted_from": &converted_from
-        }),
-    );
     (
         StatusCode::OK,
         Json(json!({
@@ -3735,18 +3586,6 @@ async fn download_upload_handler(
 
     let safe_name = sanitize_file_name(&file);
     let file_path = downloads_dir.join(&safe_name);
-    trace_media_file(
-        "tauri_upload_download_request",
-        json!({
-            "trace_id": &safe_name,
-            "user_id": &user_id,
-            "requested_file": &file,
-            "safe_name": &safe_name,
-            "downloads_dir": downloads_dir.to_string_lossy().to_string(),
-            "candidate_path": file_path.to_string_lossy().to_string(),
-            "candidate_probe": file_trace_probe(&file_path)
-        }),
-    );
     let verbose_logs = download_verbose_logs_enabled();
     if verbose_logs {
         println!(
@@ -3791,18 +3630,6 @@ async fn download_upload_handler(
                     .into_response();
             }
         };
-    trace_media_file(
-        "tauri_upload_download_resolved",
-        json!({
-            "trace_id": &safe_name,
-            "user_id": &user_id,
-            "requested_path": file_path.to_string_lossy().to_string(),
-            "served_path": served_path.to_string_lossy().to_string(),
-            "served_name": &served_name,
-            "content_type": content_type,
-            "served_probe": file_trace_probe(&served_path)
-        }),
-    );
 
     let metadata = match fs::metadata(&served_path).await {
         Ok(value) => value,
@@ -3940,17 +3767,6 @@ async fn extract_audio_handler(
         )
             .into_response();
     };
-    trace_media_file(
-        "tauri_extract_audio_source_resolved",
-        json!({
-            "trace_id": &safe_name,
-            "user_id": &user_id,
-            "safe_name": &safe_name,
-            "source_path": source_path.to_string_lossy().to_string(),
-            "source_dir": source_dir.to_string_lossy().to_string(),
-            "source_probe": file_trace_probe(&source_path)
-        }),
-    );
 
     let extension = Path::new(&safe_name)
         .extension()
@@ -3986,15 +3802,6 @@ async fn extract_audio_handler(
     let cached_audio = cache_dir.join(format!("{}.aac.m4a", base_name));
 
     if fs::metadata(&cached_audio).await.is_err() {
-        trace_media_file(
-            "tauri_extract_audio_before_conversion",
-            json!({
-                "trace_id": &safe_name,
-                "source_path": source_path.to_string_lossy().to_string(),
-                "output_path": cached_audio.to_string_lossy().to_string(),
-                "source_probe": file_trace_probe(&source_path)
-            }),
-        );
         let source_path_for_ffmpeg = source_path.clone();
         let cached_audio_for_ffmpeg = cached_audio.clone();
         let extract_result = tokio::task::spawn_blocking(move || {
@@ -4040,25 +3847,7 @@ async fn extract_audio_handler(
             )
                 .into_response();
         }
-        trace_media_file(
-            "tauri_extract_audio_after_conversion",
-            json!({
-                "trace_id": &safe_name,
-                "source_path": source_path.to_string_lossy().to_string(),
-                "output_path": cached_audio.to_string_lossy().to_string(),
-                "output_probe": file_trace_probe(&cached_audio)
-            }),
-        );
     } else {
-        trace_media_file(
-            "tauri_extract_audio_cache_hit",
-            json!({
-                "trace_id": &safe_name,
-                "source_path": source_path.to_string_lossy().to_string(),
-                "output_path": cached_audio.to_string_lossy().to_string(),
-                "output_probe": file_trace_probe(&cached_audio)
-            }),
-        );
     }
 
     let metadata = match fs::metadata(&cached_audio).await {
@@ -4177,19 +3966,6 @@ async fn download_recording_handler(
                         .into_response();
                 }
             };
-        trace_media_file(
-            "tauri_recording_download_resolved_direct",
-            json!({
-                "trace_id": &safe_name,
-                "user_id": &user_id,
-                "recording_id": &recording_id,
-                "direct_path": direct_path.to_string_lossy().to_string(),
-                "served_path": served_path.to_string_lossy().to_string(),
-                "served_name": &served_name,
-                "content_type": content_type,
-                "served_probe": file_trace_probe(&served_path)
-            }),
-        );
         let disposition = format!("inline; filename=\"{}\"", served_name);
         match serve_file_with_range(&served_path, content_type, "", &headers, &disposition).await {
             Ok(response) => {
@@ -4368,20 +4144,6 @@ async fn download_recording_handler(
                     .into_response();
             }
         };
-    trace_media_file(
-        "tauri_recording_download_resolved",
-        json!({
-            "trace_id": &target_name,
-            "user_id": &user_id,
-            "recording_id": &recording_id,
-            "relative_path": &rel,
-            "target_path": target_path.to_string_lossy().to_string(),
-            "served_path": served_path.to_string_lossy().to_string(),
-            "served_name": &served_name,
-            "content_type": content_type,
-            "served_probe": file_trace_probe(&served_path)
-        }),
-    );
     let disposition = format!("inline; filename=\"{}\"", served_name);
     match serve_file_with_range(&served_path, content_type, "", &headers, &disposition).await {
         Ok(response) => {

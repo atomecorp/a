@@ -4,12 +4,8 @@
 use super::{metering, playback, recorder};
 use serde_json::{json, Value};
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::warn;
-
-const MTRACK_FILE_TRACE_TAG: &str = "MTRACK_FILE_TRACE_V1";
 
 fn clip_metadata_json(metadata: &playback::ClipMetadata) -> Value {
     json!({
@@ -41,39 +37,6 @@ fn resolve_audio_clip_path(project_root: &Path, clip_path: &str) -> Result<PathB
         "Audio clip path does not exist: {}",
         candidate.display()
     ))
-}
-
-fn file_probe_json(path: &Path) -> Value {
-    let metadata = fs::metadata(path).ok();
-    let first_bytes = fs::File::open(path)
-        .ok()
-        .and_then(|mut file| {
-            let mut buffer = [0u8; 16];
-            file.read(&mut buffer)
-                .ok()
-                .map(|count| buffer[..count].to_vec())
-        })
-        .unwrap_or_default();
-    let signature = first_bytes
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join("");
-    json!({
-        "exists": path.exists(),
-        "is_file": metadata.as_ref().map(|m| m.is_file()).unwrap_or(false),
-        "size": metadata.as_ref().map(|m| m.len()).unwrap_or(0),
-        "extension": path.extension().and_then(|value| value.to_str()).unwrap_or(""),
-        "signature": signature
-    })
-}
-
-fn trace_audio_file(stage: &str, data: Value) {
-    warn!(
-        message = MTRACK_FILE_TRACE_TAG,
-        stage = stage,
-        data = ?data
-    );
 }
 
 fn lower_file_extension(path: &Path) -> String {
@@ -145,46 +108,15 @@ fn extract_native_video_audio(source_path: &Path, output_path: &Path) -> Result<
     ))
 }
 
-fn prepare_native_audio_decode_path(id: &str, source_path: &Path) -> Result<PathBuf, String> {
+fn prepare_native_audio_decode_path(source_path: &Path) -> Result<PathBuf, String> {
     if !is_video_container_requiring_native_audio_extract(source_path) {
         return Ok(source_path.to_path_buf());
     }
     let cached_audio_path = native_audio_cache_path(source_path)?;
     if cached_audio_path.exists() {
-        trace_audio_file(
-            "tauri_audio_video_extract_cache_hit",
-            json!({
-                "trace_id": id,
-                "id": id,
-                "source_path": source_path.to_string_lossy().to_string(),
-                "prepared_path": cached_audio_path.to_string_lossy().to_string(),
-                "source_probe": file_probe_json(source_path),
-                "prepared_probe": file_probe_json(&cached_audio_path)
-            }),
-        );
         return Ok(cached_audio_path);
     }
-    trace_audio_file(
-        "tauri_audio_video_extract_before",
-        json!({
-            "trace_id": id,
-            "id": id,
-            "source_path": source_path.to_string_lossy().to_string(),
-            "prepared_path": cached_audio_path.to_string_lossy().to_string(),
-            "source_probe": file_probe_json(source_path)
-        }),
-    );
     extract_native_video_audio(source_path, &cached_audio_path)?;
-    trace_audio_file(
-        "tauri_audio_video_extract_after",
-        json!({
-            "trace_id": id,
-            "id": id,
-            "source_path": source_path.to_string_lossy().to_string(),
-            "prepared_path": cached_audio_path.to_string_lossy().to_string(),
-            "prepared_probe": file_probe_json(&cached_audio_path)
-        }),
-    );
     Ok(cached_audio_path)
 }
 
@@ -201,55 +133,9 @@ pub fn audio_load_clip(
     path: String,
 ) -> Result<Value, String> {
     let input_path_was_absolute = Path::new(&path).is_absolute();
-    trace_audio_file(
-        "tauri_audio_load_clip_before_resolve",
-        json!({
-            "trace_id": &id,
-            "id": &id,
-            "input_path": &path,
-            "input_path_was_absolute": input_path_was_absolute,
-            "project_root": paths.project_root.to_string_lossy().to_string()
-        }),
-    );
     let resolved_path = resolve_audio_clip_path(&paths.project_root, &path)?;
-    trace_audio_file(
-        "tauri_audio_load_clip_before_decode",
-        json!({
-            "trace_id": &id,
-            "id": &id,
-            "input_path": &path,
-            "resolved_path": resolved_path.to_string_lossy().to_string(),
-            "probe": file_probe_json(&resolved_path)
-        }),
-    );
-    let decode_path = prepare_native_audio_decode_path(&id, &resolved_path)?;
-    if decode_path != resolved_path {
-        trace_audio_file(
-            "tauri_audio_load_clip_prepared_decode_path",
-            json!({
-                "trace_id": &id,
-                "id": &id,
-                "input_path": &path,
-                "resolved_path": resolved_path.to_string_lossy().to_string(),
-                "decode_path": decode_path.to_string_lossy().to_string(),
-                "decode_probe": file_probe_json(&decode_path)
-            }),
-        );
-    }
+    let decode_path = prepare_native_audio_decode_path(&resolved_path)?;
     let metadata = playback::load_clip(&id, &decode_path.to_string_lossy())?;
-    trace_audio_file(
-        "tauri_audio_load_clip_after_decode",
-        json!({
-            "trace_id": &id,
-            "id": &id,
-            "input_path": &path,
-            "resolved_path": resolved_path.to_string_lossy().to_string(),
-            "decode_path": decode_path.to_string_lossy().to_string(),
-            "sample_rate": metadata.sample_rate,
-            "frame_count": metadata.frame_count,
-            "duration_seconds": metadata.duration_seconds
-        }),
-    );
     Ok(json!({
         "success": true,
         "id": id,
@@ -267,28 +153,8 @@ pub fn audio_load_clip(
 #[tauri::command]
 pub fn audio_load_clip_from_bytes(id: String, bytes: Vec<u8>) -> Result<Value, String> {
     let byte_len = bytes.len();
-    trace_audio_file(
-        "tauri_audio_load_clip_from_bytes_before_decode",
-        json!({
-            "trace_id": &id,
-            "id": &id,
-            "bytes_len": byte_len,
-            "signature": bytes.iter().take(16).map(|byte| format!("{byte:02x}")).collect::<Vec<_>>().join("")
-        }),
-    );
     // Pass owned Vec to avoid an extra .to_vec() copy inside playback
     let metadata = playback::load_clip_from_bytes(&id, bytes)?;
-    trace_audio_file(
-        "tauri_audio_load_clip_from_bytes_after_decode",
-        json!({
-            "trace_id": &id,
-            "id": &id,
-            "bytes_len": byte_len,
-            "sample_rate": metadata.sample_rate,
-            "frame_count": metadata.frame_count,
-            "duration_seconds": metadata.duration_seconds
-        }),
-    );
     Ok(json!({
         "success": true,
         "id": id,
@@ -317,20 +183,6 @@ pub fn audio_play_instance(
     loop_start_seconds: Option<f64>,
     loop_end_seconds: Option<f64>,
 ) -> Result<Value, String> {
-    trace_audio_file(
-        "tauri_audio_play_instance_before",
-        json!({
-            "trace_id": &asset_id,
-            "asset_id": &asset_id,
-            "voice_id": &voice_id,
-            "start_seconds": start_seconds,
-            "duration_seconds": duration_seconds,
-            "gain": gain,
-            "rate": rate,
-            "loop_start_seconds": loop_start_seconds,
-            "loop_end_seconds": loop_end_seconds
-        }),
-    );
     playback::play_instance(
         &asset_id,
         &voice_id,
@@ -341,14 +193,6 @@ pub fn audio_play_instance(
         loop_start_seconds,
         loop_end_seconds,
     )?;
-    trace_audio_file(
-        "tauri_audio_play_instance_after",
-        json!({
-            "trace_id": &asset_id,
-            "asset_id": &asset_id,
-            "voice_id": &voice_id
-        }),
-    );
     Ok(json!({
         "success": true,
         "asset_id": asset_id,

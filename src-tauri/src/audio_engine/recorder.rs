@@ -101,6 +101,19 @@ impl OutputFormat {
             Self::Float32 => writer.write_sample(sample as f32 / 32768.0),
         }
     }
+
+    fn write_u16_sample<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut WavWriter<W>,
+        sample: u16,
+    ) -> Result<(), hound::Error> {
+        let centered = sample as i32 - 32768;
+        match self {
+            Self::Int16 => writer.write_sample(centered as i16),
+            Self::Int24 => writer.write_sample(centered << 8),
+            Self::Float32 => writer.write_sample(centered as f32 / 32768.0),
+        }
+    }
 }
 
 /// Preferred buffer size hint for CPAL.
@@ -361,6 +374,40 @@ pub fn start_with_options(
                         )
                         .map_err(|e| format!("Failed to build input stream (i16): {e}"))?
                 }
+                SampleFormat::U16 => {
+                    let writer_clone3 = Arc::clone(&writer);
+                    let stop_for_callback3 = Arc::clone(&stop_atomic_cb);
+                    let frame_count_cb3 = Arc::clone(&frame_count_thread);
+                    let fmt_cb3 = fmt;
+                    device
+                        .build_input_stream(
+                            &stream_config,
+                            move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                                if stop_for_callback3.load(Ordering::Relaxed) {
+                                    return;
+                                }
+                                let floats: Vec<f32> = data
+                                    .iter()
+                                    .map(|&s| (s as f32 - 32768.0) / 32768.0)
+                                    .collect();
+                                metering::push_samples(&floats);
+                                if let Ok(mut guard) = writer_clone3.lock() {
+                                    if let Some(ref mut w) = *guard {
+                                        for &sample in data {
+                                            let _ = fmt_cb3.write_u16_sample(w, sample);
+                                        }
+                                    }
+                                }
+                                frame_count_cb3.fetch_add(
+                                    (data.len() / usize::from(actual_ch.max(1))) as u64,
+                                    Ordering::Relaxed,
+                                );
+                            },
+                            err_fn,
+                            None,
+                        )
+                        .map_err(|e| format!("Failed to build input stream (u16): {e}"))?
+                }
                 _ => {
                     return Err(format!("Unsupported sample format: {:?}", sample_format));
                 }
@@ -465,6 +512,11 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
     } else {
         session.start_time.elapsed().as_secs_f64()
     };
+    if frame_count == 0 {
+        return Err(format!(
+            "audio_recording_empty: no input frames were captured for session '{session_id}'"
+        ));
+    }
 
     Ok(RecordResult {
         session_id: session_id.to_string(),

@@ -170,7 +170,7 @@ final class AppNativeAudioController: NSObject {
     private func configureAudioSessionIfNeeded() throws {
         if audioSessionReady { return }
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothA2DP])
+        try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP])
         try session.setActive(true)
         audioSessionReady = true
     }
@@ -325,9 +325,22 @@ final class AppNativeAudioController: NSObject {
         activeRecordingSessionId = nil
         activeRecordingFileName = nil
         activeRecordingPath = nil
+        activeRecordingFile = nil
         activeRecordingSampleRate = 0
         activeRecordingChannels = 0
         activeRecordingFrames = 0
+        if frames <= 0 || (fileSize >= 0 && fileSize <= 44) {
+            complete(completion, payload: [
+                "success": false,
+                "session_id": sessionId,
+                "file_name": fileName,
+                "file_path": path,
+                "absolute_file_path": absolutePath,
+                "size_bytes": fileSize,
+                "frame_count": Int(frames)
+            ], error: "audio_recording_empty")
+            return
+        }
         print("[AUDIO_NATIVE] audio_record_stop OK session=\(sessionId) file=\(fileName) path=\(path) absolute=\(absolutePath.isEmpty ? "<unknown>" : absolutePath) bytes=\(fileSize) duration=\(duration) frames=\(frames)")
         complete(completion, payload: [
             "success": true,

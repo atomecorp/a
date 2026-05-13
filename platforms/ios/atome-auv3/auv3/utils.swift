@@ -954,6 +954,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             let stats = stopMicRecordingEngine(sampleRate: activeSampleRate)
             duration = stats.duration
             print("[AUV3_RECORD] mic_engine_stop_ok session=\(activeSessionId) file=\(activeFileName) frames=\(stats.frames) peak=\(stats.peak)")
+            if stats.frames <= 0 {
+                ok = false
+                stopErrorMessage = "audio_recording_empty"
+            }
         } else {
             var errPtr: UnsafeMutablePointer<CChar>? = nil
             ok = squirrel_recorder_core_stop(&errPtr, &duration)
@@ -1061,7 +1065,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         let engine = AVAudioEngine()
 #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers])
+        try? session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP])
         try? session.setActive(true)
 #endif
         let input = engine.inputNode

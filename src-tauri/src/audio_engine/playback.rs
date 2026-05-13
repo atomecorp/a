@@ -26,9 +26,6 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use tracing::warn;
-
-const MTRACK_FILE_TRACE_TAG: &str = "MTRACK_FILE_TRACE_V1";
 
 /// Configurable tween durations for audio parameter changes.
 /// Allows the caller to tune fade times for professional-grade audio.
@@ -265,57 +262,21 @@ fn resolve_native_decode_route(
 ) -> Result<NativeDecodeRoute, String> {
     let container = sniff_native_container(bytes);
     if container == NativeContainer::IsoBmff || is_isobmff_extension(extension_hint) {
-        warn!(
-            message = MTRACK_FILE_TRACE_TAG,
-            stage = "tauri_audio_decode_route",
-            source_label = source_label,
-            extension = extension_hint.unwrap_or(""),
-            container = ?container,
-            route = "symphonia_isobmff",
-            signature = byte_signature(bytes)
-        );
         return Ok(NativeDecodeRoute::SymphoniaIsoBmff);
     }
     if matches!(
         container,
         NativeContainer::Mp3 | NativeContainer::Wav | NativeContainer::Ogg | NativeContainer::Flac
     ) {
-        warn!(
-            message = MTRACK_FILE_TRACE_TAG,
-            stage = "tauri_audio_decode_route",
-            source_label = source_label,
-            extension = extension_hint.unwrap_or(""),
-            container = ?container,
-            route = "kira",
-            signature = byte_signature(bytes)
-        );
         return Ok(NativeDecodeRoute::Kira);
     }
     if is_kira_audio_extension(extension_hint) {
-        warn!(
-            message = MTRACK_FILE_TRACE_TAG,
-            stage = "tauri_audio_decode_route_error",
-            source_label = source_label,
-            extension = extension_hint.unwrap_or(""),
-            container = ?container,
-            route = "error_container_mismatch",
-            signature = byte_signature(bytes)
-        );
         return Err(format!(
             "Native audio container mismatch for {source_label}: extension={} signature={}",
             extension_hint.unwrap_or("unknown"),
             byte_signature(bytes)
         ));
     }
-    warn!(
-        message = MTRACK_FILE_TRACE_TAG,
-        stage = "tauri_audio_decode_route_error",
-        source_label = source_label,
-        extension = extension_hint.unwrap_or(""),
-        container = ?container,
-        route = "error_unsupported_container",
-        signature = byte_signature(bytes)
-    );
     Err(format!(
         "Unsupported native audio container for {source_label}: extension={} signature={}",
         extension_hint.unwrap_or("none"),

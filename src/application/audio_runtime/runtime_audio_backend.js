@@ -236,68 +236,6 @@ export const isNativeKiraPlayback = (env = globalThis) => (
     isNativeKiraPlaybackValue(resolveAudioRuntime(env)?.playback)
 );
 
-export const MTRACK_FILE_TRACE_TAG = 'MTRACK_FILE_TRACE_V1';
-
-const sanitizeFileTraceValue = (value, depth = 0, seen = new WeakSet()) => {
-    if (value == null) return value;
-    if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value * 10000) / 10000 : null;
-    if (typeof value === 'string' || typeof value === 'boolean') return value;
-    if (typeof value === 'bigint') return String(value);
-    if (value instanceof Error) {
-        return { name: value.name || 'Error', message: value.message || String(value) };
-    }
-    if (depth >= 3) return Array.isArray(value) ? `[Array:${value.length}]` : '[Object]';
-    if (typeof value !== 'object') return String(value);
-    if (seen.has(value)) return '[Circular]';
-    seen.add(value);
-    if (Array.isArray(value)) {
-        return value.slice(0, 12).map((entry) => sanitizeFileTraceValue(entry, depth + 1, seen));
-    }
-    const result = {};
-    Object.entries(value).slice(0, 48).forEach(([key, entryValue]) => {
-        result[key] = sanitizeFileTraceValue(entryValue, depth + 1, seen);
-    });
-    return result;
-};
-
-export const traceMtrackFile = (stage = '', detail = {}, env = globalThis) => {
-    const payload = {
-        tag: MTRACK_FILE_TRACE_TAG,
-        ts: new Date().toISOString(),
-        stage: String(stage || 'trace'),
-        trace_id: String(detail?.trace_id || detail?.traceId || detail?.clip_id || detail?.id || '').trim() || null,
-        detail: sanitizeFileTraceValue(detail && typeof detail === 'object' ? detail : { value: detail })
-    };
-    const line = `[${MTRACK_FILE_TRACE_TAG}] ${payload.stage} ${JSON.stringify(payload)}`;
-    try {
-        const consoleRef = env?.console || (typeof console !== 'undefined' ? console : null);
-        if (consoleRef && typeof consoleRef.warn === 'function') {
-            consoleRef.warn(line);
-        } else if (consoleRef && typeof consoleRef.log === 'function') {
-            consoleRef.log(line);
-        }
-    } catch (_) { }
-    try {
-        const bridge = env?.webkit?.messageHandlers?.console;
-        if (bridge && typeof bridge.postMessage === 'function') {
-            bridge.postMessage(line);
-        }
-    } catch (_) { }
-    try {
-        const invoke = getTauriInvoke(env);
-        if (typeof invoke === 'function') {
-            void invoke('log_from_webview', {
-                level: 'warn',
-                source: 'mtrack_file_trace',
-                component: 'mtrack',
-                message: `${MTRACK_FILE_TRACE_TAG}:${payload.stage}`,
-                data: payload
-            }).catch(() => { });
-        }
-    } catch (_) { }
-    return payload;
-};
-
 export const isStrictNativeKiraPlaybackRuntime = (env = globalThis) => (
     isNativeKiraPlayback(env)
     || isIosHostAppRuntime(env)

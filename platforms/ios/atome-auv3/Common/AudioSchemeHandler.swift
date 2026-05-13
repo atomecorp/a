@@ -150,7 +150,9 @@ document.getElementById('player').addEventListener('error', e => {
     
     private func mimeType(for ext: String) -> String {
         switch ext {
-        case "m4a", "mp4": return "audio/mp4"
+        case "m4a": return "audio/mp4"
+        case "mp4", "m4v": return "video/mp4"
+        case "mov": return "video/quicktime"
         case "mp3": return "audio/mpeg"
         case "wav": return "audio/wav"
     case "js": return "application/javascript"

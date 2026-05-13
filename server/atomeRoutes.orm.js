@@ -20,8 +20,12 @@ import {
 } from './atomeRealtime.js';
 
 const SYNC_DEBUG =
-    process.env.SQUIRREL_SYNC_DEBUG !== '0'
-    && process.env.SQUIRREL_SYNC_DEBUG !== 'false';
+    process.env.SQUIRREL_SYNC_DEBUG === '1'
+    || process.env.SQUIRREL_SYNC_DEBUG === 'true';
+const FASTIFY_EVENT_DEBUG =
+    process.env.SQUIRREL_FASTIFY_EVENT_DEBUG === '1'
+    || process.env.SQUIRREL_FASTIFY_EVENT_DEBUG === 'true'
+    || SYNC_DEBUG;
 const TAURI_SYNC_URL = process.env.SQUIRREL_TAURI_URL || process.env.TAURI_URL || 'http://127.0.0.1:3000';
 const SYNC_REMOTE_ENABLED = process.env.SQUIRREL_SYNC_REMOTE !== '0';
 const SYNC_TARGET_SERVER = 'tauri';
@@ -33,6 +37,15 @@ function syncDebugLog(message, data = null) {
         return;
     }
     console.log(`[SyncDebug] ${message}`, data);
+}
+
+function fastifyEventDebugLog(message, data = null) {
+    if (!FASTIFY_EVENT_DEBUG) return;
+    if (data === null || data === undefined) {
+        console.log(`[Fastify] ${message}`);
+        return;
+    }
+    console.log(`[Fastify] ${message}`, data);
 }
 
 // =============================================================================
@@ -351,7 +364,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     grantorId: user.id
                 });
             } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                console.warn("[cleanup] operation failed", error);
+            }
 
             try {
                 await broadcastAtomeCreate({
@@ -362,7 +376,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     senderUserId: user.id
                 });
             } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                console.warn("[cleanup] operation failed", error);
+            }
 
             // Broadcast to WebSocket clients
             broadcastMessage({
@@ -547,7 +562,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     });
                 }
             } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                console.warn("[cleanup] operation failed", error);
+            }
 
             // Broadcast
             broadcastMessage({
@@ -621,7 +637,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     });
                 }
             } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                console.warn("[cleanup] operation failed", error);
+            }
 
             // Broadcast
             broadcastMessage({
@@ -688,7 +705,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     senderUserId: user.id
                 });
             } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                console.warn("[cleanup] operation failed", error);
+            }
 
             // Broadcast
             broadcastMessage({
@@ -823,11 +841,11 @@ export async function registerAtomeRoutes(server, dataSource = null) {
     };
 
     server.post('/api/events/commit', async (request, reply) => {
-        console.log('[Fastify] /api/events/commit received');
+        fastifyEventDebugLog('/api/events/commit received');
         const syncSource = String(request.headers['x-sync-source'] || '').toLowerCase();
         const user = await validateToken(request);
         if (!user) {
-            console.log('[Fastify] /api/events/commit UNAUTHORIZED - no valid token');
+            fastifyEventDebugLog('/api/events/commit unauthorized - no valid token');
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
@@ -837,7 +855,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const actor = normalizeCommitActor(event.actor, user.id);
-        console.log('[Fastify] /api/events/commit processing', {
+        fastifyEventDebugLog('/api/events/commit processing', {
             user_id: user.id,
             atome_id: event.atome_id || null,
             kind: event.kind || null
@@ -880,11 +898,11 @@ export async function registerAtomeRoutes(server, dataSource = null) {
     });
 
     server.post('/api/events/commit-batch', async (request, reply) => {
-        console.log('[Fastify] /api/events/commit-batch received');
+        fastifyEventDebugLog('/api/events/commit-batch received');
         const syncSource = String(request.headers['x-sync-source'] || '').toLowerCase();
         const user = await validateToken(request);
         if (!user) {
-            console.log('[Fastify] /api/events/commit-batch UNAUTHORIZED');
+            fastifyEventDebugLog('/api/events/commit-batch unauthorized');
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
@@ -900,7 +918,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             ...evt,
             actor: normalizeCommitActor(evt?.actor, user.id) || secondaryActor
         }));
-        console.log('[Fastify] /api/events/commit-batch processing', {
+        fastifyEventDebugLog('/api/events/commit-batch processing', {
             user_id: user.id,
             count: normalizedEvents.length
         });
@@ -1067,7 +1085,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                         payload: { snapshot_id: snapshotId, label }
                     });
                 } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                    console.warn("[cleanup] operation failed", error);
+                }
             }
 
             return reply.send({ success: true, snapshotId });
