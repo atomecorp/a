@@ -47,6 +47,7 @@ export const isAuv3AudioRuntime = (env = globalThis) => {
     // Only match when the native host explicitly declares AUv3 mode.
     // hasSwiftBridge alone is NOT sufficient — the standalone iOS app
     // also exposes webkit.messageHandlers.swiftBridge but is NOT an AUv3.
+    if (hostEnv === 'app') return false;
     return hostEnv === 'auv3'
         || env?.__AUV3_MODE__ === true;
 };

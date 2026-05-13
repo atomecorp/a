@@ -7,6 +7,7 @@ import {
 
 const iosEnv = {
     __HOST_ENV: 'app',
+    __AUV3_MODE__: true,
     __ATOME_IOS_NATIVE_INVOKE: async () => ({ success: true }),
     location: { protocol: 'https:', hostname: 'localhost' }
 };
@@ -15,6 +16,18 @@ assert.equal(iosRuntime.runtime, 'ios_app');
 assert.equal(iosRuntime.playback, 'ios_native_kira');
 assert.equal(iosRuntime.native_kira_required, true);
 assert.equal(isStrictNativeKiraPlaybackRuntime(iosEnv), true);
+
+const auv3Env = {
+    __HOST_ENV: 'auv3',
+    __AUV3_MODE__: true,
+    __ATOME_IOS_NATIVE_INVOKE: async () => ({ success: true }),
+    webkit: { messageHandlers: { swiftBridge: { postMessage() {} } } },
+    location: { protocol: 'atome:', hostname: '' }
+};
+const auv3Runtime = resolveAudioRuntime(auv3Env);
+assert.equal(auv3Runtime.runtime, 'ios_auv3');
+assert.equal(auv3Runtime.playback, 'ios_auv3_native');
+assert.equal(auv3Runtime.native_kira_required, true);
 
 const tauriEnv = {
     __TAURI__: { core: { invoke: async () => ({ success: true }) } },

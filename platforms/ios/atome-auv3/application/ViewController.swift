@@ -16,9 +16,11 @@ final class AppNativeAudioController: NSObject {
         let id: String
         let url: URL
         let path: String
-        let buffer: AVAudioPCMBuffer
         let sampleRate: Double
         let durationSeconds: Double
+        let isAudioFile: Bool           // true: stream via AVAudioFile; false: lazy decode via AVAssetReader
+        let processingFormat: AVAudioFormat?  // cached from AVAudioFile for engine connection
+        let asset: AVURLAsset?          // non-nil only for video files
     }
 
     private final class VoiceEntry {
@@ -27,6 +29,7 @@ final class AppNativeAudioController: NSObject {
         let playerNode: AVAudioPlayerNode
         let rateNode: AVAudioUnitVarispeed
         var stopWorkItem: DispatchWorkItem?
+        var audioFiles: [AVAudioFile] = []
 
         init(voiceId: String,
              assetId: String,
@@ -370,73 +373,48 @@ final class AppNativeAudioController: NSObject {
         try engine.start()
     }
 
-    private func preferredDecodeSampleRate() -> Double {
-        let sessionRate = AVAudioSession.sharedInstance().sampleRate
-        return sessionRate > 0 ? sessionRate : 44_100
-    }
-
-    private func copySampleBufferFloats(_ sampleBuffer: CMSampleBuffer) -> [Float] {
-        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return [] }
-        let byteCount = CMBlockBufferGetDataLength(blockBuffer)
-        guard byteCount > 0 else { return [] }
-        var data = Data(count: byteCount)
-        data.withUnsafeMutableBytes { ptr in
-            guard let baseAddress = ptr.baseAddress else { return }
-            _ = CMBlockBufferCopyDataBytes(
-                blockBuffer,
-                atOffset: 0,
-                dataLength: byteCount,
-                destination: baseAddress
-            )
+    // Open file and read metadata — no decode. For audio files uses AVAudioFile (instant).
+    // For video containers uses AVURLAsset metadata only.
+    private func loadClipEntry(url: URL, id: String) throws -> ClipEntry {
+        if let audioFile = try? AVAudioFile(forReading: url) {
+            let fmt = audioFile.processingFormat
+            let sr = fmt.sampleRate
+            let duration = sr > 0 ? Double(audioFile.length) / sr : 0
+            return ClipEntry(id: id, url: url, path: url.path,
+                             sampleRate: sr, durationSeconds: duration,
+                             isAudioFile: true, processingFormat: fmt, asset: nil)
         }
-        return data.withUnsafeBytes { rawBuffer in
-            Array(rawBuffer.bindMemory(to: Float.self))
-        }
-    }
-
-    private func buildPCMBuffer(sampleRate: Double,
-                                channelCount: AVAudioChannelCount,
-                                left: [Float],
-                                right: [Float]) throws -> AVAudioPCMBuffer {
-        guard let format = AVAudioFormat(
-            standardFormatWithSampleRate: sampleRate,
-            channels: channelCount
-        ) else {
-            throw NSError(domain: "AppNativeAudioController", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Unable to create native PCM format"
-            ])
-        }
-        let frameCount = min(left.count, right.count)
-        guard frameCount > 0,
-              let buffer = AVAudioPCMBuffer(
-                pcmFormat: format,
-                frameCapacity: AVAudioFrameCount(frameCount)
-              ),
-              let channels = buffer.floatChannelData else {
-            throw NSError(domain: "AppNativeAudioController", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "Unable to allocate native PCM buffer"
-            ])
-        }
-        buffer.frameLength = AVAudioFrameCount(frameCount)
-        left.withUnsafeBufferPointer { source in
-            channels[0].update(from: source.baseAddress!, count: frameCount)
-        }
-        if channelCount > 1 {
-            right.withUnsafeBufferPointer { source in
-                channels[1].update(from: source.baseAddress!, count: frameCount)
-            }
-        }
-        return buffer
-    }
-
-    private func decodeClipBuffer(_ url: URL) throws -> (AVAudioPCMBuffer, Double, Double) {
-        let asset = AVURLAsset(url: url)
+        // Video container: read audio track metadata without decoding
+        let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: false])
         guard let track = asset.tracks(withMediaType: .audio).first else {
             throw NSError(domain: "AppNativeAudioController", code: 3, userInfo: [
                 NSLocalizedDescriptionKey: "No audio track found in \(url.lastPathComponent)"
             ])
         }
-        let sampleRate = preferredDecodeSampleRate()
+        let duration = max(0, CMTimeGetSeconds(asset.duration))
+        var sr: Double = 44100
+        if let desc = track.formatDescriptions.first {
+            let cmDesc = desc as! CMFormatDescription
+            if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(cmDesc)?.pointee {
+                sr = max(1, Double(asbd.mSampleRate))
+            }
+        }
+        return ClipEntry(id: id, url: url, path: url.path,
+                         sampleRate: sr, durationSeconds: duration,
+                         isAudioFile: false, processingFormat: nil, asset: asset)
+    }
+
+    // For video clips: decode only the needed time range — not the whole file.
+    private func decodeAssetSegment(_ asset: AVURLAsset,
+                                    startSeconds: Double,
+                                    durationSeconds: Double?) throws -> AVAudioPCMBuffer {
+        guard let track = asset.tracks(withMediaType: .audio).first else {
+            throw NSError(domain: "AppNativeAudioController", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "No audio track in asset"
+            ])
+        }
+        let outputSR = max(1.0, AVAudioSession.sharedInstance().sampleRate > 0
+            ? AVAudioSession.sharedInstance().sampleRate : 44100.0)
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -444,89 +422,80 @@ final class AppNativeAudioController: NSObject {
             AVLinearPCMIsFloatKey: true,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsNonInterleaved: false,
-            AVSampleRateKey: sampleRate,
+            AVSampleRateKey: outputSR,
             AVNumberOfChannelsKey: 2
         ])
         output.alwaysCopiesSampleData = false
+        let assetDuration = max(0, CMTimeGetSeconds(asset.duration))
+        let safeStart = max(0, min(startSeconds, assetDuration))
+        let safeEnd: Double
+        if let dur = durationSeconds, dur > 0 {
+            safeEnd = min(safeStart + dur, assetDuration)
+        } else {
+            safeEnd = assetDuration
+        }
+        if safeEnd > safeStart {
+            reader.timeRange = CMTimeRange(
+                start: CMTime(seconds: safeStart, preferredTimescale: 44100),
+                end: CMTime(seconds: safeEnd, preferredTimescale: 44100)
+            )
+        }
         guard reader.canAdd(output) else {
             throw NSError(domain: "AppNativeAudioController", code: 4, userInfo: [
-                NSLocalizedDescriptionKey: "Unable to add AVAssetReader output for \(url.lastPathComponent)"
+                NSLocalizedDescriptionKey: "Unable to add output for segment decode"
             ])
         }
         reader.add(output)
         guard reader.startReading() else {
             throw reader.error ?? NSError(domain: "AppNativeAudioController", code: 5, userInfo: [
-                NSLocalizedDescriptionKey: "Unable to start AVAssetReader for \(url.lastPathComponent)"
+                NSLocalizedDescriptionKey: "Unable to start segment decode"
             ])
         }
-
         var left: [Float] = []
         var right: [Float] = []
         while reader.status == .reading {
             guard let sampleBuffer = output.copyNextSampleBuffer() else { break }
-            let floats = copySampleBufferFloats(sampleBuffer)
+            guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
+                CMSampleBufferInvalidate(sampleBuffer)
+                continue
+            }
+            let byteCount = CMBlockBufferGetDataLength(blockBuffer)
+            var data = Data(count: byteCount)
+            data.withUnsafeMutableBytes { ptr in
+                guard let base = ptr.baseAddress else { return }
+                _ = CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: byteCount, destination: base)
+            }
+            let floats = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
             CMSampleBufferInvalidate(sampleBuffer)
             guard !floats.isEmpty else { continue }
-            let frameCount = floats.count / 2
-            left.reserveCapacity(left.count + frameCount)
-            right.reserveCapacity(right.count + frameCount)
-            for frameIndex in 0..<frameCount {
-                let baseIndex = frameIndex * 2
-                left.append(floats[baseIndex])
-                right.append(floats[baseIndex + 1])
+            let fc = floats.count / 2
+            for i in 0..<fc {
+                left.append(floats[i * 2])
+                right.append(floats[i * 2 + 1])
             }
         }
-
         if reader.status == .failed {
             throw reader.error ?? NSError(domain: "AppNativeAudioController", code: 6, userInfo: [
-                NSLocalizedDescriptionKey: "Audio decode failed for \(url.lastPathComponent)"
+                NSLocalizedDescriptionKey: "Segment decode failed"
             ])
         }
-
-        let buffer = try buildPCMBuffer(sampleRate: sampleRate, channelCount: 2, left: left, right: right)
-        let durationSeconds = sampleRate > 0 ? (Double(buffer.frameLength) / sampleRate) : 0
-        return (buffer, sampleRate, durationSeconds)
-    }
-
-    private func makeSliceBuffer(from clip: ClipEntry,
-                                 startSeconds: Double,
-                                 durationSeconds: Double?) throws -> AVAudioPCMBuffer {
-        let totalFrames = Int(clip.buffer.frameLength)
-        guard totalFrames > 0,
-              let channels = clip.buffer.floatChannelData else {
-            throw NSError(domain: "AppNativeAudioController", code: 7, userInfo: [
-                NSLocalizedDescriptionKey: "Decoded clip buffer is empty for \(clip.id)"
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: outputSR, channels: 2) else {
+            throw NSError(domain: "AppNativeAudioController", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Unable to create PCM format"
             ])
         }
-        let sampleRate = max(1, clip.sampleRate)
-        let clampedStart = clamp(startSeconds, min: 0, max: clip.durationSeconds)
-        let startFrame = min(
-            max(0, Int((clampedStart * sampleRate).rounded(.down))),
-            max(0, totalFrames - 1)
-        )
-        let requestedEndSeconds = durationSeconds.map { clampedStart + max(0.001, $0) } ?? clip.durationSeconds
-        let endFrame = min(
-            totalFrames,
-            max(startFrame + 1, Int((requestedEndSeconds * sampleRate).rounded(.up)))
-        )
-        let frameCount = max(1, endFrame - startFrame)
-        guard let slice = AVAudioPCMBuffer(
-            pcmFormat: clip.buffer.format,
-            frameCapacity: AVAudioFrameCount(frameCount)
-        ),
-              let targetChannels = slice.floatChannelData else {
-            throw NSError(domain: "AppNativeAudioController", code: 8, userInfo: [
-                NSLocalizedDescriptionKey: "Unable to allocate slice buffer for \(clip.id)"
+        let count = min(left.count, right.count)
+        guard count > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)),
+              let channels = buffer.floatChannelData else {
+            throw NSError(domain: "AppNativeAudioController", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "Unable to allocate segment buffer"
             ])
         }
-        slice.frameLength = AVAudioFrameCount(frameCount)
-        for channelIndex in 0..<Int(clip.buffer.format.channelCount) {
-            targetChannels[channelIndex].update(
-                from: channels[channelIndex].advanced(by: startFrame),
-                count: frameCount
-            )
-        }
-        return slice
+        buffer.frameLength = AVAudioFrameCount(count)
+        left.withUnsafeBufferPointer { channels[0].update(from: $0.baseAddress!, count: count) }
+        right.withUnsafeBufferPointer { channels[1].update(from: $0.baseAddress!, count: count) }
+        return buffer
     }
 
     private func detachVoiceNodes(_ voice: VoiceEntry) {
@@ -536,8 +505,12 @@ final class AppNativeAudioController: NSObject {
         engine.detach(voice.rateNode)
     }
 
-    private func stopVoiceLocked(_ voiceId: String) {
-        guard let voice = voices.removeValue(forKey: voiceId) else { return }
+    private func stopVoiceLocked(_ voiceId: String, reason: String = "stop") {
+        guard let voice = voices.removeValue(forKey: voiceId) else {
+            print("[AUDIO_NATIVE] audio_stop_voice SKIP voice=\(voiceId) reason=\(reason) active=false")
+            return
+        }
+        print("[AUDIO_NATIVE] audio_stop_voice OK voice=\(voiceId) asset=\(voice.assetId) reason=\(reason)")
         voice.stopWorkItem?.cancel()
         voice.playerNode.stop()
         detachVoiceNodes(voice)
@@ -547,7 +520,7 @@ final class AppNativeAudioController: NSObject {
         let voiceIds = voices.values
             .filter { $0.assetId == assetId }
             .map(\.voiceId)
-        voiceIds.forEach(stopVoiceLocked)
+        voiceIds.forEach { stopVoiceLocked($0, reason: "asset_stop") }
     }
 
     private func scheduleLoopingBuffers(voiceId: String,
@@ -559,25 +532,52 @@ final class AppNativeAudioController: NSObject {
         let normalizedLoopStart = clamp(loopStartSeconds, min: 0, max: clip.durationSeconds)
         let normalizedLoopEnd = clamp(loopEndSeconds, min: normalizedLoopStart + 0.001, max: clip.durationSeconds)
         let normalizedStart = clamp(startSeconds, min: normalizedLoopStart, max: normalizedLoopEnd - 0.001)
-        let loopBuffer = try makeSliceBuffer(
-            from: clip,
-            startSeconds: normalizedLoopStart,
-            durationSeconds: normalizedLoopEnd - normalizedLoopStart
-        )
-        if normalizedStart > normalizedLoopStart {
-            let introBuffer = try makeSliceBuffer(
-                from: clip,
-                startSeconds: normalizedStart,
-                durationSeconds: normalizedLoopEnd - normalizedStart
-            )
-            voice.playerNode.scheduleBuffer(introBuffer, at: nil, options: []) { [weak self] in
-                self?.queue.async {
-                    guard let self, self.voices[voiceId] != nil else { return }
-                    voice.playerNode.scheduleBuffer(loopBuffer, at: nil, options: [.loops], completionHandler: nil)
+        if clip.isAudioFile {
+            // Read only the loop region into a small buffer — gapless looping requires scheduleBuffer(.loops)
+            let loopFile = try AVAudioFile(forReading: clip.url)
+            let sr = loopFile.processingFormat.sampleRate
+            let loopStartFrame = AVAudioFramePosition(normalizedLoopStart * sr)
+            let loopEndFrame   = AVAudioFramePosition(normalizedLoopEnd * sr)
+            let loopBodyFrames = AVAudioFrameCount(max(1, loopEndFrame - loopStartFrame))
+            guard let loopBuffer = AVAudioPCMBuffer(pcmFormat: loopFile.processingFormat, frameCapacity: loopBodyFrames) else {
+                throw NSError(domain: "AppNativeAudioController", code: 8, userInfo: [
+                    NSLocalizedDescriptionKey: "Unable to allocate loop buffer for '\(clip.id)'"
+                ])
+            }
+            loopFile.framePosition = loopStartFrame
+            try loopFile.read(into: loopBuffer, frameCount: loopBodyFrames)
+            voice.audioFiles.append(loopFile)
+            if normalizedStart > normalizedLoopStart {
+                let introFile = try AVAudioFile(forReading: clip.url)
+                voice.audioFiles.append(introFile)
+                let introStartFrame = AVAudioFramePosition(normalizedStart * sr)
+                let introFrames     = AVAudioFrameCount(max(1, loopEndFrame - introStartFrame))
+                voice.playerNode.scheduleSegment(introFile, startingFrame: introStartFrame, frameCount: introFrames, at: nil) { [weak self] in
+                    self?.queue.async {
+                        guard self?.voices[voiceId] != nil else { return }
+                        voice.playerNode.scheduleBuffer(loopBuffer, at: nil, options: [.loops], completionHandler: nil)
+                    }
                 }
+            } else {
+                voice.playerNode.scheduleBuffer(loopBuffer, at: nil, options: [.loops], completionHandler: nil)
+            }
+        } else if let asset = clip.asset {
+            let loopBuffer = try decodeAssetSegment(asset, startSeconds: normalizedLoopStart, durationSeconds: normalizedLoopEnd - normalizedLoopStart)
+            if normalizedStart > normalizedLoopStart {
+                let introBuffer = try decodeAssetSegment(asset, startSeconds: normalizedStart, durationSeconds: normalizedLoopEnd - normalizedStart)
+                voice.playerNode.scheduleBuffer(introBuffer, at: nil, options: []) { [weak self] in
+                    self?.queue.async {
+                        guard self?.voices[voiceId] != nil else { return }
+                        voice.playerNode.scheduleBuffer(loopBuffer, at: nil, options: [.loops], completionHandler: nil)
+                    }
+                }
+            } else {
+                voice.playerNode.scheduleBuffer(loopBuffer, at: nil, options: [.loops], completionHandler: nil)
             }
         } else {
-            voice.playerNode.scheduleBuffer(loopBuffer, at: nil, options: [.loops], completionHandler: nil)
+            throw NSError(domain: "AppNativeAudioController", code: 9, userInfo: [
+                NSLocalizedDescriptionKey: "Clip '\(clip.id)' has no audio source for looping"
+            ])
         }
     }
 
@@ -607,29 +607,35 @@ final class AppNativeAudioController: NSObject {
                         self.complete(completion, payload: ["success": false], error: "Missing clip id")
                         return
                     }
+                    if let cached = self.clips[id] {
+                        print("[AUDIO_NATIVE] audio_load_clip CACHED id=\(id) path=\(cached.path) duration=\(cached.durationSeconds)")
+                        self.complete(completion, payload: [
+                            "success": true,
+                            "id": id,
+                            "path": cached.path,
+                            "input_path": rawPath,
+                            "input_path_was_absolute": rawPath.hasPrefix("/"),
+                            "sample_rate": cached.sampleRate,
+                            "duration_seconds": cached.durationSeconds
+                        ])
+                        return
+                    }
                     guard let url = self.resolveClipURL(rawPath) else {
                         print("[AUDIO_NATIVE] audio_load_clip ERROR path_not_found id=\(id) input=\(rawPath)")
                         self.complete(completion, payload: ["success": false, "id": id], error: "Audio clip path does not exist: \(rawPath)")
                         return
                     }
-                    let (buffer, sampleRate, durationSeconds) = try self.decodeClipBuffer(url)
-                    self.clips[id] = ClipEntry(
-                        id: id,
-                        url: url,
-                        path: url.path,
-                        buffer: buffer,
-                        sampleRate: sampleRate,
-                        durationSeconds: durationSeconds
-                    )
-                    print("[AUDIO_NATIVE] audio_load_clip OK id=\(id) input=\(rawPath) path=\(url.path) sample_rate=\(sampleRate) duration=\(durationSeconds)")
+                    let clip = try self.loadClipEntry(url: url, id: id)
+                    self.clips[id] = clip
+                    print("[AUDIO_NATIVE] audio_load_clip OK id=\(id) input=\(rawPath) path=\(url.path) sample_rate=\(clip.sampleRate) duration=\(clip.durationSeconds) streaming=\(clip.isAudioFile)")
                     self.complete(completion, payload: [
                         "success": true,
                         "id": id,
                         "path": url.path,
                         "input_path": rawPath,
                         "input_path_was_absolute": rawPath.hasPrefix("/"),
-                        "sample_rate": sampleRate,
-                        "duration_seconds": durationSeconds
+                        "sample_rate": clip.sampleRate,
+                        "duration_seconds": clip.durationSeconds
                     ])
 
                 case "audio_play":
@@ -661,7 +667,7 @@ final class AppNativeAudioController: NSObject {
                         self.complete(completion, payload: ["success": false, "asset_id": assetId, "voice_id": voiceId], error: "Clip '\(assetId)' not found")
                         return
                     }
-                    self.stopVoiceLocked(voiceId)
+                    self.stopVoiceLocked(voiceId, reason: "replace_same_voice")
                     let startSeconds = self.clamp(
                         self.resolveDouble(payload, ["startSeconds", "start_seconds"], fallback: 0),
                         min: 0,
@@ -672,15 +678,24 @@ final class AppNativeAudioController: NSObject {
                     let durationSeconds = self.resolveOptionalDouble(payload, ["durationSeconds", "duration_seconds"])
                     let loopStart = self.resolveOptionalDouble(payload, ["loopStartSeconds", "loop_start_seconds"])
                     let loopEnd = self.resolveOptionalDouble(payload, ["loopEndSeconds", "loop_end_seconds"])
+                    var scheduledDurationForStop: Double? = nil
                     let playerNode = AVAudioPlayerNode()
                     let rateNode = AVAudioUnitVarispeed()
                     rateNode.rate = rate
                     playerNode.volume = gain
+                    let playbackFormat: AVAudioFormat
+                    if clip.isAudioFile, let fmt = clip.processingFormat {
+                        playbackFormat = fmt
+                    } else {
+                        let sr = max(1.0, AVAudioSession.sharedInstance().sampleRate > 0
+                            ? AVAudioSession.sharedInstance().sampleRate : 44100.0)
+                        playbackFormat = AVAudioFormat(standardFormatWithSampleRate: sr, channels: 2)!
+                    }
                     self.engine.attach(playerNode)
                     self.engine.attach(rateNode)
-                    self.engine.connect(playerNode, to: rateNode, format: clip.buffer.format)
-                    self.engine.connect(rateNode, to: self.engine.mainMixerNode, format: clip.buffer.format)
-                    try self.ensureAudioEngineRunning(playbackFormat: clip.buffer.format)
+                    self.engine.connect(playerNode, to: rateNode, format: playbackFormat)
+                    self.engine.connect(rateNode, to: self.engine.mainMixerNode, format: playbackFormat)
+                    try self.ensureAudioEngineRunning(playbackFormat: playbackFormat)
                     let voice = VoiceEntry(
                         voiceId: voiceId,
                         assetId: assetId,
@@ -699,33 +714,53 @@ final class AppNativeAudioController: NSObject {
                             loopStartSeconds: loopStart,
                             loopEndSeconds: loopEnd
                         )
-                    } else {
-                        let playBuffer = try self.makeSliceBuffer(
-                            from: clip,
-                            startSeconds: startSeconds,
-                            durationSeconds: durationSeconds
-                        )
-                        playerNode.scheduleBuffer(playBuffer, at: nil, options: []) { [weak self] in
-                            self?.queue.async {
-                                self?.stopVoiceLocked(voiceId)
-                            }
+                    } else if clip.isAudioFile {
+                        // Streaming path — open fresh file per voice, no PCM in RAM
+                        let audioFile = try AVAudioFile(forReading: clip.url)
+                        voice.audioFiles.append(audioFile)
+                        let sr = audioFile.processingFormat.sampleRate
+                        let startFrame = AVAudioFramePosition(max(0, startSeconds * sr))
+                        let totalFrames = audioFile.length
+                        let remainingFrames = AVAudioFrameCount(max(0, totalFrames - startFrame))
+                        let frameCount: AVAudioFrameCount
+                        if let dur = durationSeconds, dur > 0 {
+                            frameCount = min(remainingFrames, AVAudioFrameCount(dur * sr))
+                        } else {
+                            frameCount = remainingFrames
                         }
+                        if frameCount > 0 {
+                            scheduledDurationForStop = Double(frameCount) / max(1.0, sr)
+                            playerNode.scheduleSegment(audioFile, startingFrame: startFrame, frameCount: frameCount, at: nil, completionHandler: nil)
+                            print("[AUDIO_NATIVE] audio_play_instance SCHEDULE_FILE asset=\(assetId) voice=\(voiceId) start_frame=\(startFrame) frame_count=\(frameCount) total_frames=\(totalFrames) remaining_frames=\(remainingFrames) scheduled_duration=\(scheduledDurationForStop ?? -1)")
+                        } else {
+                            print("[AUDIO_NATIVE] audio_play_instance ERROR empty_file_segment asset=\(assetId) voice=\(voiceId) start=\(startSeconds) total_frames=\(totalFrames) remaining_frames=\(remainingFrames)")
+                        }
+                    } else if let asset = clip.asset {
+                        // Video path — decode only the needed segment (not the whole file)
+                        let playBuffer = try self.decodeAssetSegment(asset, startSeconds: startSeconds, durationSeconds: durationSeconds)
+                        scheduledDurationForStop = Double(playBuffer.frameLength) / max(1.0, playBuffer.format.sampleRate)
+                        playerNode.scheduleBuffer(playBuffer, at: nil, options: [], completionHandler: nil)
+                        print("[AUDIO_NATIVE] audio_play_instance SCHEDULE_BUFFER asset=\(assetId) voice=\(voiceId) frames=\(playBuffer.frameLength) sample_rate=\(playBuffer.format.sampleRate) scheduled_duration=\(scheduledDurationForStop ?? -1)")
+                    } else {
+                        throw NSError(domain: "AppNativeAudioController", code: 9, userInfo: [
+                            NSLocalizedDescriptionKey: "Clip '\(assetId)' has no audio source"
+                        ])
                     }
                     self.voices[voiceId] = voice
                     playerNode.play()
                     print("[AUDIO_NATIVE] audio_play_instance OK asset=\(assetId) voice=\(voiceId) start=\(startSeconds) duration=\(durationSeconds ?? -1) rate=\(rate) gain=\(gain)")
 
-                    if let durationSeconds = self.resolveOptionalDouble(payload, ["durationSeconds", "duration_seconds"]),
-                       durationSeconds > 0 {
+                    if let scheduledDuration = scheduledDurationForStop, scheduledDuration > 0 {
                         let safeRate = max(0.0001, Double(rate))
-                        let stopDelay = max(0.03, durationSeconds / safeRate)
+                        let stopDelay = max(0.03, scheduledDuration / safeRate)
                         let stopWork = DispatchWorkItem { [weak self] in
                             self?.queue.async {
-                                self?.stopVoiceLocked(voiceId)
+                                self?.stopVoiceLocked(voiceId, reason: "scheduled_stop")
                             }
                         }
                         voice.stopWorkItem = stopWork
                         self.queue.asyncAfter(deadline: .now() + stopDelay + 0.02, execute: stopWork)
+                        print("[AUDIO_NATIVE] audio_play_instance STOP_TIMER voice=\(voiceId) delay=\(stopDelay + 0.02) scheduled_duration=\(scheduledDuration) rate=\(rate)")
                     }
                     self.complete(completion, payload: [
                         "success": true,
@@ -739,7 +774,7 @@ final class AppNativeAudioController: NSObject {
                         self.complete(completion, payload: ["success": false], error: "Missing voice id")
                         return
                     }
-                    self.stopVoiceLocked(voiceId)
+                    self.stopVoiceLocked(voiceId, reason: "command_stop_instance")
                     self.complete(completion, payload: ["success": true, "voice_id": voiceId])
 
                 case "audio_stop":
@@ -749,7 +784,7 @@ final class AppNativeAudioController: NSObject {
                         return
                     }
                     if self.voices[id] != nil {
-                        self.stopVoiceLocked(id)
+                        self.stopVoiceLocked(id, reason: "command_stop_voice")
                     } else {
                         self.stopVoicesForAssetLocked(id)
                     }
@@ -786,7 +821,9 @@ final class AppNativeAudioController: NSObject {
                     }
 
                 case "audio_shutdown":
-                    Array(self.voices.keys).forEach(self.stopVoiceLocked)
+                    Array(self.voices.keys).forEach { voiceId in
+                        self.stopVoiceLocked(voiceId, reason: "audio_shutdown")
+                    }
                     self.clips.removeAll()
                     self.engine.stop()
                     self.engine.reset()
