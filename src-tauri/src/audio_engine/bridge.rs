@@ -48,7 +48,10 @@ fn lower_file_extension(path: &Path) -> String {
 }
 
 fn is_video_container_requiring_native_audio_extract(path: &Path) -> bool {
-    matches!(lower_file_extension(path).as_str(), "webm" | "mkv" | "avi")
+    matches!(
+        lower_file_extension(path).as_str(),
+        "mp4" | "m4v" | "mov" | "3gp" | "3g2" | "webm" | "mkv" | "avi"
+    )
 }
 
 fn native_audio_cache_path(source_path: &Path) -> Result<PathBuf, String> {
@@ -118,6 +121,41 @@ fn prepare_native_audio_decode_path(source_path: &Path) -> Result<PathBuf, Strin
     }
     extract_native_video_audio(source_path, &cached_audio_path)?;
     Ok(cached_audio_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_video_container_requiring_native_audio_extract;
+    use std::path::Path;
+
+    #[test]
+    fn extracts_audio_from_video_containers_before_native_decode() {
+        for file_name in [
+            "clip.mp4",
+            "clip.m4v",
+            "clip.mov",
+            "clip.3gp",
+            "clip.3g2",
+            "clip.webm",
+            "clip.mkv",
+            "clip.avi",
+        ] {
+            assert!(
+                is_video_container_requiring_native_audio_extract(Path::new(file_name)),
+                "{file_name} should be extracted before native audio decode"
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_audio_only_containers_on_direct_native_decode_route() {
+        for file_name in ["clip.m4a", "clip.aac", "clip.mp3", "clip.wav", "clip.flac"] {
+            assert!(
+                !is_video_container_requiring_native_audio_extract(Path::new(file_name)),
+                "{file_name} should stay on the direct native audio decode route"
+            );
+        }
+    }
 }
 
 #[tauri::command]
