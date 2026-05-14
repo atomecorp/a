@@ -25,6 +25,12 @@ function dropDown(config) {
 
   const placeholderText = placeholder != null ? String(placeholder) : '';
 
+  const reportCallbackError = (error) => {
+    queueMicrotask(() => {
+      throw error;
+    });
+  };
+
   // Normalize options to { label, value }
   const opts = options.map((opt) => {
     if (opt && typeof opt === 'object') {
@@ -285,7 +291,11 @@ function dropDown(config) {
     }
     // Fire callback
     if (typeof onChange === 'function') {
-      try { onChange(value, label, i); } catch (err) {}
+      try {
+        onChange(value, label, i);
+      } catch (err) {
+        reportCallbackError(err);
+      }
     }
     // Fire DOM event for external listeners
     try {
@@ -319,7 +329,11 @@ function dropDown(config) {
       updateHighlight();
       if (typeof onHover === 'function') {
         const opt = opts[i];
-        try { onHover(opt.value, opt.label, i); } catch (err) {}
+        try {
+          onHover(opt.value, opt.label, i);
+        } catch (err) {
+          reportCallbackError(err);
+        }
       }
     });
 

@@ -1,0 +1,5154 @@
+# eVe / Atome Master Cleanup Audit Report
+
+Generated: 2026-05-14T06:42:42.421Z
+
+This report is generated from a deterministic static scan. It separates confirmed facts from candidates that need subsystem-owner review before deletion or architectural migration.
+
+## Inventory Summary
+
+- Total files scanned: 5354
+- First-party files scanned: 1733
+- Generated/vendor/build files classified: 3621
+- First-party code/text files: 1431
+- Total first-party code/text lines: 521906
+- JavaScript files: 1066
+- TypeScript files: 3
+- Rust files: 18
+- Ruby files: 0
+- CSS files: 3
+- Asset files: 683
+- Empty files: 32
+- Duplicate filename groups: 80
+- Inconsistent casing groups: 3
+
+## Generated Artifacts
+
+- `todos/eve_master_cleanup_file_tree.txt`: full file tree.
+- `todos/eve_master_cleanup_findings.json`: machine-readable audit evidence.
+- `todos/eve_master_cleanup_audit_report.md`: human-readable audit evidence.
+
+## Oversized Files Above 1000 Lines
+
+- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
+- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `src/squirrel/components/intuition_builder/index.js`: 7130 lines
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `src-tauri/src/server/mod.rs`: 5587 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
+- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `src/application/examples/user.js`: 4899 lines
+- `server/server.js`: 4849 lines
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
+- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
+- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `src-tauri/src/server/local_atome.rs`: 3649 lines
+- `src/application/eVe/elements/design.js`: 3510 lines
+- `src/application/lyrix/index.js`: 3452 lines
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
+- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
+- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
+- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `src/application/jeezs/index.js`: 2612 lines
+- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `src/squirrel/atome/mcp.js`: 2568 lines
+- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
+- `database/adole.js`: 2343 lines
+- `server/auth.js`: 2281 lines
+- `src/application/examples/ios_file_browser.js`: 2189 lines
+- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `tests/application/examples/ios_file_browser.js`: 2153 lines
+- `src/squirrel/voice/tool_router.js`: 2151 lines
+- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `src/application/lyrix/src/components/ui.js`: 2079 lines
+- `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
+- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
+- `src/application/eVe/documentations/strangler.md`: 2046 lines
+- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `src/squirrel/voice/orchestrator.js`: 1898 lines
+- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
+- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `src/application/lyrix/src/components/settings.js`: 1873 lines
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `src/application/examples/record_audio.js`: 1813 lines
+- `src/squirrel/apis/unified/adole.js`: 1794 lines
+- `src/squirrel/voice/home_surface.js`: 1749 lines
+- `tests/application/examples/record_audio.js`: 1698 lines
+- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `server/sharing.js`: 1660 lines
+- `src-tauri/src/server/local_auth.rs`: 1645 lines
+- `src/application/examples/menus.js`: 1643 lines
+- `tests/application/examples/menus.js`: 1643 lines
+- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `src/squirrel/atome/atome.js`: 1595 lines
+- `src/application/eVe/intuition/tools/background.js`: 1573 lines
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `src/application/examples/record_video_UI.js`: 1518 lines
+- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `src/squirrel/components/editor_builder.js`: 1503 lines
+- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `tests/application/examples/record_video_UI.js`: 1489 lines
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
+- `src/squirrel/components/matrix_builder.js`: 1430 lines
+- `src/squirrel/voice/service.js`: 1428 lines
+- `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
+- `src/squirrel/ai/default_tools.js`: 1424 lines
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `src/squirrel/components/button_builder.js`: 1348 lines
+- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `src/application/examples/messages.js`: 1300 lines
+- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `src/application/aBox/index.js`: 1283 lines
+- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+
+## Oversized Files Above 800 Lines
+
+- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
+- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `src/squirrel/components/intuition_builder/index.js`: 7130 lines
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `src-tauri/src/server/mod.rs`: 5587 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
+- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `src/application/examples/user.js`: 4899 lines
+- `server/server.js`: 4849 lines
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
+- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
+- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `src-tauri/src/server/local_atome.rs`: 3649 lines
+- `src/application/eVe/elements/design.js`: 3510 lines
+- `src/application/lyrix/index.js`: 3452 lines
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
+- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
+- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
+- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `src/application/jeezs/index.js`: 2612 lines
+- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `src/squirrel/atome/mcp.js`: 2568 lines
+- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
+- `database/adole.js`: 2343 lines
+- `server/auth.js`: 2281 lines
+- `src/application/examples/ios_file_browser.js`: 2189 lines
+- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `tests/application/examples/ios_file_browser.js`: 2153 lines
+- `src/squirrel/voice/tool_router.js`: 2151 lines
+- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `src/application/lyrix/src/components/ui.js`: 2079 lines
+- `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
+- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
+- `src/application/eVe/documentations/strangler.md`: 2046 lines
+- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `src/squirrel/voice/orchestrator.js`: 1898 lines
+- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
+- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `src/application/lyrix/src/components/settings.js`: 1873 lines
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `src/application/examples/record_audio.js`: 1813 lines
+- `src/squirrel/apis/unified/adole.js`: 1794 lines
+- `src/squirrel/voice/home_surface.js`: 1749 lines
+- `tests/application/examples/record_audio.js`: 1698 lines
+- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `server/sharing.js`: 1660 lines
+- `src-tauri/src/server/local_auth.rs`: 1645 lines
+- `src/application/examples/menus.js`: 1643 lines
+- `tests/application/examples/menus.js`: 1643 lines
+- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `src/squirrel/atome/atome.js`: 1595 lines
+- `src/application/eVe/intuition/tools/background.js`: 1573 lines
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `src/application/examples/record_video_UI.js`: 1518 lines
+- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `src/squirrel/components/editor_builder.js`: 1503 lines
+- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `tests/application/examples/record_video_UI.js`: 1489 lines
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
+- `src/squirrel/components/matrix_builder.js`: 1430 lines
+- `src/squirrel/voice/service.js`: 1428 lines
+- `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
+- `src/squirrel/ai/default_tools.js`: 1424 lines
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `src/squirrel/components/button_builder.js`: 1348 lines
+- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `src/application/examples/messages.js`: 1300 lines
+- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `src/application/aBox/index.js`: 1283 lines
+- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+
+## Oversized Files Above 500 Lines
+
+- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
+- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `src/squirrel/components/intuition_builder/index.js`: 7130 lines
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `src-tauri/src/server/mod.rs`: 5587 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
+- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `src/application/examples/user.js`: 4899 lines
+- `server/server.js`: 4849 lines
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
+- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
+- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `src-tauri/src/server/local_atome.rs`: 3649 lines
+- `src/application/eVe/elements/design.js`: 3510 lines
+- `src/application/lyrix/index.js`: 3452 lines
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
+- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
+- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
+- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `src/application/jeezs/index.js`: 2612 lines
+- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `src/squirrel/atome/mcp.js`: 2568 lines
+- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
+- `database/adole.js`: 2343 lines
+- `server/auth.js`: 2281 lines
+- `src/application/examples/ios_file_browser.js`: 2189 lines
+- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `tests/application/examples/ios_file_browser.js`: 2153 lines
+- `src/squirrel/voice/tool_router.js`: 2151 lines
+- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `src/application/lyrix/src/components/ui.js`: 2079 lines
+- `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
+- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
+- `src/application/eVe/documentations/strangler.md`: 2046 lines
+- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `src/squirrel/voice/orchestrator.js`: 1898 lines
+- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
+- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `src/application/lyrix/src/components/settings.js`: 1873 lines
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `src/application/examples/record_audio.js`: 1813 lines
+- `src/squirrel/apis/unified/adole.js`: 1794 lines
+- `src/squirrel/voice/home_surface.js`: 1749 lines
+- `tests/application/examples/record_audio.js`: 1698 lines
+- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `server/sharing.js`: 1660 lines
+- `src-tauri/src/server/local_auth.rs`: 1645 lines
+- `src/application/examples/menus.js`: 1643 lines
+- `tests/application/examples/menus.js`: 1643 lines
+- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `src/squirrel/atome/atome.js`: 1595 lines
+- `src/application/eVe/intuition/tools/background.js`: 1573 lines
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `src/application/examples/record_video_UI.js`: 1518 lines
+- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `src/squirrel/components/editor_builder.js`: 1503 lines
+- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `tests/application/examples/record_video_UI.js`: 1489 lines
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
+- `src/squirrel/components/matrix_builder.js`: 1430 lines
+- `src/squirrel/voice/service.js`: 1428 lines
+- `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
+- `src/squirrel/ai/default_tools.js`: 1424 lines
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `src/squirrel/components/button_builder.js`: 1348 lines
+- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `src/application/examples/messages.js`: 1300 lines
+- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `src/application/aBox/index.js`: 1283 lines
+- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+
+## Oversized Files Above 300 Lines
+
+- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
+- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `src/squirrel/components/intuition_builder/index.js`: 7130 lines
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `src-tauri/src/server/mod.rs`: 5587 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
+- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `src/application/examples/user.js`: 4899 lines
+- `server/server.js`: 4849 lines
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
+- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
+- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `src-tauri/src/server/local_atome.rs`: 3649 lines
+- `src/application/eVe/elements/design.js`: 3510 lines
+- `src/application/lyrix/index.js`: 3452 lines
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
+- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
+- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
+- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `src/application/jeezs/index.js`: 2612 lines
+- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `src/squirrel/atome/mcp.js`: 2568 lines
+- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
+- `database/adole.js`: 2343 lines
+- `server/auth.js`: 2281 lines
+- `src/application/examples/ios_file_browser.js`: 2189 lines
+- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `tests/application/examples/ios_file_browser.js`: 2153 lines
+- `src/squirrel/voice/tool_router.js`: 2151 lines
+- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `src/application/lyrix/src/components/ui.js`: 2079 lines
+- `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
+- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
+- `src/application/eVe/documentations/strangler.md`: 2046 lines
+- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `src/squirrel/voice/orchestrator.js`: 1898 lines
+- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
+- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `src/application/lyrix/src/components/settings.js`: 1873 lines
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `src/application/examples/record_audio.js`: 1813 lines
+- `src/squirrel/apis/unified/adole.js`: 1794 lines
+- `src/squirrel/voice/home_surface.js`: 1749 lines
+- `tests/application/examples/record_audio.js`: 1698 lines
+- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `server/sharing.js`: 1660 lines
+- `src-tauri/src/server/local_auth.rs`: 1645 lines
+- `src/application/examples/menus.js`: 1643 lines
+- `tests/application/examples/menus.js`: 1643 lines
+- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `src/squirrel/atome/atome.js`: 1595 lines
+- `src/application/eVe/intuition/tools/background.js`: 1573 lines
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `src/application/examples/record_video_UI.js`: 1518 lines
+- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `src/squirrel/components/editor_builder.js`: 1503 lines
+- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `tests/application/examples/record_video_UI.js`: 1489 lines
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
+- `src/squirrel/components/matrix_builder.js`: 1430 lines
+- `src/squirrel/voice/service.js`: 1428 lines
+- `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
+- `src/squirrel/ai/default_tools.js`: 1424 lines
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `src/squirrel/components/button_builder.js`: 1348 lines
+- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `src/application/examples/messages.js`: 1300 lines
+- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `src/application/aBox/index.js`: 1283 lines
+- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+
+## Empty Files
+
+- `server/certificates/.gitkeep`
+- `src/application/lyrix/src/core/logger.js`
+- `src/application/lyrix/src/core/platform.js`
+- `src/application/lyrix/src/services/prefs.js`
+- `third_party/iPlug2/Dependencies/IPlug/RTAudio/tests/Debug/.placeholder`
+- `third_party/iPlug2/Dependencies/IPlug/RTAudio/tests/Release/.placeholder`
+- `third_party/iPlug2/Dependencies/IPlug/RTAudio/tests/Windows/Debug/.placeholder`
+- `third_party/iPlug2/Dependencies/IPlug/RTAudio/tests/Windows/Release/.placeholder`
+- `third_party/iPlug2/Dependencies/IPlug/RTMidi/tests/Debug/.placeholder`
+- `third_party/iPlug2/Dependencies/IPlug/RTMidi/tests/Release/.placeholder`
+- `third_party/iPlug2/Examples/IPlugChunks/IPlugChunks.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugCocoaUI/IPlugCocoaUI.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugControls/IPlugControls.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugConvoEngine/IPlugConvoEngine.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugDrumSynth/IPlugDrumSynth.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugEffect/IPlugEffect.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugEffect/build-mac/XCBuildData/3ca5a5e7158d1906444319d9625124b3.xcbuilddata/attachments/d41d8cd98f00b204e9800998ecf8427e`
+- `third_party/iPlug2/Examples/IPlugInstrument/IPlugInstrument.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugMidiEffect/IPlugMidiEffect.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugOSCEditor/IPlugOSCEditor.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugP5js/IPlugP5js.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugReaperPlugin/IPlugReaperPlugin.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugResponsiveUI/IPlugResponsiveUI.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugSideChain/IPlugSideChain.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugSurroundEffect/IPlugSurroundEffect.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugSvelteUI/IPlugSvelteUI.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugSwiftUI/IPlugSwiftUI.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugVisualizer/IPlugVisualizer.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Examples/IPlugWebUI/IPlugWebUI.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Tests/IGraphicsStressTest/IGraphicsStressTest.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Tests/IGraphicsTest/IGraphicsTest.xcworkspace/.xcodesamplecode.plist`
+- `third_party/iPlug2/Tests/MetaParamTest/MetaParamTest.xcworkspace/.xcodesamplecode.plist`
+
+## Duplicate Filename Groups
+
+- `index.js`: `database/index.js`, `dev/daemon/index.js`, `src/application/aBox/index.js`, `src/application/eVe/core/event_store/index.js`, `src/application/eVe/core/media_engine/index.js`, `src/application/eVe/core/media_store/index.js`, `src/application/eVe/core/project_store/index.js`, `src/application/eVe/intuition/atome/index.js`, `src/application/eVe/intuition/atome/visual/index.js`, `src/application/eVe/intuition/components/index.js`, `src/application/eVe/intuition/components/ui/index.js`, `src/application/eVe/intuition/components/visual/index.js`, `src/application/eVe/intuition/contracts/index.js`, `src/application/eVe/intuition/flower/index.js`, `src/application/eVe/intuition/index.js`, `src/application/eVe/intuition/matrix/core/index.js`, `src/application/eVe/intuition/matrix/index.js`, `src/application/eVe/intuition/matrix/ui/index.js`, `src/application/eVe/intuition/matrix/visual/index.js`, `src/application/eVe/intuition/menu/index.js`, `src/application/eVe/intuition/panels/index.js`, `src/application/eVe/intuition/panels/ui/index.js`, `src/application/eVe/intuition/panels/visual/index.js`, `src/application/eVe/intuition/runtime/index.js`, `src/application/eVe/intuition/tools/imports_exports/index.js`, `src/application/eVe/intuition/tools/index.js`, `src/application/eVe/intuition/tools/molecule/gestures/index.js`, `src/application/eVe/intuition/tools/molecule/index.js`, `src/application/eVe/intuition/tools/molecule/kernel/index.js`, `src/application/eVe/intuition/tools/molecule/media/index.js`, `src/application/eVe/intuition/tools/molecule/multi_instance/index.js`, `src/application/eVe/intuition/tools/molecule/nested/index.js`, `src/application/eVe/intuition/tools/molecule/panel/index.js`, `src/application/eVe/intuition/tools/molecule/persistence/index.js`, `src/application/eVe/intuition/tools/molecule/recording/index.js`, `src/application/eVe/intuition/tools/molecule/session/index.js`, `src/application/eVe/intuition/tools/ui/index.js`, `src/application/eVe/intuition/tools/visual/index.js`, `src/application/index.js`, `src/application/jeezs/index.js`, `src/application/lyrix/index.js`, `src/application/vie/index.js`, `src/squirrel/bank/index.js`, `src/squirrel/calendar/index.js`, `src/squirrel/components/intuition_builder/index.js`, `src/squirrel/contacts/index.js`, `src/squirrel/mail/index.js`, `src/squirrel/security/index.js`, `src/squirrel/voice/index.js`
+- `README.md`: `README.md`, `atome-os/builder/README.md`, `atome-os/builder/installer/desktop/README.md`, `atome-os/builder/installer/sbc/README.md`, `platforms/ios/atome-auv3/README.md`, `server/README.md`, `src/application/eVe/README.md`, `src/application/eVe/concept/README.md`
+- `bootstrap.js`: `src/application/eVe/intuition/bootstrap.js`, `src/squirrel/bank/bootstrap.js`, `src/squirrel/calendar/bootstrap.js`, `src/squirrel/contacts/bootstrap.js`, `src/squirrel/mail/bootstrap.js`, `src/squirrel/security/bootstrap.js`, `src/squirrel/voice/bootstrap.js`
+- `bootstrap.test.mjs`: `src/squirrel/bank/bootstrap.test.mjs`, `src/squirrel/calendar/bootstrap.test.mjs`, `src/squirrel/contacts/bootstrap.test.mjs`, `src/squirrel/mail/bootstrap.test.mjs`, `src/squirrel/security/bootstrap.test.mjs`, `src/squirrel/voice/bootstrap.test.mjs`
+- `errors.js`: `src/application/eVe/core/event_store/errors.js`, `src/application/eVe/core/media_store/errors.js`, `src/application/eVe/core/project_store/errors.js`, `src/application/eVe/intuition/tools/molecule/kernel/errors.js`, `src/application/eVe/intuition/tools/molecule/session/errors.js`
+- `style.js`: `src/application/eVe/intuition/atome/image/visual/style.js`, `src/application/eVe/intuition/atome/shape/visual/style.js`, `src/application/eVe/intuition/atome/text/visual/style.js`, `src/application/eVe/intuition/atome/video/visual/style.js`, `src/application/lyrix/src/components/style.js`
+- `service.js`: `src/squirrel/bank/service.js`, `src/squirrel/calendar/service.js`, `src/squirrel/contacts/service.js`, `src/squirrel/mail/service.js`, `src/squirrel/voice/service.js`
+- `service.test.mjs`: `src/squirrel/bank/service.test.mjs`, `src/squirrel/calendar/service.test.mjs`, `src/squirrel/contacts/service.test.mjs`, `src/squirrel/mail/service.test.mjs`, `src/squirrel/voice/service.test.mjs`
+- `Contents.json`: `platforms/ios/atome-auv3/application/Assets.xcassets/AccentColor.colorset/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/AppIcon.appiconset/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/LaunchLogo.imageset/Contents.json`
+- `api.js`: `src/application/eVe/core/event_store/api.js`, `src/application/eVe/core/media_store/api.js`, `src/application/eVe/core/project_store/api.js`, `src/application/eVe/intuition/matrix/core/api.js`
+- `constants.js`: `src/application/eVe/domains/mtrax/shared/constants.js`, `src/application/eVe/intuition/contracts/constants.js`, `src/application/eVe/intuition/matrix/core/constants.js`, `src/application/lyrix/src/core/constants.js`
+- `menu.js`: `src/application/eVe/intuition/flower/menu.js`, `src/application/eVe/intuition/ribbon/menu.js`, `src/application/lyrix/src/intuition/menu.js`, `src/application/vie/menu.js`
+- `shortcut.js`: `src/application/eVe/intuition/tools/config/shortcut.js`, `src/application/examples/shortcut.js`, `src/squirrel/apis/shortcut.js`, `tests/application/examples/shortcut.js`
+- `connector_contract.js`: `src/squirrel/bank/connector_contract.js`, `src/squirrel/calendar/connector_contract.js`, `src/squirrel/contacts/connector_contract.js`, `src/squirrel/mail/connector_contract.js`
+- `shell.js`: `server/shell.js`, `src/application/examples/shell.js`, `tests/application/examples/shell.js`
+- `visio.js`: `server/visio.js`, `src/application/examples/visio.js`, `tests/application/examples/visio.js`
+- `memory_adapter.js`: `src/application/eVe/core/event_store/memory_adapter.js`, `src/application/eVe/core/media_store/memory_adapter.js`, `src/application/eVe/core/project_store/memory_adapter.js`
+- `bootstrap_runtime.js`: `src/application/eVe/domains/mtrax/core/bootstrap_runtime.js`, `src/application/eVe/domains/mtrax/integration/bootstrap_runtime.js`, `src/application/eVe/domains/mtrax/karaoke/bootstrap_runtime.js`
+- `state.js`: `src/application/eVe/intuition/core/state.js`, `src/application/eVe/intuition/matrix/core/state.js`, `src/squirrel/components/intuition_builder/state.js`
+- `runtime.js`: `src/application/eVe/intuition/footer/runtime.js`, `src/application/eVe/intuition/tools/molecule/runtime.js`, `src/squirrel/apis/unified/adole_api/runtime.js`
+- `AI.js`: `src/application/eVe/intuition/tools/AI.js`, `src/application/examples/AI.js`, `tests/application/examples/AI.js`
+- `atome.js`: `src/application/examples/atome.js`, `src/squirrel/atome/atome.js`, `tests/application/examples/atome.js`
+- `audio.js`: `src/application/examples/audio.js`, `src/application/lyrix/src/features/audio/audio.js`, `tests/application/examples/audio.js`
+- `leaflet.js`: `src/application/examples/leaflet.js`, `src/js/leaflet.js`, `tests/application/examples/leaflet.js`
+- `platform.js`: `src/application/examples/platform.js`, `src/application/lyrix/src/core/platform.js`, `tests/application/examples/platform.js`
+- `svg.js`: `src/application/examples/svg.js`, `src/squirrel/components/intuition_builder/svg.js`, `tests/application/examples/svg.js`
+- `node_protocol_clients.js`: `src/squirrel/calendar/node_protocol_clients.js`, `src/squirrel/contacts/node_protocol_clients.js`, `src/squirrel/mail/node_protocol_clients.js`
+- `build.sh`: `atome-os/builder/core/build.sh`, `platforms/web/audio-wasm/build.sh`
+- `audio.yml`: `atome-os/builder/packages/audio.yml`, `atome-os/builder/profiles/audio.yml`
+- `adole.js`: `database/adole.js`, `src/squirrel/apis/unified/adole.js`
+- `atome_object.md`: `documentations/atome_object.md`, `src/application/eVe/documentations/atome_object.md`
+- `URLOpener.swift`: `platforms/ios/atome-auv3/Common/URLOpener.swift`, `platforms/ios/shared/URLLaunching/URLOpener.swift`
+- `config.toml`: `platforms/web/audio-wasm/.cargo/config.toml`, `src-tauri/.cargo/config.toml`
+- `Cargo.toml`: `platforms/web/audio-wasm/Cargo.toml`, `src-tauri/Cargo.toml`
+- `lib.rs`: `platforms/web/audio-wasm/src/lib.rs`, `src-tauri/src/lib.rs`
+- `auth.js`: `server/auth.js`, `src/squirrel/apis/unified/adole_api/auth.js`
+- `sharing.js`: `server/sharing.js`, `src/squirrel/apis/unified/adole_api/sharing.js`
+- `primitives.js`: `src/application/eVe/core/atome_events/primitives.js`, `src/application/eVe/domains/mtrax/shared/primitives.js`
+- `selection_context_runtime.js`: `src/application/eVe/core/atome_events/selection_context_runtime.js`, `src/application/eVe/domains/mtrax/clips/selection_context_runtime.js`
+- `tools.md`: `src/application/eVe/documentations/tools.md`, `src/application/eVe/tests/Todos/tools.md`
+
+## Inconsistent Casing Groups
+
+- `abox.md`: aBox.md, abox.md
+- `record_audio_ui.js`: record_audio_UI.js, record_audio_ui.js
+- `dragdrop.js`: dragDrop.js, dragdrop.js
+
+## Unused Asset Candidates
+
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/.video_cache/video_1778659118910.mp4`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/.video_cache/video_1778659551581.mp4`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/.video_cache/video_1778661289982.mp4`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/.video_cache/video_1778678499094.mp4`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/.video_cache/video_1778678544828.mp4`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/.video_cache/video_1778696445901.mp4`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/audio_1778664313493.wav`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/audio_1778665999094.wav`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/audio_1778667088050.wav`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/audio_1778678482331.wav`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/audio_1778696470983.wav`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/audio_1778696607722.wav`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/video_1778659118910.webm`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/video_1778659551581.webm`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/video_1778661289982.webm`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/video_1778678499094.webm`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/video_1778678544828.webm`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/video_1778696445901.webm`
+- `data/users/e25b813b-810f-5871-b503-aef5f188e137/recordings/video_1778696581128.webm`
+- `src/assets/fonts/Roboto/Roboto-Black.ttf`
+- `src/assets/fonts/Roboto/Roboto-BlackItalic.ttf`
+- `src/assets/fonts/Roboto/Roboto-Bold.ttf`
+- `src/assets/fonts/Roboto/Roboto-BoldItalic.ttf`
+- `src/assets/fonts/Roboto/Roboto-Italic.ttf`
+- `src/assets/fonts/Roboto/Roboto-Light.ttf`
+- `src/assets/fonts/Roboto/Roboto-LightItalic.ttf`
+- `src/assets/fonts/Roboto/Roboto-Medium.ttf`
+- `src/assets/fonts/Roboto/Roboto-MediumItalic.ttf`
+- `src/assets/fonts/Roboto/Roboto-Regular.ttf`
+- `src/assets/fonts/Roboto/Roboto-ThinItalic.ttf`
+- `src/assets/fonts/Roboto_Slab/RobotoSlab-VariableFont_wght.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-Black.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-Bold.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-ExtraBold.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-ExtraLight.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-Light.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-Medium.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-Regular.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-SemiBold.ttf`
+- `src/assets/fonts/Roboto_Slab/static/RobotoSlab-Thin.ttf`
+- `src/assets/images/blank.png`
+- `src/assets/images/icons/communicate.svg`
+- `src/assets/images/icons/controller.svg`
+- `src/assets/images/icons/envelope.svg`
+- `src/assets/images/icons/find.svg`
+- `src/assets/images/icons/grid.svg`
+- `src/assets/images/icons/home.svg`
+- `src/assets/images/icons/import.svg`
+- `src/assets/images/icons/info.svg`
+- `src/assets/images/icons/matrix.svg`
+- `src/assets/images/icons/matrix2.svg`
+- `src/assets/images/icons/mute.svg`
+- `src/assets/images/icons/shop.svg`
+- `src/assets/images/icons/solo.svg`
+- `src/assets/images/icons/time.svg`
+- `src/assets/images/icons/user.svg`
+- `src/assets/images/icons/volume.svg`
+- `src/assets/images/noise.svg`
+- `src/favicon.ico`
+- `src-tauri/icons/64x64.png`
+- `src-tauri/icons/Square107x107Logo.png`
+- `src-tauri/icons/Square142x142Logo.png`
+- `src-tauri/icons/Square150x150Logo.png`
+- `src-tauri/icons/Square284x284Logo.png`
+- `src-tauri/icons/Square30x30Logo.png`
+- `src-tauri/icons/Square310x310Logo.png`
+- `src-tauri/icons/Square44x44Logo.png`
+- `src-tauri/icons/Square71x71Logo.png`
+- `src-tauri/icons/Square89x89Logo.png`
+- `src-tauri/icons/StoreLogo.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/scrub_commit_4_0.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/scrub_preview_4_0.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/seek_0_2.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/seek_1_0.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/seek_2_0.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/seek_2_04.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/seek_2_0_back.png`
+- `temp/probe_reports/molecule_webgpu_visual_probe/seek_3_0.png`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoSVG/example/23.svg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoSVG/example/drawing.svg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoSVG/example/nano.svg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoSVG/example/screenshot-1.png`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoSVG/example/screenshot-2.png`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/NotoEmoji-Regular.ttf`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/Roboto-Bold.ttf`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/Roboto-Light.ttf`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/Roboto-Regular.ttf`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/entypo.ttf`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image1.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image10.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image11.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image12.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image2.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image3.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image4.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image5.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image6.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image7.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image8.jpg`
+- `third_party/iPlug2/Dependencies/IGraphics/NanoVG/example/images/image9.jpg`
+
+## Unclear Ownership Candidates
+
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift`
+- `platforms/ios/atome-auv3/Common/FeatureFlags.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/IPlugAUControl.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/NotificationNudge.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.h`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseManager.swift`
+- `platforms/ios/atome-auv3/Common/RecorderCoreShim.mm`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/SandboxPathValidator.swift`
+- `platforms/ios/atome-auv3/Common/ServerInfoProvider.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/Common/WKWebViewFactory.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `src/application/eVe/todo/AI_integration_problems_to_solve.md`
+- `src/application/eVe/todo/AUDIT.md`
+- `src/application/eVe/todo/Full_vocal_AI_integration.md`
+- `src/application/eVe/todo/MCP_voice_control.md`
+- `src/application/eVe/todo/MTraX_edition.md`
+- `src/application/eVe/todo/Midi_implementation.md`
+- `src/application/eVe/todo/Mtracks_engine.md`
+- `src/application/eVe/todo/apple_mail_security.md`
+- `src/application/eVe/todo/atome_midi_binding_system.md`
+- `src/application/eVe/todo/audio_engine_migration.md`
+- `src/application/eVe/todo/cpal_Kira_integration.md`
+- `src/application/eVe/todo/eVe_AI.md`
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
+- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `src/application/eVe/todo/new Mtrax engine.md`
+- `src/application/eVe/todo/ribbon_menu_conversion_plan/conversion_plan.md`
+- `src/application/eVe/todo/ribbon_menu_conversion_plan/implementation_status.md`
+- `src/application/eVe/todo/social network tool.md`
+- `src/application/eVe/todo/strict_dry_menu_refactor_plan.md`
+- `src/application/eVe/todo/tool_monitor.md`
+- `src/application/eVe/todo/tools monitoring.md`
+- `src/application/eVe/todo/urgent.md`
+- `src/application/eVe/todo/v2_full_migration_framework.md`
+- `src/application/eVe/todo/vector editing layer.md`
+- `src/utils/ios_runtime.js`
+- `src/utils/module_loader_runtime.js`
+- `src/utils/perf_runtime.js`
+- `src/utils/spark_exposure_runtime.js`
+
+## Patch-History Naming Candidates
+
+- `PROJET_MOLECULE_DEBUG.md`
+- `dev/specs/debug_automation.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/Problems solving/AI_debug.md`
+- `documentations/Problems solving/LOOPY_PRO_CRASH_FIX.md`
+- `documentations/Problems solving/SRC_AUV3_LAST_FIX.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/debug_mode.md`
+- `documentations/get_tempo.md`
+- `documentations/tempo_regression_fix.md`
+- `scripts/fix_node_modules.sh`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/domains/mtrax/preview/preview_frame_dispatch_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_transform_patch_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_automation_patch_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_playback_patch_runtime.js`
+- `src/application/eVe/domains/mtrax/visual/patch_apply_runtime.js`
+- `src/application/eVe/domains/mtrax/visual/patch_helpers.js`
+- `src/squirrel/components/template_builder.js`
+- `tests/probes/atome_persistence_probe.test.mjs`
+- `tests/probes/audio_recording_quick_capture_probe.test.mjs`
+- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/eve_ai_mcp_visual_validation.test.mjs`
+- `tests/probes/eve_business_validation.test.mjs`
+- `tests/probes/eve_llm_e2e_suite.test.mjs`
+- `tests/probes/eve_runtime_calendar_crud_probe.test.mjs`
+- `tests/probes/eve_runtime_comm_calendar_probe.test.mjs`
+- `tests/probes/eve_runtime_coverage.test.mjs`
+- `tests/probes/eve_runtime_creative_probe.test.mjs`
+- `tests/probes/eve_runtime_integrity.test.mjs`
+- `tests/probes/eve_runtime_main_panel_probe.test.mjs`
+- `tests/probes/eve_runtime_registered_handler_audit.test.mjs`
+- `tests/probes/eve_runtime_selection_transform_probe.test.mjs`
+- `tests/probes/eve_runtime_transport_capture_probe.test.mjs`
+- `tests/probes/eve_runtime_transport_record_reveal_probe.test.mjs`
+- `tests/probes/eve_strangler_integration.test.mjs`
+- `tests/probes/eve_tauri_llm_routing_probe.test.mjs`
+- `tests/probes/fastify_debug.test.mjs`
+- `tests/probes/media_api_suite_probe.test.mjs`
+- `tests/probes/media_import_probe.test.mjs`
+- `tests/probes/molecule_multitrack_timeline_probe.test.mjs`
+- `tests/probes/molecule_webgpu_visual_probe.test.mjs`
+- `tests/probes/mtrack_current_video_preview_probe.test.mjs`
+- `tests/probes/mtrack_drag_perf_probe.test.mjs`
+- `tests/probes/mtrack_interaction_diag.test.mjs`
+- `tests/probes/mtrack_media_play_ui_probe.test.mjs`
+- `tests/probes/mtrack_perf_probe.test.mjs`
+- `tests/probes/mtrack_preview_dispatch_probe.test.mjs`
+- `tests/probes/mtrack_synthetic_video_preview_probe.test.mjs`
+- `tests/probes/mtrack_zoom_slider_perf_probe.test.mjs`
+- `tests/probes/photo_video_capture_fullscreen_probe.test.mjs`
+- `tests/probes/tauri_recorded_video_mtrack_probe.test.mjs`
+- `tests/probes/video_recording_audio_integrity_probe.test.mjs`
+
+## Long Function Candidates
+
+- `src/application/eVe/intuition/eVeIntuition.js:12430`: approx. 5573 lines
+- `server/server.js:893`: approx. 3909 lines
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js:1636`: approx. 2880 lines
+- `server/server.js:2337`: approx. 2310 lines
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js:40`: approx. 1925 lines
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js:11`: approx. 1817 lines
+- `src/application/examples/record_audio.js:7`: approx. 1806 lines
+- `src/application/eVe/domains/media/api/audio_api.js:242`: approx. 1722 lines
+- `tests/application/examples/record_audio.js:7`: approx. 1691 lines
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js:34`: approx. 1514 lines
+- `src/application/examples/record_video_UI.js:4`: approx. 1514 lines
+- `tests/application/examples/record_video_UI.js:4`: approx. 1485 lines
+- `server/auth.js:819`: approx. 1448 lines
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js:4`: approx. 1344 lines
+- `src/squirrel/components/editor_builder.js:167`: approx. 1284 lines
+- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js:4`: approx. 1270 lines
+- `src/squirrel/ai/default_tools.js:177`: approx. 1245 lines
+- `src/application/eVe/intuition/menu/core/toolbox_runtime.js:260`: approx. 1241 lines
+- `src/application/eVe/domains/mtrax/media/element_runtime.js:10`: approx. 1199 lines
+- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js:11`: approx. 1177 lines
+- `src/application/eVe/domains/mtrax/ui/styles.js:19`: approx. 1140 lines
+- `tests/probes/eve_ai_mcp_visual_validation.test.mjs:41`: approx. 1122 lines
+- `src/application/examples/AI.js:1`: approx. 1099 lines
+- `tests/application/examples/AI.js:1`: approx. 1099 lines
+- `src/application/lyrix/src/components/songLibraryModal.js:261`: approx. 1094 lines
+- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js:16`: approx. 981 lines
+- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js:232`: approx. 950 lines
+- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js:3`: approx. 912 lines
+- `src/application/eVe/core/atome_events/drag_runtime.js:47`: approx. 905 lines
+- `src/application/jeezs/index.js:217`: approx. 903 lines
+- `server/atomeRoutes.orm.js:308`: approx. 843 lines
+- `server/server.js:3730`: approx. 827 lines
+- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js:165`: approx. 827 lines
+- `server/visio.js:68`: approx. 787 lines
+- `src/squirrel/components/console_builder.js:200`: approx. 772 lines
+- `src/squirrel/voice/tool_router.js:659`: approx. 766 lines
+- `server/server.js:3788`: approx. 758 lines
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_runtime.js:18`: approx. 758 lines
+- `src/application/examples/record_video.js:5`: approx. 743 lines
+- `src/application/eVe/intuition/tools/core/hmtracks_audio_engine_v1.js:213`: approx. 724 lines
+- `src/application/eVe/core/atome_events/project_layer_runtime.js:152`: approx. 716 lines
+- `tests/application/examples/record_video.js:5`: approx. 714 lines
+- `src/application/eVe/domains/mtrax/timeline/persist_runtime.js:3`: approx. 707 lines
+- `src/squirrel/voice/tool_router.js:724`: approx. 700 lines
+- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js:18`: approx. 694 lines
+- `src/application/examples/ios_file_browser.js:1479`: approx. 685 lines
+- `tests/application/examples/ios_file_browser.js:1443`: approx. 685 lines
+- `tests/probes/eve_llm_e2e_suite.test.mjs:198`: approx. 681 lines
+- `src/application/eVe/domains/mtrax/media/position_runtime.js:6`: approx. 676 lines
+- `src/application/eVe/domains/mtrax/ui/controls_runtime.js:1`: approx. 660 lines
+- `src/application/eVe/domains/mtrax/tracks/render_tracks_runtime.js:3`: approx. 649 lines
+- `src/application/lyrix/src/components/settings.js:1064`: approx. 648 lines
+- `src/application/lyrix/index.js:2262`: approx. 647 lines
+- `src/application/eVe/domains/mtrax/clips/split_join_runtime.js:10`: approx. 635 lines
+- `src/squirrel/components/button_builder.js:559`: approx. 633 lines
+- `src/application/lyrix/src/components/settings.js:436`: approx. 626 lines
+- `src/application/examples/audio.js:9`: approx. 595 lines
+- `tests/application/examples/audio.js:9`: approx. 595 lines
+- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js:1`: approx. 591 lines
+- `src/squirrel/voice/panel.js:113`: approx. 587 lines
+- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js:7`: approx. 582 lines
+- `src/application/eVe/intuition/eVeIntuition.js:15520`: approx. 581 lines
+- `src/application/lyrix/index.js:2328`: approx. 573 lines
+- `src/application/eVe/intuition/tools/detail.js:42`: approx. 571 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js:4402`: approx. 569 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js:4408`: approx. 563 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js:1595`: approx. 549 lines
+- `src/application/examples/visio.js:4`: approx. 548 lines
+- `tests/application/examples/visio.js:4`: approx. 548 lines
+- `src/application/examples/record_audio_UI.js:6`: approx. 547 lines
+- `tests/application/examples/record_audio_UI.js:6`: approx. 547 lines
+- `src/application/eVe/domains/mtrax/media/position_runtime.js:131`: approx. 546 lines
+- `server/server.js:3185`: approx. 543 lines
+- `src/application/eVe/domains/mtrax/timeline/play_runtime.js:472`: approx. 541 lines
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js:1239`: approx. 536 lines
+- `src/application/eVe/intuition/runtime/tool_genesis.js:4426`: approx. 534 lines
+- `src/application/eVe/intuition/eVeIntuition.js:18013`: approx. 532 lines
+- `src/squirrel/components/slider_builder.js:270`: approx. 532 lines
+- `tests/probes/tauri_recorded_video_mtrack_probe.test.mjs:223`: approx. 530 lines
+- `server/server.js:3193`: approx. 524 lines
+
+## Runtime Inventory
+
+### bootstrapFiles
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/index.js`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Adole apis.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/calendar_ui.md`
+- `documentations/code&tools.md`
+- `documentations/components.md`
+- `documentations/console_api.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/new intuition menu.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/tempo_regression_fix.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/tools_api_and_coding.md`
+- `documentations/transport_creation.md`
+- `engines/audio/au/Plugin.cpp`
+- `engines/audio/core/disk_reader_apple.mm`
+- `engines/audio/core/dsp_core.cpp`
+- `engines/audio/core/dsp_core.h`
+- `install_server.sh`
+- `molecule-status.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseManager.swift`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WKWebViewFactory.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/ActiveScenePoller.swift`
+- `platforms/ios/atome-auv3/application/AppDelegate.swift`
+- `platforms/ios/atome-auv3/application/AppGroupOpenURLInbox.swift`
+- `platforms/ios/atome-auv3/application/SceneDelegate.swift`
+- `platforms/ios/atome-auv3/application/StorageSetupViewController.swift`
+- `platforms/ios/atome-auv3/application/TrustedTapOpener.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+
+### bridges
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `.vscode/launch.json`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/desktop/README.md`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/packages/js.yml`
+- `atome-os/builder/packages/rust.yml`
+- `atome-os/builder/packages/webview.yml`
+- `atome-os/builder/profiles/desktop.yml`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_engine_system_dependencies.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/code&tools.md`
+- `documentations/database_architecture.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/media_capture_apis.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `documentations/set_main_server_address.md`
+- `documentations/sync_protocol.md`
+- `documentations/tools_api_and_coding.md`
+- `documentations/transport_creation.md`
+- `documentations/using_squirrel.md`
+- `engines/audio/iplug/bridge/WebBridge.cpp`
+- `engines/audio/iplug/bridge/WebBridge.h`
+- `engines/audio/iplug/include/PlayerAPI.h`
+- `install_full.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/shared/URLLaunching/URLScriptBridge.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/install_dependencies.sh`
+
+### facades
+
+- `documentations/CRUD_apis.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/kira_audio_commands.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/documentations/atome_object.md`
+- `src/application/eVe/documentations/eve_structure_audit.md`
+- `src/application/eVe/documentations/mail_v1_architecture.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/eVe.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/todo/audio_engine_migration.md`
+- `src/application/eVe/todo/cpal_Kira_integration.md`
+- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `src/application/index.js`
+- `src/squirrel/voice/service.test.mjs`
+
+### gateways
+
+- `documentations/AI.md`
+- `documentations/code&tools.md`
+- `scripts/phase9_ui_regression_suite.mjs`
+- `server/mailRoutes.js`
+- `server/mailRoutes.test.mjs`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/done.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/documentations/tools_cahier_des_charges.md`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/intuition/tools/core/tool_interaction.finder_action_mapping.test.mjs`
+- `src/application/eVe/intuition/tools/project_drop.js`
+- `src/application/eVe/todo/eVe_AI.md`
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
+- `src/application/thermUSS/infra_en.md`
+- `src/application/thermUSS/infra_fr.md`
+- `tests/probes/eve_business_validation.test.mjs`
+- `tests/probes/eve_strangler_integration.test.mjs`
+
+### registries
+
+- `README.md`
+- `documentations/AI.md`
+- `documentations/atome_object.md`
+- `documentations/audio_layer.md`
+- `documentations/code&tools.md`
+- `documentations/libraries_management.md`
+- `documentations/libraries_management_complete.md`
+- `documentations/security_architecture.md`
+- `documentations/tools_api_and_coding.md`
+- `install_full.sh`
+- `scripts/check_molecule_guardrails.mjs`
+- `server/wsApiState.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/atome_object.md`
+- `src/application/eVe/documentations/done.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/intuition/runtime/tool.js`
+- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/intuition/tools/finder.js`
+- `src/application/eVe/intuition/tools/molecule/multi_instance/index.js`
+- `src/application/eVe/intuition/tools/molecule/session/index.js`
+- `src/application/eVe/intuition/tools/molecule/session/registry.js`
+- `src/application/eVe/intuition/tools/perform.js`
+- `src/application/eVe/todo/Full_vocal_AI_integration.md`
+- `src/application/eVe/todo/MCP_voice_control.md`
+- `src/application/eVe/todo/eVe_AI.md`
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
+- `src/application/eVe/todo/strict_dry_menu_refactor_plan.md`
+- `src/application/security/trusted_keys.js`
+- `src/squirrel/ai/model_catalog_registry.test.mjs`
+- `src/squirrel/apis/essentials.js`
+- `src/squirrel/apis/shortcut.js`
+- `src/squirrel/atome/mcp.platform_surface.test.mjs`
+- `src/squirrel/calendar/service.test.mjs`
+- `src/squirrel/components/editor_builder.js`
+- `src-tauri/src/dev_logging.rs`
+- `todos/developer-experience.md`
+- `todos/eve_atome_master_cleanup_plan.md`
+- `todos/finder.md`
+- `todos/todo.md`
+
+### loaders
+
+- `PROJET_MOLECULE_DEBUG.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/scripts/configure_boot.sh`
+- `database/adole.js`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/button_usage.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/debug_mode.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management.md`
+- `documentations/pwa_packaging_guide_en.md`
+- `engines/audio/au/Plugin.cpp`
+- `engines/audio/core/dsp_core.cpp`
+- `engines/audio/core/dsp_core.h`
+- `engines/audio/iplug/bridge/WebBridge.h`
+- `install_full.sh`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/FeatureFlags.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/IPlugAUControl.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseManager.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/run_fastify.sh`
+- `scripts/run_tauri.sh`
+- `scripts/setup/run_unix.sh`
+- `server/data/users/anonymous/Downloads/DKD_converter.cpp`
+- `server/fileStorage.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/shell.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/runtime_audio_backend.js`
+- `src/application/audio_runtime/stt_api.js`
+- `src/application/eVe/concept/freebsd.html`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+- `src/application/eVe/core/molecule_store_bootstrap.js`
+- `src/application/eVe/core/project_store/api.js`
+- `src/application/eVe/core/project_store/memory_adapter.js`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/api/video_recording_controller.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+
+### dispatchers
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `dev/specs/debug_automation.md`
+- `documentations/AI.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Voice_recog.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_object.md`
+- `documentations/code&tools.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/tools_api_and_coding.md`
+- `documentations/transport_creation.md`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/bundle.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/audio_runtime/tauri_audio_bridge.js`
+- `src/application/eVe/concept/correction.md`
+- `src/application/eVe/documentations/Good practices.md`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/atome_object.md`
+- `src/application/eVe/documentations/done.md`
+- `src/application/eVe/documentations/failure_modes_v1.md`
+- `src/application/eVe/documentations/realtime_sync_architecture.md`
+- `src/application/eVe/documentations/runtime_ai_mcp_entrypoints.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/domains/mtrax/timeline/playback_frame_update_runtime.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/runtime/command_bus.js`
+- `src/application/eVe/intuition/runtime/index.js`
+- `src/application/eVe/intuition/runtime/tool_genesis.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `src/application/eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/intuition/tools/project_bootstrap.js`
+- `src/application/eVe/todo/AUDIT.md`
+- `src/application/eVe/todo/Full_vocal_AI_integration.md`
+- `src/application/eVe/todo/Midi_implementation.md`
+- `src/application/eVe/todo/eVe_AI.md`
+- `src/application/examples/ios_apis.js`
+- `src/application/examples/user.js`
+- `src/js/codemirror.bundle.js`
+- `src/js/opal.min.js`
+- `src/js/three.core.min.js`
+- `src/js/three.min.js`
+- `src/squirrel/ai/default_tools.runtime_trace_integration.test.mjs`
+- `src/squirrel/apis/unified/adole.js`
+- `src/squirrel/atome/mcp.communication_surface.test.mjs`
+- `src/squirrel/atome/mcp.js`
+- `src/squirrel/atome/mcp.platform_surface.test.mjs`
+- `src/squirrel/atome/mcp.runtime_bridge.test.mjs`
+- `src/squirrel/atome/mcp.security_surface.test.mjs`
+- `src/squirrel/components/dropDown_builder.js`
+- `src/squirrel/components/editor_builder.js`
+- `src/squirrel/components/intuition_builder/index.js`
+- `src/squirrel/kickstart.js`
+- `src/squirrel/voice/ai_planner.js`
+- `src/squirrel/voice/orchestrator.js`
+- `tests/application/examples/ios_apis.js`
+- `tests/probes/eve_business_validation.test.mjs`
+- `tests/probes/eve_runtime_selection_transform_probe.test.mjs`
+- `tests/probes/eve_strangler_integration.test.mjs`
+- `todos/eve_atome_master_cleanup_plan.md`
+- `todos/video_recording_and_preview.md`
+
+### eventBuses
+
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/aBox.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/using_squirrel.md`
+- `engines/audio/iplug/bridge/WebBridge.h`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `scripts/bundle.js`
+- `scripts/package-app.js`
+- `server/aBoxServer.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userFiles.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/audio_runtime/tauri_audio_bridge.js`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/atome_events/drag_runtime.js`
+- `src/application/eVe/core/atome_events/project_layer_runtime.js`
+- `src/application/eVe/core/atome_events/resize_runtime.js`
+- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/text_edit_runtime.js`
+- `src/application/eVe/core/atome_events/trace_runtime.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/event_bus.js`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/documentations/realtime_sync_architecture.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/api/video_recording_controller.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_engine_runtime.js`
+- `src/application/eVe/domains/mtrax/automation/clip_lane_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/media_play_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/project_duplication_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/selection_bridge_runtime.js`
+- `src/application/eVe/domains/mtrax/core/diagnostics.js`
+- `src/application/eVe/domains/mtrax/core/runtime_frame_eval.js`
+- `src/application/eVe/domains/mtrax/integration/bridge_drop_bootstrap_runtime.js`
+- `src/application/eVe/domains/mtrax/integration/interaction_bootstrap_runtime.js`
+- `src/application/eVe/domains/mtrax/integration/tool_gateway_result_runtime.js`
+- `src/application/eVe/domains/mtrax/media/element_runtime.js`
+- `src/application/eVe/domains/mtrax/media/position_runtime.js`
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_draw_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_edit_bridges_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_file_drop_bridge.js`
+- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_interaction_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_metadata_events_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_metadata_retry.test.mjs`
+- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_text_create_runtime.js`
+- `src/application/eVe/domains/mtrax/project/commit_bridge_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_atome_drop_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_atome_timeline_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_local_drag_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_playback_mirror_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_playback_patch_runtime.js`
+
+### stateStores
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/packages/base.yml`
+- `atome-os/builder/scripts/configure_network.sh`
+- `auv3.sh`
+- `database/adole.js`
+- `database/driver.js`
+- `database/index.js`
+- `dev/daemon/index.js`
+- `dev/specs/debug_automation.md`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Adole apis.md`
+- `documentations/Adole messaging_system.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/AI_debug.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Voice_recog.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/developer_experience_analysis_en.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_optimizations.md`
+- `documentations/audits/performance_optimizations_en.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/auv3_webview_audio_injection.md`
+- `documentations/button_usage.md`
+- `documentations/code&tools.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/components.md`
+- `documentations/database_architecture.md`
+- `documentations/get_tempo.md`
+- `documentations/github_token_configuration.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/human_handshake.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/new intuition menu.md`
+- `documentations/purchasekit_doc.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/tools_api_and_coding.md`
+- `documentations/transport_creation.md`
+- `engines/audio/core/disk_reader.cpp`
+- `engines/audio/core/disk_reader_apple.mm`
+- `engines/audio/core/dsp_core.cpp`
+- `engines/audio/core/dsp_core.h`
+- `engines/audio/core/ring_buffer.cpp`
+- `engines/audio/iplug/dsp/Envelope.h`
+- `engines/audio/iplug/dsp/RingBuffer.h`
+- `engines/audio/iplug/recorder/RecorderCore.cpp`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/README.md`
+- `platforms/ios/atome-auv3/application/AppDelegate.swift`
+- `platforms/ios/atome-auv3/application/AppURLOpener.swift`
+
+### transportMechanisms
+
+- `.github/copilot-instructions.md`
+- `README.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/core/lib/versions.sh`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/auto_update.md`
+- `atome-os/builder/overlays/services/atome_updater.sh`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `auv3.sh`
+- `dev/daemon/index.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/audio_layer.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/button_usage.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/github_token_configuration.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/pwa_packaging_guide_en.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/shell.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/using_squirrel.md`
+- `install_full.sh`
+- `install_server.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `scripts/fix_node_modules.sh`
+- `scripts/install_dependencies.sh`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/publish-npm.sh`
+- `scripts/publish-to-github.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup_debian_server.sh`
+- `scripts/static_file_server.mjs`
+- `scripts/test-server-verification.js`
+- `scripts/test_contracts.mjs`
+- `scripts/test_sync.sh`
+- `scripts/update_iplug2.sh`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/userFiles.js`
+- `server/visio.js`
+- `server/wsSend.js`
+- `src/application/aBox/index.js`
+
+### nativeInvokeCommands
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `.vscode/launch.json`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/desktop/README.md`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/packages/js.yml`
+- `atome-os/builder/packages/rust.yml`
+- `atome-os/builder/packages/webview.yml`
+- `atome-os/builder/profiles/desktop.yml`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/AI.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_engine_system_dependencies.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/database_architecture.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/media_capture_apis.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `documentations/set_main_server_address.md`
+- `documentations/sync_protocol.md`
+- `documentations/tools_api_and_coding.md`
+- `documentations/using_squirrel.md`
+- `install_full.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/install_dependencies.sh`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/run_tauri.sh`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/steps/preflight.mjs`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `scripts/test_contracts.mjs`
+- `scripts/test_sync.sh`
+- `server/aBoxServer.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/sync/fileSyncWatcher.js`
+- `src/application/aBox/index.js`
+
+### mcpTools
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `.vscode/settings.json`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/atome_object.md`
+- `documentations/code&tools.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/new intuition menu.md`
+- `documentations/tools_api_and_coding.md`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/install_dependencies.sh`
+- `scripts/phase9_mcp_runtime_suite.mjs`
+- `scripts/setup/bootstrap.sh`
+- `src/application/eVe/concept/correction.md`
+- `src/application/eVe/concept/eVe.html`
+- `src/application/eVe/core/atome_events/placement_runtime.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/documentations/Atome Time Machine.md`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/atome_object.md`
+- `src/application/eVe/documentations/bank_v1_architecture.md`
+- `src/application/eVe/documentations/calendar_v1_architecture.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/desktop_manual_validation_checklist.md`
+- `src/application/eVe/documentations/done.md`
+- `src/application/eVe/documentations/failure_modes_v1.md`
+- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
+- `src/application/eVe/documentations/mail_v1_architecture.md`
+- `src/application/eVe/documentations/runtime_ai_mcp_entrypoints.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/documentations/tools_cahier_des_charges.md`
+- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `src/application/eVe/domains/mtrax/recording/schedule_utils.js`
+- `src/application/eVe/domains/mtrax/tracks/render_tracks_runtime.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/intuition/components/core/component_creator.js`
+- `src/application/eVe/intuition/contracts/constants.js`
+- `src/application/eVe/intuition/contracts/contracts.js`
+- `src/application/eVe/intuition/contracts/index.js`
+- `src/application/eVe/intuition/contracts/validator.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/flower/menu.js`
+- `src/application/eVe/intuition/footer/runtime.js`
+- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`
+- `src/application/eVe/intuition/matrix/core/project_data.js`
+- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`
+- `src/application/eVe/intuition/panels/core/panel_creator.js`
+- `src/application/eVe/intuition/projection/tool_strip.js`
+- `src/application/eVe/intuition/ribbon/menu.js`
+- `src/application/eVe/intuition/runtime/command_bus.js`
+- `src/application/eVe/intuition/runtime/history_policy.js`
+- `src/application/eVe/intuition/runtime/selection.js`
+- `src/application/eVe/intuition/runtime/tool.js`
+- `src/application/eVe/intuition/runtime/tool_gateway.js`
+- `src/application/eVe/intuition/shared/group_state_runtime.js`
+- `src/application/eVe/intuition/shared/tool_drag.js`
+- `src/application/eVe/intuition/tools/AI.js`
+- `src/application/eVe/intuition/tools/activities.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/clock.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/contextual/flower_menu_visual.js`
+- `src/application/eVe/intuition/tools/copy.js`
+- `src/application/eVe/intuition/tools/core/finder_tools_projection.js`
+- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
+- `src/application/eVe/intuition/tools/core/svg_vector_edit_runtime.js`
+- `src/application/eVe/intuition/tools/core/tool_definition_ssot.long_press.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_instances.js`
+- `src/application/eVe/intuition/tools/core/tool_interaction.js`
+- `src/application/eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_latch_aliases.js`
+- `src/application/eVe/intuition/tools/core/tool_latch_aliases.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_registry.js`
+- `src/application/eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+
+### webgpuEntryPoints
+
+- `.codex/AGENTS.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
+- `src/application/eVe/domains/mtrax/media/position_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/import_media_timeline.js`
+- `src/application/eVe/domains/mtrax/timeline/schema_utils.js`
+- `src/application/eVe/domains/mtrax/ui/styles.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `src/application/eVe/intuition/runtime/tool_genesis.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_adapter.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_adapter.test.mjs`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.test.mjs`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `src/application/eVe/intuition/tools/molecule/kernel/reducers.js`
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
+- `src/application/eVe/todo/new Mtrax engine.md`
+- `tests/mtrack_decode_test.mjs`
+- `tests/mtrack_diag_test.mjs`
+- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/media_api_suite_probe.test.mjs`
+- `tests/probes/molecule_webgpu_visual_probe.test.mjs`
+- `tests/probes/mtrack_media_play_ui_probe.test.mjs`
+- `tests/probes/photo_video_capture_fullscreen_probe.test.mjs`
+- `todos/eve_atome_master_cleanup_plan.md`
+- `todos/molecule_streaming_status.md`
+- `todos/video_recording_and_preview.md`
+
+### audioEntryPoints
+
+- `.codex/AGENTS.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/build.sh`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/adding_a_stack.md`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/audio_lowlatency.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/packages/audio.yml`
+- `atome-os/builder/profiles/audio.yml`
+- `atome-os/builder/profiles/desktop.yml`
+- `atome-os/builder/profiles/dev.yml`
+- `atome-os/builder/profiles/minimal.yml`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `auv3.sh`
+- `documentations/ADOLE.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/CORRECTIONS_APPLIED.md`
+- `documentations/Problems solving/EXTERNAL_DISPLAY_MIGRATION_NOTES.md`
+- `documentations/Problems solving/LOOPY_PRO_CRASH_FIX.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/SRC_AUV3_LAST_FIX.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/Voice_recog.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_engine_system_dependencies.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/auv3_webview_audio_injection.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management.md`
+- `documentations/libraries_management_complete.md`
+- `documentations/media-url-contract.md`
+- `documentations/media_capture_apis.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/server_installation.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/tempo_regression_fix.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `engines/audio/au/Plugin.cpp`
+- `engines/audio/au/Plugin.h`
+- `engines/audio/core/disk_reader.cpp`
+- `engines/audio/core/disk_reader.h`
+- `engines/audio/core/disk_reader_apple.mm`
+- `engines/audio/core/dsp_core.cpp`
+- `engines/audio/core/dsp_core.h`
+- `engines/audio/core/ring_buffer.cpp`
+- `engines/audio/core/ring_buffer.h`
+- `engines/audio/iplug/bridge/WebBridge.cpp`
+- `engines/audio/iplug/bridge/WebBridge.h`
+- `engines/audio/iplug/dsp/Envelope.h`
+- `engines/audio/iplug/dsp/PlayerDSP.cpp`
+- `engines/audio/iplug/dsp/PlayerDSP.h`
+- `engines/audio/iplug/dsp/RingBuffer.h`
+- `engines/audio/iplug/include/PlayerAPI.h`
+- `engines/audio/iplug/recorder/RecorderCore.cpp`
+- `engines/audio/iplug/recorder/RecorderCore.h`
+- `molecule-status.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+
+### mediaLoaders
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/build.sh`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/adding_a_stack.md`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/audio_lowlatency.md`
+- `atome-os/builder/docs/auto_update.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/desktop/README.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/packages/audio.yml`
+- `atome-os/builder/packages/base.yml`
+- `atome-os/builder/packages/ruby.yml`
+- `atome-os/builder/profiles/audio.yml`
+- `atome-os/builder/profiles/desktop.yml`
+- `atome-os/builder/profiles/dev.yml`
+- `atome-os/builder/profiles/minimal.yml`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/finalize_image.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `atome-os/builder/scripts/mount_image.sh`
+- `atome-os/builder/scripts/preflight.sh`
+- `auv3.sh`
+- `dev/specs/debug_automation.md`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/CORRECTIONS_APPLIED.md`
+- `documentations/Problems solving/EXTERNAL_DISPLAY_MIGRATION_NOTES.md`
+- `documentations/Problems solving/LOOPY_PRO_CRASH_FIX.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/SRC_AUV3_LAST_FIX.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_engine_system_dependencies.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/auv3_webview_audio_injection.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management.md`
+- `documentations/libraries_management_complete.md`
+- `documentations/media-url-contract.md`
+- `documentations/media_capture_apis.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/server_installation.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/tempo_regression_fix.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/tools_api_and_coding.md`
+- `documentations/transport_creation.md`
+- `engines/audio/au/Plugin.cpp`
+
+### filesystemAccessPoints
+
+- `.github/copilot-instructions.md`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/configure_network.sh`
+- `atome-os/builder/scripts/configure_ui.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/mount_image.sh`
+- `atome-os/builder/scripts/preflight.sh`
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/shell.md`
+- `install_full.sh`
+- `install_server.sh`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/configure_https_server.sh`
+- `scripts/generate-server-keys.js`
+- `scripts/generate_cert.sh`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_live_bundle.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_suite_lib.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/core/logger.mjs`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/workflows/audit-only.mjs`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `scripts/static_file_server.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `scripts/update_iplug2.sh`
+- `server/aBoxServer.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userExportImport.js`
+- `server/userHome.js`
+- `src/application/eVe/documentations/Security_and_sharing.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/tools/imports_exports/index.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/examples/input_file.js`
+- `src/application/examples/ios_apis.js`
+- `src/application/examples/ios_file_browser.js`
+- `src/application/examples/iplug_ios.js`
+- `src/application/examples/iplug_sampler.js`
+- `src/application/examples/iplug_sampler_bck.js`
+- `src/application/examples/record_audio.js`
+- `src/application/examples/shellUI.js`
+- `src/application/lyrix/index.js`
+- `src/application/lyrix/src/components/songLibraryModal.js`
+- `src/application/lyrix/src/features/import/dragDrop.js`
+- `src/js/codemirror.bundle.js`
+- `src/js/three.core.min.js`
+- `src/squirrel/apis/update_atome.js`
+- `tests/application/examples/input_file.js`
+
+### networkAccessPoints
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/core/lib/versions.sh`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/auto_update.md`
+- `atome-os/builder/overlays/services/atome_updater.sh`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/profiles/minimal.yml`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `auv3.sh`
+- `database/adole.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/AI.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_engine_system_dependencies.md`
+- `documentations/audio_layer.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/button_usage.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/database_architecture.md`
+- `documentations/github_token_configuration.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/media_capture_apis.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/pwa_packaging_guide_en.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/shell.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/sync_protocol.md`
+- `documentations/using_squirrel.md`
+- `install_full.sh`
+- `install_server.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/fix_node_modules.sh`
+- `scripts/install_dependencies.sh`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/publish-npm.sh`
+- `scripts/publish-to-github.sh`
+- `scripts/reset_Framework.sh`
+- `scripts/run_fastify.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+
+### permissionRequestPoints
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `README.md`
+- `database/adole.js`
+- `documentations/AI.md`
+- `documentations/Adole finder engine.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/AI_debug.md`
+- `documentations/atome_object.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/code&tools.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/purchasekit_doc.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/security_architecture.md`
+- `documentations/sync_protocol.md`
+- `documentations/tools_api_and_coding.md`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseManager.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/README.md`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/install_dependencies.sh`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/userFiles.js`
+- `server/visio.js`
+- `src/application/audio_runtime/stt_api.js`
+- `src/application/eVe/documentations/Good practices.md`
+- `src/application/eVe/documentations/Security_and_sharing.md`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/atome_object.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/done.md`
+- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
+- `src/application/eVe/documentations/realtime_sync_architecture.md`
+- `src/application/eVe/documentations/remote_control_test_harness.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/mtrax/clips/cutter_contract_runtime.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/elements/eVe_look.js`
+- `src/application/eVe/intuition/contracts/contracts.js`
+- `src/application/eVe/intuition/contracts/validator.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/runtime/tool.js`
+- `src/application/eVe/intuition/tools/activities.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/clock.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/copy.js`
+- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
+- `src/application/eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_registry.js`
+- `src/application/eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
+- `src/application/eVe/intuition/tools/couleur.js`
+- `src/application/eVe/intuition/tools/delete.js`
+- `src/application/eVe/intuition/tools/detail.js`
+- `src/application/eVe/intuition/tools/font.js`
+- `src/application/eVe/intuition/tools/layer.js`
+- `src/application/eVe/intuition/tools/paste.js`
+
+### persistenceAccessPoints
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `atome-os/builder/packages/base.yml`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `database/index.js`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Adole finder engine.md`
+- `documentations/Adole messaging_system.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/database_architecture.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/media_capture_apis.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `install_full.sh`
+- `install_server.sh`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/install_dependencies.sh`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/run_fastify.sh`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup_debian_server.sh`
+- `scripts/test_sync.sh`
+- `server/atomeRealtime.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/notificationStack.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userFiles.js`
+- `server/visio.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/browser_store/indexeddb_backend.js`
+- `src/application/eVe/core/ios_store/ios_sqlite_backend.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/core/media_store/api.js`
+- `src/application/eVe/core/media_store/memory_adapter.js`
+- `src/application/eVe/core/molecule_store_bootstrap.js`
+- `src/application/eVe/core/project_store/api.js`
+- `src/application/eVe/core/project_store/memory_adapter.js`
+- `src/application/eVe/core/tauri_store/tauri_sqlite_backend.js`
+- `src/application/eVe/documentations/Offline Online explanations.md`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
+
+### synchronizationFlows
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/auto_update.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/scripts/finalize_image.sh`
+- `database/adole.js`
+- `database/index.js`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Adole apis.md`
+- `documentations/Adole finder engine.md`
+- `documentations/Adole messaging_system.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_webview_audio_injection.md`
+- `documentations/code&tools.md`
+- `documentations/console_api.md`
+- `documentations/database_architecture.md`
+- `documentations/github_token_configuration.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/sync_protocol.md`
+- `documentations/tools_api_and_coding.md`
+- `install_full.sh`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/StorageSettingsView.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/bundle-codemirror.js`
+- `scripts/codemirror-entry.js`
+- `scripts/install_dependencies.sh`
+- `scripts/phase9_ui_regression_suite.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/test_sync.sh`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/atomeRealtime.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/mailRoutes.js`
+- `server/mailRoutes.test.mjs`
+- `server/server.js`
+
+## AI-Debt Indicators
+
+### overDefensiveCode
+
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Problems solving/CORRECTIONS_APPLIED.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/safe_optimizations.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/code&tools.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/SandboxPathValidator.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/StorageSettingsView.swift`
+- `platforms/ios/atome-auv3/application/StorageSetupViewController.swift`
+- `platforms/ios/atome-auv3/application/TrustedTapOpener.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `platforms/ios/shared/URLLaunching/URLOpener.swift`
+- `platforms/ios/shared/URLLaunching/URLScriptBridge.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/bundle-codemirror.js`
+- `scripts/bundle.js`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/generate-server-keys.js`
+- `scripts/icloud_account_discovery.mjs`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/install_dependencies.sh`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/test-server-verification.js`
+- `scripts/test_contracts.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/atomeRealtime.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/mailRoutes.js`
+- `server/mailRoutes.test.mjs`
+- `server/notificationStack.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+
+### unexplainedFallbacks
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/core/lib/versions.sh`
+- `atome-os/builder/core/lib/yaml.sh`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/packages/js.yml`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `auv3.sh`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/aBox.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/calendar_api.md`
+- `documentations/code&tools.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/libraries_management.md`
+- `documentations/libraries_management_complete.md`
+- `documentations/media-url-contract.md`
+- `documentations/media_capture_apis.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/set_main_server_address.md`
+- `documentations/tempo_regression_fix.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/ServerInfoProvider.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/AppDelegate.swift`
+- `platforms/ios/atome-auv3/application/TrustedTapOpener.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `platforms/ios/shared/URLLaunching/URLOpener.swift`
+- `scripts/generate-server-keys.js`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/reset_Framework.sh`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/mailRoutes.js`
+- `server/server.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userFiles.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/kira_audio_commands.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/audio_runtime/runtime_audio_backend.js`
+
+### excessiveTryCatch
+
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/bundle-codemirror.js`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/test-server-verification.js`
+- `scripts/test_contracts.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `server/aBoxServer.js`
+- `server/atomeRealtime.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/mailRoutes.js`
+- `server/notificationStack.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userExportImport.js`
+- `server/userFiles.js`
+- `server/userHome.js`
+- `server/visio.js`
+- `server/wsApiState.js`
+- `server/wsSend.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/audio_runtime/runtime_audio_backend.js`
+- `src/application/audio_runtime/stt_api.js`
+- `src/application/audio_runtime/tauri_audio_bridge.js`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/atome_events/drag_runtime.js`
+- `src/application/eVe/core/atome_events/local_interaction_edit_runtime.js`
+- `src/application/eVe/core/atome_events/placement_runtime.js`
+- `src/application/eVe/core/atome_events/primitives.js`
+- `src/application/eVe/core/atome_events/project_layer_runtime.js`
+- `src/application/eVe/core/atome_events/resize_runtime.js`
+- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/text_creation_session.js`
+- `src/application/eVe/core/atome_events/text_edit_runtime.js`
+- `src/application/eVe/core/atome_events/text_fit_runtime.js`
+- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/trace_runtime.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/event_bus.js`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+
+### duplicatedHelperFunctions
+
+- `database/adole.js`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/set_main_server_address.md`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/setup/core/logger.mjs`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/static_file_server.mjs`
+- `scripts/test_contracts.mjs`
+- `server/aBoxServer.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userExportImport.js`
+- `server/userFiles.js`
+- `server/userHome.js`
+- `server/visio.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/eVe/core/project_security.js`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/user/profile_api.js`
+- `src/application/eVe/elements/design.js`
+- `src/application/eVe/intuition/tools/calendar.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `src/application/eVe/user/background.js`
+- `src/application/examples/audio.js`
+- `src/application/examples/auv3file_browser.js`
+- `src/application/examples/calendar.js`
+- `src/application/examples/calendarUI.js`
+- `src/application/examples/console.js`
+- `src/application/examples/demos.js`
+- `src/application/examples/input_file.js`
+- `src/application/examples/ios_audio_bridge.js`
+- `src/application/examples/ios_file_browser.js`
+- `src/application/examples/iplug_sampler.js`
+- `src/application/examples/iplug_sampler_bad.js`
+- `src/application/examples/leaflet.js`
+- `src/application/examples/messages_ui.js`
+- `src/application/examples/record_audio.js`
+- `src/application/examples/record_audio_UI.js`
+- `src/application/examples/record_video.js`
+- `src/application/examples/record_video_UI.js`
+- `src/application/examples/share.js`
+- `src/application/examples/share_ui.js`
+- `src/application/examples/shell.js`
+- `src/application/examples/shellUI.js`
+- `src/application/examples/testSVGSize.js`
+- `src/application/examples/tools.js`
+- `src/application/examples/user.js`
+- `src/application/examples/visio.js`
+- `src/application/examples/visio_UI.js`
+- `src/application/examples/web_navigation.js`
+- `src/application/jeezs/demo.js`
+- `src/application/jeezs/index backup.js`
+- `src/application/jeezs/index.js`
+- `src/application/lyrix/index.js`
+- `src/application/lyrix/src/components/settings.js`
+- `src/application/lyrix/src/features/lyrics/SongUtils.js`
+- `src/application/lyrix/src/features/lyrics/library.js`
+- `src/application/lyrix/src/intuition/menu.js`
+- `src/application/security/cloudSync.js`
+- `src/application/ui/filerEvents.js`
+- `src/application/ui/record_audio_ui.js`
+- `src/application/vie/index.js`
+- `src/application/vie/unit_test.js`
+- `src/js/event-calendar.min.map.json`
+- `src/js/gsap.min.js`
+- `src/js/opal-parser.min.js`
+- `src/js/opal.min.js`
+- `src/shared/logging.js`
+- `src/shared/recipient_access.js`
+
+### vagueUtilityNames
+
+- `README.md`
+- `atome-os/builder/core/build.sh`
+- `atome-os/builder/core/lib/common.sh`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/configure_boot.sh`
+- `atome-os/builder/scripts/configure_network.sh`
+- `atome-os/builder/scripts/configure_ui.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/finalize_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `atome-os/builder/scripts/mount_image.sh`
+- `atome-os/builder/scripts/preflight.sh`
+- `build_PWA_app.sh`
+- `dev/specs/debug_automation.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/CORRECTIONS_APPLIED.md`
+- `documentations/Problems solving/EXTERNAL_DISPLAY_MIGRATION_NOTES.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/SRC_AUV3_LAST_FIX.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_engine_system_dependencies.md`
+- `documentations/audio_layer.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/auv3_webview_audio_injection.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/debug_mode.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/new intuition menu.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/server_installation.md`
+- `documentations/tempo_regression_fix.md`
+- `install_full.sh`
+- `install_server.sh`
+- `molecule-status.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift`
+- `platforms/ios/atome-auv3/Common/FeatureFlags.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/IPlugAUControl.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/NotificationNudge.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.h`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseManager.swift`
+- `platforms/ios/atome-auv3/Common/RecorderCoreShim.mm`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/SandboxPathValidator.swift`
+- `platforms/ios/atome-auv3/Common/ServerInfoProvider.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/Common/WKWebViewFactory.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/README.md`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/bundle.js`
+- `scripts/server_update.js`
+- `scripts/setup/run_unix.sh`
+- `scripts/test_sync.sh`
+- `server/auth.js`
+
+### genericWrappers
+
+- `.codex/AGENTS.md`
+- `CDN_publication.sh`
+- `PROJET_MOLECULE_DEBUG.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/core/lib/yaml.sh`
+- `atome-os/builder/docs/adding_a_stack.md`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/audio_lowlatency.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/packages/audio.yml`
+- `auv3.sh`
+- `build_PWA_app.sh`
+- `database/adole.js`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Adole finder engine.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/CORRECTIONS_APPLIED.md`
+- `documentations/Problems solving/LOOPY_PRO_CRASH_FIX.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/SRC_AUV3_LAST_FIX.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/Voice_recog.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_final_report_en.md`
+- `documentations/audits/safe_optimizations.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/calendar_ui.md`
+- `documentations/code&tools.md`
+- `documentations/database_architecture.md`
+- `documentations/github_token_configuration.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/sync_protocol.md`
+- `documentations/transport_creation.md`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.h`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/RecorderCoreShim.mm`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/application/AppURLOpener.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/configure_https_server.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/sanitize_svg.sh`
+- `server/atomeRoutes.orm.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/userFiles.js`
+- `server/visio.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/eVe/concept/correction.md`
+- `src/application/eVe/concept/eVe.html`
+- `src/application/eVe/concept/freebsd.html`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/event_store/api.js`
+
+### repeatedCompatibilityLayers
+
+- `.codex/AGENTS.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/adding_a_stack.md`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/audio_lowlatency.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/packages/audio.yml`
+- `atome-os/builder/profiles/minimal.yml`
+- `auv3.sh`
+- `database/adole.js`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Adole finder engine.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/CORRECTIONS_APPLIED.md`
+- `documentations/Problems solving/LOOPY_PRO_CRASH_FIX.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/SRC_AUV3_LAST_FIX.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/aBox.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_final_report_en.md`
+- `documentations/audits/safe_optimizations.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/code&tools.md`
+- `documentations/database_architecture.md`
+- `documentations/github_token_configuration.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management_complete.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/sync_protocol.md`
+- `documentations/transport_creation.md`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.h`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/RecorderCoreShim.mm`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/AppURLOpener.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/codemirror-entry.js`
+- `scripts/configure_https_server.sh`
+- `scripts/install_dependencies.sh`
+- `scripts/setup/run_unix.sh`
+- `server/atomeRoutes.orm.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/userFiles.js`
+- `server/visio.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/eVe/concept/correction.md`
+- `src/application/eVe/concept/eVe.html`
+- `src/application/eVe/concept/freebsd.html`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/event_store/api.js`
+- `src/application/eVe/core/event_store/errors.js`
+- `src/application/eVe/core/event_store/index.js`
+- `src/application/eVe/core/event_store/memory_adapter.js`
+- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+
+### featureSpecificHacks
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/lib/versions.sh`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/audio_lowlatency.md`
+- `atome-os/builder/docs/auto_update.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/configure_boot.sh`
+- `atome-os/builder/scripts/finalize_image.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `auv3.sh`
+- `database/adole.js`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/audits/developer_experience_analysis_en.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_final_report_en.md`
+- `documentations/audits/performance_optimizations.md`
+- `documentations/audits/performance_protocol_en.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/button_usage.md`
+- `documentations/calendar_api.md`
+- `documentations/calendar_ui.md`
+- `documentations/components.md`
+- `documentations/console_api.md`
+- `documentations/database_architecture.md`
+- `documentations/env_setup.md`
+- `documentations/get_tempo.md`
+- `documentations/github_token_configuration.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/human_handshake.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/new intuition menu.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/security_architecture.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/tempo_regression_fix.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `documentations/using_squirrel.md`
+- `engines/audio/core/disk_reader.cpp`
+- `engines/audio/core/dsp_core.cpp`
+- `engines/audio/core/dsp_core.h`
+- `engines/audio/iplug/bridge/WebBridge.cpp`
+- `engines/audio/iplug/dsp/PlayerDSP.cpp`
+- `engines/audio/iplug/dsp/PlayerDSP.h`
+- `engines/audio/iplug/dsp/RingBuffer.h`
+- `install_full.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/SandboxPathValidator.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+
+### inconsistentNaming
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/build.sh`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/core/lib/common.sh`
+- `atome-os/builder/core/lib/versions.sh`
+- `atome-os/builder/core/lib/yaml.sh`
+- `atome-os/builder/docs/adding_a_stack.md`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/audio_lowlatency.md`
+- `atome-os/builder/docs/auto_update.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/desktop/README.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/overlays/services/atome_updater.sh`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/packages/audio.yml`
+- `atome-os/builder/packages/base.yml`
+- `atome-os/builder/packages/js.yml`
+- `atome-os/builder/packages/native.yml`
+- `atome-os/builder/packages/network.yml`
+- `atome-os/builder/packages/ruby.yml`
+- `atome-os/builder/packages/rust.yml`
+- `atome-os/builder/packages/webview.yml`
+- `atome-os/builder/profiles/audio.yml`
+- `atome-os/builder/profiles/desktop.yml`
+- `atome-os/builder/profiles/dev.yml`
+- `atome-os/builder/profiles/minimal.yml`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/configure_boot.sh`
+- `atome-os/builder/scripts/configure_network.sh`
+- `atome-os/builder/scripts/configure_ui.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/finalize_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `atome-os/builder/scripts/mount_image.sh`
+- `atome-os/builder/scripts/preflight.sh`
+- `auv3.sh`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/index.js`
+- `dev/daemon/index.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Adole apis.md`
+- `documentations/Adole finder engine.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/CORRECTIONS_APPLIED.md`
+- `documentations/Problems solving/EXTERNAL_DISPLAY_MIGRATION_NOTES.md`
+- `documentations/Problems solving/LOOPY_PRO_CRASH_FIX.md`
+- `documentations/Problems solving/MIDI_CRASH_ANALYSIS.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/SRC_AUV3_LAST_FIX.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/audits/developer_experience_analysis_en.md`
+
+### deadBranches
+
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/atome_object.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/safe_optimizations.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/code&tools.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/console_api.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/set_main_server_address.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `engines/audio/core/disk_reader.cpp`
+- `engines/audio/core/disk_reader_apple.mm`
+- `engines/audio/core/dsp_core.cpp`
+- `engines/audio/iplug/dsp/Envelope.h`
+- `engines/audio/iplug/dsp/RingBuffer.h`
+- `engines/audio/iplug/recorder/RecorderCore.cpp`
+- `install_full.sh`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/SandboxPathValidator.swift`
+- `platforms/ios/atome-auv3/Common/ServerInfoProvider.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/TrustedTapOpener.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `platforms/ios/shared/URLLaunching/URLOpener.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_no_fallbacks.mjs`
+- `scripts/generate-server-keys.js`
+- `scripts/icloud_account_discovery.mjs`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/setup/platform/detect.mjs`
+- `scripts/setup/steps/preflight.mjs`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `scripts/static_file_server.mjs`
+- `scripts/test_contracts.mjs`
+- `scripts/test_sync.sh`
+- `server/aBoxServer.js`
+
+### multipleSolutions
+
+- `.codex/AGENTS.md`
+- `README.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/core/lib/yaml.sh`
+- `atome-os/builder/docs/adding_a_stack.md`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/installer/sbc/README.md`
+- `atome-os/builder/profiles/minimal.yml`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `database/adole.js`
+- `dev/daemon/index.js`
+- `documentations/ADOLE.md`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole Time Machine.md`
+- `documentations/Adole apis.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/atome_object.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/auv3_webview_audio_injection.md`
+- `documentations/calendar_api.md`
+- `documentations/code&tools.md`
+- `documentations/database_architecture.md`
+- `documentations/env_setup.md`
+- `documentations/get_tempo.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management_complete.md`
+- `documentations/new intuition menu.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/server_installation.md`
+- `documentations/sync_protocol.md`
+- `documentations/tempo_regression_fix.md`
+- `documentations/tools_api_and_coding.md`
+- `install_server.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/codemirror-entry.js`
+- `scripts/configure_https_server.sh`
+- `scripts/install_dependencies.sh`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/sanitize_svg.sh`
+- `scripts/server_update.js`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/core/logger.mjs`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/setup/run_unix.sh`
+- `server/auth.js`
+- `server/server.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/demo.example.js`
+- `src/application/eVe/core/atome_commit.js`
+
+## Debug Indicators
+
+### consolePollution
+
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/audits/developer_experience_analysis_en.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_optimizations.md`
+- `documentations/audits/performance_optimizations_en.md`
+- `documentations/button_usage.md`
+- `documentations/calendar_api.md`
+- `documentations/components.md`
+- `documentations/console_api.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/media_capture_apis.md`
+- `documentations/new intuition menu.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `documentations/using_squirrel.md`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/bundle-codemirror.js`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_no_fallbacks.mjs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/generate-server-keys.js`
+- `scripts/install_dependencies.sh`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_live_bundle.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_suite_lib.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/core/logger.mjs`
+- `scripts/static_file_server.mjs`
+- `scripts/test-server-verification.js`
+- `scripts/test_contracts.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/atomeRealtime.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/mailRoutes.test.mjs`
+- `server/notificationStack.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userExportImport.js`
+- `server/userFiles.js`
+- `server/userHome.js`
+- `server/visio.js`
+- `server/wsApiState.js`
+- `server/wsSend.js`
+- `src/application/audio_runtime/demo.example.js`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/domains/media/shared/media_source.test.mjs`
+- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
+
+### temporaryDebugPrints
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `.vscode/launch.json`
+- `PROJET_MOLECULE_DEBUG.md`
+- `atome-os/builder/core/build.sh`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/profiles/dev.yml`
+- `auv3.sh`
+- `database/adole.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/ADOLE.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/AI_debug.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Voice_recog.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audits/developer_experience_analysis_en.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/button_usage.md`
+- `documentations/console_api.md`
+- `documentations/debug_mode.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/new intuition menu.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/server_installation.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/tempo_regression_fix.md`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`
+- `platforms/ios/atome-auv3/Common/IPlugAUControl.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/WKWebViewFactory.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/README.md`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/test_contracts.mjs`
+- `server/README.md`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/server.js`
+- `server/sharing.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/wsApiState.js`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/project_security.js`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/remote_control_test_harness.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/mtrax/api/api_misc_runtime.js`
+- `src/application/eVe/domains/mtrax/api/api_transport_bootstrap_runtime.js`
+- `src/application/eVe/domains/mtrax/api/api_transport_record_bundle_runtime.js`
+- `src/application/eVe/domains/mtrax/api/window_api_bridge_runtime.js`
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_bootstrap_runtime.js`
+
+### emojiLogs
+
+- `documentations/README_auv3_file_handling.md`
+- `documentations/button_usage.md`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `scripts/bundle-codemirror.js`
+- `scripts/generate-server-keys.js`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/wsApiState.js`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/examples/audio.js`
+- `src/application/examples/audio_swift.js`
+- `src/application/examples/buttons.js`
+- `src/application/examples/console.js`
+- `src/application/examples/demos.js`
+- `src/application/examples/drag.js`
+- `src/application/examples/dragNdrop.js`
+- `src/application/examples/events.js`
+- `src/application/examples/ide_code_editor.js`
+- `src/application/examples/leaflet.js`
+- `src/application/examples/lists.js`
+- `src/application/examples/matrix.js`
+- `src/application/examples/menus.js`
+- `src/application/examples/tables.js`
+- `src/application/examples/unit.js`
+- `tests/application/examples/audio.js`
+- `tests/application/examples/audio_swift.js`
+- `tests/application/examples/buttons.js`
+- `tests/application/examples/console.js`
+- `tests/application/examples/demos.js`
+- `tests/application/examples/drag.js`
+- `tests/application/examples/dragNdrop.js`
+- `tests/application/examples/events.js`
+- `tests/application/examples/ide_code_editor.js`
+- `tests/application/examples/leaflet.js`
+- `tests/application/examples/lists.js`
+- `tests/application/examples/matrix.js`
+- `tests/application/examples/menus.js`
+- `tests/application/examples/tables.js`
+- `tests/application/examples/unit.js`
+- `tests/application/test/slice.js`
+
+### unstructuredLogs
+
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/audits/developer_experience_analysis_en.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_optimizations.md`
+- `documentations/audits/performance_optimizations_en.md`
+- `documentations/button_usage.md`
+- `documentations/calendar_api.md`
+- `documentations/components.md`
+- `documentations/console_api.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/media_capture_apis.md`
+- `documentations/new intuition menu.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `documentations/using_squirrel.md`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/bundle-codemirror.js`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_no_fallbacks.mjs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/generate-server-keys.js`
+- `scripts/install_dependencies.sh`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_live_bundle.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_suite_lib.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/core/logger.mjs`
+- `scripts/static_file_server.mjs`
+- `scripts/test-server-verification.js`
+- `scripts/test_contracts.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/atomeRealtime.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/mailRoutes.test.mjs`
+- `server/notificationStack.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userExportImport.js`
+- `server/userFiles.js`
+- `server/userHome.js`
+- `server/visio.js`
+- `server/wsApiState.js`
+- `server/wsSend.js`
+- `src/application/audio_runtime/demo.example.js`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/domains/media/shared/media_source.test.mjs`
+- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
+
+### swallowedErrors
+
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `dev/daemon/index.js`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `scripts/reset_Framework.sh`
+- `server/githubSync.js`
+- `server/server.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/audio_runtime/runtime_audio_backend.js`
+- `src/application/audio_runtime/stt_api.js`
+- `src/application/audio_runtime/tauri_audio_bridge.js`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/atome_events/drag_runtime.js`
+- `src/application/eVe/core/atome_events/local_interaction_edit_runtime.js`
+- `src/application/eVe/core/atome_events/primitives.js`
+- `src/application/eVe/core/atome_events/project_layer_runtime.js`
+- `src/application/eVe/core/atome_events/resize_runtime.js`
+- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/text_creation_session.js`
+- `src/application/eVe/core/atome_events/text_edit_runtime.js`
+- `src/application/eVe/core/atome_events/text_fit_runtime.js`
+- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/trace_runtime.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/api/video_recording_controller.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+- `src/application/eVe/domains/media/shared/media_source.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_playhead_sync.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_transport_runtime.js`
+- `src/application/eVe/domains/mtrax/automation/clip_lane_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/media_play_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/runtime_playback_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/selection_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/split_join_runtime.js`
+- `src/application/eVe/domains/mtrax/core/diagnostics.js`
+- `src/application/eVe/domains/mtrax/core/runtime_frame_eval.js`
+- `src/application/eVe/domains/mtrax/integration/tool_gateway_result_runtime.js`
+- `src/application/eVe/domains/mtrax/media/audio_state_runtime.js`
+- `src/application/eVe/domains/mtrax/media/auth_playback_cache.js`
+- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js`
+- `src/application/eVe/domains/mtrax/media/element_runtime.js`
+- `src/application/eVe/domains/mtrax/media/position_runtime.js`
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/media/source_runtime.js`
+- `src/application/eVe/domains/mtrax/media/upload_resolution_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_draw_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_file_drop_bridge.js`
+- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_text_create_runtime.js`
+
+### debugOnlyBranches
+
+- `.codex/AGENTS.md`
+- `.vscode/launch.json`
+- `PROJET_MOLECULE_DEBUG.md`
+- `atome-os/builder/core/build.sh`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/profiles/dev.yml`
+- `auv3.sh`
+- `database/adole.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/Problems solving/AI_debug.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/console_api.md`
+- `documentations/debug_mode.md`
+- `documentations/get_tempo.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/new intuition menu.md`
+- `documentations/routing_midi_to_host.md`
+- `documentations/tempo_regression_fix.md`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/test_contracts.mjs`
+- `server/README.md`
+- `server/server.js`
+- `server/wsApiState.js`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/remote_control_test_harness.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/elements/eVe_look.js`
+- `src/application/eVe/i18n/languages.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/matrix/core/project_data.js`
+- `src/application/eVe/intuition/runtime/layer_contract.js`
+- `src/application/eVe/intuition/tools/imports_exports/index.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/eVe/todo/AI_integration_problems_to_solve.md`
+- `src/application/eVe/todo/Midi_implementation.md`
+- `src/application/eVe/todo/audio_engine_migration.md`
+- `src/application/eVe/todo/eVe_AI.md`
+- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
+- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `src/application/eVe/todo/v2_full_migration_framework.md`
+- `src/application/examples/console.js`
+- `src/application/examples/demos.js`
+- `src/application/examples/dragNdrop.js`
+- `src/application/examples/ios_apis.js`
+- `src/application/examples/ios_file_browser.js`
+- `src/application/examples/iplug_ios.js`
+- `src/application/examples/iplug_sampler_bad.js`
+- `src/application/examples/leaflet.js`
+- `src/application/examples/messages.js`
+- `src/application/examples/messages_ui.js`
+- `src/application/examples/record_audio.js`
+- `src/application/examples/tables.js`
+- `src/application/examples/user.js`
+- `src/application/examples/web_navigation.js`
+- `src/application/lyrix/index.js`
+- `src/application/lyrix/src/core/lowTrafficMode.js`
+
+### hardcodedDebugFlags
+
+- `src/application/examples/record_audio.js`
+- `src/application/examples/tables.js`
+- `tests/application/examples/record_audio.js`
+- `tests/application/examples/tables.js`
+- `tests/probes/eve_llm_e2e_suite.test.mjs`
+
+## Security Indicators
+
+### filesystemAccess
+
+- `.github/copilot-instructions.md`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/configure_network.sh`
+- `atome-os/builder/scripts/configure_ui.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/mount_image.sh`
+- `atome-os/builder/scripts/preflight.sh`
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/shell.md`
+- `install_full.sh`
+- `install_server.sh`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/configure_https_server.sh`
+- `scripts/generate-server-keys.js`
+- `scripts/generate_cert.sh`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_live_bundle.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_suite_lib.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/core/logger.mjs`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/workflows/audit-only.mjs`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `scripts/static_file_server.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `scripts/update_iplug2.sh`
+- `server/aBoxServer.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/shell.js`
+- `server/sync/fileSyncWatcher.js`
+- `server/userExportImport.js`
+- `server/userHome.js`
+- `src/application/eVe/documentations/Security_and_sharing.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/tools/imports_exports/index.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/examples/input_file.js`
+- `src/application/examples/ios_apis.js`
+- `src/application/examples/ios_file_browser.js`
+- `src/application/examples/iplug_ios.js`
+- `src/application/examples/iplug_sampler.js`
+- `src/application/examples/iplug_sampler_bck.js`
+- `src/application/examples/record_audio.js`
+- `src/application/examples/shellUI.js`
+- `src/application/lyrix/index.js`
+- `src/application/lyrix/src/components/songLibraryModal.js`
+- `src/application/lyrix/src/features/import/dragDrop.js`
+- `src/js/codemirror.bundle.js`
+- `src/js/three.core.min.js`
+- `src/squirrel/apis/update_atome.js`
+- `tests/application/examples/input_file.js`
+
+### networkAccess
+
+- `README.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/core/lib/versions.sh`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/auto_update.md`
+- `atome-os/builder/overlays/services/atome_updater.sh`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `auv3.sh`
+- `dev/daemon/index.js`
+- `dev/log_schema.json`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/audio_layer.md`
+- `documentations/auv3_midi_output_troubleshooting_guide.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/button_usage.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/github_token_configuration.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/pwa_packaging_guide_en.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/using_squirrel.md`
+- `install_full.sh`
+- `install_server.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `scripts/install_dependencies.sh`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/publish-npm.sh`
+- `scripts/publish-to-github.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup_debian_server.sh`
+- `scripts/static_file_server.mjs`
+- `scripts/test-server-verification.js`
+- `scripts/test_contracts.mjs`
+- `scripts/test_sync.sh`
+- `scripts/update_iplug2.sh`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/runtime_audio_backend.js`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
+- `src/application/eVe/concept/eVe.html`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/live_icloud_smoke_tests.md`
+
+### websocketPayloadValidation
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/daemon/index.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/ADOLE.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Adole messaging_system.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/auv3_webview_audio_injection.md`
+- `documentations/calendar_api.md`
+- `documentations/calendar_ui.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/console_api.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/server_installation.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/set_main_server_address.md`
+- `documentations/shell.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/sync_protocol.md`
+- `install_full.sh`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/StorageSettingsView.swift`
+- `platforms/ios/atome-auv3/application/StorageSetupViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `platforms/ios/shared/URLLaunching/URLScriptBridge.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_no_fallbacks.mjs`
+- `scripts/fix_node_modules.sh`
+- `scripts/generate-server-keys.js`
+- `scripts/icloud_account_discovery.mjs`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/install_dependencies.sh`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/run_fastify.sh`
+- `scripts/run_tauri.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/core/logger.mjs`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/steps/preflight.mjs`
+- `scripts/test-server-verification.js`
+- `scripts/test_contracts.mjs`
+- `server/README.md`
+- `server/aBoxServer.js`
+- `server/atomeRealtime.js`
+
+### nativeBridgeCommands
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `.vscode/launch.json`
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `atome-os/builder/README.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/docs/architecture.md`
+- `atome-os/builder/docs/known_issues.md`
+- `atome-os/builder/installer/desktop/README.md`
+- `atome-os/builder/overlays/ui/start_atome.sh`
+- `atome-os/builder/packages/js.yml`
+- `atome-os/builder/packages/rust.yml`
+- `atome-os/builder/packages/webview.yml`
+- `atome-os/builder/profiles/desktop.yml`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `database/adole.js`
+- `database/driver.js`
+- `dev/log_schema.json`
+- `dev/specs/debug_automation.md`
+- `documentations/AI.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_engine_system_dependencies.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/database_architecture.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/how_to_read_atome_from_base.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/libraries_management.md`
+- `documentations/media-url-contract.md`
+- `documentations/media_capture_apis.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/security_architecture.md`
+- `documentations/server_installation.md`
+- `documentations/set_main_server_address.md`
+- `documentations/sync_protocol.md`
+- `documentations/tools_api_and_coding.md`
+- `documentations/using_squirrel.md`
+- `install_full.sh`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/install_dependencies.sh`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/run_tauri.sh`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `scripts/test_contracts.mjs`
+- `scripts/test_sync.sh`
+- `server/aBoxServer.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/sync/fileSyncWatcher.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/audio.facade.js`
+
+### javascriptBridgeExposure
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `documentations/AI.md`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/AI_debug.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/Voice_recog.md`
+- `documentations/aBox.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/auv3_sample_rate_detection.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/calendar_api.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/debug_mode.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/instructions_for_ai.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/media-url-contract.md`
+- `documentations/new intuition menu.md`
+- `documentations/server_installation.md`
+- `documentations/set_main_server_address.md`
+- `documentations/time_position_stream_creation.md`
+- `documentations/transport_creation.md`
+- `documentations/using_squirrel.md`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/application/StorageSettingsView.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `platforms/ios/shared/URLLaunching/URLScriptBridge.swift`
+- `scripts/bundle.js`
+- `scripts/package-app.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/demo.example.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/audio_runtime/stt_api.js`
+- `src/application/audio_runtime/tauri_audio_bridge.js`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/atome_events/drag_runtime.js`
+- `src/application/eVe/core/atome_events/local_interaction_edit_runtime.js`
+- `src/application/eVe/core/atome_events/placement_runtime.js`
+- `src/application/eVe/core/atome_events/project_layer_runtime.js`
+- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/text_creation_session.js`
+- `src/application/eVe/core/atome_events/text_edit_runtime.js`
+- `src/application/eVe/core/atome_events/text_fit_runtime.js`
+- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/trace_runtime.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/event_bus.js`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+- `src/application/eVe/core/project_security.js`
+- `src/application/eVe/default/shortcuts.js`
+- `src/application/eVe/documentations/Good practices.md`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/desktop_manual_validation_checklist.md`
+- `src/application/eVe/documentations/done.md`
+- `src/application/eVe/documentations/int8.md`
+- `src/application/eVe/documentations/realtime_sync_architecture.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+
+### tokenStorage
+
+- `PROJET_MOLECULE_DEBUG.md`
+- `documentations/AI.md`
+- `documentations/Adole apis.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/aBox.md`
+- `documentations/github_token_configuration.md`
+- `documentations/security_architecture.md`
+- `documentations/set_github_address_to_monitor.md`
+- `documentations/shell.md`
+- `molecule-status.md`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `scripts/install_dependencies.sh`
+- `scripts/reset_Framework.sh`
+- `scripts/setup/run_unix.sh`
+- `scripts/test_sync.sh`
+- `server/README.md`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/shell.js`
+- `server/visio.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/documentations/Security_and_sharing.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/desktop_manual_validation_checklist.md`
+- `src/application/eVe/documentations/failure_modes_v1.md`
+- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
+- `src/application/eVe/documentations/remote_control_test_harness.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_metadata.test.mjs`
+- `src/application/eVe/domains/mtrax/media/authorization_bootstrap_runtime.js`
+- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js`
+- `src/application/eVe/domains/mtrax/media/element_runtime.js`
+- `src/application/eVe/domains/mtrax/media/element_video_audio_source.test.mjs`
+- `src/application/eVe/domains/mtrax/media/extracted_audio_auth_source.test.mjs`
+- `src/application/eVe/domains/mtrax/media/source_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_metadata_retry.test.mjs`
+- `src/application/eVe/domains/user/profile_api.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/i18n/i18n.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/runtime/tool.js`
+- `src/application/eVe/intuition/runtime/tool_genesis.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/contact.js`
+- `src/application/eVe/intuition/tools/copy.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
+- `src/application/eVe/intuition/tools/core/svg_vector_model.js`
+- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_registry.js`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/intuition/tools/imports_exports/index.js`
+- `src/application/eVe/intuition/tools/infos.js`
+- `src/application/eVe/intuition/tools/molecule/persistence/index.js`
+- `src/application/eVe/intuition/tools/mtrack.js`
+- `src/application/eVe/intuition/tools/project_drop.js`
+- `src/application/eVe/intuition/tools/ui/tool_button_factory.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/eVe/todo/Full_vocal_AI_integration.md`
+- `src/application/eVe/todo/apple_mail_security.md`
+- `src/application/eVe/todo/eVe_AI.md`
+
+### secretLeakage
+
+- `atome-os/builder/docs/auto_update.md`
+- `documentations/AI.md`
+- `documentations/Adole apis.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/database_architecture.md`
+- `documentations/post_quantum_encrypting.md`
+- `documentations/security_architecture.md`
+- `install_full.sh`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/generate-server-keys.js`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/test_sync.sh`
+- `server/aBoxServer.js`
+- `server/auth.js`
+- `server/mailRoutes.js`
+- `server/mailRoutes.test.mjs`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/documentations/Offline Online explanations.md`
+- `src/application/eVe/documentations/failure_modes_v1.md`
+- `src/application/eVe/documentations/live_icloud_smoke_tests.md`
+- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
+- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `src/application/eVe/domains/user/profile_api.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/elements/design.js`
+- `src/application/eVe/elements/eVe_look.js`
+- `src/application/eVe/i18n/languages.js`
+- `src/application/eVe/intuition/tools/AI.js`
+- `src/application/eVe/intuition/tools/contact.js`
+- `src/application/eVe/intuition/tools/imports_exports/index.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/eVe/todo/AI_integration_problems_to_solve.md`
+- `src/application/eVe/todo/Full_vocal_AI_integration.md`
+- `src/application/eVe/todo/apple_mail_security.md`
+- `src/application/examples/AI.js`
+- `src/application/examples/DB.js`
+- `src/application/examples/shellUI.js`
+- `src/application/examples/user.js`
+- `src/application/examples/web_navigation.js`
+- `src/application/security/cloudSync.js`
+- `src/application/security/syncQueue.js`
+- `src/application/thermUSS/securite_fr.md`
+- `src/application/thermUSS/security_en.md`
+- `src/squirrel/ai/model_catalog_refresh.js`
+- `src/squirrel/ai/model_catalog_refresh.test.mjs`
+- `src/squirrel/ai/provider_client.js`
+- `src/squirrel/ai/provider_client.test.mjs`
+- `src/squirrel/apis/unified/adole.js`
+- `src/squirrel/apis/unified/adole_api/auth.js`
+- `src/squirrel/apis/unified/adole_apis.js`
+- `src/squirrel/atome/mcp.js`
+- `src/squirrel/bank/bootstrap.js`
+- `src/squirrel/calendar/bootstrap.js`
+- `src/squirrel/calendar/node_protocol_clients.js`
+- `src/squirrel/calendar/node_protocol_clients.test.mjs`
+- `src/squirrel/contacts/bootstrap.connector.test.mjs`
+- `src/squirrel/contacts/bootstrap.js`
+- `src/squirrel/contacts/icloud_connector.js`
+- `src/squirrel/contacts/icloud_connector.test.mjs`
+- `src/squirrel/contacts/node_protocol_clients.js`
+- `src/squirrel/contacts/node_protocol_clients.test.mjs`
+- `src/squirrel/mail/bootstrap.connector.test.mjs`
+- `src/squirrel/mail/bootstrap.js`
+- `src/squirrel/mail/bootstrap.remote_archive_delete.test.mjs`
+- `src/squirrel/mail/bootstrap.remote_mark_read.test.mjs`
+- `src/squirrel/mail/bootstrap.remote_send.test.mjs`
+- `src/squirrel/mail/bootstrap.remote_sync.test.mjs`
+- `src/squirrel/mail/bootstrap.tauri_sync_target.test.mjs`
+- `src/squirrel/mail/icloud_connector.js`
+- `src/squirrel/mail/icloud_connector.test.mjs`
+- `src/squirrel/mail/node_protocol_clients.js`
+- `src/squirrel/mail/node_protocol_transport.integration.test.mjs`
+
+### localStorageUsage
+
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/media_capture_apis.md`
+- `documentations/server_installation.md`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `scripts/reset_Framework.sh`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/panels/core/panel_creator.js`
+- `src/application/eVe/intuition/runtime/tool_genesis.js`
+- `src/application/eVe/intuition/tools/activities.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/contact.js`
+- `src/application/eVe/intuition/tools/copy.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.test.mjs`
+- `src/application/eVe/intuition/tools/detail.js`
+- `src/application/eVe/intuition/tools/finder.js`
+- `src/application/eVe/intuition/tools/imports_exports/index.js`
+- `src/application/eVe/intuition/tools/infos.js`
+- `src/application/eVe/intuition/tools/project_bootstrap.js`
+- `src/application/eVe/intuition/tools/relationship_store.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/eVe/user/background.js`
+- `src/application/examples/AI.js`
+- `src/application/examples/ide_code_editor.js`
+- `src/application/examples/localstorage_reader.js`
+- `src/application/examples/record_audio.js`
+- `src/application/examples/record_video.js`
+- `src/application/examples/record_video_UI.js`
+- `src/application/examples/share.js`
+- `src/application/examples/shell.js`
+- `src/application/examples/tools.js`
+- `src/application/examples/user.js`
+- `src/application/examples/visio.js`
+- `src/application/examples/visio_UI.js`
+- `src/application/lyrix/index.js`
+- `src/application/lyrix/src/components/settings.js`
+- `src/application/lyrix/src/components/songLibraryModal.js`
+- `src/application/lyrix/src/core/syncedLyrics.js`
+- `src/application/lyrix/src/features/audio/audio.js`
+- `src/application/lyrix/src/features/lyrics/display.js`
+- `src/application/lyrix/src/features/lyrics/library.js`
+- `src/application/lyrix/src/features/midi/midi_utilities.js`
+- `src/application/lyrix/src/features/purchase/purchase_manager.js`
+- `src/application/lyrix/src/services/storage.js`
+- `src/application/lyrix/src/services/storageIntegrity.js`
+- `src/application/security/syncQueue.js`
+- `src/squirrel/ai/model_catalog_cache.js`
+- `src/squirrel/ai/model_catalog_refresh.js`
+- `src/squirrel/ai/model_catalog_refresh.test.mjs`
+- `src/squirrel/ai/offline_mutation_queue.js`
+- `src/squirrel/ai/persistent_memory.js`
+- `src/squirrel/ai/persistent_memory.test.mjs`
+- `src/squirrel/ai/proactive_state_store.js`
+- `src/squirrel/ai/quota_tracker.js`
+- `src/squirrel/ai/trace_store.js`
+- `src/squirrel/ai/trace_store.test.mjs`
+- `src/squirrel/apis/loadServerConfig.js`
+- `src/squirrel/apis/loader.js`
+- `src/squirrel/apis/unified/adole.js`
+- `src/squirrel/apis/unified/adole_api/atomes.local_auth_headers.test.mjs`
+- `src/squirrel/apis/unified/adole_api/auth.js`
+- `src/squirrel/apis/unified/adole_api/session.current_project.test.mjs`
+- `src/squirrel/apis/unified/adole_api/session.js`
+- `src/squirrel/apis/unified/adole_api/storage.js`
+- `src/squirrel/apis/unified/realtime_dedupe.js`
+- `src/squirrel/components/editor_builder.js`
+
+### permissionsModel
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `database/adole.js`
+- `documentations/ADOLE.md`
+- `documentations/Adole finder engine.md`
+- `documentations/CRUD_apis.md`
+- `documentations/atome_object.md`
+- `documentations/auv3_url_opening_and_squirrel_ui.md`
+- `documentations/code&tools.md`
+- `documentations/host_voice_recognition.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/purchasekit_doc.md`
+- `documentations/security_architecture.md`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseManager.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/README.md`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `scripts/install_dependencies.sh`
+- `scripts/test-server-verification.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/userFiles.js`
+- `src/application/eVe/documentations/Good practices.md`
+- `src/application/eVe/documentations/Security_and_sharing.md`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/atome_object.md`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/failure_modes_v1.md`
+- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
+- `src/application/eVe/documentations/mail_v1_architecture.md`
+- `src/application/eVe/documentations/remote_control_test_harness.md`
+- `src/application/eVe/documentations/runtime_ai_mcp_entrypoints.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/core/tool_registry.js`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/todo/Full_vocal_AI_integration.md`
+- `src/application/eVe/todo/apple_mail_security.md`
+- `src/application/eVe/todo/cpal_Kira_integration.md`
+- `src/application/eVe/todo/eVe_AI.md`
+- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `src/application/examples/user.js`
+- `src/application/security/serverVerification.js`
+- `src/application/thermUSS/security.md`
+- `src/application/thermUSS/security_en.md`
+- `src/js/leaflet.js`
+- `src/js/leaflet.min.js`
+- `src/js/opal.min.js`
+- `src/squirrel/ai/default_tools.js`
+- `src/squirrel/apis/unified/adole.js`
+- `src/squirrel/apis/unified/adole_api/sharing.js`
+- `src/squirrel/atome/mcp.js`
+- `src/squirrel/atome/mcp.security_surface.test.mjs`
+- `src/squirrel/mail/node_protocol_clients.js`
+- `src/squirrel/voice/home_surface.js`
+- `src/squirrel/voice/orchestrator.js`
+- `src/squirrel/voice/orchestrator.test.mjs`
+- `src/squirrel/voice/service.js`
+- `src-tauri/capabilities/default.json`
+- `src-tauri/src/server/local_atome.rs`
+- `todos/Notification_tool.md`
+- `todos/Share_tool.md`
+- `todos/calendar_todos.md`
+- `todos/eVe website publishing.md`
+- `todos/eve_atome_master_cleanup_plan.md`
+- `todos/finder.md`
+- `todos/finder_UI.md`
+
+### pathTraversalRisks
+
+- `.github/copilot-instructions.md`
+- `README.md`
+- `atome-os/builder/scripts/configure_audio.sh`
+- `atome-os/builder/scripts/configure_boot.sh`
+- `atome-os/builder/scripts/configure_network.sh`
+- `atome-os/builder/scripts/configure_ui.sh`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `atome-os/builder/scripts/finalize_image.sh`
+- `atome-os/builder/scripts/install_packages.sh`
+- `atome-os/builder/scripts/install_runtime.sh`
+- `atome-os/builder/scripts/mount_image.sh`
+- `atome-os/builder/scripts/preflight.sh`
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `database/index.js`
+- `dev/daemon/index.js`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/Voice_recog.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/calendar_ui.md`
+- `documentations/components.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/set_github_address_to_monitor.md`
+- `engines/audio/au/Plugin.cpp`
+- `engines/audio/au/Plugin.h`
+- `engines/audio/iplug/bridge/WebBridge.h`
+- `engines/audio/iplug/recorder/RecorderCore.cpp`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/RecorderCoreShim.mm`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/web/audio-wasm/.cargo/config.toml`
+- `platforms/web/audio-wasm/build.sh`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/bundle.js`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/generate-server-keys.js`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/package-app.js`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_live_bundle.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_suite_lib.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/publish-to-github.sh`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/cli/run.mjs`
+- `scripts/setup/core/logger.mjs`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/workflows/audit-only.mjs`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `scripts/static_file_server.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `server/aBoxServer.js`
+- `server/atomeRealtime.js`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/fileStorage.js`
+- `server/githubSync.js`
+- `server/mailRoutes.js`
+- `server/notificationStack.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/shell.js`
+
+### commandInjectionRisks
+
+- `check-syntax.mjs`
+- `database/driver.js`
+- `documentations/host_voice_synthesis.md`
+- `documentations/instructions_for_ai.md`
+- `scripts/icloud_account_discovery.mjs`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/phase9_icloud_live_bundle.mjs`
+- `scripts/phase9_suite_lib.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/server_update.js`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/steps/preflight.mjs`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `server/data/users/anonymous/Downloads/DKD_converter.cpp`
+- `server/server.js`
+- `server/shell.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/intuition/shared/svg_runtime.js`
+- `src/application/eVe/intuition/tools/core/svg_vector_model.js`
+- `src/application/eVe/intuition/tools/core/tool_target_id.unique_resolution.test.mjs`
+- `src/application/eVe/intuition/tools/imports_exports/index.js`
+- `src/application/eVe/todo/MCP_voice_control.md`
+- `src/js/codemirror.bundle.js`
+- `src/js/gsap.min.js`
+- `src/js/leaflet.js`
+- `src/js/leaflet.min.js`
+- `src/js/opal.min.js`
+- `src/js/three.core.min.js`
+- `src/js/three.min.js`
+- `src/js/tone.min.js`
+- `src/wasm/squirrel_audio_wasm.js`
+- `src-tauri/src/audio_engine/recorder.rs`
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/main.rs`
+- `src-tauri/src/server/local_auth.rs`
+- `src-tauri/src/server/mod.rs`
+- `tests/probes/tauri_recorded_video_mtrack_probe.test.mjs`
+- `tests/probes/video_recording_audio_integrity_probe.test.mjs`
+- `todos/AI_Integration.md`
+
+### unsafeEvalUsage
+
+- `src/application/eVe/intuition/tools/calendar.js`
+- `src/application/examples/calendar.js`
+- `src/js/opal-parser.min.js`
+- `src/js/opal.min.js`
+- `src/squirrel/components/console_builder.js`
+- `src/squirrel/components/editor_builder.js`
+- `src/squirrel/components/intuition_builder/index.js`
+- `src/wasm/squirrel_audio_wasm.js`
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/main.rs`
+- `tests/probes/fastify_debug.test.mjs`
+- `tests/ui/test_wasm_audio.mjs`
+
+### dynamicImportRisks
+
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `documentations/debug_mode.md`
+- `scripts/install_dependencies.sh`
+- `scripts/package-app.js`
+- `scripts/reset_Framework.sh`
+- `server/atomeRoutes.orm.js`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/server.js`
+- `server/userFiles.js`
+- `server/visio.js`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/eVe/default/shortcuts.js`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/domains/media/api/video_recording_controller.js`
+- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
+- `src/application/eVe/domains/mtrax/media/atome_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.surface_capture.test.mjs`
+- `src/application/eVe/domains/mtrax/ui/panel_lifecycle_runtime.close_state.test.mjs`
+- `src/application/eVe/elements/design/dialog_runtime.background_drag.test.mjs`
+- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/footer/runtime.sync_placement.test.mjs`
+- `src/application/eVe/intuition/panel_definitions.js`
+- `src/application/eVe/intuition/runtime/layer_contract.layer_order.test.mjs`
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `src/application/eVe/intuition/tools/background.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/contact.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
+- `src/application/eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.finder_inline_open_guard.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.finder_pointer_click_open_guard.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.finder_ui_runtime_flows.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.finder_v2_flows.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.mtrack_panel_mount_contract.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
+- `src/application/eVe/intuition/tools/detail.js`
+- `src/application/eVe/intuition/tools/perform.js`
+- `src/application/eVe/intuition/tools/project_drop.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/eVe/todo/AUDIT.md`
+- `src/application/eVe/todo/cpal_Kira_integration.md`
+- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `src/application/examples/calendar.js`
+- `src/application/examples/record_audio_UI.js`
+- `src/application/examples/record_video.js`
+- `src/application/examples/record_video_UI.js`
+- `src/application/examples/shell.js`
+- `src/application/examples/update.js`
+- `src/application/examples/visio.js`
+- `src/application/index.js`
+- `src/application/jeezs/index backup.js`
+- `src/application/lyrix/src/features/lyrics/display.js`
+- `src/application/vie/vie.js`
+- `src/js/tone.min.js`
+- `src/squirrel/ai/default_tools.js`
+- `src/squirrel/ai/default_tools.runtime_bridge.test.mjs`
+- `src/squirrel/ai/default_tools.runtime_trace_integration.test.mjs`
+- `src/squirrel/apis/unified/adole_api/atomes.local_auth_headers.test.mjs`
+- `src/squirrel/apis/unified/adole_api/session.current_project.test.mjs`
+- `src/squirrel/atome/mcp.communication_surface.test.mjs`
+- `src/squirrel/atome/mcp.platform_surface.test.mjs`
+- `src/squirrel/atome/mcp.runtime_bridge.test.mjs`
+- `src/squirrel/atome/mcp.security_surface.test.mjs`
+- `src/squirrel/calendar/bootstrap.js`
+- `src/squirrel/calendar/calendar_api_source.js`
+- `src/squirrel/components/editor_builder.js`
+- `src/squirrel/contacts/icloud_connector.js`
+
+### corsPolicy
+
+- `documentations/CRUD_apis.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/aBox.md`
+- `documentations/libraries_management.md`
+- `documentations/set_main_server_address.md`
+- `install_full.sh`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `scripts/install_dependencies.sh`
+- `server/README.md`
+- `server/server.js`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/documentations/realtime_sync_architecture.md`
+- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js`
+- `src/application/eVe/intuition/tools/background.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `src/application/examples/record_video.js`
+- `src/application/examples/record_video_UI.js`
+- `src/squirrel/apis/unified/adole.js`
+- `src-tauri/Cargo.toml`
+- `src-tauri/src/server/mod.rs`
+- `tests/application/examples/record_video.js`
+- `tests/application/examples/record_video_UI.js`
+- `tests/mtrack_decode_test.mjs`
+- `todos/eve_atome_master_cleanup_plan.md`
+- `todos/matrix.md`
+- `todos/user_auth.md`
+
+### cspPolicy
+
+- `src/application/examples/web_navigation.js`
+- `src-tauri/tauri.conf.json`
+- `tests/application/examples/web_navigation.js`
+- `todos/eve_atome_master_cleanup_plan.md`
+
+## Performance Indicators
+
+### startupDuration
+
+- `README.md`
+- `RECORDING_INTEGRATION_PLAN.md`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Eden atome Database.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_layer.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/audits/performance_protocol_en.md`
+- `documentations/calendar_api.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/pwa_packaging_guide_en.md`
+- `documentations/server_installation.md`
+- `molecule-status.md`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/setup/bootstrap.sh`
+- `scripts/setup/run_unix.sh`
+- `scripts/test-server-verification.js`
+- `server/README.md`
+- `server/auth.js`
+- `server/githubSync.js`
+- `server/mailRoutes.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/shell.js`
+- `server/userFiles.js`
+- `server/visio.js`
+- `src/application/aBox/index.js`
+- `src/application/audio_runtime/record_audio_api.js`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/atome_events/drag_runtime.js`
+- `src/application/eVe/core/atome_events/drag_session_runtime.js`
+- `src/application/eVe/core/atome_events/primitives.js`
+- `src/application/eVe/core/atome_events/project_layer_runtime.js`
+- `src/application/eVe/core/atome_events/resize_runtime.js`
+- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events/selection_context_runtime.js`
+- `src/application/eVe/core/atome_events/text_creation_session.js`
+- `src/application/eVe/core/atome_events/text_edit_ui_runtime.js`
+- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
+- `src/application/eVe/core/atome_events.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/core/molecule_store_bootstrap.js`
+- `src/application/eVe/documentations/Offline Online explanations.md`
+- `src/application/eVe/documentations/atome_concepts.md`
+- `src/application/eVe/documentations/calendar_v1_architecture.md`
+- `src/application/eVe/documentations/done.md`
+- `src/application/eVe/documentations/int8.md`
+- `src/application/eVe/documentations/latency_targets_v1.md`
+- `src/application/eVe/documentations/realtime_sync_architecture.md`
+- `src/application/eVe/documentations/remote_control_test_harness.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/api/video_recording_controller.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+- `src/application/eVe/domains/mtrax/api/api_transport_bootstrap_runtime.js`
+- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_bootstrap_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_metadata.test.mjs`
+
+### blockingSynchronousWork
+
+- `check-syntax.mjs`
+- `database/adole.js`
+- `engines/audio/core/disk_reader.cpp`
+- `engines/audio/core/disk_reader_apple.mm`
+- `engines/audio/iplug/recorder/RecorderCore.cpp`
+- `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_molecule_guardrails.mjs`
+- `scripts/check_tauri_fs_boundary.mjs`
+- `scripts/generate-server-keys.js`
+- `scripts/icloud_live_credentials.mjs`
+- `scripts/mtrack_perf_guard.mjs`
+- `scripts/mtrack_perf_suite_summary.mjs`
+- `scripts/phase9_icloud_calendar_live_smoke.mjs`
+- `scripts/phase9_icloud_credentials_doctor.mjs`
+- `scripts/phase9_icloud_live_bundle.mjs`
+- `scripts/phase9_icloud_mail_live_smoke.mjs`
+- `scripts/phase9_suite_lib.mjs`
+- `scripts/phase9_voice_latency_baseline.mjs`
+- `scripts/purge_webview_storage.mjs`
+- `scripts/reset_Framework.sh`
+- `scripts/sanitize-svgs-128fit.cjs`
+- `scripts/server_update.js`
+- `scripts/setup/core/orchestrator.mjs`
+- `scripts/setup/core/state-store.mjs`
+- `scripts/setup/steps/preflight.mjs`
+- `scripts/setup/workflows/dev-minimal.mjs`
+- `scripts/update-hot-manifest.mjs`
+- `server/data/users/anonymous/Downloads/DKD_converter.cpp`
+- `server/fileStorage.js`
+- `server/server.js`
+- `server/serverIdentity.js`
+- `server/sharing.js`
+- `server/wsApiState.js`
+- `src/application/eVe/core/atome_commit.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/mtrax/clips/loop_model.js`
+- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/preview_metadata_runtime.js`
+- `src/application/eVe/domains/mtrax/core/diagnostics.js`
+- `src/application/eVe/domains/mtrax/integration/tool_gateway_result_runtime.js`
+- `src/application/eVe/domains/mtrax/media/auth_playback_cache.js`
+- `src/application/eVe/domains/mtrax/project/project_record_host_runtime.js`
+- `src/application/eVe/domains/mtrax/recording/action_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_model.js`
+- `src/application/eVe/domains/mtrax/timeline/ruler_overlay_runtime.js`
+- `src/application/eVe/elements/design.js`
+- `src/application/eVe/intuition/core/dom.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/footer/runtime.js`
+- `src/application/eVe/intuition/matrix/core/project_data.js`
+- `src/application/eVe/intuition/matrix/ui/view.js`
+- `src/application/eVe/intuition/ribbon/menu.js`
+- `src/application/eVe/intuition/runtime/command_bus.js`
+- `src/application/eVe/intuition/runtime/eve_intuition/tool_key_runtime.js`
+- `src/application/eVe/intuition/runtime/tool_gateway.js`
+- `src/application/eVe/intuition/shared/svg_runtime.js`
+- `src/application/eVe/intuition/tools/calendar.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`
+- `src/application/eVe/intuition/tools/core/svg_vector_edit_runtime.js`
+- `src/application/eVe/intuition/tools/core/svg_vector_model.js`
+- `src/application/eVe/intuition/tools/core/tool_interaction.js`
+- `src/application/eVe/intuition/tools/core/tool_latch_aliases.js`
+- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `src/application/eVe/intuition/tools/detail.js`
+- `src/application/eVe/intuition/tools/infos.js`
+- `src/application/eVe/intuition/tools/molecule/runtime.js`
+- `src/application/eVe/intuition/tools/project_drop.js`
+- `src/application/eVe/intuition/tools/selection_style_apply.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/eVe/user/background.js`
+- `src/application/examples/AI.js`
+- `src/application/examples/calendar.js`
+- `src/application/examples/ios_audio_bridge.js`
+
+### expensiveImports
+
+- `PROJET_MOLECULE_DEBUG.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `check-syntax.mjs`
+- `database/adole.js`
+- `database/adole.user_classification.test.mjs`
+- `database/driver.js`
+- `database/index.js`
+- `dev/daemon/index.js`
+- `documentations/AUv3_API_Reference.md`
+- `documentations/Adole apis.md`
+- `documentations/Auto_test_and _debug_atome_usage.md`
+- `documentations/CRUD_apis.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/README_auv3_file_handling.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/audits/developer_experience_analysis_en.md`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_protocol_en.md`
+- `documentations/calendar_api.md`
+- `documentations/calendar_ui.md`
+- `documentations/communication_auv3_app.md`
+- `documentations/components.md`
+- `documentations/debug_mode.md`
+- `documentations/host_voice_synthesis.md`
+- `documentations/libraries_management_complete.md`
+- `engines/audio/core/disk_reader_apple.mm`
+- `install_server.sh`
+- `package.json`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`
+- `platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift`
+- `platforms/ios/atome-auv3/Common/EntitlementStore.swift`
+- `platforms/ios/atome-auv3/Common/ExternalDisplayGuards.swift`
+- `platforms/ios/atome-auv3/Common/FeatureFlags.swift`
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift`
+- `platforms/ios/atome-auv3/Common/FileSystemBridge.swift`
+- `platforms/ios/atome-auv3/Common/IPlugAUControl.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/Common/MIDIController.swift`
+- `platforms/ios/atome-auv3/Common/MainAppFileManager.swift`
+- `platforms/ios/atome-auv3/Common/NotificationNudge.swift`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.h`
+- `platforms/ios/atome-auv3/Common/OpenURLShim.m`
+- `platforms/ios/atome-auv3/Common/PurchaseBridge.swift`
+- `platforms/ios/atome-auv3/Common/PurchaseManager.swift`
+- `platforms/ios/atome-auv3/Common/SandboxAssetManager.swift`
+- `platforms/ios/atome-auv3/Common/SandboxPathValidator.swift`
+- `platforms/ios/atome-auv3/Common/ServerInfoProvider.swift`
+- `platforms/ios/atome-auv3/Common/SharedBus.swift`
+- `platforms/ios/atome-auv3/Common/URLOpener.swift`
+- `platforms/ios/atome-auv3/Common/WKWebViewFactory.swift`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+- `platforms/ios/atome-auv3/application/ActiveScenePoller.swift`
+- `platforms/ios/atome-auv3/application/AppDelegate.swift`
+- `platforms/ios/atome-auv3/application/AppGroupOpenURLInbox.swift`
+- `platforms/ios/atome-auv3/application/AppURLOpener.swift`
+- `platforms/ios/atome-auv3/application/DarwinNotificationListener.swift`
+- `platforms/ios/atome-auv3/application/SceneDelegate.swift`
+- `platforms/ios/atome-auv3/application/StorageSettingsView.swift`
+- `platforms/ios/atome-auv3/application/StorageSetupViewController.swift`
+- `platforms/ios/atome-auv3/application/TrustedTapOpener.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/ios/atome-auv3/iplug/AUViewController.swift`
+- `platforms/ios/au/SquirrelAudioAUv3Extension/AUv3AudioUnit.h`
+- `platforms/ios/au/SquirrelAudioAUv3Extension/AUv3AudioUnit.mm`
+- `platforms/ios/au/SquirrelAudioAUv3Extension/AUv3ViewController.h`
+- `platforms/ios/au/SquirrelAudioAUv3Extension/AUv3ViewController.mm`
+- `platforms/ios/shared/URLLaunching/URLOpener.swift`
+- `platforms/ios/shared/URLLaunching/URLScriptBridge.swift`
+- `scripts/axum_mail_sync_bridge.mjs`
+- `scripts/bundle-codemirror.js`
+
+### mediaStartupLoads
+
+- `PROJET_MOLECULE_DEBUG.md`
+- `README.md`
+- `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `atome-os/builder/core/config.yml`
+- `atome-os/builder/installer/desktop/README.md`
+- `atome-os/builder/scripts/fetch_base_image.sh`
+- `documentations/AI.md`
+- `documentations/Auto_test_and _debug_atome.md`
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
+- `documentations/Problems solving/medias_not_accessible.md`
+- `documentations/aBox.md`
+- `documentations/atome_Audio_MVP.md`
+- `documentations/atome_audio_engine.md`
+- `documentations/audio_engine_migration_synthesis.md`
+- `documentations/audio_layer.md`
+- `documentations/audio_multitracks.md`
+- `engines/audio/iplug/dsp/PlayerDSP.h`
+- `engines/audio/iplug/include/PlayerAPI.h`
+- `install_server.sh`
+- `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
+- `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
+- `platforms/ios/atome-auv3/application/ViewController.swift`
+- `platforms/ios/atome-auv3/auv3/utils.swift`
+- `platforms/web/audio-wasm/src/lib.rs`
+- `server/data/users/anonymous/Downloads/DKD_converter.cpp`
+- `src/application/audio_runtime/backend.kira.js`
+- `src/application/audio_runtime/demo.example.js`
+- `src/application/audio_runtime/types.d.ts`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/core/media_engine/molecule.native.js`
+- `src/application/eVe/core/media_engine/molecule.test.mjs`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/documentations/tools.md`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/api/video_recording_controller.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
+- `src/application/eVe/domains/media/shared/media_identifier.test.mjs`
+- `src/application/eVe/domains/media/shared/media_source.js`
+- `src/application/eVe/domains/media/shared/media_source.test.mjs`
+- `src/application/eVe/domains/mtrax/api/api_record_media_runtime.js`
+- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
+- `src/application/eVe/domains/mtrax/audio/hmtracks_transport_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/add_clip_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/source_ops_bootstrap_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/split_join_runtime.js`
+- `src/application/eVe/domains/mtrax/core/diagnostics.js`
+- `src/application/eVe/domains/mtrax/integration/clipboard_paste_runtime.js`
+- `src/application/eVe/domains/mtrax/media/drop_runtime.js`
+- `src/application/eVe/domains/mtrax/media/element_runtime.js`
+- `src/application/eVe/domains/mtrax/media/element_video_audio_source.test.mjs`
+- `src/application/eVe/domains/mtrax/media/extracted_audio_auth_source.test.mjs`
+- `src/application/eVe/domains/mtrax/media/source_runtime.js`
+- `src/application/eVe/domains/mtrax/media/upload_resolution_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_docked_pipeline_bundle_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/project/commit_bridge_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/join_playback_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/persist_runtime.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/matrix/core/preview.js`
+- `src/application/eVe/intuition/runtime/tool_genesis.js`
+- `src/application/eVe/intuition/tools/background.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/copy.js`
+- `src/application/eVe/intuition/tools/core/hmtracks_audio_engine_v1.test.mjs`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/intuition/tools/detail.js`
+
+### retryLoops
+
+- `PROJET_MOLECULE_DEBUG.md`
+- `documentations/Problems solving/AI_debug.md`
+- `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/audits/framework_comparison_audit_en.md`
+- `documentations/audits/performance_optimizations.md`
+- `documentations/audits/performance_optimizations_en.md`
+- `documentations/audits/performance_protocol_en.md`
+- `documentations/database_architecture.md`
+- `documentations/get_tempo.md`
+- `documentations/ios_file_system_integration.md`
+- `documentations/stream_webview_auv3.md`
+- `documentations/tempo_regression_fix.md`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `server/githubSync.js`
+- `server/server.js`
+- `src/application/audio_runtime/audio.facade.js`
+- `src/application/audio_runtime/tauri_audio_bridge.js`
+- `src/application/eVe/core/atome_events/drag_runtime.js`
+- `src/application/eVe/core/atome_events/resize_runtime.js`
+- `src/application/eVe/core/atome_events/text_edit_runtime.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/documentations/debug_UI.md`
+- `src/application/eVe/documentations/strangler.md`
+- `src/application/eVe/domains/media/api/audio_api.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
+- `src/application/eVe/domains/mtrax/core/diagnostics.js`
+- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.surface_capture.test.mjs`
+- `src/application/eVe/domains/mtrax/preview/preview_frame_dispatch_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_playback_timeline_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_record_sampler_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/play_runtime.js`
+- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/controls_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/docked_renderer_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/embedded_footer_drag_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/embedded_footer_resize_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
+- `src/application/eVe/domains/user/profile_api.js`
+- `src/application/eVe/eVe_essentials.md`
+- `src/application/eVe/elements/design/dialog_runtime.js`
+- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `src/application/eVe/elements/design.js`
+- `src/application/eVe/intuition/core/dom.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/flower/context.js`
+- `src/application/eVe/intuition/footer/runtime.js`
+- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`
+- `src/application/eVe/intuition/matrix/ui/view.js`
+- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`
+- `src/application/eVe/intuition/menu/ui/toolbox_dom.js`
+- `src/application/eVe/intuition/ribbon/menu.js`
+- `src/application/eVe/intuition/runtime/layer_contract.js`
+- `src/application/eVe/intuition/runtime/layer_contract.layer_order.test.mjs`
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`
+- `src/application/eVe/intuition/runtime/preview_surface.js`
+- `src/application/eVe/intuition/runtime/tool_genesis.js`
+- `src/application/eVe/intuition/tools/background.js`
+- `src/application/eVe/intuition/tools/capture.js`
+- `src/application/eVe/intuition/tools/clock.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/contact.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
+- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
+- `src/application/eVe/intuition/tools/core/svg_vector_edit_runtime.js`
+- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `src/application/eVe/intuition/tools/core/tool_runtime.js`
+- `src/application/eVe/intuition/tools/detail.js`
+- `src/application/eVe/intuition/tools/finder.js`
+- `src/application/eVe/intuition/tools/infos.js`
+- `src/application/eVe/intuition/tools/map.js`
+
+### observers
+
+- `documentations/Intuition_toolbox_menu_usage.md`
+- `documentations/audits/safe_optimizations.md`
+- `src/application/eVe/core/atome_events/trace_runtime.js`
+- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
+- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+- `src/application/eVe/domains/mtrax/core/state_factory.js`
+- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/controls_header_bundle_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/embedded_footer_resize_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/ensure_bridge_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/panel_lifecycle_runtime.js`
+- `src/application/eVe/elements/design/dialog_runtime.background_drag.test.mjs`
+- `src/application/eVe/elements/design/dialog_runtime.js`
+- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `src/application/eVe/elements/design.js`
+- `src/application/eVe/elements/eVe_look.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/footer/runtime.js`
+- `src/application/eVe/intuition/footer/runtime.sync_placement.test.mjs`
+- `src/application/eVe/intuition/matrix/ui/view.js`
+- `src/application/eVe/intuition/menu/ui/toolbox_dom.js`
+- `src/application/eVe/intuition/runtime/layer_contract.js`
+- `src/application/eVe/intuition/runtime/layer_contract.layer_order.test.mjs`
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`
+- `src/application/eVe/intuition/runtime/tool_genesis.js`
+- `src/application/eVe/intuition/tools/clock.js`
+- `src/application/eVe/intuition/tools/communication.js`
+- `src/application/eVe/intuition/tools/mtrack.js`
+- `src/application/eVe/intuition/tools/project_drop.js`
+- `src/application/eVe/intuition/tools/user.js`
+- `src/application/eVe/todo/AUDIT.md`
+- `src/application/eVe/user/background.js`
+- `src/application/examples/share_ui.js`
+- `src/application/jeezs/demo.js`
+- `src/application/jeezs/index.js`
+- `src/application/lyrix/src/core/lowTrafficMode.js`
+- `src/application/lyrix/src/features/lyrics/display.js`
+- `src/js/codemirror.bundle.js`
+- `src/squirrel/atome/atome.js`
+- `src/squirrel/components/matrix_builder.js`
+- `src/squirrel/squirrel.js`
+- `src/squirrel/voice/main_handle_bridge.js`
+- `tests/application/examples/share_ui.js`
+- `todos/framework_cleanup_and_ui_optimization_plan_2026-04-19.md`
+- `todos/video_recording_and_preview.md`
+
+### domMutation
+
+- `.codex/AGENTS.md`
+- `.github/copilot-instructions.md`
+- `documentations/audits/benchmark_en.html`
+- `documentations/audits/performance_optimizations.md`
+- `documentations/audits/performance_optimizations_en.md`
+- `documentations/audits/performance_protocol_en.md`
+- `documentations/audits/safe_optimizations.md`
+- `documentations/html5_drag_drop_tauri_guide.md`
+- `documentations/instructions_for_ai.md`
+- `platforms/ios/atome-auv3/Common/WebViewManager.swift`
+- `scripts/bundle.js`
+- `src/application/aBox/index.js`
+- `src/application/eVe/core/atome_events/drag_runtime.js`
+- `src/application/eVe/core/atome_events/host_binding_runtime.js`
+- `src/application/eVe/core/atome_events/placement_runtime.js`
+- `src/application/eVe/core/atome_events/project_layer_runtime.js`
+- `src/application/eVe/core/atome_events/text_creation_session.js`
+- `src/application/eVe/core/atome_events/text_edit_runtime.js`
+- `src/application/eVe/core/atome_events/text_edit_ui_runtime.js`
+- `src/application/eVe/core/atome_events/trace_runtime.js`
+- `src/application/eVe/core/atome_timeline.js`
+- `src/application/eVe/core/media_engine/molecule.api.js`
+- `src/application/eVe/core/media_engine/molecule.js`
+- `src/application/eVe/default/shortcuts.js`
+- `src/application/eVe/documentations/Good practices.md`
+- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `src/application/eVe/domains/media/api/video_api.js`
+- `src/application/eVe/domains/media/asset_box.js`
+- `src/application/eVe/domains/media/media_diagnostics.js`
+- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/preview_metadata_runtime.js`
+- `src/application/eVe/domains/mtrax/clips/selection_runtime.js`
+- `src/application/eVe/domains/mtrax/core/diagnostics.js`
+- `src/application/eVe/domains/mtrax/media/element_runtime.js`
+- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_host_resolution_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_layout_runtime.js`
+- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_local_drag_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_playback_target_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_record_helpers_runtime.js`
+- `src/application/eVe/domains/mtrax/project/project_record_host_runtime.js`
+- `src/application/eVe/domains/mtrax/svg/markup_manifest_runtime.js`
+- `src/application/eVe/domains/mtrax/text/clip_editor_runtime.js`
+- `src/application/eVe/domains/mtrax/text/descriptor_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/join_playback_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_preview.js`
+- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`
+- `src/application/eVe/domains/mtrax/timeline/ruler_render_runtime.js`
+- `src/application/eVe/domains/mtrax/tracks/clip_ops_runtime.js`
+- `src/application/eVe/domains/mtrax/tracks/lane_ui_runtime.js`
+- `src/application/eVe/domains/mtrax/tracks/name_editing.js`
+- `src/application/eVe/domains/mtrax/tracks/render_tracks_runtime.js`
+- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/docked_renderer_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/embedded_footer_drag_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/embedded_footer_resize_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/footer_embed_primitives.js`
+- `src/application/eVe/domains/mtrax/ui/layout_helpers_runtime.js`
+- `src/application/eVe/domains/mtrax/ui/styles.js`
+- `src/application/eVe/domains/mtrax/visual/descriptor_capture_runtime.js`
+- `src/application/eVe/domains/mtrax/visual/patch_apply_runtime.js`
+- `src/application/eVe/elements/design/dialog_runtime.background_drag.test.mjs`
+- `src/application/eVe/elements/design/dialog_runtime.js`
+- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `src/application/eVe/elements/design/i18n_bindings.js`
+- `src/application/eVe/elements/design/panel_chrome.js`
+- `src/application/eVe/elements/design.js`
+- `src/application/eVe/elements/eVe_look.js`
+- `src/application/eVe/elements/look/preset_ensurers.js`
+- `src/application/eVe/intuition/core/dom.js`
+- `src/application/eVe/intuition/eVeIntuition.js`
+- `src/application/eVe/intuition/flower/menu.js`
+- `src/application/eVe/intuition/footer/inline_button.js`
+- `src/application/eVe/intuition/footer/runtime.js`
+- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`
+- `src/application/eVe/intuition/matrix/core/preview.js`
+
+## Cleanup Decisions
+
+- No source deletion was performed from static evidence alone.
+- Empty files, apparently unused assets, duplicate names, and patch-history names are classified as cleanup candidates until direct and indirect usages are verified by subsystem.
+- All future cleanup work should reuse `todos/eve_master_cleanup_findings.json` as the initial evidence set and must verify build/runtime behavior after each subsystem-level deletion.

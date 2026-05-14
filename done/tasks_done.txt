@@ -1,0 +1,329 @@
+eVe / Atome cleanup log
+Started: 2026-05-14 Europe/Paris
+
+Rules followed:
+- No source deletion without direct usage verification.
+- No fallback, shim, temporary patch, or duplicate runtime added.
+- Temporary audit scripts stay under ./temp.
+- Persistent completion evidence is recorded here after each processed file or folder.
+
+Current working state:
+- Previous audit and governance artifacts are present under ./todos.
+- The master plan is fully checked, but cleanup candidates still require subsystem-by-subsystem verification.
+
+2026-05-14 - Batch 1: Lyrix empty source files
+
+Processed folder:
+- `src/application/lyrix/src`
+
+Deleted files:
+- `src/application/lyrix/src/core/logger.js`
+- `src/application/lyrix/src/core/platform.js`
+- `src/application/lyrix/src/services/prefs.js`
+
+Verification performed before deletion:
+- Confirmed all three files were zero bytes with `wc -c`.
+- Searched first-party code and documentation for direct path imports and filename imports.
+- Matches were limited to generated cleanup audit artifacts for these exact files.
+- No runtime imports, package exports, script references, or Lyrix module references were found.
+
+Cleanup result:
+- Removed three empty first-party source files with unclear ownership.
+- No fallback, shim, replacement wrapper, or runtime behavior was added.
+
+2026-05-14 - Batch 2: Node-only static serve scripts
+
+Processed files:
+- `package.json`
+- `scripts/static_file_server.mjs`
+
+Verification performed before change:
+- Searched `package.json`, `scripts`, `documentations`, and source folders for `python -m http.server`, `npm run serve`, and `npm run perf`.
+- Confirmed the Python dependency was limited to the `serve` and `perf` npm scripts.
+- Preserved the existing script names and port to avoid changing the public developer workflow.
+
+Cleanup result:
+- Replaced `python -m http.server 8000` with `node scripts/static_file_server.mjs 8000 .`.
+- Replaced the `perf` script's Python server with the same Node static server after the existing Rollup step.
+- Added explicit repository-root path validation and deterministic 400/404 responses.
+- No Python, TypeScript, fallback route, or compatibility shim was introduced.
+
+Runtime verification:
+- Started `node scripts/static_file_server.mjs 8765 .` with approved local-network execution.
+- Fetched `http://127.0.0.1:8765/package.json` successfully with `curl -sS`.
+- Stopped the verification server process after the request.
+
+2026-05-14 - Batch 3: package metadata and npm log cleanup
+
+Processed file:
+- `package.json`
+
+Verification performed before change:
+- Confirmed the edited strings are package metadata or npm script messages.
+- Confirmed no runtime source import or API contract depends on these message strings.
+
+Cleanup result:
+- Replaced the French package description with an English description.
+- Removed emoji from npm script output.
+- Replaced French CDN TODO text with English text.
+- No script names, command order, build target, runtime API, or dependency versions were changed.
+
+2026-05-14 - Batch 4: Jeezs backup source removal
+
+Processed folder:
+- `src/application/jeezs`
+
+Deleted file:
+- `src/application/jeezs/index backup.js`
+
+Verification performed before deletion:
+- Compared tracked file presence with `git log`.
+- Confirmed the backup file is not byte-identical to `src/application/jeezs/index.js`.
+- Searched first-party code and documentation for `index backup`, `index%20backup`, `jeezs/index backup`, and escaped-space references.
+- Matches were limited to generated cleanup audit artifacts.
+- Inspected the file header and confirmed it was a historical presentation-page backup with French comments, direct DOM access, and inline HTML generation.
+
+Cleanup result:
+- Removed one tracked backup source file.
+- Kept canonical `src/application/jeezs/index.js` unchanged.
+- No behavior, API, runtime route, or asset path was changed.
+
+2026-05-14 - Batch 5: historical settings icon removal
+
+Processed files:
+- `src/assets/images/icons/settings_old.svg`
+- `src/application/examples/testSVGSize.js`
+
+Verification performed before deletion:
+- Searched first-party code and documentation for `settings_old.svg`, `settings_old`, and `icons/settings_old`.
+- Confirmed the only non-audit reference was the static SVG showcase list in `src/application/examples/testSVGSize.js`.
+- Confirmed canonical `src/assets/images/icons/settings.svg` exists and remains unchanged.
+
+Cleanup result:
+- Removed the historical `settings_old.svg` asset.
+- Removed the stale asset path from the SVG showcase list.
+- No production runtime module or canonical settings icon was changed.
+
+2026-05-14 - Batch 6: undocumented temporary import media removal
+
+Processed folder:
+- `temp_import_tests`
+
+Deleted files:
+- `temp_import_tests/WhatsApp_Video.mp4`
+- `temp_import_tests/recorded.webm`
+
+Verification performed before deletion:
+- Listed tracked files under `temp_import_tests`.
+- Searched first-party code and documentation for `temp_import_tests`, `WhatsApp_Video.mp4`, and `recorded.webm`.
+- Confirmed `todos/molecule_streaming_status.md` documents the retained fixtures: `0000.png`, `atome.svg`, `Jeezs's fire.m4v`, `Vampire.m4v`, and `test.m4a`.
+- Confirmed the two deleted files were referenced only by generated cleanup audit artifacts.
+
+Cleanup result:
+- Removed two undocumented tracked media fixtures from the temporary import fixture folder.
+- Preserved documented media fixtures required by existing molecule streaming status notes.
+- No test code, media loader, runtime route, or documented fixture path was changed.
+
+2026-05-14 - Scope correction after user instruction
+
+Instruction received:
+- Do not process `src/application/examples`.
+- Inside `src/application`, process only `src/application/eVe`.
+- If Python scripts are indispensable, replace them with Ruby scripts.
+
+Correction applied:
+- Restored `src/application/lyrix/src/core/logger.js`.
+- Restored `src/application/lyrix/src/core/platform.js`.
+- Restored `src/application/lyrix/src/services/prefs.js`.
+- Restored `src/application/jeezs/index backup.js`.
+- Restored `src/application/examples/testSVGSize.js`.
+- Restored `src/assets/images/icons/settings_old.svg`.
+
+Active scope from this point:
+- `src/application/eVe`
+- repository-level governance files
+- repository-level scripts and package commands
+- non-application temporary/import fixtures only when directly verified
+
+2026-05-14 - Batch 7: eVe local macOS metadata cleanup
+
+Processed folder:
+- `src/application/eVe`
+
+Deleted files:
+- `src/application/eVe/.DS_Store`
+- `src/application/eVe/domains/.DS_Store`
+- `src/application/eVe/domains/media/.DS_Store`
+- `src/application/eVe/intuition/.DS_Store`
+
+Verification performed before deletion:
+- Confirmed these files are ignored by the nested eVe Git repository with `git -C src/application/eVe status --short --ignored`.
+- Confirmed no first-party source or documentation references these `.DS_Store` paths.
+- Checked `src/application/eVe/.git` and confirmed it is a valid submodule gitdir pointer, so it was preserved.
+
+Cleanup result:
+- Removed local macOS metadata from the allowed eVe scope.
+- No tracked source, runtime module, documentation, or submodule metadata was changed.
+
+2026-05-14 - Batch 8: eVe prototype and mockup folder removal
+
+Processed folders:
+- `src/application/eVe/R&D`
+- `src/application/eVe/Mockup`
+
+Deleted tracked files:
+- `src/application/eVe/Mockup/module_design_test.html`
+- `src/application/eVe/R&D/ATG.html`
+- `src/application/eVe/R&D/ATG.js`
+- `src/application/eVe/R&D/Tauri Nativescript NodeGui.md`
+- `src/application/eVe/R&D/Texgen.js – Procedural Texture Generator  jQuery Plugins.webloc`
+- `src/application/eVe/R&D/ace-stepACE-Step-1.5- The most powerful local music generation model that outperforms most commercial alternatives, supporting Mac, AMD, Intel, and CUDA devices..webloc`
+- `src/application/eVe/R&D/atomic_object_demo_methods.js`
+- `src/application/eVe/R&D/atomic_object_desc_finalXXX.json`
+- `src/application/eVe/R&D/converter.js`
+- `src/application/eVe/R&D/eVeTGen6.html`
+- `src/application/eVe/R&D/extension.js`
+- `src/application/eVe/R&D/lib_to_intall.md`
+- `src/application/eVe/R&D/menu_goey copy.html`
+- `src/application/eVe/R&D/menu_goey.html`
+- `src/application/eVe/R&D/menu_goey_hexagoncal.html`
+- `src/application/eVe/R&D/menu_opening.html`
+- `src/application/eVe/R&D/mutiltrack.html`
+- `src/application/eVe/R&D/schalkt-tgen- Seamless texture generator in javascript.webloc`
+- `src/application/eVe/R&D/verif.html`
+
+Verification performed before deletion:
+- Listed tracked files in `R&D`, `Mockup`, and `todo` from the nested eVe repository.
+- Searched eVe runtime/source outside `R&D`, `Mockup`, and `todo` for these folder and file names.
+- Searched repository documentation and todos outside those folders for these names.
+- Found no runtime imports, no bootstrap references, no package references, no media-loader references, and no architecture documentation dependency outside generated cleanup artifacts.
+- Confirmed the folders contained isolated prototypes/mockups, `.webloc` references, direct HTML/DOM experiments, and duplicate historical menu experiments.
+
+Cleanup result:
+- Removed tracked prototype/mockup folders from the allowed eVe scope.
+- Preserved `src/application/eVe/todo` because it contains active planning documents rather than runtime prototypes.
+- No replacement abstraction, fallback, shim, or runtime route was added.
+
+2026-05-14 - Python script scope audit
+
+Processed files:
+- `package.json`
+- repository-level shell/setup scripts
+- `third_party` Python file inventory
+
+Verification performed:
+- Searched package scripts and repository setup scripts for `python`, `python3`, and `.py`.
+- Confirmed `package.json` no longer starts a Python static server after Batch 2.
+- Confirmed remaining first-party Python mentions are installer dependency declarations for system packages such as `python3`, not maintained Python application scripts.
+- Confirmed `.py` files are under `third_party/iPlug2`, which is vendor scope and not rewritten as part of this cleanup pass.
+
+Cleanup result:
+- No Ruby replacement was required for an indispensable first-party Python script because no such maintained first-party Python script remains in package execution paths.
+- Vendor Python files were preserved.
+
+2026-05-14 - Validation after scoped cleanup
+
+Checks run:
+- `node temp/eve_master_cleanup_audit.mjs`
+- `npm run check:m0`
+- `npm run check:master-cleanup`
+- `npm run check:syntax`
+- `npm run build`
+- `node --check scripts/static_file_server.mjs`
+- `rg -n "python -m http\\.server" package.json scripts README.md documentations todos`
+
+Results:
+- Cleanup audit regenerated successfully.
+- Guardrails passed.
+- Master cleanup governance test passed.
+- Syntax check passed for 1059 files.
+- Build completed and regenerated `dist/squirrel.js`.
+- Static server script passed Node syntax validation.
+- No remaining `python -m http.server` command was found in searched first-party command/docs paths.
+
+2026-05-14 - Batch 9: repository metadata cleanup outside application examples
+
+Processed files:
+- `./.DS_Store`
+- `./logs/.DS_Store`
+- `./platforms/.DS_Store`
+- `./platforms/ios/.DS_Store`
+- `./platforms/ios/atome-auv3/.DS_Store`
+- `./platforms/web/.DS_Store`
+- `./src-tauri/.DS_Store`
+- `./src/.DS_Store`
+- `./src/squirrel/.DS_Store`
+- `./src/squirrel/apis/.DS_Store`
+- `./src/squirrel/apis/unified/.DS_Store`
+- `./temp_import_tests/.DS_Store`
+
+Verification performed before deletion:
+- Enumerated `.DS_Store` files outside `node_modules`, `src-tauri/target`, and `third_party`.
+- Checked these metadata files are not tracked with `git ls-files`.
+- Preserved `.git/.DS_Store` because it is inside Git internals.
+- Preserved `src/application/.DS_Store` to respect the user instruction that inside `src/application` only `src/application/eVe` should be processed.
+
+Cleanup result:
+- Removed untracked macOS metadata from repository, platform, Tauri, Squirrel, logs, and temporary fixture folders.
+- No source code, asset, test, runtime route, submodule metadata, or application example file was modified.
+
+2026-05-14 - Batch 10: Squirrel template component review
+
+Processed file:
+- `src/squirrel/components/template_builder.js`
+
+Verification performed:
+- Searched `src/squirrel`, `src/application/eVe`, scripts, package commands, documentation, and todos for `template_builder`, `components/template`, and `Template` references.
+- Confirmed `src/squirrel/spark.js` loads it as `components.template`.
+- Confirmed `scripts/bundle.js` imports and exposes it on `window.Squirrel.Template`.
+- Confirmed `src/application/eVe/intuition/tools/calendar.js` imports `createNotification` from it.
+
+Cleanup result:
+- The file is not unused and was preserved.
+- It remains flagged for later architecture cleanup because it contains direct DOM access, French comments, and template behavior, but removing it now would break Squirrel and eVe calendar usage.
+
+2026-05-14 - Batch 11: Squirrel template component comment cleanup
+
+Processed file:
+- `src/squirrel/components/template_builder.js`
+
+Verification performed before change:
+- Confirmed the module is used by `src/squirrel/spark.js`, `scripts/bundle.js`, and `src/application/eVe/intuition/tools/calendar.js`.
+- Confirmed the module API must remain: default `createTemplate`, named `Template`, `createTemplate`, `createSimpleTemplate`, `createNotification`, and `createCard`.
+
+Cleanup result:
+- Replaced French/emoji comments with concise English comments or removed redundant narration.
+- Removed an empty `if (config.debug) {}` block.
+- Preserved all exports, DOM behavior, style defaults, IDs, helper names, and public API.
+
+2026-05-14 - Batch 12: Squirrel callback error visibility
+
+Processed files:
+- `src/squirrel/apis/dragdrop.js`
+- `src/squirrel/components/dropDown_builder.js`
+
+Verification performed before change:
+- Searched `src/squirrel` for empty `catch` blocks.
+- Selected callback wrappers where errors were fully swallowed: `opts.onDrop`, `onChange`, and `onHover`.
+- Preserved immediate UI flow by reporting callback failures asynchronously instead of interrupting selection/drop cleanup.
+
+Cleanup result:
+- Replaced silent callback catches with queued error rethrows.
+- No callback signature, DOM event, selection value, drop normalization, or public API was changed.
+- Remaining larger silent catches in `src/squirrel/apis/unified/adole.js`, `src/squirrel/components/intuition_builder/index.js`, `button_builder.js`, and `editor_builder.js` remain documented candidates because they require subsystem-specific behavior review.
+
+2026-05-14 - Validation after Squirrel cleanup
+
+Checks run:
+- `node temp/eve_master_cleanup_audit.mjs`
+- `npm run check:m0`
+- `npm run check:master-cleanup`
+- `npm run check:syntax`
+- `npm run build`
+
+Results:
+- Cleanup audit regenerated successfully.
+- Guardrails passed.
+- Master cleanup governance test passed.
+- Syntax check passed for 1059 files.
+- Build completed and regenerated `dist/squirrel.js`.

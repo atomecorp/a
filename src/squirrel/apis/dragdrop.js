@@ -37,6 +37,12 @@ async function _entryToFiles(entry, pathPrefix = '') {
     });
 }
 
+function _reportCallbackError(error) {
+    queueMicrotask(() => {
+        throw error;
+    });
+}
+
 async function _collectFilesFromDataTransfer(dt) {
     const files = [];
 
@@ -167,7 +173,11 @@ export function createDropZone(target, options = {}) {
         if (!opts.multiple && normalized.length > 1) normalized = [normalized[0]];
 
         if (typeof opts.onDrop === 'function') {
-            try { opts.onDrop(normalized, e); } catch (err) {}
+            try {
+                opts.onDrop(normalized, e);
+            } catch (err) {
+                _reportCallbackError(err);
+            }
         }
     };
 

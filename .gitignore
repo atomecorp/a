@@ -26,6 +26,10 @@ platforms/web/audio-wasm/target/
 *.old
 logs
 tests
+!tests/
+tests/*
+!tests/governance/
+!tests/governance/master_cleanup_governance.test.mjs
 
 # Test files
 src/assets/uploads/

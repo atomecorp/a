@@ -1,22 +1,18 @@
 /**
- * 📋 TEMPLATE COMPONENT - ARCHITECTURE DE RÉFÉRENCE
- * Composant template avec l'architecture clean pour créer de nouveaux composants
+ * Template component reference implementation.
+ * Provides the legacy Squirrel template API used by the public bundle.
  * Architecture: Zero dependency, functional, bundle-friendly
  */
 
-// === FONCTION PRINCIPALE DE CRÉATION ===
 function createTemplate(options = {}) {
-  // Configuration par défaut
   const config = {
     id: options.id || `template-${Date.now()}`,
     position: { x: 0, y: 0, ...options.position },
     size: { width: 'auto', height: 'auto', ...options.size },
     attach: options.attach || 'body',
     
-    // Contenu du composant
     content: options.content || 'Template Component',
     
-    // Styles avec contrôle CSS complet
     style: {
       display: 'block',
       position: 'relative',
@@ -33,7 +29,6 @@ function createTemplate(options = {}) {
       ...options.style
     },
     
-    // Comportement
     behavior: {
       clickable: options.behavior?.clickable ?? true,
       hoverable: options.behavior?.hoverable ?? true,
@@ -41,19 +36,15 @@ function createTemplate(options = {}) {
       ...options.behavior
     },
     
-    // Callbacks
     onClick: options.onClick || null,
     onHover: options.onHover || null,
     onMount: options.onMount || null,
     onDestroy: options.onDestroy || null,
     
-    // Debug
     debug: options.debug || false
   };
 
-  // === FONCTION INTERNE DE CRÉATION DU CONTAINER ===
   function createContainer() {
-    // Déterminer le point d'attachement
     let attachPoint;
     if (typeof config.attach === 'string') {
       attachPoint = document.querySelector(config.attach);
@@ -61,19 +52,17 @@ function createTemplate(options = {}) {
         attachPoint = document.body;
       }
     } else {
-      attachPoint = config.attach; // Assume que c'est déjà un élément DOM
+      attachPoint = config.attach;
     }
 
     if (!attachPoint) {
       attachPoint = document.body;
     }
 
-    // Créer le container principal
     const container = document.createElement('div');
     container.id = config.id;
     container.className = 'hs-template';
     
-    // Ajouter le contenu
     if (typeof config.content === 'string') {
       container.textContent = config.content;
     } else if (config.content instanceof HTMLElement) {
@@ -89,21 +78,14 @@ function createTemplate(options = {}) {
       });
     }
 
-    // Appliquer les styles du container
     applyContainerStyles(container);
     
-    // Attacher au DOM
     attachPoint.appendChild(container);
-    
-    if (config.debug) {
-    }
 
     return container;
   }
 
-  // === FONCTION D'APPLICATION DES STYLES ===
   function applyContainerStyles(container) {
-    // Styles de position si spécifiés
     const positionStyles = {};
     if (config.position.x !== undefined || config.position.y !== undefined) {
       positionStyles.position = 'absolute';
@@ -111,19 +93,15 @@ function createTemplate(options = {}) {
       if (config.position.y !== undefined) positionStyles.top = `${config.position.y}px`;
     }
 
-    // Styles de taille si spécifiés
     const sizeStyles = {};
     if (config.size.width !== 'auto') sizeStyles.width = typeof config.size.width === 'number' ? `${config.size.width}px` : config.size.width;
     if (config.size.height !== 'auto') sizeStyles.height = typeof config.size.height === 'number' ? `${config.size.height}px` : config.size.height;
 
-    // Appliquer tous les styles
     const finalStyles = { ...config.style, ...positionStyles, ...sizeStyles };
     Object.assign(container.style, finalStyles);
   }
 
-  // === FONCTION DE SETUP DES EVENT LISTENERS ===
   function setupEventListeners(container) {
-    // Click handler
     if (config.behavior.clickable && config.onClick) {
       container.addEventListener('click', (event) => {
         config.onClick(container, event);
@@ -131,7 +109,6 @@ function createTemplate(options = {}) {
       container.style.cursor = 'pointer';
     }
 
-    // Hover handlers
     if (config.behavior.hoverable) {
       container.addEventListener('mouseenter', (event) => {
         container.style.transform = 'translateY(-2px)';
@@ -152,7 +129,6 @@ function createTemplate(options = {}) {
       });
     }
 
-    // Draggable (optionnel, implémentation basique)
     if (config.behavior.draggable) {
       container.draggable = true;
       container.addEventListener('dragstart', (event) => {
@@ -166,18 +142,13 @@ function createTemplate(options = {}) {
     }
   }
 
-  // === CRÉATION ET ASSEMBLAGE FINAL ===
   const container = createContainer();
   setupEventListeners(container);
 
-  // Callback onMount
   if (config.onMount) {
     config.onMount(container);
   }
-
-  // === MÉTHODES PUBLIQUES DU COMPOSANT ===
   
-  // Méthode pour mettre à jour le contenu
   container.updateContent = function(newContent) {
     if (typeof newContent === 'string') {
       this.textContent = newContent;
@@ -188,13 +159,11 @@ function createTemplate(options = {}) {
     return this;
   };
 
-  // Méthode pour mettre à jour les styles
   container.updateStyle = function(newStyles) {
     Object.assign(this.style, newStyles);
     return this;
   };
 
-  // Méthode pour détruire le composant
   container.destroy = function() {
     if (config.onDestroy) {
       config.onDestroy(this);
@@ -204,7 +173,6 @@ function createTemplate(options = {}) {
     }
   };
 
-  // Méthode pour obtenir la configuration
   container.getConfig = function() {
     return { ...config };
   };
@@ -212,9 +180,6 @@ function createTemplate(options = {}) {
   return container;
 }
 
-// === FACTORY FUNCTIONS POUR VARIANTES COMMUNES ===
-
-// Template simple avec contenu texte
 const createSimpleTemplate = (text, options = {}) => createTemplate({ 
   ...options, 
   content: text,
@@ -226,7 +191,6 @@ const createSimpleTemplate = (text, options = {}) => createTemplate({
   }
 });
 
-// Template de notification
 const createNotification = (message, type = 'info', options = {}) => {
   const typeStyles = {
     info: { backgroundColor: '#e3f2fd', borderColor: '#2196f3', color: '#1976d2' },
@@ -249,7 +213,6 @@ const createNotification = (message, type = 'info', options = {}) => {
   });
 };
 
-// Template de card
 const createCard = (title, content, options = {}) => {
   const cardContainer = document.createElement('div');
   
@@ -281,7 +244,6 @@ const createCard = (title, content, options = {}) => {
   });
 };
 
-// === EXPORTS ===
 export { 
   createTemplate,
   createSimpleTemplate,
@@ -289,9 +251,7 @@ export {
   createCard
 };
 
-// Alias pour compatibilité avec l'ancien pattern (comme Menu dans menu_builder.js)
 const Template = createTemplate;
 export { Template };
 
-// Export par défaut : fonction directe (cohérent avec menu_builder.js)
 export default createTemplate;

@@ -102,13 +102,10 @@
 
   // Add the puts method to display in the console
   window.puts = function puts(val) {
-    console.log(val);
   };
 
   // Add the print method to display in the console without newline (Ruby-like)
   window.print = function print(val) {
-    // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
-    console.log('[PRINT]', val);
   };
 
   // Add the grab method to retrieve DOM elements
@@ -123,20 +120,20 @@
     };
 
     const resolveSelectableId = (thing, fallbackId = null) => {
-      
-        if (!thing) return null;
-        if (typeof thing === 'string') return thing;
 
-        // DOM element id conventions
-        const elId = thing.id ? String(thing.id) : '';
-        if (elId.startsWith('atome_')) return elId.slice('atome_'.length);
-        if (elId.startsWith('project_view_')) return elId.slice('project_view_'.length);
-        if (looksLikeUuid(elId)) return elId;
+      if (!thing) return null;
+      if (typeof thing === 'string') return thing;
 
-        // Common object id fields
-        const candidate = thing.atome_id || thing.object_id || thing.id || null;
-        if (candidate && looksLikeUuid(candidate)) return String(candidate);
-      
+      // DOM element id conventions
+      const elId = thing.id ? String(thing.id) : '';
+      if (elId.startsWith('atome_')) return elId.slice('atome_'.length);
+      if (elId.startsWith('project_view_')) return elId.slice('project_view_'.length);
+      if (looksLikeUuid(elId)) return elId;
+
+      // Common object id fields
+      const candidate = thing.atome_id || thing.object_id || thing.id || null;
+      if (candidate && looksLikeUuid(candidate)) return String(candidate);
+
 
       if (fallbackId && looksLikeUuid(fallbackId)) return String(fallbackId);
       return fallbackId ? String(fallbackId) : null;
@@ -149,11 +146,11 @@
       let _last = null;
 
       const publish = () => {
-        
-          window.__selectedAtomeId = _last;
-          window.__selectedAtomeIds = Array.from(_selected);
-          window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: _last, selected: Array.from(_selected) } }));
-        
+
+        window.__selectedAtomeId = _last;
+        window.__selectedAtomeIds = Array.from(_selected);
+        window.dispatchEvent(new CustomEvent('adole-atome-selected', { detail: { atomeId: _last, selected: Array.from(_selected) } }));
+
       };
 
       window.SelectionAPI = {
@@ -201,25 +198,25 @@
     const enhanceSelectable = (obj, fallbackId = null) => {
       if (!obj) return obj;
       if (obj._enhancedSelection) return obj;
-      
-        Object.defineProperty(obj, '_enhancedSelection', { value: true, enumerable: false });
 
-        Object.defineProperty(obj, 'select', {
-          value: function (options = {}) {
-            const api = ensureSelectionApi();
-            return api.select(this, { ...options, fallbackId });
-          },
-          enumerable: false
-        });
+      Object.defineProperty(obj, '_enhancedSelection', { value: true, enumerable: false });
 
-        Object.defineProperty(obj, 'selected', {
-          value: function () {
-            const api = ensureSelectionApi();
-            return api.selected();
-          },
-          enumerable: false
-        });
-      
+      Object.defineProperty(obj, 'select', {
+        value: function (options = {}) {
+          const api = ensureSelectionApi();
+          return api.select(this, { ...options, fallbackId });
+        },
+        enumerable: false
+      });
+
+      Object.defineProperty(obj, 'selected', {
+        value: function () {
+          const api = ensureSelectionApi();
+          return api.selected();
+        },
+        enumerable: false
+      });
+
       return obj;
     };
 
@@ -999,9 +996,16 @@
         if (!candidate || serverPathCandidates.includes(candidate)) return;
         serverPathCandidates.push(candidate);
       };
+      const projectRootAssetPath = canonicalAssetPath.replace(/^assets\//, 'src/assets/');
+      if (isLocalAxumPage()) {
+        pushServerPathCandidate(projectRootAssetPath);
+      }
       pushServerPathCandidate(canonicalAssetPath);
       pushServerPathCandidate(cleanPath);
       pushServerPathCandidate(assetPath);
+      if (!isLocalAxumPage()) {
+        pushServerPathCandidate(projectRootAssetPath);
+      }
 
       const serverCandidates = [];
       const pushServerCandidate = (base, routePath) => {
@@ -1321,12 +1325,10 @@
         // Si le handler retourne une promesse, capturer les erreurs
         if (result && typeof result.then === 'function') {
           result.catch(err => {
-            console.error('[Squirrel] Async event handler error:', err);
           });
         }
         return result;
       } catch (err) {
-        console.error('[Squirrel] Event handler error:', err);
       }
     };
   };
@@ -1391,7 +1393,6 @@
           element.innerHTML = svgContent;
         })
         .catch(error => {
-          console.error(`Erreur lors du chargement du SVG ${merged.svgSrc}:`, error);
         });
     }
 
@@ -1461,7 +1462,6 @@
             element.innerHTML = svgContent;
           })
           .catch(error => {
-            console.error(`Erreur lors du chargement du SVG ${updateProps.svgSrc}:`, error);
           });
       }
 
@@ -1559,7 +1559,6 @@
         }
         attempts += 1;
         if (attempts >= 120) {
-          console.warn(`Parent selector "${parent}" not found`);
           element._parentAttachPending = false;
           window.removeEventListener('squirrel:ready', retry, true);
           document.removeEventListener('DOMContentLoaded', retry, true);
@@ -1640,7 +1639,6 @@
         try {
           op();
         } catch (error) {
-          console.error('Batch operation failed:', error);
         }
       });
     });
@@ -2232,14 +2230,6 @@
     // Calcul des zones de drag effectives
     const effectiveDragMin = dragMin !== null ? dragMin : min;
     const effectiveDragMax = dragMax !== null ? dragMax : max;
-    
-    // Validation des zones de drag
-    if (effectiveDragMin < min) {
-      console.warn(`dragMin (${effectiveDragMin}) ne peut pas être inférieur à min (${min})`);
-    }
-    if (effectiveDragMax > max) {
-      console.warn(`dragMax (${effectiveDragMax}) ne peut pas être supérieur à max (${max})`);
-    }
 
     // Gestionnaires d'événements
     const handleMouseDown = (e) => {
@@ -2687,7 +2677,6 @@
   const applyTemplate = (config, templateName) => {
     const template = buttonTemplates[templateName];
     if (!template) {
-      console.warn(`Template "${templateName}" non trouvé. Templates disponibles:`, Object.keys(buttonTemplates));
       return config;
     }
 
@@ -3211,18 +3200,15 @@
         // Exécuter l'action appropriée (with async error handling)
         if (currentToggleState && button._handlers.onAction) {
           Promise.resolve(button._handlers.onAction(currentToggleState, button)).catch(err => {
-            console.error('[Button] onAction error:', err);
           });
         } else if (!currentToggleState && button._handlers.offAction) {
           Promise.resolve(button._handlers.offAction(currentToggleState, button)).catch(err => {
-            console.error('[Button] offAction error:', err);
           });
         }
 
         // Callback de changement d'état
         if (onStateChange) {
           Promise.resolve(onStateChange(currentToggleState, button)).catch(err => {
-            console.error('[Button] onStateChange error:', err);
           });
         }
 
@@ -3255,14 +3241,12 @@
         // Exécuter l'action de l'état (with async error handling)
         if (newState.action) {
           Promise.resolve(newState.action(newState, currentStateIndex, button)).catch(err => {
-            console.error('[Button] state action error:', err);
           });
         }
 
         // Callback de changement d'état
         if (onStateChange) {
           Promise.resolve(onStateChange(newState, currentStateIndex, button)).catch(err => {
-            console.error('[Button] onStateChange error:', err);
           });
         }
 
@@ -3270,14 +3254,12 @@
         // Mode bouton classique (with async error handling)
         if (button._handlers.onClick) {
           Promise.resolve(button._handlers.onClick(event, button)).catch(err => {
-            console.error('[Button] onClick error:', err);
           });
         }
       }
     };
 
     // Création du conteneur principal
-    // console.log('🔍 CSS final avant création DOM:', { backgroundColor: containerStyles.backgroundColor, color: containerStyles.color });
 
     // ✅ Nettoyer les styles CSS pour éviter les propriétés parasites
     const cleanStyles = {};
@@ -3288,7 +3270,6 @@
       }
     });
 
-    // console.log('🔍 cleanStyles:', { backgroundColor: cleanStyles.backgroundColor, color: cleanStyles.color });
 
     const button = $('button-container', {
       id: buttonId,
@@ -3320,7 +3301,6 @@
     });
 
     // ✅ Debug: vérifier les styles appliqués dans le DOM
-    // console.log('🔍 Styles appliqués au DOM:', button.style.cssText);
 
     // Stocker la config pour référence
     button._config = processedConfig;
@@ -3585,7 +3565,6 @@
       },
       set(newHandler) {
         this._handlers.onClick = newHandler;
-        console.log('✅ onClick handler mis à jour');
       },
       enumerable: true,
       configurable: true
@@ -3598,7 +3577,6 @@
       },
       set(newHandler) {
         this._handlers.onAction = newHandler;
-        console.log('✅ onAction handler mis à jour');
       },
       enumerable: true,
       configurable: true
@@ -3611,7 +3589,6 @@
       },
       set(newHandler) {
         this._handlers.offAction = newHandler;
-        console.log('✅ offAction handler mis à jour');
       },
       enumerable: true,
       configurable: true
@@ -3643,27 +3620,16 @@
   createButton.getTemplate = (name) => buttonTemplates[name];
   createButton.addTemplate = (name, template) => {
     buttonTemplates[name] = template;
-    // console.log(`✅ Template "${name}" ajouté`);
     return createButton;
   };
 
   createButton.listTemplates = () => {
-    console.table(
-      Object.entries(buttonTemplates).map(([key, value]) => ({
-        nom: key,
-        description: value.description || 'Aucune description',
-        famille: value.name || key
-      }))
-    );
     return createButton;
   };
 
   createButton.removeTemplate = (name) => {
     if (buttonTemplates[name]) {
       delete buttonTemplates[name];
-      // console.log(`✅ Template "${name}" supprimé`);
-    } else {
-      console.warn(`⚠️ Template "${name}" introuvable`);
     }
     return createButton;
   };
@@ -3750,7 +3716,6 @@
           Object.assign(transferData, JSON.parse(jsonData));
         }
       } catch (err) {
-        console.warn('Erreur parsing des données de drop:', err);
       }
 
       // Récupérer les données texte
@@ -3772,7 +3737,6 @@
           sourceElement._markDropSuccessful();
         }
 
-        console.log('🎯 Marked source element as successfully dropped');
       }
 
       // Appeler la fonction de drop
@@ -3874,7 +3838,6 @@
 
         // Si le drop est réussi, on ignore complètement dragend
         if (isDropSuccessful || element.getAttribute('data-drop-successful') === 'true') {
-          console.log('Drop successful - ignoring dragend completely');
           // Nettoyer et sortir immédiatement
           element.removeAttribute('data-dragging');
           element.removeAttribute('data-drag-id');
@@ -3884,7 +3847,6 @@
         }
 
         // Si pas de drop réussi, restaurer normalement
-        console.log('No successful drop - restoring element');
         element.removeAttribute('data-dragging');
         element.removeAttribute('data-drag-id');
         element.removeAttribute('data-moved');
@@ -4232,27 +4194,26 @@
 
   class List {
     constructor(options = {}) {
-      // console.log('🏗️ Création du composant List avec options:', options);
-      
+
       // Configuration par défaut Material Design
       this.config = {
         id: options.id || `list-${Date.now()}`,
         items: options.items || [],
         position: { x: 0, y: 0, ...options.position },
         size: { width: 300, height: 400, ...options.size },
-        
+
         // Espacement ultra-personnalisable
-        spacing: { 
+        spacing: {
           vertical: options.spacing?.vertical ?? 4,        // Espace entre les éléments
           horizontal: options.spacing?.horizontal ?? 0,    // Marge horizontale
           itemPadding: options.spacing?.itemPadding ?? 16, // Padding interne des éléments
           marginTop: options.spacing?.marginTop ?? 0,      // Marge avant chaque élément
           marginBottom: options.spacing?.marginBottom ?? 0, // Marge après chaque élément
-          ...options.spacing 
+          ...options.spacing
         },
-        
+
         attach: options.attach || 'body',
-        
+
         // Configuration Material Design des éléments
         itemStyle: {
           fontSize: options.itemStyle?.fontSize ?? '14px',
@@ -4263,7 +4224,7 @@
           borderRadius: options.itemStyle?.borderRadius ?? '8px',
           ...options.itemStyle
         },
-        
+
         states: {
           hover: {
             backgroundColor: '#f5f5f5',
@@ -4280,15 +4241,15 @@
           },
           ...options.states
         },
-        
+
         containerStyle: options.containerStyle || {},
-        
+
         // Options Material Design
         selectable: options.selectable !== false,
         multiSelect: options.multiSelect || false,
         elevation: options.elevation ?? 2,
         rippleEffect: options.rippleEffect !== false,
-        
+
         // Debug
         debug: options.debug || false
       };
@@ -4321,24 +4282,20 @@
 
     init() {
       try {
-  // console.log(`🚀 Initialisation de la liste "${this.config.id}"...`);
         this.createContainer();
         this.createItems();
         this.setupEventListeners();
         this.isInitialized = true;
 
         if (this.config.debug) {
-  // console.log(`✅ List "${this.config.id}" initialisée avec succès`);
-  // console.log(`📝 ${this.config.items.length} éléments créés`);
         }
       } catch (error) {
-        console.error(`❌ Erreur lors de l'initialisation de List "${this.config.id}":`, error);
       }
     }
 
     createContainer() {
-      const attachPoint = typeof this.config.attach === 'string' 
-        ? document.querySelector(this.config.attach) 
+      const attachPoint = typeof this.config.attach === 'string'
+        ? document.querySelector(this.config.attach)
         : this.config.attach;
 
       if (!attachPoint) {
@@ -4348,19 +4305,15 @@
       this.container = document.createElement('div');
       this.container.id = this.config.id;
       this.container.className = 'list-container';
-      
+
       this.applyContainerStyles();
       attachPoint.appendChild(this.container);
-      
-  // console.log(`📦 Container créé et attaché à "${this.config.attach}"`);
-  // console.log(`🔍 Container dans le DOM:`, this.container);
-  // console.log(`📐 Dimensions:`, this.container.style.width, 'x', this.container.style.height);
-  // console.log(`📍 Position:`, this.container.style.left, this.container.style.top);
+
     }
 
     applyContainerStyles() {
       const elevation = this.getElevationShadow(this.config.elevation);
-      
+
       const defaultStyles = {
         position: 'absolute',
         left: `${this.config.position.x}px`,
@@ -4393,7 +4346,6 @@
     }
 
     createItems() {
-  // console.log(`📋 Création de ${this.config.items.length} éléments...`);
       this.config.items.forEach((itemData, index) => {
         const itemElement = this.createItem(itemData, index);
         this.container.appendChild(itemElement);
@@ -4403,19 +4355,19 @@
     createItem(itemData, index) {
       const itemElement = document.createElement('div');
       const itemId = itemData.id || `item-${index}`;
-      
+
       itemElement.id = itemId;
       itemElement.className = 'list-item';
       itemElement.textContent = itemData.content || itemData.text || `Élément ${index + 1}`;
-      
+
       // Stockage des données
       this.itemsMap.set(itemId, itemData);
       this.itemElements.set(itemId, itemElement);
       this.itemStates.set(itemId, 'default');
-      
+
       // Application des styles Material Design
       this.applyItemStyles(itemElement, itemData);
-      
+
       return itemElement;
     }
 
@@ -4428,20 +4380,20 @@
         marginBottom: `${this.config.spacing.vertical}px`,
         marginLeft: `${this.config.spacing.horizontal}px`,
         marginRight: `${this.config.spacing.horizontal}px`,
-        
+
         // Texte personnalisable
         fontSize: this.config.itemStyle.fontSize,
         fontWeight: this.config.itemStyle.fontWeight,
         lineHeight: this.config.itemStyle.lineHeight,
         color: this.config.itemStyle.textColor,
         fontFamily: 'inherit',
-        
+
         // Style Material Design
         background: this.config.itemStyle.backgroundColor,
         borderRadius: this.config.itemStyle.borderRadius,
         border: 'none',
         boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-        
+
         // Interactions
         cursor: 'pointer',
         transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
@@ -4454,9 +4406,9 @@
       const componentStyles = this.config.itemStyle.default || {};
       const itemSpecificStyles = itemData.style || {};
       const finalStyles = { ...defaultStyles, ...componentStyles, ...itemSpecificStyles };
-      
+
       Object.assign(element.style, finalStyles);
-      
+
       // Ajouter l'effet ripple si activé
       if (this.config.rippleEffect) {
         this.addRippleEffect(element);
@@ -4470,7 +4422,7 @@
         const size = Math.max(rect.width, rect.height);
         const x = e.clientX - rect.left - size / 2;
         const y = e.clientY - rect.top - size / 2;
-        
+
         ripple.style.cssText = `
         position: absolute;
         width: ${size}px;
@@ -4484,7 +4436,7 @@
         pointer-events: none;
         z-index: 1;
       `;
-        
+
         // Ajouter l'animation CSS si elle n'existe pas
         if (!document.getElementById('ripple-styles')) {
           const style = document.createElement('style');
@@ -4499,7 +4451,7 @@
         `;
           document.head.appendChild(style);
         }
-        
+
         element.appendChild(ripple);
         setTimeout(() => ripple.remove(), 600);
       });
@@ -4559,7 +4511,7 @@
     handleItemLeave(element) {
       const itemId = element.id;
       const currentState = this.itemStates.get(itemId);
-      
+
       if (currentState === 'hover') {
         const isSelected = this.selectedItems.has(itemId);
         this.applyState(itemId, isSelected ? 'selected' : 'default');
@@ -4580,7 +4532,7 @@
       if (!element) return;
 
       const stateStyles = this.config.states[stateName] || {};
-      
+
       if (stateName === 'default') {
         const itemData = this.itemsMap.get(itemId);
         this.applyItemStyles(element, itemData);
@@ -4622,10 +4574,10 @@
     addItem(itemData) {
       const index = this.config.items.length;
       this.config.items.push(itemData);
-      
+
       const itemElement = this.createItem(itemData, index);
       this.container.appendChild(itemElement);
-      
+
       return itemData.id || `item-${index}`;
     }
 
@@ -4675,12 +4627,12 @@
       if (this.container && this.container.parentNode) {
         this.container.parentNode.removeChild(this.container);
       }
-      
+
       this.itemsMap.clear();
       this.itemElements.clear();
       this.itemStates.clear();
       this.selectedItems.clear();
-      
+
       this.isInitialized = false;
     }
   }
@@ -4766,11 +4718,8 @@
         this.isInitialized = true;
 
         if (this.config.debug) {
-          // console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
-          // console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
         }
       } catch (error) {
-        console.error(`❌ Erreur lors de l'initialisation de Matrix "${this.config.id}":`, error);
       }
     }
 
@@ -5330,7 +5279,6 @@
         : parentElement;
 
       if (!parent) {
-        console.error('❌ Élément parent non trouvé');
         return;
       }
 
@@ -6050,9 +5998,7 @@
         // Reset des callbacks
         this.callbacks = {};
 
-        // console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
       } catch (error) {
-        console.error(`❌ Erreur lors de la destruction de Matrix "${this.config.id}":`, error);
       }
     }
   }
@@ -6143,17 +6089,12 @@
       // Point d'attachement
       const attachPoint = document.querySelector(config.attach);
       if (!attachPoint) {
-        console.error(`❌ Point d'attachement "${config.attach}" introuvable`);
         return null;
       }
 
       // Appliquer les styles du container
       applyContainerStyles(container);
       attachPoint.appendChild(container);
-      
-      if (config.debug) {
-        console.log(`📦 Container menu créé et attaché à "${config.attach}"`);
-      }
       
       return container;
     }
@@ -6529,10 +6470,6 @@
         });
       }
     });
-
-    if (config.debug) {
-      console.log(`✅ Menu "${config.id}" créé avec succès`);
-    }
 
     // Retourner l'élément DOM du container
     return container;
@@ -7091,24 +7028,20 @@
   };
 
   /**
-   * 📋 TEMPLATE COMPONENT - ARCHITECTURE DE RÉFÉRENCE
-   * Composant template avec l'architecture clean pour créer de nouveaux composants
+   * Template component reference implementation.
+   * Provides the legacy Squirrel template API used by the public bundle.
    * Architecture: Zero dependency, functional, bundle-friendly
    */
 
-  // === FONCTION PRINCIPALE DE CRÉATION ===
   function createTemplate(options = {}) {
-    // Configuration par défaut
     const config = {
       id: options.id || `template-${Date.now()}`,
       position: { x: 0, y: 0, ...options.position },
       size: { width: 'auto', height: 'auto', ...options.size },
       attach: options.attach || 'body',
       
-      // Contenu du composant
       content: options.content || 'Template Component',
       
-      // Styles avec contrôle CSS complet
       style: {
         display: 'block',
         position: 'relative',
@@ -7125,7 +7058,6 @@
         ...options.style
       },
       
-      // Comportement
       behavior: {
         clickable: options.behavior?.clickable ?? true,
         hoverable: options.behavior?.hoverable ?? true,
@@ -7133,19 +7065,15 @@
         ...options.behavior
       },
       
-      // Callbacks
       onClick: options.onClick || null,
       onHover: options.onHover || null,
       onMount: options.onMount || null,
       onDestroy: options.onDestroy || null,
       
-      // Debug
       debug: options.debug || false
     };
 
-    // === FONCTION INTERNE DE CRÉATION DU CONTAINER ===
     function createContainer() {
-      // Déterminer le point d'attachement
       let attachPoint;
       if (typeof config.attach === 'string') {
         attachPoint = document.querySelector(config.attach);
@@ -7153,20 +7081,17 @@
           attachPoint = document.body;
         }
       } else {
-        attachPoint = config.attach; // Assume que c'est déjà un élément DOM
+        attachPoint = config.attach;
       }
 
       if (!attachPoint) {
-        console.warn(`⚠️ Point d'attachement "${config.attach}" non trouvé, utilisation de body`);
         attachPoint = document.body;
       }
 
-      // Créer le container principal
       const container = document.createElement('div');
       container.id = config.id;
       container.className = 'hs-template';
       
-      // Ajouter le contenu
       if (typeof config.content === 'string') {
         container.textContent = config.content;
       } else if (config.content instanceof HTMLElement) {
@@ -7182,22 +7107,14 @@
         });
       }
 
-      // Appliquer les styles du container
       applyContainerStyles(container);
       
-      // Attacher au DOM
       attachPoint.appendChild(container);
-      
-      if (config.debug) {
-        console.log(`📦 Template component créé et attaché à "${config.attach}"`);
-      }
 
       return container;
     }
 
-    // === FONCTION D'APPLICATION DES STYLES ===
     function applyContainerStyles(container) {
-      // Styles de position si spécifiés
       const positionStyles = {};
       if (config.position.x !== undefined || config.position.y !== undefined) {
         positionStyles.position = 'absolute';
@@ -7205,19 +7122,15 @@
         if (config.position.y !== undefined) positionStyles.top = `${config.position.y}px`;
       }
 
-      // Styles de taille si spécifiés
       const sizeStyles = {};
       if (config.size.width !== 'auto') sizeStyles.width = typeof config.size.width === 'number' ? `${config.size.width}px` : config.size.width;
       if (config.size.height !== 'auto') sizeStyles.height = typeof config.size.height === 'number' ? `${config.size.height}px` : config.size.height;
 
-      // Appliquer tous les styles
       const finalStyles = { ...config.style, ...positionStyles, ...sizeStyles };
       Object.assign(container.style, finalStyles);
     }
 
-    // === FONCTION DE SETUP DES EVENT LISTENERS ===
     function setupEventListeners(container) {
-      // Click handler
       if (config.behavior.clickable && config.onClick) {
         container.addEventListener('click', (event) => {
           config.onClick(container, event);
@@ -7225,7 +7138,6 @@
         container.style.cursor = 'pointer';
       }
 
-      // Hover handlers
       if (config.behavior.hoverable) {
         container.addEventListener('mouseenter', (event) => {
           container.style.transform = 'translateY(-2px)';
@@ -7246,7 +7158,6 @@
         });
       }
 
-      // Draggable (optionnel, implémentation basique)
       if (config.behavior.draggable) {
         container.draggable = true;
         container.addEventListener('dragstart', (event) => {
@@ -7260,18 +7171,13 @@
       }
     }
 
-    // === CRÉATION ET ASSEMBLAGE FINAL ===
     const container = createContainer();
     setupEventListeners(container);
 
-    // Callback onMount
     if (config.onMount) {
       config.onMount(container);
     }
-
-    // === MÉTHODES PUBLIQUES DU COMPOSANT ===
     
-    // Méthode pour mettre à jour le contenu
     container.updateContent = function(newContent) {
       if (typeof newContent === 'string') {
         this.textContent = newContent;
@@ -7282,13 +7188,11 @@
       return this;
     };
 
-    // Méthode pour mettre à jour les styles
     container.updateStyle = function(newStyles) {
       Object.assign(this.style, newStyles);
       return this;
     };
 
-    // Méthode pour détruire le composant
     container.destroy = function() {
       if (config.onDestroy) {
         config.onDestroy(this);
@@ -7298,7 +7202,6 @@
       }
     };
 
-    // Méthode pour obtenir la configuration
     container.getConfig = function() {
       return { ...config };
     };
@@ -8386,7 +8289,6 @@
       this.element.style.minHeight = `${totalHeight}px`;
 
       // Optionnel: Log pour debug
-      console.log(`📏 Unit ${this.name}: ${maxConnectors} connecteurs max → hauteur ${totalHeight}px`);
     }
 
     select() {
