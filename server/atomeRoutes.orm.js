@@ -264,6 +264,18 @@ function resolveSyncOperation(kind) {
     return 'update';
 }
 
+function normalizeAtomeCommitActor(candidate, authenticatedUserId) {
+    const secondary = { type: 'user', id: authenticatedUserId };
+    if (!candidate || typeof candidate !== 'object') return secondary;
+    const actorId = candidate.id || candidate.user_id || candidate.userId || null;
+    if (!actorId) return secondary;
+    if (String(actorId) !== String(authenticatedUserId)) return secondary;
+    return {
+        ...candidate,
+        id: actorId
+    };
+}
+
 async function resolveAtomeForSync(event) {
     const atomeId = event?.atome_id || null;
     if (!atomeId) return null;
@@ -300,6 +312,80 @@ async function resolveAtomeForSync(event) {
         type: atomeType || null,
         properties
     };
+}
+
+async function emitCommittedAtomeSync(event) {
+    if (!event?.atome_id || event?.kind === 'snapshot') return;
+    const syncAtome = await resolveAtomeForSync(event);
+    if (syncAtome) {
+        syncAtomeViaWebSocket(syncAtome, resolveSyncOperation(event.kind));
+        return;
+    }
+    if (event.kind === 'delete') {
+        syncAtomeViaWebSocket({ atome_id: event.atome_id }, 'delete');
+    }
+}
+
+export async function commitAtomeEvent({
+    event,
+    authenticatedUserId,
+    syncSource = ''
+} = {}) {
+    if (!authenticatedUserId) {
+        return { ok: false, error: 'authenticated_user_missing' };
+    }
+    if (!event || typeof event !== 'object') {
+        return { ok: false, error: 'invalid_event_payload' };
+    }
+    const actor = normalizeAtomeCommitActor(event.actor, authenticatedUserId);
+    const normalizedSyncSource = String(syncSource || event.sync_source || '').toLowerCase();
+    const shouldEnqueue = SYNC_REMOTE_ENABLED && normalizedSyncSource !== SYNC_TARGET_SERVER;
+    const created = await db.appendEvent(
+        { ...event, actor },
+        {
+            syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
+            skipQueue: !shouldEnqueue
+        }
+    );
+    await emitCommittedAtomeSync(created);
+    return { ok: true, event: created };
+}
+
+export async function commitAtomeEvents({
+    events,
+    authenticatedUserId,
+    actor = null,
+    txId = null,
+    syncSource = ''
+} = {}) {
+    if (!authenticatedUserId) {
+        return { ok: false, error: 'authenticated_user_missing' };
+    }
+    if (!Array.isArray(events) || !events.length) {
+        return { ok: false, error: 'missing_events_array' };
+    }
+    const secondaryActor = normalizeAtomeCommitActor(actor, authenticatedUserId);
+    const normalizedEvents = events.map((evt) => ({
+        ...evt,
+        actor: evt?.actor
+            ? normalizeAtomeCommitActor(evt.actor, authenticatedUserId)
+            : secondaryActor
+    }));
+    const normalizedSyncSource = String(syncSource || '').toLowerCase();
+    const shouldEnqueue = SYNC_REMOTE_ENABLED && normalizedSyncSource !== SYNC_TARGET_SERVER;
+    const created = await db.appendEvents(normalizedEvents, {
+        txId,
+        syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
+        skipQueue: !shouldEnqueue
+    });
+    const latestByAtome = new Map();
+    for (const evt of created || []) {
+        const atomeId = evt?.atome_id;
+        if (!atomeId || evt?.kind === 'snapshot') continue;
+        latestByAtome.set(atomeId, evt);
+    }
+    await Promise.all(Array.from(latestByAtome.values()).map((evt) => emitCommittedAtomeSync(evt)));
+    return { ok: true, events: created };
 }
 
 /**
@@ -828,18 +914,6 @@ export async function registerAtomeRoutes(server, dataSource = null) {
     // EVENT LOG + STATE CURRENT (new pipeline)
     // ========================================================================
 
-    const normalizeCommitActor = (candidate, authenticatedUserId) => {
-        const secondary = { type: 'user', id: authenticatedUserId };
-        if (!candidate || typeof candidate !== 'object') return secondary;
-        const actorId = candidate.id || candidate.user_id || candidate.userId || null;
-        if (!actorId) return secondary;
-        if (String(actorId) !== String(authenticatedUserId)) return secondary;
-        return {
-            ...candidate,
-            id: actorId
-        };
-    };
-
     server.post('/api/events/commit', async (request, reply) => {
         fastifyEventDebugLog('/api/events/commit received');
         const syncSource = String(request.headers['x-sync-source'] || '').toLowerCase();
@@ -854,7 +928,6 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(400).send({ success: false, error: 'Invalid event payload' });
         }
 
-        const actor = normalizeCommitActor(event.actor, user.id);
         fastifyEventDebugLog('/api/events/commit processing', {
             user_id: user.id,
             atome_id: event.atome_id || null,
@@ -868,28 +941,20 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         });
 
         try {
-            const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
-            const created = await db.appendEvent(
-                { ...event, actor },
-                {
-                    syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
-                    skipQueue: !shouldEnqueue
-                }
-            );
+            const result = await commitAtomeEvent({
+                event,
+                authenticatedUserId: user.id,
+                syncSource
+            });
+            if (!result.ok) {
+                return reply.code(400).send({ success: false, error: result.error });
+            }
+            const created = result.event;
             syncDebugLog('commit stored', {
                 atome_id: created?.atome_id || null,
                 kind: created?.kind || null,
                 event_id: created?.id || created?.event_id || null
             });
-            if (created?.atome_id && created?.kind !== 'snapshot') {
-                const syncAtome = await resolveAtomeForSync(created);
-                if (syncAtome) {
-                    const op = resolveSyncOperation(created.kind);
-                    syncAtomeViaWebSocket(syncAtome, op);
-                } else if (created.kind === 'delete') {
-                    syncAtomeViaWebSocket({ atome_id: created.atome_id }, 'delete');
-                }
-            }
             return reply.send({ success: true, event: created });
         } catch (error) {
             console.error('[Events] Commit error:', error);
@@ -913,48 +978,32 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const txId = body.tx_id || null;
-        const secondaryActor = normalizeCommitActor(body.actor, user.id);
-        const normalizedEvents = events.map((evt) => ({
-            ...evt,
-            actor: normalizeCommitActor(evt?.actor, user.id) || secondaryActor
-        }));
         fastifyEventDebugLog('/api/events/commit-batch processing', {
             user_id: user.id,
-            count: normalizedEvents.length
+            count: events.length
         });
         syncDebugLog('commit-batch received', {
             user_id: user.id,
-            count: normalizedEvents.length,
+            count: events.length,
             tx_id: txId
         });
 
         try {
-            const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
-            const created = await db.appendEvents(normalizedEvents, {
+            const result = await commitAtomeEvents({
+                events,
+                authenticatedUserId: user.id,
+                actor: body.actor || null,
                 txId,
-                syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
-                skipQueue: !shouldEnqueue
+                syncSource
             });
+            if (!result.ok) {
+                return reply.code(400).send({ success: false, error: result.error });
+            }
+            const created = result.events;
             syncDebugLog('commit-batch stored', {
                 count: Array.isArray(created) ? created.length : 0,
                 tx_id: txId
             });
-            const latestByAtome = new Map();
-            for (const evt of created || []) {
-                const atomeId = evt?.atome_id;
-                if (!atomeId || evt?.kind === 'snapshot') continue;
-                latestByAtome.set(atomeId, evt);
-            }
-            if (latestByAtome.size) {
-                await Promise.all(Array.from(latestByAtome.values()).map(async (evt) => {
-                    const syncAtome = await resolveAtomeForSync(evt);
-                    if (syncAtome) {
-                        syncAtomeViaWebSocket(syncAtome, resolveSyncOperation(evt.kind));
-                    } else if (evt?.kind === 'delete' && evt?.atome_id) {
-                        syncAtomeViaWebSocket({ atome_id: evt.atome_id }, 'delete');
-                    }
-                }));
-            }
             return reply.send({ success: true, events: created });
         } catch (error) {
             console.error('[Events] Commit batch error:', error);
@@ -1077,12 +1126,15 @@ export async function registerAtomeRoutes(server, dataSource = null) {
 
             if (projectId || atomeId) {
                 try {
-                    await db.appendEvent({
+                    await commitAtomeEvent({
+                        authenticatedUserId: user.id,
+                        event: {
                         kind: 'snapshot',
                         atome_id: atomeId || projectId,
                         project_id: projectId,
                         actor,
                         payload: { snapshot_id: snapshotId, label }
+                        }
                     });
                 } catch (error) {
                     console.warn("[cleanup] operation failed", error);

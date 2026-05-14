@@ -132,6 +132,10 @@ LANGUAGE AND STACK POLICY
 Implementation language:
 
 - JavaScript ONLY.
+- rust for Tauri and iOS
+- Swift for IOS
+- Ruby if needed for some script
+- C/C++ for DSP or hiigh end operations
 
 Strictly forbidden:
 

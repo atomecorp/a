@@ -7,7 +7,7 @@
 - Header and footer heights are derived from the shared tool size token.
 - Header and footer share the same color and shadow tokens.
 - The header is empty by default and remains draggable.
-- The footer contains the panel title, close control, and left/right resize grips.
+- The footer contains the panel title, close control, and the right resize grip.
 - Attached panel tools mount below the footer, never inside the body and never above the footer.
 
 ## Migration Steps
@@ -45,7 +45,7 @@
 - Footer exists on every panel.
 - Header and footer heights equal half the shared tool size.
 - Header and footer use the same centralized color and shadow tokens.
-- Footer contains title, close control, left resize grip, and right resize grip.
+- Footer contains title, close control, and one right resize grip.
 - Header and footer both support dragging.
 - Resize behavior still works.
 - Close behavior still routes through each panel close handler.

@@ -59,7 +59,12 @@ import {
   getABoxEventBus
 } from './aBoxServer.js';
 import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId, normalizePhone } from './auth.js';
-import { registerAtomeRoutes, syncAtomeViaWebSocket } from './atomeRoutes.orm.js';
+import {
+  commitAtomeEvent,
+  commitAtomeEvents,
+  registerAtomeRoutes,
+  syncAtomeViaWebSocket
+} from './atomeRoutes.orm.js';
 import { registerSharingRoutes, handleShareMessage } from './sharing.js';
 import { buildUserExportZip, inspectUserExportZip, importUserExportZip } from './userExportImport.js';
 import { registerMailRoutes } from './mailRoutes.js';
@@ -2434,15 +2439,6 @@ async function startServer() {
                 return;
               }
 
-              // Simple kind -> operation resolver
-              const resolveSyncOperation = (kind) => {
-                if (!kind) return 'update';
-                const n = String(kind).toLowerCase();
-                if (n === 'delete') return 'delete';
-                if (n === 'create') return 'create';
-                return 'update';
-              };
-
               try {
                 if (action === 'commit') {
                   const event = data.event || data.body || data.payload || null;
@@ -2450,43 +2446,18 @@ async function startServer() {
                     safeSend({ type: 'events-response', success: false, error: 'Invalid event payload' });
                     return;
                   }
-                  const actor = event.actor || { type: 'user', id: attachedSenderUserId };
                   const syncSource = String(event.sync_source || data.sync_source || '').toLowerCase();
-                  const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
-                  const created = await db.appendEvent(
-                    { ...event, actor },
-                    {
-                      syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
-                      skipQueue: !shouldEnqueue
-                    }
-                  );
-
-                  // Emit websocket sync for created event (if applicable)
-                  if (created?.atome_id && created?.kind !== 'snapshot') {
-                    const atomeId = created.atome_id;
-                    const [state, atome] = await Promise.all([
-                      db.getStateCurrent(atomeId).catch(() => null),
-                      db.getAtome(atomeId).catch(() => null)
-                    ]);
-                    const properties = (state && state.properties) || (atome && (atome.particles || atome.properties || atome.data)) || {};
-                    const atomePayload = {
-                      atome_id: atomeId,
-                      atome_type: resolveSyncAtomeType(
-                        atome && (atome.atome_type || atome.type || atome.kind),
-                        properties.atome_type,
-                        properties.type,
-                        properties.kind
-                      ),
-                      parent_id: (atome && atome.parent_id) || properties.parent_id || null,
-                      owner_id: (atome && atome.owner_id) || properties.owner_id || null,
-                      created_at: atome?.created_at || null,
-                      updated_at: (state && state.updated_at) || atome?.updated_at || null,
-                      particles: properties
-                    };
-                    syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(created.kind));
+                  const result = await commitAtomeEvent({
+                    event,
+                    authenticatedUserId: attachedSenderUserId,
+                    syncSource
+                  });
+                  if (!result.ok) {
+                    safeSend({ type: 'events-response', success: false, error: result.error || 'commit_failed' });
+                    return;
                   }
 
-                  safeSend({ type: 'events-response', success: true, event: created });
+                  safeSend({ type: 'events-response', success: true, event: result.event });
                   return;
                 }
 
@@ -2498,54 +2469,20 @@ async function startServer() {
                     return;
                   }
 
-                  const defaultActor = body.actor || { type: 'user', id: attachedSenderUserId };
-                  const normalized = events.map((evt) => ({ ...evt, actor: evt?.actor || defaultActor }));
                   const syncSource = String(body.sync_source || '').toLowerCase();
-                  const shouldEnqueue = SYNC_REMOTE_ENABLED && syncSource !== SYNC_TARGET_SERVER;
-                  const created = await db.appendEvents(normalized, {
+                  const result = await commitAtomeEvents({
+                    events,
+                    authenticatedUserId: attachedSenderUserId,
+                    actor: body.actor || null,
                     txId: body.tx_id || null,
-                    syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
-                    skipQueue: !shouldEnqueue
+                    syncSource
                   });
-
-                  // Determine latest event per atome and emit websocket syncs
-                  const latestByAtome = new Map();
-                  for (const evt of created || []) {
-                    const atomeId = evt?.atome_id;
-                    if (!atomeId || evt?.kind === 'snapshot') continue;
-                    latestByAtome.set(atomeId, evt);
-                  }
-                  if (latestByAtome.size) {
-                    for (const evt of Array.from(latestByAtome.values())) {
-                      try {
-                        const atomeId = evt.atome_id;
-                        const [state, atome] = await Promise.all([
-                          db.getStateCurrent(atomeId).catch(() => null),
-                          db.getAtome(atomeId).catch(() => null)
-                        ]);
-                        const properties = (state && state.properties) || (atome && (atome.particles || atome.properties || atome.data)) || {};
-                        const atomePayload = {
-                          atome_id: atomeId,
-                          atome_type: resolveSyncAtomeType(
-                            atome && (atome.atome_type || atome.type || atome.kind),
-                            properties.atome_type,
-                            properties.type,
-                            properties.kind
-                          ),
-                          parent_id: (atome && atome.parent_id) || properties.parent_id || null,
-                          owner_id: (atome && atome.owner_id) || properties.owner_id || null,
-                          created_at: atome?.created_at || null,
-                          updated_at: (state && state.updated_at) || atome?.updated_at || null,
-                          particles: properties
-                        };
-                        syncAtomeViaWebSocket(atomePayload, resolveSyncOperation(evt.kind));
-                      } catch (error) {
-                        console.warn("[server] operation failed", error);
-                      }
-                    }
+                  if (!result.ok) {
+                    safeSend({ type: 'events-response', success: false, error: result.error || 'commit_batch_failed' });
+                    return;
                   }
 
-                  safeSend({ type: 'events-response', success: true, events: created });
+                  safeSend({ type: 'events-response', success: true, events: result.events });
                   return;
                 }
               } catch (error) {
