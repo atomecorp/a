@@ -587,6 +587,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                 let source = (body["source"] as? String) ?? "mic"
                                 let sampleRate = (body["sampleRate"] as? NSNumber)?.doubleValue
                                 let channels = (body["channels"] as? NSNumber)?.uint32Value
+                                let userId = (body["userId"] as? String) ?? (body["user_id"] as? String)
                                 let sampleRateText = sampleRate.map { String($0) } ?? "<nil>"
                                 let channelsText = channels.map { String($0) } ?? "<nil>"
                                 print("[AUV3_RECORD_BRIDGE] record_start session=\(sessionId) file=\(fileName) source=\(source) sampleRate=\(sampleRateText) channels=\(channelsText)")
@@ -594,7 +595,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                                fileName: fileName,
                                                source: source,
                                                sampleRate: sampleRate,
-                                               channels: channels)
+                                               channels: channels,
+                                               userId: userId)
                             } else {
                                 print("[AUV3_RECORD_BRIDGE] record_stop session=\(sessionId)")
                                 au.recordStop(sessionId: sessionId)

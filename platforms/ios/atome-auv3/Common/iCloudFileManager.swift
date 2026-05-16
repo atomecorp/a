@@ -22,7 +22,10 @@ public class iCloudFileManager: ObservableObject {
     // Persisté pour ne pas redemander à chaque lancement
     private var fileAccessGrantedOnce: Bool = UserDefaults.standard.bool(forKey: "AtomeFileAccessGranted")
     private var isRunningInsideExtension: Bool {
-        (Bundle.main.bundleIdentifier ?? "").contains(".appex")
+        let bundle = Bundle.main
+        if bundle.bundlePath.hasSuffix(".appex") { return true }
+        if bundle.infoDictionary?["NSExtension"] != nil { return true }
+        return false
     }
     
     private init() {
@@ -41,8 +44,7 @@ public class iCloudFileManager: ObservableObject {
     // MARK: - Directory URLs
     private func getLocalDocumentsDirectory() -> URL {
         // Déterminer si on est dans l'extension AUv3 ou l'app principale
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-        let isAUv3Extension = bundleIdentifier.contains(".appex")
+        let isAUv3Extension = isRunningInsideExtension
         
         if isAUv3Extension {
             if let preferred = SandboxPathValidator.primaryRoot() {
@@ -111,8 +113,7 @@ public class iCloudFileManager: ObservableObject {
         }
         
         // Si c'est l'app principale, synchroniser les fichiers depuis App Groups
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-        let isApp = !bundleIdentifier.contains(".appex")
+        let isApp = !isRunningInsideExtension
         if isApp {
             // Première passe : AppGroup -> Visible
             syncFromAppGroupsToVisibleDocuments()
@@ -310,8 +311,7 @@ public class iCloudFileManager: ObservableObject {
             do { try FileManager.default.startDownloadingUbiquitousItem(at: fileURL) } catch { /* may not be ubiquitous; ignore */ }
             
             // Si c'est une extension AUv3, aussi copier vers Documents visible
-            let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-            if bundleIdentifier.contains(".appex") {
+            if self.isRunningInsideExtension {
                 copyFileToVisibleDocuments(from: fileURL, relativePath: relForVisible)
             }
             

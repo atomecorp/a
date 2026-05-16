@@ -105,6 +105,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var recordingSampleRate: Double = 0
     private var recordingChannels: UInt32 = 0
     private var recordingPath: String = ""
+    private var recordingRelativePath: String = ""
     private var recordingInputBuffer: AVAudioPCMBuffer?
     private var recordingChannelPointers: [UnsafePointer<Float>?] = Array(repeating: nil, count: 8)
     private var micRecordingEngine: AVAudioEngine?
@@ -795,7 +796,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         }
     }
 
-    public func recordStart(sessionId: String, fileName: String, source: String, sampleRate: Double?, channels: UInt32?) {
+    public func recordStart(sessionId: String, fileName: String, source: String, sampleRate: Double?, channels: UInt32?, userId: String?) {
         if recordingState != .idle {
             emitRecordingEvent(type: "record_error", payload: [
                 "session_id": sessionId,
@@ -806,7 +807,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
         let normalizedSource = normalizeRecordingSource(source)
         let safeName = sanitizeRecordingFileName(fileName)
-        guard let url = resolveRecordingURL(fileName: safeName) else {
+        guard let output = resolveRecordingOutput(fileName: safeName, userId: userId) else {
             emitRecordingEvent(type: "record_error", payload: [
                 "session_id": sessionId,
                 "error": "App Group container unavailable",
@@ -814,6 +815,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             ])
             return
         }
+        let url = output.url
+        let relativePath = output.relativePath
 
 #if os(iOS)
         if normalizedSource == "mic" {
@@ -903,13 +906,13 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         recordingSampleRate = actualSampleRate
         recordingChannels = actualChannels
         recordingPath = url.path
+        recordingRelativePath = relativePath
         audioDebugRecordingStartFrame = nil
 
         recordingInputBuffer = nil
 
         recordingState = .recording
 
-        let relativePath = "recordings/\(safeName)"
         print("[AUV3_RECORD] start_ok session=\(sessionId) file=\(safeName) source=\(normalizedSource) relative=\(relativePath) absolute=\(url.path) sample_rate=\(actualSampleRate) channels=\(actualChannels)")
         emitRecordingEvent(type: "record_started", payload: [
             "session_id": sessionId,
@@ -945,6 +948,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         let activeSource = recordingSource
         let activeSampleRate = recordingSampleRate
         let activeChannels = recordingChannels
+        let activeRelativePath = recordingRelativePath
         recordingState = .idle
 
         var duration: Double = 0
@@ -979,7 +983,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             let analysis = analyzeRecordedFile(at: URL(fileURLWithPath: activePath))
             let fileExists = FileManager.default.fileExists(atPath: activePath)
             let fileSize = ((try? FileManager.default.attributesOfItem(atPath: activePath))?[.size] as? NSNumber)?.int64Value ?? -1
-            let relativePath = activeFileName.isEmpty ? "" : "recordings/\(activeFileName)"
+            let relativePath = activeRelativePath
             print("[AUV3_RECORD] stop_ok session=\(activeSessionId) file=\(activeFileName) source=\(activeSource) relative=\(relativePath) absolute=\(activePath) exists=\(fileExists) bytes=\(fileSize) duration=\(duration) analysis=\(String(describing: analysis))")
             let playbackStartFrameValue = audioDebugPlaybackStartFrame.map(Int.init)
             let recordingStartFrameValue = audioDebugRecordingStartFrame.map(Int.init)
@@ -1024,6 +1028,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         recordingSampleRate = 0
         recordingChannels = 0
         recordingPath = ""
+        recordingRelativePath = ""
         audioDebugRecordingStartFrame = nil
         recordingInputBuffer = nil
     }
@@ -1048,17 +1053,34 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         return name + ".wav"
     }
 
-    private func resolveRecordingURL(fileName: String) -> URL? {
-        guard let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedBus.appGroupSuite) else {
+    private func normalizedRecordingUserId(_ userId: String?) -> String {
+        let trimmed = (userId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "anonymous" }
+        let allowed = trimmed.map { ch -> Character in
+            if ch.isLetter || ch.isNumber { return ch }
+            if ch == "_" || ch == "-" || ch == "." { return ch }
+            return "_"
+        }
+        let normalized = String(allowed)
+        return normalized.isEmpty ? "anonymous" : normalized
+    }
+
+    private func resolveRecordingOutput(fileName: String, userId: String?) -> (url: URL, relativePath: String)? {
+        guard let root = SandboxPathValidator.primaryRoot() else {
             return nil
         }
-        let recordingsDir = base.appendingPathComponent("Documents").appendingPathComponent("recordings")
+        let safeUserId = normalizedRecordingUserId(userId)
+        let relativePath = "data/users/\(safeUserId)/recordings/\(fileName)"
+        guard let sanitized = SandboxPathValidator.sanitizedRelativePath(relativePath) else {
+            return nil
+        }
+        let url = root.appendingPathComponent(sanitized, isDirectory: false)
         do {
-            try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         } catch {
             return nil
         }
-        return recordingsDir.appendingPathComponent(fileName)
+        return (url, sanitized)
     }
 
     private func startMicRecordingEngine(url: URL) throws -> (sampleRate: Double, channels: Int) {

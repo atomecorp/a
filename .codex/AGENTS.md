@@ -535,7 +535,7 @@ Forbidden in committed production code:
 
 - temporary verbose runtime instrumentation
 
-- Temporary logs are allowed for debugging only and must be removed immediately and completely once the problem is solved.
+- Temporary logs are mandatory for debugging and problem resolution. They must be added precisely, strategically, and only where necessary to diagnose and resolve issues as efficiently and accurately as possible. Once the problem is resolved, all temporary debugging logs, traces, probes, verbose outputs, and related instrumentation must be removed immediately, completely, and scrupulously, leaving zero residual debug code or leftover logging.
 
 Only permanently authorized logs are:
 
