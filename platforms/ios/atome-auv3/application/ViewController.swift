@@ -699,6 +699,18 @@ final class AppNativeAudioController: NSObject {
                         "duration_seconds": clip.durationSeconds
                     ])
 
+                case "audio_has_clip":
+                    let id = self.resolveString(payload, ["id"])
+                    guard !id.isEmpty else {
+                        self.complete(completion, payload: ["success": false], error: "Missing clip id")
+                        return
+                    }
+                    self.complete(completion, payload: [
+                        "success": true,
+                        "id": id,
+                        "loaded": self.clips[id] != nil
+                    ])
+
                 case "audio_play":
                     let id = self.resolveString(payload, ["id"])
                     guard !id.isEmpty else {
