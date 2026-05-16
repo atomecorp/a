@@ -165,6 +165,7 @@ fn main() {
             audio_engine::bridge::audio_init,
             audio_engine::bridge::audio_load_clip,
             audio_engine::bridge::audio_load_clip_from_bytes,
+            audio_engine::bridge::audio_has_clip,
             audio_engine::bridge::audio_play,
             audio_engine::bridge::audio_play_instance,
             audio_engine::bridge::audio_stop,

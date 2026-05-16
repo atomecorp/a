@@ -502,6 +502,78 @@ Architecture:
 The system must behave as a standalone creative operating system.
 
 ────────────────────────────────
+
+LOGGING AND DEBUG CLEANUP POLICY
+
+────────────────────────────────
+
+Temporary debugging code MUST NEVER remain in production code.
+
+When a task, fix, refactor, migration, or debugging session is completed:
+
+- all temporary logs MUST be removed;
+
+- all temporary debug instrumentation MUST be removed;
+
+- all temporary probes MUST be removed;
+
+- all temporary tracing hooks MUST be removed;
+
+- all temporary console outputs MUST be removed.
+
+Forbidden in committed production code:
+
+- console.log
+
+- console.warn
+
+- console.debug
+
+- ad-hoc debug traces
+
+- temporary performance traces
+
+- temporary verbose runtime instrumentation
+
+- Temporary logs are allowed for debugging only and must be removed immediately and completely once the problem is solved.
+
+Only permanently authorized logs are:
+
+- Atome version logs
+
+- eVe version logs
+
+All other logs encountered during refactor, cleanup, review, or implementation work MUST be removed systematically.
+
+Debugging must never become part of the permanent architecture.
+
+If persistent observability is required, it MUST use:
+
+- centralized architecture-compliant monitoring;
+
+- structured logging systems;
+
+- explicit log levels;
+
+- deterministic trace systems;
+
+- production-safe instrumentation.
+
+Silent accumulation of debug logs across the framework is forbidden.
+
+Before finalizing any task, the assistant MUST:
+
+- scan modified files for remaining logs;
+
+- remove all non-authorized logs;
+
+- verify no temporary debug code remains;
+
+- verify no temporary instrumentation remains.
+
+Leaving temporary logs in the framework is considered an architecture violation.
+
+────────────────────────────────
 FALLBACK POLICY
 ────────────────────────────────
 

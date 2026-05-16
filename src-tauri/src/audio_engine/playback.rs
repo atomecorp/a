@@ -539,6 +539,12 @@ pub fn load_clip_from_bytes(id: &str, bytes: Vec<u8>) -> Result<ClipMetadata, St
     Ok(metadata)
 }
 
+pub fn has_clip(id: &str) -> Result<bool, String> {
+    let guard = ENGINE.read().map_err(lock_err)?;
+    let engine = guard.as_ref().ok_or("Audio engine not initialized")?;
+    Ok(engine.clips.contains_key(id))
+}
+
 pub fn play(id: &str) -> Result<(), String> {
     play_instance(id, id, 0.0, None, 1.0, 1.0, None, None)
 }
