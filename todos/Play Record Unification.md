@@ -34,6 +34,14 @@ The audio system must be isolated from UI state, tracks, MTRACK internals, molec
 - [x] Add regression coverage for track movement, molecule close/open, and timeline reload without audio cache loss.
 - [x] Verify no temporary logs, duplicate fallback routes, or UI-coupled audio control remain.
 
+## AGENTS Compliance Phase
+
+- [x] Declare the Play/Record API contract with versioned, MCP-compatible operations.
+- [x] Route every effectful Play/Record operation through Command Bus audit before execution.
+- [x] Preserve deterministic idempotency keys and trace fields for replay.
+- [x] Add tests for Command Bus events and API contract exposure.
+- [x] Re-run syntax, contract, regression, and log/fallback scans.
+
 ## Acceptance Criteria
 
 - `Squirrel.av.audio` and all MTRACK/molecule playback paths call the same core authority.

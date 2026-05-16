@@ -3,8 +3,14 @@ import assert from 'node:assert/strict';
 
 import {
     canonicalizePlayRecordMediaSource,
+    PLAY_RECORD_API_CONTRACT,
     PlayRecordCore
 } from './play_record_core.js';
+import { commandBusV2 } from '../eVe/intuition/runtime/command_bus.js';
+
+test.beforeEach(() => {
+    commandBusV2.clear();
+});
 
 test('canonicalizePlayRecordMediaSource preserves recording and upload local paths', () => {
     const recording = canonicalizePlayRecordMediaSource({
@@ -86,6 +92,22 @@ test('PlayRecordCore sends the native load and voice command contract', async ()
         loopStartSeconds: null,
         loopEndSeconds: null
     });
+    const events = commandBusV2.listEvents({ tool_id: 'play_record' });
+    assert.deepEqual(events.map((entry) => entry.envelope?.meta?.action), [
+        'loadAsset',
+        'playVoice',
+        'stopVoice',
+        'playAsset',
+        'stopAsset'
+    ]);
+    assert.ok(events.every((entry) => String(entry.envelope?.idempotency_key || '').startsWith('play_record:')));
+});
+
+test('PlayRecordCore exposes a versioned MCP-compatible API contract', () => {
+    assert.equal(PLAY_RECORD_API_CONTRACT.schema_version, 1);
+    assert.equal(PLAY_RECORD_API_CONTRACT.tool_key, 'play_record');
+    assert.ok(PLAY_RECORD_API_CONTRACT.operations.some((entry) => entry.name === 'recordStart'));
+    assert.ok(PLAY_RECORD_API_CONTRACT.operations.every((entry) => entry.command_action));
 });
 
 test('PlayRecordCore routes web facade playback through the internal backend gate', async () => {
