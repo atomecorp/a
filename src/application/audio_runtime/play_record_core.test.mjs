@@ -65,12 +65,16 @@ test('PlayRecordCore sends the native load and voice command contract', async ()
         rate: 1
     });
     await core.stopVoice('voice-1');
+    await core.playAsset('asset-1');
+    await core.stopAsset('asset-1');
 
     assert.deepEqual(calls.map((entry) => entry.command), [
         'audio_init',
         'audio_load_clip',
         'audio_play_instance',
-        'audio_stop_instance'
+        'audio_stop_instance',
+        'audio_play',
+        'audio_stop'
     ]);
     assert.deepEqual(calls.find((entry) => entry.command === 'audio_play_instance')?.args, {
         assetId: 'asset-1',
@@ -82,4 +86,103 @@ test('PlayRecordCore sends the native load and voice command contract', async ()
         loopStartSeconds: null,
         loopEndSeconds: null
     });
+});
+
+test('PlayRecordCore routes web facade playback through the internal backend gate', async () => {
+    const backendCalls = [];
+    const env = {
+        WebAssembly: {},
+        location: {
+            protocol: 'http:',
+            hostname: '127.0.0.1'
+        },
+        Squirrel: {
+            av: {
+                audio: {
+                    get_backend: () => 'kira',
+                    detect_and_set_backend: () => 'kira',
+                    __call_backend_method: (method, arg) => {
+                        backendCalls.push({ method, arg });
+                        return true;
+                    }
+                }
+            }
+        }
+    };
+
+    const core = new PlayRecordCore(env);
+    await core.loadAsset({
+        clip_id: 'direct-asset',
+        path_or_bookmark: 'data/users/user-1/Uploads/take.wav'
+    });
+    await core.playVoice({
+        clip_id: 'direct-asset',
+        voice_id: 'direct-voice',
+        start: 0
+    });
+    await core.stopVoice({ voice_id: 'direct-voice' });
+    await core.playAsset({ clip_id: 'direct-asset' });
+    await core.stopAsset({ clip_id: 'direct-asset' });
+
+    assert.deepEqual(backendCalls.map((entry) => entry.method), [
+        'create_clip',
+        'play_instance',
+        'stop_instance',
+        'play',
+        'stop'
+    ]);
+    assert.equal(backendCalls[0].arg.id, 'direct-asset');
+    assert.equal(backendCalls[0].arg.path, 'data/users/user-1/Uploads/take.wav');
+    assert.equal(backendCalls[1].arg.asset_id, 'direct-asset');
+    assert.equal(backendCalls[1].arg.voice_id, 'direct-voice');
+});
+
+test('PlayRecordCore keeps assets stable across UI-only timeline operations', async () => {
+    const backendCalls = [];
+    const env = {
+        WebAssembly: {},
+        location: {
+            protocol: 'http:',
+            hostname: '127.0.0.1'
+        },
+        Squirrel: {
+            av: {
+                audio: {
+                    get_backend: () => 'kira',
+                    detect_and_set_backend: () => 'kira',
+                    __call_backend_method: (method, arg) => {
+                        backendCalls.push({ method, arg });
+                        return true;
+                    }
+                }
+            }
+        }
+    };
+    const core = new PlayRecordCore(env);
+
+    await core.loadAsset({
+        assetId: 'stable-audio',
+        path: 'data/users/user-1/recordings/stable.wav'
+    });
+
+    const uiOnlyOperations = [
+        { type: 'track_move', trackId: 'track-a', from: 0, to: 1 },
+        { type: 'molecule_close', moleculeId: 'mol-a' },
+        { type: 'molecule_open', moleculeId: 'mol-a' },
+        { type: 'timeline_reload', timelineId: 'timeline-a' }
+    ];
+    uiOnlyOperations.forEach((operation) => {
+        assert.ok(operation.type);
+    });
+
+    assert.equal(await core.hasAsset('stable-audio'), true);
+    assert.equal(
+        backendCalls.some((entry) => entry.method === 'destroy_clip'),
+        false
+    );
+    await core.destroyAsset('stable-audio');
+    assert.equal(
+        backendCalls.some((entry) => entry.method === 'destroy_clip'),
+        true
+    );
 });

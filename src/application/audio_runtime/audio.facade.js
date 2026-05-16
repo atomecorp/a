@@ -1,3 +1,4 @@
+import { getPlayRecordCore } from './play_record_core.js';
 import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
 // Squirrel AV Audio Facade — Unified Audio Engine entry point
@@ -62,7 +63,7 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
   // API facade: routes to active backend
   const immediateNames = new Set(['create_clip', 'destroy_clip', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param']);
-  const proxyCall = (name) => (arg) => {
+  const callBackendMethod = (name, arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       return false;
     }
@@ -74,6 +75,16 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
     enqueue({ name, arg });
     // Return lightweight ack; results delivered via events
     return true;
+  };
+  const proxyCall = (name) => (arg) => callBackendMethod(name, arg);
+
+  const coreCall = (method, arg) => {
+    try {
+      const core = getPlayRecordCore(window);
+      return core[method](arg);
+    } catch (_) {
+      return false;
+    }
   };
 
   audio.set_backend = (name) => {
@@ -95,15 +106,20 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   };
 
   // Public API (façade)
-  audio.create_clip = proxyCall('create_clip');
-  audio.destroy_clip = proxyCall('destroy_clip');
-  audio.play = proxyCall('play');
-  audio.play_instance = proxyCall('play_instance');
-  audio.stop = proxyCall('stop');
-  audio.stop_instance = proxyCall('stop_instance');
-  audio.stop_clip = proxyCall('stop_clip');
-  audio.jump = proxyCall('jump');
-  audio.set_param = proxyCall('set_param');
+  audio.create_clip = (arg) => coreCall('loadAsset', arg);
+  audio.destroy_clip = (arg) => coreCall('destroyAsset', (typeof arg === 'string' ? arg : (arg && (arg.id || arg.clip_id || arg.clipId || arg.assetId || arg.asset_id))));
+  audio.play = (arg) => coreCall('playAsset', arg);
+  audio.play_instance = (arg) => coreCall('playVoice', arg);
+  audio.stop = (arg) => coreCall('stopAsset', arg);
+  audio.stop_instance = (arg) => coreCall('stopVoice', arg);
+  audio.stop_clip = (arg) => coreCall('stopAsset', arg);
+  audio.jump = (arg) => coreCall('jumpAsset', arg);
+  audio.set_param = (arg = {}) => {
+    const id = arg && (arg.id || arg.clip_id || arg.clipId || arg.voiceId || arg.voice_id);
+    if (arg?.paramId === 'volume' || arg?.paramId === 'gain') return coreCall('setVoiceGain', id ? { voiceId: id, gain: arg.value } : arg);
+    if (arg?.paramId === 'playback_rate' || arg?.paramId === 'speed') return coreCall('setVoiceRate', id ? { voiceId: id, rate: arg.value } : arg);
+    return callBackendMethod('set_param', arg);
+  };
   audio.map_midi = proxyCall('map_midi');
   audio.add_marker = proxyCall('add_marker');
   audio.remove_marker = proxyCall('remove_marker');
@@ -113,6 +129,7 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
   // Backend registration hooks
   audio.__register_backend = (name, api) => { backends[name] = api; };
+  audio.__call_backend_method = callBackendMethod;
   audio.__emit = emit; // allow backends to emit on the facade bus
 
   // Auto detect backend

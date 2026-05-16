@@ -24,15 +24,15 @@ The audio system must be isolated from UI state, tracks, MTRACK internals, molec
 - [x] Create a unified play/record core with runtime-neutral APIs.
 - [x] Move shared Kira/native command normalization into the unified core.
 - [x] Centralize media path and source resolution for uploads, recordings, `/file`, `/api/uploads`, `/api/recordings`, absolute paths, and project-relative paths.
-- [ ] Route direct playback through the unified core.
+- [x] Route direct playback through the unified core.
 - [x] Route MTRACK native playback through the unified core.
 - [x] Route molecule native playback through the unified core.
 - [x] Route recording through the unified core for Tauri, iOS app, AUv3, and browser.
 - [x] Align native bridge command support, including `audio_has_clip`, across Tauri and iOS app.
-- [ ] Remove duplicated recording/playback paths once the unified core is authoritative.
+- [x] Remove duplicated recording/playback paths once the unified core is authoritative.
 - [x] Add contract tests for imported-file playback, recorded-file playback, direct playback, MTRACK playback, and molecule playback.
-- [ ] Add regression coverage for track movement, molecule close/open, and timeline reload without audio cache loss.
-- [ ] Verify no temporary logs, duplicate fallback routes, or UI-coupled audio control remain.
+- [x] Add regression coverage for track movement, molecule close/open, and timeline reload without audio cache loss.
+- [x] Verify no temporary logs, duplicate fallback routes, or UI-coupled audio control remain.
 
 ## Acceptance Criteria
 

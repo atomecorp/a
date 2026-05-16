@@ -39,6 +39,8 @@ const readCanonicalSourceValue = (source = {}) => safeString(
     || source.localPath
     || source.file_path
     || source.filePath
+    || source.path_or_bookmark
+    || source.pathOrBookmark
     || source.path
     || source.media_url
     || source.mediaUrl
@@ -56,6 +58,8 @@ export const canonicalizePlayRecordMediaSource = (input = {}) => {
         source.localPath,
         source.file_path,
         source.filePath,
+        source.path_or_bookmark,
+        source.pathOrBookmark,
         source.path,
         source.media_url,
         source.mediaUrl,
@@ -67,13 +71,15 @@ export const canonicalizePlayRecordMediaSource = (input = {}) => {
         || source.mediaRef
         || source.assetId
         || source.asset_id
+        || source.clipId
+        || source.clip_id
         || source.id
         || localPath
         || sourceValue
     );
     return Object.freeze({
         mediaRef,
-        assetId: safeString(source.assetId || source.asset_id || source.id || mediaRef),
+        assetId: safeString(source.assetId || source.asset_id || source.clipId || source.clip_id || source.id || mediaRef),
         source: sourceValue,
         localPath,
         url: safeString(source.url || source.media_url || source.mediaUrl),
@@ -171,7 +177,7 @@ export class PlayRecordCore {
 
     async loadAsset(input = {}) {
         const media = canonicalizePlayRecordMediaSource(input);
-        const assetId = safeString(input.assetId || input.asset_id || media.assetId);
+        const assetId = safeString(input.assetId || input.asset_id || input.clipId || input.clip_id || input.id || media.assetId);
         if (!assetId) {
             throw new Error('play_record_asset_id_required');
         }
@@ -204,8 +210,8 @@ export class PlayRecordCore {
             return { ok: true, assetId, media, result };
         }
         const facade = this.facade();
-        if (typeof facade.create_clip !== 'function') {
-            throw new Error('play_record_facade_create_clip_unavailable');
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
         }
         const payload = {
             id: assetId,
@@ -213,12 +219,44 @@ export class PlayRecordCore {
             url: media.url || media.source,
             bytes: media.bytes
         };
-        const result = await Promise.resolve(facade.create_clip(payload));
+        const result = await Promise.resolve(facade.__call_backend_method('create_clip', payload));
         if (result === false) {
             throw new Error('play_record_facade_load_failed');
         }
         this.assetCache.set(assetId, cacheKey);
         return { ok: true, assetId, media, result };
+    }
+
+    async playAsset(input = {}) {
+        const id = safeString(
+            typeof input === 'string'
+                ? input
+                : (input.assetId || input.asset_id || input.id || input.clipId || input.clip_id)
+        );
+        if (!id) {
+            throw new Error('play_record_asset_id_required');
+        }
+        await this.init();
+        const runtime = this.runtime();
+        if (
+            runtime.playback === 'tauri_native_kira'
+            || runtime.playback === 'ios_native_kira'
+        ) {
+            const result = await this.invoke()('audio_play', { id });
+            if (result?.success === false) {
+                throw new Error(safeString(result?.error) || 'play_record_native_direct_play_failed');
+            }
+            return { ok: true, result, assetId: id };
+        }
+        const facade = this.facade();
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
+        }
+        const result = await Promise.resolve(facade.__call_backend_method('play', { id }));
+        if (result === false) {
+            throw new Error('play_record_facade_direct_play_failed');
+        }
+        return { ok: true, result, assetId: id };
     }
 
     async playVoice(input = {}) {
@@ -242,11 +280,14 @@ export class PlayRecordCore {
             return { ok: true, result, payload };
         }
         const facade = this.facade();
-        if (typeof facade.play_instance !== 'function') {
-            throw new Error('play_record_facade_play_instance_unavailable');
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
         }
         const result = await Promise.resolve(
-            facade.play_instance(buildFacadeKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload))
+            facade.__call_backend_method(
+                'play_instance',
+                buildFacadeKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload)
+            )
         );
         if (result === false) {
             throw new Error('play_record_facade_play_failed');
@@ -270,17 +311,59 @@ export class PlayRecordCore {
             return { ok: true, result, payload };
         }
         const facade = this.facade();
-        if (typeof facade.stop_instance !== 'function') {
-            throw new Error('play_record_facade_stop_instance_unavailable');
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
         }
         const result = await Promise.resolve(
-            facade.stop_instance(buildFacadeKiraAudioPayload(KIRA_AUDIO_COMMANDS.STOP_INSTANCE, payload))
+            facade.__call_backend_method(
+                'stop_instance',
+                buildFacadeKiraAudioPayload(KIRA_AUDIO_COMMANDS.STOP_INSTANCE, payload)
+            )
         );
         return { ok: true, result, payload };
     }
 
+    async stopAsset(input = {}) {
+        const id = safeString(
+            typeof input === 'string'
+                ? input
+                : (input.assetId || input.asset_id || input.id || input.clipId || input.clip_id)
+        );
+        if (!id) return { ok: true, skipped: true };
+        await this.init();
+        const runtime = this.runtime();
+        if (
+            runtime.playback === 'tauri_native_kira'
+            || runtime.playback === 'ios_native_kira'
+        ) {
+            const result = await this.invoke()('audio_stop', { id });
+            return { ok: true, result, assetId: id };
+        }
+        const facade = this.facade();
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
+        }
+        const result = await Promise.resolve(facade.__call_backend_method('stop', { id }));
+        return { ok: true, result, assetId: id };
+    }
+
+    async jumpAsset(input = {}) {
+        const id = safeString(
+            typeof input === 'string'
+                ? input
+                : (input.assetId || input.asset_id || input.id || input.clipId || input.clip_id)
+        );
+        if (!id) return { ok: true, skipped: true };
+        await this.stopAsset(id);
+        return await this.playAsset(id);
+    }
+
     async destroyAsset(assetId = '') {
-        const id = safeString(assetId);
+        const id = safeString(
+            typeof assetId === 'string'
+                ? assetId
+                : (assetId?.assetId || assetId?.asset_id || assetId?.id || assetId?.clipId || assetId?.clip_id)
+        );
         if (!id) return { ok: true, skipped: true };
         await this.init();
         this.assetCache.delete(id);
@@ -293,17 +376,18 @@ export class PlayRecordCore {
             return { ok: true, result };
         }
         const facade = this.facade();
-        if (typeof facade.destroy_clip === 'function') {
-            await Promise.resolve(facade.destroy_clip({ id }));
+        if (typeof facade.__call_backend_method === 'function') {
+            await Promise.resolve(facade.__call_backend_method('destroy_clip', { id }));
         }
         return { ok: true };
     }
 
     async setVoiceGain(voiceId = '', gain = 1) {
-        const id = safeString(voiceId);
+        const source = (voiceId && typeof voiceId === 'object') ? voiceId : null;
+        const id = safeString(source ? (source.voiceId || source.voice_id || source.id || source.clipId || source.clip_id) : voiceId);
         if (!id) return { ok: true, skipped: true };
         await this.init();
-        const normalizedGain = Math.min(16, Math.max(0.000001, Number(gain) || 1));
+        const normalizedGain = Math.min(16, Math.max(0.000001, Number(source ? source.gain : gain) || 1));
         const db = 20 * Math.log10(normalizedGain);
         const runtime = this.runtime();
         if (
@@ -314,18 +398,19 @@ export class PlayRecordCore {
             return { ok: true, result, id, gain: normalizedGain };
         }
         const facade = this.facade();
-        if (typeof facade.set_param !== 'function') {
-            throw new Error('play_record_facade_set_param_unavailable');
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
         }
-        await Promise.resolve(facade.set_param({ id, paramId: 'volume', value: db }));
+        await Promise.resolve(facade.__call_backend_method('set_param', { id, paramId: 'volume', value: db }));
         return { ok: true, id, gain: normalizedGain };
     }
 
     async setVoiceRate(voiceId = '', rate = 1) {
-        const id = safeString(voiceId);
+        const source = (voiceId && typeof voiceId === 'object') ? voiceId : null;
+        const id = safeString(source ? (source.voiceId || source.voice_id || source.id || source.clipId || source.clip_id) : voiceId);
         if (!id) return { ok: true, skipped: true };
         await this.init();
-        const normalizedRate = Math.max(0.0001, Number(rate) || 1);
+        const normalizedRate = Math.max(0.0001, Number(source ? source.rate : rate) || 1);
         const runtime = this.runtime();
         if (
             runtime.playback === 'tauri_native_kira'
@@ -335,10 +420,10 @@ export class PlayRecordCore {
             return { ok: true, result, id, rate: normalizedRate };
         }
         const facade = this.facade();
-        if (typeof facade.set_param !== 'function') {
-            throw new Error('play_record_facade_set_param_unavailable');
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
         }
-        await Promise.resolve(facade.set_param({ id, paramId: 'playback_rate', value: normalizedRate }));
+        await Promise.resolve(facade.__call_backend_method('set_param', { id, paramId: 'playback_rate', value: normalizedRate }));
         return { ok: true, id, rate: normalizedRate };
     }
 
