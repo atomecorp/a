@@ -31,13 +31,31 @@ fn bits_to_f64(v: u64) -> f64 {
 /// Called from the audio input callback with raw f32 samples.
 /// Computes RMS and peak and stores atomically.
 pub fn push_samples(samples: &[f32]) {
-    if samples.is_empty() {
+    push_converted_samples(samples.len(), |index| samples[index]);
+}
+
+pub fn push_i16_samples(samples: &[i16]) {
+    push_converted_samples(samples.len(), |index| samples[index] as f32 / 32768.0);
+}
+
+pub fn push_u16_samples(samples: &[u16]) {
+    push_converted_samples(samples.len(), |index| {
+        (samples[index] as f32 - 32768.0) / 32768.0
+    });
+}
+
+fn push_converted_samples<F>(sample_count: usize, mut sample_at: F)
+where
+    F: FnMut(usize) -> f32,
+{
+    if sample_count == 0 {
         return;
     }
     let mut sum_sq: f64 = 0.0;
     let mut peak: f32 = 0.0;
     let mut clips: u64 = 0;
-    for &s in samples {
+    for index in 0..sample_count {
+        let s = sample_at(index);
         let abs = s.abs();
         sum_sq += (abs as f64) * (abs as f64);
         if abs > peak {
@@ -47,7 +65,7 @@ pub fn push_samples(samples: &[f32]) {
             clips += 1;
         }
     }
-    let rms = (sum_sq / samples.len() as f64).sqrt();
+    let rms = (sum_sq / sample_count as f64).sqrt();
 
     // Exponential smoothing for RMS
     let prev_smoothed = bits_to_f64(SMOOTHED_RMS_BITS.load(Ordering::Relaxed));
@@ -77,7 +95,11 @@ pub struct Levels {
 }
 
 fn to_db(linear: f64) -> f64 {
-    if linear > 0.0 { 20.0 * linear.log10() } else { -120.0 }
+    if linear > 0.0 {
+        20.0 * linear.log10()
+    } else {
+        -120.0
+    }
 }
 
 /// Read current levels (lock-free).
@@ -103,4 +125,36 @@ pub fn reset() {
     PEAK_BITS.store(0, Ordering::Relaxed);
     SMOOTHED_RMS_BITS.store(0, Ordering::Relaxed);
     CLIP_COUNT.store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{get_levels, push_i16_samples, push_samples, push_u16_samples, reset};
+
+    #[test]
+    fn metering_accepts_i16_samples_without_float_buffer() {
+        reset();
+        push_i16_samples(&[0, 16_384, -16_384, 32_767]);
+        let levels = get_levels();
+        assert!(levels.rms > 0.0);
+        assert!(levels.peak > 0.99);
+    }
+
+    #[test]
+    fn metering_accepts_u16_samples_without_float_buffer() {
+        reset();
+        push_u16_samples(&[32_768, 49_152, 16_384, 65_535]);
+        let levels = get_levels();
+        assert!(levels.rms > 0.0);
+        assert!(levels.peak > 0.99);
+    }
+
+    #[test]
+    fn metering_keeps_f32_path() {
+        reset();
+        push_samples(&[0.0, 0.25, -0.5, 1.0]);
+        let levels = get_levels();
+        assert!(levels.rms > 0.0);
+        assert!(levels.peak >= 1.0);
+    }
 }

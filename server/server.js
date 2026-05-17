@@ -779,6 +779,107 @@ async function resolveDownloadTarget(fileParam, userId) {
   return null;
 }
 
+function lowerFileExtension(fileName) {
+  return path.extname(String(fileName || '')).replace(/^\./, '').trim().toLowerCase();
+}
+
+function replaceFileExtension(fileName, extension) {
+  const cleanExtension = String(extension || '').trim().replace(/^\./, '');
+  const stem = path.basename(String(fileName || ''), path.extname(String(fileName || '')));
+  return sanitizeFileName(`${stem}.${cleanExtension}`);
+}
+
+function shouldServeWebmVideoAsMp4(fileName, mimeType = '') {
+  const lowerName = String(fileName || '').trim().toLowerCase();
+  const lowerMime = String(mimeType || '').trim().toLowerCase();
+  return lowerFileExtension(fileName) === 'webm'
+    && !lowerName.startsWith('audio_')
+    && !lowerName.startsWith('audio_recording_')
+    && !lowerMime.startsWith('audio/');
+}
+
+function resolveVideoCacheTarget(sourcePath, fileName) {
+  const parent = path.dirname(sourcePath);
+  const cacheDir = path.join(parent, '.video_cache');
+  const cachedName = replaceFileExtension(fileName, 'mp4');
+  return {
+    cacheDir,
+    cachedName,
+    cachedPath: path.join(cacheDir, cachedName)
+  };
+}
+
+async function transcodeVideoToMp4(sourcePath, outputPath) {
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await new Promise((resolve, reject) => {
+    execFile('ffmpeg', [
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-i',
+      sourcePath,
+      '-map',
+      '0:v:0',
+      '-map',
+      '0:a?',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-profile:v',
+      'baseline',
+      '-level',
+      '3.1',
+      '-movflags',
+      '+faststart',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      outputPath
+    ], { timeout: 120000 }, (error, _stdout, stderr) => {
+      if (error) {
+        const message = String(stderr || error.message || 'ffmpeg exited without details').trim();
+        reject(new Error(`recording_transcode_failed: ${message}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function ensureVideoPlaybackCache(sourcePath, fileName, mimeType = '') {
+  if (!shouldServeWebmVideoAsMp4(fileName, mimeType)) return null;
+  const target = resolveVideoCacheTarget(sourcePath, fileName);
+  try {
+    await fs.access(target.cachedPath);
+  } catch (_) {
+    await transcodeVideoToMp4(sourcePath, target.cachedPath);
+  }
+  return target;
+}
+
+async function resolveVideoPlaybackTarget(target) {
+  const sourcePath = target.filePath;
+  const sourceName = path.basename(sourcePath);
+  const downloadName = target.downloadName || sourceName;
+  const sourceMimeType = target.meta?.mime_type || '';
+  const cache = await ensureVideoPlaybackCache(sourcePath, sourceName, sourceMimeType);
+  if (!cache) {
+    return {
+      filePath: sourcePath,
+      downloadName,
+      mimeType: null
+    };
+  }
+  return {
+    filePath: cache.cachedPath,
+    downloadName: cache.cachedName,
+    mimeType: 'video/mp4'
+  };
+}
+
 // HTTPS Configuration
 let httpsOptions = null;
 if (process.env.USE_HTTPS === 'true') {
@@ -1644,6 +1745,7 @@ async function startServer() {
         });
 
         await fs.rm(uploadDir, { recursive: true, force: true });
+        await ensureVideoPlaybackCache(filePath, fileName, mimeHeader || '');
 
         if (DATABASE_ENABLED) {
           const mimeType = mimeHeader || null;
@@ -2064,10 +2166,11 @@ async function startServer() {
           return { success: false, error: target?.error || 'File not found' };
         }
 
-        await fs.access(target.filePath);
-        const stat = await fs.stat(target.filePath);
+        const playbackTarget = await resolveVideoPlaybackTarget(target);
+        await fs.access(playbackTarget.filePath);
+        const stat = await fs.stat(playbackTarget.filePath);
         const totalSize = stat.size;
-        const ext = path.extname(target.filePath).toLowerCase();
+        const ext = path.extname(playbackTarget.filePath).toLowerCase();
 
         // Resolve MIME type: DB metadata > extension lookup > logLine
         const MEDIA_MIME_TYPES = {
@@ -2079,11 +2182,11 @@ async function startServer() {
           '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
           '.pdf': 'application/pdf', '.json': 'application/json',
         };
-        const mimeType = (target.meta?.mime_type) || MEDIA_MIME_TYPES[ext] || 'application/octet-stream';
+        const mimeType = playbackTarget.mimeType || target.meta?.mime_type || MEDIA_MIME_TYPES[ext] || 'application/octet-stream';
 
         reply.header('Content-Type', mimeType);
         reply.header('Accept-Ranges', 'bytes');
-        reply.header('Content-Disposition', `inline; filename="${target.downloadName}"`);
+        reply.header('Content-Disposition', `inline; filename="${playbackTarget.downloadName || target.downloadName}"`);
         reply.header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
 
         // HTTP Range support for media seeking
@@ -2101,12 +2204,12 @@ async function startServer() {
             reply.code(206);
             reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
             reply.header('Content-Length', end - start + 1);
-            return reply.send(createReadStream(target.filePath, { start, end }));
+            return reply.send(createReadStream(playbackTarget.filePath, { start, end }));
           }
         }
 
         reply.header('Content-Length', totalSize);
-        return reply.send(createReadStream(target.filePath));
+        return reply.send(createReadStream(playbackTarget.filePath));
       } catch (error) {
         request.log.error({ err: error }, 'Unable to download upload');
         const status = error?.status || 404;
@@ -2127,10 +2230,11 @@ async function startServer() {
           return { success: false, error: target?.error || 'Recording not found' };
         }
 
-        await fs.access(target.filePath);
-        const stat = await fs.stat(target.filePath);
+        const playbackTarget = await resolveVideoPlaybackTarget(target);
+        await fs.access(playbackTarget.filePath);
+        const stat = await fs.stat(playbackTarget.filePath);
         const totalSize = stat.size;
-        const ext = path.extname(target.filePath).toLowerCase();
+        const ext = path.extname(playbackTarget.filePath).toLowerCase();
         const mediaMimeTypes = {
           '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime',
           '.webm': 'video/webm', '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska',
@@ -2139,11 +2243,11 @@ async function startServer() {
           '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg',
           '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml'
         };
-        const mimeType = target.meta?.mime_type || mediaMimeTypes[ext] || 'application/octet-stream';
+        const mimeType = playbackTarget.mimeType || target.meta?.mime_type || mediaMimeTypes[ext] || 'application/octet-stream';
 
         reply.header('Content-Type', mimeType);
         reply.header('Accept-Ranges', 'bytes');
-        reply.header('Content-Disposition', `inline; filename="${target.downloadName}"`);
+        reply.header('Content-Disposition', `inline; filename="${playbackTarget.downloadName || target.downloadName}"`);
         reply.header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
 
         const rangeHeader = request.headers.range;
@@ -2160,12 +2264,12 @@ async function startServer() {
             reply.code(206);
             reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
             reply.header('Content-Length', end - start + 1);
-            return reply.send(createReadStream(target.filePath, { start, end }));
+            return reply.send(createReadStream(playbackTarget.filePath, { start, end }));
           }
         }
 
         reply.header('Content-Length', totalSize);
-        return reply.send(createReadStream(target.filePath));
+        return reply.send(createReadStream(playbackTarget.filePath));
       } catch (error) {
         request.log.error({ err: error }, 'Unable to download recording');
         const status = error?.status || 404;
@@ -3047,6 +3151,7 @@ async function startServer() {
                 } catch (error) {
                   console.warn("[server] operation failed", error);
                 }
+                await ensureVideoPlaybackCache(filePath, fileName, mimeType || '');
 
                 if (DATABASE_ENABLED) {
                   const stats = await fs.stat(filePath).catch(() => null);

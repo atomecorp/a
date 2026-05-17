@@ -889,6 +889,121 @@ Do not expose marker/region features as ad hoc backend-specific parameters. The 
 
 ## Implementation Priorities
 
+## Execution Plan to Complete the AV Refactor
+
+This plan turns the audit into an implementation sequence. Each step must keep existing public behavior working while moving ownership to the target AV architecture.
+
+### Current Refactor Status
+
+Last updated: 2026-05-17
+
+Completed:
+
+- P1 public API boundary seed:
+  - Added shared AV contract helpers for lifecycle objects, media-neutral stores, and typed unsupported-capability errors.
+  - Added `Squirrel.av.audio.playback` and `Squirrel.av.audio.recording` compatibility namespaces while keeping legacy audio aliases working.
+  - Added `Squirrel.av.video.playback`, `Squirrel.av.video.recording`, and `Squirrel.av.video.preview` facade namespaces.
+  - Added targeted JS tests for audio/video API boundary behavior.
+- P0 Tauri codec/transcode separation:
+  - Moved video-container soundtrack extraction logic out of `src-tauri/src/audio_engine/bridge.rs`.
+  - Added `src-tauri/src/audio_engine/transcode.rs` for video container detection, native audio cache ownership, cache refresh policy, cache rebuild, and `ffmpeg` execution.
+  - Moved transcode/cache unit tests from the bridge into the transcode service.
+- P0 Tauri recorder realtime risk reduction:
+  - Removed direct `hound::WavWriter` disk writes from the CPAL input callback.
+  - Added a bounded lock-free SPSC ring buffer between the CPAL callback and a non-realtime WAV writer thread.
+  - Added explicit `overrun_frames` accounting when the realtime ring buffer cannot accept a full callback block.
+  - Added `overrun_frames` to the Tauri `audio_record_stop` JSON payload.
+- P0 recorder metering allocation cleanup:
+  - Removed per-callback `Vec<f32>` allocations for I16/U16 input metering.
+  - Added typed metering helpers for `i16` and `u16` slices.
+  - Added targeted Rust tests for f32/i16/u16 metering paths.
+
+Validated:
+
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed.
+- `npm run check:syntax` passed.
+- `rustfmt --check` on touched Rust audio engine files passed.
+- `cargo check` passed.
+- `cargo test audio_engine::transcode` passed.
+- `cargo test audio_engine::metering::tests` passed.
+
+Known validation caveat:
+
+- `cargo test audio_engine::` still fails on pre-existing CoreAudio device initialization tests in this environment (`Failed to create AudioManager`), then poisons the shared test lock. The new transcode and metering tests pass when run with targeted filters.
+
+Remaining:
+
+- Expose and monitor `overrun_frames` in the JS/UI recording diagnostics path.
+- Verify Tauri recording behavior with a real input device after the ring-buffer writer change.
+- Remove or gate production Swift/AUv3 debug paths in `platforms/ios/atome-auv3/auv3/utils.swift`.
+- Replace AUv3 legacy C FFI recorder/shim paths with a first-class native recorder backend.
+- Extract `MediaPersistenceService` from audio/video API files.
+- Extract preview service/UI ownership from `video_api.js`.
+- Replace in-memory AV marker/region stores with persisted Atome state.
+- Add and enforce `AVClock` on playback/recording sessions.
+- Add device enumeration/selection, latency reporting, codec profile registry, graph routing, video metrics, and offline export.
+- Continue splitting AUv3 `utils.swift` into render engine, decoder, playback state, recorder, transport observer, and diagnostics modules.
+
+### Phase 1: P0 Native Risk Removal
+
+1. Extract Tauri video-container audio extraction out of `src-tauri/src/audio_engine/bridge.rs`.
+   - Create a codec/transcode service module owned by the audio engine or a future media engine.
+   - Move video container detection, cache path creation, cache invalidation, and `ffmpeg` execution into that service.
+   - Keep `bridge.rs` limited to command validation, path resolution, calling playback/recorder/transcode services, and JSON response shaping.
+   - Add Rust unit tests for video-container detection and cache refresh behavior in the new service module.
+
+2. Replace CPAL callback disk writes in `src-tauri/src/audio_engine/recorder.rs`.
+   - The CPAL callback must only check atomics, copy samples into a bounded realtime queue, update frame counters, and push allocation-free metering taps.
+   - The WAV writer must run on a non-realtime writer loop that drains the queue and owns `hound::WavWriter`.
+   - Overflow must be explicit: increment an overrun counter and report it in `RecordResult`; do not block the audio callback.
+   - Stop/finalize must stop the stream first, close the producer, drain pending blocks, then finalize the WAV on the writer path.
+
+3. Remove per-callback allocations in recorder metering.
+   - Replace I16/U16 `Vec<f32>` conversion with allocation-free metering helpers that accept typed slices.
+   - Keep existing `audio_get_levels` response shape stable.
+   - Add unit coverage for metering conversion paths if pure functions are introduced.
+
+4. Gate or remove production Swift debug paths.
+   - Identify permanent debug prints and JS-evaluated diagnostics in `platforms/ios/atome-auv3/auv3/utils.swift`.
+   - Route remaining diagnostics through a production-safe structured logging flag.
+   - Avoid changing AUv3 render behavior until there is isolated coverage.
+
+5. Replace the AUv3 legacy C FFI recorder path.
+   - Inventory all `squirrel_recorder_core_*` and `RecorderCoreShim` call sites.
+   - Introduce a first-class AUv3 recorder backend interface with the same session lifecycle as `Squirrel.av.audio.recording`.
+   - Remove legacy shims only after the new backend is exercised by app and AUv3 hosts.
+
+### Phase 2: P1 Public Boundary Completion
+
+1. Keep `Squirrel.av.audio.playback` and `Squirrel.av.audio.recording` as the public split; migrate callers off legacy `create_clip`, `play_instance`, and `record_start` aliases incrementally.
+2. Promote `Squirrel.av.video.playback`, `Squirrel.av.video.recording`, and `Squirrel.av.video.preview` from compatibility wrappers to backend-adapter based APIs.
+3. Extract `MediaPersistenceService` from `audio_api.js` and `video_api.js` so recording stop does not own Atome/file persistence.
+4. Extract preview UI from `video_api.js`; capture services should publish preview frames or streams, and UI should subscribe.
+5. Add `AVClock` objects to recording/playback session creation and reject session APIs that omit a clock once migration is complete.
+
+### Phase 3: Shared Media Object Model
+
+1. Replace in-memory marker/region stores with persisted Atome state.
+2. Make audio and video playback use marker and region IDs instead of ad hoc start/duration parameters at the public API level.
+3. Add shared capability errors for unsupported reverse playback, scheduling, pitch/stretch, video retime, loop transition, and offline export.
+4. Add event emission for `av.asset.loaded`, `av.voice.started`, `av.recording.started`, `av.recording.stopped`, and `av.stream.overrun`.
+
+### Phase 4: Feature Completion and Validation
+
+1. Add device enumeration/selection for audio input/output and video input.
+2. Add latency reporting and compensation fields to session state.
+3. Add typed codec/container profiles and route all encode/decode/transcode jobs through codec services.
+4. Add video monitoring metrics: frame rate, dropped frames, jitter, decode latency, render latency, and A/V drift.
+5. Add offline export from timeline/media graph without DOM playback or screen recording.
+
+### Refactor Guardrails
+
+- No bridge module may own codec, persistence, preview UI, or transport policy after its phase is complete.
+- No realtime audio callback may lock, allocate, touch disk, spawn processes, or call JS.
+- Legacy aliases may remain temporarily, but they must delegate into the split AV APIs.
+- Missing backend behavior must return typed capability errors, not silent fallbacks or missing API fields.
+- Every phase must include targeted tests plus the global syntax/build check appropriate to the touched runtime.
+
 ### P0: Remove Structural Regressions and Realtime Risks
 
 1. Move CPAL callback disk writes to a lock-free ring buffer plus writer thread.

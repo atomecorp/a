@@ -13,10 +13,12 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
 use hound::{WavSpec, WavWriter};
+use ringbuf::{traits::*, HeapRb};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
+use std::time::Duration;
 
 use super::metering;
 
@@ -84,34 +86,6 @@ impl OutputFormat {
                 writer.write_sample(s)
             }
             Self::Float32 => writer.write_sample(sample),
-        }
-    }
-
-    fn write_i16_sample<W: std::io::Write + std::io::Seek>(
-        &self,
-        writer: &mut WavWriter<W>,
-        sample: i16,
-    ) -> Result<(), hound::Error> {
-        match self {
-            Self::Int16 => writer.write_sample(sample),
-            Self::Int24 => {
-                // Scale i16 → i24 range
-                writer.write_sample((sample as i32) << 8)
-            }
-            Self::Float32 => writer.write_sample(sample as f32 / 32768.0),
-        }
-    }
-
-    fn write_u16_sample<W: std::io::Write + std::io::Seek>(
-        &self,
-        writer: &mut WavWriter<W>,
-        sample: u16,
-    ) -> Result<(), hound::Error> {
-        let centered = sample as i32 - 32768;
-        match self {
-            Self::Int16 => writer.write_sample(centered as i16),
-            Self::Int24 => writer.write_sample(centered << 8),
-            Self::Float32 => writer.write_sample(centered as f32 / 32768.0),
         }
     }
 }
@@ -190,6 +164,7 @@ struct RecordingSession {
     channels: u16,
     output_format: OutputFormat,
     frame_count: Arc<AtomicU64>,
+    overrun_frames: Arc<AtomicU64>,
 }
 
 static SESSIONS: once_cell::sync::Lazy<Mutex<HashMap<String, RecordingSession>>> =
@@ -201,9 +176,49 @@ pub struct RecordResult {
     pub file_path: String,
     pub duration_sec: f64,
     pub frame_count: u64,
+    pub overrun_frames: u64,
     pub sample_rate: u32,
     pub channels: u16,
     pub output_format: String,
+}
+
+fn write_f32_buffer<W: std::io::Write + std::io::Seek>(
+    writer: &mut WavWriter<W>,
+    format: OutputFormat,
+    samples: &[f32],
+) -> Result<(), String> {
+    for &sample in samples {
+        format
+            .write_f32_sample(writer, sample)
+            .map_err(|error| format!("Failed to write WAV sample: {error}"))?;
+    }
+    Ok(())
+}
+
+fn spawn_wav_writer_thread(
+    mut consumer: ringbuf::HeapCons<f32>,
+    mut writer: WavWriter<std::io::BufWriter<std::fs::File>>,
+    output_format: OutputFormat,
+    writer_stop: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<Result<(), String>> {
+    std::thread::spawn(move || {
+        let mut buffer = vec![0.0_f32; 4096];
+        loop {
+            let count = consumer.pop_slice(&mut buffer);
+            if count > 0 {
+                write_f32_buffer(&mut writer, output_format, &buffer[..count])?;
+                continue;
+            }
+            if writer_stop.load(Ordering::Acquire) && consumer.is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        writer
+            .finalize()
+            .map_err(|error| format!("Failed to finalize WAV: {error}"))?;
+        Ok(())
+    })
 }
 
 pub fn start(
@@ -263,6 +278,8 @@ pub fn start_with_options(
     let stop_atomic_cb = Arc::clone(&stop_atomic);
     let frame_count = Arc::new(AtomicU64::new(0));
     let frame_count_thread = Arc::clone(&frame_count);
+    let overrun_frames = Arc::new(AtomicU64::new(0));
+    let overrun_frames_thread = Arc::clone(&overrun_frames);
     let path_owned = abs_wav_path.to_string();
     let sr = actual_sample_rate;
     let ch = actual_channels;
@@ -304,12 +321,20 @@ pub fn start_with_options(
 
             let writer = WavWriter::create(&path_owned, wav_spec)
                 .map_err(|e| format!("Failed to create WAV file {path_owned}: {e}"))?;
-            let writer = Arc::new(Mutex::new(Some(writer)));
-            let writer_clone = Arc::clone(&writer);
+            let rb_capacity = usize::try_from(actual_sr)
+                .unwrap_or(48_000)
+                .saturating_mul(usize::from(actual_ch.max(1)))
+                .saturating_mul(4)
+                .max(4096);
+            let rb = HeapRb::<f32>::new(rb_capacity);
+            let (producer, consumer) = rb.split();
+            let writer_stop = Arc::new(AtomicBool::new(false));
+            let writer_handle =
+                spawn_wav_writer_thread(consumer, writer, fmt, Arc::clone(&writer_stop));
 
             let stop_for_callback = Arc::clone(&stop_atomic_cb);
             let frame_count_cb = Arc::clone(&frame_count_thread);
-            let fmt_cb = fmt;
+            let overrun_frames_cb = Arc::clone(&overrun_frames_thread);
 
             let sample_format = default_config.sample_format();
 
@@ -318,35 +343,37 @@ pub fn start_with_options(
             };
 
             let stream = match sample_format {
-                SampleFormat::F32 => device
-                    .build_input_stream(
-                        &stream_config,
-                        move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                            if stop_for_callback.load(Ordering::Relaxed) {
-                                return;
-                            }
-                            metering::push_samples(data);
-                            if let Ok(mut guard) = writer_clone.lock() {
-                                if let Some(ref mut w) = *guard {
-                                    for &sample in data {
-                                        let _ = fmt_cb.write_f32_sample(w, sample);
-                                    }
+                SampleFormat::F32 => {
+                    let mut producer = producer;
+                    device
+                        .build_input_stream(
+                            &stream_config,
+                            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                                if stop_for_callback.load(Ordering::Relaxed) {
+                                    return;
                                 }
-                            }
-                            frame_count_cb.fetch_add(
-                                (data.len() / usize::from(actual_ch.max(1))) as u64,
-                                Ordering::Relaxed,
-                            );
-                        },
-                        err_fn,
-                        None,
-                    )
-                    .map_err(|e| format!("Failed to build input stream: {e}"))?,
+                                metering::push_samples(data);
+                                let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
+                                if producer.vacant_len() >= data.len() {
+                                    let written = producer.push_slice(data);
+                                    frame_count_cb.fetch_add(
+                                        (written / usize::from(actual_ch.max(1))) as u64,
+                                        Ordering::Relaxed,
+                                    );
+                                } else {
+                                    overrun_frames_cb.fetch_add(frames, Ordering::Relaxed);
+                                }
+                            },
+                            err_fn,
+                            None,
+                        )
+                        .map_err(|e| format!("Failed to build input stream: {e}"))?
+                }
                 SampleFormat::I16 => {
-                    let writer_clone2 = Arc::clone(&writer);
+                    let mut producer = producer;
                     let stop_for_callback2 = Arc::clone(&stop_atomic_cb);
                     let frame_count_cb2 = Arc::clone(&frame_count_thread);
-                    let fmt_cb2 = fmt;
+                    let overrun_frames_cb2 = Arc::clone(&overrun_frames_thread);
                     device
                         .build_input_stream(
                             &stream_config,
@@ -354,20 +381,24 @@ pub fn start_with_options(
                                 if stop_for_callback2.load(Ordering::Relaxed) {
                                     return;
                                 }
-                                let floats: Vec<f32> =
-                                    data.iter().map(|&s| s as f32 / 32768.0).collect();
-                                metering::push_samples(&floats);
-                                if let Ok(mut guard) = writer_clone2.lock() {
-                                    if let Some(ref mut w) = *guard {
-                                        for &sample in data {
-                                            let _ = fmt_cb2.write_i16_sample(w, sample);
+                                metering::push_i16_samples(data);
+                                let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
+                                if producer.vacant_len() >= data.len() {
+                                    let mut written = 0usize;
+                                    for &sample in data {
+                                        if producer.try_push(sample as f32 / 32768.0).is_ok() {
+                                            written += 1;
+                                        } else {
+                                            break;
                                         }
                                     }
+                                    frame_count_cb2.fetch_add(
+                                        (written / usize::from(actual_ch.max(1))) as u64,
+                                        Ordering::Relaxed,
+                                    );
+                                } else {
+                                    overrun_frames_cb2.fetch_add(frames, Ordering::Relaxed);
                                 }
-                                frame_count_cb2.fetch_add(
-                                    (data.len() / usize::from(actual_ch.max(1))) as u64,
-                                    Ordering::Relaxed,
-                                );
                             },
                             err_fn,
                             None,
@@ -375,10 +406,10 @@ pub fn start_with_options(
                         .map_err(|e| format!("Failed to build input stream (i16): {e}"))?
                 }
                 SampleFormat::U16 => {
-                    let writer_clone3 = Arc::clone(&writer);
+                    let mut producer = producer;
                     let stop_for_callback3 = Arc::clone(&stop_atomic_cb);
                     let frame_count_cb3 = Arc::clone(&frame_count_thread);
-                    let fmt_cb3 = fmt;
+                    let overrun_frames_cb3 = Arc::clone(&overrun_frames_thread);
                     device
                         .build_input_stream(
                             &stream_config,
@@ -386,22 +417,25 @@ pub fn start_with_options(
                                 if stop_for_callback3.load(Ordering::Relaxed) {
                                     return;
                                 }
-                                let floats: Vec<f32> = data
-                                    .iter()
-                                    .map(|&s| (s as f32 - 32768.0) / 32768.0)
-                                    .collect();
-                                metering::push_samples(&floats);
-                                if let Ok(mut guard) = writer_clone3.lock() {
-                                    if let Some(ref mut w) = *guard {
-                                        for &sample in data {
-                                            let _ = fmt_cb3.write_u16_sample(w, sample);
+                                metering::push_u16_samples(data);
+                                let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
+                                if producer.vacant_len() >= data.len() {
+                                    let mut written = 0usize;
+                                    for &sample in data {
+                                        let centered = sample as f32 - 32768.0;
+                                        if producer.try_push(centered / 32768.0).is_ok() {
+                                            written += 1;
+                                        } else {
+                                            break;
                                         }
                                     }
+                                    frame_count_cb3.fetch_add(
+                                        (written / usize::from(actual_ch.max(1))) as u64,
+                                        Ordering::Relaxed,
+                                    );
+                                } else {
+                                    overrun_frames_cb3.fetch_add(frames, Ordering::Relaxed);
                                 }
-                                frame_count_cb3.fetch_add(
-                                    (data.len() / usize::from(actual_ch.max(1))) as u64,
-                                    Ordering::Relaxed,
-                                );
                             },
                             err_fn,
                             None,
@@ -417,10 +451,10 @@ pub fn start_with_options(
                 .play()
                 .map_err(|e| format!("Failed to start recording stream: {e}"))?;
 
-            Ok((stream, writer))
+            Ok((stream, writer_stop, writer_handle))
         })();
 
-        let (stream, writer) = match init_result {
+        let (stream, writer_stop, writer_handle) = match init_result {
             Ok(value) => {
                 let _ = ready_tx.send(Ok(()));
                 value
@@ -437,11 +471,11 @@ pub fn start_with_options(
         // Drop stream first (stops audio callbacks)
         drop(stream);
 
-        // Finalize WAV
-        let mut guard = writer.lock().map_err(|e| format!("Lock error: {e}"))?;
-        if let Some(w) = guard.take() {
-            w.finalize()
-                .map_err(|e| format!("Failed to finalize WAV: {e}"))?;
+        writer_stop.store(true, Ordering::Release);
+        match writer_handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => return Err(error),
+            Err(_) => return Err("WAV writer thread panicked".to_string()),
         }
 
         Ok(0.0) // duration computed from Instant in stop()
@@ -481,6 +515,7 @@ pub fn start_with_options(
             channels: actual_channels,
             output_format,
             frame_count,
+            overrun_frames,
         },
     );
 
@@ -507,6 +542,7 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
         }
     }
     let frame_count = session.frame_count.load(Ordering::Relaxed);
+    let overrun_frames = session.overrun_frames.load(Ordering::Relaxed);
     let duration_sec = if session.sample_rate > 0 {
         frame_count as f64 / session.sample_rate as f64
     } else {
@@ -523,6 +559,7 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
         file_path: session.file_path,
         duration_sec,
         frame_count,
+        overrun_frames,
         sample_rate: session.sample_rate,
         channels: session.channels,
         output_format: format!("{:?}", session.output_format),
