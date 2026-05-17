@@ -3,6 +3,7 @@ import {
     resolveAudioRuntime,
     resolveVoiceCaptureProvider
 } from './runtime_audio_backend.js';
+import { installSharedAVContracts } from './av_contracts.js';
 
 // Unified recorder API (Tauri + AUv3 + browser capture backend)
 // Contract:
@@ -14,6 +15,7 @@ import {
 
     const PENDING = new Map();
     let listenersReady = false;
+    const av = installSharedAVContracts(window);
 
     function updateRecordProvider() {
         window.__SQUIRREL_RECORD_PROVIDER__ = resolveVoiceCaptureProvider(window);
@@ -36,6 +38,20 @@ import {
 
     function defaultSampleRate(context, source) {
         return null;
+    }
+
+    function reportRecordingOverrun(result = {}, entry = {}) {
+        const overrunFrames = Number(result?.overrun_frames || result?.overrunFrames || 0);
+        if (!Number.isFinite(overrunFrames) || overrunFrames <= 0) return null;
+        return av.monitoring.reportStreamOverrun({
+            media_kind: 'audio',
+            session_id: result.session_id || result.sessionId || entry.sessionId || '',
+            stream_id: result.session_id || result.sessionId || entry.sessionId || '',
+            provider: result.provider || entry.provider || '',
+            overrun_frames: overrunFrames,
+            sample_rate: result.sample_rate || result.sampleRate || entry.sampleRate || 0,
+            channels: result.channels || entry.channels || 0
+        });
     }
 
     function defaultChannels(context, source) {
@@ -199,7 +215,7 @@ import {
                 const frameCount = Number(detail.frame_count || detail.frameCount || 0);
                 const overrunFrames = Number(detail.overrun_frames || detail.overrunFrames || 0);
                 const sampleRate = Number(detail.sample_rate || detail.sampleRate || entry.sampleRate || 0);
-                entry.stop.resolve({
+                const resolved = {
                     ...detail,
                     session_id: sessionId,
                     file_name: detail.file_name || detail.fileName || entry.fileName || null,
@@ -212,7 +228,9 @@ import {
                     sample_rate: sampleRate,
                     channels: Number(detail.channels || entry.channels || 0),
                     provider: entry.provider || 'iplug_native_recorder'
-                });
+                };
+                const monitoring = reportRecordingOverrun(resolved, entry);
+                entry.stop.resolve(monitoring ? { ...resolved, monitoring } : resolved);
                 entry.stop = null;
             }
             PENDING.delete(sessionId);
@@ -371,7 +389,7 @@ import {
                 const frameCount = Number(result?.frame_count || result?.frameCount || 0);
                 const overrunFrames = Number(result?.overrun_frames || result?.overrunFrames || 0);
                 const sampleRate = Number(result?.sample_rate || result?.sampleRate || entry.sampleRate || 0);
-                return {
+                const resolved = {
                     session_id: sid,
                     file_name: entry.fileName,
                     file_path: entry.filePath,
@@ -385,6 +403,8 @@ import {
                     channels: Number(result?.channels || entry.channels || 0),
                     provider: entry.provider
                 };
+                const monitoring = reportRecordingOverrun(resolved, entry);
+                return monitoring ? { ...resolved, monitoring } : resolved;
             } finally {
                 PENDING.delete(sid);
             }

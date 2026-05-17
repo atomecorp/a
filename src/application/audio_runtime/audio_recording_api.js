@@ -6,21 +6,23 @@ export class AudioRecordingAPI {
         this.env = env;
         this.core = core;
         this.sessions = new Map();
-        installSharedAVContracts(env);
+        this.av = installSharedAVContracts(env);
     }
 
     createRecordingSession(input = {}) {
+        const clock = this.av.clocks.requireClock(input.clockId || input.clock_id || 'default');
         const session = createAVLifecycleObject({
             id: input.sessionId || input.session_id || input.id || '',
             runtimeBackend: this.core.runtime()?.recording || 'audio.recording',
             ownerUserId: input.ownerUserId || input.owner_user_id || null,
             projectId: input.projectId || input.project_id || null,
-            clockId: input.clockId || input.clock_id || 'default',
+            clockId: clock.id,
             traceId: input.traceId || input.trace_id || ''
         });
         const next = Object.freeze({
             ...session,
             media_kind: 'audio',
+            clock,
             source: input.source || 'mic',
             options: { ...input }
         });

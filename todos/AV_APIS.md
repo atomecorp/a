@@ -31,9 +31,9 @@ Current strengths:
 Current blockers:
 
 - Audio playback and recording are still combined in `PlayRecordCore`.
-- Video recording APIs own capture, preview, persistence, UI placement, and Atome creation in the same module.
+- Video recording APIs still own capture; Atome persistence and preview UI ownership have moved behind dedicated services.
 - Tauri `bridge.rs` performs video-container audio extraction with `ffmpeg`, which mixes transport/API command handling with codec/container management.
-- AUv3 `utils.swift` still contains playback rendering, decoding, recording, transport polling, debug capture, and legacy C FFI recorder bindings in one realtime-sensitive class.
+- AUv3 `utils.swift` still contains playback rendering, decoding, recording, transport polling, and debug capture in one realtime-sensitive class.
 - Browser/WebMedia recording paths still duplicate audio/video capture behavior outside the unified AV contract.
 - Several "fallback", "legacy", and "shim" paths remain and should be treated as architectural debt, not as final architecture.
 
@@ -179,7 +179,7 @@ Video rendering is not isolated. `video_api.js` owns preview panel creation, DOM
 Violation:
 
 - `AppNativeVideoRecorder` records movie files and encodes/dispatches JPEG preview frames through `WebViewManager.evaluateJS`.
-- `video_api.js` handles native capture, browser capture, project media creation, preview UI, preview stream registry, and playback helpers.
+- `video_api.js` handles native capture, browser capture, and playback helpers; project media creation routes through `MediaPersistenceService`, while preview stream and panel ownership route through preview services.
 
 Required split:
 
@@ -346,12 +346,12 @@ Required split:
 - `AppNativeMediaCaptureController` handles photo, permissions, preview, video recording, and preview host attachment.
 - `AppNativeVideoRecorder` couples native recording with preview frame encoding and JS dispatch.
 - `bridge.rs` couples Tauri command handling with ffmpeg process execution and media cache management.
-- `utils.swift` couples AUv3 render, file playback, decode, recording, transport polling, debug capture, and legacy C FFI bindings.
+- `utils.swift` couples AUv3 render, file playback, decode, recording, transport polling, and debug capture.
 
 ### Obsolete or Transitional Abstractions
 
-- `squirrel_recorder_core_*` in AUv3 Swift is explicitly deprecated and bypasses the target unified Kira/CPAL engine.
-- `RecorderCoreShim.mm` and related shim naming should be removed or replaced by a first-class native recorder backend.
+- AUv3 Swift recording now routes through a native recorder backend instead of declaring `squirrel_recorder_core_*` C FFI calls directly.
+- The previous `RecorderCoreShim.mm` build-time shim has been replaced by a named AUv3 native recorder backend boundary.
 - `backend.kira.js` still describes replacing legacy paths but contains AUv3 command-specific branches.
 - Empty diagnostic functions such as `logRecordDiag`, `logAudioDiag`, and `logVideoDiag` create inert instrumentation surfaces.
 
@@ -925,6 +925,29 @@ Completed:
   - Added a centralized `AUv3Diagnostics` gate in `platforms/ios/atome-auv3/auv3/utils.swift`.
   - Replaced direct Swift `print` diagnostics in the AUv3 utility with diagnostics-gated calls.
   - Removed remaining `fallback` wording from touched AUv3 comments to keep runtime policy explicit.
+- P0 AUv3 recorder backend boundary:
+  - Removed Swift `@_silgen_name` recorder declarations from `platforms/ios/atome-auv3/auv3/utils.swift`.
+  - Added `AUv3NativeRecorderBackend` as a first-class Objective-C++ recorder boundary for AUv3 recording start, stop, planar push, and interleaved push.
+  - Added an AUv3 Swift bridging header for the recorder backend.
+  - Removed the previous `RecorderCoreShim.mm` build-time shim.
+- P1 MediaPersistenceService extraction:
+  - Added `src/application/eVe/domains/media/api/media_persistence_service.js`.
+  - Moved shared recording Atome ID/path resolution, media URL resolution, project Atome commit, and render projection logic out of `audio_api.js` and `video_api.js`.
+  - Kept video-specific placement and authenticated media URL behavior via service options instead of keeping persistence code in `video_api.js`.
+- P1 preview service/UI extraction:
+  - Added `src/application/eVe/domains/media/preview/video_preview_stream_service.js`.
+  - Moved the shared live preview `MediaStream` registry, refcounting, acquisition, release, and safe stream stop behavior out of `video_api.js`.
+  - Added `src/application/eVe/domains/media/preview/video_preview_panel_service.js`.
+  - Moved camera preview panel state, DOM ownership, drag/resize behavior, panel/surface presentation, and open/close/switch lifecycle out of `video_api.js`.
+  - Kept `video_api.js` as the public API boundary and native/browser capture runtime provider.
+- P1 AV monitoring overrun surface:
+  - Added `Squirrel.av.monitoring` through the shared AV contracts.
+  - Added `AVMonitoringStore.reportStreamOverrun`, `listStreamOverruns`, and `getStreamOverrunSummary`.
+  - Connected native recorder `overrun_frames` results from `record_stop` to `av.stream.overrun` monitoring reports.
+- P1 AVClock contract:
+  - Added `AVClock` and `AVClockRegistry` to the shared AV contracts.
+  - Exposed clocks through `Squirrel.av.clocks` and `Squirrel.av.sync.clocks`.
+  - Required audio recording sessions, audio voice creation, video recording sessions, and video assets to resolve a registered clock and carry a verified `clock_id`.
 
 Validated:
 
@@ -936,6 +959,17 @@ Validated:
 - `cargo test audio_engine::metering::tests` passed.
 - `xcodebuild -list -project platforms/ios/atome-auv3/atome.xcodeproj` passed and identified the `atomeAudioUnit` scheme.
 - `xcodebuild -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed.
+- `xcodebuild -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed after the AUv3 native recorder backend change.
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after the MediaPersistenceService extraction.
+- `npm run check:syntax` passed after the MediaPersistenceService extraction.
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after the preview stream service extraction.
+- `npm run check:syntax` passed after the preview stream service extraction.
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after the preview panel service extraction.
+- `npm run check:syntax` passed after the preview panel service extraction.
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after adding AV monitoring overrun reports.
+- `npm run check:syntax` passed after adding AV monitoring overrun reports.
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after adding `AVClock`.
+- `npm run check:syntax` passed after adding `AVClock`.
 
 Known validation caveat:
 
@@ -943,13 +977,8 @@ Known validation caveat:
 
 Remaining:
 
-- Surface `overrun_frames` in production UI/monitoring once the centralized AV monitoring API exists.
 - Verify Tauri recording behavior with a real input device after the ring-buffer writer change.
-- Replace AUv3 legacy C FFI recorder/shim paths with a first-class native recorder backend.
-- Extract `MediaPersistenceService` from audio/video API files.
-- Extract preview service/UI ownership from `video_api.js`.
 - Replace in-memory AV marker/region stores with persisted Atome state.
-- Add and enforce `AVClock` on playback/recording sessions.
 - Add device enumeration/selection, latency reporting, codec profile registry, graph routing, video metrics, and offline export.
 - Continue splitting AUv3 `utils.swift` into render engine, decoder, playback state, recorder, transport observer, and diagnostics modules.
 

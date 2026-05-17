@@ -5,7 +5,7 @@ export class AudioPlaybackAPI {
     constructor(env = globalThis, core = getPlayRecordCore(env)) {
         this.env = env;
         this.core = core;
-        installSharedAVContracts(env);
+        this.av = installSharedAVContracts(env);
     }
 
     loadAsset(input = {}) {
@@ -33,10 +33,13 @@ export class AudioPlaybackAPI {
     }
 
     createVoice(input = {}) {
+        const clock = this.av.clocks.requireClock(input.clockId || input.clock_id || 'default');
         return {
             ok: true,
             voiceId: input.voiceId || input.voice_id || input.id || `voice_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-            assetId: input.assetId || input.asset_id || input.clipId || input.clip_id || null
+            assetId: input.assetId || input.asset_id || input.clipId || input.clip_id || null,
+            clockId: clock.id,
+            clock
         };
     }
 

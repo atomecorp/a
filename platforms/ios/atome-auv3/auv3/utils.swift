@@ -26,36 +26,6 @@ private enum AUv3Diagnostics {
     }
 }
 
-// DEPRECATED — Legacy C FFI recording bridge
-// These squirrel_recorder_core_* functions bypass the unified Kira/CPAL engine.
-// Kept for AUv3 backward compatibility until native AUv3 recording
-// is routed through the unified audio pipeline. Do NOT use for new features.
-
-@_silgen_name("squirrel_recorder_core_start")
-private func squirrel_recorder_core_start(_ path: UnsafePointer<CChar>,
-                                          _ sampleRate: UInt32,
-                                          _ channels: UInt16,
-                                          _ source: UnsafePointer<CChar>,
-                                          _ errOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Bool
-
-@_silgen_name("squirrel_recorder_core_stop")
-private func squirrel_recorder_core_stop(_ errOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-                                         _ outDurationSec: UnsafeMutablePointer<Double>) -> Bool
-
-@_silgen_name("squirrel_recorder_core_push")
-private func squirrel_recorder_core_push(_ data: UnsafePointer<UnsafePointer<Float>?>,
-                                         _ channels: UInt16,
-                                         _ frames: UInt32)
-
-@_silgen_name("squirrel_recorder_core_push_interleaved")
-private func squirrel_recorder_core_push_interleaved(_ data: UnsafePointer<Float>,
-                                                     _ channels: UInt16,
-                                                     _ frames: UInt32)
-
-@_silgen_name("squirrel_string_free")
-private func squirrel_string_free(_ s: UnsafeMutablePointer<CChar>?)
-
-
 // File d'attente circulaire pour messages JS (évite blocage thread principal)
 
 // Protocol for real-time audio data delegation
@@ -121,6 +91,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var recordingRelativePath: String = ""
     private var recordingInputBuffer: AVAudioPCMBuffer?
     private var recordingChannelPointers: [UnsafePointer<Float>?] = Array(repeating: nil, count: 8)
+    private let nativeRecorderBackend = AUv3NativeRecorderBackend()
     private var micRecordingEngine: AVAudioEngine?
     private var micRecordingFile: AVAudioFile?
     private var micRecordingFrames: AVAudioFramePosition = 0
@@ -891,19 +862,14 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 return
             }
         } else {
-            var errPtr: UnsafeMutablePointer<CChar>? = nil
-            let ok = url.path.withCString { pathPtr in
-                normalizedSource.withCString { srcPtr in
-                    squirrel_recorder_core_start(pathPtr, UInt32(sr), UInt16(ch), srcPtr, &errPtr)
-                }
-            }
-
+            let ok = nativeRecorderBackend.start(withPath: url.path,
+                                                 sampleRate: UInt32(sr),
+                                                 channels: UInt16(ch),
+                                                 source: normalizedSource)
             if !ok {
-                var message = "Recorder start failed"
-                if let errPtr {
-                    message = String(cString: errPtr)
-                    squirrel_string_free(errPtr)
-                }
+                let message = nativeRecorderBackend.lastErrorMessage.isEmpty
+                    ? "Recorder start failed"
+                    : nativeRecorderBackend.lastErrorMessage
                 emitRecordingEvent(type: "record_error", payload: [
                     "session_id": sessionId,
                     "error": message,
@@ -976,14 +942,11 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 stopErrorMessage = "audio_recording_empty"
             }
         } else {
-            var errPtr: UnsafeMutablePointer<CChar>? = nil
-            ok = squirrel_recorder_core_stop(&errPtr, &duration)
+            ok = nativeRecorderBackend.stop(withDuration: &duration)
             if !ok {
-                stopErrorMessage = "Recorder stop failed"
-                if let errPtr {
-                    stopErrorMessage = String(cString: errPtr)
-                    squirrel_string_free(errPtr)
-                }
+                stopErrorMessage = nativeRecorderBackend.lastErrorMessage.isEmpty
+                    ? "Recorder stop failed"
+                    : nativeRecorderBackend.lastErrorMessage
             }
         }
         if !ok {
@@ -1344,7 +1307,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             let buf = bufferList.buffer(at: 0)
             guard let mData = buf.mData else { return }
             let ptr = mData.assumingMemoryBound(to: Float.self)
-            squirrel_recorder_core_push_interleaved(ptr, UInt16(ch), UInt32(frames))
+            nativeRecorderBackend.pushInterleavedFloat32(ptr, channels: UInt16(ch), frames: UInt32(frames))
             return
         }
         if bufferList.numberOfBuffers < ch { return }
@@ -1356,7 +1319,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         }
         recordingChannelPointers.withUnsafeBufferPointer { ptr in
             if let base = ptr.baseAddress {
-                squirrel_recorder_core_push(base, UInt16(ch), UInt32(frames))
+                nativeRecorderBackend.pushPlanarFloat32(base, channels: UInt16(ch), frames: UInt32(frames))
             }
         }
     }

@@ -48,9 +48,11 @@ test('audio playback and recording APIs are separate wrappers over the legacy co
         voiceId: 'voice-boundary'
     });
 
-    const created = recording.createRecordingSession({ id: 'session-boundary', source: 'mic' });
+    env.Squirrel.av.clocks.create({ id: 'recording-clock', sampleRate: 48000 });
+    const created = recording.createRecordingSession({ id: 'session-boundary', source: 'mic', clockId: 'recording-clock' });
     assert.equal(created.session.media_kind, 'audio');
     assert.equal(created.session.state, 'created');
+    assert.equal(created.session.clock_id, 'recording-clock');
     const armed = recording.armRecordingSession('session-boundary');
     assert.equal(armed.session.state, 'armed');
 
@@ -68,11 +70,24 @@ test('shared AV stores provide media-neutral asset, marker, and region contracts
     const asset = av.assets.create({ id: 'asset-a', media_kind: 'video' });
     const marker = av.markers.create({ id: 'marker-a', asset_id: asset.id, seconds: 1.25, kind: 'cue' });
     const region = av.regions.create({ id: 'region-a', asset_id: asset.id, start_marker_id: marker.id });
+    const overrun = av.monitoring.reportStreamOverrun({
+        media_kind: 'audio',
+        session_id: 'session-a',
+        provider: 'tauri',
+        overrun_frames: 128,
+        sample_rate: 48000,
+        channels: 2
+    });
+    const clock = av.clocks.create({ id: 'session-clock', sampleRate: 48000 });
 
     assert.equal(av.schema_version, 1);
     assert.equal(av.assets.get('asset-a').media_kind, 'video');
     assert.equal(av.markers.list({ assetId: asset.id }).length, 1);
     assert.equal(av.regions.get(region.id).start_marker_id, marker.id);
+    assert.equal(overrun.event_type, 'av.stream.overrun');
+    assert.equal(av.monitoring.getStreamOverrunSummary({ session_id: 'session-a' }).overrun_frames, 128);
+    assert.equal(av.clocks.requireClock('session-clock').id, clock.id);
+    assert.equal(clock.secondsToSamples(0.5), 24000);
 });
 
 test('video facade exposes playback and recording namespaces with typed unsupported errors', () => {
@@ -84,9 +99,11 @@ test('video facade exposes playback and recording namespaces with typed unsuppor
     const loaded = video.playback.loadAsset({ id: 'video-asset', source: '/media/take.mov' });
     assert.equal(loaded.ok, true);
     assert.equal(video.playback.queryState('video-asset').loaded, true);
+    assert.equal(loaded.asset.clock_id, 'default');
 
     const session = video.recording.createRecordingSession({ id: 'video-session' });
     assert.equal(session.session.media_kind, 'video');
+    assert.equal(session.session.clock_id, 'default');
 
     assert.throws(
         () => video.playback.scheduleVoice({ assetId: 'video-asset' }),
