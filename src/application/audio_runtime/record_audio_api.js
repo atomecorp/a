@@ -4,7 +4,7 @@ import {
     resolveVoiceCaptureProvider
 } from './runtime_audio_backend.js';
 
-// Unified recorder API (Tauri + AUv3 + browser fallback)
+// Unified recorder API (Tauri + AUv3 + browser capture backend)
 // Contract:
 // - record_start(params) -> Promise<sessionId>
 // - record_stop(sessionId) -> Promise<payload> or throws
@@ -14,8 +14,6 @@ import {
 
     const PENDING = new Map();
     let listenersReady = false;
-
-    function logRecordDiag() { }
 
     function updateRecordProvider() {
         window.__SQUIRREL_RECORD_PROVIDER__ = resolveVoiceCaptureProvider(window);
@@ -157,15 +155,6 @@ import {
     }
 
     function sendNativeMessage(msg) {
-        logRecordDiag('send_native_message', {
-            action: msg?.action || null,
-            type: msg?.type || null,
-            session_id: msg?.sessionId || msg?.session_id || null,
-            file_name: msg?.fileName || msg?.file_name || null,
-            source: msg?.source || null,
-            has_to_dsp: typeof window.__toDSP === 'function',
-            has_swift_bridge: !!window.webkit?.messageHandlers?.swiftBridge
-        });
         if (typeof window.__toDSP === 'function') {
             window.__toDSP(msg);
             return true;
@@ -191,22 +180,9 @@ import {
         const type = detail.type || null;
         if (!type) return;
         const sessionId = detail.session_id || detail.sessionId || '';
-        logRecordDiag('native_event', {
-            type,
-            session_id: sessionId || null,
-            file_name: detail.file_name || detail.fileName || null,
-            file_path: detail.file_path || detail.path || null,
-            absolute_file_path: detail.absolute_file_path || null,
-            error: detail.error || detail.message || null,
-            duration_sec: detail.duration_sec || detail.durationSec || null,
-            frame_count: detail.frame_count || detail.frameCount || null,
-            sample_rate: detail.sample_rate || detail.sampleRate || null,
-            channels: detail.channels || null
-        });
         if (!sessionId) return;
         const entry = PENDING.get(sessionId);
         if (!entry) {
-            logRecordDiag('native_event_without_pending_entry', { type, session_id: sessionId });
             return;
         }
 
@@ -221,6 +197,7 @@ import {
         if (type === 'record_done') {
             if (entry.stop) {
                 const frameCount = Number(detail.frame_count || detail.frameCount || 0);
+                const overrunFrames = Number(detail.overrun_frames || detail.overrunFrames || 0);
                 const sampleRate = Number(detail.sample_rate || detail.sampleRate || entry.sampleRate || 0);
                 entry.stop.resolve({
                     ...detail,
@@ -231,6 +208,7 @@ import {
                         ? frameCount / sampleRate
                         : Number(detail.duration_sec || detail.durationSec || 0),
                     frame_count: frameCount,
+                    overrun_frames: Number.isFinite(overrunFrames) && overrunFrames > 0 ? overrunFrames : 0,
                     sample_rate: sampleRate,
                     channels: Number(detail.channels || entry.channels || 0),
                     provider: entry.provider || 'iplug_native_recorder'
@@ -274,15 +252,6 @@ import {
             ? params.channels
             : defaultChannels(context, source);
 
-        logRecordDiag('record_start_request', {
-            context,
-            source,
-            session_id: sessionId,
-            file_name: fileName,
-            sample_rate: sampleRate,
-            channels,
-            params_keys: Object.keys(params || {})
-        });
 
         if (context === 'tauri' || context === 'ios_app') {
             const invoke = getTauriInvoke(window);
@@ -310,13 +279,6 @@ import {
                 userId,
                 sampleRate: requestedSampleRate,
                 channels: requestedChannels
-            });
-            logRecordDiag('record_start_native_invoke_ok', {
-                context,
-                session_id: sessionId,
-                file_name: fileName,
-                file_path: filePath,
-                user_id: userId || null
             });
             PENDING.set(sessionId, {
                 provider: 'iplug_native_recorder',
@@ -382,7 +344,6 @@ import {
             pendingEntry.start = { resolve, reject };
             if (!sendNativeMessage(msg)) {
                 PENDING.delete(sessionId);
-                logRecordDiag('record_start_send_failed', { context, session_id: sessionId });
                 reject(new Error('Native recorder bridge is not available'));
             }
         });
@@ -395,13 +356,6 @@ import {
         if (!sid) throw new Error('Missing sessionId');
 
         const entry = PENDING.get(sid);
-        logRecordDiag('record_stop_request', {
-            session_id: sid,
-            has_entry: !!entry,
-            transport: entry?.transport || null,
-            file_name: entry?.fileName || null,
-            file_path: entry?.filePath || null
-        });
         if (entry?.transport === 'tauri' || entry?.transport === 'ios_app') {
             const invoke = getTauriInvoke(window);
             if (typeof invoke !== 'function') {
@@ -414,17 +368,8 @@ import {
                 const result = await invoke('audio_record_stop', {
                     sessionId: sid
                 });
-                logRecordDiag('record_stop_native_invoke_result', {
-                    session_id: sid,
-                    result,
-                    returned_file_path: result?.file_path || result?.path || null,
-                    returned_absolute_file_path: result?.absolute_file_path || null,
-                    returned_size_bytes: result?.size_bytes || null,
-                    returned_duration_sec: result?.duration_sec || null,
-                    returned_frame_count: result?.frame_count || result?.frameCount || null,
-                    returned_sample_rate: result?.sample_rate || result?.sampleRate || null
-                });
                 const frameCount = Number(result?.frame_count || result?.frameCount || 0);
+                const overrunFrames = Number(result?.overrun_frames || result?.overrunFrames || 0);
                 const sampleRate = Number(result?.sample_rate || result?.sampleRate || entry.sampleRate || 0);
                 return {
                     session_id: sid,
@@ -435,6 +380,7 @@ import {
                         ? frameCount / sampleRate
                         : Number(result?.duration_sec || 0),
                     frame_count: frameCount,
+                    overrun_frames: Number.isFinite(overrunFrames) && overrunFrames > 0 ? overrunFrames : 0,
                     sample_rate: sampleRate,
                     channels: Number(result?.channels || entry.channels || 0),
                     provider: entry.provider
@@ -477,7 +423,6 @@ import {
             PENDING.set(sid, pendingEntry);
             if (!sendNativeMessage(msg)) {
                 PENDING.delete(sid);
-                logRecordDiag('record_stop_send_failed', { session_id: sid });
                 reject(new Error('Native recorder bridge is not available'));
             }
         });

@@ -13,6 +13,19 @@ import Accelerate
 import os.lock
 import WebKit
 
+private enum AUv3Diagnostics {
+#if DEBUG
+    private static let enabled = ProcessInfo.processInfo.environment["ATOME_AUV3_DIAGNOSTICS"] == "1"
+#else
+    private static let enabled = false
+#endif
+
+    static func log(_ message: @autoclosure () -> String) {
+        guard enabled else { return }
+        fputs(message() + "\n", stderr)
+    }
+}
+
 // DEPRECATED — Legacy C FFI recording bridge
 // These squirrel_recorder_core_* functions bypass the unified Kira/CPAL engine.
 // Kept for AUv3 backward compatibility until native AUv3 recording
@@ -235,9 +248,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             let outIsFloat32 = (outFormat?.commonFormat == .pcmFormatFloat32)
             if !strongSelf.didLogOutputFormat, let fmt = outFormat {
                 strongSelf.didLogOutputFormat = true
-                print("🔊 AUv3 out fmt: sr=\(fmt.sampleRate) ch=\(fmt.channelCount) interleaved=\(fmt.isInterleaved) common=\(fmt.commonFormat.rawValue) bytesPerFrame=\(fmt.streamDescription.pointee.mBytesPerFrame)")
+                AUv3Diagnostics.log("🔊 AUv3 out fmt: sr=\(fmt.sampleRate) ch=\(fmt.channelCount) interleaved=\(fmt.isInterleaved) common=\(fmt.commonFormat.rawValue) bytesPerFrame=\(fmt.streamDescription.pointee.mBytesPerFrame)")
                 let bl = AudioBufferListWrapper(ptr: outputData)
-                print("🔊 AUv3 out buffers: \(bl.numberOfBuffers)")
+                AUv3Diagnostics.log("🔊 AUv3 out buffers: \(bl.numberOfBuffers)")
             }
             
             // File playback path (render decoded PCM if available)
@@ -648,7 +661,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             pendingScrubPreview = nil
         }
         self.playActive = on
-        // Prefer file playback when a file is loaded; fallback to test tone otherwise
+        // Prefer file playback when a file is loaded; use test tone only when no file is active.
     os_unfair_lock_lock(&fileLock)
         let hasFile = fileLoaded
         let hasAux = !auxSlots.isEmpty
@@ -665,7 +678,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     os_unfair_lock_unlock(&fileLock)
         // Do not enable tone while we are decoding a file (reduces perceived latency/beeps)
         self.isTestToneActive = on && !hasFile && !hasAux && !isDecodingFile
-        print("🎧 AUv3 playback state play=\(on) loaded=\(hasFile) decoding=\(isDecodingFile) aux=\(hasAux) frames=\(totalFrames) frameIndex=\(currentFrameIndex) tone=\(self.isTestToneActive)")
+        AUv3Diagnostics.log("🎧 AUv3 playback state play=\(on) loaded=\(hasFile) decoding=\(isDecodingFile) aux=\(hasAux) frames=\(totalFrames) frameIndex=\(currentFrameIndex) tone=\(self.isTestToneActive)")
         if on && hasFile {
             let sr = Int(getSampleRate() ?? 44100.0)
             fadeInTotal = max(128, min(sr / 100, 1024)) // ~10ms, clamped
@@ -700,7 +713,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
             }
             try? data.write(to: url)
-            print("📝 AUv3: wrote debug capture to \(url.path)")
+            AUv3Diagnostics.log("📝 AUv3: wrote debug capture to \(url.path)")
         }
     }
     public func setPlaybackPositionNormalized(_ pos: Float) {
@@ -846,7 +859,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
         if let requestedSr = sampleRate, abs(requestedSr - srDefault) > 0.5 {
             // AUv3 must use the host sample rate; ignore the requested rate and continue
-            print("ℹ️ AUv3: ignoring requested SR \(requestedSr), using host SR \(srDefault)")
+            AUv3Diagnostics.log("ℹ️ AUv3: ignoring requested SR \(requestedSr), using host SR \(srDefault)")
         }
         if normalizedSource == "plugin", let requestedCh = channels, Int(requestedCh) != Int(chDefault) {
             emitRecordingEvent(type: "record_error", payload: [
@@ -867,9 +880,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 let started = try startMicRecordingEngine(url: url)
                 actualSampleRate = started.sampleRate
                 actualChannels = UInt32(started.channels)
-                print("[AUV3_RECORD] mic_engine_start_ok session=\(sessionId) file=\(safeName) frames=0 peak=0.0")
+                AUv3Diagnostics.log("[AUV3_RECORD] mic_engine_start_ok session=\(sessionId) file=\(safeName) frames=0 peak=0.0")
             } catch {
-                print("[AUV3_RECORD] mic_engine_start_error session=\(sessionId) file=\(safeName) error=\(error.localizedDescription)")
+                AUv3Diagnostics.log("[AUV3_RECORD] mic_engine_start_error session=\(sessionId) file=\(safeName) error=\(error.localizedDescription)")
                 emitRecordingEvent(type: "record_error", payload: [
                     "session_id": sessionId,
                     "error": error.localizedDescription,
@@ -913,7 +926,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
         recordingState = .recording
 
-        print("[AUV3_RECORD] start_ok session=\(sessionId) file=\(safeName) source=\(normalizedSource) relative=\(relativePath) absolute=\(url.path) sample_rate=\(actualSampleRate) channels=\(actualChannels)")
+        AUv3Diagnostics.log("[AUV3_RECORD] start_ok session=\(sessionId) file=\(safeName) source=\(normalizedSource) relative=\(relativePath) absolute=\(url.path) sample_rate=\(actualSampleRate) channels=\(actualChannels)")
         emitRecordingEvent(type: "record_started", payload: [
             "session_id": sessionId,
             "file_name": safeName,
@@ -957,7 +970,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         if activeSource == "mic" {
             let stats = stopMicRecordingEngine(sampleRate: activeSampleRate)
             duration = stats.duration
-            print("[AUV3_RECORD] mic_engine_stop_ok session=\(activeSessionId) file=\(activeFileName) frames=\(stats.frames) peak=\(stats.peak)")
+            AUv3Diagnostics.log("[AUV3_RECORD] mic_engine_stop_ok session=\(activeSessionId) file=\(activeFileName) frames=\(stats.frames) peak=\(stats.peak)")
             if stats.frames <= 0 {
                 ok = false
                 stopErrorMessage = "audio_recording_empty"
@@ -984,7 +997,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             let fileExists = FileManager.default.fileExists(atPath: activePath)
             let fileSize = ((try? FileManager.default.attributesOfItem(atPath: activePath))?[.size] as? NSNumber)?.int64Value ?? -1
             let relativePath = activeRelativePath
-            print("[AUV3_RECORD] stop_ok session=\(activeSessionId) file=\(activeFileName) source=\(activeSource) relative=\(relativePath) absolute=\(activePath) exists=\(fileExists) bytes=\(fileSize) duration=\(duration) analysis=\(String(describing: analysis))")
+            AUv3Diagnostics.log("[AUV3_RECORD] stop_ok session=\(activeSessionId) file=\(activeFileName) source=\(activeSource) relative=\(relativePath) absolute=\(activePath) exists=\(fileExists) bytes=\(fileSize) duration=\(duration) analysis=\(String(describing: analysis))")
             let playbackStartFrameValue = audioDebugPlaybackStartFrame.map(Int.init)
             let recordingStartFrameValue = audioDebugRecordingStartFrame.map(Int.init)
             let expectedPeakFrameValue = audioDebugExpectedPeakFrame
@@ -1126,7 +1139,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 os_unfair_lock_unlock(&self.micRecordingLock)
                 try activeFile?.write(from: buffer)
             } catch {
-                print("[AUV3_RECORD] mic_engine_write_error file=\(url.lastPathComponent) error=\(error.localizedDescription)")
+                AUv3Diagnostics.log("[AUV3_RECORD] mic_engine_write_error file=\(url.lastPathComponent) error=\(error.localizedDescription)")
             }
         }
         engine.prepare()
@@ -1277,7 +1290,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 "first_peak_frame": firstPeakFrame as Any
             ]
         } catch {
-            print("⚠️ AUv3: failed to analyze recorded file at \(url.path): \(error.localizedDescription)")
+            AUv3Diagnostics.log("⚠️ AUv3: failed to analyze recorded file at \(url.path): \(error.localizedDescription)")
             return nil
         }
     }
@@ -1693,7 +1706,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         }
         os_unfair_lock_unlock(&fileLock)
 
-        print("🎧 AUv3 playback load request decision=\(logDecision) path=\(path) start=\(requestedPosition.map { String(format: "%.4f", $0) } ?? "nil") loaded=\(logLoaded) decoding=\(logDecoding) frames=\(logFrames) frameIndex=\(logFrameIndex)")
+        AUv3Diagnostics.log("🎧 AUv3 playback load request decision=\(logDecision) path=\(path) start=\(requestedPosition.map { String(format: "%.4f", $0) } ?? "nil") loaded=\(logLoaded) decoding=\(logDecoding) frames=\(logFrames) frameIndex=\(logFrameIndex)")
 
         if !shouldStartDecode {
             self.isTestToneActive = false
@@ -1710,7 +1723,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
     private func decodeFile(at path: String, gen: Int, startPositionNormalized: Float?) {
         let exists = FileManager.default.fileExists(atPath: path)
-        print("🔎 AUv3: decodeFile gen=\(gen) path=\(path) exists=\(exists) start=\(startPositionNormalized.map { String(format: "%.4f", $0) } ?? "nil")")
+        AUv3Diagnostics.log("🔎 AUv3: decodeFile gen=\(gen) path=\(path) exists=\(exists) start=\(startPositionNormalized.map { String(format: "%.4f", $0) } ?? "nil")")
         let url = URL(fileURLWithPath: path)
         do {
             let srcFile = try AVAudioFile(forReading: url)
@@ -1720,12 +1733,12 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 srcFile.framePosition = min(max(0, targetFrame), max(0, srcFile.length - 1))
             }
             guard let dstFormat = AVAudioFormat(standardFormatWithSampleRate: outSR, channels: 2) else {
-                print("❌ AUv3: Failed to create destination format")
+                AUv3Diagnostics.log("❌ AUv3: Failed to create destination format")
                 return
             }
             let converter = AVAudioConverter(from: srcFile.processingFormat, to: dstFormat)
             guard let converter = converter else {
-                print("❌ AUv3: AVAudioConverter init failed")
+                AUv3Diagnostics.log("❌ AUv3: AVAudioConverter init failed")
                 return
             }
 
@@ -1779,7 +1792,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             }
             let decodedFrames = outL.count
             DispatchQueue.main.async {
-                print("📥 AUv3: decoded file gen=\(gen) frames=\(decodedFrames) sr=\(Int(outSR))")
+                AUv3Diagnostics.log("📥 AUv3: decoded file gen=\(gen) frames=\(decodedFrames) sr=\(Int(outSR))")
             }
             // AVAudioFile path decodes whole file; signal ready now if we have frames
             if gen == self.currentDecodeGen, self.fileLoaded {
@@ -1787,8 +1800,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 self.consumePendingScrubPreviewIfNeeded(path: path)
             }
         } catch {
-            // AVAudioFile often fails in AUv3 extensions (sandbox restrictions); AVAssetReader fallback is the normal path
-            print("ℹ️ AUv3: AVAudioFile unavailable (\(error.localizedDescription)) — using AVAssetReader")
+            // AVAudioFile often fails in AUv3 extensions; AVAssetReader owns the alternate decode path.
+            AUv3Diagnostics.log("ℹ️ AUv3: AVAudioFile unavailable (\(error.localizedDescription)) — using AVAssetReader")
             decodeWithAssetReader(url: url, gen: gen, startPositionNormalized: startPositionNormalized)
         }
     }
@@ -1817,7 +1830,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             assetDuration = asset.duration
         }
         guard let track else {
-            print("❌ AUv3: no audio track in asset")
+            AUv3Diagnostics.log("❌ AUv3: no audio track in asset")
             if gen == self.currentDecodeGen {
                 self.isDecodingFile = false
             }
@@ -1834,7 +1847,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 let startTime = CMTime(seconds: requestedStartSeconds, preferredTimescale: 600)
                 reader.timeRange = CMTimeRange(start: startTime, duration: CMTime.positiveInfinity)
             }
-            print("🎧 AUv3 asset reader start gen=\(gen) file=\(url.lastPathComponent) requestedStart=\(String(format: "%.4f", requestedStartSeconds)) duration=\(durationSeconds.isFinite ? String(format: "%.4f", durationSeconds) : "unknown")")
+            AUv3Diagnostics.log("🎧 AUv3 asset reader start gen=\(gen) file=\(url.lastPathComponent) requestedStart=\(String(format: "%.4f", requestedStartSeconds)) duration=\(durationSeconds.isFinite ? String(format: "%.4f", durationSeconds) : "unknown")")
             // Request float32 PCM at host sample rate, stereo, interleaved
             let settings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
@@ -1848,7 +1861,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
             output.alwaysCopiesSampleData = false
             guard reader.canAdd(output) else {
-                print("❌ AUv3: cannot add asset reader output")
+                AUv3Diagnostics.log("❌ AUv3: cannot add asset reader output")
                 if gen == self.currentDecodeGen {
                     self.isDecodingFile = false
                 }
@@ -1856,7 +1869,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             }
             reader.add(output)
             guard reader.startReading() else {
-                print("❌ AUv3: asset reader failed to start")
+                AUv3Diagnostics.log("❌ AUv3: asset reader failed to start")
                 if gen == self.currentDecodeGen {
                     self.isDecodingFile = false
                 }
@@ -1893,7 +1906,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                         return Array(p)
                     }
                     if chunkCount < 3 {
-                        print("📦 AUv3: asset reader chunk floats=\(floats.count) ch=\(chCount) bytes=\(length)")
+                        AUv3Diagnostics.log("📦 AUv3: asset reader chunk floats=\(floats.count) ch=\(chCount) bytes=\(length)")
                         chunkCount += 1
                     }
                     if chCount >= 2 {
@@ -1924,7 +1937,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     let primedFrames = min(self.fileAudioL.count, self.fileAudioR.count)
                     os_unfair_lock_unlock(&fileLock)
                     primed = true
-                    DispatchQueue.main.async { print("🚀 AUv3: primed playback gen=\(gen) frames=\(primedFrames)") }
+                    DispatchQueue.main.async { AUv3Diagnostics.log("🚀 AUv3: primed playback gen=\(gen) frames=\(primedFrames)") }
                     self.isTestToneActive = false
                     // First chunk ready -> notify JS for zero-wait play
                     if gen == self.currentDecodeGen {
@@ -1949,7 +1962,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             if reader.status == .reading { reachedEOF = true }
 
             if reachedEOF && (!outL.isEmpty || primed) {
-                print("ℹ️ AUv3: asset reader reached EOF with status 'reading'; committing decoded data")
+                AUv3Diagnostics.log("ℹ️ AUv3: asset reader reached EOF with status 'reading'; committing decoded data")
                 var totalFrames = 0
                 if gen == self.currentDecodeGen {
                     os_unfair_lock_lock(&fileLock)
@@ -1969,7 +1982,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     os_unfair_lock_unlock(&fileLock)
                 }
                 let finalFrames = totalFrames
-                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader, EOF) gen=\(gen) frames=\(finalFrames)") }
+                DispatchQueue.main.async { AUv3Diagnostics.log("📥 AUv3: decoded (asset reader, EOF) gen=\(gen) frames=\(finalFrames)") }
                 self.isTestToneActive = false
                 // Do not auto-start playback; wait for explicit 'play' param from UI
                 if gen == self.currentDecodeGen {
@@ -1999,7 +2012,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     os_unfair_lock_unlock(&fileLock)
                 }
                 let finalFrames = totalFrames
-                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader) gen=\(gen) frames=\(finalFrames)") }
+                DispatchQueue.main.async { AUv3Diagnostics.log("📥 AUv3: decoded (asset reader) gen=\(gen) frames=\(finalFrames)") }
                 if outL.isEmpty {
                     // No decoded audio; keep silent (do not auto-enable test tone)
                     self.isTestToneActive = false
@@ -2015,21 +2028,21 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     self.consumePendingScrubPreviewIfNeeded(path: url.path)
                 }
             case .failed:
-                print("❌ AUv3: asset reader failed: \(reader.error?.localizedDescription ?? "unknown error")")
+                AUv3Diagnostics.log("❌ AUv3: asset reader failed: \(reader.error?.localizedDescription ?? "unknown error")")
                 if gen == self.currentDecodeGen {
                     self.isDecodingFile = false
                 }
             case .cancelled:
-                print("⚠️ AUv3: asset reader cancelled")
+                AUv3Diagnostics.log("⚠️ AUv3: asset reader cancelled")
                 if gen == self.currentDecodeGen {
                     self.isDecodingFile = false
                 }
             default:
-                print("ℹ️ AUv3: asset reader finished with status=\(reader.status.rawValue)")
+                AUv3Diagnostics.log("ℹ️ AUv3: asset reader finished with status=\(reader.status.rawValue)")
                 self.isDecodingFile = false
             }
         } catch {
-            print("❌ AUv3: asset reader error \(error.localizedDescription)")
+            AUv3Diagnostics.log("❌ AUv3: asset reader error \(error.localizedDescription)")
             self.isDecodingFile = false
         }
     }

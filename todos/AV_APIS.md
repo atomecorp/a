@@ -917,6 +917,14 @@ Completed:
   - Removed per-callback `Vec<f32>` allocations for I16/U16 input metering.
   - Added typed metering helpers for `i16` and `u16` slices.
   - Added targeted Rust tests for f32/i16/u16 metering paths.
+- Recording diagnostics contract:
+  - Propagated native `overrun_frames` through `record_stop`.
+  - Propagated `overrun_frames` through eVe `record_audio().stop()` normalized results.
+  - Removed no-op JS diagnostic hooks from the touched recording API paths.
+- P0 Swift/AUv3 production diagnostics gate:
+  - Added a centralized `AUv3Diagnostics` gate in `platforms/ios/atome-auv3/auv3/utils.swift`.
+  - Replaced direct Swift `print` diagnostics in the AUv3 utility with diagnostics-gated calls.
+  - Removed remaining `fallback` wording from touched AUv3 comments to keep runtime policy explicit.
 
 Validated:
 
@@ -926,6 +934,8 @@ Validated:
 - `cargo check` passed.
 - `cargo test audio_engine::transcode` passed.
 - `cargo test audio_engine::metering::tests` passed.
+- `xcodebuild -list -project platforms/ios/atome-auv3/atome.xcodeproj` passed and identified the `atomeAudioUnit` scheme.
+- `xcodebuild -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed.
 
 Known validation caveat:
 
@@ -933,9 +943,8 @@ Known validation caveat:
 
 Remaining:
 
-- Expose and monitor `overrun_frames` in the JS/UI recording diagnostics path.
+- Surface `overrun_frames` in production UI/monitoring once the centralized AV monitoring API exists.
 - Verify Tauri recording behavior with a real input device after the ring-buffer writer change.
-- Remove or gate production Swift/AUv3 debug paths in `platforms/ios/atome-auv3/auv3/utils.swift`.
 - Replace AUv3 legacy C FFI recorder/shim paths with a first-class native recorder backend.
 - Extract `MediaPersistenceService` from audio/video API files.
 - Extract preview service/UI ownership from `video_api.js`.
