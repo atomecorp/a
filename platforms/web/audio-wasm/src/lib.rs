@@ -31,13 +31,36 @@ struct VoiceEntry {
 }
 
 struct WasmAudioEngine {
-    manager: AudioManager<CpalBackend>,
+    manager: Option<AudioManager<CpalBackend>>,
     clips: HashMap<String, ClipEntry>,
     voices: HashMap<String, VoiceEntry>,
 }
 
 static ENGINE: once_cell::sync::Lazy<Mutex<Option<WasmAudioEngine>>> =
     once_cell::sync::Lazy::new(|| Mutex::new(None));
+
+fn create_audio_manager() -> Result<AudioManager<CpalBackend>, JsValue> {
+    AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
+        .map_err(|e| JsValue::from_str(&format!("Failed to create AudioManager: {e}")))
+}
+
+fn ensure_engine(guard: &mut Option<WasmAudioEngine>) -> &mut WasmAudioEngine {
+    guard.get_or_insert_with(|| WasmAudioEngine {
+        manager: None,
+        clips: HashMap::new(),
+        voices: HashMap::new(),
+    })
+}
+
+fn ensure_audio_manager(engine: &mut WasmAudioEngine) -> Result<&mut AudioManager<CpalBackend>, JsValue> {
+    if engine.manager.is_none() {
+        engine.manager = Some(create_audio_manager()?);
+    }
+    engine
+        .manager
+        .as_mut()
+        .ok_or_else(|| JsValue::from_str("Audio manager not initialized"))
+}
 
 fn is_explicit_symphonia_container(bytes: &[u8]) -> bool {
     bytes.len() >= 12 && &bytes[4..8] == b"ftyp"
@@ -176,16 +199,11 @@ fn decode_clip_with_symphonia(data: &[u8]) -> Result<StaticSoundData, JsValue> {
 
 #[wasm_bindgen]
 pub fn audio_init() -> Result<(), JsValue> {
-    let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
-        .map_err(|e| JsValue::from_str(&format!("Failed to create AudioManager: {e}")))?;
     let mut guard = ENGINE
         .lock()
         .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
-    *guard = Some(WasmAudioEngine {
-        manager,
-        clips: HashMap::new(),
-        voices: HashMap::new(),
-    });
+    let engine = ensure_engine(&mut guard);
+    ensure_audio_manager(engine)?;
     web_sys::console::log_1(&"[squirrel-audio-wasm] Audio engine initialized".into());
     Ok(())
 }
@@ -197,9 +215,7 @@ pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<(), JsValue> 
     let mut guard = ENGINE
         .lock()
         .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
-    let engine = guard
-        .as_mut()
-        .ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
+    let engine = ensure_engine(&mut guard);
 
     let sound_data = if is_explicit_symphonia_container(data) {
         decode_clip_with_symphonia(data)?
@@ -285,8 +301,8 @@ pub fn audio_play_instance(
         .volume(gain_to_decibels(gain))
         .playback_rate(PlaybackRate(requested_rate));
 
-    let handle = engine
-        .manager
+    let manager = ensure_audio_manager(engine)?;
+    let handle = manager
         .play(sound_data)
         .map_err(|e| JsValue::from_str(&format!("Play error: {e}")))?;
     engine

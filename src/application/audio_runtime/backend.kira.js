@@ -28,6 +28,9 @@ import {
 
   let mode = null; // 'tauri' | 'wasm'
   let wasm = null;
+  let initPromise = null;
+  let wasmModulePromise = null;
+  let wasmAudioManagerReady = false;
 
   function resolveClipId(arg) {
     if (typeof arg === 'string') return arg;
@@ -101,22 +104,78 @@ import {
     return Promise.reject(new Error('[backend.kira] No audio backend available'));
   }
 
+  function isNativePlaybackRuntime(runtime) {
+    return runtime.playback === 'tauri_native_kira'
+      || runtime.playback === 'ios_native_kira'
+      || runtime.playback === 'ios_auv3_native';
+  }
+
+  function loadWasmModule() {
+    if (!wasmModulePromise) {
+      wasmModulePromise = import('/wasm/squirrel_audio_wasm.js')
+        .then(function (mod) {
+          return Promise.resolve(mod.default()).then(function () {
+            wasm = mod;
+            return mod;
+          });
+        });
+    }
+    return wasmModulePromise;
+  }
+
+  function ensureRuntimeMode(options) {
+    var shouldCreateAudioManager = !!(options && options.audioManager);
+    var runtime = resolveAudioRuntime(window);
+    if (isNativePlaybackRuntime(runtime)) {
+      if (mode === 'tauri') return initPromise || Promise.resolve();
+      if (!initPromise) {
+        mode = 'tauri';
+        initPromise = invoke('audio_init').catch(function (error) {
+          mode = null;
+          initPromise = null;
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+    if (runtime.playback === 'web_wasm_kira') {
+      mode = 'wasm';
+      return loadWasmModule().then(function () {
+        if (!shouldCreateAudioManager) return;
+        if (wasmAudioManagerReady) return;
+        return Promise.resolve(wasm.audio_init()).then(function () {
+          wasmAudioManagerReady = true;
+        });
+      }).catch(function (error) {
+        if (shouldCreateAudioManager) {
+          mode = null;
+          initPromise = null;
+          wasmAudioManagerReady = false;
+        }
+        throw error;
+      });
+    }
+    return Promise.reject(new Error('[backend.kira] Unified playback runtime unavailable'));
+  }
+
   /**
    * Load a clip from a URL. Returns a Promise so the caller can track completion.
    */
   function loadClipFromUrl(id, url) {
-    if (mode === 'tauri' && isIosHostAppRuntime(window)) {
-      return rejectIosHostAppBytesLoad('load_url_requires_local_path(' + id + ')');
-    }
-    if (mode === 'tauri' && isAuv3NativeRuntime()) {
-      if (postAuv3LocalClipLoad(url)) {
-        return Promise.resolve(true);
+    return ensureRuntimeMode({ audioManager: false }).then(function () {
+      if (mode === 'tauri' && isIosHostAppRuntime(window)) {
+        return rejectIosHostAppBytesLoad('load_url_requires_local_path(' + id + ')');
       }
-      const error = new Error('[backend.kira] AUv3 native playback requires a local media path');
-      emitError('load_url_requires_local_path(' + id + ')', error);
-      return Promise.reject(error);
-    }
-    return fetch(url)
+      if (mode === 'tauri' && isAuv3NativeRuntime()) {
+        if (postAuv3LocalClipLoad(url)) {
+          return Promise.resolve(true);
+        }
+        const error = new Error('[backend.kira] AUv3 native playback requires a local media path');
+        emitError('load_url_requires_local_path(' + id + ')', error);
+        return Promise.reject(error);
+      }
+      return fetch(url);
+    })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + url);
         return r.arrayBuffer();
@@ -149,30 +208,7 @@ import {
 
   var backend = {
     async init() {
-      var runtime = resolveAudioRuntime(window);
-      if (
-        runtime.playback === 'tauri_native_kira'
-        || runtime.playback === 'ios_native_kira'
-        || runtime.playback === 'ios_auv3_native'
-      ) {
-        mode = 'tauri';
-        await invoke('audio_init');
-        return;
-      }
-      if (runtime.playback === 'web_wasm_kira') {
-        mode = 'wasm';
-        try {
-          var mod = await import('/wasm/squirrel_audio_wasm.js');
-          await mod.default();
-          wasm = mod;
-          wasm.audio_init();
-          return;
-        } catch (e) {
-          mode = null;
-          throw e;
-        }
-      }
-      throw new Error('[backend.kira] Unified playback runtime unavailable');
+      await ensureRuntimeMode({ audioManager: true });
     },
 
     create_clip(arg) {
@@ -190,61 +226,71 @@ import {
         });
       }
 
-      if (mode === 'tauri' && path) {
-        if (isAuv3NativeRuntime() && postAuv3LocalClipLoad(path)) return true;
-        return invoke('audio_load_clip', { id: id, path: path }).catch(function (e) {
-          emitError('load_clip(' + id + ')', e);
-          throw e;
-        });
-      }
-      if ((mode === 'tauri' || mode === 'wasm') && bytes) {
-        if (mode === 'tauri' && isIosHostAppRuntime(window)) {
-          return rejectIosHostAppBytesLoad('load_clip_from_bytes(' + id + ')');
+      return ensureRuntimeMode({ audioManager: false }).then(function () {
+        if (mode === 'tauri' && path) {
+          if (isAuv3NativeRuntime() && postAuv3LocalClipLoad(path)) return true;
+          return invoke('audio_load_clip', { id: id, path: path }).catch(function (e) {
+            emitError('load_clip(' + id + ')', e);
+            throw e;
+          });
         }
-        if (mode === 'tauri' && isAuv3NativeRuntime()) {
-          var auv3BytesError = new Error('[backend.kira] AUv3 native playback does not support byte-loaded clips');
-          emitError('load_clip_from_bytes(' + id + ')', auv3BytesError);
-          return Promise.reject(auv3BytesError);
+        if ((mode === 'tauri' || mode === 'wasm') && bytes) {
+          if (mode === 'tauri' && isIosHostAppRuntime(window)) {
+            return rejectIosHostAppBytesLoad('load_clip_from_bytes(' + id + ')');
+          }
+          if (mode === 'tauri' && isAuv3NativeRuntime()) {
+            var auv3BytesError = new Error('[backend.kira] AUv3 native playback does not support byte-loaded clips');
+            emitError('load_clip_from_bytes(' + id + ')', auv3BytesError);
+            return Promise.reject(auv3BytesError);
+          }
+          if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
+            try { wasm.audio_load_clip_from_bytes(id, bytes); return true; }
+            catch (e) { emitError('wasm load(' + id + ')', e); throw e; }
+          }
+          return invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) }).catch(function (e) {
+            emitError('load_clip_from_bytes(' + id + ')', e);
+            throw e;
+          });
         }
-        if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
-          try { wasm.audio_load_clip_from_bytes(id, bytes); return true; }
-          catch (e) { emitError('wasm load(' + id + ')', e); throw e; }
+        if ((mode === 'tauri' || mode === 'wasm') && url) {
+          return loadClipFromUrl(id, url);
         }
-        return invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) }).catch(function (e) {
-          emitError('load_clip_from_bytes(' + id + ')', e);
-          throw e;
-        });
-      }
-      if ((mode === 'tauri' || mode === 'wasm') && url) {
-        return loadClipFromUrl(id, url);
-      }
-      return false;
+        return false;
+      });
     },
 
     destroy_clip(arg) {
       var id = resolveClipId(arg);
       if (!id) return;
       clipMeta.delete(id);
-      invoke('audio_destroy_clip', { id: id }).catch(function (e) {
+      ensureRuntimeMode({ audioManager: false }).then(function () {
+        return invoke('audio_destroy_clip', { id: id });
+      }).catch(function (e) {
         emitError('destroy_clip(' + id + ')', e);
       });
     },
 
     play(arg) {
       var id = resolveClipId(arg);
-      if (id) invoke('audio_play', { id: id }).catch(function (e) {
+      if (id) return ensureRuntimeMode({ audioManager: true }).then(function () {
+        return invoke('audio_play', { id: id });
+      }).catch(function (e) {
         emitError('play(' + id + ')', e);
+        throw e;
       });
+      return false;
     },
 
     play_instance(arg) {
       if (!arg) return;
       var payload = normalizeKiraPlayInstancePayload(arg);
       if (!payload.assetId || !payload.voiceId) return;
-      return invoke(
-        KIRA_AUDIO_COMMANDS.PLAY_INSTANCE,
-        buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload)
-      ).catch(function (e) {
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        return invoke(
+          KIRA_AUDIO_COMMANDS.PLAY_INSTANCE,
+          buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload)
+        );
+      }).catch(function (e) {
         emitError('play_instance(' + payload.assetId + '/' + payload.voiceId + ')', e);
         throw e;
       });
@@ -252,17 +298,23 @@ import {
 
     stop(arg) {
       var id = resolveClipId(arg);
-      if (id) invoke('audio_stop', { id: id }).catch(function (e) {
+      if (id) return ensureRuntimeMode({ audioManager: false }).then(function () {
+        return invoke('audio_stop', { id: id });
+      }).catch(function (e) {
         emitError('stop(' + id + ')', e);
+        throw e;
       });
+      return false;
     },
 
     stop_instance(arg) {
       var payload = normalizeKiraStopInstancePayload(arg);
-      if (payload.voiceId) return invoke(
-        KIRA_AUDIO_COMMANDS.STOP_INSTANCE,
-        buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.STOP_INSTANCE, payload)
-      ).catch(function (e) {
+      if (payload.voiceId) return ensureRuntimeMode({ audioManager: false }).then(function () {
+        return invoke(
+          KIRA_AUDIO_COMMANDS.STOP_INSTANCE,
+          buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.STOP_INSTANCE, payload)
+        );
+      }).catch(function (e) {
         emitError('stop_instance(' + payload.voiceId + ')', e);
         throw e;
       });
@@ -278,12 +330,15 @@ import {
       // For Kira, this means stop → play (Kira doesn't support seek on static sounds)
       var id = resolveClipId(arg);
       if (!id) return;
-      invoke('audio_stop', { id: id })
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        return invoke('audio_stop', { id: id });
+      })
         .then(function () {
           return invoke('audio_play', { id: id });
         })
         .catch(function (e) {
           emitError('jump(' + id + ')', e);
+          throw e;
         });
     },
 
@@ -292,14 +347,21 @@ import {
       var id = resolveClipId(arg);
       if (!id) return;
       if (arg.paramId === 'volume' || arg.paramId === 'gain') {
-        invoke('audio_set_volume', { id: id, db: arg.value || 0 }).catch(function (e) {
+        return ensureRuntimeMode({ audioManager: false }).then(function () {
+          return invoke('audio_set_volume', { id: id, db: arg.value || 0 });
+        }).catch(function (e) {
           emitError('set_volume(' + id + ')', e);
+          throw e;
         });
       } else if (arg.paramId === 'playback_rate' || arg.paramId === 'speed') {
-        invoke('audio_set_playback_rate', { id: id, rate: arg.value || 1 }).catch(function (e) {
+        return ensureRuntimeMode({ audioManager: false }).then(function () {
+          return invoke('audio_set_playback_rate', { id: id, rate: arg.value || 1 });
+        }).catch(function (e) {
           emitError('set_playback_rate(' + id + ')', e);
+          throw e;
         });
       }
+      return false;
     },
 
     map_midi(arg) {
@@ -362,19 +424,13 @@ import {
   audio.__register_backend('kira', backend);
 
   Promise.resolve().then(function () {
+    var runtime = resolveAudioRuntime(window);
+    if (runtime.playback === 'web_wasm_kira') {
+      audio.set_backend('kira');
+      return;
+    }
     backend.init().then(function () {
       audio.set_backend('kira');
-    }).catch(function (error) {
-      var runtime = resolveAudioRuntime(window);
-      var hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
-      var strictNativeKira = hostEnv === 'app'
-        || hostEnv === 'auv3'
-        || runtime.playback === 'tauri_native_kira'
-        || runtime.playback === 'ios_native_kira'
-        || runtime.playback === 'ios_auv3_native';
-      if (!strictNativeKira && typeof audio.detect_and_set_backend === 'function') {
-        audio.detect_and_set_backend();
-      }
-    });
+    }).catch(function () { });
   });
 })();
