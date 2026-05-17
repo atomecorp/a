@@ -33,6 +33,27 @@ const createNativeAudioEnv = (calls = []) => ({
     }
 });
 
+const createAtomeEnv = () => {
+    const records = new Map();
+    return {
+        Atome: {
+            commit: async (event = {}) => {
+                records.set(event.atome_id, {
+                    id: event.atome_id,
+                    atome_id: event.atome_id,
+                    project_id: event.project_id || null,
+                    properties: { ...(event.props || {}) }
+                });
+                return { ok: true, data: records.get(event.atome_id) };
+            },
+            listStateCurrent: async (projectId = null) => Array.from(records.values()).filter((record) => {
+                if (!projectId) return true;
+                return record.project_id === projectId;
+            })
+        }
+    };
+};
+
 test('audio playback and recording APIs are separate wrappers over the legacy core', async () => {
     const calls = [];
     const env = createNativeAudioEnv(calls);
@@ -64,12 +85,12 @@ test('audio playback and recording APIs are separate wrappers over the legacy co
     assert.ok(commandBusV2.listEvents({ tool_id: 'play_record' }).length >= 2);
 });
 
-test('shared AV stores provide media-neutral asset, marker, and region contracts', () => {
-    const env = {};
+test('shared AV stores provide media-neutral asset, marker, and region contracts', async () => {
+    const env = createAtomeEnv();
     const av = installSharedAVContracts(env);
     const asset = av.assets.create({ id: 'asset-a', media_kind: 'video' });
-    const marker = av.markers.create({ id: 'marker-a', asset_id: asset.id, seconds: 1.25, kind: 'cue' });
-    const region = av.regions.create({ id: 'region-a', asset_id: asset.id, start_marker_id: marker.id });
+    const marker = await av.markers.create({ id: 'marker-a', asset_id: asset.id, seconds: 1.25, kind: 'cue' });
+    const region = await av.regions.create({ id: 'region-a', asset_id: asset.id, start_marker_id: marker.id });
     const overrun = av.monitoring.reportStreamOverrun({
         media_kind: 'audio',
         session_id: 'session-a',
@@ -84,10 +105,32 @@ test('shared AV stores provide media-neutral asset, marker, and region contracts
     assert.equal(av.assets.get('asset-a').media_kind, 'video');
     assert.equal(av.markers.list({ assetId: asset.id }).length, 1);
     assert.equal(av.regions.get(region.id).start_marker_id, marker.id);
+    await av.markers.refresh(null);
+    await av.regions.refresh(null);
+    assert.equal(av.markers.get('marker-a').seconds, 1.25);
+    assert.equal(av.regions.list({ assetId: asset.id }).length, 1);
     assert.equal(overrun.event_type, 'av.stream.overrun');
     assert.equal(av.monitoring.getStreamOverrunSummary({ session_id: 'session-a' }).overrun_frames, 128);
     assert.equal(av.clocks.requireClock('session-clock').id, clock.id);
     assert.equal(clock.secondsToSamples(0.5), 24000);
+
+    const inputDevice = av.devices.register({ id: 'mic-a', media_kind: 'audio', direction: 'input', label: 'Mic A' });
+    assert.equal(av.devices.select({ id: inputDevice.id, scope: 'audio.input' }).device.id, 'mic-a');
+    const latency = av.latency.report({ media_kind: 'audio', object_id: 'session-a', input_latency_ms: 4.5 });
+    assert.equal(latency.input_latency_ms, 4.5);
+    const profile = av.codec.createProfile({ id: 'wav-f32', media_kind: 'audio', codec: 'pcm_f32', container: 'wav' });
+    assert.equal(av.codec.getProfile(profile.id).container, 'wav');
+    const sourceNode = av.graph.createNode({ id: 'source-a', media_kind: 'audio', node_type: 'source' });
+    const outputNode = av.graph.createNode({ id: 'output-a', media_kind: 'audio', node_type: 'output' });
+    assert.equal(av.graph.connect({ source: sourceNode.id, target: outputNode.id }).source_id, 'source-a');
+    const metrics = av.videoMetrics.report({ object_id: 'video-session', frame_rate: 30, dropped_frames: 1 });
+    assert.equal(metrics.dropped_frames, 1);
+    assert.throws(
+        () => av.export.createJob({ media_kind: 'video' }),
+        (error) => error?.code === 'av_capability_unsupported'
+            && error.capability === 'offline_export'
+            && error.media_kind === 'video'
+    );
 });
 
 test('video facade exposes playback and recording namespaces with typed unsupported errors', () => {

@@ -139,6 +139,13 @@ import { installSharedAVContracts } from './av_contracts.js';
   audio.clear_marker_follow_actions = proxyCall('clear_marker_follow_actions');
   audio.query_clip = proxyCall('query_clip');
 
+  av.devices.listAudioInputs = () => av.devices.list({ media_kind: 'audio', direction: 'input' });
+  av.devices.listAudioOutputs = () => av.devices.list({ media_kind: 'audio', direction: 'output' });
+  av.devices.selectAudioInput = (input) => av.devices.select({ ...(input || {}), scope: 'audio.input' });
+  av.devices.selectAudioOutput = (input) => av.devices.select({ ...(input || {}), scope: 'audio.output' });
+  av.codec.createAudioProfile = (input) => av.codec.createProfile({ ...(input || {}), media_kind: 'audio' });
+  av.graph.createAudioNode = (input) => av.graph.createNode({ ...(input || {}), media_kind: 'audio' });
+
   // Backend registration hooks
   audio.__register_backend = (name, api) => { backends[name] = api; };
   audio.__call_backend_method = callBackendMethod;

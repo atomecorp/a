@@ -70,6 +70,13 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AudioUnitViewController.swift,
+				AUv3Diagnostics.swift,
+				AUv3Decoder.swift,
+				AUv3JavaScriptAudio.swift,
+				AUv3PlaybackState.swift,
+				AUv3Recorder.swift,
+				AUv3RenderEngine.swift,
+				AUv3TransportObserver.swift,
 				utils.swift,
 			);
 			target = 349603FE281861B500E13C15 /* atomeAudioUnit */;

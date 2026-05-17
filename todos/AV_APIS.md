@@ -948,6 +948,30 @@ Completed:
   - Added `AVClock` and `AVClockRegistry` to the shared AV contracts.
   - Exposed clocks through `Squirrel.av.clocks` and `Squirrel.av.sync.clocks`.
   - Required audio recording sessions, audio voice creation, video recording sessions, and video assets to resolve a registered clock and carry a verified `clock_id`.
+- P3 persisted AV marker/region stores:
+  - Replaced shared in-memory marker and region stores with Atome-backed persistent stores.
+  - Added Atome commit/listStateCurrent backed create, update, delete, refresh, get, and list behavior for `Squirrel.av.markers` and `Squirrel.av.regions`.
+  - Marker and region mutations now use deterministic Atome state instead of module-local memory.
+- P2 shared AV feature-completeness contract:
+  - Added shared AV device enumeration/selection, latency reporting, codec profile, media graph, video metrics, and offline export API contracts.
+  - Exposed audio input/output and video input device helpers from the audio/video facades.
+  - Exposed audio/video codec profile helpers and audio/video graph node helpers from the public facades.
+  - Offline export now reports a typed unsupported-capability error until a concrete backend is registered.
+- P0 AUv3 diagnostics and transport split:
+  - Moved the AUv3 diagnostics gate out of `utils.swift` into `AUv3Diagnostics.swift`.
+  - Moved host transport polling, tempo/playhead mapping, WebView transport cache publication, and transport delegate dispatch out of `utils.swift` into `AUv3TransportObserver.swift`.
+  - Added the new AUv3 Swift modules to the `atomeAudioUnit` target membership.
+  - Removed the direct transport JS silent catch path from the moved transport observer.
+- P0 AUv3 module split completion:
+  - Moved AUv3 render-block ownership out of `utils.swift` into `AUv3RenderEngine.swift`.
+  - Moved playback state controls, seek/scrub helpers, and debug capture controls into `AUv3PlaybackState.swift`.
+  - Moved JavaScript audio injection and mixing into `AUv3JavaScriptAudio.swift`.
+  - Moved file decode, AVAudioFile decode, and AVAssetReader decode paths into `AUv3Decoder.swift`.
+  - Moved AUv3 recording lifecycle, mic capture, recorder backend push, WAV analysis, and recording event publication into `AUv3Recorder.swift`.
+  - Kept `utils.swift` focused on AUv3 state, bus setup, initialization, MIDI helpers, logging, and shared utility accessors.
+- P0 Tauri real input recording verification:
+  - Verified the CPAL recorder against the machine's real default input device after the ring-buffer writer change.
+  - Captured a valid 44.1 kHz mono Int24 WAV with 88064 frames and `overrun_frames: 0`.
 
 Validated:
 
@@ -970,6 +994,13 @@ Validated:
 - `npm run check:syntax` passed after adding AV monitoring overrun reports.
 - `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after adding `AVClock`.
 - `npm run check:syntax` passed after adding `AVClock`.
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after replacing marker/region stores with Atome-backed persistence.
+- `npm run check:syntax` passed after replacing marker/region stores with Atome-backed persistence.
+- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after adding shared AV device, latency, codec, graph, video metrics, and offline export contracts.
+- `npm run check:syntax` passed after adding shared AV device, latency, codec, graph, video metrics, and offline export contracts.
+- `xcodebuild -quiet -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed after splitting AUv3 diagnostics and transport observer modules.
+- `xcodebuild -quiet -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed after completing the AUv3 render, playback, decoder, JavaScript audio, recorder, transport, and diagnostics split.
+- `cargo test test_record_mic -- --nocapture --test-threads=1` passed outside the sandbox with the real default input device. The captured result was `frame_count: 88064`, `duration_sec: 1.9969160997732427`, `sample_rate: 44100`, `channels: 1`, `output_format: "Int24"`, and `overrun_frames: 0`.
 
 Known validation caveat:
 
@@ -977,10 +1008,7 @@ Known validation caveat:
 
 Remaining:
 
-- Verify Tauri recording behavior with a real input device after the ring-buffer writer change.
-- Replace in-memory AV marker/region stores with persisted Atome state.
-- Add device enumeration/selection, latency reporting, codec profile registry, graph routing, video metrics, and offline export.
-- Continue splitting AUv3 `utils.swift` into render engine, decoder, playback state, recorder, transport observer, and diagnostics modules.
+- None.
 
 ### Phase 1: P0 Native Risk Removal
 
