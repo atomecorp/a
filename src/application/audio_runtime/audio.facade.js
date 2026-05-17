@@ -1,5 +1,8 @@
 import { getPlayRecordCore } from './play_record_core.js';
 import { resolveAudioRuntime } from './runtime_audio_backend.js';
+import { getAudioPlaybackAPI } from './audio_playback_api.js';
+import { getAudioRecordingAPI } from './audio_recording_api.js';
+import { installSharedAVContracts } from './av_contracts.js';
 
 // Squirrel AV Audio Facade — Unified Audio Engine entry point
 // Exposes Squirrel.av.audio with a single playback authority: kira.
@@ -12,8 +15,12 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 
 (function () {
   const ns = (window.Squirrel = window.Squirrel || {});
-  const av = (ns.av = ns.av || {});
+  const av = installSharedAVContracts(window);
   const audio = (av.audio = av.audio || {});
+  const playbackApi = getAudioPlaybackAPI(window);
+  const recordingApi = getAudioRecordingAPI(window);
+  audio.playback = audio.playback || playbackApi;
+  audio.recording = audio.recording || recordingApi;
 
   // Event bus
   const listeners = new Map(); // type -> Set(fn)
@@ -106,14 +113,19 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
   };
 
   // Public API (façade)
-  audio.create_clip = (arg) => coreCall('loadAsset', arg);
-  audio.destroy_clip = (arg) => coreCall('destroyAsset', (typeof arg === 'string' ? arg : (arg && (arg.id || arg.clip_id || arg.clipId || arg.assetId || arg.asset_id))));
-  audio.play = (arg) => coreCall('playAsset', arg);
-  audio.play_instance = (arg) => coreCall('playVoice', arg);
-  audio.stop = (arg) => coreCall('stopAsset', arg);
-  audio.stop_instance = (arg) => coreCall('stopVoice', arg);
-  audio.stop_clip = (arg) => coreCall('stopAsset', arg);
-  audio.jump = (arg) => coreCall('jumpAsset', arg);
+  audio.create_clip = (arg) => playbackApi.loadAsset(arg);
+  audio.destroy_clip = (arg) => playbackApi.unloadAsset(typeof arg === 'string' ? arg : (arg && (arg.id || arg.clip_id || arg.clipId || arg.assetId || arg.asset_id)));
+  audio.play = (arg) => playbackApi.playAsset(arg);
+  audio.play_instance = (arg) => playbackApi.startVoice(arg);
+  audio.stop = (arg) => playbackApi.stopAsset(arg);
+  audio.stop_instance = (arg) => playbackApi.stopVoice(arg);
+  audio.stop_clip = (arg) => playbackApi.stopAsset(arg);
+  audio.jump = (arg) => playbackApi.seekAsset(arg);
+  audio.createRecordingSession = (arg) => recordingApi.createRecordingSession(arg);
+  audio.prepareRecordingSession = (arg) => recordingApi.prepareRecordingSession(arg);
+  audio.armRecordingSession = (arg) => recordingApi.armRecordingSession(arg);
+  audio.startRecordingSession = (arg) => recordingApi.startRecordingSession(arg);
+  audio.stopRecordingSession = (arg) => recordingApi.stopRecordingSession(arg);
   audio.set_param = (arg = {}) => {
     const id = arg && (arg.id || arg.clip_id || arg.clipId || arg.voiceId || arg.voice_id);
     if (arg?.paramId === 'volume' || arg?.paramId === 'gain') return coreCall('setVoiceGain', id ? { voiceId: id, gain: arg.value } : arg);
