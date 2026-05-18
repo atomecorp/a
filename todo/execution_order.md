@@ -25,17 +25,17 @@ Source principale: `todo/urgent_priorities.md`
 
 - [x] Remplacer tout `require()` dans module ES, notamment `tools/communication.js`.
 - [x] Deplacer `mtraxCloseInFlightGuard` avant toute utilisation dans `eVeIntuition.js`.
-- [ ] Unifier les prefixes de selection depuis `runtime/selection.js`.
-- [ ] Renommer `ensureString` en `isString` dans `contracts/validator.js`.
-- [ ] Ajouter `destroyLayerInvariantObserver()` et le connecter au cycle de destruction.
-- [ ] Verifier lint/build/smoke test apres chaque correction.
+- [x] Unifier les prefixes de selection depuis `runtime/selection.js`.
+- [x] Renommer `ensureString` en `isString` dans `contracts/validator.js`.
+- [x] Ajouter `destroyLayerInvariantObserver()` et le connecter au cycle de destruction.
+- [x] Verifier lint/build/smoke test apres chaque correction.
 
 ## 2. Factorisation minimale du socle
 
 Source principale: `todo/urgent_priorities.md`
 
-- [ ] Creer `shared/utils.js` et migrer progressivement les utilitaires communs.
-- [ ] Creer `shared/media_types.js` et supprimer les duplications de types media.
+- [x] Creer `shared/utils.js` et migrer progressivement les utilitaires communs.
+- [x] Creer `shared/media_types.js` et supprimer les duplications de types media.
 - [ ] Centraliser les constantes de layers et de TTL panels.
 - [ ] Factoriser le locking via `runtime/in_flight_lock.js`.
 - [ ] Unifier `readExplicitLatchedState` / `readExplicitLatched`.
