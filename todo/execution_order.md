@@ -16,6 +16,7 @@ Regle de suivi:
 
 - Cocher chaque tache terminee avec `[x]`.
 - Ne pas commencer une phase dependante tant que les phases socle ne sont pas validees.
+- Une fois toutes les taches d'un fichier `todo/*.md` accomplies et verifiees, deplacer ce fichier vers `done/` si ce n'est pas deja fait.
 - Apres la derniere tache terminee et verifiee, supprimer ce fichier: `todo/execution_order.md`.
 
 ## 1. Corrections critiques immediates eVe Intuition
