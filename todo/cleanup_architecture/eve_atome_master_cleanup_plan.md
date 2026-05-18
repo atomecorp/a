@@ -442,9 +442,11 @@ Completion note: Completed for this pass by measuring size thresholds, long func
 Recommended limits:
 
 - Ideal file: under 300 lines
-- Warning threshold: 500 lines
-- Critical threshold: 800 lines
-- Forbidden without justification: 1000+ lines
+- Transitional zone: 300 to 500 lines only when the module remains cohesive and the boundary is architecturally justified
+- Hard maximum for a normal module: 500 lines
+- Above 500 lines: non-compliant and must be reduced before adding new scope, except when the current change is explicitly performing that reduction
+- Above 800 lines: critical legacy state requiring immediate reduction ownership and no feature growth
+- 1000+ lines: forbidden without explicit architectural justification and an active reduction plan
 
 Checklist:
 

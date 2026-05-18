@@ -21,9 +21,11 @@ This task exists for current code, not only for future code generation.
 The remediation work must use the following thresholds:
 
 - ideal file: under 300 lines
-- warning threshold: 500 lines
-- critical threshold: 800 lines
-- forbidden without explicit architectural justification and a reduction plan: 1000+ lines
+- transitional zone: 300 to 500 lines only when the module remains cohesive and the boundary is architecturally justified
+- hard maximum for a normal module: 500 lines
+- above 500 lines: non-compliant and must be reduced before adding new scope, except when the current change is explicitly performing that reduction
+- above 800 lines: critical legacy state requiring immediate reduction ownership and no feature growth
+- 1000+ lines: forbidden without explicit architectural justification and an active reduction plan
 
 ## Scope
 
@@ -39,9 +41,11 @@ This task covers:
 The remediation must enforce at least the following rules:
 
 - one clear responsibility per module whenever architecture allows it
+- strong factorization without artificial file multiplication
 - no dead, deprecated, duplicated, or unreachable code kept by inertia
 - no silent catch or silent failure path hiding structural problems
 - no repeated local utility logic across many files when a shared module is appropriate
+- no artificial micro-file split creating wrappers, pass-through layers, or navigation overhead without real architectural value
 - explicit and stable naming
 - maintainable file boundaries and readable control flow
 
@@ -63,6 +67,7 @@ The remediation must enforce at least the following rules:
 
 - Split oversized files by stable architectural responsibility.
 - Move duplicated utilities into shared modules where appropriate.
+- Do not split files only to satisfy a line-count target; prefer cohesive modules and real factorization over file multiplication.
 - Remove dead, deprecated, and duplicated code discovered during the split.
 - Keep runtime behavior deterministic during refactors.
 

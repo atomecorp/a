@@ -89,27 +89,34 @@ The codebase MUST respect explicit file-size and structure limits.
 File size policy:
 
 - ideal file: under 300 lines;
-- warning threshold: 500 lines;
-- critical threshold: 800 lines;
-- forbidden without explicit architectural justification and a split plan: 1000+ lines.
+- transitional zone: 300 to 500 lines only when the module remains cohesive and the boundary is architecturally justified;
+- hard maximum for a normal module: 500 lines;
+- above 500 lines: non-compliant and must be reduced before adding new scope, except when the current change is explicitly performing that reduction;
+- above 800 lines: critical legacy state requiring immediate reduction ownership and no feature growth;
+- 1000+ lines: forbidden without explicit architectural justification and an active reduction plan.
 
 Mandatory enforcement rules:
 
 - Do not create new oversized files when a split is possible.
-- Do not keep adding features into a file that is already above the critical threshold unless the current task is explicitly reducing or restructuring that file.
-- If a file exceeds the warning threshold, verify whether responsibilities are mixed and split them when architecture allows it.
-- If a file exceeds the critical threshold, reduction and responsibility separation become mandatory, not optional.
-- Any justified exception above 1000 lines must be explicitly documented with the reason, the ownership boundary, and the intended reduction plan.
+- Do not keep adding features into a file that is already above 500 lines unless the current task is explicitly reducing or restructuring that file.
+- If a file approaches 500 lines, verify whether responsibilities are mixed, whether reusable logic should be factorized, and whether the boundary can be improved without fragmenting the architecture.
+- Do not multiply files artificially to satisfy line-count targets; split only along stable responsibilities or real shared reusable logic.
+- Do not create pass-through files, proxy wrappers, or useless micro-modules whose only purpose is to lower a line count.
+- If a file exceeds 500 lines, reduction and responsibility separation become mandatory, not optional.
+- Any justified exception above 800 lines must be explicitly documented with the reason, the ownership boundary, and the intended reduction plan.
+- Any exceptional file above 1000 lines remains forbidden unless the architectural justification and active reduction plan are both explicitly documented.
 
 Coding standards are mandatory for both new and existing code.
 
 You must enforce:
 
 - single clear responsibility per module whenever architecture allows it;
+- strong factorization without artificial file multiplication;
 - explicit and consistent naming;
 - removal of dead, deprecated, duplicated, or unreachable code;
 - no silent failure paths hiding invalid states;
 - no broad utility duplication across files when a shared module is appropriate;
+- no artificial micro-file fragmentation that harms navigation or hides cohesion problems;
 - stable and readable public interfaces;
 - code organization that remains navigable for long-term maintenance.
 
