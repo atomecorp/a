@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Ordre d'execution des taches
 
 Objectif: attaquer les taches dans l'ordre le plus efficace, cocher ce qui est accompli, et supprimer ce fichier une fois toutes les taches terminees.

@@ -1,9 +1,19 @@
 # Prompt de verification des tests Molecule / Mtracks
 
+## Mandatory Execution Gate
+
+Before starting any verification, implementation, refactor, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Tu dois verifier de maniere exhaustive que le panel Molecule / Mtracks est present, conforme a l'architecture canonique des panels, stable visuellement, deplacable, redimensionnable, et qu'il conserve correctement son etat apres chaque interaction.
 
 Avant toute verification, lis et applique strictement:
-- `./.codex/AGENTS.md`
+
 - `./todos/moelcule_sanitizer.md`
 - `./todos/panel_sanitizer.md`
 - `./src/application/eVe/documentations/Good practices.md`
@@ -13,6 +23,7 @@ Objectif: produire une verification fonctionnelle et DOM du panel Molecule / Mtr
 ## 1. Structure canonique attendue
 
 Verifier que le panel Molecule utilise le chrome canonique commun aux panels:
+
 - root de panel unique, rattache au bon hote molecule/groupe ou a la couche canonique selon le mode.
 - header canonique present, visible, utilisable comme zone de deplacement.
 - body canonique present, avec preview et timeline internes.
@@ -27,6 +38,7 @@ Verifier explicitement que le panel n'est jamais docke directement dans un atome
 ## 2. Contenu interne obligatoire
 
 Verifier que le panel contient au minimum:
+
 - une zone de preview interne, avec le canvas de preview a l'interieur du panel.
 - une timeline visible sous la preview.
 - un separateur visible et interactif entre la preview et la zone des pistes.
@@ -44,11 +56,13 @@ Verifier explicitement dans le DOM que les pistes audio et video sont situees so
 ## 3. Interactions de deplacement
 
 Tester le deplacement du panel:
+
 - en drag depuis le header.
 - en drag depuis le footer si le comportement commun des panels l'autorise.
 - en drag depuis la zone outil si cette zone est censee servir de surface de deplacement.
 
 Apres chaque deplacement:
+
 - le panel doit rester dans les limites visibles de l'ecran.
 - le panel ne doit pas passer sous la main toolbar en bas.
 - le panel ne doit pas sortir a gauche, a droite, en haut ou en bas.
@@ -62,6 +76,7 @@ Tester aussi le deplacement apres resize et apres manipulation du separateur pre
 ## 4. Resize du panel complet
 
 Tester le redimensionnement par le grip en bas a droite du footer:
+
 - agrandir le panel.
 - reduire le panel.
 - relacher le pointeur puis verifier la taille finale.
@@ -71,6 +86,7 @@ Tester le redimensionnement par le grip en bas a droite du footer:
 - verifier que la taille reste bornee par l'ecran et par la main toolbar en bas.
 
 Tester ensuite:
+
 - double-clic fullscreen.
 - double-clic restauration.
 - resize apres restauration.
@@ -81,10 +97,12 @@ La taille restauree doit etre exactement la derniere taille utilisateur connue, 
 ## 5. Double-clic fullscreen / restauration
 
 Tester le double-clic sur:
+
 - le header.
 - le footer.
 
 Comportement attendu:
+
 - a l'ouverture initiale par double-clic sur l'atome, la molecule doit deja occuper tout l'espace autorise de l'ecran.
 - cette ouverture initiale fullscreen doit respecter la zone interdite de la main toolbar en bas de l'ecran.
 - premier double-clic: le panel passe en fullscreen borne.
@@ -98,6 +116,7 @@ Comportement attendu:
 ## 6. Separateur preview / tracks
 
 Tester le separateur entre la preview et les pistes:
+
 - le deplacer vers le bas pour donner plus de place a la preview.
 - verifier que les pistes restent presentes et visibles dans l'espace restant.
 - le deplacer vers le haut pour donner plus de place aux tracks.
@@ -112,6 +131,7 @@ Le separateur ne doit jamais transformer l'hote, externaliser la preview hors du
 ## 7. Preview et canvas
 
 Verifier que le canvas de preview:
+
 - est enfant du body Molecule, dans la zone preview attendue.
 - n'est pas place en fond du panel.
 - n'est pas place comme enfant direct parasite de l'atome hote.
@@ -123,6 +143,7 @@ Verifier qu'un canvas media natif appartenant a un atome source ne reste pas vis
 ## 8. Tracks et timeline
 
 Verifier que les tracks:
+
 - existent dans le DOM quand le payload timeline contient des pistes.
 - sont visibles dans le design.
 - ne sont pas masquees par la preview.
@@ -137,6 +158,7 @@ Verifier que les interactions internes aux tracks ne declenchent pas un deplacem
 ## 9. Bouton de fermeture
 
 Tester le bouton de fermeture:
+
 - il est visible dans le footer canonique.
 - il ferme le panel.
 - il nettoie les artefacts de dock.
@@ -148,6 +170,7 @@ Tester le bouton de fermeture:
 ## 10. Non-regressions DOM
 
 Inspecter le DOM apres chaque grande interaction et verifier:
+
 - un seul panel Molecule actif.
 - pas de duplication de root/header/body/footer.
 - pas de duplication de tracks.
@@ -160,6 +183,7 @@ Inspecter le DOM apres chaque grande interaction et verifier:
 ## 11. Rapport attendu
 
 Produire un rapport avec:
+
 - chaque element attendu: present / absent.
 - chaque interaction testee: ok / echec.
 - la ligne DOM ou le selecteur implique en cas d'echec.

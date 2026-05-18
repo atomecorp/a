@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Device Automation – Voice Autonomous macOS Agent
 
 Master Build Specification
@@ -165,6 +175,7 @@ User says:
 “Computer, check my unread emails and summarize them.”
 
 Flow must be:
+
  1. Wake word detection
  2. Transcribe speech
  3. Send to GPT with tool schema
@@ -204,6 +215,7 @@ System must:
 1. Output Requirement
 
 The AI generating this system must:
+
  1. Generate all source files
  2. Generate package.json
  3. Provide .env template

@@ -1,5 +1,15 @@
 # Rapport sanitaire du panel Moelcule Mtrax
 
+## Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Date: 2026-05-14
 
 ## Perimetre inspecte
@@ -237,37 +247,13 @@ Recommandation:
 
 ## Probleme 8: nomenclature incoherente Mtrack / Mtrax / Mtracks
 
-Constat:
+This rename work now has a dedicated task in [todo/molecule/molecule_rename_mtrack_to_molecule.md](todo/molecule/molecule_rename_mtrack_to_molecule.md).
 
-- Le domaine fonctionnel visible pour l'utilisateur est "Molécule", mais le code utilise massivement `mtrack`, `mtrax`, `mtracks`, `hmtracks`, `MTRACK`, `MTRAX`.
-- Les noms melangent plusieurs epoques du produit: timeline, tracks, audio engine, panel, preview, bridge, API window.
-- Certains fichiers sont dans `domains/mtrax`, certaines variables parlent de `mtrack`, et les logs alternent entre `MTRACK_TRACE`, `MTRACK_VIDEO_DIAG`, `MTRACK_IOS_*`, `hmtracks_audio_stage`.
+Summary:
 
-Impact:
-
-- La recherche dans le code est bruitee et incomplete: chercher `mtrax` ne trouve pas tout, chercher `mtrack` trouve trop.
-- Les nouveaux developpements risquent de choisir un prefixe au hasard.
-- Le domaine utilisateur "molecule" n'est pas reflechi dans les APIs internes.
-- Les logs et diagnostics deviennent difficiles a correler.
-
-Recommandation:
-
-- Renommer au maximum les mots et variables `mtrack`, `mtrax`, `mtracks` vers `molecule`.
-- Faire le renommage par couches pour limiter le risque:
-  - noms de fichiers/modules internes;
-  - variables/fonctions/classes;
-  - datasets/classes CSS;
-  - events DOM;
-  - APIs window;
-  - logs et tags diagnostics.
-- Garder temporairement des aliases de compatibilite uniquement aux frontieres publiques, avec une date/phase de suppression.
-- Documenter les exceptions legitimes, par exemple `hmtracks` si c'est un moteur audio tiers ou un nom de backend encore distinct.
-
-Definition cible:
-
-- Le domaine applicatif doit lire comme `molecule`.
-- Les anciens noms `mtrack/mtrax/mtracks` ne doivent rester que dans des adapters de migration clairement identifies.
-- Les logs principaux doivent utiliser un namespace unique, par exemple `MOLECULE_TRACE`, `MOLECULE_LAYOUT`, `MOLECULE_PREVIEW`, `MOLECULE_AUDIO`.
+- The visible product domain is Molecule, but internal naming still mixes `mtrack`, `mtrax`, `mtracks`, `hmtracks`, `MTRACK`, and `MTRAX`.
+- The rename must move internal naming toward `molecule` progressively, while keeping temporary compatibility aliases only at explicit public boundaries.
+- The target state is a codebase where the application domain, APIs, and diagnostics read primarily as `molecule`.
 
 ## Probleme 9: factorisation insuffisante
 
@@ -415,14 +401,7 @@ Actions:
 
 ### P2: lancer le renommage Molecule
 
-Objectif: aligner le code avec le domaine produit.
-
-Actions:
-
-- Inventorier tous les symboles `mtrack/mtrax/mtracks`.
-- Renommer progressivement vers `molecule`.
-- Garder des aliases de compatibilite uniquement aux frontieres publiques.
-- Renommer les logs principaux vers un namespace `MOLECULE_*`.
+Voir la tache dediee [todo/molecule/molecule_rename_mtrack_to_molecule.md](todo/molecule/molecule_rename_mtrack_to_molecule.md).
 
 ### P2: factoriser et instrumenter
 

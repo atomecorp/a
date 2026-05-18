@@ -1,11 +1,23 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # 🎨 PRESET/SKIN SYSTEM
 
 ## Vision
+
 LEGO-style system of pre-styled and skinnable components for rapid development.
 
 ## Desired Usage Examples
 
 ### Preset Definition
+
 ```javascript
 // Basic preset
 definePreset('button', {
@@ -38,6 +50,7 @@ defineSkin('button', 'glass', {
 ```
 
 ### Simple Usage
+
 ```javascript
 // Usage with preset + skin
 const saveBtn = $('button:primary', {
@@ -57,6 +70,7 @@ const glassBtn = $('button:glass', {
 ```
 
 ### Complex Presets
+
 ```javascript
 // Modern slider preset
 definePreset('slider', {
@@ -89,6 +103,7 @@ const volumeSlider = $('slider:ios', {
 ```
 
 ## TODO Implementation
+
 - [ ] Create `definePreset(name, config)`
 - [ ] Create `defineSkin(preset, skinName, styles)`
 - [ ] Parse the syntax `'preset:skin'`

@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # 📦 NPM Publication Checklist - Squirrel Framework
 
 ## 🔍 1. Package Name Verification
@@ -5,6 +15,7 @@
 ### Task: Check that `squirrel-framework` is available on NPM
 
 **Actions to perform:**
+
 ```bash
 # Check if the name is taken
 npm view squirrel-framework
@@ -17,6 +28,7 @@ npm view squirrel-components
 ```
 
 **If the name is taken:**
+
 - Change the `"name"` in `package.json`
 - Consider a scope: `@your-username/squirrel-framework`
 - Alternatives: `squirrel-web-framework`, `squirrel-ui-kit`, etc.
@@ -30,7 +42,9 @@ npm view squirrel-components
 ### Task: Update the GitHub URL in package.json
 
 **Actions to perform:**
+
 1. **Create the GitHub repository:**
+
    ```bash
    # Initialize git if not done
    git init
@@ -43,6 +57,7 @@ npm view squirrel-components
    ```
 
 2. **Update package.json:**
+
    ```json
    {
      "homepage": "https://github.com/YOUR-USERNAME/squirrel-framework",
@@ -57,6 +72,7 @@ npm view squirrel-components
    ```
 
 3. **Add badges in README:**
+
    ```markdown
    [![npm version](https://badge.fury.io/js/squirrel-framework.svg)](https://www.npmjs.com/package/squirrel-framework)
    [![GitHub issues](https://img.shields.io/github/issues/YOUR-USERNAME/squirrel-framework.svg)](https://github.com/YOUR-USERNAME/squirrel-framework/issues)
@@ -71,12 +87,14 @@ npm view squirrel-components
 ### Task: Create a LICENSE file
 
 **Actions to perform:**
+
 ```bash
 # Create the LICENSE file (MIT recommended)
 touch LICENSE
 ```
 
 **LICENSE Content (MIT):**
+
 ```
 MIT License
 
@@ -102,6 +120,7 @@ SOFTWARE.
 ```
 
 **Update package.json:**
+
 ```json
 {
   "license": "MIT",
@@ -120,11 +139,13 @@ SOFTWARE.
 **Actions to perform:**
 
 1. **Install test dependencies:**
+
    ```bash
    npm install --save-dev vitest jsdom @testing-library/dom
    ```
 
 2. **Create test configuration:**
+
    ```javascript
    // vitest.config.js
    import { defineConfig } from 'vitest/config';
@@ -139,12 +160,14 @@ SOFTWARE.
    ```
 
 3. **Create basic tests:**
+
    ```bash
    mkdir -p test
    # Create test/button.test.js, test/slider.test.js, etc.
    ```
 
 4. **Test example (test/button.test.js):**
+
    ```javascript
    import { describe, it, expect } from 'vitest';
    import { Button } from '../src/squirrel/components/button.js';
@@ -159,6 +182,7 @@ SOFTWARE.
    ```
 
 5. **Add scripts in package.json:**
+
    ```json
    {
      "scripts": {
@@ -186,6 +210,7 @@ SOFTWARE.
    - Code examples
 
 2. **Component documentation:**
+
    ```bash
    # Create docs/ if not existing
    mkdir -p docs/components
@@ -197,16 +222,19 @@ SOFTWARE.
    ```
 
 3. **Contribution guide:**
+
    ```bash
    touch CONTRIBUTING.md
    ```
 
 4. **Changelog:**
+
    ```bash
    touch CHANGELOG.md
    ```
 
 5. **Practical examples:**
+
    ```bash
    mkdir -p examples
    touch examples/basic-usage.html
@@ -214,6 +242,7 @@ SOFTWARE.
    ```
 
 **Recommended structure:**
+
 ```
 docs/
 ├── README.md (main guide)
@@ -248,6 +277,7 @@ docs/
 - [ ] NPM account configured (`npm login`)
 
 **Final command:**
+
 ```bash
 ./publish-npm.sh
 ```

@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Optimized Architecture for a Video + DAW Editor with SVG Morphing and Editable HTML Text
 
 Overview
@@ -17,6 +27,7 @@ The system is designed for high performance and scalability.
 ⸻
 
 Core Principles
+
  1. Single visible WebGL canvas (PixiJS only)
  2. No DOM rendering during playback
  3. Strict separation between Edit Mode and Playback Mode

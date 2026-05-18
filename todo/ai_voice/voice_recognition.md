@@ -1,16 +1,29 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Voice Recognition (Deferred)
 
 Status: deferred (not doing now). This note captures the plan so we can resume quickly later.
 
 ## Goal
+
 Add cross-platform speech-to-text for Tauri desktop + mobile using `tauri-plugin-stt`.
 
 ## Scope
+
 - Desktop: macOS, Windows, Linux (Vosk offline models).
 - Mobile: iOS, Android (native speech APIs).
 - UI: real-time transcript + interim results + errors.
 
 ## Tasks
+
 - [ ] Decide target platforms for the first MVP (desktop only vs full mobile).
 - [ ] Add Rust plugin in `src-tauri/Cargo.toml` and register in `src-tauri/src/main.rs`.
 - [ ] Add permissions to `src-tauri/capabilities/default.json` (stt + mic).
@@ -22,11 +35,13 @@ Add cross-platform speech-to-text for Tauri desktop + mobile using `tauri-plugin
 - [ ] Update build scripts to enable STT feature flag.
 
 ## Platform Notes
+
 - iOS: add `NSSpeechRecognitionUsageDescription` and `NSMicrophoneUsageDescription`.
 - Android: add `RECORD_AUDIO` permission.
 - Desktop: install or bundle `libvosk` and verify model download paths.
 
 ## Testing
+
 - [ ] Verify mic permissions on each platform.
 - [ ] Verify interim results and final results.
 - [ ] Verify offline behavior on desktop (after model download).

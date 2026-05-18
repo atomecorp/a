@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Finder (Advanced Search) – Atomes + Tools
 
 This document specifies an **advanced search system** (“Finder”) to locate **Atomes** and **tools** using structured criteria, heuristics/indices, and an optional **AI search mode** via an MCP connector.

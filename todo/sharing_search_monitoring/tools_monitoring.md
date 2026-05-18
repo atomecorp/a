@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Tache - Tools Monitoring Dashboard
 
 ## Objectif
@@ -7,6 +17,7 @@ Creer un outil de monitoring qui ouvre un panneau avec un tableau de bord des to
 ## Resultat attendu
 
 Le panneau affiche:
+
 1. En haut: la liste des tools actuellement actifs (y compris les tools hidden/systeme actives).
 2. En dessous: la liste complete de tous les tools disponibles.
 3. Pour chaque ligne: nom, id, mode d activation, etat actif/inactif, flag hidden.

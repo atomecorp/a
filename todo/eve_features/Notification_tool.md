@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Notification System – Functional Specification
 
 1. Purpose
@@ -21,6 +31,7 @@ Nothing is automatically purged.
 1. Notification Arrival Behavior (Passive Display)
 
 When a new notification arrives:
+
  1. The toolbar icon automatically expands horizontally (animated, smooth).
  2. The notification text is displayed immediately inside the expanded icon.
 
@@ -55,6 +66,7 @@ End of Passive Display
 1. Opening the Notification Panel (Primary Accordion)
 
 When the user clicks the notification icon:
+
  1. The icon expands vertically into a panel (accordion behavior).
  2. The panel displays a list of notification titles only.
  3. The pulse animation stops only after the panel is opened.

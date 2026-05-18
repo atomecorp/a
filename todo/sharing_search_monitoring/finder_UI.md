@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Structured Search Panel – Technical Specification
 
 ## Overview
@@ -5,8 +15,8 @@
 This document describes the implementation of a **structured search panel**.
 The panel must be consistent with existing UI patterns already used in:
 
-* `src/application/eVe/tools/user`
-* `src/application/eVe/tools/infos.js`
+- `src/application/eVe/tools/user`
+- `src/application/eVe/tools/infos.js`
 
 The goal is to provide a powerful, extensible, and coherent search experience across Atome / eVe.
 
@@ -18,10 +28,10 @@ At the top of the panel, a **text input field** is displayed.
 
 ### Characteristics
 
-* Includes a **magnifying-glass icon** (search indicator)
-* Accepts free-text input
-* Acts as the **primary query source**
-* The entered value is reused by default filters further down the panel
+- Includes a **magnifying-glass icon** (search indicator)
+- Accepts free-text input
+- Acts as the **primary query source**
+- The entered value is reused by default filters further down the panel
 
 ---
 
@@ -31,16 +41,16 @@ Below the search input, a horizontal row allows the user to choose **what to sea
 
 ### Available Search Scopes (5 buttons)
 
-* **Store** – search in the shop / marketplace
-* **People** – search for users or persons
-* **Internet** – external web search
-* **Place** – search for locations
-* **Local** – search locally (projects, Atomes, files, etc.)
+- **Store** – search in the shop / marketplace
+- **People** – search for users or persons
+- **Internet** – external web search
+- **Place** – search for locations
+- **Local** – search locally (projects, Atomes, files, etc.)
 
 ### Behavior
 
-* Only **one scope** can be active at a time
-* The selected scope determines the data source and search strategy
+- Only **one scope** can be active at a time
+- The selected scope determines the data source and search strategy
 
 ---
 
@@ -50,16 +60,16 @@ A second horizontal row allows **sorting and filtering of results**.
 
 ### Sorting Options (5 choices)
 
-* **Creation Date**
-* **Modification Date**
-* **Type**
-* **Alphanumeric** (alphabetical order)
-* **Size**
+- **Creation Date**
+- **Modification Date**
+- **Type**
+- **Alphanumeric** (alphabetical order)
+- **Size**
 
 ### Behavior
 
-* Only **one sorting criterion** can be active
-* Sorting affects the result list immediately
+- Only **one sorting criterion** can be active
+- Sorting affects the result list immediately
 
 ---
 
@@ -71,8 +81,8 @@ An **accordion section** provides advanced and extensible filtering capabilities
 
 When the accordion is opened:
 
-* A **Name filter** is present by default
-* The associated input field is **automatically filled** with the value from the main search input
+- A **Name filter** is present by default
+- The associated input field is **automatically filled** with the value from the main search input
 
 This ensures consistency between the global search and detailed filtering.
 
@@ -88,12 +98,12 @@ Each added filter row contains **three fields**:
 
 A dropdown allowing selection of **any Atome property**, for example:
 
-* `id`
-* `width`
-* `height`
-* `color`
-* `position`
-* any other available property
+- `id`
+- `width`
+- `height`
+- `color`
+- `position`
+- any other available property
 
 This selector is **dynamic** and reflects the available Atome properties.
 
@@ -105,35 +115,35 @@ Defines **how the selected property is evaluated**.
 
 Available conditions:
 
-* starts with
-* equals
-* different from
-* greater than
-* greater than or equal to
-* less than
-* less than or equal to
-* between
+- starts with
+- equals
+- different from
+- greater than
+- greater than or equal to
+- less than
+- less than or equal to
+- between
 
 ---
 
 #### 3. Value Input
 
-* For most conditions, a **single input field** is displayed
+- For most conditions, a **single input field** is displayed
 
-  * Example: `= 30`, `> 60`, `= "toto"`
+  - Example: `= 30`, `> 60`, `= "toto"`
 
-* **Special case – `between`**
+- **Special case – `between`**
 
-  * Displays **two input fields**
-  * Defines a minimum and maximum value
-  * Example: `between 30 and 60`
+  - Displays **two input fields**
+  - Defines a minimum and maximum value
+  - Example: `between 30 and 60`
 
 ---
 
 ### Filter Combination Rules
 
-* Multiple filters can be added
-* All active filters are **combined** to refine the result set
+- Multiple filters can be added
+- All active filters are **combined** to refine the result set
 
 ---
 
@@ -143,16 +153,16 @@ Below the filters, a row allows changing the **order direction of results**.
 
 ### Columns (3)
 
-* **Name** (alphabetical)
-* **Date**
-* **Atome Type**
+- **Name** (alphabetical)
+- **Date**
+- **Atome Type**
 
 ### Behavior
 
-* Each column allows toggling between:
+- Each column allows toggling between:
 
-  * **Ascending**
-  * **Descending**
+  - **Ascending**
+  - **Descending**
 
 ---
 
@@ -162,27 +172,27 @@ At the bottom of the panel, a **dynamic results list** is displayed.
 
 ### Columns (3)
 
-* **Name**
-* **Date**
-* **Type**
+- **Name**
+- **Date**
+- **Type**
 
 ### Behavior
 
 The list updates dynamically according to:
 
-* search input value
-* selected search scope
-* sorting option
-* advanced filters
-* order direction
+- search input value
+- selected search scope
+- sorting option
+- advanced filters
+- order direction
 
 ---
 
 ## Notes
 
-* UI must remain consistent with existing eVe tool panels
-* Architecture must allow future extension (new scopes, properties, conditions)
-* Filters and sorting must be reactive and performant
+- UI must remain consistent with existing eVe tool panels
+- Architecture must allow future extension (new scopes, properties, conditions)
+- Filters and sorting must be reactive and performant
 
 ---
 
@@ -192,11 +202,11 @@ The list updates dynamically according to:
 
 UI search scopes represent functional domains and are mapped internally to Finder entities and permission scopes:
 
-* **Store** → `entity: tool` | `scope: public`
-* **People** → `entity: user` | `scope: public` or `project`
-* **Place** → `entity: place` | `scope: public`
-* **Local** → `entity: atome` | `scope: project` (default) or `personal`
-* **Internet** → external search provider (bypasses Finder)
+- **Store** → `entity: tool` | `scope: public`
+- **People** → `entity: user` | `scope: public` or `project`
+- **Place** → `entity: place` | `scope: public`
+- **Local** → `entity: atome` | `scope: project` (default) or `personal`
+- **Internet** → external search provider (bypasses Finder)
 
 ---
 

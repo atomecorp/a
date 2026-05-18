@@ -1,11 +1,23 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # 🍭 API SUGAR - Zero-overhead Commodities
 
 ## Vision
+
 Add elegant shortcuts without impacting performance.
 
 ## Desired API Sugar Examples
 
 ### 1. Position & Size shortcuts
+
 ```javascript
 // Instead of
 element.style.left = '100px';
@@ -47,6 +59,7 @@ element.visible = false; // instead of element.style.display = 'none'
 // Or method chaining
 element.move(100, 200).size(300, 150);
 ```
+
 // In $ after element creation
 element.move = (x, y) => {
   element.style.left = x + 'px';
@@ -62,7 +75,9 @@ element.size = (w, h) => {
 
 // Usage fluent
 element.move(100, 200).size(300, 150);
+
 ### 2. Visibility shortcuts
+
 ```javascript
 // Instead of
 element.style.display = 'none';
@@ -79,6 +94,7 @@ element.hide().show().fadeOut().fadeIn();
 ```
 
 ### 3. Event sugar
+
 ```javascript
 // Instead of
 element.addEventListener('click', handler);
@@ -106,6 +122,7 @@ element.click(() => console.log('clicked'))
 ```
 
 ### 4. CSS Template Literals
+
 ```javascript
 // Instead of multiple assignments
 element.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
@@ -120,6 +137,7 @@ element.css`
 ```
 
 ### 5. Animation shortcuts
+
 ```javascript
 // Instead of verbose Web Animations API
 element.animate([
@@ -137,6 +155,7 @@ element.slideX(100).then(() => element.scaleTo(1.2));
 ```
 
 ### 6. Class management sugar
+
 ```javascript
 // Instead of
 element.classList.add('active');
@@ -152,6 +171,7 @@ element.expanded = !element.expanded; // → classList.toggle('expanded')
 ```
 
 ## TODO Implementation
+
 - [ ] Getters/setters pour x, y, w, h, visible, opacity
 - [ ] Methods move(), size(), hide(), show(), fadeIn(), fadeOut()
 - [ ] Event shortcuts click(), hover(), focus(), blur()
@@ -160,6 +180,3 @@ element.expanded = !element.expanded; // → classList.toggle('expanded')
 - [ ] Class management shortcuts addClass(), removeClass(), toggleClass()
 - [ ] Toutes les APIs retournent `this` pour method chaining
 - [ ] Zero impact performance - utiliser defineProperty et natives
-
-
-

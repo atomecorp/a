@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Calendar Todos (Phase 1 now, Phase 2 later)
 
 This document specifies how to support **simple todos** ("due date + reminder") inside the existing Calendar feature, and how to evolve into a richer task system later **without changing the core storage model**.

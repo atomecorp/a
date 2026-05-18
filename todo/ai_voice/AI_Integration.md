@@ -1,9 +1,20 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # AI Integration: Unified Shell & System Access for Squirrel (Tauri & Node.js)
 
 **Objective:**  
 Design a unified JavaScript/TypeScript codebase for Squirrel that enables seamless integration of AI APIs (OpenAI, Ollama, etc.) and system/shell access, working both in Tauri (desktop) and Node.js/Fastify (server) environments, without duplicating business logic.
 
 **Requirements:**
+
 - All business logic, AI API calls, and orchestration must be written in JavaScript/TypeScript modules, shared between desktop and server.
 - System access (shell commands, file system, etc.) must be abstracted via a JS interface (e.g. `runShellCommand(cmd, args)`), with environment-specific implementations:
   - **Tauri:** Use `@tauri-apps/api` for shell and file access.
@@ -13,6 +24,7 @@ Design a unified JavaScript/TypeScript codebase for Squirrel that enables seamle
 - No business logic should be duplicated in Rust or Node—only the system bridge is environment-specific.
 
 **Example Structure:**
+
 ```
 src/shared/ai.js         # All AI logic and API calls
 src/shared/system.js     # Abstracted system/shell access
@@ -21,6 +33,7 @@ server/bridge.js         # Node.js-specific implementation
 ```
 
 **Example Abstraction (system.js):**
+
 ```js
 export async function runShellCommand(cmd, args = []) {
   if (window.__TAURI__) {
@@ -45,6 +58,7 @@ export async function runShellCommand(cmd, args = []) {
 ```
 
 **Usage:**
+
 - Import and use `runShellCommand` and AI logic in your JS code, regardless of environment.
 - The correct system bridge will be used automatically (Tauri or Node.js).
 - All AI and orchestration logic remains in a single, maintainable JS/TS codebase.

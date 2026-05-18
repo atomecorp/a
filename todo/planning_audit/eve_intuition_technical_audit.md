@@ -1,4 +1,15 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Audit Technique — eVe Intuition
+
 **Date :** 22 février 2026
 **Périmètre :** `src/application/eVe/intuition/**`
 **Volume total :** ~70 000 lignes, ~65 fichiers JS
@@ -67,6 +78,7 @@ try {
 `require()` est CommonJS. Ce fichier est un module ES (`import/export`). Dans un bundler Vite/Rollup, `require` n'est pas défini. Ce code lèvera une `ReferenceError` en runtime dans les environnements Tauri et PWA. Le commentaire dit "Fallback" — les fallbacks sont **interdits** selon les instructions de l'équipe.
 
 **Fix :** Importer `ShareAPI` correctement via un import dynamique ES :
+
 ```js
 const getShareApi = async () => {
     if (typeof window !== 'undefined' && window.ShareAPI) return window.ShareAPI;
@@ -471,6 +483,7 @@ Les modules `runtime/` (command_bus, layer_contract, history_policy) sont bien �
 ### Robustesse : 5/10
 
 Le code est très défensif (nombreux guards `typeof window === 'undefined'`, optional chaining partout, fallbacks `|| ''`). Mais :
+
 - 433 blocs `catch` silencieux cachent des erreurs potentiellement critiques
 - Le ratio addEventListener/removeEventListener de 5.7:1 est préoccupant
 - Un bug structurel réel (require() CJS en ES module) pourrait faire crasher communication.js en prod
@@ -542,6 +555,7 @@ La stratégie de modules est bonne en intention (runtime/, tools/, contracts/, p
    - `mtrack_drag_drop.js`
    - `mtrack_clip_manager.js`
 6. **Définir des invariants de module** pour les ID de layers et préfixes de sélection :
+
    ```js
    console.assert(INTUITION_PANEL_LAYER_ID === 'intuition_panel_layer', 'Layer ID contract violated');
    ```

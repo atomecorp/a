@@ -1,5 +1,15 @@
 # Molecule Trouble Solving Guide
 
+## Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 ## Purpose
 
 This guide defines the investigation and correction plan for the current Molecule/Mtrack instability. It must be followed before any source code change.

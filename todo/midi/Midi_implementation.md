@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Atome — MIDI Engine universel (Desktop + Mobile)
 
 Objectif : construire un moteur MIDI universel pour Atome (automation, réception notes/CC, MIDI Learn, mapping, enregistrement/replay), utilisable :
@@ -17,6 +27,7 @@ Contraintes non négociables
 1) Architecture cible
 
 1.1 Modules
+
  1. atome-midi-core (Rust)
  • Modèle d’événements MIDI normalisé
  • Router/Filter/Mapper
@@ -265,6 +276,7 @@ Convertir un flux MIDI en modifications de propriétés Atome déterministes.
 ⸻
 
 1) Panneaux UI (MVP)
+
  1. MIDI Monitor
  • affiche source, channel, type, data, timestamp
  2. Ports
@@ -281,6 +293,7 @@ Convertir un flux MIDI en modifications de propriétés Atome déterministes.
 1) Plan de tâches (checklist exécutable)
 
 Phase A — Core Rust (MVP)
+
  1. Créer crate atome-midi-core.
  2. Définir MidiEvent, MidiKind, MidiSourceId, MidiPortUID.
  3. Implémenter parser bytes → MidiEvent (Note/CC/PB minimum).

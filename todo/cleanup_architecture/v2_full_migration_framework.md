@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 # Tache - Migration complete framework eVe vers V2
 
 ## Constat audit (code actif)
@@ -95,5 +105,5 @@ Les commandes suivantes doivent retourner 0 occurrence dans `src/application/eVe
 
 En complement:
 
-5. Smoke test UI: ouverture/fermeture des panels principaux, drag/drop tools, palettes, toolboxes dynamiques, matrix open/close.
-6. Verification persistence: changement projet => restauration correcte des tools/toolboxes du projet courant uniquement.
+1. Smoke test UI: ouverture/fermeture des panels principaux, drag/drop tools, palettes, toolboxes dynamiques, matrix open/close.
+2. Verification persistence: changement projet => restauration correcte des tools/toolboxes du projet courant uniquement.

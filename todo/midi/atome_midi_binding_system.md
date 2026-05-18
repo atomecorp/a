@@ -1,5 +1,15 @@
-
 # Atome MIDI Binding System
+
+## Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 ### Specification – Scope, Conflict Resolution and Execution Engine
 
 Version: draft 1  
@@ -83,18 +93,23 @@ Resolution priority:
 # 5. Binding Modes
 
 ### Inherit
+
 Uses parent binding.
 
 ### Override
+
 Replaces parent binding.
 
 ### Mask
+
 Disables parent binding without replacing it.
 
 ### Additive
+
 Allows multiple actions for one source.
 
 ### Protected
+
 Cannot be overridden unless explicitly unlocked.
 
 ---
@@ -148,29 +163,35 @@ CC120 → Panic
 # 9. Supported Actions
 
 Transport:
+
 - transport_play
 - transport_stop
 - transport_record
 - panic
 
 Song navigation:
+
 - song_next
 - song_previous
 - song_select
 
 Scene control:
+
 - scene_launch
 - scene_next
 
 Pattern control:
+
 - pattern_launch
 - pattern_switch
 
 Sample control:
+
 - sample_trigger
 - sample_stop
 
 Parameter control:
+
 - parameter_set
 - parameter_increment
 
@@ -197,6 +218,7 @@ Conflicts occur when:
 same MIDI source + different incompatible bindings.
 
 Types:
+
 - redundant
 - override
 - composite
@@ -268,6 +290,7 @@ Song → Trigger Intro
 Resolution: Song overrides Global
 
 Statuses:
+
 - active
 - inherited
 - masked

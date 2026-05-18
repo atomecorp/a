@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Sharing System – Technical Specification
 
 This document defines the complete functional and security requirements for the Sharing System. It is intended to be used directly by Copilot or any developer as a precise implementation guide, without interpretation.
@@ -61,6 +71,7 @@ B. Targeted (Private)
 3.3 Share Type
 
 Each share defines a synchronization mode:
+
  1. One-shot
  • Snapshot at time T
  • No future updates propagated
@@ -126,6 +137,7 @@ Example:
  • an entire Project
 
 Workflow:
+
  1. User selects entities
  2. User opens Share tool
  3. User configures share panel

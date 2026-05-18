@@ -1,3 +1,13 @@
+# Mandatory Execution Gate
+
+Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+
+Read and strictly apply:
+
+- ./.codex/AGENTS.md
+
+If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+
 Documentation Audit & Normalization Prompt
 
 You will analyze a set of technical documents located in the folder:
@@ -70,6 +80,7 @@ You must never:
 ⸻
 
 📤 Expected Output
+
  1. Audit report:
  • List of inconsistencies
  • Vague areas
