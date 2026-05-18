@@ -1,4 +1,4 @@
-eVe / Atome Unified AI Coding & Architecture Guideline
+# eVe / Atome Unified AI Coding & Architecture Guideline
 
 Version: 2.0
 Status: Active – Strict Enforcement
@@ -79,6 +79,46 @@ You must:
 - optimize memory allocations;
 - optimize realtime performance;
 - avoid unnecessary abstractions.
+
+────────────────────────────────
+MANDATORY FILE SIZE AND CODING STANDARDS
+────────────────────────────────
+
+The codebase MUST respect explicit file-size and structure limits.
+
+File size policy:
+
+- ideal file: under 300 lines;
+- warning threshold: 500 lines;
+- critical threshold: 800 lines;
+- forbidden without explicit architectural justification and a split plan: 1000+ lines.
+
+Mandatory enforcement rules:
+
+- Do not create new oversized files when a split is possible.
+- Do not keep adding features into a file that is already above the critical threshold unless the current task is explicitly reducing or restructuring that file.
+- If a file exceeds the warning threshold, verify whether responsibilities are mixed and split them when architecture allows it.
+- If a file exceeds the critical threshold, reduction and responsibility separation become mandatory, not optional.
+- Any justified exception above 1000 lines must be explicitly documented with the reason, the ownership boundary, and the intended reduction plan.
+
+Coding standards are mandatory for both new and existing code.
+
+You must enforce:
+
+- single clear responsibility per module whenever architecture allows it;
+- explicit and consistent naming;
+- removal of dead, deprecated, duplicated, or unreachable code;
+- no silent failure paths hiding invalid states;
+- no broad utility duplication across files when a shared module is appropriate;
+- stable and readable public interfaces;
+- code organization that remains navigable for long-term maintenance.
+
+For already-written code:
+
+- identify files above size thresholds;
+- identify code that violates the coding standards;
+- open or update dedicated remediation tasks when full reduction is not completed in the current change;
+- reduce oversized or non-compliant files at the source instead of normalizing their complexity as acceptable.
 
 Before deleting files:
 

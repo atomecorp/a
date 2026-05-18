@@ -8,7 +8,7 @@ Read and strictly apply:
 
 If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
 
-# Ordre d'execution des taches
+## Ordre d'execution des taches
 
 Objectif: attaquer les taches dans l'ordre le plus efficace, cocher ce qui est accompli, et supprimer ce fichier une fois toutes les taches terminees.
 
@@ -22,8 +22,8 @@ Regle de suivi:
 
 Source principale: `todo/urgent_priorities.md`
 
-- [ ] Remplacer tout `require()` dans module ES, notamment `tools/communication.js`.
-- [ ] Deplacer `mtraxCloseInFlightGuard` avant toute utilisation dans `eVeIntuition.js`.
+- [x] Remplacer tout `require()` dans module ES, notamment `tools/communication.js`.
+- [x] Deplacer `mtraxCloseInFlightGuard` avant toute utilisation dans `eVeIntuition.js`.
 - [ ] Unifier les prefixes de selection depuis `runtime/selection.js`.
 - [ ] Renommer `ensureString` en `isString` dans `contracts/validator.js`.
 - [ ] Ajouter `destroyLayerInvariantObserver()` et le connecter au cycle de destruction.
@@ -150,7 +150,21 @@ Sources principales:
 - [ ] Ajouter les garde-fous CI anti regression V1.
 - [ ] Nettoyer uniquement les artefacts generes confirmes comme jetables.
 
-## 10. Chantiers produits differables
+## 10. Taille des fichiers / normes de codage
+
+Source principale:
+
+- `todo/cleanup_architecture/file_size_and_coding_standards_remediation.md`
+
+- [ ] Inventorier les fichiers au-dessus de 300, 500, 800 et 1000 lignes.
+- [ ] Prioriser les fichiers critiques melangeant plusieurs responsabilites.
+- [ ] Reduire les fichiers critiques avant de continuer a les etendre.
+- [ ] Sortir les utilitaires dupliques vers des modules partages quand cela supprime une vraie duplication.
+- [ ] Supprimer le code mort, deprecated, duplique ou inatteignable trouve pendant les reductions.
+- [ ] Documenter tout fichier restant au-dessus de 1000 lignes avec justification et plan de reduction.
+- [ ] Verifier l'alignement du code existant avec les normes de `.codex/AGENTS.md`.
+
+## 11. Chantiers produits differables
 
 Ces taches doivent rester apres stabilisation du socle.
 
