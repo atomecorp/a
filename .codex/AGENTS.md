@@ -599,9 +599,32 @@ No other fallback mechanism is permitted.
 INTERNATIONALIZATION POLICY
 ────────────────────────────────
 
-All labels, placeholders, and UI text MUST use:
+All user-visible text MUST use the existing Atome/eVe internationalization system:
 
 - eveT()
+
+This applies to every system text rendered or exposed by:
+
+- tools;
+- panels;
+- dialogs;
+- modal windows;
+- confirmation boxes;
+- system objects;
+- Atome objects;
+- menu entries;
+- tooltips;
+- buttons;
+- labels;
+- placeholders;
+- empty states;
+- status messages;
+- visible warnings;
+- visible errors;
+- onboarding or helper text;
+- accessibility-facing text when it is user-visible or assistive.
+
+Hardcoded user-visible strings are forbidden in tools, panels, dialogs, object definitions, and system UI.
 
 Keys must remain grouped by domain:
 
@@ -609,7 +632,9 @@ Keys must remain grouped by domain:
 - eve.user.*
 - etc.
 
-Non-i18n-compliant labels are forbidden.
+Non-i18n-compliant labels, placeholders, messages, titles, buttons, and system UI text are forbidden.
+
+English-only internal code comments, logs, warnings, debug messages, and developer documentation remain governed by the LANGUAGE AND STACK POLICY and must not be confused with user-visible localized text.
 
 ────────────────────────────────
 SHARING AND ACL POLICY
