@@ -42,11 +42,18 @@ Source principale: `todo/urgent_priorities.md`
 
 ## 3. Contrat panel / layout eVe
 
-Source principale: `todo/eve_features/update_panel_refactor.md`
+Sources principales:
+
+- `todo/eve_features/update_panel_refactor.md`
+- `todo/eve_features/panel_tools_above_footer_band.md`
+- `todo/eve_features/panel_overflow_direction_indicators.md`
 
 - [ ] Centraliser les tokens de chrome panel.
-- [ ] Finaliser `createEveDialog` avec header, body, footer et tools dock.
+- [ ] Finaliser `createEveDialog` avec header, body, tools band, footer.
+- [ ] Placer les outils de panel au-dessus du footer band.
+- [ ] Garder le footer comme bande finale avec titre, fermeture et resize grip.
 - [ ] Garantir que le body reste la seule zone scrollable.
+- [ ] Ajouter des indicateurs visibles de debordement haut/bas sur le vrai scroll container.
 - [ ] Migrer les panels simples avant les panels complexes.
 - [ ] Valider home/user, finder, communication, calendar et mtrack.
 
@@ -57,14 +64,20 @@ Sources principales:
 - `todo/molecule/molecule_sanitizer.md`
 - `todo/media_handling/MTraX_edition.md`
 - `todo/molecule/molecule_tests.md`
+- `todo/molecule/molecule_trouble_solving.md`
+- `todo/molecule/molecule_rename_mtrack_to_molecule.md`
 
+- [ ] Construire les diagnostics globaux Molecule avant les corrections profondes.
 - [ ] Clarifier le contrat preview: interne par defaut, externalise uniquement si explicite.
 - [ ] Remplacer le layout tracks/cells par un layout responsive.
 - [ ] Fiabiliser le splitter pour qu'il ne deplace jamais le panel.
 - [ ] Retirer les styles globaux dangereux sur le host docke.
 - [ ] Simplifier les synchronisations layout.
+- [ ] Traiter les bugs Molecule dans l'ordre du guide trouble solving.
 - [ ] Ajouter ou mettre a jour les probes/tests Molecule.
-- [ ] Lancer le renommage progressif Molecule seulement apres stabilisation.
+- [ ] Inventorier les noms `mtrack`, `mtrax`, `mtracks`, `hmtracks`.
+- [ ] Lancer le renommage progressif Molecule seulement apres stabilisation fonctionnelle.
+- [ ] Garder les aliases legacy uniquement aux frontieres publiques documentees.
 
 ## 5. AV APIs / recording / preview
 
@@ -84,6 +97,7 @@ Sources principales:
 - `todo/sharing_search_monitoring/sharing_to_code.md`
 - `todo/sharing_search_monitoring/finder.md`
 - `todo/sharing_search_monitoring/finder_UI.md`
+- `todo/communication_social/matrix_flower_context_menu.md`
 
 - [ ] Reproduire le bug de partage Fastify vers Tauri et collecter les logs.
 - [ ] Identifier la cause: `receiverProjectId`, `parent_id`, ou filtre `loadProjectAtomes()`.
@@ -91,6 +105,8 @@ Sources principales:
 - [ ] Supprimer les fallbacks qui masquent les erreurs.
 - [ ] Ajouter validation et erreurs claires pour les partages non lies.
 - [ ] Stabiliser Finder apres correction du modele partage/projet.
+- [ ] Ajouter le menu Flower contextuel Matrix apres stabilisation selection/command path.
+- [ ] Verifier que Copy, Paste, Duplicate, Delete et Rename routent vers les vrais chemins runtime.
 
 ## 7. Mail / IA vocale / MCP
 
