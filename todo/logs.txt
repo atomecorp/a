@@ -1,0 +1,247 @@
+
+🔄 FileSyncCoordinator sync complete roots=
+   • /private/var/mobile/Containers/Shared/AppGroup/FEC63937-7BD8-442E-8F5D-0581885ECE24/Documents
+   • /var/mobile/Containers/Data/Application/54CC5C37-83A3-4E11-8990-A566406BF129/Documents
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"request_id":"ws_1083_1774763882923","state":{"project_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","atome
+🔌 WS recv: 698 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774763364270_d07deabf04c1b","props":{"selected":false,"updated_at":"2026-03-29T05:58:03.979Z"},"project_id":"75426b19-eb9f-4
+🔌 WS message type: events
+🔌 WS recv: 696 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"selected":true,"updated_at":"2026-03-29T05:58:03.979Z"},"project_id":"75426b19-eb9f-40
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"event":{"ts":"2026-03-29T05:58:03Z","project_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","actor":{"type":"user","id":"1
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774763364270_d07deabf04c1b","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"event":{"ts":"2026-03-29T05:58:04Z","project_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","actor":{"type"
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"type":"state-current-response","request_id":"ws_1086_1774763884002","state":{"type":"group","parent_id"
+[WS-DIAG] onmessage: {"success":true,"type":"state-current-response","request_id":"ws_1087_1774763884008","state":{"type":"text","parent_id":
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"request_id":"ws_1088_1774763884127","success":true,"type":"state-current-response","state":{"type":"user","atome_id":"
+🔌 WS recv: 764 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"737px","top":"236px"},"tx_id":"tx_1774763884439_ad6be81f21f77
+🔌 WS message type: events
+🔌 WS recv: 1476 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"737px","top":"236px","updated_at":"2026-03-29T05:58:04.616Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"request_id":"ws_1089_1774763884614","success":true,"type":"events-response","events":[{"ts":"2026-03-29T05:58:04Z","tx
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"737px","top":"236px"},"tx_id":"tx_1774763884439_ad6be81f21f77","gesture
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"event":{"ts":"2026-03-29T05:58:04Z","project_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","actor":{"type":"user","id":"1
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"type":"events-response","request_id":"ws_1091_1774763884616","events":[{"ts":"2026-03-29T05:58:04Z","tx
+[WS-DIAG] onmessage: {"success":true,"request_id":"ws_1092_1774763884636","state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"request_id":"ws_1093_1774763885331","success":true,"type":"state-current-response","state":{"type":"user","atome_id":"
+🔌 WS recv: 765 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"731px","top":"242px"},"tx_id":"tx_1774763885512_4cc69c88ef662
+🔌 WS message type: events
+🔌 WS recv: 1477 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"731px","top":"242px","updated_at":"2026-03-29T05:58:05.645Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"events":[{"ts":"2026-03-29T05:58:05Z","tx_id":"tx_1774763885512_4cc69c88ef6628","project_id":"75426b19-eb9f-404c-8d72-
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"731px","top":"242px"},"tx_id":"tx_1774763885512_4cc69c88ef6628","gestur
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1095_1774763885646","event":{"ts":"2026-03-29T05:58:05Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1096_1774763885646","events":[{"ts":"2026-03-29T05:58:05Z","tx
+[WS-DIAG] onmessage: {"state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","atome_id":"atome_1774762886525_a53266fe13c6e
+🔌 WS recv: 763 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"726px","top":"246px"},"tx_id":"tx_1774763886386_cca1f96163e74
+🔌 WS message type: events
+🔌 WS recv: 1475 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"726px","top":"246px","updated_at":"2026-03-29T05:58:06.492Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"request_id":"ws_1098_1774763886485","success":true,"events":[{"ts":"2026-03-29T05:58:06Z","tx_id":"tx_1774763886386_cc
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"726px","top":"246px"},"tx_id":"tx_1774763886386_cca1f96163e74","gesture
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"event":{"ts":"2026-03-29T05:58:06Z","project_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","actor":{"type":"user","id":"1
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"request_id":"ws_1100_1774763886493","success":true,"events":[{"ts":"2026-03-29T05:58:06Z","tx_id":"tx_1774763886386_cc
+[WS-DIAG] onmessage: {"request_id":"ws_1101_1774763886511","success":true,"state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"state":{"type":"user","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","atome_type":"user","version":4
+🔌 WS recv: 764 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"718px","top":"250px"},"tx_id":"tx_1774763887086_4e1335c5e360c
+🔌 WS message type: events
+🔌 WS recv: 1476 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"718px","top":"250px","updated_at":"2026-03-29T05:58:07.170Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1103_1774763887169","events":[{"ts":"2026-03-29T05:58:07Z","tx
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"718px","top":"250px"},"tx_id":"tx_1774763887086_4e1335c5e360c","gesture
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"request_id":"ws_1104_1774763887170","success":true,"type":"events-response","event":{"ts":"2026-03-29T05:58:07Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"events":[{"ts":"2026-03-29T05:58:07Z","tx_id":"tx_1774763887086_4e1335c5e360c","project_id":"75426b19-eb9f-404c-8d72-d
+[WS-DIAG] onmessage: {"state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","atome_id":"atome_1774762886525_a53266fe13c6e
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"request_id":"ws_1107_1774763887739","state":{"type":"user","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","atome_ty
+🔌 WS recv: 765 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"713px","top":"254px"},"tx_id":"tx_1774763887679_f10edee942442
+🔌 WS message type: events
+🔌 WS recv: 1477 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"713px","top":"254px","updated_at":"2026-03-29T05:58:07.770Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"request_id":"ws_1108_1774763887769","type":"events-response","events":[{"ts":"2026-03-29T05:58:07Z","tx_id":"tx_177476
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"713px","top":"254px"},"tx_id":"tx_1774763887679_f10edee9424428","gestur
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1109_1774763887770","event":{"ts":"2026-03-29T05:58:07Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"request_id":"ws_1110_1774763887770","type":"events-response","events":[{"ts":"2026-03-29T05:58:07Z","tx
+[WS-DIAG] onmessage: {"success":true,"type":"state-current-response","request_id":"ws_1111_1774763887794","state":{"type":"text","parent_id":
+🔌 WS recv: 764 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"705px","top":"255px"},"tx_id":"tx_1774763888228_0216285058817
+🔌 WS message type: events
+🔌 WS recv: 1476 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"705px","top":"255px","updated_at":"2026-03-29T05:58:08.278Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"events":[{"ts":"2026-03-29T05:58:08Z","tx_id":"tx_1774763888228_0216285058817","project_id":"75426b19-eb9f-404c-8d72-d
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"705px","top":"255px"},"tx_id":"tx_1774763888228_0216285058817","gesture
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1113_1774763888279","event":{"ts":"2026-03-29T05:58:08Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"events":[{"ts":"2026-03-29T05:58:08Z","tx_id":"tx_1774763888228_0216285058817","project_id":"75426b19-eb9f-404c-8d72-d
+[WS-DIAG] onmessage: {"state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","atome_id":"atome_1774762886525_a53266fe13c6e
+🔌 WS recv: 765 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"696px","top":"260px"},"tx_id":"tx_1774763888720_8739bf5231657
+🔌 WS message type: events
+🔌 WS recv: 1477 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"696px","top":"260px","updated_at":"2026-03-29T05:58:08.783Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"events":[{"ts":"2026-03-29T05:58:08Z","tx_id":"tx_1774763888720_8739bf52316578","project_id":"75426b19-eb9f-404c-8d72-
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"696px","top":"260px"},"tx_id":"tx_1774763888720_8739bf52316578","gestur
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1117_1774763888783","event":{"ts":"2026-03-29T05:58:08Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"request_id":"ws_1118_1774763888784","events":[{"ts":"2026-03-29T05:58:08Z","tx_id":"tx_1774763888720_87
+[WS-DIAG] onmessage: {"success":true,"request_id":"ws_1119_1774763888802","state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"request_id":"ws_1120_1774763888943","state":{"type":"user","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e1
+🔌 WS recv: 766 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"688px","top":"260px"},"tx_id":"tx_1774763889179_253551e6dbaec
+🔌 WS message type: events
+🔌 WS recv: 1478 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"688px","top":"260px","updated_at":"2026-03-29T05:58:09.212Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"success":true,"type":"events-response","events":[{"ts":"2026-03-29T05:58:09Z","tx_id":"tx_1774763889179_253551e6dbaec8
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"688px","top":"260px"},"tx_id":"tx_1774763889179_253551e6dbaec8","gestur
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"request_id":"ws_1122_1774763889212","success":true,"type":"events-response","event":{"ts":"2026-03-29T05:58:09Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"request_id":"ws_1123_1774763889212","success":true,"type":"events-response","events":[{"ts":"2026-03-29T05:58:09Z","tx
+[WS-DIAG] onmessage: {"request_id":"ws_1124_1774763889236","state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","atome_i
+🔌 WS recv: 763 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"682px","top":"261px"},"tx_id":"tx_1774763889553_ca8c7239b0485
+🔌 WS message type: events
+🔌 WS recv: 1475 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"682px","top":"261px","updated_at":"2026-03-29T05:58:09.595Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"success":true,"type":"events-response","request_id":"ws_1125_1774763889594","events":[{"ts":"2026-03-29T05:58:09Z","tx
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"682px","top":"261px"},"tx_id":"tx_1774763889553_ca8c7239b0485","gesture
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"event":{"ts":"2026-03-29T05:58:09Z","project_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","actor":{"type":"user","id":"1
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"events":[{"ts":"2026-03-29T05:58:09Z","tx_id":"tx_1774763889553_ca8c7239b0485","project_id":"75426b19-eb9f-404c-8d72-d
+[WS-DIAG] onmessage: {"state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","atome_id":"atome_1774762886525_a53266fe13c6e
+🔌 WS recv: 763 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"675px","top":"261px"},"tx_id":"tx_1774763889936_ef8c2ae900688
+🔌 WS message type: events
+🔌 WS recv: 1475 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"675px","top":"261px","updated_at":"2026-03-29T05:58:09.969Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1129_1774763889969","events":[{"ts":"2026-03-29T05:58:09Z","tx
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"675px","top":"261px"},"tx_id":"tx_1774763889936_ef8c2ae900688","gesture
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"type":"events-response","success":true,"request_id":"ws_1130_1774763889970","event":{"ts":"2026-03-29T05:58:09Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"request_id":"ws_1131_1774763889970","success":true,"events":[{"ts":"2026-03-29T05:58:09Z","tx_id":"tx_1774763889936_ef
+[WS-DIAG] onmessage: {"request_id":"ws_1132_1774763889994","success":true,"state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"type":"state-current-response","request_id":"ws_1133_1774763890147","state":{"type":"user","atome_id":"
+🔌 WS recv: 765 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"668px","top":"287px"},"tx_id":"tx_1774763890303_faabc28215af1
+🔌 WS message type: events
+🔌 WS recv: 1477 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"668px","top":"287px","updated_at":"2026-03-29T05:58:10.345Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"success":true,"type":"events-response","request_id":"ws_1134_1774763890344","events":[{"ts":"2026-03-29T05:58:10Z","tx
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"668px","top":"287px"},"tx_id":"tx_1774763890303_faabc28215af18","gestur
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"request_id":"ws_1135_1774763890345","success":true,"type":"events-response","event":{"ts":"2026-03-29T05:58:10Z","proj
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"events":[{"ts":"2026-03-29T05:58:10Z","tx_id":"tx_1774763890303_faabc28215af18","project_id":"75426b19-eb9f-404c-8d72-
+[WS-DIAG] onmessage: {"state":{"type":"text","parent_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","atome_id":"atome_1774762886525_a53266fe13c6e
+🔌 WS recv: 764 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"gesture_frame","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"663px","top":"287px"},"tx_id":"tx_1774763890670_cb56d5bde3cd7
+🔌 WS message type: events
+🔌 WS recv: 1476 bytes on connection
+🔌 WS text received: {"type":"events","action":"commit","event":{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"663px","top":"287px","updated_at":"2026-03-29T05:58:10.753Z"},"project_id":"754
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"success":true,"request_id":"ws_1138_1774763890753","type":"events-response","events":[{"ts":"2026-03-29T05:58:10Z","tx
+🔌 WS text received: {"type":"events","action":"commit-batch","events":[{"kind":"set","atome_id":"atome_1774762886525_a53266fe13c6e","props":{"left":"663px","top":"287px"},"tx_id":"tx_1774763890670_cb56d5bde3cd7","gesture
+🔌 WS message type: events
+[WS-DIAG] onmessage: {"event":{"ts":"2026-03-29T05:58:10Z","project_id":"75426b19-eb9f-404c-8d72-d317f14bfd4c","actor":{"type":"user","id":"1
+🔌 WS recv: 382 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"atome_1774762886525_a53266fe13c6e","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2LWMx
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"type":"events-response","request_id":"ws_1140_1774763890754","events":[{"ts":"2026-03-29T05:58:10Z","tx
+[WS-DIAG] onmessage: {"success":true,"type":"state-current-response","request_id":"ws_1141_1774763890776","state":{"type":"text","parent_id":
+🔄 FileSyncCoordinator sync complete roots=
+   • /private/var/mobile/Containers/Shared/AppGroup/FEC63937-7BD8-442E-8F5D-0581885ECE24/Documents
+   • /var/mobile/Containers/Data/Application/54CC5C37-83A3-4E11-8990-A566406BF129/Documents
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"type":"state-current-response","state":{"type":"user","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab"
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"state":{"type":"user","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","atome_type":"user","version":49,"id":"1c6fcc3
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"success":true,"type":"state-current-response","state":{"type":"user","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab"
+🔌 WS recv: 385 bytes on connection
+🔌 WS text received: {"type":"state-current","action":"get","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzQ3MjY5OTEsInN1YiI6IjFjNmZjYzM5LWVjMTEtNWVmZS1hY2E2L
+🔌 WS message type: state-current
+[WS-DIAG] onmessage: {"state":{"type":"user","atome_id":"1c6fcc39-ec11-5efe-aca6-c14b19e10fab","atome_type":"user","version":49,"id":"1c6fcc3
