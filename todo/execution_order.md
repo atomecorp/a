@@ -36,7 +36,7 @@ Source principale: `todo/urgent_priorities.md`
 
 - [x] Creer `shared/utils.js` et migrer progressivement les utilitaires communs.
 - [x] Creer `shared/media_types.js` et supprimer les duplications de types media.
-- [ ] Centraliser les constantes de layers et de TTL panels.
+- [x] Centraliser les constantes de layers et de TTL panels.
 - [ ] Factoriser le locking via `runtime/in_flight_lock.js`.
 - [ ] Unifier `readExplicitLatchedState` / `readExplicitLatched`.
 - [ ] Verifier les imports/exports et l'absence de duplication restante avec `rg`.
