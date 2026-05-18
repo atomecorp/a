@@ -155,14 +155,15 @@ Sources principales:
 
 Source principale:
 
-- `todo/cleanup_architecture/file_size_and_coding_standards_remediation.md`
-
-- [ ] Inventorier les fichiers au-dessus de 300, 500, 800 et 1000 lignes.
-- [ ] Prioriser les fichiers critiques melangeant plusieurs responsabilites.
-- [ ] Reduire les fichiers critiques avant de continuer a les etendre.
-- [ ] Sortir les utilitaires dupliques vers des modules partages quand cela supprime une vraie duplication.
+- [ ] Inventorier les fichiers dans les seuils: sous 300, entre 300 et 500, au-dessus de 500, au-dessus de 800 et au-dessus de 1000 lignes.
+- [ ] Prioriser les fichiers au-dessus de 500 lignes et ceux qui melangent plusieurs responsabilites.
+- [ ] Reduire tout fichier au-dessus de 500 lignes avant de continuer a l'etendre, sauf si le travail en cours realise deja cette reduction.
+- [ ] Traiter tout fichier au-dessus de 800 lignes comme une dette legacy critique a reduire avant toute croissance fonctionnelle.
+- [ ] Sortir les utilitaires dupliques vers des modules partages seulement quand cela supprime une vraie duplication et renforce une frontiere architecturale stable.
+- [ ] Eviter la multiplication artificielle des fichiers: pas de micro-fichiers, wrappers pass-through, proxies ou couches vides crees uniquement pour faire baisser le nombre de lignes.
 - [ ] Supprimer le code mort, deprecated, duplique ou inatteignable trouve pendant les reductions.
-- [ ] Documenter tout fichier restant au-dessus de 1000 lignes avec justification et plan de reduction.
+- [ ] Documenter tout fichier restant au-dessus de 800 lignes avec justification, frontiere de responsabilite et plan de reduction.
+- [ ] Interdire tout fichier au-dessus de 1000 lignes sans justification architecturale explicite et plan actif de reduction.
 - [ ] Verifier l'alignement du code existant avec les normes de `.codex/AGENTS.md`.
 
 ## 11. Chantiers produits differables
