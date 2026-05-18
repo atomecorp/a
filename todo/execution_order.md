@@ -37,7 +37,7 @@ Source principale: `todo/urgent_priorities.md`
 - [x] Creer `shared/utils.js` et migrer progressivement les utilitaires communs.
 - [x] Creer `shared/media_types.js` et supprimer les duplications de types media.
 - [x] Centraliser les constantes de layers et de TTL panels.
-- [ ] Factoriser le locking via `runtime/in_flight_lock.js`.
+- [x] Factoriser le locking via `runtime/in_flight_lock.js`.
 - [ ] Unifier `readExplicitLatchedState` / `readExplicitLatched`.
 - [ ] Verifier les imports/exports et l'absence de duplication restante avec `rg`.
 
@@ -159,8 +159,11 @@ Source principale:
 - [ ] Prioriser les fichiers au-dessus de 500 lignes et ceux qui melangent plusieurs responsabilites.
 - [ ] Reduire tout fichier au-dessus de 500 lignes avant de continuer a l'etendre, sauf si le travail en cours realise deja cette reduction.
 - [ ] Traiter tout fichier au-dessus de 800 lignes comme une dette legacy critique a reduire avant toute croissance fonctionnelle.
+- [ ] Imposer ces regles a tout fichier modifie, meme s'il etait deja hors seuil avant intervention.
 - [ ] Sortir les utilitaires dupliques vers des modules partages seulement quand cela supprime une vraie duplication et renforce une frontiere architecturale stable.
 - [ ] Eviter la multiplication artificielle des fichiers: pas de micro-fichiers, wrappers pass-through, proxies ou couches vides crees uniquement pour faire baisser le nombre de lignes.
+- [ ] Ne pas disperser une logique coherente dans une multitude de petits fichiers pour contourner la contrainte de lignes; garder des frontieres de fichiers lisibles, stables et justifiees.
+- [ ] Exiger pour tout fichier touche: verification du nombre de lignes, factorisation, nettoyage, optimisation et validation avant cloture.
 - [ ] Supprimer le code mort, deprecated, duplique ou inatteignable trouve pendant les reductions.
 - [ ] Documenter tout fichier restant au-dessus de 800 lignes avec justification, frontiere de responsabilite et plan de reduction.
 - [ ] Interdire tout fichier au-dessus de 1000 lignes sans justification architecturale explicite et plan actif de reduction.

@@ -42,6 +42,8 @@ The remediation must enforce at least the following rules:
 
 - one clear responsibility per module whenever architecture allows it
 - strong factorization without artificial file multiplication
+- cohesive file boundaries; do not disperse a single coherent responsibility across many files unless that split creates a real architectural benefit
+- every modified file must be brought back under these rules; touching a file means accepting responsibility for its size, cohesion, cleanup, factorization, and optimization
 - no dead, deprecated, duplicated, or unreachable code kept by inertia
 - no silent catch or silent failure path hiding structural problems
 - no repeated local utility logic across many files when a shared module is appropriate
@@ -68,6 +70,9 @@ The remediation must enforce at least the following rules:
 - Split oversized files by stable architectural responsibility.
 - Move duplicated utilities into shared modules where appropriate.
 - Do not split files only to satisfy a line-count target; prefer cohesive modules and real factorization over file multiplication.
+- Do not introduce a proliferation of small files to evade size limits; keep related logic grouped when separation would only scatter the implementation.
+- For every modified file, enforce the line-count policy even if the file was already oversized before the change.
+- Do not leave a touched file in a knowingly non-compliant state when the current task can fix it.
 - Remove dead, deprecated, and duplicated code discovered during the split.
 - Keep runtime behavior deterministic during refactors.
 
@@ -76,6 +81,7 @@ The remediation must enforce at least the following rules:
 - For every file that remains above the critical threshold, document why it still exists in that state.
 - For every file above 1000 lines, attach an explicit reduction plan instead of silently accepting it.
 - Ensure future tasks do not keep growing critical files without first reducing them.
+- Any task that modifies a file must include the compliance work needed to make that file respect size, factorization, cleanup, and validation rules.
 
 ## Validation Checklist
 
@@ -83,6 +89,9 @@ The remediation must enforce at least the following rules:
 - Critical files have an explicit reduction plan.
 - Deprecated, duplicated, and dead code found during remediation is removed.
 - New shared modules are introduced only when they remove real duplication.
+- Every modified file is explicitly validated after change.
+- Every modified file is checked against the line-count policy before task closure.
+- No touched file is left exempt because it was already non-compliant before the change.
 - Refactors preserve runtime behavior and architecture contracts.
 
 ## Definition Of Done

@@ -98,11 +98,16 @@ File size policy:
 Mandatory enforcement rules:
 
 - Do not create new oversized files when a split is possible.
+- Every modified file MUST be re-evaluated against line-count limits, responsibility boundaries, factorization quality, dead-code removal, and optimization expectations before the task is considered complete.
+- Every modified file that was already non-compliant before the change MUST still be reduced, cleaned, or restructured as part of the job; pre-existing debt is not a valid excuse to leave a touched file outside these rules.
 - Do not keep adding features into a file that is already above 500 lines unless the current task is explicitly reducing or restructuring that file.
 - If a file approaches 500 lines, verify whether responsibilities are mixed, whether reusable logic should be factorized, and whether the boundary can be improved without fragmenting the architecture.
 - Do not multiply files artificially to satisfy line-count targets; split only along stable responsibilities or real shared reusable logic.
+- Do not create a proliferation of small files to bypass line limits; file count reduction is never a valid goal on its own, and scattering related logic across many weakly justified files is forbidden.
 - Do not create pass-through files, proxy wrappers, or useless micro-modules whose only purpose is to lower a line count.
 - If a file exceeds 500 lines, reduction and responsibility separation become mandatory, not optional.
+- No touched file may be finalized in a state that still violates these structure rules when the violation can be removed within the current task scope.
+- If bringing a touched file into compliance would require a larger architectural split, that reduction work becomes part of the current task rather than an optional follow-up.
 - Any justified exception above 800 lines must be explicitly documented with the reason, the ownership boundary, and the intended reduction plan.
 - Any exceptional file above 1000 lines remains forbidden unless the architectural justification and active reduction plan are both explicitly documented.
 
@@ -112,6 +117,7 @@ You must enforce:
 
 - single clear responsibility per module whenever architecture allows it;
 - strong factorization without artificial file multiplication;
+- cohesive file boundaries that keep closely related logic together instead of dispersing it across many files without architectural necessity;
 - explicit and consistent naming;
 - removal of dead, deprecated, duplicated, or unreachable code;
 - no silent failure paths hiding invalid states;
@@ -126,6 +132,16 @@ For already-written code:
 - identify code that violates the coding standards;
 - open or update dedicated remediation tasks when full reduction is not completed in the current change;
 - reduce oversized or non-compliant files at the source instead of normalizing their complexity as acceptable.
+- do not treat a touched legacy file as exempt; once modified, it must undergo the same size, factorization, cleanup, and optimization rules as new code.
+
+Validation is mandatory for every modified file:
+
+- run the narrowest relevant executable validation after each substantive edit when one exists;
+- verify the final line count and module boundary of every touched file;
+- verify that the change did not scatter previously cohesive logic across an unjustified number of files;
+- verify that factorization improved or at minimum did not regress;
+- verify that no dead, duplicated, deprecated, or unreachable code remains in touched files;
+- do not finalize a task while a touched file remains unvalidated.
 
 Before deleting files:
 
