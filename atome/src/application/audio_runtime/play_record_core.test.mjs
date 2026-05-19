@@ -6,11 +6,19 @@ import {
     PLAY_RECORD_API_CONTRACT,
     PlayRecordCore
 } from './play_record_core.js';
-import { commandBusV2 } from '../../../../eVe/intuition/runtime/command_bus.js';
 
-test.beforeEach(() => {
-    commandBusV2.clear();
-});
+const createCommandBus = () => {
+    const events = [];
+    return {
+        dispatch(envelope = {}) {
+            events.push({ tool_id: envelope?.meta?.tool_id, envelope });
+            return { ok: true, envelope };
+        },
+        listEvents(filter = {}) {
+            return events.filter((entry) => !filter.tool_id || entry.tool_id === filter.tool_id);
+        }
+    };
+};
 
 test('canonicalizePlayRecordMediaSource preserves recording and upload local paths', () => {
     const recording = canonicalizePlayRecordMediaSource({
@@ -30,7 +38,13 @@ test('canonicalizePlayRecordMediaSource preserves recording and upload local pat
 
 test('PlayRecordCore sends the native load and voice command contract', async () => {
     const calls = [];
+    const commandBus = createCommandBus();
     const env = {
+        atome: {
+            tools: {
+                v2CommandBus: commandBus
+            }
+        },
         __SQUIRREL_FORCE_TAURI_RUNTIME: true,
         __TAURI_INTERNALS__: {
             invoke: async (command, args = {}) => {
@@ -92,7 +106,7 @@ test('PlayRecordCore sends the native load and voice command contract', async ()
         loopStartSeconds: null,
         loopEndSeconds: null
     });
-    const events = commandBusV2.listEvents({ tool_id: 'play_record' });
+    const events = commandBus.listEvents({ tool_id: 'play_record' });
     assert.deepEqual(events.map((entry) => entry.envelope?.meta?.action), [
         'loadAsset',
         'playVoice',
@@ -113,6 +127,11 @@ test('PlayRecordCore exposes a versioned MCP-compatible API contract', () => {
 test('PlayRecordCore routes web facade playback through the internal backend gate', async () => {
     const backendCalls = [];
     const env = {
+        atome: {
+            tools: {
+                v2CommandBus: createCommandBus()
+            }
+        },
         WebAssembly: {},
         location: {
             protocol: 'http:',
@@ -162,6 +181,11 @@ test('PlayRecordCore routes web facade playback through the internal backend gat
 test('PlayRecordCore keeps assets stable across UI-only timeline operations', async () => {
     const backendCalls = [];
     const env = {
+        atome: {
+            tools: {
+                v2CommandBus: createCommandBus()
+            }
+        },
         WebAssembly: {},
         location: {
             protocol: 'http:',

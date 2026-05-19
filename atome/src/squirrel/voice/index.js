@@ -17,10 +17,6 @@ export {
 } from './bootstrap.js';
 export { bootstrapMainHandleVoiceEntry } from './main_handle_bridge.js';
 export {
-    bootstrapDilasPanel,
-    openDilasPanel
-} from './dilas_panel.js';
-export {
     createVoiceOrchestrator,
     resolveVoiceExecutionBridge,
     VOICE_ORCHESTRATOR_EVENT_NAME,

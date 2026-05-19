@@ -1,4 +1,3 @@
-import { loadUserProfile } from '../../../../eVe/domains/user/profile_api.js';
 import {
     AI_MODEL_CATALOG_TTL_MS,
     buildModelCatalogCacheRecord,
@@ -10,6 +9,7 @@ import {
     AI_MODEL_PROVIDER_REGISTRY,
     getAiModelProviderDefinition
 } from './model_catalog_registry.js';
+import { loadRuntimeUserProfile } from './profile_loader.js';
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -78,7 +78,7 @@ const sortModels = (models = [], definition = null) => {
 };
 
 export const resolveConfiguredAiProviderKeys = async ({
-    loadProfile = loadUserProfile
+    loadProfile = loadRuntimeUserProfile
 } = {}) => {
     const profileResult = await loadProfile();
     if (!profileResult?.ok) {
@@ -239,7 +239,7 @@ const buildCatalogItem = ({
 export const refreshAiModelCatalog = async ({
     storage = null,
     fetchImpl = globalThis.fetch?.bind(globalThis),
-    loadProfile = loadUserProfile,
+    loadProfile = loadRuntimeUserProfile,
     now = () => new Date().toISOString()
 } = {}) => {
     const configured = await resolveConfiguredAiProviderKeys({ loadProfile });
@@ -295,7 +295,7 @@ export const refreshAiModelCatalog = async ({
 export const ensureFreshAiModelCatalog = async ({
     storage = null,
     fetchImpl = globalThis.fetch?.bind(globalThis),
-    loadProfile = loadUserProfile,
+    loadProfile = loadRuntimeUserProfile,
     force = false,
     now = () => new Date().toISOString()
 } = {}) => {
@@ -315,7 +315,7 @@ export const bootstrapAiModelCatalogRefresh = ({
     env = (typeof window !== 'undefined' ? window : globalThis),
     storage = env?.localStorage || null,
     fetchImpl = env?.fetch?.bind(env),
-    loadProfile = loadUserProfile,
+    loadProfile = loadRuntimeUserProfile,
     intervalMs = REFRESH_INTERVAL_MS
 } = {}) => {
     if (!env || typeof env !== 'object') return null;

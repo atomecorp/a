@@ -11,7 +11,6 @@ import {
     normalizeKiraPlayInstancePayload,
     normalizeKiraStopInstancePayload
 } from './kira_audio_commands.js';
-import { commandBusV2 } from '../../../../eVe/intuition/runtime/command_bus.js';
 
 const safeString = (value) => String(value ?? '').trim();
 
@@ -158,7 +157,10 @@ export class PlayRecordCore {
     }
 
     commandBus() {
-        const runtimeBus = this.env?.atome?.tools?.v2CommandBus || commandBusV2;
+        const runtimeBus = this.env?.atome?.tools?.v2CommandBus
+            || this.env?.Squirrel?.commandBus
+            || this.env?.AtomeCommandBus
+            || null;
         if (!runtimeBus || typeof runtimeBus.dispatch !== 'function') {
             throw new Error('play_record_command_bus_unavailable');
         }

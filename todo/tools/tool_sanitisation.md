@@ -77,10 +77,73 @@ Un tool conforme doit satisfaire tous les points suivants:
 - [ ] Le tool declare un comportement canonique: button_type, actions, bindings.
 - [ ] Le tool s'execute via ToolRuntime et Command Bus, jamais par mutation directe UI.
 - [ ] Le tool fonctionne dans les memes conditions depuis menu, panel, projection, script, MCP, et AI.
+- [ ] Le tool declare explicitement sa correspondance MCP: statut d'exposition, entrypoint canonique, actions autorisees, audit, et policy.
 - [ ] Le rendu visuel provient d'une factory unique, sans chemin clone/fallback specifique au support.
 - [ ] Le tool n'a qu'une seule source d'icone et n'utilise pas de fallback generique pour masquer une definition manquante.
 - [ ] Le tool n'expose pas de doublons de conventions techniques dans son contrat visible sauf migration explicitement bornee.
 - [ ] Le tool a des tests de persistance, d'invocation, de latch si applicable, et de parite visuelle entre ses projections.
+
+## Controle MCP et correspondance obligatoire tool <-> MCP
+
+Le document et le systeme doivent expliciter, pour chaque tool canonique, sa relation exacte avec MCP.
+
+Regles obligatoires:
+
+1. Aucun tool canonique ne doit rester sans statut MCP explicite.
+2. Si une surface runtime V2 existe pour le tool, MCP doit preferer runtime.tools.call ou runtime.tools.batch_call.
+3. AtomeAI ne remplace pas le runtime; il ajoute policy, proposal, confirmation, et audit pour les appels AI.
+4. Un tool peut etre cache cote UI et rester exposable via MCP, a condition que son contrat runtime soit complet.
+5. Un tool peut etre non expose directement a MCP, mais ce statut doit etre documente avec raison precise:
+   - pure host UI sans logique metier propre,
+   - surface runtime absente,
+   - migration en cours,
+   - usage interne strictement borne.
+6. Le mapping MCP ne doit jamais pointer vers un helper legacy si une surface runtime V2 equivalente existe deja.
+7. Les actions MCP doivent reutiliser les memes noms canoniques que l'UI: pointer.*, gesture.*, state.*, commit.
+8. Le meme trace_id doit pouvoir traverser UI, MCP, AI, runtime, et command bus.
+
+Statuts MCP autorises:
+
+- expose_direct_runtime: le tool est appele directement via runtime.tools.call ou runtime.tools.batch_call.
+- expose_via_ai_policy: le tool est execute via AtomeAI.callTool, puis delegue au runtime canonique.
+- internal_only: pas d'exposition MCP directe; le tool reste runtime-only ou UI-only pour une raison documentee.
+- non_conforme: aucun mapping canonique stable n'existe encore; blocage a traiter.
+
+Chaque tool doit porter ou derivable sans ambiguite le bloc conceptuel suivant:
+
+```jsonc
+{
+  "mcp": {
+    "status": "expose_direct_runtime",
+    "preferred_entrypoint": "runtime.tools.call",
+    "batch_entrypoint": "runtime.tools.batch_call",
+    "tool_name": "ui.capture.audio",
+    "allowed_actions": ["pointer.click", "state.on", "state.off"],
+    "audit_surface": "runtime.audit.list",
+    "policy_surface": "AtomeAI.callTool",
+    "source_layer": "atome_mcp_runtime_call"
+  }
+}
+```
+
+Matrice minimale obligatoire a maintenir pendant la sanitisation:
+
+| Tool canonique | Role | Statut MCP | Entrypoint canonique | Action(s) MCP | Policy/Audit | Etat |
+| --- | --- | --- | --- | --- | --- | --- |
+| tool.main.capture | host palette capture | internal_only | a clarifier | a clarifier | runtime.audit.list | host UI a ne pas exposer tel quel sans contrat runtime propre |
+| ui.capture.audio | capture audio | expose_direct_runtime | runtime.tools.call | pointer.click, state.on, state.off | runtime.audit.list + AtomeAI.callTool si policy | contrat a enrichir |
+| ui.capture.video | capture video | expose_direct_runtime | runtime.tools.call | pointer.click, state.on, state.off | runtime.audit.list + AtomeAI.callTool si policy | contrat a enrichir |
+| ui.capture.preview | preview camera | expose_direct_runtime | runtime.tools.call | pointer.click, state.on, state.off | runtime.audit.list | contrat a enrichir |
+| ui.capture.photo | capture photo | expose_direct_runtime | runtime.tools.call | pointer.click | runtime.audit.list | contrat a enrichir |
+| ui.capture.import | import media | expose_direct_runtime | runtime.tools.call | pointer.click | runtime.audit.list + AtomeAI.callTool si policy | surface a confirmer en detail |
+| ui.capture.screen | capture screen | expose_direct_runtime | runtime.tools.call | pointer.click, state.on, state.off | runtime.audit.list + AtomeAI.callTool si policy | surface a confirmer en detail |
+| ui.capture.validation | validation capture | expose_direct_runtime | runtime.tools.call | pointer.click | runtime.audit.list | semantics a clarifier |
+
+Consequence pour ce chantier:
+
+- la sanitisation ne doit pas seulement nettoyer les boutons;
+- elle doit produire une cartographie explicite entre chaque tool critique et sa forme MCP canonique;
+- tout tool sans correspondance MCP documentee reste incomplet, meme si son rendu UI est propre.
 
 ## Comparaison contrat vs implementation actuelle audio/capture
 
@@ -189,6 +252,21 @@ Impact:
 - Une partie du comportement reste plus proche d'un outil specialise de surface que d'un tool strictement centre sur son contrat runtime.
 - Cela rend les garanties de parite multi-support plus difficiles a tenir.
 
+#### Ecart 8 - La correspondance explicite de chaque tool avec MCP n'est pas encore formalisee
+
+Constat:
+
+- Le document mentionne MCP comme surface cible, mais il ne formalisait pas jusqu'ici le mapping tool par tool.
+- L'implementation capture expose des tool_id exploitables, mais pas encore une matrice stable et explicite du type:
+  - quel tool est appelable via runtime.tools.call,
+  - quel tool doit passer par AtomeAI pour policy,
+  - quel tool n'est qu'un host UI et ne doit pas etre expose tel quel.
+
+Impact:
+
+- Le systeme peut paraitre "compatible MCP" sans que la correspondance exacte soit auditable.
+- Cela ouvre la porte a des expositions incoherentes, a des appels MCP trop bas niveau, ou a des hosts UI exposes comme s'ils etaient des tools metier.
+
 ## Template canonique cible pour un tool conforme
 
 Template cible a utiliser comme reference de convergence:
@@ -252,6 +330,16 @@ Template cible a utiliser comme reference de convergence:
   "runtime": {
     "execution_mode": "v2_registered_handler",
     "handler_id": "ui.capture.audio"
+  },
+  "mcp": {
+    "status": "expose_direct_runtime",
+    "preferred_entrypoint": "runtime.tools.call",
+    "batch_entrypoint": "runtime.tools.batch_call",
+    "tool_name": "ui.capture.audio",
+    "allowed_actions": ["pointer.click", "state.on", "state.off"],
+    "audit_surface": "runtime.audit.list",
+    "policy_surface": "AtomeAI.callTool",
+    "source_layer": "atome_mcp_runtime_call"
   }
 }
 ```
@@ -276,6 +364,7 @@ Taches:
 - [ ] Definir la shape canonique minimale obligatoire d'un tool V2 reellement persistable.
 - [ ] Aligner la persistence runtime sur ce contrat minimal sans champ implicite reconstruit localement.
 - [ ] Garantir qu'un support visuel consomme une definition, au lieu de la recomposer.
+- [ ] Etablir pour chaque tool critique sa correspondance MCP explicite: statut, entrypoint, actions autorisees, audit, et policy.
 
 Critere de sortie:
 
@@ -326,6 +415,7 @@ Taches:
 - [ ] Exposer les tools a MCP et AI via runtime.tools.list, runtime.tools.call, runtime.tools.batch_call quand la surface existe.
 - [ ] Faire porter les capabilities, contextes, et risk levels par la definition canonique plutot que par des valeurs par defaut trop larges.
 - [ ] Verifier que les handlers ne contiennent pas de mutation directe hors pipeline.
+- [ ] Interdire toute exposition MCP d'un host UI ou d'un helper legacy quand un tool runtime canonique existe deja.
 
 Critere de sortie:
 
@@ -359,6 +449,7 @@ Critere de sortie:
 - [ ] Verification documentaire: chaque tool critique a un contrat complet et unique.
 - [ ] Verification registre: createTool / registerTool / registerUiAction convergent vers la meme semantique persistante sans definition parallele.
 - [ ] Verification invocation: UI, projection, MCP, et script utilisent les memes actions canoniques.
+- [ ] Verification correspondance MCP: chaque tool critique a un statut MCP explicite, un entrypoint unique, et aucune ambiguite entre runtime direct, AI policy, et host UI.
 - [ ] Verification visuelle: meme iconographie, meme label, meme style actif/inactif, meme comportement de latch ou momentary dans tous les contextes.
 - [ ] Verification de non-regression: persistence, historique, et audit restent intacts apres simplification.
 
@@ -369,6 +460,7 @@ Le premier lot de correction a executer sur ce chantier doit couvrir exactement:
 - l'audio capture;
 - la palette capture qui le contient;
 - la source d'icone canonique de ces tools;
+- la matrice MCP explicite de la famille capture;
 - la suppression de la definition menu locale qui force icon = false si une source canonique equivalente existe deja.
 
 ## Definition de termine pour ce chantier
@@ -376,6 +468,7 @@ Le premier lot de correction a executer sur ce chantier doit couvrir exactement:
 Ce chantier ne pourra etre considere comme termine que lorsque les conditions suivantes seront vraies:
 
 - tous les tools critiques sont definis depuis une SSOT complete;
+- tous les tools critiques ont une correspondance MCP explicite et verifiable;
 - aucun support UI ne reconstruit une variante metier locale d'un tool;
 - les icones et labels proviennent d'une source unique et explicite;
 - les chemins legacy de compatibilite restants sont borner, documentes, et limites a une migration residuelle strictement necessaire;

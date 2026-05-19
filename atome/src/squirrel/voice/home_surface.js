@@ -1,4 +1,3 @@
-import { getEveLocale } from '../../../../eVe/i18n/i18n.js';
 import { VOICE_LOCAL_COMMANDS, normalizeLocalVoiceCommand } from './session_runtime.js';
 import { mountVoiceMeter } from './voice_meter.js';
 import { createVoiceActivityDetector } from './vad.js';
@@ -200,7 +199,11 @@ const cloneValue = (value) => {
 const resolveVoiceApi = (env, explicitApi = null) => explicitApi || env?.Squirrel?.voice || env?.AtomeVoice || env?.atome?.voice || null;
 
 const resolveLocale = () => {
-    const locale = toText(getEveLocale?.()) || toText(globalThis?.document?.documentElement?.lang) || 'fr-FR';
+    const runtimeLocale = globalThis?.AtomeLocale?.get?.()
+        || globalThis?.Squirrel?.locale?.get?.()
+        || globalThis?.eveLocale
+        || globalThis?.EveLocale?.get?.();
+    const locale = toText(runtimeLocale) || toText(globalThis?.document?.documentElement?.lang) || 'fr-FR';
     if (!locale) return 'fr-FR';
     const normalized = locale.replace('_', '-').toLowerCase();
     if (normalized === 'fr') return 'fr-FR';

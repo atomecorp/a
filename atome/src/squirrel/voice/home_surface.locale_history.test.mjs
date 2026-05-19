@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
 import { mountHomeVoiceSurface } from './home_surface.js';
-import { setEveLocale } from '../../../../eVe/i18n/i18n.js';
 
 const dom = new JSDOM('<!doctype html><html><body><div id="host"></div></body></html>', {
     url: 'https://example.test/'
@@ -45,7 +44,7 @@ assert.equal(renderedEntries.length >= 2, true, 'home voice surface should expos
 assert.equal(renderedEntries[0].style.userSelect, 'text', 'home voice surface history should allow text selection');
 assert.equal(renderedEntries[0].style.webkitUserSelect, 'text', 'home voice surface history should allow text selection on WebKit');
 
-setEveLocale('en-US');
+globalThis.eveLocale = 'en-US';
 window.document.documentElement.lang = 'en-US';
 controller.refreshLabels();
 
@@ -59,5 +58,6 @@ controller.destroy();
 delete globalThis.window;
 delete globalThis.document;
 delete globalThis.localStorage;
+delete globalThis.eveLocale;
 
 console.log('voice_home_surface_locale_history: ok');

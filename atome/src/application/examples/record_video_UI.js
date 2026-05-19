@@ -67,12 +67,16 @@
         try {
             const token = localStorage.getItem('cloud_auth_token') || localStorage.getItem('auth_token');
             if (token) return true;
-        } catch (_) { }
+        } catch (_) {
+            renderCameraStatus('Camera toggle unavailable', '#ffb0b0');
+        }
 
         try {
             const pending = JSON.parse(localStorage.getItem('auth_pending_sync') || '[]');
             if (Array.isArray(pending) && pending.length > 0) return true;
-        } catch (_) { }
+        } catch (_) {
+            renderMediaStatus('Mode selector unavailable', '#ffb0b0');
+        }
 
         return false;
     }
@@ -308,7 +312,9 @@
             element.autoplay = opts.autoplay !== false;
             element.muted = opts.muted !== false;
             element.playsInline = opts.playsInline !== false;
-        } catch (_) { }
+        } catch (_) {
+            renderCameraStatus('Camera preview unavailable', '#ffb0b0');
+        }
 
         try {
             element.srcObject = stream;
@@ -321,7 +327,9 @@
             if (playPromise && typeof playPromise.catch === 'function') {
                 playPromise.catch(() => null);
             }
-        } catch (_) { }
+        } catch (_) {
+            renderMediaStatus('Media selector unavailable', '#ffb0b0');
+        }
 
         const stop = () => {
             try { stream.getTracks().forEach((track) => track.stop()); } catch (_) { }
@@ -787,9 +795,6 @@
         if (typeof window.record_audio_list_media === 'function' && typeof window.record_audio_play === 'function') {
             return { listMediaFiles: window.record_audio_list_media, play: window.record_audio_play };
         }
-        try {
-            await import('../../../../eVe/domains/media/api/audio_api.js');
-        } catch (_) { }
         const listMediaFiles = (typeof window.record_audio_list_media === 'function')
             ? window.record_audio_list_media
             : null;
@@ -841,7 +846,6 @@
 
         const host = resolveHost();
         if (!host) {
-            console.warn('[record_video_UI] Cannot attach record icon: host not found.');
             return;
         }
 
@@ -1283,7 +1287,7 @@
                 try {
                     const recordVideo = await ensureVideoApi();
                     if (!recordVideo) {
-                        console.warn('[record_video_UI] record_video() is not available.');
+                        renderMediaStatus('Record API unavailable', '#ffb0b0');
                         return;
                     }
                     if (!state.isRecording) {
@@ -1308,7 +1312,6 @@
                     refreshMediaList().catch(() => null);
                 } catch (e) {
                     const message = e && e.message ? e.message : String(e);
-                    console.warn('[record_video_UI] Record action failed:', message);
                     renderMediaStatus(`Record failed: ${message}`, '#ffb0b0');
                     state.ctrl = null;
                     state.isRecording = false;
@@ -1354,9 +1357,7 @@
                 toggle.textContent = 'Cam Off';
                 toggle.style.backgroundColor = '#7a2d2d';
             }
-        } catch (e) {
-            console.warn('[record_video_UI] Failed to mount camera toggle:', e && e.message ? e.message : e);
-        }
+        } catch (_) { }
 
         // Mode selector (audio/video)
         try {
@@ -1390,12 +1391,8 @@
                         updateCameraPreview().catch(() => null);
                     }
                 });
-            } else {
-                console.warn('[record_video_UI] dropDown() is not available; mode selector not shown.');
             }
-        } catch (e) {
-            console.warn('[record_video_UI] Failed to mount mode selector:', e && e.message ? e.message : e);
-        }
+        } catch (_) { }
 
         // Camera preview
         try {
@@ -1469,9 +1466,7 @@
             makePanelResizable(cameraState.holder, resizeHandle, host);
             renderCameraStatus('Camera preview');
             updateCameraPreview().catch(() => null);
-        } catch (e) {
-            console.warn('[record_video_UI] Failed to mount camera preview:', e && e.message ? e.message : e);
-        }
+        } catch (_) { }
 
         // Media selector + player (under the preview)
         try {
@@ -1510,8 +1505,6 @@
 
             renderMediaStatus('No media selected');
             refreshMediaList().catch(() => null);
-        } catch (e) {
-            console.warn('[record_video_UI] Failed to mount media selector:', e && e.message ? e.message : e);
-        }
+        } catch (_) { }
     });
 })();

@@ -17,26 +17,14 @@ const dom = new JSDOM(`
 const { window } = dom;
 const handle = window.document.querySelector('[data-role="main-toolbox-handle"]');
 
-let bootstrapCalls = 0;
 let openCalls = 0;
 
-const importModule = async (path) => {
-    assert.equal(path, './dilas_panel.js', 'main handle bridge should import the Dilas panel module');
-    return {
-        bootstrapDilasPanel({ env }) {
-            bootstrapCalls += 1;
-            env.open_dilas_panel = async () => {
-                openCalls += 1;
-                return true;
-            };
-        }
-    };
+window.open_dilas_panel = async () => {
+    openCalls += 1;
+    return true;
 };
 
-bootstrapMainHandleVoiceEntry({
-    env: window,
-    importModule
-});
+bootstrapMainHandleVoiceEntry({ env: window });
 
 handle.dispatchEvent(new window.MouseEvent('mousedown', {
     bubbles: true,
@@ -54,7 +42,6 @@ handle.dispatchEvent(new window.MouseEvent('mouseup', {
 
 await new Promise((resolve) => setTimeout(resolve, 0));
 
-assert.equal(bootstrapCalls, 1, 'main handle bridge should bootstrap the Dilas panel module when it is not initialized yet');
-assert.equal(openCalls, 1, 'main handle bridge should open Dilas after bootstrapping the panel module');
+assert.equal(openCalls, 1, 'main handle bridge should open the Dilas panel installed by the eVe layer');
 
 console.log('voice_main_handle_bridge_import_bootstrap: ok');

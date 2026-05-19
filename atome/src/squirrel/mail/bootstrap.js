@@ -209,20 +209,7 @@ const loadPersistedMailPreferences = async (env) => {
             return null;
         }
     }
-    if (typeof window === 'undefined' || env !== window) return null;
-    try {
-        const mod = await import('../../../../eVe/domains/user/profile_api.js');
-        if (typeof mod?.loadUserProfile !== 'function') return null;
-        const result = await mod.loadUserProfile();
-        const profile = result?.profile && typeof result.profile === 'object' ? result.profile : null;
-        if (!profile) return null;
-        return persistRuntimeMailPreferences(env, mergeMailCredentialSources(
-            profile?.preferences?.mail && typeof profile.preferences.mail === 'object' ? profile.preferences.mail : null,
-            profile?.email ? { email: profile.email } : null
-        ));
-    } catch (_) {
-        return null;
-    }
+    return null;
 };
 
 const resolveRuntimeMailCredentials = async (env, options = {}) => {

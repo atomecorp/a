@@ -1,4 +1,3 @@
-import { getEveLocale } from '../../../../eVe/i18n/i18n.js';
 import {
     normalizeAiProviderError,
     requestProviderJsonCompletion,
@@ -20,7 +19,11 @@ const cloneValue = (value) => {
 };
 
 const resolveLocale = (locale = null) => {
-    const preferred = toText(locale) || toText(getEveLocale?.()) || toText(globalThis?.document?.documentElement?.lang) || DEFAULT_LOCALE;
+    const runtimeLocale = globalThis?.AtomeLocale?.get?.()
+        || globalThis?.Squirrel?.locale?.get?.()
+        || globalThis?.eveLocale
+        || globalThis?.EveLocale?.get?.();
+    const preferred = toText(locale) || toText(runtimeLocale) || toText(globalThis?.document?.documentElement?.lang) || DEFAULT_LOCALE;
     return preferred || DEFAULT_LOCALE;
 };
 
@@ -514,8 +517,6 @@ export const createVoiceAiPlanner = ({
             });
         } catch (error) {
             const normalized = normalizeAiProviderError(error);
-            if (typeof console?.warn === 'function') {
-            }
             usageTracker.recordIncident({
                 provider: providerConfig.providerId,
                 model: providerConfig.model,

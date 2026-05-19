@@ -1,9 +1,9 @@
-import { loadUserProfile } from '../../../../eVe/domains/user/profile_api.js';
 import { buildLocalApiUrl, isTauri } from '../apis/serverUrls.js';
 import {
     AI_MODEL_PROVIDER_LIST,
     AI_MODEL_PROVIDER_REGISTRY
 } from './model_catalog_registry.js';
+import { loadRuntimeUserProfile } from './profile_loader.js';
 
 export const AI_PROVIDER_DEFINITIONS = Object.freeze(Object.fromEntries(
     Object.entries(AI_MODEL_PROVIDER_REGISTRY).map(([key, entry]) => ([key, Object.freeze({
@@ -335,7 +335,7 @@ export const extractJsonResponse = (text) => {
 };
 
 export const resolveFirstAiProviderConfig = async ({
-    loadProfile = loadUserProfile
+    loadProfile = loadRuntimeUserProfile
 } = {}) => {
     const profileResult = await loadProfile();
     if (!profileResult?.ok) {
@@ -440,12 +440,7 @@ export const normalizeAiProviderError = (error) => {
         raw_body: rawBody
     };
 
-    const classify = (code) => {
-        // Log raw provider data + final decision for debugging
-        if (typeof console?.warn === 'function') {
-        }
-        return code;
-    };
+    const classify = (code) => code;
 
     if (!raw || lower === 'provider_timeout' || lower.includes('timeout') || lower.includes('aborted')) {
         return {

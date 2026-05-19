@@ -29,8 +29,9 @@ const withSoftTimeout = async (task, {
 
 const loadCalendarApi = async () => {
     if (globalThis.CalendarAPI) return globalThis.CalendarAPI;
-    const mod = await import('../../../../eVe/intuition/tools/calendar.js');
-    return mod?.CalendarAPI || globalThis.CalendarAPI || null;
+    if (globalThis.atome?.calendar) return globalThis.atome.calendar;
+    if (globalThis.window?.atome?.calendar) return globalThis.window.atome.calendar;
+    return null;
 };
 
 const requireCalendarApi = async () => {

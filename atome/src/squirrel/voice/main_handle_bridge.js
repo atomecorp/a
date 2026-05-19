@@ -5,8 +5,6 @@ const BRIDGE_KEY = '__SQUIRREL_VOICE_MAIN_HANDLE_BRIDGE__';
 
 import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
 
-const defaultImportModule = (path) => import(path);
-
 const getClientPoint = (event) => {
     if (!event) return null;
     if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
@@ -35,20 +33,10 @@ const clearTimer = (state) => {
 
 const toggleDilasPanel = async ({
     env,
-    anchorEl = null,
-    importModule = defaultImportModule
+    anchorEl = null
 } = {}) => {
     const panelPerfStart = perfNowMs();
     if (!env || typeof env !== 'object') return false;
-    if (typeof env.toggle_dilas_panel !== 'function') {
-        const module = await importModule('./dilas_panel.js');
-        if (typeof module?.bootstrapDilasPanel === 'function') {
-            module.bootstrapDilasPanel({ env });
-        } else if (typeof module?.openDilasPanel === 'function') {
-            await module.openDilasPanel({ env });
-            return true;
-        }
-    }
     if (typeof env.toggle_dilas_panel === 'function') {
         await env.toggle_dilas_panel({ anchorEl });
         const totalMs = perfElapsedMs(panelPerfStart);
@@ -63,7 +51,6 @@ const toggleDilasPanel = async ({
         emitPerfEvent('voice.toggle_panel', { ok: true, totalMs, mode: 'open' });
         return true;
     }
-    env.console?.warn?.('[voice.main_handle] dilas panel toggle unavailable');
     emitPerfEvent('voice.toggle_panel', {
         ok: false,
         totalMs: perfElapsedMs(panelPerfStart),
@@ -74,20 +61,10 @@ const toggleDilasPanel = async ({
 
 const openDilasPanel = async ({
     env,
-    anchorEl = null,
-    importModule = defaultImportModule
+    anchorEl = null
 } = {}) => {
     const panelPerfStart = perfNowMs();
     if (!env || typeof env !== 'object') return false;
-    if (typeof env.open_dilas_panel !== 'function' && typeof env.toggle_dilas_panel !== 'function') {
-        const module = await importModule('./dilas_panel.js');
-        if (typeof module?.bootstrapDilasPanel === 'function') {
-            module.bootstrapDilasPanel({ env });
-        } else if (typeof module?.openDilasPanel === 'function') {
-            await module.openDilasPanel({ env });
-            return true;
-        }
-    }
     if (typeof env.toggle_dilas_panel === 'function') {
         await env.toggle_dilas_panel({ anchorEl });
         const totalMs = perfElapsedMs(panelPerfStart);
@@ -96,7 +73,6 @@ const openDilasPanel = async ({
         return true;
     }
     if (typeof env.open_dilas_panel !== 'function') {
-        env.console?.warn?.('[voice.main_handle] open_dilas_panel unavailable');
         emitPerfEvent('voice.open_panel', {
             ok: false,
             totalMs: perfElapsedMs(panelPerfStart),
@@ -113,8 +89,7 @@ const openDilasPanel = async ({
 
 const installHandleBridge = ({
     env,
-    handle,
-    importModule = defaultImportModule
+    handle
 }) => {
     if (!handle || handle.__squirrelVoiceMainHandleBound === true) return false;
     handle.__squirrelVoiceMainHandleBound = true;
@@ -138,9 +113,12 @@ const installHandleBridge = ({
         state.suppressClicksUntil = Date.now() + 900;
         handle.dataset.voiceHoldActive = 'true';
         try {
-            await toggleDilasPanel({ env, anchorEl: handle, importModule });
+            await toggleDilasPanel({ env, anchorEl: handle });
         } catch (error) {
-            env.console?.warn?.('[voice.main_handle] long-press open failed:', error?.message || error);
+            emitPerfEvent('voice.long_press_open_failed', {
+                ok: false,
+                error: error?.message || String(error)
+            });
         } finally {
             delete handle.dataset.voiceHoldActive;
         }
@@ -204,14 +182,13 @@ const installHandleBridge = ({
 
 export const bootstrapMainHandleVoiceEntry = ({
     env = (typeof window !== 'undefined' ? window : globalThis),
-    importModule = defaultImportModule
 } = {}) => {
     if (!env?.document || env[BRIDGE_KEY]) return env?.[BRIDGE_KEY] || null;
 
     const attach = () => {
         const handles = Array.from(env.document.querySelectorAll(HANDLE_SELECTOR));
         handles.forEach((handle) => {
-            installHandleBridge({ env, handle, importModule });
+        installHandleBridge({ env, handle });
         });
         return handles.length;
     };
