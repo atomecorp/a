@@ -25,7 +25,7 @@ protocol TransportDataDelegate: AnyObject {
     func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double)
 }
 
-public class auv3Utils: AUAudioUnit, IPlugAUControl {
+public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     // MARK: - Properties
     
     var _outputBusArray: AUAudioUnitBusArray?
@@ -95,7 +95,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     var audioDebugRenderFrameCursor: Int64 = 0
     var audioDebugPlaybackStartFrame: Int64? = nil
     var audioDebugRecordingStartFrame: Int64? = nil
-    // File playback (placeholder for iPlug core integration)
+    // File playback through the native audio engine
     var loadedFilePath: String? = nil
     var pendingScrubPreview: (path: String, position: Float, duration: Double)? = nil
     var pendingLoadPositionNormalized: Float? = nil
@@ -135,7 +135,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         didEmitReadyForPath.insert(path)
         let id = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
         let js = """
-        try{ if(typeof window.__fromDSP==='function'){ window.__fromDSP({ type:'clip_ready', payload: { clip_id: '\(id)', path: '\(path)' } }); }
+        try{ if(typeof window.nativeAudioEvent==='function'){ window.nativeAudioEvent({ type:'clip_ready', payload: { clip_id: '\(id)', path: '\(path)' } }); }
              else { window.dispatchEvent(new CustomEvent('clip_ready', { detail: { clip_id: '\(id)', path: '\(path)' } })); } }catch(e){}
         """
         DispatchQueue.main.async {

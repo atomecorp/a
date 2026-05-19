@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.20)
 
 project(atome_audio LANGUAGES C CXX)
 
-option(ATOME_BUILD_AU "Build AUv3 target (iOS/macOS)" ON)
 option(ATOME_BUILD_WAM "Build Web WAM target (Emscripten)" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -11,12 +10,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 add_subdirectory(engines/audio/core)
-
-if(ATOME_BUILD_AU)
-  # Fetch or expose iPlug2 only when the AU target is requested.
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deps/iplug2_fetch.cmake OPTIONAL)
-  add_subdirectory(engines/audio/au)
-endif()
 
 if(ATOME_BUILD_WAM)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/web/CMakeLists.txt")

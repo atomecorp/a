@@ -44,7 +44,7 @@ const voiceApi = {
     providers: {
         stt: { selected: 'browser_web_speech' },
         tts: { selected: 'browser_speech_synthesis' },
-        capture: { selected: 'iplug_native_recorder' }
+        capture: { selected: 'native_audio_recorder' }
     },
     runtime,
     async ensureReady() {

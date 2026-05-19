@@ -6,7 +6,7 @@
 
 ## Overview
 
-Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that drives custom components, media tooling, and drag-and-drop workflows. The authoring syntax is intentionally Ruby-like (symbols, method blocks, `box/text` primitives) but compiles down to vanilla JS so it can run everywhere. The desktop shell is powered by Tauri 2, which embeds both a Rust (Axum) micro server and the Node/Fastify stack so that the same `/api/uploads` and static assets work across dev servers, packaged apps, and AUv3 extensions. A shared iPlug2 pipeline keeps the DSP core consistent between AUv3 and WebAudio Module (WAM) builds.
+Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that drives custom components, media tooling, and drag-and-drop workflows. The authoring syntax is intentionally Ruby-like (symbols, method blocks, `box/text` primitives) but compiles down to vanilla JS so it can run everywhere. The desktop shell is powered by Tauri 2, which embeds both a Rust (Axum) micro server and the Node/Fastify stack so that the same `/api/uploads` and static assets work across dev servers, packaged apps, and AUv3 extensions. Audio now uses the native CPAL/Kira path on Tauri, the Swift native AUv3 engine on iOS, and the WebAssembly/WebAudio path in browser contexts.
 
 ## Architecture at a glance
 
@@ -16,14 +16,14 @@ Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that driv
 | **Fastify server** (`server/server.js`) | Serves static files during development, exposes `/api/uploads` backed by `src/assets/uploads`, handles DB access (SQLite/libSQL via ADOLE). | `http://127.0.0.1:3001` |
 | **Axum server in Tauri** (`src-tauri/src/server`) | Mirrors the same API when the app runs inside Tauri, persisting uploads under the sandbox (`~/Library/Containers/.../uploads`). | `http://127.0.0.1:3000` |
 | **Tauri host** (`src-tauri`) | Launches the Axum server, makes sure Fastify is running (spawning it if needed), and exposes the port to the frontend. | Native desktop bundle. |
-| **DSP / AUv3 / WAM** (`engines/audio/core`, `engines/audio/au`, `platforms/web/audio-wasm`, `platforms/ios/atome-auv3`) | Shared C++ DSP core compiled via the root CMake superbuild, surfaced either as an AUv3 (iPlug2) or as a WebAssembly audio bridge. | Depends on the chosen target. |
+| **Audio runtime** (`engines/audio/core`, `platforms/web/audio-wasm`, `platforms/ios/atome-auv3`) | Shared native recorder utilities, browser audio WASM, and Swift AUv3 audio host code. | Depends on the chosen target. |
 
 ## Key capabilities
 
 - **Declarative UI DSL** – Build interfaces entirely in JS using Squirrel selectors (no raw HTML/CSS edits).
 - **Drag & drop uploads** – `src/application/aBox/index.js` streams blobs to `/api/uploads`, refreshes metadata, and offers one-click downloads.
 - **Multi-runtime parity** – Fastify (Node) and Axum (Rust) implement the same endpoints, so Tauri/AUv3 and the browser stay aligned.
-- **Audio tooling** –  GSAP animations, Tone.js helpers, and the shared iPlug2 DSP core.
+- **Audio tooling** –  GSAP animations, Tone.js helpers, native CPAL/Kira audio, Swift AUv3 audio, and WebAudio/WASM browser support.
 - **Automation scripts** – `run.sh` installs deps, configures SQLite paths, launches Fastify + Tauri, or builds production bundles.
 
 ## Prerequisites
@@ -108,14 +108,14 @@ src/
 ├── js/, css/, web/         # Third-party libs bundled with the UI
 ├── index.html              # Entry point consumed by Squirrel (never edited directly)
 engines/
-├── audio/                  # Shared DSP, AU, and iPlug recorder bridge code
+├── audio/                  # Shared DSP and native recorder support code
 src-tauri/
 ├── src/main.rs             # Tauri bootstrap + server launch
 ├── src/server/             # Axum router, uploads handler, static serving
 platforms/
 ├── atomeOS/builder/        # Atome OS FreeBSD image builder
 ├── web/audio-wasm/         # Browser Kira WASM audio engine source
-├── ios/atome-auv3/         # iPlug2 AUv3 host + Swift UI bridge
+├── ios/atome-auv3/         # Swift AUv3 host + UI bridge
 ├── ios/shared/             # Shared iOS support code
 server/
 ├── server.js               # Fastify server used outside of Tauri
@@ -145,10 +145,10 @@ pub fn parse_dsl() -> Vec<String> {
 
 The generated JS is still plain ES modules and ends up calling helpers like `createNode` or `$()` so it can run unchanged whether the app is embedded in a browser, in Tauri, or inside the AUv3 WebView.
 
-## Audio plugins, AUv3, and WAM
+## Audio Runtime
 
 - The root `CMakeLists.txt` builds shared targets: `dsp_core`, `ring_buffer`, `disk_reader`.
-- `engines/audio/au` exposes the DSP parameters to iPlug2; `platforms/web/audio-wasm` exposes the browser audio engine source, and `platforms/ios/atome-auv3/iplug/AUViewController.swift` renders the Squirrel UI via WKWebView.
+- `platforms/web/audio-wasm` exposes the browser audio engine source, and `platforms/ios/atome-auv3` renders the Squirrel UI via WKWebView while routing audio through the Swift native AUv3 engine.
 - `auv3.sh`, `build_PWA_app.sh`, and `scripts/run_fastify.sh`/`run_tauri.sh` automate packaging for each runtime.
 - Known limitations (see `Problems solving/`): disk streaming is a placeholder, time-stretch hooks exist but need concrete implementations, and the WAM glue is still minimal.
 

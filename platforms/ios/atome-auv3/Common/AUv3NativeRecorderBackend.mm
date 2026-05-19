@@ -1,6 +1,6 @@
 #import "AUv3NativeRecorderBackend.h"
 
-#include "../../../../engines/audio/iplug/recorder/RecorderCore.cpp"
+#include "../../../../engines/audio/core/recorder/recorder_core.cpp"
 #include "../../../../engines/audio/core/ring_buffer.cpp"
 
 @interface AUv3NativeRecorderBackend ()

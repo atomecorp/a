@@ -209,10 +209,6 @@ import { installSharedAVContracts } from './av_contracts.js';
     }
 
     function sendNativeMessage(msg) {
-        if (typeof window.__toDSP === 'function') {
-            window.__toDSP(msg);
-            return true;
-        }
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge) {
             window.webkit.messageHandlers.swiftBridge.postMessage(msg);
             return true;
@@ -223,7 +219,7 @@ import { installSharedAVContracts } from './av_contracts.js';
     function ensureListeners() {
         if (listenersReady) return;
         listenersReady = true;
-        window.addEventListener('iplug_recording', (ev) => {
+        window.addEventListener('native_audio_recording', (ev) => {
             const detail = ev && ev.detail ? ev.detail : {};
             handleNativeEvent(detail);
         });
@@ -265,7 +261,7 @@ import { installSharedAVContracts } from './av_contracts.js';
                     overrun_frames: Number.isFinite(overrunFrames) && overrunFrames > 0 ? overrunFrames : 0,
                     sample_rate: sampleRate,
                     channels: Number(detail.channels || entry.channels || 0),
-                    provider: entry.provider || 'iplug_native_recorder'
+                    provider: entry.provider || 'native_audio_recorder'
                 };
                 const monitoring = reportRecordingOverrun(resolved, entry);
                 entry.stop.resolve(monitoring ? { ...resolved, monitoring } : resolved);
@@ -365,14 +361,14 @@ import { installSharedAVContracts } from './av_contracts.js';
                 userId
             });
             PENDING.set(sessionId, {
-                provider: 'iplug_native_recorder',
+                provider: 'native_audio_recorder',
                 transport: context,
                 fileName,
                 filePath,
                 sampleRate: requestedSampleRate,
                 channels: requestedChannels
             });
-            window.__SQUIRREL_RECORD_PROVIDER__ = 'iplug_native_recorder';
+            window.__SQUIRREL_RECORD_PROVIDER__ = 'native_audio_recorder';
             return sessionId;
         }
 
@@ -401,7 +397,6 @@ import { installSharedAVContracts } from './av_contracts.js';
         }
 
         const msg = {
-            type: 'iplug',
             action: 'record_start',
             sessionId,
             fileName,
@@ -414,7 +409,7 @@ import { installSharedAVContracts } from './av_contracts.js';
         // Pre-register the PENDING entry BEFORE creating the Promise to avoid
         // a race where the native event fires before the Promise executor runs.
         const pendingEntry = {
-            provider: 'iplug_native_recorder',
+            provider: 'native_audio_recorder',
             transport: 'auv3',
             fileName,
             sampleRate: Number(sampleRate) || null,
@@ -494,14 +489,13 @@ import { installSharedAVContracts } from './av_contracts.js';
         }
 
         const msg = {
-            type: 'iplug',
             action: 'record_stop',
             sessionId: sid
         };
 
         return new Promise((resolve, reject) => {
             const pendingEntry = PENDING.get(sid) || {
-                provider: 'iplug_native_recorder',
+                provider: 'native_audio_recorder',
                 start: null,
                 stop: null
             };

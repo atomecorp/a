@@ -6,11 +6,6 @@ export const hasSwiftBridge = (env = globalThis) => !!(
     || env?.webkit?.messageHandlers?.callback
 );
 
-export const hasIPlugBridge = (env = globalThis) => !!(
-    typeof env?.__toDSP === 'function'
-    || hasSwiftBridge(env)
-);
-
 export const getTauriInvoke = (env = globalThis) => {
     try {
         if (typeof env?.__TAURI_INTERNALS__?.invoke === 'function') {
@@ -116,7 +111,6 @@ export const describeAudioRuntimeEnvironment = (env = globalThis) => {
         has_tauri_object: !!env?.__TAURI__,
         has_tauri_internals_object: !!env?.__TAURI_INTERNALS__,
         has_swift_bridge: hasSwiftBridge(env),
-        has_iplug_bridge: hasIPlugBridge(env),
         is_auv3_audio_runtime: isAuv3AudioRuntime(env),
         is_ios_host_app_runtime: isIosHostAppRuntime(env),
         is_tauri_audio_runtime: isTauriAudioRuntime(env),
@@ -137,7 +131,6 @@ export const resolveAudioRuntime = (env = globalThis) => {
             playback: 'ios_auv3_native',
             record: 'ios_auv3_native',
             preferredFacadeBackendOrder: ['kira'],
-            hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: hasSwiftBridge(env),
             tauriInvoke: null,
             native_kira_required: true
@@ -150,7 +143,6 @@ export const resolveAudioRuntime = (env = globalThis) => {
             playback: 'tauri_native_kira',
             record: 'tauri_native_kira',
             preferredFacadeBackendOrder: ['kira'],
-            hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: false,
             tauriInvoke,
             native_kira_required: true
@@ -163,7 +155,6 @@ export const resolveAudioRuntime = (env = globalThis) => {
             playback: 'unsupported',
             record: 'unsupported',
             preferredFacadeBackendOrder: ['kira'],
-            hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: false,
             tauriInvoke: null,
             native_kira_required: true
@@ -177,7 +168,6 @@ export const resolveAudioRuntime = (env = globalThis) => {
                 playback: 'ios_native_kira',
                 record: 'ios_native_kira',
                 preferredFacadeBackendOrder: ['kira'],
-                hasIPlugBridge: hasIPlugBridge(env),
                 hasSwiftBridge: hasSwiftBridge(env),
                 tauriInvoke,
                 native_kira_required: true
@@ -188,7 +178,6 @@ export const resolveAudioRuntime = (env = globalThis) => {
             playback: 'unsupported',
             record: 'unsupported',
             preferredFacadeBackendOrder: ['kira'],
-            hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: hasSwiftBridge(env),
             tauriInvoke: null,
             native_kira_required: true
@@ -201,7 +190,6 @@ export const resolveAudioRuntime = (env = globalThis) => {
             playback: wasmAvailable ? 'web_wasm_kira' : 'unsupported',
             record: hasWebCapture ? 'web_capture' : 'unsupported',
             preferredFacadeBackendOrder: wasmAvailable ? ['kira'] : [],
-            hasIPlugBridge: hasIPlugBridge(env),
             hasSwiftBridge: false,
             tauriInvoke: null
         };
@@ -212,7 +200,6 @@ export const resolveAudioRuntime = (env = globalThis) => {
         playback: 'unsupported',
         record: 'unsupported',
         preferredFacadeBackendOrder: [],
-        hasIPlugBridge: hasIPlugBridge(env),
         hasSwiftBridge: hasSwiftBridge(env),
         tauriInvoke: null
     };
@@ -225,7 +212,7 @@ export const resolveVoiceCaptureProvider = (env = globalThis) => {
     if (runtime.record === 'tauri_native_kira'
         || runtime.record === 'ios_auv3_native'
         || runtime.record === 'ios_native_kira') {
-        return 'iplug_native_recorder';
+        return 'native_audio_recorder';
     }
     if (runtime.record === 'web_capture') {
         return 'web_capture_recorder';

@@ -1,7 +1,7 @@
 // Types for Squirrel AV Audio API
 // Note: If you do not use TypeScript, these definitions still help via editors.
 
-export type BackendName = 'kira' | 'iplug';
+export type BackendName = 'kira';
 
 export type WhenSpec =
   | { type: 'now' }

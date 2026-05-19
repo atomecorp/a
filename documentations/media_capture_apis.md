@@ -95,11 +95,11 @@ record_audio(filename, path?, options?)
 
 Behavior:
 - WebAudio path: captures mic, downsamples to 16k mono WAV, creates an atome.
-- iPlug2 path: uses native engine (Tauri), creates an atome.
+- native audio path: uses native engine (Tauri), creates an atome.
 
-Options (WebAudio + iPlug2):
-- backend: 'webaudio' | 'iplug2'
-- source: 'mic' | 'plugin' (iplug2 only)
+Options (WebAudio + native audio):
+- backend: 'webaudio' | 'native_audio'
+- source: 'mic' | 'native'
 
 Return:
 
@@ -113,7 +113,7 @@ Return:
 
 Notes:
 - WebAudio quality is fixed to 16k mono for now.
-- iPlug2 quality is managed by the native engine.
+- native audio quality is managed by the native engine.
 
 ---
 
@@ -270,7 +270,7 @@ await record_video('clip', null, {
 ### Audio (WebAudio)
 
 - WebAudio path is fixed to 16k mono for now.
-- iPlug2 quality is configured in the native engine.
+- native audio quality is configured in the native engine.
 
 ---
 

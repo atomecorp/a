@@ -1,4 +1,4 @@
-#include "RecorderCore.h"
+#include "recorder_core.h"
 
 #include <algorithm>
 #include <atomic>
@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-#include "../../core/ring_buffer.h"
+#include "../ring_buffer.h"
 
 namespace {
 

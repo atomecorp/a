@@ -493,8 +493,8 @@ extension auv3Utils {
         let js = """
         try{
           const payload = \(json);
-          if(typeof window.__fromDSP==='function'){ window.__fromDSP({ type:'\(type)', payload }); }
-          window.dispatchEvent(new CustomEvent('iplug_recording', { detail: Object.assign({ type:'\(type)' }, payload) }));
+          if(typeof window.nativeAudioEvent==='function'){ window.nativeAudioEvent({ type:'\(type)', payload }); }
+          window.dispatchEvent(new CustomEvent('native_audio_recording', { detail: Object.assign({ type:'\(type)' }, payload) }));
         }catch(e){}
         """
         DispatchQueue.main.async {

@@ -12,7 +12,7 @@ import {
 
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
-// Replaces the legacy iplug + html backends with a unified CPAL/Kira engine.
+// Replaces legacy HTML/native split backends with a unified CPAL/Kira engine.
 //
 // Fixes over previous version:
 // - Proper error propagation (no more silent .catch(() => {}))
@@ -79,7 +79,6 @@ import {
     var bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.atome;
     if (!relativePath || !bridge || typeof bridge.postMessage !== 'function') return false;
     bridge.postMessage({
-      type: 'iplug',
       action: 'loadLocalPath',
       relativePath: relativePath
     });

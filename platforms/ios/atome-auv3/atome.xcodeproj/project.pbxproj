@@ -74,8 +74,8 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AudioUnitViewController.swift,
-				AUv3Diagnostics.swift,
 				AUv3Decoder.swift,
+				AUv3Diagnostics.swift,
 				AUv3JavaScriptAudio.swift,
 				AUv3PlaybackState.swift,
 				AUv3Recorder.swift,

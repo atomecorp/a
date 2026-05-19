@@ -48,7 +48,7 @@ export const VOICE_V1_PROVIDER_DECISION = Object.freeze({
         lang: DEFAULT_LANG
     },
     capture: {
-        primary: 'iplug_native_recorder'
+        primary: 'native_audio_recorder'
     }
 });
 
@@ -379,7 +379,7 @@ export const resolveVoiceProviders = (env = globalThis) => {
     const captureSelected = (() => {
         if (typeof recordStart === 'function' && typeof recordStop === 'function') {
             if (providerHint && providerHint !== 'unsupported') return providerHint;
-            return 'iplug_native_recorder';
+            return 'native_audio_recorder';
         }
         if (providerHint === 'web_capture_recorder') return providerHint;
         return 'unsupported';

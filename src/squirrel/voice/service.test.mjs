@@ -129,7 +129,7 @@ const env = {
 const providers = resolveVoiceProviders(env);
 assert.equal(providers.stt.selected, 'browser_web_speech', 'browser speech recognition should be selected when host STT plugin is absent');
 assert.equal(providers.tts.selected, 'browser_speech_synthesis', 'speechSynthesis should be selected as the v1 TTS backend');
-assert.equal(providers.capture.selected, 'iplug_native_recorder', 'native recorder bridge should be selected when record_start/stop are available');
+assert.equal(providers.capture.selected, 'native_audio_recorder', 'native recorder bridge should be selected when record_start/stop are available');
 assert.equal(VOICE_V1_PROVIDER_DECISION.stt.primary, 'browser_web_speech', 'the v1 provider decision should now prefer the browser online STT backend');
 assert.equal(VOICE_V1_PROVIDER_DECISION.stt.fallback, 'tauri_plugin_stt', 'the v1 provider decision should keep Tauri STT as the local fallback backend');
 

@@ -31,15 +31,15 @@ fn main() {
         println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=11.0");
         println!("cargo:rerun-if-changed=native/recorder.mm");
         println!("cargo:rerun-if-changed=native/recorder.h");
-        println!("cargo:rerun-if-changed=../engines/audio/iplug/recorder/RecorderCore.cpp");
-        println!("cargo:rerun-if-changed=../engines/audio/iplug/recorder/RecorderCore.h");
+        println!("cargo:rerun-if-changed=../engines/audio/core/recorder/recorder_core.cpp");
+        println!("cargo:rerun-if-changed=../engines/audio/core/recorder/recorder_core.h");
         println!("cargo:rerun-if-changed=../engines/audio/core/ring_buffer.cpp");
         println!("cargo:rerun-if-changed=../engines/audio/core/ring_buffer.h");
         println!("cargo:rerun-if-changed={}", local_vosk_dylib.display());
 
         cc::Build::new()
             .file("native/recorder.mm")
-            .file("../engines/audio/iplug/recorder/RecorderCore.cpp")
+            .file("../engines/audio/core/recorder/recorder_core.cpp")
             .file("../engines/audio/core/ring_buffer.cpp")
             .flag("-fobjc-arc")
             // Match Rust's deployment target (Tauri defaults to 11.0 in this repo)

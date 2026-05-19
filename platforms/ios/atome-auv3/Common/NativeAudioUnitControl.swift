@@ -1,7 +1,7 @@
 import Foundation
 
-// Shared control surface for iPlug-style AU parameters without depending on concrete AU class
-public protocol IPlugAUControl: AnyObject {
+// Shared control surface for native audio AU parameters without depending on concrete AU class
+public protocol NativeAudioUnitControl: AnyObject {
     func setMasterGain(_ g: Float)
     func setPlayActive(_ on: Bool)
     func loadLocalFile(_ path: String)

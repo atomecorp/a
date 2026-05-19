@@ -217,7 +217,7 @@ const audioFile = await atome.objects.create<AudioFileAtome>({
 });
 ```
 
-#### Record (Tauri + iPlug2 or WebAudio fallback)
+#### Record (Tauri native audio or WebAudio fallback)
 
 ```ts
 // Start record from selected track/bus
@@ -637,7 +637,7 @@ Beyond place/move/trim/roll/split/join, the bare minimum to feel like a "real" m
 
 With ces briques, on obtient un **multitrack MVP** qui :
 
-* Enregistre en direct-to-disk (iPlug2 natif ou WebAudio fallback) avec stockage unifié.
+* Enregistre en direct-to-disk (native audio ou WebAudio fallback) avec stockage unifié.
 * Permet de placer, déplacer, couper, rallonger et recoller les clips.
 * Reste 100 % non-destructif (WAV jamais réécrit).
 * Utilise uniquement les APIs et objets déjà définis dans le document audio principal.

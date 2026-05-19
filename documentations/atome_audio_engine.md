@@ -996,7 +996,7 @@ The legacy audio system still exists in parts of the codebase, but it should now
 | direct HTML / video audio ownership | soundtrack routed through unified engine |
 | runtime-local debug heuristics | shared sample-accuracy suite and native timing metrics |
 
-The backend order may still contain fallbacks such as `kira`, `iplug`, or `html`, but the product direction is no longer "keep all engines alive forever". The direction is:
+The backend order may still contain fallbacks such as `kira`, `native_audio`, or `html`, but the product direction is no longer "keep all engines alive forever". The direction is:
 
 - converge on the unified engine
 - keep fallbacks only where strictly necessary

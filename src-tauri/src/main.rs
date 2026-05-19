@@ -5,7 +5,6 @@
 
 mod audio_engine;
 mod dev_logging;
-mod iplug_bridge;
 mod native_contacts;
 mod native_recorder;
 mod runtime_logging;
@@ -159,8 +158,6 @@ fn main() {
         .plugin(tauri_plugin_stt::init())
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
-            iplug_bridge::iplug_send,
-            iplug_bridge::iplug_poll_events,
             native_contacts::macos_contacts_snapshot,
             audio_engine::bridge::audio_init,
             audio_engine::bridge::audio_load_clip,

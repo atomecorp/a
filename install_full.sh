@@ -12,7 +12,6 @@ set -euo pipefail
 MODE="stable"          # stable | latest
 SKIP_TAURI=false
 SKIP_FASTIFY=false
-SKIP_IPLUG=false
 SKIP_SYSTEM=false
 SKIP_INSTALL_SERVER=false
 
@@ -92,7 +91,6 @@ Options:
   -l, --latest                 Shortcut for --mode latest
   --skip-tauri             Skip updating @tauri-apps/cli
   --skip-fastify           Skip updating Fastify and related plugins
-  --skip-iplug             Skip refreshing iPlug2 (scripts/update_iplug2.sh)
   --skip-system            Skip OS/system dependency installation
   --skip-install-server    Skip calling install_server.sh (Debian/FreeBSD)
   --os <auto|debian|freebsd|macos>
@@ -129,10 +127,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-fastify)
       SKIP_FASTIFY=true
-      shift
-      ;;
-    --skip-iplug)
-      SKIP_IPLUG=true
       shift
       ;;
     --skip-system)
@@ -580,31 +574,6 @@ reinstall_project_dependencies() {
   fi
 }
 
-update_iplug2() {
-  if [ "$SKIP_IPLUG" = true ]; then
-    log_warn "⏭️  Skipping iPlug2 update (--skip-iplug)"
-    return
-  fi
-
-  local updater="$PROJECT_ROOT/scripts/update_iplug2.sh"
-  if [ ! -f "$updater" ]; then
-    log_error "❌ iPlug2 updater not found at $updater"
-    return 1
-  fi
-
-  if [ ! -x "$updater" ]; then
-    chmod +x "$updater"
-  fi
-
-  log_info "🎛  Updating iPlug2 dependency"
-  if (cd "$PROJECT_ROOT" && "$updater"); then
-    log_ok "✅ iPlug2 refreshed"
-  else
-    log_error "❌ iPlug2 update failed"
-    return 1
-  fi
-}
-
 # --- Stable mode -----------------------------------------------------------
 
 # --- Skia Stack Installation (Removed) -------------------------------------
@@ -860,12 +829,6 @@ main() {
     update_fastify_stack
   else
     log_info "⏭️  Skipping Fastify plugins update"
-  fi
-
-  if [[ "$SKIP_IPLUG" == "false" ]]; then
-    update_iplug2
-  else
-    log_info "⏭️  Skipping iPlug2 update"
   fi
 
   if [[ "$MODE" == "stable" ]]; then

@@ -6,7 +6,7 @@
   A.on('backend_changed', ({backend})=>console.log('backend ->', backend));
 
   // Ensure backend
-  A.detect_and_set_backend(['kira','iplug']);
+  A.detect_and_set_backend(['kira']);
 
   // Define two clips
   A.create_clip({ id:'c1', path_or_bookmark:'Recordings/clip1.m4a', mode:'preload',
@@ -30,7 +30,7 @@
   A.map_midi({ cc: [{ cc:1, target:'env_attack', range:[0.001, 0.5] }, { cc:2, target:'env_release', range:[0.01, 1.0] }] });
 
   // Swap backend to test routing
-  // setTimeout(()=> A.set_backend('iplug'), 5000);
+  // setTimeout(()=> A.set_backend('kira'), 5000);
 
   // Listen to events
   A.on('voice_started', (e)=>console.log('voice_started', e));

@@ -55,11 +55,6 @@ export const ensureVoiceBridgeModules = async ({
         hasTauriInternals: !!readEnv(env, '__TAURI_INTERNALS__')
     });
 
-    if (tauri && typeof readEnv(env, '__toDSP') !== 'function') {
-        await importModule('../../application/audio_runtime/tauri_audio_bridge.js');
-        loaded.push('tauri_audio_bridge');
-    }
-
     if (tauri && (typeof readEnv(env, 'record_start') !== 'function' || typeof readEnv(env, 'record_stop') !== 'function')) {
         await importModule('../../application/audio_runtime/record_audio_api.js');
         loaded.push('record_audio_api');

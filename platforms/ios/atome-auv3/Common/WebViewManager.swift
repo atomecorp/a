@@ -538,7 +538,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             break
         case "swiftBridge":
             if let body = message.body as? [String: Any] {
-                // Quick path: iPlug-style param messages { type:'param', id:'gain|play|position', value:Number }
+                // Quick path: native audio param messages { type:'param', id:'gain|play|position', value:Number }
                 if let t = body["type"] as? String, t == "param" {
                     let id = (body["id"] as? String) ?? ""
                     let value: Float = {
@@ -548,7 +548,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         if let s = body["value"] as? String, let d = Double(s) { return Float(d) }
                         return 0
                     }()
-                    if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                    if let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                         switch id {
                         case "gain": au.setMasterGain(value)
                         case "play": au.setPlayActive(value > 0.5)
@@ -561,7 +561,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     return
                 }
                 // Debug commands
-                if let cmd = body["debug"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                if let cmd = body["debug"] as? String, let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                     if cmd == "dumpCapture" { au.dumpDebugCapture() }
                     return
                 }
@@ -579,7 +579,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         let sessionId = (body["sessionId"] as? String)
                             ?? (body["session_id"] as? String)
                             ?? ""
-                        if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                        if let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                             if action == "record_start" {
                                 let fileName = (body["fileName"] as? String) ?? "mic.wav"
                                 let source = (body["source"] as? String) ?? "mic"
@@ -610,19 +610,19 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     }
                     if action == "stopSlot" {
                         if let slotId = body["slotId"] as? String,
-                           let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                           let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                             au.stopAudioSlot(slotId)
                         }
                         return
                     }
                     if action == "clearAuxSlots" {
-                        if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                        if let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                             au.clearAuxSlots()
                         }
                         return
                     }
                     if action == "scrubPreview" {
-                        if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                        if let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                             let rel = (body["relativePath"] as? String) ?? ""
                             let lookupPath = WebViewManager.normalizedLocalMediaPath(rel)
                             let positionNormalized: Float = {
@@ -687,10 +687,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         }
                         return
                     }
-                    if action == "loadLocalPath" || action == "loadAndPlay" || (body["type"] as? String) == "iplug" {
-                        // Accept either { action:'loadLocalPath', relativePath } or { type:'iplug', action:'loadLocalPath', relativePath }
+                    if action == "loadLocalPath" || action == "loadAndPlay" {
+                        // Accept native media load messages with relativePath.
                         let autoPlay = (action == "loadAndPlay")
-                        if let rel = body["relativePath"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                        if let rel = body["relativePath"] as? String, let au = WebViewManager.hostAudioUnit as? NativeAudioUnitControl {
                             let startPositionNormalized: Float? = {
                                 if let n = body["positionNormalized"] as? NSNumber { return n.floatValue }
                                 if let d = body["positionNormalized"] as? Double { return Float(d) }

@@ -81,7 +81,6 @@
     "test:coverage": "vitest run --coverage",
     "manifest:update": "node scripts/update-hot-manifest.mjs",
     "update:libs": "./install_full.sh --mode latest",
-    "update:libs:no-iplug": "./install_full.sh --mode latest --skip-iplug",
     "update:libs:basic": "./install_full.sh --mode latest --skip-tauri --skip-fastify",
     "update:libs:stable": "./install_full.sh --mode stable",
     "generate-keys": "node scripts/generate-server-keys.js",

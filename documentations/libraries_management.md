@@ -47,10 +47,7 @@ npm run update:libs
 - ✅ Sauvegarde + rollback automatiques en cas de problème
 - ✅ Génère des fichiers `.version` pour chaque asset téléchargé
 - ✅ Met à jour @tauri-apps/cli et la stack Fastify (désactivables avec `--skip-tauri` / `--skip-fastify`)
-- ✅ Rafraîchit aussi iPlug2 (exécute `scripts/update_iplug2.sh`)
 - ✅ Réinstalle toutes les dépendances npm via `scripts/install_dependencies.sh`
-
-Pour ignorer iPlug2 : `npm run update:libs:no-iplug`, `npm run update:libs -- --skip-iplug` ou `./update_all_libraries.sh --mode latest --skip-iplug`
 
  ℹ️ Le mode `latest` s'appuie sur `jq`. Installez-le via `brew install jq` (macOS) ou votre gestionnaire de paquets.
 
@@ -69,9 +66,7 @@ npm run update:libs:basic
 - ✅ Télécharge uniquement les librairies front
 - ✅ Conserve les sauvegardes/rollback et les fichiers `.version`
 - ✅ Idéal quand vous ne souhaitez pas toucher au CLI Tauri ou à Fastify
-- ℹ️ Inclut iPlug2 par défaut ; ajoutez `--skip-iplug` pour éviter le téléchargement
-
-> ➖ Exemple : `./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify --skip-iplug`
+> ➖ Exemple : `./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify`
 
 ### 3. Mode stable (versions validées)
 
@@ -86,7 +81,7 @@ npm run update:libs:stable
 - ✅ Applique le set de versions épinglées et testées
 - ✅ Pratique pour figer les builds de production
 
-> ➖ `./update_all_libraries.sh --mode stable --skip-iplug` évitera la mise à jour iPlug2
+> ➖ `./update_all_libraries.sh --mode stable` applique le set stable complet.
 
 ## 🔧 Utilisation dans le HTML
 
@@ -206,7 +201,7 @@ cp src/js/gsap.min.js.backup src/js/gsap.min.js
 ### Permissions d'exécution
 
 ```bash
-chmod +x update_all_libraries.sh scripts/update_iplug2.sh scripts/*.sh
+chmod +x update_all_libraries.sh scripts/*.sh
 ```
 
 ## 📈 Monitoring des Versions
