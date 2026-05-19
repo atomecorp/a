@@ -150,9 +150,9 @@ Regles obligatoires de cette phase:
 
 Taches:
 
-- [ ] Valider avec l'utilisateur la frontiere open-source Atome / closed-source eVe.
-- [ ] Valider les regles de classement: UI closed, tools closed, infrastructure de l'app open, security open, cross-platform open, server open.
-- [ ] Identifier les dependances autorisees et interdites entre couches open et closed.
+- [x] Valider avec l'utilisateur la frontiere open-source Atome / closed-source eVe.
+- [x] Valider les regles de classement: UI closed, tools closed, infrastructure de l'app open, security open, cross-platform open, server open.
+- [x] Identifier les dependances autorisees et interdites entre couches open et closed.
 - [ ] Identifier les dossiers et modules a deplacer, scinder, ou proteger pour respecter cette architecture.
 - [ ] Verifier que la structure cible est suffisamment stable pour devenir la base des cartographies futures.
 - [ ] Produire un test ou une verification adaptee apres chaque sous-tache et un rapport d'avancement global.
@@ -186,7 +186,52 @@ Taches:
 - [ ] Rendre ces maps obligatoires avant toute nouvelle implementation.
 - [ ] Produire un test ou une verification documentaire ciblee apres chaque sous-tache et un rapport d'avancement global.
 
-### Phase 3 - Finalisation Molecule / MTraX
+### Phase 3 - Audit strict de securite framework / resolution des failles
+
+Statut:
+
+- [ ] Non commencee
+
+Depend de:
+
+- Phase 2 terminee
+
+Sources principales:
+
+- todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md
+- todo/cleanup_architecture/eve_atome_master_cleanup_plan.md
+- todo/communication_social/user_auth.md
+- todo/communication_social/apple_mail_security.md
+- todo/sharing_search_monitoring/Share_tool.md
+- todo/ai_voice/MCP_voice_control.md
+- todo/ai_voice/Full_vocal_AI_integration.md
+
+Objectif:
+
+- Mener un audit de securite strict, hautement sensible, et tres approfondi sur tout le framework, puis resoudre les failles identifiees selon leur severite avant de poursuivre les autres chantiers.
+
+Regles obligatoires de cette phase:
+
+- L'audit couvre l'ensemble du framework, pas seulement un sous-systeme isole.
+- Les surfaces client, runtime, MCP, bridge, stockage, reseau, serveur, auth, permissions, sync, et natif doivent etre auditees.
+- Les failles critiques et hautes doivent etre resolues avant de passer aux phases suivantes.
+- Les failles moyennes doivent etre soit corrigees, soit documentees avec proprietaire, impact, mitigation, et plan d'action explicite.
+- Aucun resultat d'audit ne doit etre masque par un fallback, un silence, ou une simple note cosmetique.
+- La cloture de phase exige des validations de securite ciblees et un rapport explicite des risques restants.
+
+Taches:
+
+- [ ] Inventorier toutes les surfaces de securite du framework: filesystem, reseau, websocket, bridges JS/natifs, tokens, secrets, permissions, stockage, MCP, sync, server, sandbox, et imports dynamiques.
+- [ ] Verifier en profondeur les risques de fuite de secrets, d'injection de commande, de traversal de chemin, d'elevation de privilege, de bypass de permissions, de bridge trop permissif, et de payloads non valides.
+- [ ] Auditer les flux auth, user preferences sensibles, token storage, journalisation, rate limiting, et separation des donnees utilisateur.
+- [ ] Auditer les surfaces MCP et IA pour confirmer l'absence de raccourcis dangereux, de mutations non autorisees, et de contournements du pipeline canonique.
+- [ ] Prioriser les failles par severite: critique, haute, moyenne, basse.
+- [ ] Corriger toutes les failles critiques et hautes avant de poursuivre.
+- [ ] Documenter clairement les failles restantes avec impact, proprietaire, plan de remediation, et justification si elles ne sont pas corrigees immediatement.
+- [ ] Produire des tests et verifications de securite cibles apres chaque correction sensible.
+- [ ] Produire un rapport d'audit et de resolution des failles avec avancement global avant cloture de phase.
+
+### Phase 4 - Finalisation Molecule / MTraX
 
 Statut:
 
@@ -194,7 +239,7 @@ Statut:
 
 Depend de:
 
-- Phase 2 terminee
+- Phase 3 terminee
 
 Sources principales:
 
@@ -212,7 +257,7 @@ Taches:
 - [ ] Lancer le renommage progressif Molecule seulement apres stabilisation fonctionnelle.
 - [ ] Garder les aliases legacy uniquement aux frontieres publiques documentees.
 
-### Phase 4 - AV APIs / recording / preview
+### Phase 5 - AV APIs / recording / preview
 
 Statut:
 
@@ -220,7 +265,7 @@ Statut:
 
 Depend de:
 
-- Phase 2 terminee
+- Phase 3 terminee
 
 Sources principales:
 
@@ -237,7 +282,7 @@ Taches:
 - [ ] Remplacer progressivement l'ancien chemin recorder C FFI AUv3.
 - [ ] Stabiliser les frontieres publiques audio/video playback/recording/preview.
 
-### Phase 5 - Partage / sync / Finder
+### Phase 6 - Partage / sync / Finder
 
 Statut:
 
@@ -245,7 +290,7 @@ Statut:
 
 Depend de:
 
-- Phase 2 terminee
+- Phase 3 terminee
 
 Sources principales:
 
@@ -265,7 +310,7 @@ Taches:
 - [ ] Ajouter le menu Flower contextuel Matrix apres stabilisation selection/command path.
 - [ ] Verifier que Copy, Paste, Duplicate, Delete et Rename routent vers les vrais chemins runtime.
 
-### Phase 6 - Migration V2 / cleanup large / performance
+### Phase 7 - Migration V2 / cleanup large / performance
 
 Statut:
 
@@ -273,7 +318,7 @@ Statut:
 
 Depend de:
 
-- Phase 2 terminee
+- Phase 3 terminee
 
 Sources principales:
 
@@ -293,7 +338,7 @@ Taches:
 - [ ] Nettoyer uniquement les artefacts generes confirmes comme jetables.
 - [ ] Executer le plan deep UX/performance apres stabilisation des frontieres V2.
 
-### Phase 7 - Auth, Apple Mail, notifications, calendar
+### Phase 8 - Auth, Apple Mail, notifications, calendar
 
 Statut:
 
@@ -301,7 +346,8 @@ Statut:
 
 Depend de:
 
-- Phase 5 terminee
+- Phase 6 terminee
+- Phase 3 terminee
 
 Sources principales:
 
@@ -317,7 +363,7 @@ Taches:
 - [ ] Stabiliser le systeme de notifications.
 - [ ] Ajouter vue semaine, recherche et preferences calendar.
 
-### Phase 8 - IA vocale / MCP / editor / runtime
+### Phase 9 - IA vocale / MCP / editor / runtime
 
 Statut:
 
@@ -326,8 +372,9 @@ Statut:
 Depend de:
 
 - Phase 2 terminee
-- Phase 7 terminee pour les dependances mail/auth/calendar
-- Phase 6 suffisamment stable pour eviter de brancher l'IA sur des surfaces legacy en cours de migration
+- Phase 8 terminee pour les dependances mail/auth/calendar
+- Phase 7 suffisamment stable pour eviter de brancher l'IA sur des surfaces legacy en cours de migration
+- Phase 3 terminee
 
 Sources principales:
 
@@ -350,7 +397,7 @@ Taches:
 - [ ] Integrer l'editeur code/MCP sur une base architecturelle stable.
 - [ ] Ajouter tests semantiques, orchestrateur et E2E Tauri.
 
-### Phase 9 - Chantiers produits differables
+### Phase 10 - Chantiers produits differables
 
 Statut:
 
