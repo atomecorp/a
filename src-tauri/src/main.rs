@@ -6,7 +6,6 @@
 mod audio_engine;
 mod dev_logging;
 mod native_contacts;
-mod native_recorder;
 mod runtime_logging;
 mod server;
 use std::fs;

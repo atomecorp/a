@@ -4561,7 +4561,6 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bcrypt",
- "cc",
  "chrono",
  "cpal 0.15.3",
  "dotenvy",
