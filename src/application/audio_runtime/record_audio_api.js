@@ -114,16 +114,54 @@ import { installSharedAVContracts } from './av_contracts.js';
         return null;
     }
 
+    function callUserIdProvider(provider) {
+        if (typeof provider !== 'function') return null;
+        try {
+            return provider();
+        } catch (error) {
+            logTauriRecord('record_audio_api.user_id_provider_failed', {
+                error: String(error?.message || error)
+            });
+            return null;
+        }
+    }
+
     function resolveUserIdSync() {
         const api = window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null);
         return extractUserId(window.__currentUser)
             || extractUserId(window.__CURRENT_USER__)
             || extractUserId(window.currentUser)
+            || extractUserId(callUserIdProvider(api?.auth?.getCurrentInfo?.bind(api.auth)))
             || extractUserId(api?.auth?.currentUser)
             || extractUserId(api?.auth?.user)
+            || extractUserId(callUserIdProvider(api?.security?.getAnonymousUserId?.bind(api.security)))
             || readStoredUserId(window.localStorage)
             || readStoredUserId(window.sessionStorage)
             || null;
+    }
+
+    function isTauriRecordRuntime() {
+        const runtime = resolveAudioRuntime(window);
+        return runtime.runtime === 'tauri_native'
+            || !!window.__SQUIRREL_FORCE_TAURI_RUNTIME__
+            || typeof window.__TAURI_INTERNALS__?.invoke === 'function'
+            || typeof window.__TAURI__?.invoke === 'function'
+            || typeof window.__TAURI__?.core?.invoke === 'function';
+    }
+
+    function logTauriRecord(stage, detail = {}) {
+        if (!isTauriRecordRuntime()) return;
+        const entry = { stage, at: new Date().toISOString(), detail };
+        try {
+            window.__TAURI_AUDIO_RECORD_DEBUG__ = Array.isArray(window.__TAURI_AUDIO_RECORD_DEBUG__)
+                ? window.__TAURI_AUDIO_RECORD_DEBUG__
+                : [];
+            window.__TAURI_AUDIO_RECORD_DEBUG__.push(entry);
+            if (window.__TAURI_AUDIO_RECORD_DEBUG__.length > 80) {
+                window.__TAURI_AUDIO_RECORD_DEBUG__.splice(0, window.__TAURI_AUDIO_RECORD_DEBUG__.length - 80);
+            }
+        } catch (_) { }
+        try { console.log('[tauri-audio-record]', stage, detail); } catch (_) { }
     }
 
     function withTimeout(promise, ms) {
@@ -273,6 +311,16 @@ import { installSharedAVContracts } from './av_contracts.js';
 
         if (context === 'tauri' || context === 'ios_app') {
             const invoke = getTauriInvoke(window);
+            logTauriRecord('record_audio_api.record_start.enter', {
+                context,
+                source,
+                sessionId,
+                fileName,
+                sampleRate,
+                channels,
+                invoke_available: typeof invoke === 'function',
+                runtime: resolveAudioRuntime(window)
+            });
             if (typeof invoke !== 'function') {
                 throw new Error(context === 'ios_app'
                     ? 'iOS native audio recorder bridge is not available'
@@ -283,6 +331,11 @@ import { installSharedAVContracts } from './av_contracts.js';
                 userId = await getAdoleUserId();
             }
             if (!userId) {
+                logTauriRecord('record_audio_api.record_start.missing_user_id', {
+                    storage_user_id: readStoredUserId(window.localStorage) || readStoredUserId(window.sessionStorage) || null,
+                    has_current_user: !!window.__currentUser,
+                    has_adole: !!(window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null))
+                });
                 throw new Error('Missing userId for native recording');
             }
             const filePath = (typeof params.filePath === 'string' && params.filePath.trim())
@@ -290,6 +343,14 @@ import { installSharedAVContracts } from './av_contracts.js';
                 : `data/users/${userId}/recordings/${fileName}`;
             const requestedSampleRate = Number(sampleRate) || 0;
             const requestedChannels = Number(channels) || 0;
+            logTauriRecord('record_audio_api.record_start.invoke_audio_record_start', {
+                sessionId,
+                fileName,
+                filePath,
+                userId,
+                sampleRate: requestedSampleRate,
+                channels: requestedChannels
+            });
             await invoke('audio_record_start', {
                 sessionId,
                 fileName,
@@ -297,6 +358,11 @@ import { installSharedAVContracts } from './av_contracts.js';
                 userId,
                 sampleRate: requestedSampleRate,
                 channels: requestedChannels
+            });
+            logTauriRecord('record_audio_api.record_start.success', {
+                sessionId,
+                filePath,
+                userId
             });
             PENDING.set(sessionId, {
                 provider: 'iplug_native_recorder',
