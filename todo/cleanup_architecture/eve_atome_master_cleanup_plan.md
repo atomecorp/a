@@ -105,6 +105,115 @@ Completion note: Completed by enforcing `.codex/AGENTS.md`, preserving the appro
 
 Completion note: Completed by enforcing `.codex/AGENTS.md`, preserving the approved architecture rules, and adding no fallback, patch, duplicate runtime, uncontrolled dependency, or security-sensitive bridge in this pass.
 
+## 1.2 Open/Closed Repository Boundary Rules
+
+The Atome/eVe repository restructure must enforce a clear product and licensing boundary between the open-source Atome framework and the closed-source eVe product layer.
+
+This boundary is mandatory during any folder move, split, merge, extraction, or cleanup.
+
+Repository classification rules:
+
+- UI is closed.
+- Tools are closed.
+- Application infrastructure is open.
+- Security is open.
+- Cross-platform runtime support is open.
+- Server is open.
+
+Atome open-source ownership:
+
+- shared runtime infrastructure;
+- application bootstrap and framework plumbing;
+- core APIs and contracts that are not product-exclusive;
+- security model, validation, and hardening layers;
+- platform abstraction and cross-platform adapters;
+- server-side infrastructure and shared backend services.
+
+eVe closed-source ownership:
+
+- product-specific UI surfaces;
+- product-specific tools and tool presentation logic;
+- product-specific workflows, orchestration, and experience layers;
+- private product packaging that should not become a framework dependency.
+
+Mandatory dependency direction:
+
+- Atome open-source code must not depend on eVe closed-source modules.
+- eVe closed-source code may depend on Atome open-source APIs, contracts, infrastructure, and platform services.
+- Shared non-UI and non-tool logic discovered inside eVe must be extracted to Atome open-source instead of duplicated.
+- UI and tool code must not become the home of shared infrastructure, security, server, or cross-platform logic.
+
+Mandatory restructuring rules:
+
+- Do not mix open and closed responsibilities inside the same target folder when a stable architectural split is possible.
+- Do not leave product-specific UI code inside open framework infrastructure.
+- Do not leave reusable infrastructure trapped inside closed eVe folders.
+- Do not duplicate security, server, runtime, sync, or platform code to maintain an artificial separation.
+- When a feature mixes UI, tools, and shared runtime logic, extract the shared runtime logic to Atome open-source first, then keep only product-specific composition inside eVe.
+
+Folder restructuring objective:
+
+- Atome must remain the reusable open framework foundation.
+- eVe must remain the closed product layer built on top of Atome.
+- The resulting directory structure must make the ownership boundary obvious from the path layout alone.
+
+Required audit before moving code:
+
+1. Identify whether the candidate module is UI, tool, infrastructure, security, cross-platform, or server.
+2. Identify whether the module is reusable outside eVe.
+3. Identify whether the module contains mixed responsibilities that must be split before relocation.
+4. Verify that moving the module will not introduce an open-to-closed dependency inversion.
+5. Verify that no shared logic remains stranded in the closed layer after the move.
+
+Mandatory preparation-first architecture rule:
+
+- Do not execute the repository restructure directly while the target architecture is still being defined.
+- This phase must prepare the ground first, not perform the final directory migration by default.
+- Before any folder move, split, merge, extraction, or enforcement pass, propose a new target directory architecture to the user.
+- The new architecture must be defined and refined in direct collaboration with the user.
+- No structural execution may start before explicit user validation of the proposed directory architecture.
+
+Mandatory target quality rules for the new directory architecture:
+
+- The architecture must respect both Atome and eVe as distinct but coherent layers.
+- The architecture must be as simple as possible.
+- The architecture must be as logical as possible.
+- The architecture must be as concise and readable as possible.
+- The path layout must make the ownership and responsibility of each folder obvious without requiring hidden tribal knowledge.
+
+Mandatory structural separation rules:
+
+- Separate temporary files from essential source files.
+- Separate generated files and generated artifacts from maintained source files.
+- Separate UI from shared code.
+- Separate UI from APIs.
+- Separate UI from cross-platform code.
+- Separate UI from server code.
+- Separate UI from MCP code.
+- Separate product tools from shared framework infrastructure.
+- Separate APIs from product presentation and UI composition.
+- Separate cross-platform adapters from business and presentation layers.
+- Separate server code from client runtime code.
+- Separate MCP/runtime integration from unrelated product UI code.
+
+Mandatory proposal contents before validation:
+
+- a proposed top-level folder architecture;
+- the ownership of each top-level area: Atome open or eVe closed;
+- the target place for UI, tools, APIs, infrastructure, security, cross-platform, server, and MCP;
+- the target place for temporary files, generated files, and essential maintained source files;
+- the dependency direction between the resulting layers;
+- the rationale explaining why the proposal is simpler, more logical, more concise, and more readable than the current layout.
+
+Validation requirements:
+
+- No open Atome module may import closed eVe UI or tool modules.
+- No shared security or platform rule may exist only in eVe.
+- No server or infrastructure layer may be reimplemented separately for Atome and eVe.
+- Every moved folder must have an explicit ownership justification: open Atome or closed eVe.
+- The code map and architecture map must reflect the final open/closed boundary once the restructuring work is performed.
+- The final restructuring may only begin after the user has reviewed and approved the proposed architecture.
+
 ---
 
 # 2. Initial Inventory

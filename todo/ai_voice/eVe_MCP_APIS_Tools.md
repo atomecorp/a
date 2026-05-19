@@ -1,4 +1,4 @@
-Unified MCP / API / Tooling Architecture Tasks
+# Unified MCP / API / Tooling Architecture Tasks
 
 All implementation work MUST strictly comply with:
 ./.codex/AGENTS.md
@@ -289,6 +289,206 @@ Documentation generation should be automated whenever possible.
 
 ⸻
 
+Phase 5 — Framework Code and API Map
+
+Objective
+
+Create and maintain a structured framework map so future development tasks can reuse existing code, APIs, modules, helpers, services, adapters, and components without scanning the whole codebase blindly every time.
+
+This map becomes a mandatory entry point before any new implementation.
+
+The goal is to prevent duplicated logic, parallel systems, redundant APIs, architectural drift, and unnecessary reinvention.
+
+Required Output Files
+
+Create or update:
+
+* `./docs/CODEMAP.md`
+* `./docs/API_MAP.md`
+* `./docs/ARCHITECTURE_MAP.md`
+
+If `./docs` does not exist, create it.
+
+Mandatory Analysis Before Writing the Maps
+
+Before creating or updating the maps, inspect the codebase and identify:
+
+1. main directories and their purpose;
+2. existing APIs;
+3. existing services;
+4. existing helpers and utilities;
+5. existing UI components;
+6. existing backend and native adapters;
+7. existing runtime-specific code;
+8. existing MCP and tool-related code;
+9. existing duplicated or overlapping logic;
+10. areas where the architecture is unclear or undocumented.
+
+Do not invent architecture that is not present in the code.
+
+If something is uncertain, mark it clearly as:
+
+`Status: To verify`
+
+Do not hallucinate missing APIs.
+
+`CODEMAP.md` Requirements
+
+Create a tree-like framework map grouped by responsibility, not as a raw file dump.
+
+For each major area, document:
+
+* path;
+* role;
+* main responsibility;
+* related modules;
+* canonical owner or owning layer;
+* main entry points;
+* primary upstream callers or dependents when known;
+* primary downstream services, adapters, or storage dependencies when known;
+* search keywords, aliases, and legacy names when they exist;
+* whether it exposes reusable logic;
+* whether it should be reused, extended, or avoided;
+* known duplication risks.
+
+The description must be precise enough that a future coding task can determine where similar logic already lives and where a new change must connect.
+
+The map must help answer quickly:
+
+* does this already exist;
+* where should this feature be added;
+* which module owns this responsibility;
+* whether creating a new file is justified.
+
+`API_MAP.md` Requirements
+
+Create a complete map of public, semi-public, and internal APIs.
+
+For each API, document:
+
+* API name;
+* file path;
+* exported functions or classes;
+* exact or normalized signature shape when known;
+* purpose;
+* input parameters;
+* output format;
+* side effects;
+* runtime target when applicable: Web, Tauri, iOS, AUv3, FreeBSD, server, and others when relevant;
+* related MCP or tool exposure when applicable;
+* main call sites or consuming modules when known;
+* backend, adapter, storage, transport, or bridge dependencies when known;
+* canonical location for future extension;
+* known aliases, historical names, or replacement APIs when they exist;
+* whether the API is stable, experimental, deprecated, missing, or `To verify`;
+* what should reuse it.
+
+The map must clearly state which APIs must be reused first and which duplicate implementations must not be created.
+
+The API descriptions must be precise enough that a future coding task can verify whether an equivalent API already exists and can connect to it without reopening a broad exploratory search.
+
+`ARCHITECTURE_MAP.md` Requirements
+
+Create a high-level architecture map describing:
+
+* global architecture;
+* major layers;
+* runtime modes;
+* data flow;
+* UI, tool, API, runtime, backend, storage, sync, and MCP separation;
+* source-of-truth rules;
+* where new code should go;
+* where new APIs should be declared;
+* where MCP tools should connect;
+* what must never be duplicated.
+
+Suggested sections:
+
+* Global Vision
+* Main Layers
+* Runtime Modes
+* Code Placement Rules
+* Reuse Rules
+* Anti-Duplication Rules
+* MCP Integration Rules
+* Maintenance Rules
+
+Tree Optimization Requirement
+
+The maps must be optimized for future AI and developer navigation.
+
+Do not dump every file mechanically.
+
+Group files and APIs by responsibility, and for each major area provide:
+
+* Area
+* Purpose
+* Main files
+* Exact ownership
+* Reusable APIs
+* Internal helpers
+* Runtime targets
+* Main integration points
+* Search keywords and legacy aliases
+* Should be extended by
+* Should not be duplicated by
+* Notes
+
+Mandatory Usage Rule
+
+Before implementing any new feature, bug fix, refactor, API, component, service, adapter, helper, utility, or tool, the coding agent must first consult:
+
+* `./docs/CODEMAP.md`
+* `./docs/API_MAP.md`
+* `./docs/ARCHITECTURE_MAP.md`
+
+Then it must perform only targeted verification in the codebase.
+
+If the maps identify an existing API, helper, module, service, component, adapter, or architectural pattern that matches the task, it must be reused, extended, exposed properly, or factorized.
+
+Creating new code is allowed only when no existing location or abstraction can correctly support the change.
+
+If new code changes framework structure, exposes a new API, modifies an existing API, moves responsibilities, or removes duplicated logic, the maps must be updated in the same task.
+
+Integration With Future Coding Tasks
+
+Any future implementation prompt must include this rule:
+
+Before creating, modifying, or adding any file, module, API, component, helper, adapter, service, or utility, first consult:
+
+* `./docs/CODEMAP.md`
+* `./docs/API_MAP.md`
+* `./docs/ARCHITECTURE_MAP.md`
+
+Then perform a targeted verification in the codebase.
+
+If an equivalent, similar, partial, or reusable implementation already exists, reuse it, extend it, expose it properly, or factorize it.
+
+Do not reinvent the wheel.
+
+Do not create parallel systems, duplicated logic, redundant adapters, fallback layers, wrappers, or isolated implementations unless there is a documented architectural reason.
+
+If creating a new file or API is truly necessary, justify why no existing file, module, API, or abstraction can correctly host the change.
+
+After implementation, remove obsolete, redundant, unused, temporary, or duplicated code introduced or discovered during the task.
+
+Update the relevant maps if the task changes structure, APIs, responsibilities, or reuse rules.
+
+Final Response Required
+
+After completing the mapping task, provide a concise report with:
+
+* files created or updated;
+* main APIs discovered;
+* main reusable modules discovered;
+* duplication risks found;
+* unclear areas marked `To verify`;
+* recommendations for future cleanup.
+
+This task is documentation and architecture mapping only.
+
+⸻
+
 Unified AI Coding Pre-Prompt
 
 Goals
@@ -326,6 +526,9 @@ The AI coding pre-prompt must require:
 8. Every API to support deterministic behavior.
 9. Every component to avoid hidden implicit dependencies.
 10. Every implementation to prioritize maintainability and clarity.
+11. Every implementation task to consult `./docs/CODEMAP.md`, `./docs/API_MAP.md`, and `./docs/ARCHITECTURE_MAP.md` before broad codebase search.
+12. Every task to reuse, extend, or factorize existing framework code before creating new modules.
+13. Every structural or API change to update the relevant framework maps in the same task.
 
 ⸻
 
@@ -355,4 +558,3 @@ The entire architecture must remain:
 * scalable;
 * realtime-ready;
 * synchronization-aware.
-

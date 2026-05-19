@@ -258,6 +258,50 @@ The authoritative architecture documentation is located under:
 
 Before generating or modifying code, the assistant MUST ensure full consistency with these documents.
 
+────────────────────────────────
+TRANSITIONAL FRAMEWORK REUSE RULE
+────────────────────────────────
+
+There is a transitional activation condition tied to:
+
+- ./todo/ai_voice/eVe_MCP_APIS_Tools.md
+
+Until that task is fully completed, the assistant MUST already inspect the existing framework and codebase before creating new code, but the repository-wide codemap/API-map driven workflow is not yet considered fully available.
+
+As soon as ./todo/ai_voice/eVe_MCP_APIS_Tools.md is completed and the required framework maps exist and are validated, the following rule becomes mandatory for every implementation task and must be applied systematically.
+
+Once that task is completed, this transitional condition must be removed from this document and the rule below must remain active without condition.
+
+Mandatory Framework Reuse and Factorization Rule
+
+Before creating, modifying, or adding any file, module, API, component, helper, adapter, service, or utility, you must first inspect the existing framework and codebase.
+
+You must verify whether an equivalent, similar, partial, or reusable implementation already exists somewhere in the project.
+
+Your task is not to reinvent the wheel.
+
+You must:
+
+1. Search the existing codebase thoroughly before writing new code.
+2. Identify existing APIs, helpers, services, components, adapters, patterns, abstractions, naming conventions, and architectural rules that can be reused.
+3. Prefer extending, connecting to, or factorizing existing code rather than creating a duplicate implementation.
+4. Avoid creating parallel systems, duplicated logic, redundant adapters, temporary wrappers, fallback layers, or isolated implementations.
+5. If similar code already exists, refactor or centralize the logic cleanly instead of adding another version.
+6. Ensure the new work integrates naturally into the existing architecture and respects the global vision of the framework.
+7. When creating a new file is truly necessary, justify why no existing file, module, API, or abstraction can correctly host the change.
+8. Keep the implementation minimal, coherent, maintainable, and aligned with the framework’s existing structure.
+9. After implementation, remove any obsolete, redundant, unused, temporary, or duplicated code introduced or discovered during the task.
+10. Never leave test code, debug code, probes, traces, temporary logs, or experimental logic in the final result.
+
+Before coding, provide a short implementation plan explaining:
+
+- what existing files or modules were inspected;
+- what reusable logic or architecture was found;
+- whether the change will reuse, extend, refactor, or create new code;
+- why the chosen approach is the cleanest and most consistent with the framework.
+
+If the codebase already contains the required functionality, do not recreate it. Use it, expose it properly, factorize it, or connect to it.
+
 If architectural uncertainty exists:
 
 - stop immediately;
