@@ -17,8 +17,8 @@ Date: 2026-05-17
 This audit covers the current audio/video subsystem across:
 
 - `src/application/audio_runtime`
-- `eve/application/domains/media`
-- `eve/application/domains/mtrax`
+- `eVe/domains/media`
+- `eVe/domains/mtrax`
 - `src-tauri/src/audio_engine`
 - `platforms/ios/atome-auv3/Common`
 - `platforms/ios/atome-auv3/auv3`
@@ -86,7 +86,7 @@ Existing entry points:
 
 - `window.record_start` / `window.record_stop`
 - `PlayRecordCore.recordStart` / `recordStop`
-- `record_audio()` in `eve/application/domains/media/api/audio_api.js`
+- `record_audio()` in `eVe/domains/media/api/audio_api.js`
 - Tauri commands: `audio_record_start`, `audio_record_stop`
 - AUv3 `recordStart` / `recordStop` in `platforms/ios/atome-auv3/auv3/utils.swift`
 - Browser fallback recording through WebAudio/AudioWorklet in `audio_api.js`
@@ -252,7 +252,7 @@ Violation:
 
 - iOS native recorder owns both `AVCaptureMovieFileOutput` and `AVCaptureVideoDataOutput` preview frame generation.
 - JS `record_video()` owns MediaRecorder configuration, native dispatch, file persistence, Atome creation, and UI control state.
-- There is duplicated video recording logic in `src/application/examples/record_video.js` and `eve/application/domains/media/api/video_api.js`.
+- There is duplicated video recording logic in `src/application/examples/record_video.js` and `eVe/domains/media/api/video_api.js`.
 
 Required split:
 
@@ -941,13 +941,13 @@ Completed:
   - Added an AUv3 Swift bridging header for the recorder backend.
   - Removed the previous `RecorderCoreShim.mm` build-time shim.
 - P1 MediaPersistenceService extraction:
-  - Added `eve/application/domains/media/api/media_persistence_service.js`.
+  - Added `eVe/domains/media/api/media_persistence_service.js`.
   - Moved shared recording Atome ID/path resolution, media URL resolution, project Atome commit, and render projection logic out of `audio_api.js` and `video_api.js`.
   - Kept video-specific placement and authenticated media URL behavior via service options instead of keeping persistence code in `video_api.js`.
 - P1 preview service/UI extraction:
-  - Added `eve/application/domains/media/preview/video_preview_stream_service.js`.
+  - Added `eVe/domains/media/preview/video_preview_stream_service.js`.
   - Moved the shared live preview `MediaStream` registry, refcounting, acquisition, release, and safe stream stop behavior out of `video_api.js`.
-  - Added `eve/application/domains/media/preview/video_preview_panel_service.js`.
+  - Added `eVe/domains/media/preview/video_preview_panel_service.js`.
   - Moved camera preview panel state, DOM ownership, drag/resize behavior, panel/surface presentation, and open/close/switch lifecycle out of `video_api.js`.
   - Kept `video_api.js` as the public API boundary and native/browser capture runtime provider.
 - P1 AV monitoring overrun surface:

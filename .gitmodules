@@ -1,6 +1,6 @@
 [submodule "third_party/iPlug2"]
 	path = third_party/iPlug2
 	url = https://github.com/iPlug2/iPlug2.git
-[submodule "eve/application"]
-	path = eve/application
+[submodule "eVe"]
+	path = eVe
 	url = git@github-eve:atomecorp/eVe.git

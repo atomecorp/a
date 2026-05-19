@@ -11,7 +11,7 @@ import {
     normalizeKiraPlayInstancePayload,
     normalizeKiraStopInstancePayload
 } from './kira_audio_commands.js';
-import { commandBusV2 } from '../../../eve/application/intuition/runtime/command_bus.js';
+import { commandBusV2 } from '../../../eVe/intuition/runtime/command_bus.js';
 
 const safeString = (value) => String(value ?? '').trim();
 

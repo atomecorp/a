@@ -89,7 +89,7 @@ Sender                           Server                          Receiver
 | `src/squirrel/apis/unified/UnifiedSync.js` | Centralized WebSocket sync, RemoteCommands (RC) system |
 | `src/squirrel/apis/unified/adole.js` | FastifyAdapter, TauriAdapter, WebSocket message handlers |
 | `src/squirrel/apis/unified/adole_apis.js` | AdoleAPI (share_atome, share_respond, list_atomes, etc.) |
-| `eve/application/tools/communication.js` | eVe communication UI, share handlers, notification system |
+| `eVe/tools/communication.js` | eVe communication UI, share handlers, notification system |
 | `src/application/examples/share.js` | ShareAPI (share_with, accept_request, reject_request) |
 | `src/application/examples/user.js` | loadProjectAtomes, project selection, visual atome creation |
 

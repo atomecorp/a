@@ -4,12 +4,12 @@ import assert from 'node:assert/strict';
 import { AudioPlaybackAPI } from './audio_playback_api.js';
 import { AudioRecordingAPI } from './audio_recording_api.js';
 import { installSharedAVContracts } from './av_contracts.js';
-import { commandBusV2 } from '../../../eve/application/intuition/runtime/command_bus.js';
+import { commandBusV2 } from '../../../eVe/intuition/runtime/command_bus.js';
 import {
     VideoPlaybackAPI,
     VideoRecordingAPI,
     installVideoFacade
-} from '../../../eve/application/domains/media/api/video_facade.js';
+} from '../../../eVe/domains/media/api/video_facade.js';
 
 test.beforeEach(() => {
     commandBusV2.clear();

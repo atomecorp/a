@@ -19,9 +19,9 @@ Validated media set:
 
 Files:
 
-- `eve/application/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
-- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
-- `eve/application/intuition/tools/core/hmtracks_audio_engine_v1.js`
+- `eVe/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
+- `eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
+- `eVe/intuition/tools/core/hmtracks_audio_engine_v1.js`
 
 Result:
 
@@ -31,10 +31,10 @@ Result:
 
 Files:
 
-- `eve/application/domains/mtrax/media/source_runtime.js`
-- `eve/application/domains/mtrax/media/authorized_playback_runtime.js`
-- `eve/application/core/media_engine/molecule.js`
-- `eve/application/core/media_engine/molecule.api.js`
+- `eVe/domains/mtrax/media/source_runtime.js`
+- `eVe/domains/mtrax/media/authorized_playback_runtime.js`
+- `eVe/core/media_engine/molecule.js`
+- `eVe/core/media_engine/molecule.api.js`
 
 Result:
 
@@ -51,7 +51,7 @@ Observed effect:
 
 File:
 
-- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
+- `eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
 
 Root cause:
 

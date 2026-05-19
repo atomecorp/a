@@ -140,7 +140,7 @@ async function main() {
         await copyDirectory(path.join(projectRoot, 'src', 'squirrel'), path.join(targetDir, 'squirrel'));
         await copyDirectory(path.join(projectRoot, 'src', 'application'), path.join(targetDir, 'application'));
         await copyDirectory(path.join(projectRoot, 'atome'), path.join(targetDir, 'atome'));
-        await copyDirectory(path.join(projectRoot, 'eve'), path.join(targetDir, 'eve'));
+        await copyDirectory(path.join(projectRoot, 'eVe'), path.join(targetDir, 'eVe'));
         await copyFile(sourcePath, exampleDest);
 
         const manifest = {

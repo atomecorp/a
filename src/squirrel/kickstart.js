@@ -147,7 +147,7 @@ function resolveVersionAssetBases() {
 async function resolveEveVersion() {
   const bases = resolveVersionAssetBases();
   for (const base of bases) {
-    const endpoint = `${base}/eve/application/version.txt`;
+    const endpoint = `${base}/eVe/version.txt`;
     const version = await fetchTextVersion(endpoint);
     if (version) return version;
   }

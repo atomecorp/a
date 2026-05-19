@@ -128,7 +128,7 @@ Cleanup result:
 
 Instruction received:
 - Do not process `src/application/examples`.
-- Inside `src/application`, process only `eve/application`.
+- Inside `src/application`, process only `eVe`.
 - If Python scripts are indispensable, replace them with Ruby scripts.
 
 Correction applied:
@@ -140,7 +140,7 @@ Correction applied:
 - Restored `src/assets/images/icons/settings_old.svg`.
 
 Active scope from this point:
-- `eve/application`
+- `eVe`
 - repository-level governance files
 - repository-level scripts and package commands
 - non-application temporary/import fixtures only when directly verified
@@ -148,18 +148,18 @@ Active scope from this point:
 2026-05-14 - Batch 7: eVe local macOS metadata cleanup
 
 Processed folder:
-- `eve/application`
+- `eVe`
 
 Deleted files:
-- `eve/application/.DS_Store`
-- `eve/application/domains/.DS_Store`
-- `eve/application/domains/media/.DS_Store`
-- `eve/application/intuition/.DS_Store`
+- `eVe/.DS_Store`
+- `eVe/domains/.DS_Store`
+- `eVe/domains/media/.DS_Store`
+- `eVe/intuition/.DS_Store`
 
 Verification performed before deletion:
-- Confirmed these files are ignored by the nested eVe Git repository with `git -C eve/application status --short --ignored`.
+- Confirmed these files are ignored by the nested eVe Git repository with `git -C eVe status --short --ignored`.
 - Confirmed no first-party source or documentation references these `.DS_Store` paths.
-- Checked `eve/application/.git` and confirmed it is a valid submodule gitdir pointer, so it was preserved.
+- Checked `eVe/.git` and confirmed it is a valid submodule gitdir pointer, so it was preserved.
 
 Cleanup result:
 - Removed local macOS metadata from the allowed eVe scope.
@@ -168,29 +168,29 @@ Cleanup result:
 2026-05-14 - Batch 8: eVe prototype and mockup folder removal
 
 Processed folders:
-- `eve/application/R&D`
-- `eve/application/Mockup`
+- `eVe/R&D`
+- `eVe/Mockup`
 
 Deleted tracked files:
-- `eve/application/Mockup/module_design_test.html`
-- `eve/application/R&D/ATG.html`
-- `eve/application/R&D/ATG.js`
-- `eve/application/R&D/Tauri Nativescript NodeGui.md`
-- `eve/application/R&D/Texgen.js – Procedural Texture Generator  jQuery Plugins.webloc`
-- `eve/application/R&D/ace-stepACE-Step-1.5- The most powerful local music generation model that outperforms most commercial alternatives, supporting Mac, AMD, Intel, and CUDA devices..webloc`
-- `eve/application/R&D/atomic_object_demo_methods.js`
-- `eve/application/R&D/atomic_object_desc_finalXXX.json`
-- `eve/application/R&D/converter.js`
-- `eve/application/R&D/eVeTGen6.html`
-- `eve/application/R&D/extension.js`
-- `eve/application/R&D/lib_to_intall.md`
-- `eve/application/R&D/menu_goey copy.html`
-- `eve/application/R&D/menu_goey.html`
-- `eve/application/R&D/menu_goey_hexagoncal.html`
-- `eve/application/R&D/menu_opening.html`
-- `eve/application/R&D/mutiltrack.html`
-- `eve/application/R&D/schalkt-tgen- Seamless texture generator in javascript.webloc`
-- `eve/application/R&D/verif.html`
+- `eVe/Mockup/module_design_test.html`
+- `eVe/R&D/ATG.html`
+- `eVe/R&D/ATG.js`
+- `eVe/R&D/Tauri Nativescript NodeGui.md`
+- `eVe/R&D/Texgen.js – Procedural Texture Generator  jQuery Plugins.webloc`
+- `eVe/R&D/ace-stepACE-Step-1.5- The most powerful local music generation model that outperforms most commercial alternatives, supporting Mac, AMD, Intel, and CUDA devices..webloc`
+- `eVe/R&D/atomic_object_demo_methods.js`
+- `eVe/R&D/atomic_object_desc_finalXXX.json`
+- `eVe/R&D/converter.js`
+- `eVe/R&D/eVeTGen6.html`
+- `eVe/R&D/extension.js`
+- `eVe/R&D/lib_to_intall.md`
+- `eVe/R&D/menu_goey copy.html`
+- `eVe/R&D/menu_goey.html`
+- `eVe/R&D/menu_goey_hexagoncal.html`
+- `eVe/R&D/menu_opening.html`
+- `eVe/R&D/mutiltrack.html`
+- `eVe/R&D/schalkt-tgen- Seamless texture generator in javascript.webloc`
+- `eVe/R&D/verif.html`
 
 Verification performed before deletion:
 - Listed tracked files in `R&D`, `Mockup`, and `todo` from the nested eVe repository.
@@ -201,7 +201,7 @@ Verification performed before deletion:
 
 Cleanup result:
 - Removed tracked prototype/mockup folders from the allowed eVe scope.
-- Preserved `eve/application/todo` because it contains active planning documents rather than runtime prototypes.
+- Preserved `eVe/todo` because it contains active planning documents rather than runtime prototypes.
 - No replacement abstraction, fallback, shim, or runtime route was added.
 
 2026-05-14 - Python script scope audit
@@ -261,7 +261,7 @@ Verification performed before deletion:
 - Enumerated `.DS_Store` files outside `node_modules`, `src-tauri/target`, and `third_party`.
 - Checked these metadata files are not tracked with `git ls-files`.
 - Preserved `.git/.DS_Store` because it is inside Git internals.
-- Preserved `src/application/.DS_Store` to respect the user instruction that inside `src/application` only `eve/application` should be processed.
+- Preserved `src/application/.DS_Store` to respect the user instruction that inside `src/application` only `eVe` should be processed.
 
 Cleanup result:
 - Removed untracked macOS metadata from repository, platform, Tauri, Squirrel, logs, and temporary fixture folders.
@@ -273,10 +273,10 @@ Processed file:
 - `src/squirrel/components/template_builder.js`
 
 Verification performed:
-- Searched `src/squirrel`, `eve/application`, scripts, package commands, documentation, and todos for `template_builder`, `components/template`, and `Template` references.
+- Searched `src/squirrel`, `eVe`, scripts, package commands, documentation, and todos for `template_builder`, `components/template`, and `Template` references.
 - Confirmed `src/squirrel/spark.js` loads it as `components.template`.
 - Confirmed `scripts/bundle.js` imports and exposes it on `window.Squirrel.Template`.
-- Confirmed `eve/application/intuition/tools/calendar.js` imports `createNotification` from it.
+- Confirmed `eVe/intuition/tools/calendar.js` imports `createNotification` from it.
 
 Cleanup result:
 - The file is not unused and was preserved.
@@ -288,7 +288,7 @@ Processed file:
 - `src/squirrel/components/template_builder.js`
 
 Verification performed before change:
-- Confirmed the module is used by `src/squirrel/spark.js`, `scripts/bundle.js`, and `eve/application/intuition/tools/calendar.js`.
+- Confirmed the module is used by `src/squirrel/spark.js`, `scripts/bundle.js`, and `eVe/intuition/tools/calendar.js`.
 - Confirmed the module API must remain: default `createTemplate`, named `Template`, `createTemplate`, `createSimpleTemplate`, `createNotification`, and `createCard`.
 
 Cleanup result:

@@ -8,7 +8,7 @@
 ## ✅ Verified Progress
 
 - **Fastify 3001**: browser acceptance is green, desktop 5/5 and MTrack 5/5
-- **MTrack regression fixed**: the browser Kira/WASM playback failure caused by `bridge is not defined` is fixed in `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
+- **MTrack regression fixed**: the browser Kira/WASM playback failure caused by `bridge is not defined` is fixed in `eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
 - **Axum 3000 bootstrap fixed**: the local browser session no longer fails at project bootstrap with `project_id:null`
 - **Axum 3000 MTrack**: now green, 5/5 on the latest probe
 
@@ -45,16 +45,16 @@ Validated with:
 1. **Axum desktop protected-media hydration**
 
 - local Axum pages must use the local authenticated media path, not the Fastify branch
-- fixed in `eve/application/domains/media/api/media_api_shared.js` and its `_up_` mirror
+- fixed in `eVe/domains/media/api/media_api_shared.js` and its `_up_` mirror
 
 1. **Desktop video auth query mismatch**
 
 - remaining Axum desktop video failures came from protected media helpers still appending `access_token`
 - the working Axum media paths use `token`
 - fixed in:
-  - `eve/application/intuition/runtime/tool_genesis.js`
-  - `eve/application/core/media_engine/molecule.js`
-  - `eve/application/core/media_engine/molecule.api.js`
+  - `eVe/intuition/runtime/tool_genesis.js`
+  - `eVe/core/media_engine/molecule.js`
+  - `eVe/core/media_engine/molecule.api.js`
   - mirrored Tauri-served `_up_` copies
 
 ---

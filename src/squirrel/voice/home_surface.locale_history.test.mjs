@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
 import { mountHomeVoiceSurface } from './home_surface.js';
-import { setEveLocale } from '../../../eve/application/i18n/i18n.js';
+import { setEveLocale } from '../../../eVe/i18n/i18n.js';
 
 const dom = new JSDOM('<!doctype html><html><body><div id="host"></div></body></html>', {
     url: 'https://example.test/'

@@ -373,5 +373,5 @@ V3
  • src/squirrel/midi/backends/midir/
  • src/squirrel/midi/backends/ios/
  • src/squirrel/midi/backends/android/
- • eve/application/tools/midi/ (UI)
- • eve/application/runtime/midi_bridge/ (IPC)
+ • eVe/tools/midi/ (UI)
+ • eVe/runtime/midi_bridge/ (IPC)

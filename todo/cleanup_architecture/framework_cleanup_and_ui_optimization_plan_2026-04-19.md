@@ -70,7 +70,7 @@ The largest active files or folders are not obviously dead code. They are centra
 Priority targets:
 
 1. `src/squirrel/spark.js`
-2. `eve/application/intuition/runtime/tool_genesis.js`
+2. `eVe/intuition/runtime/tool_genesis.js`
 3. `src/squirrel/components/matrix_builder.js`
 4. `src/squirrel/components/intuition_builder/index.js`
 5. `src/squirrel/apis/unified/adole/core.js`
@@ -86,7 +86,7 @@ Priority targets:
 
 Phase 1: structural audit
 
-1. Build an import and usage graph for `src/squirrel`, `eve/application`, and `server`.
+1. Build an import and usage graph for `src/squirrel`, `eVe`, and `server`.
 2. Classify files as core runtime, optional integration, examples, legacy, or generated output.
 3. Produce a delete list backed by references, not guesses.
 
@@ -115,7 +115,7 @@ Phase 4: delete legacy and dead code
    - Eager static imports load many subsystems at startup.
    - Immediate DOM cleanup scans run before the app is fully interactive.
 
-2. `eve/application/intuition/runtime/tool_genesis.js`
+2. `eVe/intuition/runtime/tool_genesis.js`
    - SVG sanitation and namespace scoping use `querySelectorAll('*')` style whole-subtree scans.
    - Hydration and media attach paths call `getBoundingClientRect()` and `ResizeObserver` on many nodes.
    - `loadProjectAtomes()` is monolithic and likely does too much synchronous work per project open.

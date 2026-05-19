@@ -131,7 +131,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 const staticRoot = path.join(projectRoot, 'src');
 const atomeStaticRoot = path.join(projectRoot, 'atome');
-const eveStaticRoot = path.join(projectRoot, 'eve');
+const eveStaticRoot = path.join(projectRoot, 'eVe');
 const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
 const LOG_DIR = path.join(projectRoot, 'logs');
 const FASTIFY_LOG_FILE = path.join(LOG_DIR, 'fastify.log');
@@ -332,7 +332,7 @@ const uploadsDir = (() => {
   }
 })();
 const VERSION_FILE = path.join(projectRoot, 'version.txt');
-const EVE_VERSION_FILE = path.join(eveStaticRoot, 'application', 'version.txt');
+const EVE_VERSION_FILE = path.join(eveStaticRoot, 'version.txt');
 const VERSION_FILE_WATCH_INTERVAL_MS = 1500;
 let SERVER_VERSION = 'unknown';
 let EVE_VERSION = 'unknown';
@@ -464,7 +464,7 @@ async function loadServerVersion() {
 }
 
 async function loadEveVersion() {
-  return loadVersionFile(EVE_VERSION_FILE, 'eve/application/version.txt');
+  return loadVersionFile(EVE_VERSION_FILE, 'eVe/version.txt');
 }
 
 async function refreshVersionCache() {
@@ -1261,13 +1261,7 @@ async function startServer() {
 
     await server.register(fastifyStatic, {
       root: eveStaticRoot,
-      prefix: '/eve/',
-      decorateReply: false
-    });
-
-    await server.register(fastifyStatic, {
-      root: path.join(eveStaticRoot, 'application'),
-      prefix: '/application/eVe/',
+      prefix: '/eVe/',
       decorateReply: false
     });
 

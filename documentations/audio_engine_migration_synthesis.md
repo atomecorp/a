@@ -3,7 +3,7 @@
 ## Summary
 
 Migration of the Atome/eVe audio engine from fragmented legacy backends to the unified
-Kira/CPAL engine, as described in `eve/application/todo/audio_engine_migration.md`.
+Kira/CPAL engine, as described in `eVe/todo/audio_engine_migration.md`.
 
 ---
 
@@ -35,7 +35,7 @@ Four files changed to route video clip audio through the native audio pipeline:
   when `disconnectLegacy` is true AND `shouldUseLegacyVideoElementAudio` returns false,
   video elements are muted. The change to return false triggers this existing behavior.
 
-### Recording Pipeline (`eve/application/domains/media/api/audio_api.js`)
+### Recording Pipeline (`eVe/domains/media/api/audio_api.js`)
 
 - `record_audio()` now checks for the unified `window.record_start` / `window.record_stop`
   (from `record_audio_api.js`) first for Tauri/AUv3 runtimes

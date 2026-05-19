@@ -195,15 +195,13 @@ document.getElementById('player').addEventListener('error', e => {
         var rel = path
         if rel.hasPrefix("/") { rel.removeFirst() }
         if rel.isEmpty { rel = "src/index.html" }
-        if rel.hasPrefix("src/application/eVe/") {
-            rel = "eve/application/" + String(rel.dropFirst("src/application/eVe/".count))
-        } else if rel.hasPrefix("application/eVe/") {
-            rel = "eve/application/" + String(rel.dropFirst("application/eVe/".count))
+        if rel.hasPrefix("eVe/") {
+            rel = "eVe/" + String(rel.dropFirst("eVe/".count))
         } else if rel.hasPrefix("atome/") {
             rel = "atome_open/" + String(rel.dropFirst("atome/".count))
         } else if rel == "server_config.json" || rel == "version.txt" {
             // Keep bundle-root files unprefixed.
-        } else if !rel.hasPrefix("src/") && !rel.hasPrefix("eve/") && !rel.hasPrefix("atome/") {
+        } else if !rel.hasPrefix("src/") && !rel.hasPrefix("eVe/") && !rel.hasPrefix("atome/") {
             rel = "src/" + rel
         }
         guard let sanitized = SandboxPathValidator.sanitizedRelativePath(rel) else {

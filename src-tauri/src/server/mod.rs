@@ -1625,36 +1625,15 @@ fn load_version(static_dir: &Path) -> String {
 
 fn load_eve_version(static_dir: &Path) -> String {
     let mut candidates = Vec::new();
-    candidates.push(
-        static_dir
-            .join("application")
-            .join("eVe")
-            .join("version.txt"),
-    );
+    candidates.push(PathBuf::from("eVe/version.txt"));
     if let Some(parent) = static_dir.parent() {
-        candidates.push(
-            parent
-                .join("src")
-                .join("application")
-                .join("eVe")
-                .join("version.txt"),
-        );
-        candidates.push(parent.join("application").join("eVe").join("version.txt"));
+        candidates.push(parent.join("eVe").join("version.txt"));
     }
     if let Ok(canon) = stdfs::canonicalize(static_dir) {
-        candidates.push(canon.join("application").join("eVe").join("version.txt"));
         if let Some(parent) = canon.parent() {
-            candidates.push(
-                parent
-                    .join("src")
-                    .join("application")
-                    .join("eVe")
-                    .join("version.txt"),
-            );
+            candidates.push(parent.join("eVe").join("version.txt"));
         }
     }
-    candidates.push(PathBuf::from("eve/application/version.txt"));
-    candidates.push(PathBuf::from("eve/application/version.txt"));
 
     for candidate in candidates {
         if let Ok(raw) = stdfs::read_to_string(&candidate) {
@@ -5351,21 +5330,12 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         )
     });
 
-    let serve_dir_eve = ServeDir::new(project_root.join("eve"));
+    let serve_dir_eve = ServeDir::new(project_root.join("eVe"));
     let eve_service = get_service(serve_dir_eve).handle_error(|error| async move {
-        println!("Erreur /eve: {:?}", error);
+        println!("Erreur /eVe: {:?}", error);
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Erreur eve",
-        )
-    });
-
-    let serve_dir_eve_application = ServeDir::new(project_root.join("eve").join("application"));
-    let eve_application_service = get_service(serve_dir_eve_application).handle_error(|error| async move {
-        println!("Erreur /application/eVe: {:?}", error);
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Erreur application eVe",
+            "Erreur eVe",
         )
     });
 
@@ -5581,8 +5551,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/ws/sync", get(ws_sync_handler))
         .nest_service("/src", src_service)
         .nest_service("/atome", atome_service)
-        .nest_service("/eve", eve_service)
-        .nest_service("/application/eVe", eve_application_service)
+        .nest_service("/eVe", eve_service)
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)

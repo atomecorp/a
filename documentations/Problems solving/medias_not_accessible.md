@@ -102,9 +102,9 @@ Apply changes to **ALL** files that may be used by UI components:
 | File | Used by |
 |------|---------|
 | `src/application/examples/record_audio.js` | Examples, tests, direct usage |
-| `eve/application/domains/media/api/audio_api.js` | `record_video_UI.js`, eVe components |
-| `eve/application/domains/media/api/media_api_shared.js` | Shared sync utilities |
-| `eve/application/tool_utils/tool_genesis.js` | Atome media hydration |
+| `eVe/domains/media/api/audio_api.js` | `record_video_UI.js`, eVe components |
+| `eVe/domains/media/api/media_api_shared.js` | Shared sync utilities |
+| `eVe/tool_utils/tool_genesis.js` | Atome media hydration |
 
 ---
 
@@ -118,10 +118,10 @@ Apply changes to **ALL** files that may be used by UI components:
 
 ## 📁 Files Modified
 
-1. `eve/application/domains/media/api/audio_api.js` ← **main fix**
+1. `eVe/domains/media/api/audio_api.js` ← **main fix**
 2. `src/application/examples/record_audio.js` ← secondary fix
-3. `eve/application/domains/media/api/media_api_shared.js` ← **sync functions added**
-4. `eve/application/tool_utils/tool_genesis.js` ← **hydration uses sync**
+3. `eVe/domains/media/api/media_api_shared.js` ← **sync functions added**
+4. `eVe/tool_utils/tool_genesis.js` ← **hydration uses sync**
 
 ---
 

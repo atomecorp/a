@@ -3,6 +3,12 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:3000",
+      "http://localhost:3000"
+    ]
+  },
   "permissions": [
     "core:default",
     "opener:default",

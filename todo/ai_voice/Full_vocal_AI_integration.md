@@ -91,7 +91,7 @@ Goal: make MCP use the real execution layer already present in the app.
   - Result: `runtime.audit.list` now exposes `v2CommandBus.listEvents()` through the MCP bridge for runtime-level audit inspection.
 - [x] Document the target architecture in `documentations/`
   - Done on 2026-03-12.
-  - Result: canonical entrypoint and audit rules are documented in `eve/application/documentations/runtime_ai_mcp_entrypoints.md`.
+  - Result: canonical entrypoint and audit rules are documented in `eVe/documentations/runtime_ai_mcp_entrypoints.md`.
 
 ### Phase 0 validation
 
@@ -328,7 +328,7 @@ Goal: support iCloud mail during the transition without depending on Mail.app.
 
 - [x] Choose the v1 IMAP/SMTP architecture
   - Done on 2026-03-13.
-  - Result: `eve/application/documentations/mail_v1_architecture.md` and `src/squirrel/mail/connector_contract.js` now lock the v1 mail decision to iCloud IMAP read + SMTP send with a local normalized index in front of voice/UI/MCP.
+  - Result: `eVe/documentations/mail_v1_architecture.md` and `src/squirrel/mail/connector_contract.js` now lock the v1 mail decision to iCloud IMAP read + SMTP send with a local normalized index in front of voice/UI/MCP.
 - [x] Add a pluggable iCloud connector abstraction
   - Done on 2026-03-13.
   - Result: `src/squirrel/mail/icloud_connector.js` now normalizes iCloud IMAP/SMTP configuration and payloads behind injected transport factories, so the mail stack has a single protocol-facing connector contract.
@@ -402,7 +402,7 @@ Goal: unify legacy Apple calendars with the new Tauri-owned calendar source.
   - Result: the existing eVe calendar panel and `CalendarAPI` are now wrapped by `src/squirrel/calendar/calendar_api_source.js` and validated in `src/squirrel/calendar/calendar_api_source.test.mjs`, so the new calendar stack grafts onto the current implementation instead of replacing it.
 - [x] Choose the v1 CalDAV server architecture
   - Done on 2026-03-13.
-  - Result: `src/squirrel/calendar/connector_contract.js` and `eve/application/documentations/calendar_v1_architecture.md` now lock the v1 calendar decision to `CalendarAPI` as the Tauri-owned primary source with legacy Apple/iCloud read sources beside it.
+  - Result: `src/squirrel/calendar/connector_contract.js` and `eVe/documentations/calendar_v1_architecture.md` now lock the v1 calendar decision to `CalendarAPI` as the Tauri-owned primary source with legacy Apple/iCloud read sources beside it.
 - [x] Implement legacy Apple/iCloud read access
   - Done on 2026-03-13.
   - Result: `src/squirrel/calendar/icloud_legacy_connector.js` now provides a read-only iCloud legacy CalDAV connector with a concrete Node CalDAV client in `src/squirrel/calendar/node_protocol_clients.js`, validated by `node_protocol_clients.test.mjs` and `icloud_legacy_connector.test.mjs`.
@@ -487,7 +487,7 @@ Goal: support analytical banking flows, not only raw balances.
 
 - [x] Choose Powens integration architecture
   - Done on 2026-03-13.
-  - Result: `eve/application/documentations/bank_v1_architecture.md` and `src/squirrel/bank/connector_contract.js` now lock v1 to Powens as the future PSD2 source behind a local normalized analytics layer.
+  - Result: `eVe/documentations/bank_v1_architecture.md` and `src/squirrel/bank/connector_contract.js` now lock v1 to Powens as the future PSD2 source behind a local normalized analytics layer.
 - [x] Define normalized banking transaction model
   - Done on 2026-03-13.
   - Result: `src/squirrel/bank/local_index.js` now defines normalized bank account and transaction records for analytics, MCP, and AI access.
@@ -579,7 +579,7 @@ Goal: make the system safe enough for real user operation.
   - Result: sensitive runtime tools now require the `desktop_local_owner` sandbox profile in addition to confirmation and capability grants.
 - [x] Add failure-mode review for mail/calendar/banking
   - Done on 2026-03-13.
-  - Result: `eve/application/documentations/failure_modes_v1.md` now documents v1 failure classes, mitigations, and release blockers for mail, calendar, banking, and voice/MCP.
+  - Result: `eVe/documentations/failure_modes_v1.md` now documents v1 failure classes, mitigations, and release blockers for mail, calendar, banking, and voice/MCP.
 
 ## Phase 9 - QA and release readiness
 
@@ -596,7 +596,7 @@ Goal: verify the product as a system, not feature by feature only.
   - Result: `scripts/phase9_ui_regression_suite.mjs` now executes the major UI family regression suite and writes `temp/script_reports/phase9_ui_regression.json`.
 - [x] Add manual validation checklist for desktop usage
   - Done on 2026-03-13.
-  - Result: `eve/application/documentations/desktop_manual_validation_checklist.md` now defines the desktop validation path for voice, MCP/runtime, mail, calendar, bank, and observability.
+  - Result: `eVe/documentations/desktop_manual_validation_checklist.md` now defines the desktop validation path for voice, MCP/runtime, mail, calendar, bank, and observability.
 - [x] Run live iCloud mail smoke test with real credentials
   - Status on 2026-03-13: executable live smoke path is working, but Apple still rejects authentication on both detected accounts.
   - Evidence:
@@ -618,10 +618,10 @@ Goal: verify the product as a system, not feature by feature only.
   - Superseded on 2026-04-26 by the minimal init cleanup: the unused `src/squirrel/observability/` bootstrap was removed.
 - [x] Measure latency and responsiveness targets
   - Done on 2026-03-13.
-  - Result: `scripts/phase9_voice_latency_baseline.mjs` now writes `temp/script_reports/phase9_voice_latency_baseline.json`, and `eve/application/documentations/latency_targets_v1.md` fixes the v1 latency targets.
+  - Result: `scripts/phase9_voice_latency_baseline.mjs` now writes `temp/script_reports/phase9_voice_latency_baseline.json`, and `eVe/documentations/latency_targets_v1.md` fixes the v1 latency targets.
 - [x] Freeze v1 scope and open v2 backlog
   - Done on 2026-03-13.
-  - Result: `eve/application/documentations/v1_scope_freeze_and_v2_backlog.md` now freezes the shipped v1 perimeter and captures the explicit v2 backlog.
+  - Result: `eVe/documentations/v1_scope_freeze_and_v2_backlog.md` now freezes the shipped v1 perimeter and captures the explicit v2 backlog.
 
 ## Done log
 

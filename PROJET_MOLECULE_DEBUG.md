@@ -129,15 +129,15 @@ Décision:
 
 ## Zones du code à auditer en priorité
 
-- `eve/application/intuition/tools/mtrack.js`
-- `eve/application/intuition/runtime/mtrack_dock_controller.js`
-- `eve/application/domains/mtrax/`
-- `eve/application/domains/mtrax/preview/`
-- `eve/application/core/media_engine/molecule.js`
-- `eve/application/core/media_engine/molecule.api.js`
-- `eve/application/intuition/runtime/tool_genesis.js`
-- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
-- `eve/application/core/project_store/`
+- `eVe/intuition/tools/mtrack.js`
+- `eVe/intuition/runtime/mtrack_dock_controller.js`
+- `eVe/domains/mtrax/`
+- `eVe/domains/mtrax/preview/`
+- `eVe/core/media_engine/molecule.js`
+- `eVe/core/media_engine/molecule.api.js`
+- `eVe/intuition/runtime/tool_genesis.js`
+- `eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `eVe/core/project_store/`
 
 ## Points de faiblesse déjà suspectés
 
@@ -158,7 +158,7 @@ Statut: correction 1 appliquée, validation partielle OK.
 Constats:
 
 - L'import média convertit bien les vidéos/audios/images en groupe Molécule/MTRX dans `tool_genesis.js`, avec `group_type: "mtrax_media"`, `mtrax_import: true`, `source_kind: "mtrax_import"` et une timeline initiale.
-- La sauvegarde de timeline dans `eve/application/domains/mtrax/timeline/persist_runtime.js` réécrit ensuite le payload du groupe avec `group_type: "media"`.
+- La sauvegarde de timeline dans `eVe/domains/mtrax/timeline/persist_runtime.js` réécrit ensuite le payload du groupe avec `group_type: "media"`.
 - Cette réécriture affaiblit l'identité spécialisée d'une molécule importée après fermeture/sauvegarde/reload. Elle peut faire perdre aux couches UI/rendu le signal "mtrax_media" qui distingue une molécule média importée d'un groupe générique.
 - Le flux d'ouverture passe par plusieurs verrous/déduplications: `tool_genesis.js`, `ui.mtrax.open`, `openGroupTimelineThroughMtrack`, puis `eveMtrackApi.loadGroupTimeline`. Les verrous semblent actuellement séparés par groupe, mais ils restent à tester avec deux ouvertures très proches.
 
@@ -168,13 +168,13 @@ Correction candidate:
 
 Validation prévue:
 
-- [fait] Ajout de `eve/application/domains/mtrax/tests/timeline_persist_runtime.test.mjs`.
-- [fait] `node eve/application/domains/mtrax/tests/timeline_persist_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/mtrack_commit_bridge_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/core/media_engine/molecule.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/clip_deletion_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/join_playback_runtime.test.mjs`: PASS.
-- [bloqué] Le test `eve/application/domains/mtrax/preview/preview_host_resolution_runtime.test.mjs` mentionné dans l'IDE n'existe pas dans le workspace actuel.
+- [fait] Ajout de `eVe/domains/mtrax/tests/timeline_persist_runtime.test.mjs`.
+- [fait] `node eVe/domains/mtrax/tests/timeline_persist_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/mtrack_commit_bridge_runtime.test.mjs`: PASS.
+- [fait] `node eVe/core/media_engine/molecule.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/clip_deletion_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/join_playback_runtime.test.mjs`: PASS.
+- [bloqué] Le test `eVe/domains/mtrax/preview/preview_host_resolution_runtime.test.mjs` mentionné dans l'IDE n'existe pas dans le workspace actuel.
 
 ### 2026-04-30 - Enquête P1/P0 boucles, splits et doublons
 
@@ -182,7 +182,7 @@ Statut: correction 2 appliquée, validation OK.
 
 Constat:
 
-- `eve/application/domains/mtrax/tests/clip_loop_model.test.mjs` échouait avant correction: `buildClipPlaybackSegments` retournait `[]` dans le scénario de lecture aplatie d'une boucle/crop.
+- `eVe/domains/mtrax/tests/clip_loop_model.test.mjs` échouait avant correction: `buildClipPlaybackSegments` retournait `[]` dans le scénario de lecture aplatie d'une boucle/crop.
 - Le test passait `fallbackSource`, mais `buildClipPlaybackSegments` ne lisait que `defaultSource`.
 - Effet runtime probable: certains chemins historiques ou tests qui fournissent `fallbackSource` peuvent produire zéro segment lisible, donc un média peut sembler perdu dans les cas de boucle, split, duplication ou playback aplati.
 
@@ -192,12 +192,12 @@ Correction:
 
 Validation prévue:
 
-- [fait] `node eve/application/domains/mtrax/tests/clip_loop_model.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/timeline_persist_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/mtrack_commit_bridge_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/clip_deletion_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/join_playback_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/core/media_engine/molecule.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/clip_loop_model.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/timeline_persist_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/mtrack_commit_bridge_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/clip_deletion_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/join_playback_runtime.test.mjs`: PASS.
+- [fait] `node eVe/core/media_engine/molecule.test.mjs`: PASS.
 - [fait] Syntaxe OK sur `persist_runtime.js` et `loop_model.js`.
 
 ### 2026-04-30 - Nouvelle tâche P0/P1 ouverture attachée et debug multi-instance
@@ -231,13 +231,13 @@ Corrections appliquées:
 
 Validation:
 
-- [fait] `node --check eve/application/intuition/eVeIntuition.js`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/timeline_persist_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/clip_loop_model.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/mtrack_commit_bridge_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/clip_deletion_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/tests/join_playback_runtime.test.mjs`: PASS.
-- [fait] `node eve/application/core/media_engine/molecule.test.mjs`: PASS.
+- [fait] `node --check eVe/intuition/eVeIntuition.js`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/timeline_persist_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/clip_loop_model.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/mtrack_commit_bridge_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/clip_deletion_runtime.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/tests/join_playback_runtime.test.mjs`: PASS.
+- [fait] `node eVe/core/media_engine/molecule.test.mjs`: PASS.
 
 Limite restante:
 
@@ -278,7 +278,7 @@ Statut: audit initial fait, nettoyages bas risque appliqués, refontes lourdes �
 
 Constats principaux:
 
-- [confirmé] Le runtime MTrack/Molécule reste organisé autour d'un gros état singleton dans `eve/application/domains/mtrax/core/state_factory.js`. Il mélange session, timeline, preview, rendu, audio, recording, sélection, drag, diagnostics et état projet.
+- [confirmé] Le runtime MTrack/Molécule reste organisé autour d'un gros état singleton dans `eVe/domains/mtrax/core/state_factory.js`. Il mélange session, timeline, preview, rendu, audio, recording, sélection, drag, diagnostics et état projet.
 - [confirmé] Le modèle actif/dormant (`activeGroupId`, `dormantGroupId`, timeline active, preview actif) explique bien la contamination possible entre deux atomes ouverts successivement. Ce n'est pas encore un vrai modèle multi-instance.
 - [confirmé] Plusieurs fichiers dépassent 900 à 2000 lignes (`loop_cells_runtime.js`, `hmtracks_native_playback_runtime.js`, `record_capture_runtime.js`, `window_api_runtime.js`, `transport_gestures_runtime.js`, `styles.js`, `group_timeline_load_runtime.js`, `play_runtime.js`). Ce sont des zones à risque élevé pour les régressions et les effets de bord.
 - [confirmé] Le renderer WebGPU a un fallback noop. C'est préférable à un crash, mais dangereux si le résultat utilisateur devient un preview vide silencieux.
@@ -372,7 +372,7 @@ Validation:
 
 - [fait] Ajout/extension de `loop_cells_runtime.test.mjs`: duplicate/clone, suppression, batch clear, batch record source, pruning, clés non canoniques, clone invalide.
 - [fait] Ajout de tests directs: `loop_cells_model.test.mjs`, `loop_cells_sections.test.mjs`, `loop_cells_preview.test.mjs`.
-- [fait] Toute la suite locale `eve/application/domains/mtrax/tests/*.mjs`: PASS.
+- [fait] Toute la suite locale `eVe/domains/mtrax/tests/*.mjs`: PASS.
 - [fait] Syntaxe globale: `npm run check:syntax` -> `Syntax OK (1072 file(s))`.
 
 Reste à faire:
@@ -429,12 +429,12 @@ Corrections appliquées:
 
 Validation ajoutée:
 
-- [fait] `node eve/application/domains/mtrax/clips/audio_link_policy.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/audio/hmtracks_session_audio_link_policy.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/media/element_video_audio_source.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/media/extracted_audio_auth_source.test.mjs`: PASS.
-- [fait] `node eve/application/domains/mtrax/preview/preview_metadata_retry.test.mjs`: PASS.
-- [fait] `node --check eve/application/intuition/eVeIntuition.js`: PASS.
+- [fait] `node eVe/domains/mtrax/clips/audio_link_policy.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/audio/hmtracks_session_audio_link_policy.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/media/element_video_audio_source.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/media/extracted_audio_auth_source.test.mjs`: PASS.
+- [fait] `node eVe/domains/mtrax/preview/preview_metadata_retry.test.mjs`: PASS.
+- [fait] `node --check eVe/intuition/eVeIntuition.js`: PASS.
 - [fait] `node --check server/server.js`: PASS.
 - [fait] `npm run check:syntax`: PASS, `Syntax OK (1078 file(s))`.
 - [fait] `CARGO_TARGET_DIR=/private/tmp/eve-tauri-codex-target cargo check` dans `src-tauri`: PASS.

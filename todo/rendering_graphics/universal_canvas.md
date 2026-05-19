@@ -23,18 +23,18 @@ The current runtime still renders project and creative objects through managed D
 
 Canvas/WebGPU-based areas:
 
-- `eve/application/core/media_engine/molecule.webgpu.js` owns the WebGPU renderer used by molecule/media layers.
-- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js` and related MTraX renderer modules provide a WebGPU-backed rendering path for timeline/media preview flows.
-- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js` provides WebGPU preview rendering for video preview.
+- `eVe/core/media_engine/molecule.webgpu.js` owns the WebGPU renderer used by molecule/media layers.
+- `eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js` and related MTraX renderer modules provide a WebGPU-backed rendering path for timeline/media preview flows.
+- `eVe/domains/media/preview/webgpu_video_preview_renderer.js` provides WebGPU preview rendering for video preview.
 - Some snapshot, poster, and thumbnail paths use temporary 2D canvas extraction.
 
 HTML/DOM-based project areas still present:
 
-- `eve/application/intuition/tools/project_bootstrap.js` creates `project_view_*` as fixed HTML `div` project layers.
-- `eve/application/intuition/tools/project_drop.js` creates and moves projected tool/atome hosts as DOM elements with `data-atome-id`.
-- `eve/application/core/atome_events/drag_runtime.js` binds pointer drag directly to DOM atome hosts.
-- `eve/application/core/atome_events/project_layer_runtime.js` performs lasso selection against DOM nodes.
-- `eve/application/intuition/eVeIntuition.js` contains diagnostics and workflows that inspect `[data-atome-id]` DOM hosts directly.
+- `eVe/intuition/tools/project_bootstrap.js` creates `project_view_*` as fixed HTML `div` project layers.
+- `eVe/intuition/tools/project_drop.js` creates and moves projected tool/atome hosts as DOM elements with `data-atome-id`.
+- `eVe/core/atome_events/drag_runtime.js` binds pointer drag directly to DOM atome hosts.
+- `eVe/core/atome_events/project_layer_runtime.js` performs lasso selection against DOM nodes.
+- `eVe/intuition/eVeIntuition.js` contains diagnostics and workflows that inspect `[data-atome-id]` DOM hosts directly.
 - Text editing still depends on hidden/visible DOM contenteditable paths.
 - Image, video, SVG, group, toolbox, and footer workflows still use DOM nodes as interactive ownership surfaces.
 

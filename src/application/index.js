@@ -88,7 +88,7 @@ import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
 // //eVe below:
 (async () => {
 	await loadModulesSequentially({
-		modules: [{ id: 'application.eVe', path: './eVe/eVe.js' }],
+		modules: [{ id: 'application.eVe', path: '../../eVe/eVe.js' }],
 		baseUrl: import.meta.url,
 		logPrefix: '[Application]'
 	});

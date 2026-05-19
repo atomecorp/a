@@ -788,7 +788,7 @@
             return { listMediaFiles: window.record_audio_list_media, play: window.record_audio_play };
         }
         try {
-            await import('../../../eve/application/domains/media/api/audio_api.js');
+            await import('../../../eVe/domains/media/api/audio_api.js');
         } catch (_) { }
         const listMediaFiles = (typeof window.record_audio_list_media === 'function')
             ? window.record_audio_list_media

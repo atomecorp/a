@@ -10,8 +10,8 @@
 		34960420281861B500E13C15 /* atomeAudioUnit.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		34960427281861EE00E13C15 /* src in Resources */ = {isa = PBXBuildFile; fileRef = 34960426281861EE00E13C15 /* src */; };
 		34960428281861EE00E13C15 /* src in Resources */ = {isa = PBXBuildFile; fileRef = 34960426281861EE00E13C15 /* src */; };
-		6BARCH010000000000000003 /* eve in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eve */; };
-		6BARCH010000000000000004 /* eve in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eve */; };
+		6BARCH010000000000000003 /* eVe in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eVe */; };
+		6BARCH010000000000000004 /* eVe in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eVe */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,7 +43,7 @@
 		349603FF281861B500E13C15 /* atomeAudioUnit.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = atomeAudioUnit.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		34960426281861EE00E13C15 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../../src; sourceTree = "<group>"; };
 		6BARCH000000000000000001 /* atome */ = {isa = PBXFileReference; lastKnownFileType = folder; name = atome; path = ../../../atome; sourceTree = "<group>"; };
-		6BARCH000000000000000002 /* eve */ = {isa = PBXFileReference; lastKnownFileType = folder; name = eve; path = ../../../eve; sourceTree = "<group>"; };
+		6BARCH000000000000000002 /* eVe */ = {isa = PBXFileReference; lastKnownFileType = folder; name = eVe; path = ../../../eVe; sourceTree = "<group>"; };
 		6BB7DA3B2D63233600CD6691 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		6BB7DA3C2D63233600CD6691 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -117,7 +117,7 @@
 				6B6B458B2D537B7800706498 /* Common */,
 				34960426281861EE00E13C15 /* src */,
 				6BARCH000000000000000001 /* atome */,
-				6BARCH000000000000000002 /* eve */,
+				6BARCH000000000000000002 /* eVe */,
 				6B864DBD2D5DDA74006DEA72 /* application */,
 				6B864DC82D5DDDD7006DEA72 /* auv3 */,
 				349603E52818619000E13C15 /* Products */,
@@ -226,7 +226,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				34960427281861EE00E13C15 /* src in Resources */,
-				6BARCH010000000000000003 /* eve in Resources */,
+				6BARCH010000000000000003 /* eVe in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -235,7 +235,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				34960428281861EE00E13C15 /* src in Resources */,
-				6BARCH010000000000000004 /* eve in Resources */,
+				6BARCH010000000000000004 /* eVe in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

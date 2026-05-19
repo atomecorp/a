@@ -164,7 +164,7 @@ Exécuter l’ensemble des corrections, factorisations et optimisations identifi
  1. Conserver 100% des fonctionnalités existantes.
  2. Respecter strictement :
 
-eve/application/documentations/**
+eVe/documentations/**
 
  1. Aucune suppression de comportement documenté.
  2. Aucune refactorisation non demandée dans le ticket en cours.

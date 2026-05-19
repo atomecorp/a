@@ -40,7 +40,7 @@ If the async chain took 22ms, the next display update was scheduled at 22 + 16.6
 
 ## Files Modified
 
-### 1. `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+### 1. `eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
 
 **Change**: Raised the seek threshold from 0.20s to **2.0s** on Tauri for playing muted video.
 
@@ -70,7 +70,7 @@ Note: A previous attempt introduced a **rate sync** approach (adjusting `video.p
 
 ---
 
-### 2. `eve/application/domains/mtrax/timeline/play_runtime.js`
+### 2. `eVe/domains/mtrax/timeline/play_runtime.js`
 
 **Change**: Moved `requestAnimationFrame(frame)` to the **start** of `frame()`, before any async work.
 
@@ -112,7 +112,7 @@ Effect: The display canvas now updates at the native vsync rate (60fps) regardle
 
 ---
 
-### 3. `eve/application/domains/mtrax/timeline/playback_frame_update_runtime.js`
+### 3. `eVe/domains/mtrax/timeline/playback_frame_update_runtime.js`
 
 **Change**: On Tauri, use the **synchronous** `evaluateRuntimeFrameState()` instead of the Worker-based async `evaluateRuntimeFrameStateAsync()`.
 
@@ -129,7 +129,7 @@ if (useWorkerEval) {
 }
 ```
 
-### 4. `eve/application/domains/mtrax/timeline/playback_position_bootstrap_runtime.js`
+### 4. `eVe/domains/mtrax/timeline/playback_position_bootstrap_runtime.js`
 
 **Change**: Passes `isTauriRuntime` down to `createPlaybackFrameUpdateRuntime` so the Worker bypass can detect the runtime context.
 

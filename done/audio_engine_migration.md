@@ -7,8 +7,8 @@ Tu travailles dans le repo Atome/eVe. Ta mission est de mener la migration total
 Le moteur cible est défini dans:
 
 - `documentations/atome_audio_engine.md`
-- `eve/application/todo/native_atome_audio_engine.md`
-- `eve/application/todo/cpal_Kira_integration.md`
+- `eVe/todo/native_atome_audio_engine.md`
+- `eVe/todo/cpal_Kira_integration.md`
 
 Le résultat attendu n'est pas une migration partielle ni une cohabitation durable entre plusieurs moteurs. Le but est:
 
@@ -163,17 +163,17 @@ Tu dois traiter en priorité, sans te limiter à eux:
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/backend.legacy_auv3.js`
 - `src/application/audio_runtime/backend.html.js`
-- `eve/application/domains/media/api/audio_api.js`
-- `eve/application/domains/media/api/video_api.js`
-- `eve/application/domains/media/api/media_api_shared.js`
+- `eVe/domains/media/api/audio_api.js`
+- `eVe/domains/media/api/video_api.js`
+- `eVe/domains/media/api/media_api_shared.js`
 - `src/application/audio_runtime/record_audio_api.js`
 - `src/application/examples/record_audio.js`
 - `src/application/examples/record_audio_UI.js`
 - `src/application/examples/record_video.js`
 - `src/application/examples/record_video_UI.js`
 - `src/application/examples/user.js`
-- `eve/application/intuition/tools/mtrack.js`
-- `eve/application/intuition/tools/audio_engine_debug_runtime.js`
+- `eVe/intuition/tools/mtrack.js`
+- `eVe/intuition/tools/audio_engine_debug_runtime.js`
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift`
 - `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`
 - `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`

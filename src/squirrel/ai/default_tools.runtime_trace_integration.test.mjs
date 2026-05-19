@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { installMockBrowserEnv } from '../../eve/application/tests/strangler_v2/_env.mjs';
+import { installMockBrowserEnv } from '../../eVe/tests/strangler_v2/_env.mjs';
 
 const registeredTools = new Map();
 
@@ -17,7 +17,7 @@ installMockBrowserEnv({
     }
 });
 
-const { commandBusV2 } = await import('../../../eve/application/intuition/runtime/index.js');
+const { commandBusV2 } = await import('../../../eVe/intuition/runtime/index.js');
 await import('./default_tools.js');
 
 const calendarCreateTool = registeredTools.get('calendar.create_event');

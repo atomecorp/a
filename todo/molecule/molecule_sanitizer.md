@@ -16,17 +16,17 @@ Date: 2026-05-14
 
 Le panel Mtrax est principalement construit dans:
 
-- `eve/application/domains/mtrax/ui/ensure_runtime.js`
-- `eve/application/domains/mtrax/ui/styles.js`
-- `eve/application/domains/mtrax/ui/panel_dialog_runtime.js`
-- `eve/application/domains/mtrax/ui/docked_renderer_runtime.js`
-- `eve/application/domains/mtrax/ui/embedded_footer_drag_runtime.js`
-- `eve/application/domains/mtrax/ui/embedded_footer_resize_runtime.js`
-- `eve/application/domains/mtrax/preview/preview_layout_runtime.js`
-- `eve/application/domains/mtrax/preview/preview_layout_bindings_runtime.js`
-- `eve/application/domains/mtrax/preview/preview_host_resolution_runtime.js`
-- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`
-- `eve/application/intuition/eVeIntuition.js`
+- `eVe/domains/mtrax/ui/ensure_runtime.js`
+- `eVe/domains/mtrax/ui/styles.js`
+- `eVe/domains/mtrax/ui/panel_dialog_runtime.js`
+- `eVe/domains/mtrax/ui/docked_renderer_runtime.js`
+- `eVe/domains/mtrax/ui/embedded_footer_drag_runtime.js`
+- `eVe/domains/mtrax/ui/embedded_footer_resize_runtime.js`
+- `eVe/domains/mtrax/preview/preview_layout_runtime.js`
+- `eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `eVe/domains/mtrax/preview/preview_host_resolution_runtime.js`
+- `eVe/domains/mtrax/timeline/loop_cells_runtime.js`
+- `eVe/intuition/eVeIntuition.js`
 - logs: `logs/new_logs.txt`, `logs/interesting_logs.txt`
 
 Ce rapport ne modifie pas le code applicatif.

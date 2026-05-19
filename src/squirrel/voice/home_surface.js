@@ -1,4 +1,4 @@
-import { getEveLocale } from '../../../eve/application/i18n/i18n.js';
+import { getEveLocale } from '../../../eVe/i18n/i18n.js';
 import { VOICE_LOCAL_COMMANDS, normalizeLocalVoiceCommand } from './session_runtime.js';
 import { mountVoiceMeter } from './voice_meter.js';
 import { createVoiceActivityDetector } from './vad.js';

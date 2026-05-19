@@ -118,8 +118,8 @@ Done in this pass:
 Validated:
 
 - `node --check src/application/audio_runtime/record_audio_api.js`
-- `node --check eve/application/domains/media/api/audio_api.js`
-- `node --check eve/application/intuition/tools/capture.js`
+- `node --check eVe/domains/media/api/audio_api.js`
+- `node --check eVe/intuition/tools/capture.js`
 - `node --check server/server.js`
 - `cargo check` in `src-tauri`
 - `cargo test audio_engine_tests::test_metering` in `src-tauri`

@@ -173,13 +173,13 @@ Structure cible validee:
 
 Execution structurelle en cours:
 
-- Deplacements effectues: src/shared vers atome/shared, src/application/security vers atome/security, src/application/eVe vers eve/application.
-- Chemins historiques actifs src/application/eVe, src/shared, et src/application/security retires des sources filtrees hors artefacts generes.
-- src/squirrel reste volontairement non deplace en bloc: il contient encore des dependances directes vers eve/application qui doivent etre scindees avant classement open strict.
+- Deplacements effectues: src/shared vers atome/shared, src/application/security vers atome/security, eVe vers eVe.
+- Chemins historiques actifs eVe, src/shared, et src/application/security retires des sources filtrees hors artefacts generes.
+- src/squirrel reste volontairement non deplace en bloc: il contient encore des dependances directes vers eVe qui doivent etre scindees avant classement open strict.
 - Modules src/squirrel a scinder ou proteger avant migration open stricte: src/squirrel/ai/default_tools.js, src/squirrel/ai/default_tools.runtime_trace_integration.test.mjs, src/squirrel/ai/model_catalog_refresh.js, src/squirrel/ai/provider_client.js, src/squirrel/calendar/bootstrap.js, src/squirrel/calendar/calendar_api_source.js, src/squirrel/mail/bootstrap.js, src/squirrel/voice/ai_planner.js, src/squirrel/voice/dilas_panel.js, src/squirrel/voice/home_surface.js, src/squirrel/voice/home_surface.locale_history.test.mjs, src/squirrel/components/intuition_builder/index.js.
 - Validation passee: npm run check:syntax.
 - Validation passee: npm run check:no-fallbacks.
-- Blocage restant: eve/application est un sous-depot Git deplace depuis src/application/eVe; son pointeur .git interne reference encore une metadonnee Git incompatible avec le nouvel emplacement. Aucune correction de metadonnee Git ne doit etre faite sans validation explicite de l'utilisateur.
+- Blocage restant: eVe est un sous-depot Git deplace depuis eVe; son pointeur .git interne reference encore une metadonnee Git incompatible avec le nouvel emplacement. Aucune correction de metadonnee Git ne doit etre faite sans validation explicite de l'utilisateur.
 
 ### Phase 2 - Cartographie framework, APIs, code et MCP
 

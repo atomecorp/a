@@ -117,7 +117,7 @@ An important consequence is that "web mode" must be treated explicitly as two di
 | `platforms/web/audio-wasm/src/lib.rs` | WASM build of the engine |
 | `src/application/audio_runtime/backend.kira.js` | JS backend for Rust / native engine usage |
 | `src/application/audio_runtime/audio.facade.js` | Public audio facade |
-| `eve/application/intuition_/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
+| `eVe/intuition_/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
 | `platforms/ios/atome-auv3/Common/WebViewManager.swift` | JS → Swift bridge for AUv3 audio commands and PCM injection |
 | `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift` | common contract for playback / stop / debug expected peak propagation |
 | `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift` | AUv3 controller exposing the audio controller to the WebView bridge |
@@ -412,13 +412,13 @@ For this document to be usable as a real migration spec, the first rule is to na
 | Area | Current entry points | Migration target |
 |------|----------------------|------------------|
 | Public clip playback | `src/application/audio_runtime/audio.facade.js`, `src/application/audio_runtime/backend.kira.js`, `src/application/audio_runtime/backend.legacy_auv3.js` | keep one public facade, retire backend-specific feature code |
-| Audio recording | `eve/application/domains/media/api/audio_api.js`, `src/application/examples/record_audio.js`, `src/application/examples/record_audio_UI.js`, `src/application/audio_runtime/record_audio_api.js` | one recording contract backed by the unified native engine |
-| Video recording / media capture | `eve/application/domains/media/api/video_api.js`, `src/application/examples/record_video.js`, `src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
-| Shared media persistence | `eve/application/domains/media/api/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
-| Media atome rendering | `src/application/examples/user.js`, `eve/application/domains/media/api/audio_api.js`, `eve/application/domains/media/api/video_api.js` | all media atomes must resolve to one playback ownership model |
+| Audio recording | `eVe/domains/media/api/audio_api.js`, `src/application/examples/record_audio.js`, `src/application/examples/record_audio_UI.js`, `src/application/audio_runtime/record_audio_api.js` | one recording contract backed by the unified native engine |
+| Video recording / media capture | `eVe/domains/media/api/video_api.js`, `src/application/examples/record_video.js`, `src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
+| Shared media persistence | `eVe/domains/media/api/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
+| Media atome rendering | `src/application/examples/user.js`, `eVe/domains/media/api/audio_api.js`, `eVe/domains/media/api/video_api.js` | all media atomes must resolve to one playback ownership model |
 | AUv3 native bridge | `platforms/ios/atome-auv3/Common/WebViewManager.swift`, `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`, `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`, `platforms/ios/atome-auv3/auv3/utils.swift` | reference native implementation for Apple timing and routing |
-| Debug validation | `eve/application/intuition_/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
-| MTrack integration | `eve/application/intuition_/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
+| Debug validation | `eVe/intuition_/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
+| MTrack integration | `eVe/intuition_/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
 
 ### Meaning of "Migrated"
 
@@ -768,17 +768,17 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eve/application/domains/media/api/audio_api.js` | eVe audio capture + persistence wrapper | canonical audio recording adapter | reduce to project/media/persistence adapter on top of one recording engine contract | recorded media persists and replays through unified engine | `bridge` |
+| `eVe/domains/media/api/audio_api.js` | eVe audio capture + persistence wrapper | canonical audio recording adapter | reduce to project/media/persistence adapter on top of one recording engine contract | recorded media persists and replays through unified engine | `bridge` |
 | `src/application/audio_runtime/record_audio_api.js` | runtime recording bridge | canonical recording bridge | keep only as a thin adapter to the unified engine contract | start/stop semantics identical across runtimes | `bridge` |
 | `src/application/examples/record_audio.js` | feature/runtime recording implementation | UI wrapper over canonical recording APIs | remove ownership of backend choices and engine semantics | no standalone engine logic remains in example layer | `current` |
 | `src/application/examples/record_audio_UI.js` | recording UI + backend toggles | UI only | keep UI concerns; remove backend-selection logic once migration completes | UI triggers canonical record commands only | `current` |
-| `eve/application/domains/media/api/media_api_shared.js` | shared media persistence helpers | remains canonical media helper layer | keep as common source for auth, path, project and media metadata resolution | audio/video APIs resolve the same canonical media fields | `target` |
+| `eVe/domains/media/api/media_api_shared.js` | shared media persistence helpers | remains canonical media helper layer | keep as common source for auth, path, project and media metadata resolution | audio/video APIs resolve the same canonical media fields | `target` |
 
 ### Video and Soundtrack Ownership
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eve/application/domains/media/api/video_api.js` | video capture / preview / persistence wrapper | canonical video adapter with engine-owned soundtrack | keep capture/persistence concerns; move soundtrack playback ownership to unified engine | video playback does not emit double audio | `bridge` |
+| `eVe/domains/media/api/video_api.js` | video capture / preview / persistence wrapper | canonical video adapter with engine-owned soundtrack | keep capture/persistence concerns; move soundtrack playback ownership to unified engine | video playback does not emit double audio | `bridge` |
 | `src/application/examples/record_video.js` | browser/video capture implementation | capture-only wrapper | keep only capture-specific logic; remove long-term playback ownership | recorded video replays with engine-owned soundtrack | `current` |
 | `src/application/examples/record_video_UI.js` | video recording UI | UI only | keep UI concerns; delegate playback/record ownership to canonical APIs | UI never owns production soundtrack playback | `current` |
 | DOM / native video element audio output | local visual media element | unified engine soundtrack routing | mute local media-element audio whenever engine soundtrack is active | no double-output audio, seek/rate stay synchronized | `retire` |
@@ -796,7 +796,7 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eve/application/intuition_/tools/audio_engine_debug_runtime.js` | runtime validation suite | canonical validation harness | keep as source of truth for fixture playback, normalized sample-accuracy assessment, suite aggregation | AUv3 `play_record_sync` and `sample_alignment` stay at `delta_samples = 0` | `target` |
+| `eVe/intuition_/tools/audio_engine_debug_runtime.js` | runtime validation suite | canonical validation harness | keep as source of truth for fixture playback, normalized sample-accuracy assessment, suite aggregation | AUv3 `play_record_sync` and `sample_alignment` stay at `delta_samples = 0` | `target` |
 | AUv3 native timing payloads | native record-stop analysis | canonical runtime timing contract | keep exposing `first_peak_frame`, `playback_start_frame`, `recording_start_frame`, `expected_peak_frame` | sample-accurate verification remains possible | `target` |
 | ad hoc media debug paths | fragmented feature-level diagnostics | shared engine-observing diagnostics | remove or demote any debug tooling that does not observe the production signal path | meters and debug panels match audible output | `retire` |
 
@@ -814,7 +814,7 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eve/application/intuition_/tools/mtrack.js` | timeline feature implementation | unified engine transport client | route audible playback, preview, scrub and playhead to engine clock | MTrack playback is engine-clocked | `current` |
+| `eVe/intuition_/tools/mtrack.js` | timeline feature implementation | unified engine transport client | route audible playback, preview, scrub and playhead to engine clock | MTrack playback is engine-clocked | `current` |
 | MTrack bridge / controller files | panel/runtime coordination | transport adapter on top of unified engine | keep UI/panel coordination, remove ownership of audio semantics | preview and timeline playback share routing model | `bridge` |
 | MTrack audio clips | mixed feature ownership | engine-managed clip sources | preload and render as first-class engine clips | mute/solo/gain behave predictably | `current` |
 | MTrack video clips | visual clip ownership with implicit soundtrack | visual clip + engine-owned soundtrack | extract or route soundtrack to the unified engine, keep visual timeline sync | no double audio, synced seek/play/rate | `current` |

@@ -381,9 +381,9 @@ We still need a proper plan and implementation for:
 
 ### User preferences / profile
 
-- [/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/user.js](/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/user.js)
-- [/Users/jean-ericgodard/RubymineProjects/a/eve/application/domains/user/profile_api.js](/Users/jean-ericgodard/RubymineProjects/a/eve/application/domains/user/profile_api.js)
-- [/Users/jean-ericgodard/RubymineProjects/a/eve/application/i18n/languages.js](/Users/jean-ericgodard/RubymineProjects/a/eve/application/i18n/languages.js)
+- [/Users/jean-ericgodard/RubymineProjects/a/eVe/intuition/tools/user.js](/Users/jean-ericgodard/RubymineProjects/a/eVe/intuition/tools/user.js)
+- [/Users/jean-ericgodard/RubymineProjects/a/eVe/domains/user/profile_api.js](/Users/jean-ericgodard/RubymineProjects/a/eVe/domains/user/profile_api.js)
+- [/Users/jean-ericgodard/RubymineProjects/a/eVe/i18n/languages.js](/Users/jean-ericgodard/RubymineProjects/a/eVe/i18n/languages.js)
 
 ### Server / Tauri transport
 
@@ -393,7 +393,7 @@ We still need a proper plan and implementation for:
 
 ### Product notes / debug context
 
-- [/Users/jean-ericgodard/RubymineProjects/a/eve/application/documentations/debug_UI.md](/Users/jean-ericgodard/RubymineProjects/a/eve/application/documentations/debug_UI.md)
+- [/Users/jean-ericgodard/RubymineProjects/a/eVe/documentations/debug_UI.md](/Users/jean-ericgodard/RubymineProjects/a/eVe/documentations/debug_UI.md)
 
 ## Required Architecture Direction
 

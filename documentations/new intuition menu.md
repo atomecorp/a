@@ -13,8 +13,8 @@ Ce document décrit le menu `goey` actuel:
 
 Code source principal:
 
-- `eve/application/intuition_/goey_menu.js`
-- `eve/application/elements/eVe_look.js`
+- `eVe/intuition_/goey_menu.js`
+- `eVe/elements/eVe_look.js`
 
 ---
 

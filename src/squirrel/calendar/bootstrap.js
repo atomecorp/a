@@ -22,7 +22,7 @@ const ensureCalendarPanelApi = async () => {
     if (typeof globalThis !== 'undefined' && typeof globalThis.open_calendar_panel === 'function') {
         return true;
     }
-    const mod = await import('../../../eve/application/intuition/tools/calendar.js');
+    const mod = await import('../../../eVe/intuition/tools/calendar.js');
     return typeof globalThis.open_calendar_panel === 'function' || typeof mod?.CalendarAPI === 'object';
 };
 

@@ -26,7 +26,7 @@ const forbiddenByFile = [
         patterns: [/__TAURI__(?:\?\.|\.)fs/, /readTextFile/, /plugin:fs/]
     },
     {
-        path: 'eve/application/intuition/tools/audio_engine_debug_runtime.js',
+        path: 'eVe/intuition/tools/audio_engine_debug_runtime.js',
         optional: true,
         patterns: [/__TAURI__(?:\?\.|\.)fs/, /resolveFsApi/, /tauri_fs_unavailable/]
     },
