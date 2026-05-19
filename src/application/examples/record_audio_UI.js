@@ -43,6 +43,12 @@
         try {
             return !!(
                 typeof window.__toDSP === 'function' ||
+                typeof window.__ATOME_IOS_NATIVE_INVOKE === 'function' ||
+                (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') ||
+                (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function') ||
+                (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') ||
+                ['tauri:', 'asset:', 'ipc:', 'atome:'].includes(String(window.location?.protocol || '').toLowerCase()) ||
+                String(window.location?.hostname || '').toLowerCase() === 'tauri.localhost' ||
                 (window.webkit && window.webkit.messageHandlers && (
                     window.webkit.messageHandlers.swiftBridge ||
                     window.webkit.messageHandlers.squirrel ||
@@ -94,6 +100,7 @@
 
         const state = {
             backend: hasIPlugBridge() ? 'iplug2' : 'webaudio',
+            backendSelectedByUser: false,
             source: 'mic',
             isRecording: false,
             sessionId: null,
@@ -399,6 +406,10 @@
             },
             onclick: async () => {
                 try {
+                    if (!state.backendSelectedByUser && hasIPlugBridge()) {
+                        state.backend = 'iplug2';
+                        updateTitle(icon);
+                    }
                     if (!state.isRecording) {
                         if (state.backend === 'iplug2') {
                             await startIPlug2(icon);
@@ -442,8 +453,7 @@
             });
 
             if (typeof dropDown === 'function') {
-                const iplugAvailable = hasIPlugBridge();
-                if (!iplugAvailable && state.backend === 'iplug2') state.backend = 'webaudio';
+                if (!hasIPlugBridge() && state.backend === 'iplug2') state.backend = 'webaudio';
                 dropDown({
                     parent: backendHolder,
                     id: 'record_audio_backend_selector',
@@ -454,6 +464,8 @@
                     ],
                     value: state.backend,
                     onChange: (val) => {
+                        state.backendSelectedByUser = true;
+                        const iplugAvailable = hasIPlugBridge();
                         if (val === 'iplug2' && !iplugAvailable) {
                             state.backend = 'webaudio';
                             console.warn('[record_audio_UI] iPlug2 backend is not available; using WebAudio.');
