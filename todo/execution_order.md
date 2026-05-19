@@ -349,6 +349,7 @@ Sources principales:
 - todo/cleanup_architecture/v2_full_migration_framework.md
 - todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md
 - todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md
+- todo/tools/tool_sanitisation.md
 
 Taches:
 
@@ -358,6 +359,7 @@ Taches:
 - [ ] Nettoyer les APIs clone/outils legacy.
 - [ ] Renommer les contrats V1 encore exposes.
 - [ ] Migrer les cles de persistance *_v1.
+- [ ] Executer la sanitisation du systeme de tools decrite dans todo/tools/tool_sanitisation.md avant de declarer la migration V2 des tools comme stabilisee.
 - [ ] Ajouter les garde-fous CI anti regression V1.
 - [ ] Nettoyer uniquement les artefacts generes confirmes comme jetables.
 - [ ] Executer le plan deep UX/performance apres stabilisation des frontieres V2.

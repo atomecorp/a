@@ -345,6 +345,102 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-shutdown`",
+          "type": "string",
+          "const": "audio-engine",
+          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-shutdown`"
+        },
+        {
+          "description": "Enables the audio_destroy_clip command.",
+          "type": "string",
+          "const": "allow-audio-destroy-clip",
+          "markdownDescription": "Enables the audio_destroy_clip command."
+        },
+        {
+          "description": "Enables the audio_get_levels command.",
+          "type": "string",
+          "const": "allow-audio-get-levels",
+          "markdownDescription": "Enables the audio_get_levels command."
+        },
+        {
+          "description": "Enables the audio_has_clip command.",
+          "type": "string",
+          "const": "allow-audio-has-clip",
+          "markdownDescription": "Enables the audio_has_clip command."
+        },
+        {
+          "description": "Enables the audio_init command.",
+          "type": "string",
+          "const": "allow-audio-init",
+          "markdownDescription": "Enables the audio_init command."
+        },
+        {
+          "description": "Enables the audio_load_clip command.",
+          "type": "string",
+          "const": "allow-audio-load-clip",
+          "markdownDescription": "Enables the audio_load_clip command."
+        },
+        {
+          "description": "Enables the audio_load_clip_from_bytes command.",
+          "type": "string",
+          "const": "allow-audio-load-clip-from-bytes",
+          "markdownDescription": "Enables the audio_load_clip_from_bytes command."
+        },
+        {
+          "description": "Enables the audio_play command.",
+          "type": "string",
+          "const": "allow-audio-play",
+          "markdownDescription": "Enables the audio_play command."
+        },
+        {
+          "description": "Enables the audio_play_instance command.",
+          "type": "string",
+          "const": "allow-audio-play-instance",
+          "markdownDescription": "Enables the audio_play_instance command."
+        },
+        {
+          "description": "Enables the audio_record_start command.",
+          "type": "string",
+          "const": "allow-audio-record-start",
+          "markdownDescription": "Enables the audio_record_start command."
+        },
+        {
+          "description": "Enables the audio_record_stop command.",
+          "type": "string",
+          "const": "allow-audio-record-stop",
+          "markdownDescription": "Enables the audio_record_stop command."
+        },
+        {
+          "description": "Enables the audio_set_playback_rate command.",
+          "type": "string",
+          "const": "allow-audio-set-playback-rate",
+          "markdownDescription": "Enables the audio_set_playback_rate command."
+        },
+        {
+          "description": "Enables the audio_set_volume command.",
+          "type": "string",
+          "const": "allow-audio-set-volume",
+          "markdownDescription": "Enables the audio_set_volume command."
+        },
+        {
+          "description": "Enables the audio_shutdown command.",
+          "type": "string",
+          "const": "allow-audio-shutdown",
+          "markdownDescription": "Enables the audio_shutdown command."
+        },
+        {
+          "description": "Enables the audio_stop command.",
+          "type": "string",
+          "const": "allow-audio-stop",
+          "markdownDescription": "Enables the audio_stop command."
+        },
+        {
+          "description": "Enables the audio_stop_instance command.",
+          "type": "string",
+          "const": "allow-audio-stop-instance",
+          "markdownDescription": "Enables the audio_stop_instance command."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

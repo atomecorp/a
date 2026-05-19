@@ -1,0 +1,97 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "audio-engine"
+description = "Allows the main webview to use the native Kira audio engine commands."
+permissions = [
+  "allow-audio-init",
+  "allow-audio-load-clip",
+  "allow-audio-load-clip-from-bytes",
+  "allow-audio-has-clip",
+  "allow-audio-play",
+  "allow-audio-play-instance",
+  "allow-audio-stop",
+  "allow-audio-stop-instance",
+  "allow-audio-destroy-clip",
+  "allow-audio-set-volume",
+  "allow-audio-set-playback-rate",
+  "allow-audio-record-start",
+  "allow-audio-record-stop",
+  "allow-audio-get-levels",
+  "allow-audio-shutdown",
+]
+
+[[permission]]
+identifier = "allow-audio-init"
+description = "Enables the audio_init command."
+commands.allow = ["audio_init"]
+
+[[permission]]
+identifier = "allow-audio-load-clip"
+description = "Enables the audio_load_clip command."
+commands.allow = ["audio_load_clip"]
+
+[[permission]]
+identifier = "allow-audio-load-clip-from-bytes"
+description = "Enables the audio_load_clip_from_bytes command."
+commands.allow = ["audio_load_clip_from_bytes"]
+
+[[permission]]
+identifier = "allow-audio-has-clip"
+description = "Enables the audio_has_clip command."
+commands.allow = ["audio_has_clip"]
+
+[[permission]]
+identifier = "allow-audio-play"
+description = "Enables the audio_play command."
+commands.allow = ["audio_play"]
+
+[[permission]]
+identifier = "allow-audio-play-instance"
+description = "Enables the audio_play_instance command."
+commands.allow = ["audio_play_instance"]
+
+[[permission]]
+identifier = "allow-audio-stop"
+description = "Enables the audio_stop command."
+commands.allow = ["audio_stop"]
+
+[[permission]]
+identifier = "allow-audio-stop-instance"
+description = "Enables the audio_stop_instance command."
+commands.allow = ["audio_stop_instance"]
+
+[[permission]]
+identifier = "allow-audio-destroy-clip"
+description = "Enables the audio_destroy_clip command."
+commands.allow = ["audio_destroy_clip"]
+
+[[permission]]
+identifier = "allow-audio-set-volume"
+description = "Enables the audio_set_volume command."
+commands.allow = ["audio_set_volume"]
+
+[[permission]]
+identifier = "allow-audio-set-playback-rate"
+description = "Enables the audio_set_playback_rate command."
+commands.allow = ["audio_set_playback_rate"]
+
+[[permission]]
+identifier = "allow-audio-record-start"
+description = "Enables the audio_record_start command."
+commands.allow = ["audio_record_start"]
+
+[[permission]]
+identifier = "allow-audio-record-stop"
+description = "Enables the audio_record_stop command."
+commands.allow = ["audio_record_stop"]
+
+[[permission]]
+identifier = "allow-audio-get-levels"
+description = "Enables the audio_get_levels command."
+commands.allow = ["audio_get_levels"]
+
+[[permission]]
+identifier = "allow-audio-shutdown"
+description = "Enables the audio_shutdown command."
+commands.allow = ["audio_shutdown"]

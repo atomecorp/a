@@ -12,6 +12,7 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "stt:default"
+    "stt:default",
+    "audio-engine"
   ]
 }
