@@ -275,6 +275,22 @@ fn main() {
                 });
             });
 
+            let navigation_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let Some(win) = navigation_handle.get_webview_window("main") else {
+                    eprintln!("[tauri] Unable to navigate main window: window not found");
+                    return;
+                };
+                let Ok(url) = tauri::Url::parse("http://127.0.0.1:3000/") else {
+                    eprintln!("[tauri] Unable to parse local Axum URL");
+                    return;
+                };
+                if let Err(err) = win.navigate(url) {
+                    eprintln!("[tauri] Unable to navigate main window to local Axum server: {}", err);
+                }
+            });
+
             // Exposed port 3000 to the front (allows dataFetcher to use http://127.0.0.1:3000/...)
             {
                 let handle = app.handle();

@@ -15,8 +15,8 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 This document describes the implementation of a **structured search panel**.
 The panel must be consistent with existing UI patterns already used in:
 
-- `src/application/eVe/tools/user`
-- `src/application/eVe/tools/infos.js`
+- `eve/application/tools/user`
+- `eve/application/tools/infos.js`
 
 The goal is to provide a powerful, extensible, and coherent search experience across Atome / eVe.
 

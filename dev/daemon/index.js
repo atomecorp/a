@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { WebSocketServer } from 'ws';
-import { coerceLogEnvelope, isValidLogEnvelope } from '../../src/shared/logging.js';
+import { coerceLogEnvelope, isValidLogEnvelope } from '../../atome/shared/logging.js';
 
 const PORT = Number(process.env.ATOME_DEV_DAEMON_PORT || 7777);
 const WS_PATH = '/dev/logs';

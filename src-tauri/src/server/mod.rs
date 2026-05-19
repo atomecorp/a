@@ -1653,8 +1653,8 @@ fn load_eve_version(static_dir: &Path) -> String {
             );
         }
     }
-    candidates.push(PathBuf::from("src/application/eVe/version.txt"));
-    candidates.push(PathBuf::from("application/eVe/version.txt"));
+    candidates.push(PathBuf::from("eve/application/version.txt"));
+    candidates.push(PathBuf::from("eve/application/version.txt"));
 
     for candidate in candidates {
         if let Ok(raw) = stdfs::read_to_string(&candidate) {
@@ -4188,7 +4188,7 @@ async fn update_file_handler(
     let allowed_prefixes = [
         "src/squirrel",
         "src/application/core",
-        "src/application/security",
+        "atome/security",
     ];
     // Fichiers spécifiques autorisés (en dehors des préfixes)
     let allowed_files = ["src/version.json"];
@@ -4303,7 +4303,7 @@ async fn batch_update_handler(
     let allowed_prefixes = [
         "src/squirrel",
         "src/application/core",
-        "src/application/security",
+        "atome/security",
     ];
     let allowed_files = ["src/version.json"];
     let protected_prefixes = ["src/application/examples", "src/application/config"];
@@ -5333,6 +5333,42 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         )
     });
 
+    let serve_dir_src = ServeDir::new(base_dir.clone());
+    let src_service = get_service(serve_dir_src).handle_error(|error| async move {
+        println!("Erreur /src: {:?}", error);
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur src",
+        )
+    });
+
+    let serve_dir_atome = ServeDir::new(project_root.join("atome"));
+    let atome_service = get_service(serve_dir_atome).handle_error(|error| async move {
+        println!("Erreur /atome: {:?}", error);
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur atome",
+        )
+    });
+
+    let serve_dir_eve = ServeDir::new(project_root.join("eve"));
+    let eve_service = get_service(serve_dir_eve).handle_error(|error| async move {
+        println!("Erreur /eve: {:?}", error);
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur eve",
+        )
+    });
+
+    let serve_dir_eve_application = ServeDir::new(project_root.join("eve").join("application"));
+    let eve_application_service = get_service(serve_dir_eve_application).handle_error(|error| async move {
+        println!("Erreur /application/eVe: {:?}", error);
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur application eVe",
+        )
+    });
+
     // Service fichiers (correspond à dataFetcher: /file/<path>).
     // User media is project-relative (data/users/...), not static-dir-relative.
     let serve_dir_file = ServeDir::new(project_root.clone());
@@ -5543,6 +5579,10 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         // WebSocket endpoints for API and sync (ADOLE v3.0)
         .route("/ws/api", get(ws_api_handler))
         .route("/ws/sync", get(ws_sync_handler))
+        .nest_service("/src", src_service)
+        .nest_service("/atome", atome_service)
+        .nest_service("/eve", eve_service)
+        .nest_service("/application/eVe", eve_application_service)
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)

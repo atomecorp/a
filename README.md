@@ -112,9 +112,8 @@ engines/
 src-tauri/
 ├── src/main.rs             # Tauri bootstrap + server launch
 ├── src/server/             # Axum router, uploads handler, static serving
-atome-os/
-├── builder/                # Atome OS FreeBSD image builder
 platforms/
+├── atomeOS/builder/        # Atome OS FreeBSD image builder
 ├── web/audio-wasm/         # Browser Kira WASM audio engine source
 ├── ios/atome-auv3/         # iPlug2 AUv3 host + Swift UI bridge
 ├── ios/shared/             # Shared iOS support code

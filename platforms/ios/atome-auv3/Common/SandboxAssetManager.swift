@@ -98,6 +98,12 @@ final class SandboxAssetManager {
     private func locateBundleAsset(for relativePath: String) -> URL? {
         guard let bundleRoot = Bundle.main.resourceURL else { return nil }
         let normalized = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bundleRelativePath: String
+        if normalized.hasPrefix("atome/") {
+            bundleRelativePath = "atome_open/" + String(normalized.dropFirst("atome/".count))
+        } else {
+            bundleRelativePath = normalized
+        }
         let nameNSString = normalized as NSString
         let baseName = nameNSString.deletingPathExtension
         let ext = nameNSString.pathExtension
@@ -108,6 +114,7 @@ final class SandboxAssetManager {
         let add: (URL?) -> Void = { candidates.append($0) }
 
         // Direct relative path from bundle root (covers src/** and assets/** trees)
+        add(bundleRoot.appendingPathComponent(bundleRelativePath))
         add(bundleRoot.appendingPathComponent(normalized))
 
         // If path already includes leading "src/", also try without that prefix to avoid duplicates

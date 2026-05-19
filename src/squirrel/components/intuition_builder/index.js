@@ -50,7 +50,7 @@ import {
     attachToIntuitionFloatingGroupLayer,
     ensureIntuitionFloatingGroupLayer,
     ensureIntuitionRoot
-} from '../../../application/eVe/intuition/runtime/layer_contract.js';
+} from '../../../../eve/application/intuition/runtime/layer_contract.js';
 
 function save_intuition_menu(...args) {
     if (typeof window.saveMenuHook === 'function') {

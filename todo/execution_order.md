@@ -153,9 +153,33 @@ Taches:
 - [x] Valider avec l'utilisateur la frontiere open-source Atome / closed-source eVe.
 - [x] Valider les regles de classement: UI closed, tools closed, infrastructure de l'app open, security open, cross-platform open, server open.
 - [x] Identifier les dependances autorisees et interdites entre couches open et closed.
-- [ ] Identifier les dossiers et modules a deplacer, scinder, ou proteger pour respecter cette architecture.
-- [ ] Verifier que la structure cible est suffisamment stable pour devenir la base des cartographies futures.
+- [x] Identifier les dossiers et modules a deplacer, scinder, ou proteger pour respecter cette architecture.
+- [x] Verifier que la structure cible est suffisamment stable pour devenir la base des cartographies futures.
+- [ ] Executer les deplacements, scissions, et protections structurels valides avant toute cartographie future.
 - [ ] Produire un test ou une verification adaptee apres chaque sous-tache et un rapport d'avancement global.
+
+Contrainte validee:
+
+- Les deplacements, scissions, et protections identifies dans cette phase ne doivent pas etre repousses a une phase lointaine: ils doivent etre prepares maintenant par inventaire exact, puis executes des que la structure cible est validee, au plus tard dans la tache suivante compatible avec la regle interdisant toute execution structurelle avant validation explicite de l'architecture cible.
+
+Structure cible validee:
+
+- atome/: couche open contenant core framework, APIs, contrats, runtime partage, securite, server, sync, plateformes, engines, et assets generiques.
+- eve/: couche closed contenant UI produit, tools produit, workflows eVe, composition produit, branding, et packaging prive.
+- tests/: validations separees par cible atome, eve, et integration.
+- documentations/: documentation separee par ownership et cartographies futures.
+- temp/: seul emplacement autorise pour probes, sorties temporaires, scripts de diagnostic jetables, et artefacts temporaires.
+- dist/ ou dossiers build dedies: uniquement artefacts generes, jamais source maintenue.
+
+Execution structurelle en cours:
+
+- Deplacements effectues: src/shared vers atome/shared, src/application/security vers atome/security, src/application/eVe vers eve/application.
+- Chemins historiques actifs src/application/eVe, src/shared, et src/application/security retires des sources filtrees hors artefacts generes.
+- src/squirrel reste volontairement non deplace en bloc: il contient encore des dependances directes vers eve/application qui doivent etre scindees avant classement open strict.
+- Modules src/squirrel a scinder ou proteger avant migration open stricte: src/squirrel/ai/default_tools.js, src/squirrel/ai/default_tools.runtime_trace_integration.test.mjs, src/squirrel/ai/model_catalog_refresh.js, src/squirrel/ai/provider_client.js, src/squirrel/calendar/bootstrap.js, src/squirrel/calendar/calendar_api_source.js, src/squirrel/mail/bootstrap.js, src/squirrel/voice/ai_planner.js, src/squirrel/voice/dilas_panel.js, src/squirrel/voice/home_surface.js, src/squirrel/voice/home_surface.locale_history.test.mjs, src/squirrel/components/intuition_builder/index.js.
+- Validation passee: npm run check:syntax.
+- Validation passee: npm run check:no-fallbacks.
+- Blocage restant: eve/application est un sous-depot Git deplace depuis src/application/eVe; son pointeur .git interne reference encore une metadonnee Git incompatible avec le nouvel emplacement. Aucune correction de metadonnee Git ne doit etre faite sans validation explicite de l'utilisateur.
 
 ### Phase 2 - Cartographie framework, APIs, code et MCP
 

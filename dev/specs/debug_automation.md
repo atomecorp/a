@@ -4,7 +4,7 @@
 status: IN_PROGRESS
 files:
   - dev/log_schema.json
-  - src/shared/logging.js
+  - atome/shared/logging.js
 description:
   - Define a JSON log envelope with required fields.
   - Provide helper functions to build/validate log entries.

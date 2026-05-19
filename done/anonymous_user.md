@@ -8,14 +8,14 @@
 - Ensured the anonymous user is created server-side at Fastify startup in `server/auth.js` using deterministic user ID based on phone.
 - Exposed anonymous helpers in `AdoleAPI.security` and used them in project security and bootstrap flows to support anonymous workspaces.
 - Kept the “Create user” action visible at all times and preserved the anonymous workspace view on logout.
-- Seeded a default anonymous project with a welcome message; the default content lives in `src/application/eVe/default_data/default_project.js`.
+- Seeded a default anonymous project with a welcome message; the default content lives in `eve/application/default_data/default_project.js`.
 - Wired bootstrap to create and populate the anonymous default project when the first anonymous project is created.
 
 ## Files touched
 
 - src/squirrel/apis/unified/adole_apis.js
 - server/auth.js
-- src/application/eVe/core/project_security.js
-- src/application/eVe/tools/project_bootstrap.js
-- src/application/eVe/tools/user.js
-- src/application/eVe/default_data/default_project.js
+- eve/application/core/project_security.js
+- eve/application/tools/project_bootstrap.js
+- eve/application/tools/user.js
+- eve/application/default_data/default_project.js

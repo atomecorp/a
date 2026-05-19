@@ -4,8 +4,8 @@
 
 The only visual and behavioral source of truth is:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/tests/ui/ribbon_menu_prototype.html`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/tests/ui/ribbon_menu_prototype_spec.md`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/tests/ui/ribbon_menu_prototype.html`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/tests/ui/ribbon_menu_prototype_spec.md`
 
 No legacy menu renderer is allowed to define the new result.
 

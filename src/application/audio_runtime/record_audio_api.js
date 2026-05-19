@@ -250,7 +250,7 @@ import { installSharedAVContracts } from './av_contracts.js';
 
     async function ensureBrowserRecordAudio() {
         if (typeof window.record_audio === 'function') return window.record_audio;
-        await import('../eVe/domains/media/api/audio_api.js');
+        await import('../../../eve/application/domains/media/api/audio_api.js');
         return (typeof window.record_audio === 'function') ? window.record_audio : null;
     }
 

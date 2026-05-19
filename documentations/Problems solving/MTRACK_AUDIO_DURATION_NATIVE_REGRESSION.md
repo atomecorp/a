@@ -12,7 +12,7 @@ the video track.
 
 ## Affected file
 
-`src/application/eVe/domains/mtrax/media/element_runtime.js`
+`eve/application/domains/mtrax/media/element_runtime.js`
 
 ---
 
@@ -172,6 +172,6 @@ If `probeVideoSourceDuration` returns `NaN` (timeout), check:
    the Tauri Axum origin.
 3. The Axum server includes `tauri://localhost` in its CORS allowed origins
    (see `shouldUseAnonymousCors` in
-   `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js`).
+   `eve/application/domains/mtrax/media/authorized_playback_runtime.js`).
 4. The timeout (2000 ms) is sufficient for the local Axum server to respond.
    Increase it if the device is slow.

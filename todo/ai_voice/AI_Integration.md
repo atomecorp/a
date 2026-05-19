@@ -26,8 +26,8 @@ Design a unified JavaScript/TypeScript codebase for Squirrel that enables seamle
 **Example Structure:**
 
 ```
-src/shared/ai.js         # All AI logic and API calls
-src/shared/system.js     # Abstracted system/shell access
+atome/shared/ai.js         # All AI logic and API calls
+atome/shared/system.js     # Abstracted system/shell access
 src-tauri/bridge.js      # Tauri-specific implementation
 server/bridge.js         # Node.js-specific implementation
 ```

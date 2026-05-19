@@ -365,7 +365,7 @@ Update the corresponding task status in dev/specs/debug_automation.md.
 
 ```text
 Inspect logs/axum.log and logs/fastify.log for recurring errors related to sync.
-Propose fixes in src/shared/sync/*.ts and add any missing logging to help
+Propose fixes in atome/shared/sync/*.ts and add any missing logging to help
 diagnose future issues.
 ```
 

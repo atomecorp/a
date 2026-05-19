@@ -11,7 +11,7 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 # Audit Technique — eVe Intuition
 
 **Date :** 22 février 2026
-**Périmètre :** `src/application/eVe/intuition/**`
+**Périmètre :** `eve/application/intuition/**`
 **Volume total :** ~70 000 lignes, ~65 fichiers JS
 
 ---
@@ -132,7 +132,7 @@ Les fonctions suivantes sont re-implémentées localement dans chaque fichier au
 
 Chaque réimplémentation est légèrement différente en signature ou en comportement. Par exemple `ensureString` dans `validator.js` retourne un boolean, pas une string — incohérence de nommage dangereuse.
 
-**Fix :** Créer `src/application/eVe/intuition/shared/utils.js` et y centraliser ces utilitaires.
+**Fix :** Créer `eve/application/intuition/shared/utils.js` et y centraliser ces utilitaires.
 
 ---
 
@@ -333,7 +333,7 @@ Un utilitaire similaire existe probablement dans `media_api_shared.js`. À véri
 ### B.1 — Créer `shared/utils.js` (utilitaires centraux)
 
 ```js
-// src/application/eVe/intuition/shared/utils.js
+// eve/application/intuition/shared/utils.js
 export const ensureString = (value, fallback = '') => {
     const out = String(value == null ? '' : value).trim();
     return out || fallback;
@@ -367,7 +367,7 @@ Remplacer toutes les instances locales par des imports depuis ce fichier.
 ### B.2 — Créer `shared/media_types.js`
 
 ```js
-// src/application/eVe/intuition/shared/media_types.js
+// eve/application/intuition/shared/media_types.js
 export const RECORDING_TYPE_MAP = Object.freeze({
     video_recording: 'video',
     audio_recording: 'sound'

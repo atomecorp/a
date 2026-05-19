@@ -35,7 +35,9 @@
     ],
     "resources": [
       "../version.txt",
-      "../src"
+      "../src",
+      "../atome",
+      "../eve"
     ]
   }
 }

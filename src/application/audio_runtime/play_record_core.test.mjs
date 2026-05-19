@@ -6,7 +6,7 @@ import {
     PLAY_RECORD_API_CONTRACT,
     PlayRecordCore
 } from './play_record_core.js';
-import { commandBusV2 } from '../eVe/intuition/runtime/command_bus.js';
+import { commandBusV2 } from '../../../eve/application/intuition/runtime/command_bus.js';
 
 test.beforeEach(() => {
     commandBusV2.clear();

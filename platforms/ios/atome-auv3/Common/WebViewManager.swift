@@ -362,12 +362,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     if FeatureFlags.loadInlineOnly {
                         let inline = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'></head><body style='margin:0;background:#000;color:#9cf;font:14px -apple-system,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'>Inline OK</body></html>"
                         webView.loadHTMLString(inline, baseURL: nil)
-                    } else if isExtension && FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
+                    } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
                         webView.load(URLRequest(url: schemeURL))
                     } else if let fileURL = mainURL {
                         webView.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
-                    } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
-                        webView.load(URLRequest(url: schemeURL))
                     }
                 }
             }
@@ -389,7 +387,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
 
     // Returns true if a load was initiated or already done
     @discardableResult
-    private static func attemptMainPageLoad(isExtension: Bool, mainURL: URL?) -> Bool {
+    private static func attemptMainPageLoad(isExtension _: Bool, mainURL: URL?) -> Bool {
         guard let webView = webView else { return false }
         if mainLoadDone { return true }
         mainLoadAttempts += 1
@@ -410,9 +408,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             webView.loadHTMLString(inline, baseURL: nil)
             mainLoadDone = true
             return true
-        } else if isExtension && FeatureFlags.registerCustomScheme {
+        } else if FeatureFlags.registerCustomScheme {
             if let schemeURL = URL(string: "atome:///src/index.html") {
-                shared.log.info("Attempt #\(mainLoadAttempts) loading AUv3 entry atome:///src/index.html")
+                shared.log.info("Attempt #\(mainLoadAttempts) loading entry atome:///src/index.html")
                 webView.load(URLRequest(url: schemeURL))
                 mainLoadDone = true
                 return true
@@ -1156,13 +1154,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 self.log.info("Retry reload() after termination; backoff=\(backoff)")
                 wv.reload()
             } else {
-                let isExtension: Bool = {
-                    let path = Bundle.main.bundlePath
-                    if path.hasSuffix(".appex") { return true }
-                    if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
-                    return false
-                }()
-                if isExtension, let entry = URL(string: "atome:///src/index.html") {
+                if FeatureFlags.registerCustomScheme, let entry = URL(string: "atome:///src/index.html") {
                     self.log.info("Retry load atome:///src/index.html after termination; backoff=\(backoff)")
                     wv.load(URLRequest(url: entry))
                 } else if let fileURL = Bundle.main.url(forResource: "src/index", withExtension: "html") {

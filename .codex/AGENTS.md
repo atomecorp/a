@@ -253,10 +253,50 @@ ARCHITECTURAL AUTHORITY
 
 The authoritative architecture documentation is located under:
 
-- src/application/eVe/documentations/
+- eve/application/documentations/
 - documentations/
 
 Before generating or modifying code, the assistant MUST ensure full consistency with these documents.
+
+────────────────────────────────
+GIT USAGE POLICY
+────────────────────────────────
+
+Git may be used in read-only mode without prior approval when it helps inspect the repository state, history, or diffs.
+
+Allowed by default in read-only mode:
+
+- git status
+- git diff
+- git log
+- git show
+- git blame
+- git grep
+- other strictly read-only Git inspection commands
+
+Git write operations are strictly forbidden unless the user explicitly requests them.
+
+Strictly forbidden without explicit user request:
+
+- git add
+- git commit
+- git push
+- git pull
+- git fetch when used to modify local refs or repository state
+- git merge
+- git rebase
+- git cherry-pick
+- git revert
+- git reset
+- git checkout when it changes files, refs, or branch state
+- git switch
+- git restore
+- git stash
+- branch creation, deletion, renaming, or any other ref mutation
+- tag creation, deletion, or movement
+- any Git command that writes to the repository, worktree, index, refs, or history
+
+Even when the user explicitly requests a Git write operation, the assistant must remain cautious, avoid destructive behavior unless explicitly requested, and never mutate repository state implicitly.
 
 ────────────────────────────────
 TRANSITIONAL FRAMEWORK REUSE RULE

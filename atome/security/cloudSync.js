@@ -11,11 +11,11 @@
  * - Passwords are re-hashed on the server side
  * - Local data is preserved as fallback
  * 
- * @module src/application/security/cloudSync
+ * @module atome/security/cloudSync
  */
 
 import { verifyServer } from './serverVerification.js';
-import { getLocalServerUrl, getCloudServerUrl } from '../../squirrel/apis/serverUrls.js';
+import { getLocalServerUrl, getCloudServerUrl } from '../../src/squirrel/apis/serverUrls.js';
 
 // Sync states
 export const SyncState = {

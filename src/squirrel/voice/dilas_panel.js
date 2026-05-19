@@ -1,9 +1,9 @@
-import { createEveDialog, revealEveDialog } from '../../application/eVe/elements/design.js';
-import { eveT, onEveLocaleChange } from '../../application/eVe/i18n/i18n.js';
+import { createEveDialog, revealEveDialog } from '../../../eve/application/elements/design.js';
+import { eveT, onEveLocaleChange } from '../../../eve/application/i18n/i18n.js';
 import {
     ensurePanelAttachedToIntuitionLayer,
     positionPanelNearTool
-} from '../../application/eVe/intuition/runtime/panel_api.js';
+} from '../../../eve/application/intuition/runtime/panel_api.js';
 import { mountHomeVoiceSurface } from './home_surface.js';
 
 const PANEL_KEY = '__SQUIRREL_DILAS_PANEL__';

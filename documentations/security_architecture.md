@@ -68,7 +68,7 @@ is an official Squirrel server before sending credentials.
 - `server/certificates/server.key` - Private key (NEVER commit!)
 - `server/certificates/server.pub` - Public key
 
-### 2. Trusted Keys Registry (`src/application/security/trusted_keys.js`)
+### 2. Trusted Keys Registry (`atome/security/trusted_keys.js`)
 
 Contains fingerprints of official server public keys. This file IS safe to commit
 as it only contains public information.
@@ -84,7 +84,7 @@ export const TRUSTED_SERVERS = {
 };
 ```
 
-### 3. Client Verification (`src/application/security/serverVerification.js`)
+### 3. Client Verification (`atome/security/serverVerification.js`)
 
 Client-side module that:
 
@@ -112,7 +112,7 @@ Rust module for offline authentication:
 - `DELETE /api/auth/local/delete` - Delete account
 - `POST /api/auth/local/update-cloud-id` - Link to cloud account
 
-### 5. Cloud Synchronization (`src/application/security/cloudSync.js`)
+### 5. Cloud Synchronization (`atome/security/cloudSync.js`)
 
 Handles syncing local accounts to the cloud:
 
@@ -135,7 +135,7 @@ Handles syncing local accounts to the cloud:
 **Safe to commit:**
 
 - `server/certificates/server.pub` (public key)
-- `src/application/security/trusted_keys.js` (fingerprints only)
+- `atome/security/trusted_keys.js` (fingerprints only)
 - `.env.example` (template without secrets)
 
 ### Environment Variables

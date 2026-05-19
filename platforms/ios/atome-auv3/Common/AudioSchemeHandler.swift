@@ -190,12 +190,20 @@ document.getElementById('player').addEventListener('error', e => {
         task.didFinish()
     }
 
-    // MARK: - Static asset serving from bundle 'src'
+    // MARK: - Static asset serving from bundled source roots
     private func serveStatic(path: String, task: WKURLSchemeTask) -> Bool {
         var rel = path
         if rel.hasPrefix("/") { rel.removeFirst() }
         if rel.isEmpty { rel = "src/index.html" }
-        if !rel.hasPrefix("src/") {
+        if rel.hasPrefix("src/application/eVe/") {
+            rel = "eve/application/" + String(rel.dropFirst("src/application/eVe/".count))
+        } else if rel.hasPrefix("application/eVe/") {
+            rel = "eve/application/" + String(rel.dropFirst("application/eVe/".count))
+        } else if rel.hasPrefix("atome/") {
+            rel = "atome_open/" + String(rel.dropFirst("atome/".count))
+        } else if rel == "server_config.json" || rel == "version.txt" {
+            // Keep bundle-root files unprefixed.
+        } else if !rel.hasPrefix("src/") && !rel.hasPrefix("eve/") && !rel.hasPrefix("atome/") {
             rel = "src/" + rel
         }
         guard let sanitized = SandboxPathValidator.sanitizedRelativePath(rel) else {

@@ -5,7 +5,7 @@ Ce document explique comment activer/désactiver le mode debug pour l'ensemble d
 ## Résumé rapide
 
 - Drapeau central retenu : `window.__CHECK_DEBUG__` (valeur boolean).
-- Helper central : `src/shared/debug.js` (exporte `isDebugEnabled()`, `shouldLogLevel()`, `wrapConsoleForDebug()`).
+- Helper central : `atome/shared/debug.js` (exporte `isDebugEnabled()`, `shouldLogLevel()`, `wrapConsoleForDebug()`).
 - Source unique : variable d'environnement `.env` exposée via `server_config.json`.
 
 ## Pourquoi centraliser ?
@@ -25,7 +25,7 @@ Consolider le debug sur un seul flag évite la dispersion des contrôles (plus s
   window.__CHECK_DEBUG__ = true;  // activer
   window.__CHECK_DEBUG__ = false; // désactiver
   // pour que le wrapping prenne effet si nécessaire, rappeler wrapConsoleForDebug
-  import('/src/shared/debug.js').then(m => m.wrapConsoleForDebug(console));
+  import('/atome/shared/debug.js').then(m => m.wrapConsoleForDebug(console));
   ```
 
 ## Effet attendu
@@ -35,7 +35,7 @@ Consolider le debug sur un seul flag évite la dispersion des contrôles (plus s
 
 ## Fichiers clés
 
-- Helper debug central : `src/shared/debug.js` (utilisez `isDebugEnabled()` dans votre code).
+- Helper debug central : `atome/shared/debug.js` (utilisez `isDebugEnabled()` dans votre code).
 - Logging / envoi centralisé : `src/squirrel/dev/logging.js` (gestion emission/forwarding), désormais respectueux du flag central.
 - Point d'application automatique : `src/squirrel/apis/loadServerConfig.js` (après chargement de `server_config.json`).
 

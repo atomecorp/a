@@ -16,7 +16,7 @@ Avant toute verification, lis et applique strictement:
 
 - `./todos/moelcule_sanitizer.md`
 - `./todos/panel_sanitizer.md`
-- `./src/application/eVe/documentations/Good practices.md`
+- `./eve/application/documentations/Good practices.md`
 
 Objectif: produire une verification fonctionnelle et DOM du panel Molecule / Mtracks, sans patch, sans fallback, sans shim, et sans recreer artificiellement les pistes si elles ne sont pas correctement chargees par le runtime existant.
 

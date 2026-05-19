@@ -10,6 +10,8 @@
 		34960420281861B500E13C15 /* atomeAudioUnit.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		34960427281861EE00E13C15 /* src in Resources */ = {isa = PBXBuildFile; fileRef = 34960426281861EE00E13C15 /* src */; };
 		34960428281861EE00E13C15 /* src in Resources */ = {isa = PBXBuildFile; fileRef = 34960426281861EE00E13C15 /* src */; };
+		6BARCH010000000000000003 /* eve in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eve */; };
+		6BARCH010000000000000004 /* eve in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eve */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +42,8 @@
 		349603E42818619000E13C15 /* atome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		349603FF281861B500E13C15 /* atomeAudioUnit.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = atomeAudioUnit.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		34960426281861EE00E13C15 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../../src; sourceTree = "<group>"; };
+		6BARCH000000000000000001 /* atome */ = {isa = PBXFileReference; lastKnownFileType = folder; name = atome; path = ../../../atome; sourceTree = "<group>"; };
+		6BARCH000000000000000002 /* eve */ = {isa = PBXFileReference; lastKnownFileType = folder; name = eve; path = ../../../eve; sourceTree = "<group>"; };
 		6BB7DA3B2D63233600CD6691 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		6BB7DA3C2D63233600CD6691 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -112,6 +116,8 @@
 			children = (
 				6B6B458B2D537B7800706498 /* Common */,
 				34960426281861EE00E13C15 /* src */,
+				6BARCH000000000000000001 /* atome */,
+				6BARCH000000000000000002 /* eve */,
 				6B864DBD2D5DDA74006DEA72 /* application */,
 				6B864DC82D5DDDD7006DEA72 /* auv3 */,
 				349603E52818619000E13C15 /* Products */,
@@ -139,6 +145,7 @@
 				349603E02818619000E13C15 /* Sources */,
 				349603E12818619000E13C15 /* Frameworks */,
 				349603E22818619000E13C15 /* Resources */,
+				6BARCH020000000000000001 /* Copy Atome Resource Root */,
 				34960424281861B500E13C15 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -162,6 +169,7 @@
 				349603FB281861B500E13C15 /* Sources */,
 				349603FC281861B500E13C15 /* Frameworks */,
 				349603FD281861B500E13C15 /* Resources */,
+				6BARCH020000000000000002 /* Copy Atome Resource Root */,
 			);
 			buildRules = (
 			);
@@ -218,6 +226,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				34960427281861EE00E13C15 /* src in Resources */,
+				6BARCH010000000000000003 /* eve in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -226,10 +235,48 @@
 			buildActionMask = 2147483647;
 			files = (
 				34960428281861EE00E13C15 /* src in Resources */,
+				6BARCH010000000000000004 /* eve in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		6BARCH020000000000000001 /* Copy Atome Resource Root */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../../atome",
+			);
+			name = "Copy Atome Resource Root";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\n";
+		};
+		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../../atome",
+			);
+			name = "Copy Atome Resource Root";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		349603E02818619000E13C15 /* Sources */ = {
@@ -295,7 +342,7 @@
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -363,7 +410,7 @@
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

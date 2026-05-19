@@ -5,7 +5,7 @@ Cette spec remplace les comportements divergents (main toolbox, bureau, panneaux
 et impose une seule source de verite pour creation, chargement, execution et historique.
 
 References:
-- `src/application/eVe/documentations/tools.md`
+- `eve/application/documentations/tools.md`
 - `documentations/ADOLE.md`
 - `documentations/Adole Time Machine.md`
 

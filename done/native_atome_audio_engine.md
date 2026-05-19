@@ -28,7 +28,7 @@ Le seul cas où l'enregistrement ne peut pas être purement natif est le Web pur
   - `platforms/web/audio-wasm/src/lib.rs`
   - artefacts générés dans `src/wasm/`
 - Le fallback Web audio existe déjà côté eVe:
-  - `src/application/eVe/domains/media/api/audio_api.js`
+  - `eve/application/domains/media/api/audio_api.js`
   - `getUserMedia`
   - `AudioWorklet`
   - `MediaRecorder` fallback
@@ -52,7 +52,7 @@ Le seul cas où l'enregistrement ne peut pas être purement natif est le Web pur
 
 ### 3. Le bridge Tauri eVe/iPlug est fragile
 
-- `src/application/eVe/domains/media/api/audio_api.js` envoie actuellement le payload vers `window.__toDSP()` sous forme de chaîne JSON.
+- `eve/application/domains/media/api/audio_api.js` envoie actuellement le payload vers `window.__toDSP()` sous forme de chaîne JSON.
 - `src/application/audio_runtime/tauri_audio_bridge.js` transmet ce payload tel quel à `iplug_send`.
 - `src-tauri/src/iplug_bridge.rs` attend un objet JSON, pas une chaîne.
 - Il faut donc corriger ce chemin.
@@ -165,7 +165,7 @@ Actions:
 
 Code à écrire:
 
-- dans `src/application/eVe/domains/media/api/audio_api.js`
+- dans `eve/application/domains/media/api/audio_api.js`
   - supprimer l'envoi stringifié vers `window.__toDSP`
   - envoyer un objet JS natif
 
@@ -491,7 +491,7 @@ Pré-requis:
 
 ### Priorité 1
 
-- `src/application/eVe/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/audio_api.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
 - `src/application/audio_runtime/audio.facade.js`
 - `src/application/audio_runtime/backend.kira.js`
@@ -531,11 +531,11 @@ Il faut aussi ajouter une validation dédiée:
 
 Créer un dossier de fixtures audio déterministes:
 
-- `src/application/eVe/tests/fixtures/audio/impulse_1s_48k_mono.wav`
-- `src/application/eVe/tests/fixtures/audio/click_track_120bpm_48k_mono.wav`
-- `src/application/eVe/tests/fixtures/audio/sine_440_5s_48k_mono.wav`
-- `src/application/eVe/tests/fixtures/audio/voice_ref_16k_mono.wav`
-- `src/application/eVe/tests/fixtures/audio/stereo_pan_lr_48k.wav`
+- `eve/application/tests/fixtures/audio/impulse_1s_48k_mono.wav`
+- `eve/application/tests/fixtures/audio/click_track_120bpm_48k_mono.wav`
+- `eve/application/tests/fixtures/audio/sine_440_5s_48k_mono.wav`
+- `eve/application/tests/fixtures/audio/voice_ref_16k_mono.wav`
+- `eve/application/tests/fixtures/audio/stereo_pan_lr_48k.wav`
 
 But de chaque fixture:
 
@@ -549,10 +549,10 @@ But de chaque fixture:
 
 Créer un petit outillage de mesure:
 
-- `src/application/eVe/tests/audio/analyze_wav_alignment.mjs`
-- `src/application/eVe/tests/audio/build_audio_fixtures.mjs`
-- `src/application/eVe/tests/audio/assert_wav_props.mjs`
-- `src/application/eVe/tests/audio/run_native_audio_matrix.mjs`
+- `eve/application/tests/audio/analyze_wav_alignment.mjs`
+- `eve/application/tests/audio/build_audio_fixtures.mjs`
+- `eve/application/tests/audio/assert_wav_props.mjs`
+- `eve/application/tests/audio/run_native_audio_matrix.mjs`
 
 Responsabilités:
 
@@ -813,12 +813,12 @@ Approche pragmatique:
 
 ### Fichiers de test à créer
 
-- `src/application/eVe/tests/audio/analyze_wav_alignment.mjs`
-- `src/application/eVe/tests/audio/run_tauri_audio_playback_probe.mjs`
-- `src/application/eVe/tests/audio/run_tauri_audio_record_probe.mjs`
-- `src/application/eVe/tests/audio/run_tauri_audio_sync_probe.mjs`
-- `src/application/eVe/tests/audio/run_web_audio_capture_probe.mjs`
-- `src/application/eVe/tests/audio/fixtures/audio/README.md`
+- `eve/application/tests/audio/analyze_wav_alignment.mjs`
+- `eve/application/tests/audio/run_tauri_audio_playback_probe.mjs`
+- `eve/application/tests/audio/run_tauri_audio_record_probe.mjs`
+- `eve/application/tests/audio/run_tauri_audio_sync_probe.mjs`
+- `eve/application/tests/audio/run_web_audio_capture_probe.mjs`
+- `eve/application/tests/audio/fixtures/audio/README.md`
 - `platforms/ios/atome-auv3/auv3/tests/AudioEngineHostTests.swift`
 - `platforms/ios/atome-auv3/auv3/tests/AudioEngineSyncTests.swift`
 

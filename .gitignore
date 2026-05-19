@@ -71,7 +71,7 @@ deploy/certs/*
 deploy/renew_cert_hook.sh
 server/certificates/
 !server/certificates/.gitkeep
-!src/application/security/trusted_keys.js
+!atome/security/trusted_keys.js
 
 # Server data files (sensitive)
 server/data/
@@ -84,4 +84,4 @@ src-tauri/gen/schemas/acl-manifests.json
 src-tauri/gen/schemas/desktop-schema.json
 src/assets/videos/avengers.mp4
 platforms/ios/atome-auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
-src/application/eVe
+eve/application

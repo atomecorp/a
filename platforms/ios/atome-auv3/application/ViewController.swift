@@ -929,6 +929,12 @@ final class FullscreenWebViewController: UIViewController {
         // Configure WKWebView with earliest possible black styling
         let config = WKWebViewConfiguration()
         let ucc = config.userContentController
+        if #available(iOS 11.0, *) {
+            config.websiteDataStore = .default()
+        }
+        if FeatureFlags.registerCustomScheme {
+            config.setURLSchemeHandler(AudioSchemeHandler(), forURLScheme: "atome")
+        }
         config.allowsInlineMediaPlayback = true
         if #available(iOS 10.0, *) {
             config.mediaTypesRequiringUserActionForPlayback = [.audio]

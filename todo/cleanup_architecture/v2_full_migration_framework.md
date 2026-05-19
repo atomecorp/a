@@ -23,21 +23,21 @@ Les traces V1 encore actives sont principalement des bridges de compatibilite:
 
 ## Fichiers detectes (prioritaires)
 
-1. `src/application/eVe/intuition/eVeIntuition.js`
-2. `src/application/eVe/intuition/matrix/core/matrix_runtime.js`
-3. `src/application/eVe/intuition/tools/user.js`
-4. `src/application/eVe/intuition/tools/infos.js`
-5. `src/application/eVe/intuition/tools/communication.js`
-6. `src/application/eVe/intuition/tools/activities.js`
-7. `src/application/eVe/intuition/tools/mtrack.js`
-8. `src/application/eVe/intuition/tools/core/tool_reveal_behavior.js`
-9. `src/application/eVe/intuition/tools/perform.js`
-10. `src/application/eVe/intuition/tools/capture.js`
-11. `src/application/eVe/intuition/tools/debug.js`
-12. `src/application/eVe/intuition/tools/project_drop.js`
-13. `src/application/eVe/intuition/tools/core/tool_runtime.js`
-14. `src/application/eVe/intuition/contracts/contracts.js`
-15. `src/application/eVe/intuition/contracts/index.js`
+1. `eve/application/intuition/eVeIntuition.js`
+2. `eve/application/intuition/matrix/core/matrix_runtime.js`
+3. `eve/application/intuition/tools/user.js`
+4. `eve/application/intuition/tools/infos.js`
+5. `eve/application/intuition/tools/communication.js`
+6. `eve/application/intuition/tools/activities.js`
+7. `eve/application/intuition/tools/mtrack.js`
+8. `eve/application/intuition/tools/core/tool_reveal_behavior.js`
+9. `eve/application/intuition/tools/perform.js`
+10. `eve/application/intuition/tools/capture.js`
+11. `eve/application/intuition/tools/debug.js`
+12. `eve/application/intuition/tools/project_drop.js`
+13. `eve/application/intuition/tools/core/tool_runtime.js`
+14. `eve/application/intuition/contracts/contracts.js`
+15. `eve/application/intuition/contracts/index.js`
 
 ## Plan de finalisation V2 (a faire)
 
@@ -85,7 +85,7 @@ en noms neutres/V2 coherents dans:
 
 ## 7. Isoler ou retirer le legacy hors runtime
 
-[ ] Verifier que `src/application/eVe/intuition___prev` n est jamais importe en runtime.
+[ ] Verifier que `eve/application/intuition___prev` n est jamais importe en runtime.
 [ ] Deplacer en archive/documentation si necessaire pour eviter toute confusion.
 
 ## 8. Ajouter garde-fous CI anti regression V1
@@ -96,12 +96,12 @@ en noms neutres/V2 coherents dans:
 
 ## Definition of Done (100% V2)
 
-Les commandes suivantes doivent retourner 0 occurrence dans `src/application/eVe/intuition` (hors `intuition_prev`):
+Les commandes suivantes doivent retourner 0 occurrence dans `eve/application/intuition` (hors `intuition_prev`):
 
-1. `rg "eveGoeyMenuApi" src/application/eVe/intuition --glob '!src/application/eVe/intuition___prev/**'`
-2. `rg "\\bnew_menu\\b|window\\.new_menu\\b" src/application/eVe/intuition --glob '!src/application/eVe/intuition___prev/**'`
-3. `rg -P "_intuition_(?!v2_)" src/application/eVe/intuition --glob '!src/application/eVe/intuition___prev/**'`
-4. `rg "TOOL_INSTANCE_CONTRACT_V1|TOOL_SKIN_CONTRACT_V1" src/application/eVe/intuition --glob '!src/application/eVe/intuition___prev/**'`
+1. `rg "eveGoeyMenuApi" eve/application/intuition --glob '!eve/application/intuition___prev/**'`
+2. `rg "\\bnew_menu\\b|window\\.new_menu\\b" eve/application/intuition --glob '!eve/application/intuition___prev/**'`
+3. `rg -P "_intuition_(?!v2_)" eve/application/intuition --glob '!eve/application/intuition___prev/**'`
+4. `rg "TOOL_INSTANCE_CONTRACT_V1|TOOL_SKIN_CONTRACT_V1" eve/application/intuition --glob '!eve/application/intuition___prev/**'`
 
 En complement:
 

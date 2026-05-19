@@ -44,7 +44,7 @@ L'image finale est produite dans `./output/atome-<profile>-<arch>-<date>.img`.
 ## Arborescence
 
 ```
-atome-os/builder/
+platforms/atomeOS/builder/
 ├── README.md
 ├── Makefile                    # raccourcis make amd64 / make arm64 / make dev ...
 ├── core/

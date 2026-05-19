@@ -1912,7 +1912,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
 
         // Security: Define allowed and protected paths
-        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'src/application/security'];
+        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'atome/security'];
         const allowedFiles = ['src/version.json']; // Fichiers spécifiques autorisés
         const protectedPrefixes = ['src/application/examples', 'src/application/config'];
 
@@ -1990,7 +1990,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             });
         }
 
-        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'src/application/security'];
+        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'atome/security'];
         const allowedFiles = ['src/version.json'];
         const protectedPrefixes = ['src/application/examples', 'src/application/config'];
 

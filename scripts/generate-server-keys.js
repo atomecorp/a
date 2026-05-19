@@ -179,7 +179,7 @@ async function main() {
 
     // Generate trusted_keys.js entry
     console.log('────────────────────────────────────────────────────────────────');
-    console.log('📝 Add this entry to src/application/security/trusted_keys.js:');
+    console.log('📝 Add this entry to atome/security/trusted_keys.js:');
     console.log('');
     console.log(`    '${serverId}': {`);
     console.log(`        name: '${serverName}',`);

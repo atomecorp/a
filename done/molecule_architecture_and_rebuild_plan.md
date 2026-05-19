@@ -782,9 +782,9 @@ Objectif: stabiliser les donnees, les medias et l historique avant la timeline.
 
 Taches:
 
-1. [DONE] Creer un module `project_store` (`src/application/eVe/core/project_store/`).
-2. [DONE] Creer un module `event_store` (`src/application/eVe/core/event_store/`).
-3. [DONE] Creer un module `media_store` (`src/application/eVe/core/media_store/`).
+1. [DONE] Creer un module `project_store` (`eve/application/core/project_store/`).
+2. [DONE] Creer un module `event_store` (`eve/application/core/event_store/`).
+3. [DONE] Creer un module `media_store` (`eve/application/core/media_store/`).
 4. [DONE] Definir l API canonique (API figee, erreurs typees, adapter memoire de reference).
 5. [TODO M1b] Brancher browser (adapter reel sur le backend canonique choisi au boot).
 6. [TODO M1b] Brancher Tauri desktop.
@@ -815,7 +815,7 @@ Objectif: obtenir un moteur timeline pur et testable.
 
 Taches:
 
-1. [DONE] Creer le dossier `src/application/eVe/intuition/tools/molecule` (sous-dossier `kernel/`).
+1. [DONE] Creer le dossier `eve/application/intuition/tools/molecule` (sous-dossier `kernel/`).
 2. [DONE] Ajouter les schemas `MoleculeTimeline`, `Track`, `Clip` (`kernel/schemas.js`).
 3. [DONE] Ajouter validateurs de schema (validateTimeline/Track/Clip/ClipSource).
 4. [DONE] Ajouter reducers purs pour add/move/resize/split/delete (`kernel/reducers.js`).
@@ -1222,7 +1222,7 @@ Objectif: diagnostiquer vite sur iOS sans accumuler du bruit permanent dans le c
 Le fichier de reference est:
 
 ```text
-src/application/eVe/documentations/debug_UI.md
+eve/application/documentations/debug_UI.md
 ```
 
 Regle:

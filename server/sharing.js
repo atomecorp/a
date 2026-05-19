@@ -17,7 +17,7 @@ import { pushNotificationToUserStack } from './notificationStack.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { wsSendJsonToUser } from './wsApiState.js';
 import { broadcastAtomeCreate } from './atomeRealtime.js';
-import { isPublicAccess } from '../src/shared/recipient_access.js';
+import { isPublicAccess } from '../atome/shared/recipient_access.js';
 
 /**
  * Permission levels (bitmask compatible)

@@ -15,7 +15,7 @@ is the duration stored in the timeline.
 
 ## Affected file
 
-`src/application/eVe/domains/mtrax/media/element_runtime.js`
+`eve/application/domains/mtrax/media/element_runtime.js`
 (factory `createMediaElementRuntime`)
 
 ---

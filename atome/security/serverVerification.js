@@ -18,7 +18,7 @@
  * - Fingerprint matching identifies official servers
  * - Public key pinning prevents MITM attacks
  * 
- * @module src/application/security/serverVerification
+ * @module atome/security/serverVerification
  */
 
 import {

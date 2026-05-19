@@ -42,7 +42,7 @@ Ce modele doit etre supprime pour les previews integrees aux outils.
 
 Creer un module unique responsable du cycle de vie video :
 
-`src/application/eVe/domains/media/api/video_recording_controller.js`
+`eve/application/domains/media/api/video_recording_controller.js`
 
 Responsabilites :
 
@@ -72,7 +72,7 @@ Interdit :
 
 Creer un module unique de preview web :
 
-`src/application/eVe/domains/media/preview/video_preview_renderer.js`
+`eve/application/domains/media/preview/video_preview_renderer.js`
 
 Responsabilites :
 
@@ -89,7 +89,7 @@ Le preview doit etre une partie normale du DOM. Les events restent donc geres pa
 
 Creer un renderer WebGPU dedie :
 
-`src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+`eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
 
 Responsabilites :
 

@@ -29,69 +29,69 @@ This report is generated from a deterministic static scan. It separates confirme
 
 ## Oversized Files Above 1000 Lines
 
-- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
-- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `eve/application/intuition/eVeIntuition.js`: 18547 lines
+- `eve/application/intuition/tools/project_drop.js`: 8833 lines
 - `src/squirrel/components/intuition_builder/index.js`: 7130 lines
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
-- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `eve/application/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `eve/application/intuition/tools/user.js`: 5815 lines
 - `src-tauri/src/server/mod.rs`: 5587 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
-- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `eve/application/intuition/runtime/tool_genesis.js`: 5337 lines
+- `eve/application/intuition/tools/communication.js`: 4951 lines
 - `src/application/examples/user.js`: 4899 lines
 - `server/server.js`: 4849 lines
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
 - `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
-- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
-- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `eve/application/intuition/ribbon/menu.js`: 4074 lines
+- `eve/application/elements/eVe_look.js`: 4064 lines
 - `src-tauri/src/server/local_atome.rs`: 3649 lines
-- `src/application/eVe/elements/design.js`: 3510 lines
+- `eve/application/elements/design.js`: 3510 lines
 - `src/application/lyrix/index.js`: 3452 lines
 - `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
-- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
-- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
-- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `eve/application/intuition/tools/mtrack.js`: 2943 lines
+- `eve/application/domains/media/api/video_api.js`: 2809 lines
+- `eve/application/intuition/tools/finder.js`: 2683 lines
 - `src/application/jeezs/index.js`: 2612 lines
-- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `eve/application/intuition/tools/infos.js`: 2600 lines
 - `src/squirrel/atome/mcp.js`: 2568 lines
-- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `eve/application/intuition/tools/detail.js`: 2496 lines
 - `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
 - `database/adole.js`: 2343 lines
 - `server/auth.js`: 2281 lines
 - `src/application/examples/ios_file_browser.js`: 2189 lines
-- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `eve/application/core/atome_commit.js`: 2184 lines
 - `tests/application/examples/ios_file_browser.js`: 2153 lines
 - `src/squirrel/voice/tool_router.js`: 2151 lines
-- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `eve/application/domains/media/api/audio_api.js`: 2135 lines
 - `src/application/lyrix/src/components/ui.js`: 2079 lines
 - `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
-- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
-- `src/application/eVe/documentations/strangler.md`: 2046 lines
-- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
-- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `eve/application/intuition/tools/capture.js`: 2053 lines
+- `eve/application/documentations/strangler.md`: 2046 lines
+- `eve/application/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `eve/application/intuition/tools/contact.js`: 1929 lines
 - `src/squirrel/voice/orchestrator.js`: 1898 lines
-- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
-- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `eve/application/intuition/tools/selection_style_apply.js`: 1893 lines
+- `eve/application/domains/media/asset_box.js`: 1889 lines
 - `src/application/lyrix/src/components/settings.js`: 1873 lines
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `eve/application/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
 - `src/application/examples/record_audio.js`: 1813 lines
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
 - `tests/comprehensive_campaign.test.mjs`: 1675 lines
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `eve/application/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
 - `src/application/examples/menus.js`: 1643 lines
 - `tests/application/examples/menus.js`: 1643 lines
-- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `eve/application/intuition/tools/calendar.js`: 1638 lines
 - `src/squirrel/atome/atome.js`: 1595 lines
-- `src/application/eVe/intuition/tools/background.js`: 1573 lines
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `eve/application/intuition/tools/background.js`: 1573 lines
+- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
 - `src/application/examples/record_video_UI.js`: 1518 lines
-- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `eve/application/intuition/menu/core/toolbox_runtime.js`: 1503 lines
 - `src/squirrel/components/editor_builder.js`: 1503 lines
-- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `eve/application/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
 - `tests/application/examples/record_video_UI.js`: 1489 lines
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
 - `src/squirrel/components/matrix_builder.js`: 1430 lines
@@ -99,82 +99,82 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
 - `src/squirrel/ai/default_tools.js`: 1424 lines
 - `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
-- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `eve/application/intuition/tools/perform.js`: 1360 lines
+- `eve/application/domains/mtrax/api/window_api_runtime.js`: 1348 lines
 - `src/squirrel/components/button_builder.js`: 1348 lines
-- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `eve/application/core/atome_timeline.js`: 1329 lines
 - `src/application/examples/messages.js`: 1300 lines
-- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `eve/application/concept/eVe.html`: 1298 lines
 - `src/application/aBox/index.js`: 1283 lines
-- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
-- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+- `eve/application/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `eve/application/todo/eVe_AI.md`: 1260 lines
 
 ## Oversized Files Above 800 Lines
 
-- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
-- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `eve/application/intuition/eVeIntuition.js`: 18547 lines
+- `eve/application/intuition/tools/project_drop.js`: 8833 lines
 - `src/squirrel/components/intuition_builder/index.js`: 7130 lines
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
-- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `eve/application/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `eve/application/intuition/tools/user.js`: 5815 lines
 - `src-tauri/src/server/mod.rs`: 5587 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
-- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `eve/application/intuition/runtime/tool_genesis.js`: 5337 lines
+- `eve/application/intuition/tools/communication.js`: 4951 lines
 - `src/application/examples/user.js`: 4899 lines
 - `server/server.js`: 4849 lines
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
 - `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
-- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
-- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `eve/application/intuition/ribbon/menu.js`: 4074 lines
+- `eve/application/elements/eVe_look.js`: 4064 lines
 - `src-tauri/src/server/local_atome.rs`: 3649 lines
-- `src/application/eVe/elements/design.js`: 3510 lines
+- `eve/application/elements/design.js`: 3510 lines
 - `src/application/lyrix/index.js`: 3452 lines
 - `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
-- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
-- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
-- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `eve/application/intuition/tools/mtrack.js`: 2943 lines
+- `eve/application/domains/media/api/video_api.js`: 2809 lines
+- `eve/application/intuition/tools/finder.js`: 2683 lines
 - `src/application/jeezs/index.js`: 2612 lines
-- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `eve/application/intuition/tools/infos.js`: 2600 lines
 - `src/squirrel/atome/mcp.js`: 2568 lines
-- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `eve/application/intuition/tools/detail.js`: 2496 lines
 - `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
 - `database/adole.js`: 2343 lines
 - `server/auth.js`: 2281 lines
 - `src/application/examples/ios_file_browser.js`: 2189 lines
-- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `eve/application/core/atome_commit.js`: 2184 lines
 - `tests/application/examples/ios_file_browser.js`: 2153 lines
 - `src/squirrel/voice/tool_router.js`: 2151 lines
-- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `eve/application/domains/media/api/audio_api.js`: 2135 lines
 - `src/application/lyrix/src/components/ui.js`: 2079 lines
 - `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
-- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
-- `src/application/eVe/documentations/strangler.md`: 2046 lines
-- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
-- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `eve/application/intuition/tools/capture.js`: 2053 lines
+- `eve/application/documentations/strangler.md`: 2046 lines
+- `eve/application/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `eve/application/intuition/tools/contact.js`: 1929 lines
 - `src/squirrel/voice/orchestrator.js`: 1898 lines
-- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
-- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `eve/application/intuition/tools/selection_style_apply.js`: 1893 lines
+- `eve/application/domains/media/asset_box.js`: 1889 lines
 - `src/application/lyrix/src/components/settings.js`: 1873 lines
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `eve/application/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
 - `src/application/examples/record_audio.js`: 1813 lines
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
 - `tests/comprehensive_campaign.test.mjs`: 1675 lines
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `eve/application/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
 - `src/application/examples/menus.js`: 1643 lines
 - `tests/application/examples/menus.js`: 1643 lines
-- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `eve/application/intuition/tools/calendar.js`: 1638 lines
 - `src/squirrel/atome/atome.js`: 1595 lines
-- `src/application/eVe/intuition/tools/background.js`: 1573 lines
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `eve/application/intuition/tools/background.js`: 1573 lines
+- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
 - `src/application/examples/record_video_UI.js`: 1518 lines
-- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `eve/application/intuition/menu/core/toolbox_runtime.js`: 1503 lines
 - `src/squirrel/components/editor_builder.js`: 1503 lines
-- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `eve/application/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
 - `tests/application/examples/record_video_UI.js`: 1489 lines
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
 - `src/squirrel/components/matrix_builder.js`: 1430 lines
@@ -182,82 +182,82 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
 - `src/squirrel/ai/default_tools.js`: 1424 lines
 - `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
-- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `eve/application/intuition/tools/perform.js`: 1360 lines
+- `eve/application/domains/mtrax/api/window_api_runtime.js`: 1348 lines
 - `src/squirrel/components/button_builder.js`: 1348 lines
-- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `eve/application/core/atome_timeline.js`: 1329 lines
 - `src/application/examples/messages.js`: 1300 lines
-- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `eve/application/concept/eVe.html`: 1298 lines
 - `src/application/aBox/index.js`: 1283 lines
-- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
-- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+- `eve/application/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `eve/application/todo/eVe_AI.md`: 1260 lines
 
 ## Oversized Files Above 500 Lines
 
-- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
-- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `eve/application/intuition/eVeIntuition.js`: 18547 lines
+- `eve/application/intuition/tools/project_drop.js`: 8833 lines
 - `src/squirrel/components/intuition_builder/index.js`: 7130 lines
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
-- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `eve/application/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `eve/application/intuition/tools/user.js`: 5815 lines
 - `src-tauri/src/server/mod.rs`: 5587 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
-- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `eve/application/intuition/runtime/tool_genesis.js`: 5337 lines
+- `eve/application/intuition/tools/communication.js`: 4951 lines
 - `src/application/examples/user.js`: 4899 lines
 - `server/server.js`: 4849 lines
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
 - `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
-- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
-- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `eve/application/intuition/ribbon/menu.js`: 4074 lines
+- `eve/application/elements/eVe_look.js`: 4064 lines
 - `src-tauri/src/server/local_atome.rs`: 3649 lines
-- `src/application/eVe/elements/design.js`: 3510 lines
+- `eve/application/elements/design.js`: 3510 lines
 - `src/application/lyrix/index.js`: 3452 lines
 - `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
-- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
-- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
-- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `eve/application/intuition/tools/mtrack.js`: 2943 lines
+- `eve/application/domains/media/api/video_api.js`: 2809 lines
+- `eve/application/intuition/tools/finder.js`: 2683 lines
 - `src/application/jeezs/index.js`: 2612 lines
-- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `eve/application/intuition/tools/infos.js`: 2600 lines
 - `src/squirrel/atome/mcp.js`: 2568 lines
-- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `eve/application/intuition/tools/detail.js`: 2496 lines
 - `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
 - `database/adole.js`: 2343 lines
 - `server/auth.js`: 2281 lines
 - `src/application/examples/ios_file_browser.js`: 2189 lines
-- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `eve/application/core/atome_commit.js`: 2184 lines
 - `tests/application/examples/ios_file_browser.js`: 2153 lines
 - `src/squirrel/voice/tool_router.js`: 2151 lines
-- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `eve/application/domains/media/api/audio_api.js`: 2135 lines
 - `src/application/lyrix/src/components/ui.js`: 2079 lines
 - `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
-- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
-- `src/application/eVe/documentations/strangler.md`: 2046 lines
-- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
-- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `eve/application/intuition/tools/capture.js`: 2053 lines
+- `eve/application/documentations/strangler.md`: 2046 lines
+- `eve/application/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `eve/application/intuition/tools/contact.js`: 1929 lines
 - `src/squirrel/voice/orchestrator.js`: 1898 lines
-- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
-- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `eve/application/intuition/tools/selection_style_apply.js`: 1893 lines
+- `eve/application/domains/media/asset_box.js`: 1889 lines
 - `src/application/lyrix/src/components/settings.js`: 1873 lines
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `eve/application/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
 - `src/application/examples/record_audio.js`: 1813 lines
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
 - `tests/comprehensive_campaign.test.mjs`: 1675 lines
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `eve/application/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
 - `src/application/examples/menus.js`: 1643 lines
 - `tests/application/examples/menus.js`: 1643 lines
-- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `eve/application/intuition/tools/calendar.js`: 1638 lines
 - `src/squirrel/atome/atome.js`: 1595 lines
-- `src/application/eVe/intuition/tools/background.js`: 1573 lines
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `eve/application/intuition/tools/background.js`: 1573 lines
+- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
 - `src/application/examples/record_video_UI.js`: 1518 lines
-- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `eve/application/intuition/menu/core/toolbox_runtime.js`: 1503 lines
 - `src/squirrel/components/editor_builder.js`: 1503 lines
-- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `eve/application/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
 - `tests/application/examples/record_video_UI.js`: 1489 lines
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
 - `src/squirrel/components/matrix_builder.js`: 1430 lines
@@ -265,82 +265,82 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
 - `src/squirrel/ai/default_tools.js`: 1424 lines
 - `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
-- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `eve/application/intuition/tools/perform.js`: 1360 lines
+- `eve/application/domains/mtrax/api/window_api_runtime.js`: 1348 lines
 - `src/squirrel/components/button_builder.js`: 1348 lines
-- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `eve/application/core/atome_timeline.js`: 1329 lines
 - `src/application/examples/messages.js`: 1300 lines
-- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `eve/application/concept/eVe.html`: 1298 lines
 - `src/application/aBox/index.js`: 1283 lines
-- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
-- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+- `eve/application/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `eve/application/todo/eVe_AI.md`: 1260 lines
 
 ## Oversized Files Above 300 Lines
 
-- `src/application/eVe/intuition/eVeIntuition.js`: 18547 lines
-- `src/application/eVe/intuition/tools/project_drop.js`: 8833 lines
+- `eve/application/intuition/eVeIntuition.js`: 18547 lines
+- `eve/application/intuition/tools/project_drop.js`: 8833 lines
 - `src/squirrel/components/intuition_builder/index.js`: 7130 lines
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`: 5958 lines
-- `src/application/eVe/intuition/tools/user.js`: 5815 lines
+- `eve/application/intuition/tools/core/tool_runtime.js`: 5958 lines
+- `eve/application/intuition/tools/user.js`: 5815 lines
 - `src-tauri/src/server/mod.rs`: 5587 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js`: 5337 lines
-- `src/application/eVe/intuition/tools/communication.js`: 4951 lines
+- `eve/application/intuition/runtime/tool_genesis.js`: 5337 lines
+- `eve/application/intuition/tools/communication.js`: 4951 lines
 - `src/application/examples/user.js`: 4899 lines
 - `server/server.js`: 4849 lines
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`: 4516 lines
 - `src/application/lyrix/src/features/lyrics/display.js`: 4351 lines
-- `src/application/eVe/intuition/ribbon/menu.js`: 4074 lines
-- `src/application/eVe/elements/eVe_look.js`: 4064 lines
+- `eve/application/intuition/ribbon/menu.js`: 4074 lines
+- `eve/application/elements/eVe_look.js`: 4064 lines
 - `src-tauri/src/server/local_atome.rs`: 3649 lines
-- `src/application/eVe/elements/design.js`: 3510 lines
+- `eve/application/elements/design.js`: 3510 lines
 - `src/application/lyrix/index.js`: 3452 lines
 - `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`: 3365 lines
-- `src/application/eVe/intuition/tools/mtrack.js`: 2943 lines
-- `src/application/eVe/domains/media/api/video_api.js`: 2809 lines
-- `src/application/eVe/intuition/tools/finder.js`: 2683 lines
+- `eve/application/intuition/tools/mtrack.js`: 2943 lines
+- `eve/application/domains/media/api/video_api.js`: 2809 lines
+- `eve/application/intuition/tools/finder.js`: 2683 lines
 - `src/application/jeezs/index.js`: 2612 lines
-- `src/application/eVe/intuition/tools/infos.js`: 2600 lines
+- `eve/application/intuition/tools/infos.js`: 2600 lines
 - `src/squirrel/atome/mcp.js`: 2568 lines
-- `src/application/eVe/intuition/tools/detail.js`: 2496 lines
+- `eve/application/intuition/tools/detail.js`: 2496 lines
 - `todos/eve_atome_master_cleanup_plan.md`: 2480 lines
 - `database/adole.js`: 2343 lines
 - `server/auth.js`: 2281 lines
 - `src/application/examples/ios_file_browser.js`: 2189 lines
-- `src/application/eVe/core/atome_commit.js`: 2184 lines
+- `eve/application/core/atome_commit.js`: 2184 lines
 - `tests/application/examples/ios_file_browser.js`: 2153 lines
 - `src/squirrel/voice/tool_router.js`: 2151 lines
-- `src/application/eVe/domains/media/api/audio_api.js`: 2135 lines
+- `eve/application/domains/media/api/audio_api.js`: 2135 lines
 - `src/application/lyrix/src/components/ui.js`: 2079 lines
 - `platforms/ios/atome-auv3/auv3/utils.swift`: 2067 lines
-- `src/application/eVe/intuition/tools/capture.js`: 2053 lines
-- `src/application/eVe/documentations/strangler.md`: 2046 lines
-- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`: 2012 lines
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
-- `src/application/eVe/intuition/tools/contact.js`: 1929 lines
+- `eve/application/intuition/tools/capture.js`: 2053 lines
+- `eve/application/documentations/strangler.md`: 2046 lines
+- `eve/application/intuition/matrix/core/matrix_runtime.js`: 2012 lines
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`: 1965 lines
+- `eve/application/intuition/tools/contact.js`: 1929 lines
 - `src/squirrel/voice/orchestrator.js`: 1898 lines
-- `src/application/eVe/intuition/tools/selection_style_apply.js`: 1893 lines
-- `src/application/eVe/domains/media/asset_box.js`: 1889 lines
+- `eve/application/intuition/tools/selection_style_apply.js`: 1893 lines
+- `eve/application/domains/media/asset_box.js`: 1889 lines
 - `src/application/lyrix/src/components/settings.js`: 1873 lines
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
+- `eve/application/domains/mtrax/media/record_capture_runtime.js`: 1828 lines
 - `src/application/examples/record_audio.js`: 1813 lines
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
 - `tests/comprehensive_campaign.test.mjs`: 1675 lines
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
+- `eve/application/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
 - `src/application/examples/menus.js`: 1643 lines
 - `tests/application/examples/menus.js`: 1643 lines
-- `src/application/eVe/intuition/tools/calendar.js`: 1638 lines
+- `eve/application/intuition/tools/calendar.js`: 1638 lines
 - `src/squirrel/atome/atome.js`: 1595 lines
-- `src/application/eVe/intuition/tools/background.js`: 1573 lines
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
+- `eve/application/intuition/tools/background.js`: 1573 lines
+- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`: 1548 lines
 - `src/application/examples/record_video_UI.js`: 1518 lines
-- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`: 1503 lines
+- `eve/application/intuition/menu/core/toolbox_runtime.js`: 1503 lines
 - `src/squirrel/components/editor_builder.js`: 1503 lines
-- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
+- `eve/application/intuition/tools/contextual/flower_menu_context.js`: 1495 lines
 - `tests/application/examples/record_video_UI.js`: 1489 lines
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift`: 1468 lines
 - `src/squirrel/components/matrix_builder.js`: 1430 lines
@@ -348,16 +348,16 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/lyrix/src/components/songLibraryModal.js`: 1427 lines
 - `src/squirrel/ai/default_tools.js`: 1424 lines
 - `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`: 1405 lines
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
-- `src/application/eVe/intuition/tools/perform.js`: 1360 lines
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`: 1348 lines
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`: 1376 lines
+- `eve/application/intuition/tools/perform.js`: 1360 lines
+- `eve/application/domains/mtrax/api/window_api_runtime.js`: 1348 lines
 - `src/squirrel/components/button_builder.js`: 1348 lines
-- `src/application/eVe/core/atome_timeline.js`: 1329 lines
+- `eve/application/core/atome_timeline.js`: 1329 lines
 - `src/application/examples/messages.js`: 1300 lines
-- `src/application/eVe/concept/eVe.html`: 1298 lines
+- `eve/application/concept/eVe.html`: 1298 lines
 - `src/application/aBox/index.js`: 1283 lines
-- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
-- `src/application/eVe/todo/eVe_AI.md`: 1260 lines
+- `eve/application/domains/mtrax/timeline/group_timeline_load_runtime.js`: 1274 lines
+- `eve/application/todo/eVe_AI.md`: 1260 lines
 
 ## Empty Files
 
@@ -396,27 +396,27 @@ This report is generated from a deterministic static scan. It separates confirme
 
 ## Duplicate Filename Groups
 
-- `index.js`: `database/index.js`, `dev/daemon/index.js`, `src/application/aBox/index.js`, `src/application/eVe/core/event_store/index.js`, `src/application/eVe/core/media_engine/index.js`, `src/application/eVe/core/media_store/index.js`, `src/application/eVe/core/project_store/index.js`, `src/application/eVe/intuition/atome/index.js`, `src/application/eVe/intuition/atome/visual/index.js`, `src/application/eVe/intuition/components/index.js`, `src/application/eVe/intuition/components/ui/index.js`, `src/application/eVe/intuition/components/visual/index.js`, `src/application/eVe/intuition/contracts/index.js`, `src/application/eVe/intuition/flower/index.js`, `src/application/eVe/intuition/index.js`, `src/application/eVe/intuition/matrix/core/index.js`, `src/application/eVe/intuition/matrix/index.js`, `src/application/eVe/intuition/matrix/ui/index.js`, `src/application/eVe/intuition/matrix/visual/index.js`, `src/application/eVe/intuition/menu/index.js`, `src/application/eVe/intuition/panels/index.js`, `src/application/eVe/intuition/panels/ui/index.js`, `src/application/eVe/intuition/panels/visual/index.js`, `src/application/eVe/intuition/runtime/index.js`, `src/application/eVe/intuition/tools/imports_exports/index.js`, `src/application/eVe/intuition/tools/index.js`, `src/application/eVe/intuition/tools/molecule/gestures/index.js`, `src/application/eVe/intuition/tools/molecule/index.js`, `src/application/eVe/intuition/tools/molecule/kernel/index.js`, `src/application/eVe/intuition/tools/molecule/media/index.js`, `src/application/eVe/intuition/tools/molecule/multi_instance/index.js`, `src/application/eVe/intuition/tools/molecule/nested/index.js`, `src/application/eVe/intuition/tools/molecule/panel/index.js`, `src/application/eVe/intuition/tools/molecule/persistence/index.js`, `src/application/eVe/intuition/tools/molecule/recording/index.js`, `src/application/eVe/intuition/tools/molecule/session/index.js`, `src/application/eVe/intuition/tools/ui/index.js`, `src/application/eVe/intuition/tools/visual/index.js`, `src/application/index.js`, `src/application/jeezs/index.js`, `src/application/lyrix/index.js`, `src/application/vie/index.js`, `src/squirrel/bank/index.js`, `src/squirrel/calendar/index.js`, `src/squirrel/components/intuition_builder/index.js`, `src/squirrel/contacts/index.js`, `src/squirrel/mail/index.js`, `src/squirrel/security/index.js`, `src/squirrel/voice/index.js`
-- `README.md`: `README.md`, `atome-os/builder/README.md`, `atome-os/builder/installer/desktop/README.md`, `atome-os/builder/installer/sbc/README.md`, `platforms/ios/atome-auv3/README.md`, `server/README.md`, `src/application/eVe/README.md`, `src/application/eVe/concept/README.md`
-- `bootstrap.js`: `src/application/eVe/intuition/bootstrap.js`, `src/squirrel/bank/bootstrap.js`, `src/squirrel/calendar/bootstrap.js`, `src/squirrel/contacts/bootstrap.js`, `src/squirrel/mail/bootstrap.js`, `src/squirrel/security/bootstrap.js`, `src/squirrel/voice/bootstrap.js`
+- `index.js`: `database/index.js`, `dev/daemon/index.js`, `src/application/aBox/index.js`, `eve/application/core/event_store/index.js`, `eve/application/core/media_engine/index.js`, `eve/application/core/media_store/index.js`, `eve/application/core/project_store/index.js`, `eve/application/intuition/atome/index.js`, `eve/application/intuition/atome/visual/index.js`, `eve/application/intuition/components/index.js`, `eve/application/intuition/components/ui/index.js`, `eve/application/intuition/components/visual/index.js`, `eve/application/intuition/contracts/index.js`, `eve/application/intuition/flower/index.js`, `eve/application/intuition/index.js`, `eve/application/intuition/matrix/core/index.js`, `eve/application/intuition/matrix/index.js`, `eve/application/intuition/matrix/ui/index.js`, `eve/application/intuition/matrix/visual/index.js`, `eve/application/intuition/menu/index.js`, `eve/application/intuition/panels/index.js`, `eve/application/intuition/panels/ui/index.js`, `eve/application/intuition/panels/visual/index.js`, `eve/application/intuition/runtime/index.js`, `eve/application/intuition/tools/imports_exports/index.js`, `eve/application/intuition/tools/index.js`, `eve/application/intuition/tools/molecule/gestures/index.js`, `eve/application/intuition/tools/molecule/index.js`, `eve/application/intuition/tools/molecule/kernel/index.js`, `eve/application/intuition/tools/molecule/media/index.js`, `eve/application/intuition/tools/molecule/multi_instance/index.js`, `eve/application/intuition/tools/molecule/nested/index.js`, `eve/application/intuition/tools/molecule/panel/index.js`, `eve/application/intuition/tools/molecule/persistence/index.js`, `eve/application/intuition/tools/molecule/recording/index.js`, `eve/application/intuition/tools/molecule/session/index.js`, `eve/application/intuition/tools/ui/index.js`, `eve/application/intuition/tools/visual/index.js`, `src/application/index.js`, `src/application/jeezs/index.js`, `src/application/lyrix/index.js`, `src/application/vie/index.js`, `src/squirrel/bank/index.js`, `src/squirrel/calendar/index.js`, `src/squirrel/components/intuition_builder/index.js`, `src/squirrel/contacts/index.js`, `src/squirrel/mail/index.js`, `src/squirrel/security/index.js`, `src/squirrel/voice/index.js`
+- `README.md`: `README.md`, `atome-os/builder/README.md`, `atome-os/builder/installer/desktop/README.md`, `atome-os/builder/installer/sbc/README.md`, `platforms/ios/atome-auv3/README.md`, `server/README.md`, `eve/application/README.md`, `eve/application/concept/README.md`
+- `bootstrap.js`: `eve/application/intuition/bootstrap.js`, `src/squirrel/bank/bootstrap.js`, `src/squirrel/calendar/bootstrap.js`, `src/squirrel/contacts/bootstrap.js`, `src/squirrel/mail/bootstrap.js`, `src/squirrel/security/bootstrap.js`, `src/squirrel/voice/bootstrap.js`
 - `bootstrap.test.mjs`: `src/squirrel/bank/bootstrap.test.mjs`, `src/squirrel/calendar/bootstrap.test.mjs`, `src/squirrel/contacts/bootstrap.test.mjs`, `src/squirrel/mail/bootstrap.test.mjs`, `src/squirrel/security/bootstrap.test.mjs`, `src/squirrel/voice/bootstrap.test.mjs`
-- `errors.js`: `src/application/eVe/core/event_store/errors.js`, `src/application/eVe/core/media_store/errors.js`, `src/application/eVe/core/project_store/errors.js`, `src/application/eVe/intuition/tools/molecule/kernel/errors.js`, `src/application/eVe/intuition/tools/molecule/session/errors.js`
-- `style.js`: `src/application/eVe/intuition/atome/image/visual/style.js`, `src/application/eVe/intuition/atome/shape/visual/style.js`, `src/application/eVe/intuition/atome/text/visual/style.js`, `src/application/eVe/intuition/atome/video/visual/style.js`, `src/application/lyrix/src/components/style.js`
+- `errors.js`: `eve/application/core/event_store/errors.js`, `eve/application/core/media_store/errors.js`, `eve/application/core/project_store/errors.js`, `eve/application/intuition/tools/molecule/kernel/errors.js`, `eve/application/intuition/tools/molecule/session/errors.js`
+- `style.js`: `eve/application/intuition/atome/image/visual/style.js`, `eve/application/intuition/atome/shape/visual/style.js`, `eve/application/intuition/atome/text/visual/style.js`, `eve/application/intuition/atome/video/visual/style.js`, `src/application/lyrix/src/components/style.js`
 - `service.js`: `src/squirrel/bank/service.js`, `src/squirrel/calendar/service.js`, `src/squirrel/contacts/service.js`, `src/squirrel/mail/service.js`, `src/squirrel/voice/service.js`
 - `service.test.mjs`: `src/squirrel/bank/service.test.mjs`, `src/squirrel/calendar/service.test.mjs`, `src/squirrel/contacts/service.test.mjs`, `src/squirrel/mail/service.test.mjs`, `src/squirrel/voice/service.test.mjs`
 - `Contents.json`: `platforms/ios/atome-auv3/application/Assets.xcassets/AccentColor.colorset/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/AppIcon.appiconset/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/LaunchLogo.imageset/Contents.json`
-- `api.js`: `src/application/eVe/core/event_store/api.js`, `src/application/eVe/core/media_store/api.js`, `src/application/eVe/core/project_store/api.js`, `src/application/eVe/intuition/matrix/core/api.js`
-- `constants.js`: `src/application/eVe/domains/mtrax/shared/constants.js`, `src/application/eVe/intuition/contracts/constants.js`, `src/application/eVe/intuition/matrix/core/constants.js`, `src/application/lyrix/src/core/constants.js`
-- `menu.js`: `src/application/eVe/intuition/flower/menu.js`, `src/application/eVe/intuition/ribbon/menu.js`, `src/application/lyrix/src/intuition/menu.js`, `src/application/vie/menu.js`
-- `shortcut.js`: `src/application/eVe/intuition/tools/config/shortcut.js`, `src/application/examples/shortcut.js`, `src/squirrel/apis/shortcut.js`, `tests/application/examples/shortcut.js`
+- `api.js`: `eve/application/core/event_store/api.js`, `eve/application/core/media_store/api.js`, `eve/application/core/project_store/api.js`, `eve/application/intuition/matrix/core/api.js`
+- `constants.js`: `eve/application/domains/mtrax/shared/constants.js`, `eve/application/intuition/contracts/constants.js`, `eve/application/intuition/matrix/core/constants.js`, `src/application/lyrix/src/core/constants.js`
+- `menu.js`: `eve/application/intuition/flower/menu.js`, `eve/application/intuition/ribbon/menu.js`, `src/application/lyrix/src/intuition/menu.js`, `src/application/vie/menu.js`
+- `shortcut.js`: `eve/application/intuition/tools/config/shortcut.js`, `src/application/examples/shortcut.js`, `src/squirrel/apis/shortcut.js`, `tests/application/examples/shortcut.js`
 - `connector_contract.js`: `src/squirrel/bank/connector_contract.js`, `src/squirrel/calendar/connector_contract.js`, `src/squirrel/contacts/connector_contract.js`, `src/squirrel/mail/connector_contract.js`
 - `shell.js`: `server/shell.js`, `src/application/examples/shell.js`, `tests/application/examples/shell.js`
 - `visio.js`: `server/visio.js`, `src/application/examples/visio.js`, `tests/application/examples/visio.js`
-- `memory_adapter.js`: `src/application/eVe/core/event_store/memory_adapter.js`, `src/application/eVe/core/media_store/memory_adapter.js`, `src/application/eVe/core/project_store/memory_adapter.js`
-- `bootstrap_runtime.js`: `src/application/eVe/domains/mtrax/core/bootstrap_runtime.js`, `src/application/eVe/domains/mtrax/integration/bootstrap_runtime.js`, `src/application/eVe/domains/mtrax/karaoke/bootstrap_runtime.js`
-- `state.js`: `src/application/eVe/intuition/core/state.js`, `src/application/eVe/intuition/matrix/core/state.js`, `src/squirrel/components/intuition_builder/state.js`
-- `runtime.js`: `src/application/eVe/intuition/footer/runtime.js`, `src/application/eVe/intuition/tools/molecule/runtime.js`, `src/squirrel/apis/unified/adole_api/runtime.js`
-- `AI.js`: `src/application/eVe/intuition/tools/AI.js`, `src/application/examples/AI.js`, `tests/application/examples/AI.js`
+- `memory_adapter.js`: `eve/application/core/event_store/memory_adapter.js`, `eve/application/core/media_store/memory_adapter.js`, `eve/application/core/project_store/memory_adapter.js`
+- `bootstrap_runtime.js`: `eve/application/domains/mtrax/core/bootstrap_runtime.js`, `eve/application/domains/mtrax/integration/bootstrap_runtime.js`, `eve/application/domains/mtrax/karaoke/bootstrap_runtime.js`
+- `state.js`: `eve/application/intuition/core/state.js`, `eve/application/intuition/matrix/core/state.js`, `src/squirrel/components/intuition_builder/state.js`
+- `runtime.js`: `eve/application/intuition/footer/runtime.js`, `eve/application/intuition/tools/molecule/runtime.js`, `src/squirrel/apis/unified/adole_api/runtime.js`
+- `AI.js`: `eve/application/intuition/tools/AI.js`, `src/application/examples/AI.js`, `tests/application/examples/AI.js`
 - `atome.js`: `src/application/examples/atome.js`, `src/squirrel/atome/atome.js`, `tests/application/examples/atome.js`
 - `audio.js`: `src/application/examples/audio.js`, `src/application/lyrix/src/features/audio/audio.js`, `tests/application/examples/audio.js`
 - `leaflet.js`: `src/application/examples/leaflet.js`, `src/js/leaflet.js`, `tests/application/examples/leaflet.js`
@@ -426,16 +426,16 @@ This report is generated from a deterministic static scan. It separates confirme
 - `build.sh`: `atome-os/builder/core/build.sh`, `platforms/web/audio-wasm/build.sh`
 - `audio.yml`: `atome-os/builder/packages/audio.yml`, `atome-os/builder/profiles/audio.yml`
 - `adole.js`: `database/adole.js`, `src/squirrel/apis/unified/adole.js`
-- `atome_object.md`: `documentations/atome_object.md`, `src/application/eVe/documentations/atome_object.md`
+- `atome_object.md`: `documentations/atome_object.md`, `eve/application/documentations/atome_object.md`
 - `URLOpener.swift`: `platforms/ios/atome-auv3/Common/URLOpener.swift`, `platforms/ios/shared/URLLaunching/URLOpener.swift`
 - `config.toml`: `platforms/web/audio-wasm/.cargo/config.toml`, `src-tauri/.cargo/config.toml`
 - `Cargo.toml`: `platforms/web/audio-wasm/Cargo.toml`, `src-tauri/Cargo.toml`
 - `lib.rs`: `platforms/web/audio-wasm/src/lib.rs`, `src-tauri/src/lib.rs`
 - `auth.js`: `server/auth.js`, `src/squirrel/apis/unified/adole_api/auth.js`
 - `sharing.js`: `server/sharing.js`, `src/squirrel/apis/unified/adole_api/sharing.js`
-- `primitives.js`: `src/application/eVe/core/atome_events/primitives.js`, `src/application/eVe/domains/mtrax/shared/primitives.js`
-- `selection_context_runtime.js`: `src/application/eVe/core/atome_events/selection_context_runtime.js`, `src/application/eVe/domains/mtrax/clips/selection_context_runtime.js`
-- `tools.md`: `src/application/eVe/documentations/tools.md`, `src/application/eVe/tests/Todos/tools.md`
+- `primitives.js`: `eve/application/core/atome_events/primitives.js`, `eve/application/domains/mtrax/shared/primitives.js`
+- `selection_context_runtime.js`: `eve/application/core/atome_events/selection_context_runtime.js`, `eve/application/domains/mtrax/clips/selection_context_runtime.js`
+- `tools.md`: `eve/application/documentations/tools.md`, `eve/application/tests/Todos/tools.md`
 
 ## Inconsistent Casing Groups
 
@@ -574,30 +574,30 @@ This report is generated from a deterministic static scan. It separates confirme
 - `platforms/ios/atome-auv3/Common/WKWebViewFactory.swift`
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift`
 - `platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
-- `src/application/eVe/todo/AI_integration_problems_to_solve.md`
-- `src/application/eVe/todo/AUDIT.md`
-- `src/application/eVe/todo/Full_vocal_AI_integration.md`
-- `src/application/eVe/todo/MCP_voice_control.md`
-- `src/application/eVe/todo/MTraX_edition.md`
-- `src/application/eVe/todo/Midi_implementation.md`
-- `src/application/eVe/todo/Mtracks_engine.md`
-- `src/application/eVe/todo/apple_mail_security.md`
-- `src/application/eVe/todo/atome_midi_binding_system.md`
-- `src/application/eVe/todo/audio_engine_migration.md`
-- `src/application/eVe/todo/cpal_Kira_integration.md`
-- `src/application/eVe/todo/eVe_AI.md`
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
-- `src/application/eVe/todo/native_atome_audio_engine.md`
-- `src/application/eVe/todo/new Mtrax engine.md`
-- `src/application/eVe/todo/ribbon_menu_conversion_plan/conversion_plan.md`
-- `src/application/eVe/todo/ribbon_menu_conversion_plan/implementation_status.md`
-- `src/application/eVe/todo/social network tool.md`
-- `src/application/eVe/todo/strict_dry_menu_refactor_plan.md`
-- `src/application/eVe/todo/tool_monitor.md`
-- `src/application/eVe/todo/tools monitoring.md`
-- `src/application/eVe/todo/urgent.md`
-- `src/application/eVe/todo/v2_full_migration_framework.md`
-- `src/application/eVe/todo/vector editing layer.md`
+- `eve/application/todo/AI_integration_problems_to_solve.md`
+- `eve/application/todo/AUDIT.md`
+- `eve/application/todo/Full_vocal_AI_integration.md`
+- `eve/application/todo/MCP_voice_control.md`
+- `eve/application/todo/MTraX_edition.md`
+- `eve/application/todo/Midi_implementation.md`
+- `eve/application/todo/Mtracks_engine.md`
+- `eve/application/todo/apple_mail_security.md`
+- `eve/application/todo/atome_midi_binding_system.md`
+- `eve/application/todo/audio_engine_migration.md`
+- `eve/application/todo/cpal_Kira_integration.md`
+- `eve/application/todo/eVe_AI.md`
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`
+- `eve/application/todo/native_atome_audio_engine.md`
+- `eve/application/todo/new Mtrax engine.md`
+- `eve/application/todo/ribbon_menu_conversion_plan/conversion_plan.md`
+- `eve/application/todo/ribbon_menu_conversion_plan/implementation_status.md`
+- `eve/application/todo/social network tool.md`
+- `eve/application/todo/strict_dry_menu_refactor_plan.md`
+- `eve/application/todo/tool_monitor.md`
+- `eve/application/todo/tools monitoring.md`
+- `eve/application/todo/urgent.md`
+- `eve/application/todo/v2_full_migration_framework.md`
+- `eve/application/todo/vector editing layer.md`
 - `src/utils/ios_runtime.js`
 - `src/utils/module_loader_runtime.js`
 - `src/utils/perf_runtime.js`
@@ -617,13 +617,13 @@ This report is generated from a deterministic static scan. It separates confirme
 - `documentations/get_tempo.md`
 - `documentations/tempo_regression_fix.md`
 - `scripts/fix_node_modules.sh`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/domains/mtrax/preview/preview_frame_dispatch_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_transform_patch_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_automation_patch_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_playback_patch_runtime.js`
-- `src/application/eVe/domains/mtrax/visual/patch_apply_runtime.js`
-- `src/application/eVe/domains/mtrax/visual/patch_helpers.js`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/domains/mtrax/preview/preview_frame_dispatch_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_transform_patch_runtime.js`
+- `eve/application/domains/mtrax/project/project_automation_patch_runtime.js`
+- `eve/application/domains/mtrax/project/project_playback_patch_runtime.js`
+- `eve/application/domains/mtrax/visual/patch_apply_runtime.js`
+- `eve/application/domains/mtrax/visual/patch_helpers.js`
 - `src/squirrel/components/template_builder.js`
 - `tests/probes/atome_persistence_probe.test.mjs`
 - `tests/probes/audio_recording_quick_capture_probe.test.mjs`
@@ -662,83 +662,83 @@ This report is generated from a deterministic static scan. It separates confirme
 
 ## Long Function Candidates
 
-- `src/application/eVe/intuition/eVeIntuition.js:12430`: approx. 5573 lines
+- `eve/application/intuition/eVeIntuition.js:12430`: approx. 5573 lines
 - `server/server.js:893`: approx. 3909 lines
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js:1636`: approx. 2880 lines
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js:1636`: approx. 2880 lines
 - `server/server.js:2337`: approx. 2310 lines
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js:40`: approx. 1925 lines
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js:11`: approx. 1817 lines
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js:40`: approx. 1925 lines
+- `eve/application/domains/mtrax/media/record_capture_runtime.js:11`: approx. 1817 lines
 - `src/application/examples/record_audio.js:7`: approx. 1806 lines
-- `src/application/eVe/domains/media/api/audio_api.js:242`: approx. 1722 lines
+- `eve/application/domains/media/api/audio_api.js:242`: approx. 1722 lines
 - `tests/application/examples/record_audio.js:7`: approx. 1691 lines
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js:34`: approx. 1514 lines
+- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js:34`: approx. 1514 lines
 - `src/application/examples/record_video_UI.js:4`: approx. 1514 lines
 - `tests/application/examples/record_video_UI.js:4`: approx. 1485 lines
 - `server/auth.js:819`: approx. 1448 lines
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js:4`: approx. 1344 lines
+- `eve/application/domains/mtrax/api/window_api_runtime.js:4`: approx. 1344 lines
 - `src/squirrel/components/editor_builder.js:167`: approx. 1284 lines
-- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js:4`: approx. 1270 lines
+- `eve/application/domains/mtrax/timeline/group_timeline_load_runtime.js:4`: approx. 1270 lines
 - `src/squirrel/ai/default_tools.js:177`: approx. 1245 lines
-- `src/application/eVe/intuition/menu/core/toolbox_runtime.js:260`: approx. 1241 lines
-- `src/application/eVe/domains/mtrax/media/element_runtime.js:10`: approx. 1199 lines
-- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js:11`: approx. 1177 lines
-- `src/application/eVe/domains/mtrax/ui/styles.js:19`: approx. 1140 lines
+- `eve/application/intuition/menu/core/toolbox_runtime.js:260`: approx. 1241 lines
+- `eve/application/domains/mtrax/media/element_runtime.js:10`: approx. 1199 lines
+- `eve/application/domains/mtrax/transport/transport_gestures_runtime.js:11`: approx. 1177 lines
+- `eve/application/domains/mtrax/ui/styles.js:19`: approx. 1140 lines
 - `tests/probes/eve_ai_mcp_visual_validation.test.mjs:41`: approx. 1122 lines
 - `src/application/examples/AI.js:1`: approx. 1099 lines
 - `tests/application/examples/AI.js:1`: approx. 1099 lines
 - `src/application/lyrix/src/components/songLibraryModal.js:261`: approx. 1094 lines
-- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js:16`: approx. 981 lines
-- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js:232`: approx. 950 lines
-- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js:3`: approx. 912 lines
-- `src/application/eVe/core/atome_events/drag_runtime.js:47`: approx. 905 lines
+- `eve/application/domains/mtrax/clips/node_render_runtime.js:16`: approx. 981 lines
+- `eve/application/domains/mtrax/transport/transport_gestures_runtime.js:232`: approx. 950 lines
+- `eve/application/domains/mtrax/preview/preview_frame_data_runtime.js:3`: approx. 912 lines
+- `eve/application/core/atome_events/drag_runtime.js:47`: approx. 905 lines
 - `src/application/jeezs/index.js:217`: approx. 903 lines
 - `server/atomeRoutes.orm.js:308`: approx. 843 lines
 - `server/server.js:3730`: approx. 827 lines
-- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js:165`: approx. 827 lines
+- `eve/application/domains/mtrax/clips/node_render_runtime.js:165`: approx. 827 lines
 - `server/visio.js:68`: approx. 787 lines
 - `src/squirrel/components/console_builder.js:200`: approx. 772 lines
 - `src/squirrel/voice/tool_router.js:659`: approx. 766 lines
 - `server/server.js:3788`: approx. 758 lines
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_runtime.js:18`: approx. 758 lines
+- `eve/application/domains/mtrax/audio/hmtracks_native_audio_runtime.js:18`: approx. 758 lines
 - `src/application/examples/record_video.js:5`: approx. 743 lines
-- `src/application/eVe/intuition/tools/core/hmtracks_audio_engine_v1.js:213`: approx. 724 lines
-- `src/application/eVe/core/atome_events/project_layer_runtime.js:152`: approx. 716 lines
+- `eve/application/intuition/tools/core/hmtracks_audio_engine_v1.js:213`: approx. 724 lines
+- `eve/application/core/atome_events/project_layer_runtime.js:152`: approx. 716 lines
 - `tests/application/examples/record_video.js:5`: approx. 714 lines
-- `src/application/eVe/domains/mtrax/timeline/persist_runtime.js:3`: approx. 707 lines
+- `eve/application/domains/mtrax/timeline/persist_runtime.js:3`: approx. 707 lines
 - `src/squirrel/voice/tool_router.js:724`: approx. 700 lines
-- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js:18`: approx. 694 lines
+- `eve/application/domains/mtrax/clips/deletion_runtime.js:18`: approx. 694 lines
 - `src/application/examples/ios_file_browser.js:1479`: approx. 685 lines
 - `tests/application/examples/ios_file_browser.js:1443`: approx. 685 lines
 - `tests/probes/eve_llm_e2e_suite.test.mjs:198`: approx. 681 lines
-- `src/application/eVe/domains/mtrax/media/position_runtime.js:6`: approx. 676 lines
-- `src/application/eVe/domains/mtrax/ui/controls_runtime.js:1`: approx. 660 lines
-- `src/application/eVe/domains/mtrax/tracks/render_tracks_runtime.js:3`: approx. 649 lines
+- `eve/application/domains/mtrax/media/position_runtime.js:6`: approx. 676 lines
+- `eve/application/domains/mtrax/ui/controls_runtime.js:1`: approx. 660 lines
+- `eve/application/domains/mtrax/tracks/render_tracks_runtime.js:3`: approx. 649 lines
 - `src/application/lyrix/src/components/settings.js:1064`: approx. 648 lines
 - `src/application/lyrix/index.js:2262`: approx. 647 lines
-- `src/application/eVe/domains/mtrax/clips/split_join_runtime.js:10`: approx. 635 lines
+- `eve/application/domains/mtrax/clips/split_join_runtime.js:10`: approx. 635 lines
 - `src/squirrel/components/button_builder.js:559`: approx. 633 lines
 - `src/application/lyrix/src/components/settings.js:436`: approx. 626 lines
 - `src/application/examples/audio.js:9`: approx. 595 lines
 - `tests/application/examples/audio.js:9`: approx. 595 lines
-- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js:1`: approx. 591 lines
+- `eve/application/domains/mtrax/preview/preview_poster_capture_runtime.js:1`: approx. 591 lines
 - `src/squirrel/voice/panel.js:113`: approx. 587 lines
-- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js:7`: approx. 582 lines
-- `src/application/eVe/intuition/eVeIntuition.js:15520`: approx. 581 lines
+- `eve/application/domains/mtrax/media/authorized_playback_runtime.js:7`: approx. 582 lines
+- `eve/application/intuition/eVeIntuition.js:15520`: approx. 581 lines
 - `src/application/lyrix/index.js:2328`: approx. 573 lines
-- `src/application/eVe/intuition/tools/detail.js:42`: approx. 571 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js:4402`: approx. 569 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js:4408`: approx. 563 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js:1595`: approx. 549 lines
+- `eve/application/intuition/tools/detail.js:42`: approx. 571 lines
+- `eve/application/intuition/runtime/tool_genesis.js:4402`: approx. 569 lines
+- `eve/application/intuition/runtime/tool_genesis.js:4408`: approx. 563 lines
+- `eve/application/intuition/runtime/tool_genesis.js:1595`: approx. 549 lines
 - `src/application/examples/visio.js:4`: approx. 548 lines
 - `tests/application/examples/visio.js:4`: approx. 548 lines
 - `src/application/examples/record_audio_UI.js:6`: approx. 547 lines
 - `tests/application/examples/record_audio_UI.js:6`: approx. 547 lines
-- `src/application/eVe/domains/mtrax/media/position_runtime.js:131`: approx. 546 lines
+- `eve/application/domains/mtrax/media/position_runtime.js:131`: approx. 546 lines
 - `server/server.js:3185`: approx. 543 lines
-- `src/application/eVe/domains/mtrax/timeline/play_runtime.js:472`: approx. 541 lines
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js:1239`: approx. 536 lines
-- `src/application/eVe/intuition/runtime/tool_genesis.js:4426`: approx. 534 lines
-- `src/application/eVe/intuition/eVeIntuition.js:18013`: approx. 532 lines
+- `eve/application/domains/mtrax/timeline/play_runtime.js:472`: approx. 541 lines
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js:1239`: approx. 536 lines
+- `eve/application/intuition/runtime/tool_genesis.js:4426`: approx. 534 lines
+- `eve/application/intuition/eVeIntuition.js:18013`: approx. 532 lines
 - `src/squirrel/components/slider_builder.js:270`: approx. 532 lines
 - `tests/probes/tauri_recorded_video_mtrack_probe.test.mjs:223`: approx. 530 lines
 - `server/server.js:3193`: approx. 524 lines
@@ -921,16 +921,16 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/audio.facade.js`
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/kira_audio_commands.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/documentations/atome_object.md`
-- `src/application/eVe/documentations/eve_structure_audit.md`
-- `src/application/eVe/documentations/mail_v1_architecture.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/eVe.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/todo/audio_engine_migration.md`
-- `src/application/eVe/todo/cpal_Kira_integration.md`
-- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/documentations/atome_object.md`
+- `eve/application/documentations/eve_structure_audit.md`
+- `eve/application/documentations/mail_v1_architecture.md`
+- `eve/application/documentations/strangler.md`
+- `eve/eve/application.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/todo/audio_engine_migration.md`
+- `eve/application/todo/cpal_Kira_integration.md`
+- `eve/application/todo/native_atome_audio_engine.md`
 - `src/application/index.js`
 - `src/squirrel/voice/service.test.mjs`
 
@@ -941,16 +941,16 @@ This report is generated from a deterministic static scan. It separates confirme
 - `scripts/phase9_ui_regression_suite.mjs`
 - `server/mailRoutes.js`
 - `server/mailRoutes.test.mjs`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/done.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/documentations/tools_cahier_des_charges.md`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/intuition/tools/core/tool_interaction.finder_action_mapping.test.mjs`
-- `src/application/eVe/intuition/tools/project_drop.js`
-- `src/application/eVe/todo/eVe_AI.md`
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/done.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/documentations/tools_cahier_des_charges.md`
+- `eve/eve/application_essentials.md`
+- `eve/application/intuition/tools/core/tool_interaction.finder_action_mapping.test.mjs`
+- `eve/application/intuition/tools/project_drop.js`
+- `eve/application/todo/eVe_AI.md`
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`
 - `src/application/thermUSS/infra_en.md`
 - `src/application/thermUSS/infra_fr.md`
 - `tests/probes/eve_business_validation.test.mjs`
@@ -971,30 +971,30 @@ This report is generated from a deterministic static scan. It separates confirme
 - `scripts/check_molecule_guardrails.mjs`
 - `server/wsApiState.js`
 - `src/application/audio_runtime/audio.facade.js`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/atome_object.md`
-- `src/application/eVe/documentations/done.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/intuition/runtime/tool.js`
-- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/intuition/tools/finder.js`
-- `src/application/eVe/intuition/tools/molecule/multi_instance/index.js`
-- `src/application/eVe/intuition/tools/molecule/session/index.js`
-- `src/application/eVe/intuition/tools/molecule/session/registry.js`
-- `src/application/eVe/intuition/tools/perform.js`
-- `src/application/eVe/todo/Full_vocal_AI_integration.md`
-- `src/application/eVe/todo/MCP_voice_control.md`
-- `src/application/eVe/todo/eVe_AI.md`
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
-- `src/application/eVe/todo/strict_dry_menu_refactor_plan.md`
-- `src/application/security/trusted_keys.js`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/atome_object.md`
+- `eve/application/documentations/done.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/preview/native_frame_video_preview_renderer.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/intuition/runtime/tool.js`
+- `eve/application/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/intuition/tools/finder.js`
+- `eve/application/intuition/tools/molecule/multi_instance/index.js`
+- `eve/application/intuition/tools/molecule/session/index.js`
+- `eve/application/intuition/tools/molecule/session/registry.js`
+- `eve/application/intuition/tools/perform.js`
+- `eve/application/todo/Full_vocal_AI_integration.md`
+- `eve/application/todo/MCP_voice_control.md`
+- `eve/application/todo/eVe_AI.md`
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`
+- `eve/application/todo/strict_dry_menu_refactor_plan.md`
+- `atome/security/trusted_keys.js`
 - `src/squirrel/ai/model_catalog_registry.test.mjs`
 - `src/squirrel/apis/essentials.js`
 - `src/squirrel/apis/shortcut.js`
@@ -1069,26 +1069,26 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/runtime_audio_backend.js`
 - `src/application/audio_runtime/stt_api.js`
-- `src/application/eVe/concept/freebsd.html`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/core/media_engine/molecule.webgpu.js`
-- `src/application/eVe/core/molecule_store_bootstrap.js`
-- `src/application/eVe/core/project_store/api.js`
-- `src/application/eVe/core/project_store/memory_adapter.js`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/api/video_recording_controller.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
+- `eve/application/concept/freebsd.html`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/core/media_engine/molecule.webgpu.js`
+- `eve/application/core/molecule_store_bootstrap.js`
+- `eve/application/core/project_store/api.js`
+- `eve/application/core/project_store/memory_adapter.js`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/media_api_shared.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/api/video_recording_controller.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/preview/native_frame_video_preview_renderer.js`
+- `eve/application/domains/media/preview/video_preview_renderer.js`
+- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
 
 ### dispatchers
 
@@ -1112,30 +1112,30 @@ This report is generated from a deterministic static scan. It separates confirme
 - `scripts/bundle.js`
 - `src/application/audio_runtime/audio.facade.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `src/application/eVe/concept/correction.md`
-- `src/application/eVe/documentations/Good practices.md`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/atome_object.md`
-- `src/application/eVe/documentations/done.md`
-- `src/application/eVe/documentations/failure_modes_v1.md`
-- `src/application/eVe/documentations/realtime_sync_architecture.md`
-- `src/application/eVe/documentations/runtime_ai_mcp_entrypoints.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/domains/mtrax/timeline/playback_frame_update_runtime.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/runtime/command_bus.js`
-- `src/application/eVe/intuition/runtime/index.js`
-- `src/application/eVe/intuition/runtime/tool_genesis.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
-- `src/application/eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/intuition/tools/project_bootstrap.js`
-- `src/application/eVe/todo/AUDIT.md`
-- `src/application/eVe/todo/Full_vocal_AI_integration.md`
-- `src/application/eVe/todo/Midi_implementation.md`
-- `src/application/eVe/todo/eVe_AI.md`
+- `eve/application/concept/correction.md`
+- `eve/application/documentations/Good practices.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/atome_object.md`
+- `eve/application/documentations/done.md`
+- `eve/application/documentations/failure_modes_v1.md`
+- `eve/application/documentations/realtime_sync_architecture.md`
+- `eve/application/documentations/runtime_ai_mcp_entrypoints.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/domains/mtrax/timeline/playback_frame_update_runtime.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/runtime/command_bus.js`
+- `eve/application/intuition/runtime/index.js`
+- `eve/application/intuition/runtime/tool_genesis.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `eve/application/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/intuition/tools/project_bootstrap.js`
+- `eve/application/todo/AUDIT.md`
+- `eve/application/todo/Full_vocal_AI_integration.md`
+- `eve/application/todo/Midi_implementation.md`
+- `eve/application/todo/eVe_AI.md`
 - `src/application/examples/ios_apis.js`
 - `src/application/examples/user.js`
 - `src/js/codemirror.bundle.js`
@@ -1192,58 +1192,58 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/record_audio_api.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/atome_events/drag_runtime.js`
-- `src/application/eVe/core/atome_events/project_layer_runtime.js`
-- `src/application/eVe/core/atome_events/resize_runtime.js`
-- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/text_edit_runtime.js`
-- `src/application/eVe/core/atome_events/trace_runtime.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/event_bus.js`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/documentations/realtime_sync_architecture.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/api/video_recording_controller.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
-- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_engine_runtime.js`
-- `src/application/eVe/domains/mtrax/automation/clip_lane_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/media_play_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/project_duplication_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/selection_bridge_runtime.js`
-- `src/application/eVe/domains/mtrax/core/diagnostics.js`
-- `src/application/eVe/domains/mtrax/core/runtime_frame_eval.js`
-- `src/application/eVe/domains/mtrax/integration/bridge_drop_bootstrap_runtime.js`
-- `src/application/eVe/domains/mtrax/integration/interaction_bootstrap_runtime.js`
-- `src/application/eVe/domains/mtrax/integration/tool_gateway_result_runtime.js`
-- `src/application/eVe/domains/mtrax/media/element_runtime.js`
-- `src/application/eVe/domains/mtrax/media/position_runtime.js`
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_draw_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_edit_bridges_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_file_drop_bridge.js`
-- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_interaction_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_metadata_events_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_metadata_retry.test.mjs`
-- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_text_create_runtime.js`
-- `src/application/eVe/domains/mtrax/project/commit_bridge_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_atome_drop_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_atome_timeline_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_local_drag_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_playback_mirror_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_playback_patch_runtime.js`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/atome_events/drag_runtime.js`
+- `eve/application/core/atome_events/project_layer_runtime.js`
+- `eve/application/core/atome_events/resize_runtime.js`
+- `eve/application/core/atome_events/selection_bootstrap_runtime.js`
+- `eve/application/core/atome_events/text_edit_runtime.js`
+- `eve/application/core/atome_events/trace_runtime.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/event_bus.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/documentations/realtime_sync_architecture.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/api/video_recording_controller.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
+- `eve/application/domains/mtrax/api/transport_api_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_engine_runtime.js`
+- `eve/application/domains/mtrax/automation/clip_lane_runtime.js`
+- `eve/application/domains/mtrax/clips/deletion_runtime.js`
+- `eve/application/domains/mtrax/clips/media_play_runtime.js`
+- `eve/application/domains/mtrax/clips/node_render_runtime.js`
+- `eve/application/domains/mtrax/clips/project_duplication_runtime.js`
+- `eve/application/domains/mtrax/clips/selection_bridge_runtime.js`
+- `eve/application/domains/mtrax/core/diagnostics.js`
+- `eve/application/domains/mtrax/core/runtime_frame_eval.js`
+- `eve/application/domains/mtrax/integration/bridge_drop_bootstrap_runtime.js`
+- `eve/application/domains/mtrax/integration/interaction_bootstrap_runtime.js`
+- `eve/application/domains/mtrax/integration/tool_gateway_result_runtime.js`
+- `eve/application/domains/mtrax/media/element_runtime.js`
+- `eve/application/domains/mtrax/media/position_runtime.js`
+- `eve/application/domains/mtrax/media/record_capture_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_draw_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_edit_bridges_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_file_drop_bridge.js`
+- `eve/application/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_interaction_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_metadata_events_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_metadata_retry.test.mjs`
+- `eve/application/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_text_create_runtime.js`
+- `eve/application/domains/mtrax/project/commit_bridge_runtime.js`
+- `eve/application/domains/mtrax/project/project_atome_drop_runtime.js`
+- `eve/application/domains/mtrax/project/project_atome_timeline_runtime.js`
+- `eve/application/domains/mtrax/project/project_local_drag_runtime.js`
+- `eve/application/domains/mtrax/project/project_playback_mirror_runtime.js`
+- `eve/application/domains/mtrax/project/project_playback_patch_runtime.js`
 
 ### stateStores
 
@@ -1511,71 +1511,71 @@ This report is generated from a deterministic static scan. It separates confirme
 - `scripts/install_dependencies.sh`
 - `scripts/phase9_mcp_runtime_suite.mjs`
 - `scripts/setup/bootstrap.sh`
-- `src/application/eVe/concept/correction.md`
-- `src/application/eVe/concept/eVe.html`
-- `src/application/eVe/core/atome_events/placement_runtime.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/documentations/Atome Time Machine.md`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/atome_object.md`
-- `src/application/eVe/documentations/bank_v1_architecture.md`
-- `src/application/eVe/documentations/calendar_v1_architecture.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/desktop_manual_validation_checklist.md`
-- `src/application/eVe/documentations/done.md`
-- `src/application/eVe/documentations/failure_modes_v1.md`
-- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
-- `src/application/eVe/documentations/mail_v1_architecture.md`
-- `src/application/eVe/documentations/runtime_ai_mcp_entrypoints.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/documentations/tools_cahier_des_charges.md`
-- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
-- `src/application/eVe/domains/mtrax/recording/schedule_utils.js`
-- `src/application/eVe/domains/mtrax/tracks/render_tracks_runtime.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/intuition/components/core/component_creator.js`
-- `src/application/eVe/intuition/contracts/constants.js`
-- `src/application/eVe/intuition/contracts/contracts.js`
-- `src/application/eVe/intuition/contracts/index.js`
-- `src/application/eVe/intuition/contracts/validator.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/flower/menu.js`
-- `src/application/eVe/intuition/footer/runtime.js`
-- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`
-- `src/application/eVe/intuition/matrix/core/project_data.js`
-- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`
-- `src/application/eVe/intuition/panels/core/panel_creator.js`
-- `src/application/eVe/intuition/projection/tool_strip.js`
-- `src/application/eVe/intuition/ribbon/menu.js`
-- `src/application/eVe/intuition/runtime/command_bus.js`
-- `src/application/eVe/intuition/runtime/history_policy.js`
-- `src/application/eVe/intuition/runtime/selection.js`
-- `src/application/eVe/intuition/runtime/tool.js`
-- `src/application/eVe/intuition/runtime/tool_gateway.js`
-- `src/application/eVe/intuition/shared/group_state_runtime.js`
-- `src/application/eVe/intuition/shared/tool_drag.js`
-- `src/application/eVe/intuition/tools/AI.js`
-- `src/application/eVe/intuition/tools/activities.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/clock.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/contextual/flower_menu_visual.js`
-- `src/application/eVe/intuition/tools/copy.js`
-- `src/application/eVe/intuition/tools/core/finder_tools_projection.js`
-- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
-- `src/application/eVe/intuition/tools/core/svg_vector_edit_runtime.js`
-- `src/application/eVe/intuition/tools/core/tool_definition_ssot.long_press.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_instances.js`
-- `src/application/eVe/intuition/tools/core/tool_interaction.js`
-- `src/application/eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_latch_aliases.js`
-- `src/application/eVe/intuition/tools/core/tool_latch_aliases.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_registry.js`
-- `src/application/eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `eve/application/concept/correction.md`
+- `eve/application/concept/eVe.html`
+- `eve/application/core/atome_events/placement_runtime.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/documentations/Atome Time Machine.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/atome_object.md`
+- `eve/application/documentations/bank_v1_architecture.md`
+- `eve/application/documentations/calendar_v1_architecture.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/desktop_manual_validation_checklist.md`
+- `eve/application/documentations/done.md`
+- `eve/application/documentations/failure_modes_v1.md`
+- `eve/application/documentations/mail_contact_calendar_and AI.md`
+- `eve/application/documentations/mail_v1_architecture.md`
+- `eve/application/documentations/runtime_ai_mcp_entrypoints.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/documentations/tools_cahier_des_charges.md`
+- `eve/application/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `eve/application/domains/mtrax/recording/schedule_utils.js`
+- `eve/application/domains/mtrax/tracks/render_tracks_runtime.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/intuition/components/core/component_creator.js`
+- `eve/application/intuition/contracts/constants.js`
+- `eve/application/intuition/contracts/contracts.js`
+- `eve/application/intuition/contracts/index.js`
+- `eve/application/intuition/contracts/validator.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/flower/menu.js`
+- `eve/application/intuition/footer/runtime.js`
+- `eve/application/intuition/matrix/core/matrix_runtime.js`
+- `eve/application/intuition/matrix/core/project_data.js`
+- `eve/application/intuition/menu/core/toolbox_runtime.js`
+- `eve/application/intuition/panels/core/panel_creator.js`
+- `eve/application/intuition/projection/tool_strip.js`
+- `eve/application/intuition/ribbon/menu.js`
+- `eve/application/intuition/runtime/command_bus.js`
+- `eve/application/intuition/runtime/history_policy.js`
+- `eve/application/intuition/runtime/selection.js`
+- `eve/application/intuition/runtime/tool.js`
+- `eve/application/intuition/runtime/tool_gateway.js`
+- `eve/application/intuition/shared/group_state_runtime.js`
+- `eve/application/intuition/shared/tool_drag.js`
+- `eve/application/intuition/tools/AI.js`
+- `eve/application/intuition/tools/activities.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/clock.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/contextual/flower_menu_visual.js`
+- `eve/application/intuition/tools/copy.js`
+- `eve/application/intuition/tools/core/finder_tools_projection.js`
+- `eve/application/intuition/tools/core/svg_draw_runtime.js`
+- `eve/application/intuition/tools/core/svg_vector_edit_runtime.js`
+- `eve/application/intuition/tools/core/tool_definition_ssot.long_press.test.mjs`
+- `eve/application/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
+- `eve/application/intuition/tools/core/tool_instances.js`
+- `eve/application/intuition/tools/core/tool_interaction.js`
+- `eve/application/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
+- `eve/application/intuition/tools/core/tool_latch_aliases.js`
+- `eve/application/intuition/tools/core/tool_latch_aliases.test.mjs`
+- `eve/application/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_registry.js`
+- `eve/application/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
 
 ### webgpuEntryPoints
 
@@ -1583,31 +1583,31 @@ This report is generated from a deterministic static scan. It separates confirme
 - `PROJET_MOLECULE_DEBUG.md`
 - `documentations/Problems solving/TAURI_VIDEO_STUTTER_FIX.md`
 - `platforms/ios/atome-auv3/Common/AppNativeMediaCaptureController.swift`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.webgpu.js`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
-- `src/application/eVe/domains/mtrax/media/position_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/import_media_timeline.js`
-- `src/application/eVe/domains/mtrax/timeline/schema_utils.js`
-- `src/application/eVe/domains/mtrax/ui/styles.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
-- `src/application/eVe/intuition/runtime/tool_genesis.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_adapter.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_adapter.test.mjs`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.test.mjs`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
-- `src/application/eVe/intuition/tools/molecule/kernel/reducers.js`
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
-- `src/application/eVe/todo/new Mtrax engine.md`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.webgpu.js`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/preview/native_frame_video_preview_renderer.js`
+- `eve/application/domains/media/preview/video_preview_renderer.js`
+- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
+- `eve/application/domains/mtrax/api/window_api_runtime.js`
+- `eve/application/domains/mtrax/media/position_runtime.js`
+- `eve/application/domains/mtrax/timeline/import_media_timeline.js`
+- `eve/application/domains/mtrax/timeline/schema_utils.js`
+- `eve/application/domains/mtrax/ui/styles.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `eve/application/intuition/runtime/tool_genesis.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_adapter.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_adapter.test.mjs`
+- `eve/application/intuition/tools/core/mtrax_renderer_runtime.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_runtime.test.mjs`
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `eve/application/intuition/tools/molecule/kernel/reducers.js`
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`
+- `eve/application/todo/new Mtrax engine.md`
 - `tests/mtrack_decode_test.mjs`
 - `tests/mtrack_diag_test.mjs`
 - `tests/probes/browser_media_acceptance_probe.test.mjs`
@@ -1846,12 +1846,12 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/sync/fileSyncWatcher.js`
 - `server/userExportImport.js`
 - `server/userHome.js`
-- `src/application/eVe/documentations/Security_and_sharing.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/tools/imports_exports/index.js`
-- `src/application/eVe/intuition/tools/user.js`
+- `eve/application/documentations/Security_and_sharing.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/tools/imports_exports/index.js`
+- `eve/application/intuition/tools/user.js`
 - `src/application/examples/input_file.js`
 - `src/application/examples/ios_apis.js`
 - `src/application/examples/ios_file_browser.js`
@@ -1995,44 +1995,44 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/userFiles.js`
 - `server/visio.js`
 - `src/application/audio_runtime/stt_api.js`
-- `src/application/eVe/documentations/Good practices.md`
-- `src/application/eVe/documentations/Security_and_sharing.md`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/atome_object.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/done.md`
-- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
-- `src/application/eVe/documentations/realtime_sync_architecture.md`
-- `src/application/eVe/documentations/remote_control_test_harness.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/mtrax/clips/cutter_contract_runtime.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/elements/eVe_look.js`
-- `src/application/eVe/intuition/contracts/contracts.js`
-- `src/application/eVe/intuition/contracts/validator.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/runtime/tool.js`
-- `src/application/eVe/intuition/tools/activities.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/clock.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/copy.js`
-- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
-- `src/application/eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_registry.js`
-- `src/application/eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
-- `src/application/eVe/intuition/tools/couleur.js`
-- `src/application/eVe/intuition/tools/delete.js`
-- `src/application/eVe/intuition/tools/detail.js`
-- `src/application/eVe/intuition/tools/font.js`
-- `src/application/eVe/intuition/tools/layer.js`
-- `src/application/eVe/intuition/tools/paste.js`
+- `eve/application/documentations/Good practices.md`
+- `eve/application/documentations/Security_and_sharing.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/atome_object.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/done.md`
+- `eve/application/documentations/mail_contact_calendar_and AI.md`
+- `eve/application/documentations/realtime_sync_architecture.md`
+- `eve/application/documentations/remote_control_test_harness.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/mtrax/clips/cutter_contract_runtime.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/elements/eVe_look.js`
+- `eve/application/intuition/contracts/contracts.js`
+- `eve/application/intuition/contracts/validator.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/runtime/tool.js`
+- `eve/application/intuition/tools/activities.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/clock.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/copy.js`
+- `eve/application/intuition/tools/core/svg_draw_runtime.js`
+- `eve/application/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
+- `eve/application/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_registry.js`
+- `eve/application/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
+- `eve/application/intuition/tools/couleur.js`
+- `eve/application/intuition/tools/delete.js`
+- `eve/application/intuition/tools/detail.js`
+- `eve/application/intuition/tools/font.js`
+- `eve/application/intuition/tools/layer.js`
+- `eve/application/intuition/tools/paste.js`
 
 ### persistenceAccessPoints
 
@@ -2095,27 +2095,27 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/visio.js`
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/browser_store/indexeddb_backend.js`
-- `src/application/eVe/core/ios_store/ios_sqlite_backend.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/core/media_store/api.js`
-- `src/application/eVe/core/media_store/memory_adapter.js`
-- `src/application/eVe/core/molecule_store_bootstrap.js`
-- `src/application/eVe/core/project_store/api.js`
-- `src/application/eVe/core/project_store/memory_adapter.js`
-- `src/application/eVe/core/tauri_store/tauri_sqlite_backend.js`
-- `src/application/eVe/documentations/Offline Online explanations.md`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/browser_store/indexeddb_backend.js`
+- `eve/application/core/ios_store/ios_sqlite_backend.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/core/media_store/api.js`
+- `eve/application/core/media_store/memory_adapter.js`
+- `eve/application/core/molecule_store_bootstrap.js`
+- `eve/application/core/project_store/api.js`
+- `eve/application/core/project_store/memory_adapter.js`
+- `eve/application/core/tauri_store/tauri_sqlite_backend.js`
+- `eve/application/documentations/Offline Online explanations.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/media_api_shared.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/mtrax/audio/hmtracks_core_runtime.js`
 
 ### synchronizationFlows
 
@@ -2430,26 +2430,26 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/runtime_audio_backend.js`
 - `src/application/audio_runtime/stt_api.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/atome_events/drag_runtime.js`
-- `src/application/eVe/core/atome_events/local_interaction_edit_runtime.js`
-- `src/application/eVe/core/atome_events/placement_runtime.js`
-- `src/application/eVe/core/atome_events/primitives.js`
-- `src/application/eVe/core/atome_events/project_layer_runtime.js`
-- `src/application/eVe/core/atome_events/resize_runtime.js`
-- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/text_creation_session.js`
-- `src/application/eVe/core/atome_events/text_edit_runtime.js`
-- `src/application/eVe/core/atome_events/text_fit_runtime.js`
-- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/trace_runtime.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/event_bus.js`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/atome_events/drag_runtime.js`
+- `eve/application/core/atome_events/local_interaction_edit_runtime.js`
+- `eve/application/core/atome_events/placement_runtime.js`
+- `eve/application/core/atome_events/primitives.js`
+- `eve/application/core/atome_events/project_layer_runtime.js`
+- `eve/application/core/atome_events/resize_runtime.js`
+- `eve/application/core/atome_events/selection_bootstrap_runtime.js`
+- `eve/application/core/atome_events/text_creation_session.js`
+- `eve/application/core/atome_events/text_edit_runtime.js`
+- `eve/application/core/atome_events/text_fit_runtime.js`
+- `eve/application/core/atome_events/trace_bootstrap_runtime.js`
+- `eve/application/core/atome_events/trace_runtime.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/event_bus.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/core/media_engine/molecule.webgpu.js`
 
 ### duplicatedHelperFunctions
 
@@ -2477,16 +2477,16 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `src/application/eVe/core/project_security.js`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/user/profile_api.js`
-- `src/application/eVe/elements/design.js`
-- `src/application/eVe/intuition/tools/calendar.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/todo/native_atome_audio_engine.md`
-- `src/application/eVe/user/background.js`
+- `eve/application/core/project_security.js`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/user/profile_api.js`
+- `eve/application/elements/design.js`
+- `eve/application/intuition/tools/calendar.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/todo/native_atome_audio_engine.md`
+- `eve/application/user/background.js`
 - `src/application/examples/audio.js`
 - `src/application/examples/auv3file_browser.js`
 - `src/application/examples/calendar.js`
@@ -2522,7 +2522,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/lyrix/src/features/lyrics/SongUtils.js`
 - `src/application/lyrix/src/features/lyrics/library.js`
 - `src/application/lyrix/src/intuition/menu.js`
-- `src/application/security/cloudSync.js`
+- `atome/security/cloudSync.js`
 - `src/application/ui/filerEvents.js`
 - `src/application/ui/record_audio_ui.js`
 - `src/application/vie/index.js`
@@ -2531,8 +2531,8 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/js/gsap.min.js`
 - `src/js/opal-parser.min.js`
 - `src/js/opal.min.js`
-- `src/shared/logging.js`
-- `src/shared/recipient_access.js`
+- `atome/shared/logging.js`
+- `atome/shared/recipient_access.js`
 
 ### vagueUtilityNames
 
@@ -2694,11 +2694,11 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/userFiles.js`
 - `server/visio.js`
 - `src/application/audio_runtime/audio.facade.js`
-- `src/application/eVe/concept/correction.md`
-- `src/application/eVe/concept/eVe.html`
-- `src/application/eVe/concept/freebsd.html`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/event_store/api.js`
+- `eve/application/concept/correction.md`
+- `eve/application/concept/eVe.html`
+- `eve/application/concept/freebsd.html`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/event_store/api.js`
 
 ### repeatedCompatibilityLayers
 
@@ -2773,15 +2773,15 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/visio.js`
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/backend.kira.js`
-- `src/application/eVe/concept/correction.md`
-- `src/application/eVe/concept/eVe.html`
-- `src/application/eVe/concept/freebsd.html`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/event_store/api.js`
-- `src/application/eVe/core/event_store/errors.js`
-- `src/application/eVe/core/event_store/index.js`
-- `src/application/eVe/core/event_store/memory_adapter.js`
-- `src/application/eVe/core/media_engine/molecule.webgpu.js`
+- `eve/application/concept/correction.md`
+- `eve/application/concept/eVe.html`
+- `eve/application/concept/freebsd.html`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/event_store/api.js`
+- `eve/application/core/event_store/errors.js`
+- `eve/application/core/event_store/index.js`
+- `eve/application/core/event_store/memory_adapter.js`
+- `eve/application/core/media_engine/molecule.webgpu.js`
 
 ### featureSpecificHacks
 
@@ -3113,7 +3113,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/demo.example.js`
-- `src/application/eVe/core/atome_commit.js`
+- `eve/application/core/atome_commit.js`
 
 ## Debug Indicators
 
@@ -3195,10 +3195,10 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/wsSend.js`
 - `src/application/audio_runtime/demo.example.js`
 - `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/domains/media/shared/media_source.test.mjs`
-- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/domains/media/shared/media_source.test.mjs`
+- `eve/application/domains/mtrax/api/transport_api_runtime.js`
 
 ### temporaryDebugPrints
 
@@ -3268,20 +3268,20 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/sharing.js`
 - `server/sync/fileSyncWatcher.js`
 - `server/wsApiState.js`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/project_security.js`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/remote_control_test_harness.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/mtrax/api/api_misc_runtime.js`
-- `src/application/eVe/domains/mtrax/api/api_transport_bootstrap_runtime.js`
-- `src/application/eVe/domains/mtrax/api/api_transport_record_bundle_runtime.js`
-- `src/application/eVe/domains/mtrax/api/window_api_bridge_runtime.js`
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_bootstrap_runtime.js`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/project_security.js`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/remote_control_test_harness.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/mtrax/api/api_misc_runtime.js`
+- `eve/application/domains/mtrax/api/api_transport_bootstrap_runtime.js`
+- `eve/application/domains/mtrax/api/api_transport_record_bundle_runtime.js`
+- `eve/application/domains/mtrax/api/window_api_bridge_runtime.js`
+- `eve/application/domains/mtrax/api/window_api_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_bootstrap_runtime.js`
 
 ### emojiLogs
 
@@ -3297,7 +3297,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/server.js`
 - `server/serverIdentity.js`
 - `server/wsApiState.js`
-- `src/application/eVe/documentations/debug_UI.md`
+- `eve/application/documentations/debug_UI.md`
 - `src/application/examples/audio.js`
 - `src/application/examples/audio_swift.js`
 - `src/application/examples/buttons.js`
@@ -3408,10 +3408,10 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/wsSend.js`
 - `src/application/audio_runtime/demo.example.js`
 - `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/domains/media/shared/media_source.test.mjs`
-- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/domains/media/shared/media_source.test.mjs`
+- `eve/application/domains/mtrax/api/transport_api_runtime.js`
 
 ### swallowedErrors
 
@@ -3438,63 +3438,63 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/runtime_audio_backend.js`
 - `src/application/audio_runtime/stt_api.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/atome_events/drag_runtime.js`
-- `src/application/eVe/core/atome_events/local_interaction_edit_runtime.js`
-- `src/application/eVe/core/atome_events/primitives.js`
-- `src/application/eVe/core/atome_events/project_layer_runtime.js`
-- `src/application/eVe/core/atome_events/resize_runtime.js`
-- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/text_creation_session.js`
-- `src/application/eVe/core/atome_events/text_edit_runtime.js`
-- `src/application/eVe/core/atome_events/text_fit_runtime.js`
-- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/trace_runtime.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/core/media_engine/molecule.webgpu.js`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/api/video_recording_controller.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
-- `src/application/eVe/domains/media/shared/media_source.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_playhead_sync.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_transport_runtime.js`
-- `src/application/eVe/domains/mtrax/automation/clip_lane_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/media_play_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/runtime_playback_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/selection_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/split_join_runtime.js`
-- `src/application/eVe/domains/mtrax/core/diagnostics.js`
-- `src/application/eVe/domains/mtrax/core/runtime_frame_eval.js`
-- `src/application/eVe/domains/mtrax/integration/tool_gateway_result_runtime.js`
-- `src/application/eVe/domains/mtrax/media/audio_state_runtime.js`
-- `src/application/eVe/domains/mtrax/media/auth_playback_cache.js`
-- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js`
-- `src/application/eVe/domains/mtrax/media/element_runtime.js`
-- `src/application/eVe/domains/mtrax/media/position_runtime.js`
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/media/source_runtime.js`
-- `src/application/eVe/domains/mtrax/media/upload_resolution_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_draw_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_file_drop_bridge.js`
-- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_text_create_runtime.js`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/atome_events/drag_runtime.js`
+- `eve/application/core/atome_events/local_interaction_edit_runtime.js`
+- `eve/application/core/atome_events/primitives.js`
+- `eve/application/core/atome_events/project_layer_runtime.js`
+- `eve/application/core/atome_events/resize_runtime.js`
+- `eve/application/core/atome_events/selection_bootstrap_runtime.js`
+- `eve/application/core/atome_events/text_creation_session.js`
+- `eve/application/core/atome_events/text_edit_runtime.js`
+- `eve/application/core/atome_events/text_fit_runtime.js`
+- `eve/application/core/atome_events/trace_bootstrap_runtime.js`
+- `eve/application/core/atome_events/trace_runtime.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/core/media_engine/molecule.webgpu.js`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/media_api_shared.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/api/video_recording_controller.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/media/preview/native_frame_video_preview_renderer.js`
+- `eve/application/domains/media/preview/video_preview_renderer.js`
+- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
+- `eve/application/domains/media/shared/media_source.js`
+- `eve/application/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_native_playback_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_playhead_sync.js`
+- `eve/application/domains/mtrax/audio/hmtracks_transport_runtime.js`
+- `eve/application/domains/mtrax/automation/clip_lane_runtime.js`
+- `eve/application/domains/mtrax/clips/deletion_runtime.js`
+- `eve/application/domains/mtrax/clips/media_play_runtime.js`
+- `eve/application/domains/mtrax/clips/node_render_runtime.js`
+- `eve/application/domains/mtrax/clips/runtime_playback_runtime.js`
+- `eve/application/domains/mtrax/clips/selection_runtime.js`
+- `eve/application/domains/mtrax/clips/split_join_runtime.js`
+- `eve/application/domains/mtrax/core/diagnostics.js`
+- `eve/application/domains/mtrax/core/runtime_frame_eval.js`
+- `eve/application/domains/mtrax/integration/tool_gateway_result_runtime.js`
+- `eve/application/domains/mtrax/media/audio_state_runtime.js`
+- `eve/application/domains/mtrax/media/auth_playback_cache.js`
+- `eve/application/domains/mtrax/media/authorized_playback_runtime.js`
+- `eve/application/domains/mtrax/media/element_runtime.js`
+- `eve/application/domains/mtrax/media/position_runtime.js`
+- `eve/application/domains/mtrax/media/record_capture_runtime.js`
+- `eve/application/domains/mtrax/media/source_runtime.js`
+- `eve/application/domains/mtrax/media/upload_resolution_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_draw_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_export_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_file_drop_bridge.js`
+- `eve/application/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_text_create_runtime.js`
 
 ### debugOnlyBranches
 
@@ -3542,26 +3542,26 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/README.md`
 - `server/server.js`
 - `server/wsApiState.js`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/remote_control_test_harness.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/elements/eVe_look.js`
-- `src/application/eVe/i18n/languages.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/matrix/core/project_data.js`
-- `src/application/eVe/intuition/runtime/layer_contract.js`
-- `src/application/eVe/intuition/tools/imports_exports/index.js`
-- `src/application/eVe/intuition/tools/user.js`
-- `src/application/eVe/todo/AI_integration_problems_to_solve.md`
-- `src/application/eVe/todo/Midi_implementation.md`
-- `src/application/eVe/todo/audio_engine_migration.md`
-- `src/application/eVe/todo/eVe_AI.md`
-- `src/application/eVe/todo/molecule_architecture_and_rebuild_plan.md`
-- `src/application/eVe/todo/native_atome_audio_engine.md`
-- `src/application/eVe/todo/v2_full_migration_framework.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/remote_control_test_harness.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/elements/eVe_look.js`
+- `eve/application/i18n/languages.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/matrix/core/project_data.js`
+- `eve/application/intuition/runtime/layer_contract.js`
+- `eve/application/intuition/tools/imports_exports/index.js`
+- `eve/application/intuition/tools/user.js`
+- `eve/application/todo/AI_integration_problems_to_solve.md`
+- `eve/application/todo/Midi_implementation.md`
+- `eve/application/todo/audio_engine_migration.md`
+- `eve/application/todo/eVe_AI.md`
+- `eve/application/todo/molecule_architecture_and_rebuild_plan.md`
+- `eve/application/todo/native_atome_audio_engine.md`
+- `eve/application/todo/v2_full_migration_framework.md`
 - `src/application/examples/console.js`
 - `src/application/examples/demos.js`
 - `src/application/examples/dragNdrop.js`
@@ -3650,12 +3650,12 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/sync/fileSyncWatcher.js`
 - `server/userExportImport.js`
 - `server/userHome.js`
-- `src/application/eVe/documentations/Security_and_sharing.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/tools/imports_exports/index.js`
-- `src/application/eVe/intuition/tools/user.js`
+- `eve/application/documentations/Security_and_sharing.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/tools/imports_exports/index.js`
+- `eve/application/intuition/tools/user.js`
 - `src/application/examples/input_file.js`
 - `src/application/examples/ios_apis.js`
 - `src/application/examples/ios_file_browser.js`
@@ -3746,14 +3746,14 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/runtime_audio_backend.js`
 - `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
-- `src/application/eVe/concept/eVe.html`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/live_icloud_smoke_tests.md`
+- `eve/application/concept/eVe.html`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/live_icloud_smoke_tests.md`
 
 ### websocketPayloadValidation
 
@@ -3973,36 +3973,36 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/record_audio_api.js`
 - `src/application/audio_runtime/stt_api.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/atome_events/drag_runtime.js`
-- `src/application/eVe/core/atome_events/local_interaction_edit_runtime.js`
-- `src/application/eVe/core/atome_events/placement_runtime.js`
-- `src/application/eVe/core/atome_events/project_layer_runtime.js`
-- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/text_creation_session.js`
-- `src/application/eVe/core/atome_events/text_edit_runtime.js`
-- `src/application/eVe/core/atome_events/text_fit_runtime.js`
-- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/trace_runtime.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/event_bus.js`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/core/media_engine/molecule.webgpu.js`
-- `src/application/eVe/core/project_security.js`
-- `src/application/eVe/default/shortcuts.js`
-- `src/application/eVe/documentations/Good practices.md`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/desktop_manual_validation_checklist.md`
-- `src/application/eVe/documentations/done.md`
-- `src/application/eVe/documentations/int8.md`
-- `src/application/eVe/documentations/realtime_sync_architecture.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/atome_events/drag_runtime.js`
+- `eve/application/core/atome_events/local_interaction_edit_runtime.js`
+- `eve/application/core/atome_events/placement_runtime.js`
+- `eve/application/core/atome_events/project_layer_runtime.js`
+- `eve/application/core/atome_events/selection_bootstrap_runtime.js`
+- `eve/application/core/atome_events/text_creation_session.js`
+- `eve/application/core/atome_events/text_edit_runtime.js`
+- `eve/application/core/atome_events/text_fit_runtime.js`
+- `eve/application/core/atome_events/trace_bootstrap_runtime.js`
+- `eve/application/core/atome_events/trace_runtime.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/event_bus.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/core/media_engine/molecule.webgpu.js`
+- `eve/application/core/project_security.js`
+- `eve/application/default/shortcuts.js`
+- `eve/application/documentations/Good practices.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/desktop_manual_validation_checklist.md`
+- `eve/application/documentations/done.md`
+- `eve/application/documentations/int8.md`
+- `eve/application/documentations/realtime_sync_architecture.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/media_api_shared.js`
 
 ### tokenStorage
 
@@ -4033,59 +4033,59 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/visio.js`
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/documentations/Security_and_sharing.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/desktop_manual_validation_checklist.md`
-- `src/application/eVe/documentations/failure_modes_v1.md`
-- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
-- `src/application/eVe/documentations/remote_control_test_harness.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_metadata.test.mjs`
-- `src/application/eVe/domains/mtrax/media/authorization_bootstrap_runtime.js`
-- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js`
-- `src/application/eVe/domains/mtrax/media/element_runtime.js`
-- `src/application/eVe/domains/mtrax/media/element_video_audio_source.test.mjs`
-- `src/application/eVe/domains/mtrax/media/extracted_audio_auth_source.test.mjs`
-- `src/application/eVe/domains/mtrax/media/source_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_metadata_retry.test.mjs`
-- `src/application/eVe/domains/user/profile_api.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/i18n/i18n.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/runtime/tool.js`
-- `src/application/eVe/intuition/runtime/tool_genesis.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/contact.js`
-- `src/application/eVe/intuition/tools/copy.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
-- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
-- `src/application/eVe/intuition/tools/core/svg_vector_model.js`
-- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_registry.js`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/intuition/tools/imports_exports/index.js`
-- `src/application/eVe/intuition/tools/infos.js`
-- `src/application/eVe/intuition/tools/molecule/persistence/index.js`
-- `src/application/eVe/intuition/tools/mtrack.js`
-- `src/application/eVe/intuition/tools/project_drop.js`
-- `src/application/eVe/intuition/tools/ui/tool_button_factory.js`
-- `src/application/eVe/intuition/tools/user.js`
-- `src/application/eVe/todo/Full_vocal_AI_integration.md`
-- `src/application/eVe/todo/apple_mail_security.md`
-- `src/application/eVe/todo/eVe_AI.md`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/documentations/Security_and_sharing.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/desktop_manual_validation_checklist.md`
+- `eve/application/documentations/failure_modes_v1.md`
+- `eve/application/documentations/mail_contact_calendar_and AI.md`
+- `eve/application/documentations/remote_control_test_harness.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/media_api_shared.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/mtrax/audio/hmtracks_native_audio_metadata.test.mjs`
+- `eve/application/domains/mtrax/media/authorization_bootstrap_runtime.js`
+- `eve/application/domains/mtrax/media/authorized_playback_runtime.js`
+- `eve/application/domains/mtrax/media/element_runtime.js`
+- `eve/application/domains/mtrax/media/element_video_audio_source.test.mjs`
+- `eve/application/domains/mtrax/media/extracted_audio_auth_source.test.mjs`
+- `eve/application/domains/mtrax/media/source_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_metadata_retry.test.mjs`
+- `eve/application/domains/user/profile_api.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/i18n/i18n.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/runtime/tool.js`
+- `eve/application/intuition/runtime/tool_genesis.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/contact.js`
+- `eve/application/intuition/tools/copy.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `eve/application/intuition/tools/core/svg_draw_runtime.js`
+- `eve/application/intuition/tools/core/svg_vector_model.js`
+- `eve/application/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_registry.js`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/intuition/tools/imports_exports/index.js`
+- `eve/application/intuition/tools/infos.js`
+- `eve/application/intuition/tools/molecule/persistence/index.js`
+- `eve/application/intuition/tools/mtrack.js`
+- `eve/application/intuition/tools/project_drop.js`
+- `eve/application/intuition/tools/ui/tool_button_factory.js`
+- `eve/application/intuition/tools/user.js`
+- `eve/application/todo/Full_vocal_AI_integration.md`
+- `eve/application/todo/apple_mail_security.md`
+- `eve/application/todo/eVe_AI.md`
 
 ### secretLeakage
 
@@ -4113,31 +4113,31 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/mailRoutes.test.mjs`
 - `server/server.js`
 - `server/serverIdentity.js`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/documentations/Offline Online explanations.md`
-- `src/application/eVe/documentations/failure_modes_v1.md`
-- `src/application/eVe/documentations/live_icloud_smoke_tests.md`
-- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
-- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
-- `src/application/eVe/domains/user/profile_api.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/elements/design.js`
-- `src/application/eVe/elements/eVe_look.js`
-- `src/application/eVe/i18n/languages.js`
-- `src/application/eVe/intuition/tools/AI.js`
-- `src/application/eVe/intuition/tools/contact.js`
-- `src/application/eVe/intuition/tools/imports_exports/index.js`
-- `src/application/eVe/intuition/tools/user.js`
-- `src/application/eVe/todo/AI_integration_problems_to_solve.md`
-- `src/application/eVe/todo/Full_vocal_AI_integration.md`
-- `src/application/eVe/todo/apple_mail_security.md`
+- `eve/application/core/atome_commit.js`
+- `eve/application/documentations/Offline Online explanations.md`
+- `eve/application/documentations/failure_modes_v1.md`
+- `eve/application/documentations/live_icloud_smoke_tests.md`
+- `eve/application/documentations/mail_contact_calendar_and AI.md`
+- `eve/application/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `eve/application/domains/user/profile_api.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/elements/design.js`
+- `eve/application/elements/eVe_look.js`
+- `eve/application/i18n/languages.js`
+- `eve/application/intuition/tools/AI.js`
+- `eve/application/intuition/tools/contact.js`
+- `eve/application/intuition/tools/imports_exports/index.js`
+- `eve/application/intuition/tools/user.js`
+- `eve/application/todo/AI_integration_problems_to_solve.md`
+- `eve/application/todo/Full_vocal_AI_integration.md`
+- `eve/application/todo/apple_mail_security.md`
 - `src/application/examples/AI.js`
 - `src/application/examples/DB.js`
 - `src/application/examples/shellUI.js`
 - `src/application/examples/user.js`
 - `src/application/examples/web_navigation.js`
-- `src/application/security/cloudSync.js`
-- `src/application/security/syncQueue.js`
+- `atome/security/cloudSync.js`
+- `atome/security/syncQueue.js`
 - `src/application/thermUSS/securite_fr.md`
 - `src/application/thermUSS/security_en.md`
 - `src/squirrel/ai/model_catalog_refresh.js`
@@ -4181,33 +4181,33 @@ This report is generated from a deterministic static scan. It separates confirme
 - `scripts/reset_Framework.sh`
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/panels/core/panel_creator.js`
-- `src/application/eVe/intuition/runtime/tool_genesis.js`
-- `src/application/eVe/intuition/tools/activities.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/contact.js`
-- `src/application/eVe/intuition/tools/copy.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.test.mjs`
-- `src/application/eVe/intuition/tools/detail.js`
-- `src/application/eVe/intuition/tools/finder.js`
-- `src/application/eVe/intuition/tools/imports_exports/index.js`
-- `src/application/eVe/intuition/tools/infos.js`
-- `src/application/eVe/intuition/tools/project_bootstrap.js`
-- `src/application/eVe/intuition/tools/relationship_store.js`
-- `src/application/eVe/intuition/tools/user.js`
-- `src/application/eVe/user/background.js`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/media_api_shared.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/panels/core/panel_creator.js`
+- `eve/application/intuition/runtime/tool_genesis.js`
+- `eve/application/intuition/tools/activities.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/contact.js`
+- `eve/application/intuition/tools/copy.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_runtime.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_runtime.test.mjs`
+- `eve/application/intuition/tools/detail.js`
+- `eve/application/intuition/tools/finder.js`
+- `eve/application/intuition/tools/imports_exports/index.js`
+- `eve/application/intuition/tools/infos.js`
+- `eve/application/intuition/tools/project_bootstrap.js`
+- `eve/application/intuition/tools/relationship_store.js`
+- `eve/application/intuition/tools/user.js`
+- `eve/application/user/background.js`
 - `src/application/examples/AI.js`
 - `src/application/examples/ide_code_editor.js`
 - `src/application/examples/localstorage_reader.js`
@@ -4231,7 +4231,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/lyrix/src/features/purchase/purchase_manager.js`
 - `src/application/lyrix/src/services/storage.js`
 - `src/application/lyrix/src/services/storageIntegrity.js`
-- `src/application/security/syncQueue.js`
+- `atome/security/syncQueue.js`
 - `src/squirrel/ai/model_catalog_cache.js`
 - `src/squirrel/ai/model_catalog_refresh.js`
 - `src/squirrel/ai/model_catalog_refresh.test.mjs`
@@ -4287,30 +4287,30 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/serverIdentity.js`
 - `server/sharing.js`
 - `server/userFiles.js`
-- `src/application/eVe/documentations/Good practices.md`
-- `src/application/eVe/documentations/Security_and_sharing.md`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/atome_object.md`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/failure_modes_v1.md`
-- `src/application/eVe/documentations/mail_contact_calendar_and AI.md`
-- `src/application/eVe/documentations/mail_v1_architecture.md`
-- `src/application/eVe/documentations/remote_control_test_harness.md`
-- `src/application/eVe/documentations/runtime_ai_mcp_entrypoints.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/documentations/v1_scope_freeze_and_v2_backlog.md`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/core/tool_registry.js`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/todo/Full_vocal_AI_integration.md`
-- `src/application/eVe/todo/apple_mail_security.md`
-- `src/application/eVe/todo/cpal_Kira_integration.md`
-- `src/application/eVe/todo/eVe_AI.md`
-- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `eve/application/documentations/Good practices.md`
+- `eve/application/documentations/Security_and_sharing.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/atome_object.md`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/failure_modes_v1.md`
+- `eve/application/documentations/mail_contact_calendar_and AI.md`
+- `eve/application/documentations/mail_v1_architecture.md`
+- `eve/application/documentations/remote_control_test_harness.md`
+- `eve/application/documentations/runtime_ai_mcp_entrypoints.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/documentations/v1_scope_freeze_and_v2_backlog.md`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/core/tool_registry.js`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/todo/Full_vocal_AI_integration.md`
+- `eve/application/todo/apple_mail_security.md`
+- `eve/application/todo/cpal_Kira_integration.md`
+- `eve/application/todo/eVe_AI.md`
+- `eve/application/todo/native_atome_audio_engine.md`
 - `src/application/examples/user.js`
-- `src/application/security/serverVerification.js`
+- `atome/security/serverVerification.js`
 - `src/application/thermUSS/security.md`
 - `src/application/thermUSS/security_en.md`
 - `src/js/leaflet.js`
@@ -4437,12 +4437,12 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/data/users/anonymous/Downloads/DKD_converter.cpp`
 - `server/server.js`
 - `server/shell.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/intuition/shared/svg_runtime.js`
-- `src/application/eVe/intuition/tools/core/svg_vector_model.js`
-- `src/application/eVe/intuition/tools/core/tool_target_id.unique_resolution.test.mjs`
-- `src/application/eVe/intuition/tools/imports_exports/index.js`
-- `src/application/eVe/todo/MCP_voice_control.md`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/intuition/shared/svg_runtime.js`
+- `eve/application/intuition/tools/core/svg_vector_model.js`
+- `eve/application/intuition/tools/core/tool_target_id.unique_resolution.test.mjs`
+- `eve/application/intuition/tools/imports_exports/index.js`
+- `eve/application/todo/MCP_voice_control.md`
 - `src/js/codemirror.bundle.js`
 - `src/js/gsap.min.js`
 - `src/js/leaflet.js`
@@ -4463,7 +4463,7 @@ This report is generated from a deterministic static scan. It separates confirme
 
 ### unsafeEvalUsage
 
-- `src/application/eVe/intuition/tools/calendar.js`
+- `eve/application/intuition/tools/calendar.js`
 - `src/application/examples/calendar.js`
 - `src/js/opal-parser.min.js`
 - `src/js/opal.min.js`
@@ -4493,46 +4493,46 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/visio.js`
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `src/application/eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
-- `src/application/eVe/default/shortcuts.js`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/domains/media/api/video_recording_controller.js`
-- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
-- `src/application/eVe/domains/mtrax/media/atome_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.surface_capture.test.mjs`
-- `src/application/eVe/domains/mtrax/ui/panel_lifecycle_runtime.close_state.test.mjs`
-- `src/application/eVe/elements/design/dialog_runtime.background_drag.test.mjs`
-- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/footer/runtime.sync_placement.test.mjs`
-- `src/application/eVe/intuition/panel_definitions.js`
-- `src/application/eVe/intuition/runtime/layer_contract.layer_order.test.mjs`
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
-- `src/application/eVe/intuition/tools/background.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/contact.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
-- `src/application/eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.finder_inline_open_guard.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.finder_pointer_click_open_guard.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.finder_ui_runtime_flows.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.finder_v2_flows.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.mtrack_panel_mount_contract.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
-- `src/application/eVe/intuition/tools/detail.js`
-- `src/application/eVe/intuition/tools/perform.js`
-- `src/application/eVe/intuition/tools/project_drop.js`
-- `src/application/eVe/intuition/tools/user.js`
-- `src/application/eVe/todo/AUDIT.md`
-- `src/application/eVe/todo/cpal_Kira_integration.md`
-- `src/application/eVe/todo/native_atome_audio_engine.md`
+- `eve/application/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eve/application/default/shortcuts.js`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/domains/media/api/video_recording_controller.js`
+- `eve/application/domains/media/preview/video_preview_renderer.js`
+- `eve/application/domains/mtrax/media/atome_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_export_runtime.surface_capture.test.mjs`
+- `eve/application/domains/mtrax/ui/panel_lifecycle_runtime.close_state.test.mjs`
+- `eve/application/elements/design/dialog_runtime.background_drag.test.mjs`
+- `eve/application/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/footer/runtime.sync_placement.test.mjs`
+- `eve/application/intuition/panel_definitions.js`
+- `eve/application/intuition/runtime/layer_contract.layer_order.test.mjs`
+- `eve/application/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `eve/application/intuition/tools/background.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/contact.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_runtime.js`
+- `eve/application/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
+- `eve/application/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
+- `eve/application/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.finder_inline_open_guard.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.finder_pointer_click_open_guard.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.finder_ui_runtime_flows.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.finder_v2_flows.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.mtrack_panel_mount_contract.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
+- `eve/application/intuition/tools/detail.js`
+- `eve/application/intuition/tools/perform.js`
+- `eve/application/intuition/tools/project_drop.js`
+- `eve/application/intuition/tools/user.js`
+- `eve/application/todo/AUDIT.md`
+- `eve/application/todo/cpal_Kira_integration.md`
+- `eve/application/todo/native_atome_audio_engine.md`
 - `src/application/examples/calendar.js`
 - `src/application/examples/record_audio_UI.js`
 - `src/application/examples/record_video.js`
@@ -4572,11 +4572,11 @@ This report is generated from a deterministic static scan. It separates confirme
 - `scripts/install_dependencies.sh`
 - `server/README.md`
 - `server/server.js`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/documentations/realtime_sync_architecture.md`
-- `src/application/eVe/domains/mtrax/media/authorized_playback_runtime.js`
-- `src/application/eVe/intuition/tools/background.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `eve/application/core/atome_commit.js`
+- `eve/application/documentations/realtime_sync_architecture.md`
+- `eve/application/domains/mtrax/media/authorized_playback_runtime.js`
+- `eve/application/intuition/tools/background.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
 - `src/application/examples/record_video.js`
 - `src/application/examples/record_video_UI.js`
 - `src/squirrel/apis/unified/adole.js`
@@ -4642,44 +4642,44 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/visio.js`
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/atome_events/drag_runtime.js`
-- `src/application/eVe/core/atome_events/drag_session_runtime.js`
-- `src/application/eVe/core/atome_events/primitives.js`
-- `src/application/eVe/core/atome_events/project_layer_runtime.js`
-- `src/application/eVe/core/atome_events/resize_runtime.js`
-- `src/application/eVe/core/atome_events/selection_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events/selection_context_runtime.js`
-- `src/application/eVe/core/atome_events/text_creation_session.js`
-- `src/application/eVe/core/atome_events/text_edit_ui_runtime.js`
-- `src/application/eVe/core/atome_events/trace_bootstrap_runtime.js`
-- `src/application/eVe/core/atome_events.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/core/molecule_store_bootstrap.js`
-- `src/application/eVe/documentations/Offline Online explanations.md`
-- `src/application/eVe/documentations/atome_concepts.md`
-- `src/application/eVe/documentations/calendar_v1_architecture.md`
-- `src/application/eVe/documentations/done.md`
-- `src/application/eVe/documentations/int8.md`
-- `src/application/eVe/documentations/latency_targets_v1.md`
-- `src/application/eVe/documentations/realtime_sync_architecture.md`
-- `src/application/eVe/documentations/remote_control_test_harness.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/api/video_recording_controller.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
-- `src/application/eVe/domains/mtrax/api/api_transport_bootstrap_runtime.js`
-- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_bootstrap_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_metadata.test.mjs`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/atome_events/drag_runtime.js`
+- `eve/application/core/atome_events/drag_session_runtime.js`
+- `eve/application/core/atome_events/primitives.js`
+- `eve/application/core/atome_events/project_layer_runtime.js`
+- `eve/application/core/atome_events/resize_runtime.js`
+- `eve/application/core/atome_events/selection_bootstrap_runtime.js`
+- `eve/application/core/atome_events/selection_context_runtime.js`
+- `eve/application/core/atome_events/text_creation_session.js`
+- `eve/application/core/atome_events/text_edit_ui_runtime.js`
+- `eve/application/core/atome_events/trace_bootstrap_runtime.js`
+- `eve/application/core/atome_events.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/core/molecule_store_bootstrap.js`
+- `eve/application/documentations/Offline Online explanations.md`
+- `eve/application/documentations/atome_concepts.md`
+- `eve/application/documentations/calendar_v1_architecture.md`
+- `eve/application/documentations/done.md`
+- `eve/application/documentations/int8.md`
+- `eve/application/documentations/latency_targets_v1.md`
+- `eve/application/documentations/realtime_sync_architecture.md`
+- `eve/application/documentations/remote_control_test_harness.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/api/video_recording_controller.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/preview/native_frame_video_preview_renderer.js`
+- `eve/application/domains/media/preview/video_preview_renderer.js`
+- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
+- `eve/application/domains/mtrax/api/api_transport_bootstrap_runtime.js`
+- `eve/application/domains/mtrax/api/transport_api_runtime.js`
+- `eve/application/domains/mtrax/api/window_api_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_bootstrap_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_native_audio_metadata.test.mjs`
 
 ### blockingSynchronousWork
 
@@ -4716,50 +4716,50 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/serverIdentity.js`
 - `server/sharing.js`
 - `server/wsApiState.js`
-- `src/application/eVe/core/atome_commit.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/mtrax/clips/loop_model.js`
-- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/preview_metadata_runtime.js`
-- `src/application/eVe/domains/mtrax/core/diagnostics.js`
-- `src/application/eVe/domains/mtrax/integration/tool_gateway_result_runtime.js`
-- `src/application/eVe/domains/mtrax/media/auth_playback_cache.js`
-- `src/application/eVe/domains/mtrax/project/project_record_host_runtime.js`
-- `src/application/eVe/domains/mtrax/recording/action_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_model.js`
-- `src/application/eVe/domains/mtrax/timeline/ruler_overlay_runtime.js`
-- `src/application/eVe/elements/design.js`
-- `src/application/eVe/intuition/core/dom.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/footer/runtime.js`
-- `src/application/eVe/intuition/matrix/core/project_data.js`
-- `src/application/eVe/intuition/matrix/ui/view.js`
-- `src/application/eVe/intuition/ribbon/menu.js`
-- `src/application/eVe/intuition/runtime/command_bus.js`
-- `src/application/eVe/intuition/runtime/eve_intuition/tool_key_runtime.js`
-- `src/application/eVe/intuition/runtime/tool_gateway.js`
-- `src/application/eVe/intuition/shared/svg_runtime.js`
-- `src/application/eVe/intuition/tools/calendar.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/contextual/flower_menu_context.js`
-- `src/application/eVe/intuition/tools/core/svg_vector_edit_runtime.js`
-- `src/application/eVe/intuition/tools/core/svg_vector_model.js`
-- `src/application/eVe/intuition/tools/core/tool_interaction.js`
-- `src/application/eVe/intuition/tools/core/tool_latch_aliases.js`
-- `src/application/eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
-- `src/application/eVe/intuition/tools/detail.js`
-- `src/application/eVe/intuition/tools/infos.js`
-- `src/application/eVe/intuition/tools/molecule/runtime.js`
-- `src/application/eVe/intuition/tools/project_drop.js`
-- `src/application/eVe/intuition/tools/selection_style_apply.js`
-- `src/application/eVe/intuition/tools/user.js`
-- `src/application/eVe/user/background.js`
+- `eve/application/core/atome_commit.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/mtrax/clips/loop_model.js`
+- `eve/application/domains/mtrax/clips/node_render_runtime.js`
+- `eve/application/domains/mtrax/clips/preview_metadata_runtime.js`
+- `eve/application/domains/mtrax/core/diagnostics.js`
+- `eve/application/domains/mtrax/integration/tool_gateway_result_runtime.js`
+- `eve/application/domains/mtrax/media/auth_playback_cache.js`
+- `eve/application/domains/mtrax/project/project_record_host_runtime.js`
+- `eve/application/domains/mtrax/recording/action_capture_runtime.js`
+- `eve/application/domains/mtrax/timeline/loop_cells_model.js`
+- `eve/application/domains/mtrax/timeline/ruler_overlay_runtime.js`
+- `eve/application/elements/design.js`
+- `eve/application/intuition/core/dom.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/footer/runtime.js`
+- `eve/application/intuition/matrix/core/project_data.js`
+- `eve/application/intuition/matrix/ui/view.js`
+- `eve/application/intuition/ribbon/menu.js`
+- `eve/application/intuition/runtime/command_bus.js`
+- `eve/application/intuition/runtime/eve_intuition/tool_key_runtime.js`
+- `eve/application/intuition/runtime/tool_gateway.js`
+- `eve/application/intuition/shared/svg_runtime.js`
+- `eve/application/intuition/tools/calendar.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/contextual/flower_menu_context.js`
+- `eve/application/intuition/tools/core/svg_vector_edit_runtime.js`
+- `eve/application/intuition/tools/core/svg_vector_model.js`
+- `eve/application/intuition/tools/core/tool_interaction.js`
+- `eve/application/intuition/tools/core/tool_latch_aliases.js`
+- `eve/application/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `eve/application/intuition/tools/detail.js`
+- `eve/application/intuition/tools/infos.js`
+- `eve/application/intuition/tools/molecule/runtime.js`
+- `eve/application/intuition/tools/project_drop.js`
+- `eve/application/intuition/tools/selection_style_apply.js`
+- `eve/application/intuition/tools/user.js`
+- `eve/application/user/background.js`
 - `src/application/examples/AI.js`
 - `src/application/examples/calendar.js`
 - `src/application/examples/ios_audio_bridge.js`
@@ -4879,56 +4879,56 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/demo.example.js`
 - `src/application/audio_runtime/types.d.ts`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/core/media_engine/molecule.native.js`
-- `src/application/eVe/core/media_engine/molecule.test.mjs`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/documentations/tools.md`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/api/video_recording_controller.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `src/application/eVe/domains/media/shared/media_identifier.test.mjs`
-- `src/application/eVe/domains/media/shared/media_source.js`
-- `src/application/eVe/domains/media/shared/media_source.test.mjs`
-- `src/application/eVe/domains/mtrax/api/api_record_media_runtime.js`
-- `src/application/eVe/domains/mtrax/api/transport_api_runtime.js`
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_core_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
-- `src/application/eVe/domains/mtrax/audio/hmtracks_transport_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/add_clip_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/deletion_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/source_ops_bootstrap_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/split_join_runtime.js`
-- `src/application/eVe/domains/mtrax/core/diagnostics.js`
-- `src/application/eVe/domains/mtrax/integration/clipboard_paste_runtime.js`
-- `src/application/eVe/domains/mtrax/media/drop_runtime.js`
-- `src/application/eVe/domains/mtrax/media/element_runtime.js`
-- `src/application/eVe/domains/mtrax/media/element_video_audio_source.test.mjs`
-- `src/application/eVe/domains/mtrax/media/extracted_audio_auth_source.test.mjs`
-- `src/application/eVe/domains/mtrax/media/source_runtime.js`
-- `src/application/eVe/domains/mtrax/media/upload_resolution_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_docked_pipeline_bundle_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/project/commit_bridge_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/group_timeline_load_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/join_playback_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/persist_runtime.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/matrix/core/preview.js`
-- `src/application/eVe/intuition/runtime/tool_genesis.js`
-- `src/application/eVe/intuition/tools/background.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/copy.js`
-- `src/application/eVe/intuition/tools/core/hmtracks_audio_engine_v1.test.mjs`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/intuition/tools/detail.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/core/media_engine/molecule.native.js`
+- `eve/application/core/media_engine/molecule.test.mjs`
+- `eve/application/documentations/strangler.md`
+- `eve/application/documentations/tools.md`
+- `eve/application/domains/media/api/media_api_shared.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/api/video_recording_controller.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/media/preview/native_frame_video_preview_renderer.js`
+- `eve/application/domains/media/shared/media_identifier.test.mjs`
+- `eve/application/domains/media/shared/media_source.js`
+- `eve/application/domains/media/shared/media_source.test.mjs`
+- `eve/application/domains/mtrax/api/api_record_media_runtime.js`
+- `eve/application/domains/mtrax/api/transport_api_runtime.js`
+- `eve/application/domains/mtrax/api/window_api_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_core_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_native_audio_runtime.js`
+- `eve/application/domains/mtrax/audio/hmtracks_transport_runtime.js`
+- `eve/application/domains/mtrax/clips/add_clip_runtime.js`
+- `eve/application/domains/mtrax/clips/deletion_runtime.js`
+- `eve/application/domains/mtrax/clips/source_ops_bootstrap_runtime.js`
+- `eve/application/domains/mtrax/clips/split_join_runtime.js`
+- `eve/application/domains/mtrax/core/diagnostics.js`
+- `eve/application/domains/mtrax/integration/clipboard_paste_runtime.js`
+- `eve/application/domains/mtrax/media/drop_runtime.js`
+- `eve/application/domains/mtrax/media/element_runtime.js`
+- `eve/application/domains/mtrax/media/element_video_audio_source.test.mjs`
+- `eve/application/domains/mtrax/media/extracted_audio_auth_source.test.mjs`
+- `eve/application/domains/mtrax/media/source_runtime.js`
+- `eve/application/domains/mtrax/media/upload_resolution_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_docked_pipeline_bundle_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `eve/application/domains/mtrax/project/commit_bridge_runtime.js`
+- `eve/application/domains/mtrax/timeline/group_timeline_load_runtime.js`
+- `eve/application/domains/mtrax/timeline/join_playback_runtime.js`
+- `eve/application/domains/mtrax/timeline/persist_runtime.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/matrix/core/preview.js`
+- `eve/application/intuition/runtime/tool_genesis.js`
+- `eve/application/intuition/tools/background.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/copy.js`
+- `eve/application/intuition/tools/core/hmtracks_audio_engine_v1.test.mjs`
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/intuition/tools/detail.js`
 
 ### retryLoops
 
@@ -4950,106 +4950,106 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/server.js`
 - `src/application/audio_runtime/audio.facade.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `src/application/eVe/core/atome_events/drag_runtime.js`
-- `src/application/eVe/core/atome_events/resize_runtime.js`
-- `src/application/eVe/core/atome_events/text_edit_runtime.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/documentations/debug_UI.md`
-- `src/application/eVe/documentations/strangler.md`
-- `src/application/eVe/domains/media/api/audio_api.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
-- `src/application/eVe/domains/mtrax/core/diagnostics.js`
-- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_export_runtime.surface_capture.test.mjs`
-- `src/application/eVe/domains/mtrax/preview/preview_frame_dispatch_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_playback_timeline_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_record_sampler_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/play_runtime.js`
-- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/controls_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/docked_renderer_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/embedded_footer_drag_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/embedded_footer_resize_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
-- `src/application/eVe/domains/user/profile_api.js`
-- `src/application/eVe/eVe_essentials.md`
-- `src/application/eVe/elements/design/dialog_runtime.js`
-- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
-- `src/application/eVe/elements/design.js`
-- `src/application/eVe/intuition/core/dom.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/flower/context.js`
-- `src/application/eVe/intuition/footer/runtime.js`
-- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`
-- `src/application/eVe/intuition/matrix/ui/view.js`
-- `src/application/eVe/intuition/menu/core/toolbox_runtime.js`
-- `src/application/eVe/intuition/menu/ui/toolbox_dom.js`
-- `src/application/eVe/intuition/ribbon/menu.js`
-- `src/application/eVe/intuition/runtime/layer_contract.js`
-- `src/application/eVe/intuition/runtime/layer_contract.layer_order.test.mjs`
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`
-- `src/application/eVe/intuition/runtime/preview_surface.js`
-- `src/application/eVe/intuition/runtime/tool_genesis.js`
-- `src/application/eVe/intuition/tools/background.js`
-- `src/application/eVe/intuition/tools/capture.js`
-- `src/application/eVe/intuition/tools/clock.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/contact.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_runtime.js`
-- `src/application/eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
-- `src/application/eVe/intuition/tools/core/svg_draw_runtime.js`
-- `src/application/eVe/intuition/tools/core/svg_vector_edit_runtime.js`
-- `src/application/eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
-- `src/application/eVe/intuition/tools/core/tool_runtime.js`
-- `src/application/eVe/intuition/tools/detail.js`
-- `src/application/eVe/intuition/tools/finder.js`
-- `src/application/eVe/intuition/tools/infos.js`
-- `src/application/eVe/intuition/tools/map.js`
+- `eve/application/core/atome_events/drag_runtime.js`
+- `eve/application/core/atome_events/resize_runtime.js`
+- `eve/application/core/atome_events/text_edit_runtime.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/documentations/debug_UI.md`
+- `eve/application/documentations/strangler.md`
+- `eve/application/domains/media/api/audio_api.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
+- `eve/application/domains/mtrax/api/window_api_runtime.js`
+- `eve/application/domains/mtrax/clips/node_render_runtime.js`
+- `eve/application/domains/mtrax/core/diagnostics.js`
+- `eve/application/domains/mtrax/preview/preview_export_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_export_runtime.surface_capture.test.mjs`
+- `eve/application/domains/mtrax/preview/preview_frame_dispatch_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `eve/application/domains/mtrax/project/project_playback_timeline_runtime.js`
+- `eve/application/domains/mtrax/project/project_record_sampler_runtime.js`
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`
+- `eve/application/domains/mtrax/timeline/play_runtime.js`
+- `eve/application/domains/mtrax/transport/transport_gestures_runtime.js`
+- `eve/application/domains/mtrax/ui/controls_runtime.js`
+- `eve/application/domains/mtrax/ui/docked_renderer_runtime.js`
+- `eve/application/domains/mtrax/ui/embedded_footer_drag_runtime.js`
+- `eve/application/domains/mtrax/ui/embedded_footer_resize_runtime.js`
+- `eve/application/domains/mtrax/ui/ensure_runtime.js`
+- `eve/application/domains/user/profile_api.js`
+- `eve/eve/application_essentials.md`
+- `eve/application/elements/design/dialog_runtime.js`
+- `eve/application/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eve/application/elements/design.js`
+- `eve/application/intuition/core/dom.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/flower/context.js`
+- `eve/application/intuition/footer/runtime.js`
+- `eve/application/intuition/matrix/core/matrix_runtime.js`
+- `eve/application/intuition/matrix/ui/view.js`
+- `eve/application/intuition/menu/core/toolbox_runtime.js`
+- `eve/application/intuition/menu/ui/toolbox_dom.js`
+- `eve/application/intuition/ribbon/menu.js`
+- `eve/application/intuition/runtime/layer_contract.js`
+- `eve/application/intuition/runtime/layer_contract.layer_order.test.mjs`
+- `eve/application/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `eve/application/intuition/runtime/mtrack_dock_controller.js`
+- `eve/application/intuition/runtime/preview_surface.js`
+- `eve/application/intuition/runtime/tool_genesis.js`
+- `eve/application/intuition/tools/background.js`
+- `eve/application/intuition/tools/capture.js`
+- `eve/application/intuition/tools/clock.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/contact.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_runtime.js`
+- `eve/application/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
+- `eve/application/intuition/tools/core/svg_draw_runtime.js`
+- `eve/application/intuition/tools/core/svg_vector_edit_runtime.js`
+- `eve/application/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `eve/application/intuition/tools/core/tool_runtime.js`
+- `eve/application/intuition/tools/detail.js`
+- `eve/application/intuition/tools/finder.js`
+- `eve/application/intuition/tools/infos.js`
+- `eve/application/intuition/tools/map.js`
 
 ### observers
 
 - `documentations/Intuition_toolbox_menu_usage.md`
 - `documentations/audits/safe_optimizations.md`
-- `src/application/eVe/core/atome_events/trace_runtime.js`
-- `src/application/eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `src/application/eVe/domains/media/preview/webgpu_video_preview_renderer.js`
-- `src/application/eVe/domains/mtrax/core/state_factory.js`
-- `src/application/eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/controls_header_bundle_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/embedded_footer_resize_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/ensure_bridge_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/panel_lifecycle_runtime.js`
-- `src/application/eVe/elements/design/dialog_runtime.background_drag.test.mjs`
-- `src/application/eVe/elements/design/dialog_runtime.js`
-- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
-- `src/application/eVe/elements/design.js`
-- `src/application/eVe/elements/eVe_look.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/footer/runtime.js`
-- `src/application/eVe/intuition/footer/runtime.sync_placement.test.mjs`
-- `src/application/eVe/intuition/matrix/ui/view.js`
-- `src/application/eVe/intuition/menu/ui/toolbox_dom.js`
-- `src/application/eVe/intuition/runtime/layer_contract.js`
-- `src/application/eVe/intuition/runtime/layer_contract.layer_order.test.mjs`
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
-- `src/application/eVe/intuition/runtime/mtrack_dock_controller.js`
-- `src/application/eVe/intuition/runtime/tool_genesis.js`
-- `src/application/eVe/intuition/tools/clock.js`
-- `src/application/eVe/intuition/tools/communication.js`
-- `src/application/eVe/intuition/tools/mtrack.js`
-- `src/application/eVe/intuition/tools/project_drop.js`
-- `src/application/eVe/intuition/tools/user.js`
-- `src/application/eVe/todo/AUDIT.md`
-- `src/application/eVe/user/background.js`
+- `eve/application/core/atome_events/trace_runtime.js`
+- `eve/application/domains/media/preview/native_frame_video_preview_renderer.js`
+- `eve/application/domains/media/preview/webgpu_video_preview_renderer.js`
+- `eve/application/domains/mtrax/core/state_factory.js`
+- `eve/application/domains/mtrax/preview/preview_layout_bindings_runtime.js`
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`
+- `eve/application/domains/mtrax/ui/controls_header_bundle_runtime.js`
+- `eve/application/domains/mtrax/ui/embedded_footer_resize_runtime.js`
+- `eve/application/domains/mtrax/ui/ensure_bridge_runtime.js`
+- `eve/application/domains/mtrax/ui/ensure_runtime.js`
+- `eve/application/domains/mtrax/ui/panel_lifecycle_runtime.js`
+- `eve/application/elements/design/dialog_runtime.background_drag.test.mjs`
+- `eve/application/elements/design/dialog_runtime.js`
+- `eve/application/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eve/application/elements/design.js`
+- `eve/application/elements/eVe_look.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/footer/runtime.js`
+- `eve/application/intuition/footer/runtime.sync_placement.test.mjs`
+- `eve/application/intuition/matrix/ui/view.js`
+- `eve/application/intuition/menu/ui/toolbox_dom.js`
+- `eve/application/intuition/runtime/layer_contract.js`
+- `eve/application/intuition/runtime/layer_contract.layer_order.test.mjs`
+- `eve/application/intuition/runtime/mtrack_dock_controller.cleanup.test.mjs`
+- `eve/application/intuition/runtime/mtrack_dock_controller.js`
+- `eve/application/intuition/runtime/tool_genesis.js`
+- `eve/application/intuition/tools/clock.js`
+- `eve/application/intuition/tools/communication.js`
+- `eve/application/intuition/tools/mtrack.js`
+- `eve/application/intuition/tools/project_drop.js`
+- `eve/application/intuition/tools/user.js`
+- `eve/application/todo/AUDIT.md`
+- `eve/application/user/background.js`
 - `src/application/examples/share_ui.js`
 - `src/application/jeezs/demo.js`
 - `src/application/jeezs/index.js`
@@ -5078,74 +5078,74 @@ This report is generated from a deterministic static scan. It separates confirme
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift`
 - `scripts/bundle.js`
 - `src/application/aBox/index.js`
-- `src/application/eVe/core/atome_events/drag_runtime.js`
-- `src/application/eVe/core/atome_events/host_binding_runtime.js`
-- `src/application/eVe/core/atome_events/placement_runtime.js`
-- `src/application/eVe/core/atome_events/project_layer_runtime.js`
-- `src/application/eVe/core/atome_events/text_creation_session.js`
-- `src/application/eVe/core/atome_events/text_edit_runtime.js`
-- `src/application/eVe/core/atome_events/text_edit_ui_runtime.js`
-- `src/application/eVe/core/atome_events/trace_runtime.js`
-- `src/application/eVe/core/atome_timeline.js`
-- `src/application/eVe/core/media_engine/molecule.api.js`
-- `src/application/eVe/core/media_engine/molecule.js`
-- `src/application/eVe/default/shortcuts.js`
-- `src/application/eVe/documentations/Good practices.md`
-- `src/application/eVe/domains/media/api/media_api_shared.js`
-- `src/application/eVe/domains/media/api/video_api.js`
-- `src/application/eVe/domains/media/asset_box.js`
-- `src/application/eVe/domains/media/media_diagnostics.js`
-- `src/application/eVe/domains/mtrax/api/window_api_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/node_render_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/preview_metadata_runtime.js`
-- `src/application/eVe/domains/mtrax/clips/selection_runtime.js`
-- `src/application/eVe/domains/mtrax/core/diagnostics.js`
-- `src/application/eVe/domains/mtrax/media/element_runtime.js`
-- `src/application/eVe/domains/mtrax/media/record_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_frame_data_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_host_resolution_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_layout_runtime.js`
-- `src/application/eVe/domains/mtrax/preview/preview_poster_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_local_drag_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_playback_target_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_record_helpers_runtime.js`
-- `src/application/eVe/domains/mtrax/project/project_record_host_runtime.js`
-- `src/application/eVe/domains/mtrax/svg/markup_manifest_runtime.js`
-- `src/application/eVe/domains/mtrax/text/clip_editor_runtime.js`
-- `src/application/eVe/domains/mtrax/text/descriptor_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/join_playback_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_preview.js`
-- `src/application/eVe/domains/mtrax/timeline/loop_cells_runtime.js`
-- `src/application/eVe/domains/mtrax/timeline/ruler_render_runtime.js`
-- `src/application/eVe/domains/mtrax/tracks/clip_ops_runtime.js`
-- `src/application/eVe/domains/mtrax/tracks/lane_ui_runtime.js`
-- `src/application/eVe/domains/mtrax/tracks/name_editing.js`
-- `src/application/eVe/domains/mtrax/tracks/render_tracks_runtime.js`
-- `src/application/eVe/domains/mtrax/transport/transport_gestures_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/docked_renderer_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/embedded_footer_drag_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/embedded_footer_resize_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/footer_embed_primitives.js`
-- `src/application/eVe/domains/mtrax/ui/layout_helpers_runtime.js`
-- `src/application/eVe/domains/mtrax/ui/styles.js`
-- `src/application/eVe/domains/mtrax/visual/descriptor_capture_runtime.js`
-- `src/application/eVe/domains/mtrax/visual/patch_apply_runtime.js`
-- `src/application/eVe/elements/design/dialog_runtime.background_drag.test.mjs`
-- `src/application/eVe/elements/design/dialog_runtime.js`
-- `src/application/eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
-- `src/application/eVe/elements/design/i18n_bindings.js`
-- `src/application/eVe/elements/design/panel_chrome.js`
-- `src/application/eVe/elements/design.js`
-- `src/application/eVe/elements/eVe_look.js`
-- `src/application/eVe/elements/look/preset_ensurers.js`
-- `src/application/eVe/intuition/core/dom.js`
-- `src/application/eVe/intuition/eVeIntuition.js`
-- `src/application/eVe/intuition/flower/menu.js`
-- `src/application/eVe/intuition/footer/inline_button.js`
-- `src/application/eVe/intuition/footer/runtime.js`
-- `src/application/eVe/intuition/matrix/core/matrix_runtime.js`
-- `src/application/eVe/intuition/matrix/core/preview.js`
+- `eve/application/core/atome_events/drag_runtime.js`
+- `eve/application/core/atome_events/host_binding_runtime.js`
+- `eve/application/core/atome_events/placement_runtime.js`
+- `eve/application/core/atome_events/project_layer_runtime.js`
+- `eve/application/core/atome_events/text_creation_session.js`
+- `eve/application/core/atome_events/text_edit_runtime.js`
+- `eve/application/core/atome_events/text_edit_ui_runtime.js`
+- `eve/application/core/atome_events/trace_runtime.js`
+- `eve/application/core/atome_timeline.js`
+- `eve/application/core/media_engine/molecule.api.js`
+- `eve/application/core/media_engine/molecule.js`
+- `eve/application/default/shortcuts.js`
+- `eve/application/documentations/Good practices.md`
+- `eve/application/domains/media/api/media_api_shared.js`
+- `eve/application/domains/media/api/video_api.js`
+- `eve/application/domains/media/asset_box.js`
+- `eve/application/domains/media/media_diagnostics.js`
+- `eve/application/domains/mtrax/api/window_api_runtime.js`
+- `eve/application/domains/mtrax/clips/node_render_runtime.js`
+- `eve/application/domains/mtrax/clips/preview_metadata_runtime.js`
+- `eve/application/domains/mtrax/clips/selection_runtime.js`
+- `eve/application/domains/mtrax/core/diagnostics.js`
+- `eve/application/domains/mtrax/media/element_runtime.js`
+- `eve/application/domains/mtrax/media/record_capture_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_frame_data_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_host_resolution_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_layout_runtime.js`
+- `eve/application/domains/mtrax/preview/preview_poster_capture_runtime.js`
+- `eve/application/domains/mtrax/project/project_local_drag_runtime.js`
+- `eve/application/domains/mtrax/project/project_playback_target_runtime.js`
+- `eve/application/domains/mtrax/project/project_record_helpers_runtime.js`
+- `eve/application/domains/mtrax/project/project_record_host_runtime.js`
+- `eve/application/domains/mtrax/svg/markup_manifest_runtime.js`
+- `eve/application/domains/mtrax/text/clip_editor_runtime.js`
+- `eve/application/domains/mtrax/text/descriptor_runtime.js`
+- `eve/application/domains/mtrax/timeline/join_playback_runtime.js`
+- `eve/application/domains/mtrax/timeline/loop_cells_preview.js`
+- `eve/application/domains/mtrax/timeline/loop_cells_runtime.js`
+- `eve/application/domains/mtrax/timeline/ruler_render_runtime.js`
+- `eve/application/domains/mtrax/tracks/clip_ops_runtime.js`
+- `eve/application/domains/mtrax/tracks/lane_ui_runtime.js`
+- `eve/application/domains/mtrax/tracks/name_editing.js`
+- `eve/application/domains/mtrax/tracks/render_tracks_runtime.js`
+- `eve/application/domains/mtrax/transport/transport_gestures_runtime.js`
+- `eve/application/domains/mtrax/ui/docked_renderer_runtime.js`
+- `eve/application/domains/mtrax/ui/embedded_footer_drag_runtime.js`
+- `eve/application/domains/mtrax/ui/embedded_footer_resize_runtime.js`
+- `eve/application/domains/mtrax/ui/ensure_runtime.js`
+- `eve/application/domains/mtrax/ui/footer_embed_primitives.js`
+- `eve/application/domains/mtrax/ui/layout_helpers_runtime.js`
+- `eve/application/domains/mtrax/ui/styles.js`
+- `eve/application/domains/mtrax/visual/descriptor_capture_runtime.js`
+- `eve/application/domains/mtrax/visual/patch_apply_runtime.js`
+- `eve/application/elements/design/dialog_runtime.background_drag.test.mjs`
+- `eve/application/elements/design/dialog_runtime.js`
+- `eve/application/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eve/application/elements/design/i18n_bindings.js`
+- `eve/application/elements/design/panel_chrome.js`
+- `eve/application/elements/design.js`
+- `eve/application/elements/eVe_look.js`
+- `eve/application/elements/look/preset_ensurers.js`
+- `eve/application/intuition/core/dom.js`
+- `eve/application/intuition/eVeIntuition.js`
+- `eve/application/intuition/flower/menu.js`
+- `eve/application/intuition/footer/inline_button.js`
+- `eve/application/intuition/footer/runtime.js`
+- `eve/application/intuition/matrix/core/matrix_runtime.js`
+- `eve/application/intuition/matrix/core/preview.js`
 
 ## Cleanup Decisions
 

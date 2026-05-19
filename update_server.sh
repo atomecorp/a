@@ -155,7 +155,7 @@ else
 fi
 
 if [[ "$no_git" == false ]]; then
-	pull_script="$project_root/src/application/eVe/git_utils/pull.sh"
+	pull_script="$project_root/eve/application/git_utils/pull.sh"
 	if [[ -f "$pull_script" ]]; then
 		bash "$pull_script"
 	else

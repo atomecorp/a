@@ -12,7 +12,7 @@
  * - Queue is stored in localStorage with encryption
  * - Actions are verified before execution
  * 
- * @module src/application/security/syncQueue
+ * @module atome/security/syncQueue
  */
 
 // =============================================================================

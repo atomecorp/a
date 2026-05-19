@@ -22,7 +22,7 @@
  * - Private keys are NEVER stored here
  * - Fingerprints prevent key substitution attacks
  * 
- * @module src/application/security/trusted_keys
+ * @module atome/security/trusted_keys
  */
 
 // =============================================================================

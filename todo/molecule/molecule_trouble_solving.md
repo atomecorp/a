@@ -19,7 +19,7 @@ The goal is to solve each problem from its root cause, one by one, without worka
 Reference rules:
 
 - `.codex/AGENTS.md`
-- `src/application/eVe/documentations/debug_UI.md`
+- `eve/application/documentations/debug_UI.md`
 
 ## Mandatory Workflow
 

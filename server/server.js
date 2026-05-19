@@ -9,7 +9,7 @@ import { promises as fs, createReadStream, createWriteStream, readFileSync, exis
 import crypto from 'crypto';
 import { execFile } from 'child_process';
 import pino from 'pino';
-import { coerceLogEnvelope, isValidLogEnvelope } from '../src/shared/logging.js';
+import { coerceLogEnvelope, isValidLogEnvelope } from '../atome/shared/logging.js';
 
 const SERVER_LOG_LEVEL = (process.env.SQUIRREL_LOG_LEVEL || 'warn').toLowerCase();
 const SERVER_INFO_ENABLED = SERVER_LOG_LEVEL === 'info' || SERVER_LOG_LEVEL === 'debug';
@@ -130,6 +130,8 @@ const DB_CONFIGURED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 const staticRoot = path.join(projectRoot, 'src');
+const atomeStaticRoot = path.join(projectRoot, 'atome');
+const eveStaticRoot = path.join(projectRoot, 'eve');
 const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
 const LOG_DIR = path.join(projectRoot, 'logs');
 const FASTIFY_LOG_FILE = path.join(LOG_DIR, 'fastify.log');
@@ -330,7 +332,7 @@ const uploadsDir = (() => {
   }
 })();
 const VERSION_FILE = path.join(projectRoot, 'version.txt');
-const EVE_VERSION_FILE = path.join(projectRoot, 'src', 'application', 'eVe', 'version.txt');
+const EVE_VERSION_FILE = path.join(eveStaticRoot, 'application', 'version.txt');
 const VERSION_FILE_WATCH_INTERVAL_MS = 1500;
 let SERVER_VERSION = 'unknown';
 let EVE_VERSION = 'unknown';
@@ -462,7 +464,7 @@ async function loadServerVersion() {
 }
 
 async function loadEveVersion() {
-  return loadVersionFile(EVE_VERSION_FILE, 'src/application/eVe/version.txt');
+  return loadVersionFile(EVE_VERSION_FILE, 'eve/application/version.txt');
 }
 
 async function refreshVersionCache() {
@@ -1249,6 +1251,31 @@ async function startServer() {
     // ===========================
     // 1. PLUGINS DE BASE
     // ===========================
+
+    // Serve framework and product roots explicitly; the main app still boots from src/.
+    await server.register(fastifyStatic, {
+      root: atomeStaticRoot,
+      prefix: '/atome/',
+      decorateReply: false
+    });
+
+    await server.register(fastifyStatic, {
+      root: eveStaticRoot,
+      prefix: '/eve/',
+      decorateReply: false
+    });
+
+    await server.register(fastifyStatic, {
+      root: path.join(eveStaticRoot, 'application'),
+      prefix: '/application/eVe/',
+      decorateReply: false
+    });
+
+    await server.register(fastifyStatic, {
+      root: staticRoot,
+      prefix: '/src/',
+      decorateReply: false
+    });
 
     // Servir les fichiers statiques depuis staticRoot (../src en dev)
     await server.register(fastifyStatic, {

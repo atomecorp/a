@@ -4,14 +4,14 @@ import process from 'node:process';
 
 const DEFAULT_ROOT = process.cwd();
 const DEFAULT_TARGETS = [
-    'src/application/eVe/intuition/tools/molecule',
-    'src/application/eVe/core/project_store',
-    'src/application/eVe/core/event_store',
-    'src/application/eVe/core/media_store'
+    'eve/application/intuition/tools/molecule',
+    'eve/application/core/project_store',
+    'eve/application/core/event_store',
+    'eve/application/core/media_store'
 ];
 const MTRACK_STYLE_CONTRACT_FILES = [
-    'src/application/eVe/domains/mtrax/ui/styles.js',
-    'src/application/eVe/domains/mtrax/ui/preview_styles.js'
+    'eve/application/domains/mtrax/ui/styles.js',
+    'eve/application/domains/mtrax/ui/preview_styles.js'
 ];
 
 const SOURCE_EXTENSIONS = new Set(['.js', '.mjs', '.ts', '.mts']);
@@ -94,7 +94,7 @@ const MTRACK_REQUIRED_STYLE_CONTRACTS = [
     {
         code: 'mtrack_preview_surface_required',
         message: 'Molecule preview media must be isolated behind the dedicated preview surface class.',
-        file: 'src/application/eVe/domains/mtrax/ui/preview_styles.js',
+        file: 'eve/application/domains/mtrax/ui/preview_styles.js',
         needle: '.eve-mtrack-preview-surface'
     }
 ];

@@ -394,7 +394,7 @@ For each path:
 
 1. Canonical candidate currently in use:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/ribbon/menu.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/ribbon/menu.js`
 - responsibility:
   - main ribbon rendering
   - bouchon / reveal / scroll snapping
@@ -406,7 +406,7 @@ For each path:
 
 1. Active consumer:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/menu/index.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/menu/index.js`
 - classification:
   - **shared active path**
 
@@ -414,7 +414,7 @@ For each path:
 
 1. Active renderer:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/flower/menu.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/flower/menu.js`
 - responsibility:
   - radial flower layout
   - flower item rendering
@@ -431,7 +431,7 @@ Observation:
 
 1. Active modern runtime:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/footer/runtime.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/footer/runtime.js`
 - responsibility:
   - render inline tools into host
   - render inline palettes
@@ -441,7 +441,7 @@ Observation:
 
 1. Inline button renderer used by footer runtime:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/footer/inline_button.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/footer/inline_button.js`
 - classification:
   - **shared active path**
 
@@ -454,7 +454,7 @@ Observation:
 
 1. Legacy still present and still callable:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
 - key functions:
   - `renderAtomeEditFooterToolsIntoRow(...)`
   - `ensureAtomeEditFooterPalette(...)`
@@ -464,7 +464,7 @@ Observation:
 Critical fact:
 
 - `window.eveAtomeEditFooterApi.renderToolsInto(...)` in
-  `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
+  `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
   can still route either:
   - to the modern footer runtime
   - or to the legacy footer renderer
@@ -477,7 +477,7 @@ Therefore:
 
 1. Shared low-level helper:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/tools/core/palette_behavior.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/core/palette_behavior.js`
 - responsibility:
   - low-level palette expansion state / geometry helper
 - classification:
@@ -485,10 +485,10 @@ Therefore:
 
 1. Additional parallel palette behaviors:
 
-- footer inline palette logic in `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/footer/runtime.js`
-- legacy footer palette behavior in `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
-- ribbon-local palette handling in `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/ribbon/menu.js`
-- project drop palette handling in `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/tools/project_drop.js`
+- footer inline palette logic in `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/footer/runtime.js`
+- legacy footer palette behavior in `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
+- ribbon-local palette handling in `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/ribbon/menu.js`
+- project drop palette handling in `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/project_drop.js`
 
 Therefore:
 
@@ -498,7 +498,7 @@ Therefore:
 
 1. Active embedded row mount:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/domains/mtrax/ui/ensure_runtime.js`
 - responsibility:
   - inject integrated tools row in Mtrack
   - call footer API to render tools into that row
@@ -515,13 +515,13 @@ Therefore:
 
 Therefore:
 
-- MTraX no longer contains the clone-based historical path; future audits should use `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/domains/mtrax`
+- MTraX no longer contains the clone-based historical path; future audits should use `/Users/jean-ericgodard/RubymineProjects/a/eve/application/domains/mtrax`
 
 #### G. Tool Visual Primitive
 
 1. Shared primitive:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/projection/button.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/projection/button.js`
 - responsibility:
   - shared button face/base styles
 - classification:
@@ -529,7 +529,7 @@ Therefore:
 
 1. Shared slider primitive:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/shared/slider_tool_content.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/shared/slider_tool_content.js`
 - classification:
   - **shared low-level primitive**
 
@@ -539,19 +539,19 @@ These are good candidates to keep.
 
 1. System authority candidate:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/elements/system_ui_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/elements/system_ui_tokens.js`
 - classification:
   - **global token authority candidate**
 
 1. Derived panel layer:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/panels/visual/panel_visual_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/panels/visual/panel_visual_tokens.js`
 - classification:
   - **derived layer**
 
 1. Ribbon-specific token layer:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/ribbon/tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/ribbon/tokens.js`
 - classification:
   - **mixed layer**
 
@@ -592,15 +592,15 @@ Specifically:
 
 #### J. Immediate Removal Targets Identified By Inventory
 
-- legacy footer renderer path in `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
+- legacy footer renderer path in `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
 - removed MTraX header clone path
 - duplicate palette implementations after canonical selection
 
 #### K. Immediate Safe Keepers Identified By Inventory
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/projection/button.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/shared/slider_tool_content.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/tools/core/palette_behavior.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/projection/button.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/shared/slider_tool_content.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/core/palette_behavior.js`
 
 ## Step 2: Choose Canonical Engines
 
@@ -633,7 +633,7 @@ The choice must minimize code and maximize reuse across:
 
 Chosen canonical basis:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/ribbon/menu.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/ribbon/menu.js`
 
 Reason:
 
@@ -654,7 +654,7 @@ Decision:
 
 Chosen canonical basis:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
 - specifically the behavior currently embodied by:
   - `renderAtomeEditFooterToolsIntoRow(...)`
   - `createToolButtonV2(...)` usage
@@ -675,12 +675,12 @@ Decision:
 
 Chosen canonical basis:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
 - specifically the behavior currently embodied by:
   - `ensureAtomeEditFooterPalette(...)`
   - the child-guard and keep-open logic in the footer palette flow
 - supported by low-level primitive:
-  - `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/tools/core/palette_behavior.js`
+  - `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/core/palette_behavior.js`
 
 Reason:
 
@@ -699,7 +699,7 @@ Decision:
 
 Chosen canonical basis:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/elements/system_ui_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/elements/system_ui_tokens.js`
 
 Reason:
 
@@ -709,16 +709,16 @@ Reason:
 Decision:
 
 - `system_ui_tokens.js` is the authority for core visual concepts
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/ribbon/tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/ribbon/tokens.js`
   and
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/panels/visual/panel_visual_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/panels/visual/panel_visual_tokens.js`
   must remain derived-only after migration
 
 #### E. Files To Keep As Shared Primitives
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/projection/button.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/shared/slider_tool_content.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/tools/core/palette_behavior.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/projection/button.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/shared/slider_tool_content.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/core/palette_behavior.js`
 
 These are not authorities by themselves, but they are valid shared building blocks.
 
@@ -726,7 +726,7 @@ These are not authorities by themselves, but they are valid shared building bloc
 
 1. Replace / debranch:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/footer/runtime.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/footer/runtime.js`
 
 Why:
 
@@ -737,7 +737,7 @@ Why:
 1. Replace / debranch:
 
 - the legacy branch selector inside
-  `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
+  `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
   that keeps both modern and legacy footer rendering alive
 
 Why:
@@ -754,8 +754,8 @@ Why:
 
 1. Audit then replace if still active as competing authority:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/tools/project_drop.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/menu/core/toolbox_runtime.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/tools/project_drop.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/menu/core/toolbox_runtime.js`
 
 Why:
 
@@ -934,10 +934,10 @@ There must be one source of truth for the core visual tokens.
 
 ### Current Baseline Files To Audit First
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/elements/system_ui_tokens.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/panels/visual/panel_visual_tokens.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/ribbon/tokens.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/elements/eVe_look.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/elements/system_ui_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/panels/visual/panel_visual_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/ribbon/tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/elements/eVe_look.js`
 - Mtrack-specific style files that introduce panel or tool dimensions locally
 
 ## Step 4: Replace Tool Rendering
@@ -958,7 +958,7 @@ Route all tool rendering through one canonical renderer.
 
 Applied:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
 
 Result:
 
@@ -974,8 +974,8 @@ This removes `footer/runtime.js` as an authority for tool rendering while preser
 
 Applied:
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/domains/mtrax/ui/styles.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/domains/mtrax/ui/styles.js`
 
 Result:
 
@@ -995,7 +995,7 @@ Removed:
 - former MTraX header clone runtime
 - former MTraX header action buttons runtime
 - `MTRACK_HEADER_TOOL_CLONES` in
-  `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/domains/mtrax/shared/constants.js`
+  `/Users/jean-ericgodard/RubymineProjects/a/eve/application/domains/mtrax/shared/constants.js`
 
 Debranched:
 
@@ -1005,7 +1005,7 @@ Debranched:
 
 Proof:
 
-- `rg -n "header_tool_clone_runtime|header_action_buttons_runtime|MTRACK_HEADER_TOOL_CLONES|mountHeaderToolClones|mtrackHeaderToolClones" src/application/eVe/domains/mtrax src/application/eVe/intuition/tools/mtrack.js -S`
+- `rg -n "header_tool_clone_runtime|header_action_buttons_runtime|MTRACK_HEADER_TOOL_CLONES|mountHeaderToolClones|mtrackHeaderToolClones" eve/application/domains/mtrax eve/application/intuition/tools/mtrack.js -S`
   returns no active matches
 
 #### 4.D Header toolbar bridge removed completely
@@ -1034,7 +1034,7 @@ Debranched:
 
 Validation:
 
-- `rg -n "GOEY_VISUAL_PREFERENCES_EVENT|MTRACK_HEADER_DETAIL_BUTTON_ID|MTRACK_HEADER_RECORD_BUTTON_ID|syncHeaderActionButtonsState|header_tools_visual_runtime|header_detail_bridge_runtime|headerTools\\b|headerRecordState\\b|visualPrefsBound\\b" src/application/eVe/domains/mtrax src/application/eVe/intuition/tools/mtrack.js src/application/eVe/domains/mtrax/shared/constants.js -S`
+- `rg -n "GOEY_VISUAL_PREFERENCES_EVENT|MTRACK_HEADER_DETAIL_BUTTON_ID|MTRACK_HEADER_RECORD_BUTTON_ID|syncHeaderActionButtonsState|header_tools_visual_runtime|header_detail_bridge_runtime|headerTools\\b|headerRecordState\\b|visualPrefsBound\\b" eve/application/domains/mtrax eve/application/intuition/tools/mtrack.js eve/application/domains/mtrax/shared/constants.js -S`
   returns no active matches
 - `/Users/jean-ericgodard/RubymineProjects/a/temp/probe_reports/mtrack_panel_tools_probe.json`
   still confirms:
@@ -1109,14 +1109,14 @@ Validate both architecture and design.
 
 ## Known Suspicious Areas To Purge
 
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/eVeIntuition.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/footer/runtime.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/ribbon/menu.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/flower/menu.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/domains/mtrax/ui/ensure_runtime.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/eVeIntuition.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/footer/runtime.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/ribbon/menu.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/flower/menu.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/domains/mtrax/ui/ensure_runtime.js`
 - removed former MTraX header clone runtime
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/elements/system_ui_tokens.js`
-- `/Users/jean-ericgodard/RubymineProjects/a/src/application/eVe/intuition/panels/visual/panel_visual_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/elements/system_ui_tokens.js`
+- `/Users/jean-ericgodard/RubymineProjects/a/eve/application/intuition/panels/visual/panel_visual_tokens.js`
 
 These are not automatically wrong, but they are the first places to audit for duplication and exceptions.
 

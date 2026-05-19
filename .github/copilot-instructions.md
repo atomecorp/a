@@ -44,7 +44,7 @@
 This document consolidates the **must‑follow rules** found in the documentation folders:
 
 - documentations/
-- src/application/eVe/documentations/
+- eve/application/documentations/
 
 It focuses on **sync**, **atome creation**, and **general coding rules**.
 
@@ -63,7 +63,7 @@ It focuses on **sync**, **atome creation**, and **general coding rules**.
 - **Replay must be deterministic**; if not, fail loudly.
 - **All mutations must be persisted and historized** through this pipeline (tools, UI, AI, batch).
 
-Source: src/application/eVe/documentations/tools.md
+Source: eve/application/documentations/tools.md
 
 ### 1.1) Real‑time Sync & Connectivity Rules
 
@@ -73,7 +73,7 @@ Source: src/application/eVe/documentations/tools.md
 - **Fastify never connects to Tauri**; clients always initiate connections.
 - **Single realtime entry point**: all realtime sync and direct-message commands are centralized in [src/squirrel/apis/unified/UnifiedSync.js](src/squirrel/apis/unified/UnifiedSync.js) and exposed as `window.Squirrel.Sync` and `window.Squirrel.SyncEngine`.
 
-Sources: src/application/eVe/documentations/realtime_sync_architecture.md, src/application/eVe/documentations/Offline Online explanations.md
+Sources: eve/application/documentations/realtime_sync_architecture.md, eve/application/documentations/Offline Online explanations.md
 
 ### 2) Atome Creation — Canonical Contract
 
@@ -148,7 +148,7 @@ Source: documentations/components.md
 - **No fallbacks**: missing keys must be fixed, not bypassed.
 - Keep keys grouped by domain (e.g., `eve.menu.*`, `eve.user.*`).
 
-Source: src/application/eVe/documentations/int8.md
+Source: eve/application/documentations/int8.md
 
 ### 9) Separation of Logic vs Rendering
 
@@ -171,7 +171,7 @@ Source: documentations/Eden atome Database.md
 - **Property‑level permissions apply** (e.g., share read‑only for `width` so recipients cannot edit it).
 - **Public visibility** is supported: some documents can be **public read** or **public write** for all eVe users.
 
-Source: src/application/eVe/documentations/Security_and_sharing.md
+Source: eve/application/documentations/Security_and_sharing.md
 
 ### 11) Tools API & Automation
 
@@ -179,7 +179,7 @@ Source: src/application/eVe/documentations/Security_and_sharing.md
 - Tools are **programmable via APIs** for batch operations and AI control.
 - **Gestures (drag, resize, rotate, etc.) must be historized with high precision** so they can be replayed like a movie.
 
-Source: src/application/eVe/documentations/tools.md
+Source: eve/application/documentations/tools.md
 
 ### 12) Ontology
 
