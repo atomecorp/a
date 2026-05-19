@@ -72,7 +72,7 @@ Sources principales:
 - [x] Clarifier le contrat preview: interne par defaut, externalise uniquement si explicite.
 - [x] Remplacer le layout tracks/cells par un layout responsive.
 - [x] Fiabiliser le splitter pour qu'il ne deplace jamais le panel.
-- [ ] Retirer les styles globaux dangereux sur le host docke.
+- [x] Retirer les styles globaux dangereux sur le host docke.
 - [ ] Simplifier les synchronisations layout.
 - [ ] Traiter les bugs Molecule dans l'ordre du guide trouble solving.
 - [ ] Ajouter ou mettre a jour les probes/tests Molecule.
