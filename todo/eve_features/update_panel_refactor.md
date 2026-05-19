@@ -13,12 +13,12 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 ## Target Contract
 
 - Every eVe panel uses one canonical container created by `createEveDialog`.
-- The canonical panel container has a top header, a body, a bottom footer, and a tools dock below the footer.
+- The canonical panel container has a top header, a body, a tools dock, and a bottom footer.
 - Header and footer heights are derived from the shared tool size token.
 - Header and footer share the same color and shadow tokens.
 - The header is empty by default and remains draggable.
 - The footer contains the panel title, close control, and the right resize grip.
-- Attached panel tools mount below the footer, never inside the body and never above the footer.
+- Attached panel tools mount above the footer, never inside the body and never below the footer.
 
 ## Migration Steps
 
@@ -60,12 +60,12 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 - Resize behavior still works.
 - Close behavior still routes through each panel close handler.
 - Panel body remains the only scrollable content area.
-- Attached tools render below the footer.
+- Attached tools render above the footer.
 
 ## Progress Log
 
 - Centralized panel chrome variables under the existing system UI token layer.
-- Updated the canonical dialog container to emit a top header, body, bottom footer, and tools dock.
+- Updated the canonical dialog container to emit a top header, body, tools dock, and bottom footer.
 - Moved the shared close control and resize grips into the footer.
 - Kept header and footer heights tied to the shared tool-size variable.
-- Moved the User Contact tool and MTraX panel tools into the canonical tools dock below the footer.
+- Moved the User Contact tool and MTraX panel tools into the canonical tools dock above the footer.

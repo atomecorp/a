@@ -38,8 +38,8 @@ Source principale: `todo/urgent_priorities.md`
 - [x] Creer `shared/media_types.js` et supprimer les duplications de types media.
 - [x] Centraliser les constantes de layers et de TTL panels.
 - [x] Factoriser le locking via `runtime/in_flight_lock.js`.
-- [ ] Unifier `readExplicitLatchedState` / `readExplicitLatched`.
-- [ ] Verifier les imports/exports et l'absence de duplication restante avec `rg`.
+- [x] Unifier `readExplicitLatchedState` / `readExplicitLatched`.
+- [x] Verifier les imports/exports et l'absence de duplication restante avec `rg`.
 
 ## 3. Contrat panel / layout eVe
 
@@ -49,14 +49,14 @@ Sources principales:
 - `todo/eve_features/panel_tools_above_footer_band.md`
 - `todo/eve_features/panel_overflow_direction_indicators.md`
 
-- [ ] Centraliser les tokens de chrome panel.
-- [ ] Finaliser `createEveDialog` avec header, body, tools band, footer.
-- [ ] Placer les outils de panel au-dessus du footer band.
-- [ ] Garder le footer comme bande finale avec titre, fermeture et resize grip.
-- [ ] Garantir que le body reste la seule zone scrollable.
-- [ ] Ajouter des indicateurs visibles de debordement haut/bas sur le vrai scroll container.
-- [ ] Migrer les panels simples avant les panels complexes.
-- [ ] Valider home/user, finder, communication, calendar et mtrack.
+- [x] Centraliser les tokens de chrome panel.
+- [x] Finaliser `createEveDialog` avec header, body, tools band, footer.
+- [x] Placer les outils de panel au-dessus du footer band.
+- [x] Garder le footer comme bande finale avec titre, fermeture et resize grip.
+- [x] Garantir que le body reste la seule zone scrollable.
+- [x] Ajouter des indicateurs visibles de debordement haut/bas sur le vrai scroll container.
+- [x] Migrer les panels simples avant les panels complexes.
+- [x] Valider home/user, finder, communication, calendar et mtrack.
 
 ## 4. Molecule / MTraX panel
 
@@ -68,8 +68,8 @@ Sources principales:
 - `todo/molecule/molecule_trouble_solving.md`
 - `todo/molecule/molecule_rename_mtrack_to_molecule.md`
 
-- [ ] Construire les diagnostics globaux Molecule avant les corrections profondes.
-- [ ] Clarifier le contrat preview: interne par defaut, externalise uniquement si explicite.
+- [x] Construire les diagnostics globaux Molecule avant les corrections profondes.
+- [x] Clarifier le contrat preview: interne par defaut, externalise uniquement si explicite.
 - [ ] Remplacer le layout tracks/cells par un layout responsive.
 - [ ] Fiabiliser le splitter pour qu'il ne deplace jamais le panel.
 - [ ] Retirer les styles globaux dangereux sur le host docke.
