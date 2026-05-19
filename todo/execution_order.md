@@ -73,7 +73,7 @@ Sources principales:
 - [x] Remplacer le layout tracks/cells par un layout responsive.
 - [x] Fiabiliser le splitter pour qu'il ne deplace jamais le panel.
 - [x] Retirer les styles globaux dangereux sur le host docke.
-- [ ] Simplifier les synchronisations layout.
+- [x] Simplifier les synchronisations layout.
 - [ ] Traiter les bugs Molecule dans l'ordre du guide trouble solving.
 - [ ] Ajouter ou mettre a jour les probes/tests Molecule.
 - [ ] Inventorier les noms `mtrack`, `mtrax`, `mtracks`, `hmtracks`.
