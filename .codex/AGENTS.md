@@ -656,6 +656,12 @@ LOGGING AND DEBUG CLEANUP POLICY
 
 Temporary debugging code MUST NEVER remain in production code.
 
+During problem resolution and debugging, cleanup is not only a final step.
+
+Failed attempts, abandoned probes, temporary branches of logic, and invalid experimental code MUST be removed incrementally as soon as they are proven unnecessary or ineffective.
+
+The assistant MUST NOT let unsuccessful debugging attempts accumulate in the codebase while continuing to iterate, because this pollutes the architecture, obscures the real fix, and increases long-term maintenance cost.
+
 When a task, fix, refactor, migration, or debugging session is completed:
 
 - all temporary logs MUST be removed;
@@ -836,6 +842,8 @@ For every modification, repair, refactor, or cleanup operation, the assistant MU
 - remove unnecessary complexity;
 
 - clean the implementation thoroughly;
+
+- remove unsuccessful attempts, abandoned experiments, invalid probes, and superseded debug edits as soon as they are no longer needed, not only at the very end;
 
 - delete every non-essential file only after verifying that it is not used anywhere else in the framework;
 
