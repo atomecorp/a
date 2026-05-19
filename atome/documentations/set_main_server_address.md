@@ -33,7 +33,7 @@ Future deployments may use multi-point/multi-region endpoints. Keep endpoint sel
 The WebSocket sync client is configured in:
 
 ```
-src/squirrel/integrations/version_sync.js
+atome/src/squirrel/integrations/version_sync.js
 ```
 
 ### 2. Server-Side (Fastify)

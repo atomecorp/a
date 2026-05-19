@@ -55,7 +55,7 @@ chroot "${WORK_MNT}" sh -c "
 # ---------------------------------------------------------------------------
 audit_framework_deps() {
     log_info "Audit des dépendances du framework..."
-    for f in package.json Gemfile Cargo.toml src-tauri/Cargo.toml CMakeLists.txt; do
+    for f in package.json Gemfile Cargo.toml platforms/desktop-tauri/Cargo.toml CMakeLists.txt; do
         target="${WORK_MNT}${FRAMEWORK_DIR}/${f}"
         if [ -f "${target}" ]; then
             log_info "  ✓ ${f} présent"
@@ -136,10 +136,10 @@ else
     fi
 
     # Cargo.toml Tauri ?
-    if [ -f "${WORK_MNT}${FRAMEWORK_DIR}/src-tauri/Cargo.toml" ]; then
+    if [ -f "${WORK_MNT}${FRAMEWORK_DIR}/platforms/desktop-tauri/Cargo.toml" ]; then
         log_info "Build Tauri (peut être long)..."
         chroot "${WORK_MNT}" su - "${INSTALL_USER}" -c "
-            cd '${FRAMEWORK_DIR}/src-tauri' && cargo fetch
+            cd '${FRAMEWORK_DIR}/platforms/desktop-tauri' && cargo fetch
         " || log_warn "cargo fetch partiel"
         # Le build final est fait au premier boot pour gagner du temps d'image
     fi

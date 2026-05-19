@@ -200,7 +200,7 @@ if Int.random(in: 1...1000) == 1 {
 - `platforms/ios/atome-auv3/Common/WebViewManager.swift` - Correction hardcoding
 - `platforms/ios/atome-auv3/auv3/AUMIDIOutputHelper.swift` - Logging allocation
 - `platforms/ios/atome-auv3/auv3/utils.swift` - Réduction spam logs
-- `src/application/examples/ios_apis.js` - Interface utilisateur
+- `atome/src/application/examples/ios_apis.js` - Interface utilisateur
 
 ---
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createNodeCaldavClient } from '../src/squirrel/calendar/node_protocol_clients.js';
+import { createNodeCaldavClient } from '../atome/src/squirrel/calendar/node_protocol_clients.js';
 import { selectIcloudAccount } from './icloud_account_discovery.mjs';
 import {
     buildIcloudAuthUserCandidates,

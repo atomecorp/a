@@ -131,7 +131,7 @@ ensure_vosk_runtime_linux() {
     return 0
   fi
 
-  local project_vosk="$PROJECT_ROOT/src-tauri/native/lib/libvosk.so"
+  local project_vosk="$PROJECT_ROOT/platforms/desktop-tauri/native/lib/libvosk.so"
   if [[ -f "$project_vosk" ]]; then
     log_info "Installing Vosk runtime from project copy..."
     run_with_sudo mkdir -p /usr/local/lib

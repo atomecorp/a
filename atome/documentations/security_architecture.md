@@ -94,7 +94,7 @@ Client-side module that:
 - Computes and checks public key fingerprint
 - Reports verification status (official/unofficial/failed)
 
-### 4. Local Authentication (`src-tauri/src/server/local_auth.rs`)
+### 4. Local Authentication (`platforms/desktop-tauri/src/server/local_auth.rs`)
 
 Rust module for offline authentication:
 
@@ -269,7 +269,7 @@ Client                                         Server
 │           ├── serverVerification.js       # Client verification
 │           ├── cloudSync.js                # Sync module
 │           └── trusted_keys.js             # Trusted fingerprints
-└── src-tauri/
+└── platforms/desktop-tauri/
     └── src/
         └── server/
             ├── mod.rs                      # Axum server

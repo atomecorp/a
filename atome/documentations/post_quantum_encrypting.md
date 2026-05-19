@@ -64,8 +64,8 @@ crypto_engine.getSupportedSchemes()
 
 ### Deliverables
 
-* `src/squirrel/crypto/crypto_engine.js`
-* `src-tauri/src/crypto_engine.rs`
+* `atome/src/squirrel/crypto/crypto_engine.js`
+* `platforms/desktop-tauri/src/crypto_engine.rs`
 * Configuration templates
 * Testing harness
 

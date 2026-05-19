@@ -5,13 +5,13 @@ import process from 'node:process';
 const DEFAULT_ROOT = process.cwd();
 
 const CANONICAL_FILE_PATHS = [
-    'src/squirrel/ai',
-    'src/squirrel/atome/mcp.js',
-    'src/squirrel/voice/ai_planner.js',
-    'src/squirrel/voice/orchestrator.js',
-    'src/squirrel/voice/tool_router.js',
-    'src/squirrel/voice/service.js',
-    'src/squirrel/voice/semantic_contract.js'
+    'atome/src/squirrel/ai',
+    'atome/src/squirrel/atome/mcp.js',
+    'atome/src/squirrel/voice/ai_planner.js',
+    'atome/src/squirrel/voice/orchestrator.js',
+    'atome/src/squirrel/voice/tool_router.js',
+    'atome/src/squirrel/voice/service.js',
+    'atome/src/squirrel/voice/semantic_contract.js'
 ];
 
 const DIRECT_RUNTIME_MUTATION_PATTERNS = [
@@ -111,8 +111,8 @@ export const checkEveAiGuardrails = ({
     const violations = [];
     for (const filePath of files) {
         const projectPath = toProjectPath(rootDir, filePath);
-        const semanticRegexEnforced = projectPath.startsWith('src/squirrel/ai/')
-            || projectPath.endsWith('src/squirrel/voice/ai_planner.js');
+        const semanticRegexEnforced = projectPath.startsWith('atome/src/squirrel/ai/')
+            || projectPath.endsWith('atome/src/squirrel/voice/ai_planner.js');
         violations.push(...collectViolationsForFile({
             rootDir,
             filePath,

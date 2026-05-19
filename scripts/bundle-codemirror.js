@@ -19,7 +19,7 @@ async function bundleCodeMirror() {
             bundle: true,
             minify: true,
             format: 'esm',
-            outfile: join(projectRoot, 'src/js/codemirror.bundle.js'),
+            outfile: join(projectRoot, 'atome/src/js/codemirror.bundle.js'),
             external: [],
             platform: 'browser',
             target: ['es2020'],
@@ -29,7 +29,7 @@ async function bundleCodeMirror() {
             }
         });
 
-        console.log('✅ CodeMirror bundle created: src/js/codemirror.bundle.js');
+        console.log('✅ CodeMirror bundle created: atome/src/js/codemirror.bundle.js');
     } catch (error) {
         console.error('❌ Bundle failed:', error);
         process.exit(1);

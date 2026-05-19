@@ -56,7 +56,7 @@ define('card', {
 ```html
 <!-- ✅ Setup in 2 lines -->
 <script type="module">
-  import { $ } from './src/squirrel/squirrel.js';
+  import { $ } from './atome/src/squirrel/squirrel.js';
   // Ready to code!
 </script>
 ```

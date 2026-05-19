@@ -16,7 +16,7 @@ This guide explains how to produce a standalone Progressive Web App (PWA) packag
 ./package_app.sh
 ```
 
-- Packages the default entry point `src/application/index.js`.
+- Packages the default entry point `atome/src/application/index.js`.
 - Prompts you for the final package name (press Enter to reuse the default).
 
 ### CLI mode (custom entry or automation)
@@ -28,7 +28,7 @@ node scripts/package-app.js \
   --overwrite
 ```
 
-- `--source` (optional): absolute path to the JavaScript entry file you want to load inside the PWA. Defaults to `src/application/index.js`.
+- `--source` (optional): absolute path to the JavaScript entry file you want to load inside the PWA. Defaults to `atome/src/application/index.js`.
 - `--name` (optional): directory name created under `packages/`. Defaults to the entry file name (without extension).
 - `--overwrite` (optional): skip the confirmation prompt if the target directory already exists.
 
@@ -37,7 +37,7 @@ node scripts/package-app.js \
 The script creates a directory at `packages/<name>/` containing:
 
 - `index.html` — preconfigured shell that loads the Squirrel runtime and your application.
-- `application/` — verbatim copy of `src/application` (keeps all relative imports intact).
+- `application/` — verbatim copy of `atome/src/application` (keeps all relative imports intact).
 - `js/`, `css/`, `assets/`, `squirrel/` — runtime dependencies copied from `src/`.
 - `<entry>.js` — the entry file you selected.
 - `manifest.json` — basic PWA manifest tailored to the package name.
@@ -79,7 +79,7 @@ npx http-server
 | --- | --- |
 | Page still shows an old version | Clear the site data or unregister the service worker from DevTools → **Application** → **Service Workers**. |
 | Blank screen on iOS only | Ensure the native host emits the `local-server-ready` event; the generated loader falls back to `squirrel:ready` after 900 ms. |
-| Missing modules or assets | Confirm the entry file and its imports live within `src/application`; the script copies that directory verbatim into the package. |
+| Missing modules or assets | Confirm the entry file and its imports live within `atome/src/application`; the script copies that directory verbatim into the package. |
 | `ENOENT` errors during packaging | Double-check the path passed to `--source`; it must be absolute. |
 
 ## 7. Updating the packaging script

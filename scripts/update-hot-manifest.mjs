@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
-const DEFAULT_SCOPE = 'src/application/examples';
-const TARGET_MANIFEST = path.join('src', 'manifest.json');
+const DEFAULT_SCOPE = 'atome/src/application/examples';
+const TARGET_MANIFEST = path.join('atome', 'src', 'manifest.json');
 const SKIP_NAMES = new Set(['.DS_Store']);
 
 const scope = process.env.MANIFEST_SCOPE || DEFAULT_SCOPE;
@@ -62,9 +62,9 @@ async function main() {
     manifestVersion: 1,
     generatedAt: new Date().toISOString(),
     scope,
-    description: `Hot-update manifest limited strictly to ${scope}/**. Do not touch other src/application modules.`,
+    description: `Hot-update manifest limited strictly to ${scope}/**. Do not touch other atome/src/application modules.`,
     rules: {
-      protectedRoots: ['src/application'],
+      protectedRoots: ['atome/src/application'],
       allowedOverrides: [scope],
       notes: [
         `Never push hot patches outside ${scope}`,

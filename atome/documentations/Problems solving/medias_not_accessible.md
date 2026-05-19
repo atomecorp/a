@@ -75,7 +75,7 @@ If a **new media type** encounters the same problem:
 Search which file actually performs the `fetch` to `/api/recordings/`:
 
 ```bash
-grep -r "api/recordings" src/application/
+grep -r "api/recordings" atome/src/application/
 ```
 
 ### Step 2: Verify the ID pattern
@@ -101,7 +101,7 @@ Apply changes to **ALL** files that may be used by UI components:
 
 | File | Used by |
 |------|---------|
-| `src/application/examples/record_audio.js` | Examples, tests, direct usage |
+| `atome/src/application/examples/record_audio.js` | Examples, tests, direct usage |
 | `eVe/domains/media/api/audio_api.js` | `record_video_UI.js`, eVe components |
 | `eVe/domains/media/api/media_api_shared.js` | Shared sync utilities |
 | `eVe/tool_utils/tool_genesis.js` | Atome media hydration |
@@ -119,7 +119,7 @@ Apply changes to **ALL** files that may be used by UI components:
 ## 📁 Files Modified
 
 1. `eVe/domains/media/api/audio_api.js` ← **main fix**
-2. `src/application/examples/record_audio.js` ← secondary fix
+2. `atome/src/application/examples/record_audio.js` ← secondary fix
 3. `eVe/domains/media/api/media_api_shared.js` ← **sync functions added**
 4. `eVe/tool_utils/tool_genesis.js` ← **hydration uses sync**
 

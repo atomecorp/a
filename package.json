@@ -19,7 +19,7 @@
   },
   "files": [
     "dist/",
-    "src/squirrel/",
+    "atome/src/squirrel/",
     "README.md",
     "LICENSE"
   ],
@@ -60,9 +60,9 @@
     "start:server": "cd server && node server.js",
     "serve": "node scripts/static_file_server.mjs 8000 .",
     "perf": "rollup -c --environment BUILD:development && node scripts/static_file_server.mjs 8000 .",
-    "tauri": "tauri",
+    "tauri": "cd platforms/desktop-tauri && tauri",
     "postinstall": "./scripts/fix_node_modules.sh",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "cd platforms/desktop-tauri && tauri dev",
     "debug-bundle": "node debug-bundle.mjs",
     "build:minimal": "npm run build:npm",
     "check:syntax": "node check-syntax.mjs",

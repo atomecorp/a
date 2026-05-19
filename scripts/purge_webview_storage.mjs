@@ -62,7 +62,7 @@ function normalizeName(name) {
 function getTauriAppInfo(projectRoot) {
     const defaults = { identifier: 'com.squirrel.desktop', productName: 'squirrel' };
     if (!projectRoot) return defaults;
-    const confPath = path.join(projectRoot, 'src-tauri', 'tauri.conf.json');
+    const confPath = path.join(projectRoot, 'platforms/desktop-tauri', 'tauri.conf.json');
     const conf = safeReadJson(confPath);
     if (!conf) return defaults;
     return {

@@ -38,7 +38,7 @@ macro_rules! eprintln {
 
 const ANONYMOUS_USERNAME: &str = "anonymous";
 const ANONYMOUS_PHONE_TAURI: &str = "0000000000";
-const ADOLE_SCHEMA_SQL: &str = include_str!("../../../database/schema.sql");
+const ADOLE_SCHEMA_SQL: &str = include_str!("../../../../database/schema.sql");
 const ADOLE_SCHEMA_TABLES: &str =
     "atomes, particles, particles_versions, snapshots, events, state_current, permissions, sync_queue, sync_state";
 

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.squirrel.desktop",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../../atome/src"
   },
   "app": {
     "withGlobalTauri": true,
@@ -34,10 +34,9 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../version.txt",
-      "../src",
-      "../atome",
-      "../eVe"
+      "../../version.txt",
+      "../../atome",
+      "../../eVe"
     ]
   }
 }

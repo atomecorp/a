@@ -62,7 +62,7 @@ The architecture is now a single logical audio stack with multiple native execut
                 │                                   │
 ┌─ Tauri / Native App ─────────────────────┐  ┌─ AUv3 / iOS Plugin ──────────────┐
 │ Rust audio engine                        │  │ Swift bridge + native render path │
-│ src-tauri/src/audio_engine               │  │ platforms/ios/atome-auv3/Common/WebViewManager    │
+│ platforms/desktop-tauri/src/audio_engine               │  │ platforms/ios/atome-auv3/Common/WebViewManager    │
 │ - playback.rs (Kira)                     │  │ platforms/ios/atome-auv3/auv3/AudioUnit...        │
 │ - recorder.rs (CPAL)                     │  │ platforms/ios/atome-auv3/auv3/utils.swift         │
 │ - metering.rs                            │  │                                   │
@@ -108,21 +108,21 @@ An important consequence is that "web mode" must be treated explicitly as two di
 
 | File | Role |
 |------|------|
-| `src-tauri/src/audio_engine/mod.rs` | Rust audio engine module root |
-| `src-tauri/src/audio_engine/playback.rs` | Kira `AudioManager` — load, play, stop, volume, rate, effects |
-| `src-tauri/src/audio_engine/recorder.rs` | CPAL input stream on dedicated thread → WAV via hound |
-| `src-tauri/src/audio_engine/metering.rs` | Lock-free RMS + peak metering |
-| `src-tauri/src/audio_engine/bridge.rs` | Tauri `#[tauri::command]` handlers |
-| `src-tauri/src/audio_engine/tests.rs` | Rust integration tests |
+| `platforms/desktop-tauri/src/audio_engine/mod.rs` | Rust audio engine module root |
+| `platforms/desktop-tauri/src/audio_engine/playback.rs` | Kira `AudioManager` — load, play, stop, volume, rate, effects |
+| `platforms/desktop-tauri/src/audio_engine/recorder.rs` | CPAL input stream on dedicated thread → WAV via hound |
+| `platforms/desktop-tauri/src/audio_engine/metering.rs` | Lock-free RMS + peak metering |
+| `platforms/desktop-tauri/src/audio_engine/bridge.rs` | Tauri `#[tauri::command]` handlers |
+| `platforms/desktop-tauri/src/audio_engine/tests.rs` | Rust integration tests |
 | `platforms/web/audio-wasm/src/lib.rs` | WASM build of the engine |
-| `src/application/audio_runtime/backend.kira.js` | JS backend for Rust / native engine usage |
-| `src/application/audio_runtime/audio.facade.js` | Public audio facade |
+| `atome/src/application/audio_runtime/backend.kira.js` | JS backend for Rust / native engine usage |
+| `atome/src/application/audio_runtime/audio.facade.js` | Public audio facade |
 | `eVe/intuition_/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
 | `platforms/ios/atome-auv3/Common/WebViewManager.swift` | JS → Swift bridge for AUv3 audio commands and PCM injection |
 | `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift` | common contract for playback / stop / debug expected peak propagation |
 | `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift` | AUv3 controller exposing the audio controller to the WebView bridge |
 | `platforms/ios/atome-auv3/auv3/utils.swift` | AUv3 native render path, JS audio mix, record events, frame tracking |
-| `src/application/audio_runtime/record_audio_api.js` | recording entry point that must converge to the unified engine |
+| `atome/src/application/audio_runtime/record_audio_api.js` | recording entry point that must converge to the unified engine |
 
 ## JavaScript API
 
@@ -219,7 +219,7 @@ In WASM mode, file-based loading is not available. Use `audio_load_clip_from_byt
 
 ## Cargo Dependencies
 
-Added to `src-tauri/Cargo.toml`:
+Added to `platforms/desktop-tauri/Cargo.toml`:
 
 ```toml
 kira = { version = "0.12", features = ["cpal", "wav", "mp3", "ogg", "flac"] }
@@ -411,11 +411,11 @@ For this document to be usable as a real migration spec, the first rule is to na
 
 | Area | Current entry points | Migration target |
 |------|----------------------|------------------|
-| Public clip playback | `src/application/audio_runtime/audio.facade.js`, `src/application/audio_runtime/backend.kira.js`, `src/application/audio_runtime/backend.legacy_auv3.js` | keep one public facade, retire backend-specific feature code |
-| Audio recording | `eVe/domains/media/api/audio_api.js`, `src/application/examples/record_audio.js`, `src/application/examples/record_audio_UI.js`, `src/application/audio_runtime/record_audio_api.js` | one recording contract backed by the unified native engine |
-| Video recording / media capture | `eVe/domains/media/api/video_api.js`, `src/application/examples/record_video.js`, `src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
+| Public clip playback | `atome/src/application/audio_runtime/audio.facade.js`, `atome/src/application/audio_runtime/backend.kira.js`, `atome/src/application/audio_runtime/backend.legacy_auv3.js` | keep one public facade, retire backend-specific feature code |
+| Audio recording | `eVe/domains/media/api/audio_api.js`, `atome/src/application/examples/record_audio.js`, `atome/src/application/examples/record_audio_UI.js`, `atome/src/application/audio_runtime/record_audio_api.js` | one recording contract backed by the unified native engine |
+| Video recording / media capture | `eVe/domains/media/api/video_api.js`, `atome/src/application/examples/record_video.js`, `atome/src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
 | Shared media persistence | `eVe/domains/media/api/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
-| Media atome rendering | `src/application/examples/user.js`, `eVe/domains/media/api/audio_api.js`, `eVe/domains/media/api/video_api.js` | all media atomes must resolve to one playback ownership model |
+| Media atome rendering | `atome/src/application/examples/user.js`, `eVe/domains/media/api/audio_api.js`, `eVe/domains/media/api/video_api.js` | all media atomes must resolve to one playback ownership model |
 | AUv3 native bridge | `platforms/ios/atome-auv3/Common/WebViewManager.swift`, `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`, `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`, `platforms/ios/atome-auv3/auv3/utils.swift` | reference native implementation for Apple timing and routing |
 | Debug validation | `eVe/intuition_/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
 | MTrack integration | `eVe/intuition_/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
@@ -759,19 +759,19 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `src/application/audio_runtime/audio.facade.js` | public JS facade with backend switching | remains public facade | keep as the only public JS entry point; hide backend specifics from feature code | all clip playback still enters through facade | `target` |
-| `src/application/audio_runtime/backend.kira.js` | native/Rust backend adapter | unified native engine adapter | extend until it becomes the preferred native path for clip playback and transport | clip load/play/stop/rate/gain pass on Tauri/native runtimes | `target` |
-| `src/application/audio_runtime/backend.legacy_auv3.js` | legacy backend | fallback only | forbid new feature dependencies; progressively detach feature modules from it | no production-critical feature depends on it | `bridge` |
-| `src/application/examples/user.js` media playback hooks | feature-local media creation/play behavior | facade + canonical media controller | route all audio/video audible playback commands to unified engine instead of local media ownership | `audio`, `sound`, `video` atomes play through unified transport | `current` |
+| `atome/src/application/audio_runtime/audio.facade.js` | public JS facade with backend switching | remains public facade | keep as the only public JS entry point; hide backend specifics from feature code | all clip playback still enters through facade | `target` |
+| `atome/src/application/audio_runtime/backend.kira.js` | native/Rust backend adapter | unified native engine adapter | extend until it becomes the preferred native path for clip playback and transport | clip load/play/stop/rate/gain pass on Tauri/native runtimes | `target` |
+| `atome/src/application/audio_runtime/backend.legacy_auv3.js` | legacy backend | fallback only | forbid new feature dependencies; progressively detach feature modules from it | no production-critical feature depends on it | `bridge` |
+| `atome/src/application/examples/user.js` media playback hooks | feature-local media creation/play behavior | facade + canonical media controller | route all audio/video audible playback commands to unified engine instead of local media ownership | `audio`, `sound`, `video` atomes play through unified transport | `current` |
 
 ### Recording and Persistence
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
 | `eVe/domains/media/api/audio_api.js` | eVe audio capture + persistence wrapper | canonical audio recording adapter | reduce to project/media/persistence adapter on top of one recording engine contract | recorded media persists and replays through unified engine | `bridge` |
-| `src/application/audio_runtime/record_audio_api.js` | runtime recording bridge | canonical recording bridge | keep only as a thin adapter to the unified engine contract | start/stop semantics identical across runtimes | `bridge` |
-| `src/application/examples/record_audio.js` | feature/runtime recording implementation | UI wrapper over canonical recording APIs | remove ownership of backend choices and engine semantics | no standalone engine logic remains in example layer | `current` |
-| `src/application/examples/record_audio_UI.js` | recording UI + backend toggles | UI only | keep UI concerns; remove backend-selection logic once migration completes | UI triggers canonical record commands only | `current` |
+| `atome/src/application/audio_runtime/record_audio_api.js` | runtime recording bridge | canonical recording bridge | keep only as a thin adapter to the unified engine contract | start/stop semantics identical across runtimes | `bridge` |
+| `atome/src/application/examples/record_audio.js` | feature/runtime recording implementation | UI wrapper over canonical recording APIs | remove ownership of backend choices and engine semantics | no standalone engine logic remains in example layer | `current` |
+| `atome/src/application/examples/record_audio_UI.js` | recording UI + backend toggles | UI only | keep UI concerns; remove backend-selection logic once migration completes | UI triggers canonical record commands only | `current` |
 | `eVe/domains/media/api/media_api_shared.js` | shared media persistence helpers | remains canonical media helper layer | keep as common source for auth, path, project and media metadata resolution | audio/video APIs resolve the same canonical media fields | `target` |
 
 ### Video and Soundtrack Ownership
@@ -779,8 +779,8 @@ Status legend:
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
 | `eVe/domains/media/api/video_api.js` | video capture / preview / persistence wrapper | canonical video adapter with engine-owned soundtrack | keep capture/persistence concerns; move soundtrack playback ownership to unified engine | video playback does not emit double audio | `bridge` |
-| `src/application/examples/record_video.js` | browser/video capture implementation | capture-only wrapper | keep only capture-specific logic; remove long-term playback ownership | recorded video replays with engine-owned soundtrack | `current` |
-| `src/application/examples/record_video_UI.js` | video recording UI | UI only | keep UI concerns; delegate playback/record ownership to canonical APIs | UI never owns production soundtrack playback | `current` |
+| `atome/src/application/examples/record_video.js` | browser/video capture implementation | capture-only wrapper | keep only capture-specific logic; remove long-term playback ownership | recorded video replays with engine-owned soundtrack | `current` |
+| `atome/src/application/examples/record_video_UI.js` | video recording UI | UI only | keep UI concerns; delegate playback/record ownership to canonical APIs | UI never owns production soundtrack playback | `current` |
 | DOM / native video element audio output | local visual media element | unified engine soundtrack routing | mute local media-element audio whenever engine soundtrack is active | no double-output audio, seek/rate stay synchronized | `retire` |
 
 ### AUv3 and Apple Native Bridge
@@ -955,7 +955,7 @@ If any answer is "no", the migration is incomplete.
 ### Rust / Tauri
 
 ```bash
-cd src-tauri
+cd platforms/desktop-tauri
 cargo test audio_engine_tests
 ```
 

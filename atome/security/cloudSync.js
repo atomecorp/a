@@ -15,7 +15,7 @@
  */
 
 import { verifyServer } from './serverVerification.js';
-import { getLocalServerUrl, getCloudServerUrl } from '../../src/squirrel/apis/serverUrls.js';
+import { getLocalServerUrl, getCloudServerUrl } from '../src/squirrel/apis/serverUrls.js';
 
 // Sync states
 export const SyncState = {

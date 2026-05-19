@@ -41,7 +41,7 @@ Both backends implement identical APIs, allowing the same frontend code to work 
 ┌─────────────────────────────────────────────────────────────┐
 │                    Frontend (JavaScript)                      │
 ├─────────────────────────────────────────────────────────────┤
-│              Unified API Layer (src/squirrel/apis/unified/)   │
+│              Unified API Layer (atome/src/squirrel/apis/unified/)   │
 │  ┌─────────────┬─────────────┬─────────────┬────────────────┐ │
 │  │ UnifiedAuth │ UnifiedAtome│ UnifiedUser │ UnifiedSync    │ │
 │  │             │             │ Data        │                │ │
@@ -691,10 +691,10 @@ All endpoints return consistent error responses:
 
 | Component | Tauri (Rust) | Fastify (Node.js) |
 |-----------|--------------|-------------------|
-| Auth routes | `src-tauri/src/server/local_auth.rs` | `server/auth.js` |
-| Atome routes | `src-tauri/src/server/local_atome.rs` | `server/atomeRoutes.orm.js` |
+| Auth routes | `platforms/desktop-tauri/src/server/local_auth.rs` | `server/auth.js` |
+| Atome routes | `platforms/desktop-tauri/src/server/local_atome.rs` | `server/atomeRoutes.orm.js` |
 | Database | `data/*.db` (SQLite) | PostgreSQL |
-| Unified APIs | `src/squirrel/apis/unified/` | Same |
+| Unified APIs | `atome/src/squirrel/apis/unified/` | Same |
 
 ---
 

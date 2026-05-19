@@ -319,9 +319,9 @@ prepare_monitored_dir
 update_hot_manifest() {
     echo "🧾 Vérification du manifest de mise à jour à chaud..."
     if npm run manifest:update; then
-        echo "✅ Manifest synchronisé (src/manifest.json)"
+        echo "✅ Manifest synchronisé (atome/src/manifest.json)"
     else
-        echo "❌ Impossible de synchroniser le manifest (src/manifest.json)."
+        echo "❌ Impossible de synchroniser le manifest (atome/src/manifest.json)."
         exit 1
     fi
     echo ""
@@ -776,7 +776,7 @@ if [ "$TAURI_ONLY" = true ]; then
         TAURI_SKIP_BUNDLE_OPEN=1 npm run tauri build
         echo ""
 
-        app_dir="$PROJECT_ROOT/src-tauri/target/release/bundle/macos"
+        app_dir="$PROJECT_ROOT/platforms/desktop-tauri/target/release/bundle/macos"
         if [ -d "$app_dir" ]; then
             latest_app=$(ls -td "$app_dir"/*.app 2>/dev/null | head -n 1 || true)
             if [ -n "${latest_app:-}" ] && [ -d "$latest_app" ]; then
@@ -789,7 +789,7 @@ if [ "$TAURI_ONLY" = true ]; then
             echo "WARN: macOS bundle directory not found: $app_dir"
         fi
 
-        dmg_dir="$PROJECT_ROOT/src-tauri/target/release/bundle/dmg"
+        dmg_dir="$PROJECT_ROOT/platforms/desktop-tauri/target/release/bundle/dmg"
         if [ -d "$dmg_dir" ]; then
             latest_dmg=$(ls -t "$dmg_dir"/*.dmg 2>/dev/null | head -n 1 || true)
             if [ -n "${latest_dmg:-}" ] && [ -f "$latest_dmg" ]; then
@@ -863,7 +863,7 @@ if [ "$PROD_BUILD" = true ]; then
     echo ""
 
     echo "🗂️  Recherche du dernier DMG généré..."
-    dmg_dir="$PROJECT_ROOT/src-tauri/target/release/bundle/dmg"
+    dmg_dir="$PROJECT_ROOT/platforms/desktop-tauri/target/release/bundle/dmg"
     if [ -d "$dmg_dir" ]; then
         latest_dmg=$(ls -t "$dmg_dir"/*.dmg 2>/dev/null | head -n 1 || true)
         if [ -n "${latest_dmg:-}" ] && [ -f "$latest_dmg" ]; then

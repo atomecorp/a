@@ -34,6 +34,23 @@ fn project_root(state: State<ProjectPaths>) -> String {
     state.project_root.to_string_lossy().to_string()
 }
 
+fn project_root_from_static_dir(static_dir: &Path) -> PathBuf {
+    if static_dir.file_name().and_then(|name| name.to_str()) == Some("src") {
+        if let Some(atome_dir) = static_dir.parent() {
+            if atome_dir.file_name().and_then(|name| name.to_str()) == Some("atome") {
+                if let Some(root) = atome_dir.parent() {
+                    return root.to_path_buf();
+                }
+            }
+        }
+    }
+
+    static_dir
+        .parent()
+        .unwrap_or(static_dir)
+        .to_path_buf()
+}
+
 fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> PathBuf {
     match std::env::var("SQUIRREL_UPLOADS_DIR") {
         Ok(raw) => {
@@ -48,11 +65,7 @@ fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> 
 
             let mut candidate = PathBuf::from(trimmed);
             if !candidate.is_absolute() {
-                let project_root = static_dir
-                    .parent()
-                    .map(|p| p.to_path_buf())
-                    .or_else(|| std::env::current_dir().ok())
-                    .unwrap_or_else(|| PathBuf::from("."));
+                let project_root = project_root_from_static_dir(static_dir);
                 candidate = project_root.join(candidate);
             }
             candidate
@@ -138,8 +151,9 @@ fn load_env_from_candidates() {
 fn live_repo_src_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .map(|root| root.join("src"))
-        .unwrap_or_else(|| PathBuf::from("../src"))
+        .and_then(|platforms| platforms.parent())
+        .map(|root| root.join("atome/src"))
+        .unwrap_or_else(|| PathBuf::from("../../atome/src"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -183,9 +197,11 @@ pub fn run() {
                         let candidates: Vec<PathBuf> = vec![
                             dir.join("dist"),
                             dir.join("public"),
+                            dir.join("atome/src"),
                             dir.join("src"),
                             dir.join("_up_/dist"),
                             dir.join("_up_/public"),
+                            dir.join("_up_/atome/src"),
                             dir.join("_up_/src"),
                             dir.clone(),
                         ];
@@ -197,9 +213,9 @@ pub fn run() {
                             }
                         }
 
-                        resolved.unwrap_or_else(|| PathBuf::from("../src"))
+                        resolved.unwrap_or_else(|| PathBuf::from("../../atome/src"))
                     }
-                    Err(_) => PathBuf::from("../src"),
+                    Err(_) => PathBuf::from("../../atome/src"),
                 }
             };
 
@@ -215,10 +231,7 @@ pub fn run() {
             let static_dir_abs = static_dir
                 .canonicalize()
                 .unwrap_or_else(|_| static_dir.clone());
-            let project_root = static_dir_abs
-                .parent()
-                .unwrap_or(&static_dir_abs)
-                .to_path_buf();
+            let project_root = project_root_from_static_dir(&static_dir_abs);
             app.manage(ProjectPaths {
                 project_root: project_root.clone(),
             });

@@ -9,7 +9,7 @@ Kira/CPAL engine, as described in `eVe/todo/audio_engine_migration.md`.
 
 ## 1. What Was Migrated
 
-### Audio Facade (`src/application/audio_runtime/audio.facade.js`)
+### Audio Facade (`atome/src/application/audio_runtime/audio.facade.js`)
 
 - Updated module header to reflect kira as the primary backend
 - Added `stop` and `stop_clip` to the `immediateNames` set for low-latency transport calls
@@ -46,7 +46,7 @@ Four files changed to route video clip audio through the native audio pipeline:
 
 ## 2. What Was Deprecated (Markers Added)
 
-### `src/application/audio_runtime/backend.legacy_auv3.js`
+### `atome/src/application/audio_runtime/backend.legacy_auv3.js`
 
 - Header marked DEPRECATED — superseded by `backend.kira.js`
 - Kept for AUv3 swiftBridge compatibility until native AUv3 audio is fully unified
@@ -92,7 +92,7 @@ Four files changed to route video clip audio through the native audio pipeline:
 
 ## 4. System Dependencies by Runtime
 
-See: `documentations/audio_engine_system_dependencies.md`
+See: `atome/documentations/audio_engine_system_dependencies.md`
 
 | Runtime | Audio Backend | Extra Packages |
 |---------|---------------|----------------|

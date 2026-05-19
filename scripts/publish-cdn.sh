@@ -19,7 +19,7 @@ else
 fi
 
 # 3. Copy CSS to dist
-cp "$PROJECT_ROOT/src/css/squirrel.css" "$PROJECT_ROOT/dist/squirrel.css"
+cp "$PROJECT_ROOT/atome/src/css/squirrel.css" "$PROJECT_ROOT/dist/squirrel.css"
 
 # Check for CSS presence before publishing
 if [ ! -f "$PROJECT_ROOT/dist/squirrel.css" ]; then
@@ -36,7 +36,7 @@ read "REPLY?Publish to GitHub and jsDelivr now? (y/N): "
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   "$SCRIPT_DIR/publish-to-github.sh" --no-confirm
   # Force update the tag to point to the latest commit
-  VERSION=$(jq -r .version "$PROJECT_ROOT/src/version.json" 2>/dev/null || echo "1.0.0")
+  VERSION=$(jq -r .version "$PROJECT_ROOT/atome/src/version.json" 2>/dev/null || echo "1.0.0")
   (cd "$PROJECT_ROOT" && git tag -f "$VERSION" && git push origin -f "$VERSION")
 else
   echo "Publication cancelled. Files are ready in ./dist."

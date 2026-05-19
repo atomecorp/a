@@ -41,7 +41,7 @@
 /* Begin PBXFileReference section */
 		349603E42818619000E13C15 /* atome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		349603FF281861B500E13C15 /* atomeAudioUnit.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = atomeAudioUnit.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		34960426281861EE00E13C15 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../../src; sourceTree = "<group>"; };
+		34960426281861EE00E13C15 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../../atome/src; sourceTree = "<group>"; };
 		6BARCH000000000000000001 /* atome */ = {isa = PBXFileReference; lastKnownFileType = folder; name = atome; path = ../../../atome; sourceTree = "<group>"; };
 		6BARCH000000000000000002 /* eVe */ = {isa = PBXFileReference; lastKnownFileType = folder; name = eVe; path = ../../../eVe; sourceTree = "<group>"; };
 		6BB7DA3B2D63233600CD6691 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };

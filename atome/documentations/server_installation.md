@@ -176,7 +176,7 @@ Assuming `PORT=3001` (default):
 * `ws://localhost:3001/ws/sync` - sync events WebSocket
 
 For detailed API and WebSocket usage examples, see `server/README.md`.
-For the minimal shared `/ws/sync` protocol, see `documentations/sync_protocol.md`.
+For the minimal shared `/ws/sync` protocol, see `atome/documentations/sync_protocol.md`.
 
 ### Manual Service Management (Advanced)
 
@@ -288,7 +288,7 @@ AiS emulates these Fastify routes for compatibility:
 
 ### Realtime Sync (AiS + Fastify)
 
-- AiS should expose `/ws/sync` using the same protocol as Axum (see `documentations/sync_protocol.md`).
+- AiS should expose `/ws/sync` using the same protocol as Axum (see `atome/documentations/sync_protocol.md`).
 - Fastify remains the reference server; AiS should relay realtime sync to/from Fastify when network is available.
 - When offline, AiS remains the local read/write authority and replays changes once Fastify is reachable.
 
@@ -369,7 +369,7 @@ Use AiS when:
 
 ### Related Documentation
 
-* **Architecture details**: `documentations/databas_architecture.md` (Section 6: AiS)
+* **Architecture details**: `atome/documentations/databas_architecture.md` (Section 6: AiS)
 * **AUV3 implementation**: `/platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
 * **WebView integration**: `/platforms/ios/atome-auv3/Common/WebViewManager.swift`
 * **File management**: `/platforms/ios/atome-auv3/Common/iCloudFileManager.swift`

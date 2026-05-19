@@ -677,7 +677,7 @@
    * - 3000: Tauri/Axum local server (auth, atomes, static files)
    * - 3001: Fastify cloud server (auth, atomes, sync, WebSocket)
    * 
-   * @module src/squirrel/apis/serverUrls
+   * @module atome/src/squirrel/apis/serverUrls
    */
 
   const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '0.0.0.0', 'tauri.localhost']);
@@ -989,14 +989,14 @@
       };
       pushAssetCandidate(canonicalAssetPath);
       pushAssetCandidate(assetPath);
-      pushAssetCandidate(canonicalAssetPath.replace(/^assets\//, 'src/assets/'));
+      pushAssetCandidate(canonicalAssetPath.replace(/^assets\//, 'atome/src/assets/'));
 
       const serverPathCandidates = [];
       const pushServerPathCandidate = (candidate) => {
         if (!candidate || serverPathCandidates.includes(candidate)) return;
         serverPathCandidates.push(candidate);
       };
-      const projectRootAssetPath = canonicalAssetPath.replace(/^assets\//, 'src/assets/');
+      const projectRootAssetPath = canonicalAssetPath.replace(/^assets\//, 'atome/src/assets/');
       if (isLocalAxumPage()) {
         pushServerPathCandidate(projectRootAssetPath);
       }

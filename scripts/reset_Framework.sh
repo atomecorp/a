@@ -317,7 +317,7 @@ stop_production_service_if_needed
 stop_dev_fastify_if_needed
 
 # Remove Tauri build artifacts
-TAURI_TARGET="$PROJECT_ROOT/src-tauri/target"
+TAURI_TARGET="$PROJECT_ROOT/platforms/desktop-tauri/target"
 remove_dir "$TAURI_TARGET" "📦 Removing Tauri build artifacts"
 
 # Remove database storage
@@ -763,7 +763,7 @@ echo ""
 echo "🎉 Framework reset complete!"
 
 # Optional: purge Tauri WebView storage (localStorage/cache)
-# This does NOT live in src-tauri/target; it is stored in OS user dirs.
+# This does NOT live in platforms/desktop-tauri/target; it is stored in OS user dirs.
 OS_NAME="$(uname -s)"
 
 # Optional escape hatch (debugging): allow skipping OS user storage purge.
@@ -786,7 +786,7 @@ const key = process.env.TAURI_KEY || '';
 const fallback = process.env.TAURI_FALLBACK || '';
 
 try {
-  const confPath = path.join(root, 'src-tauri', 'tauri.conf.json');
+  const confPath = path.join(root, 'platforms/desktop-tauri', 'tauri.conf.json');
   const conf = JSON.parse(fs.readFileSync(confPath, 'utf8'));
   const value = (conf && key in conf) ? conf[key] : fallback;
   process.stdout.write(String(value || fallback));

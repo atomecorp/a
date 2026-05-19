@@ -1,12 +1,12 @@
 # Calendar UI demo (EventCalendar Lab)
 
-This document describes the UI demo implemented in `src/application/examples/calendarUI.js`.
+This document describes the UI demo implemented in `atome/src/application/examples/calendarUI.js`.
 
-Note: Some code references (for example in `src/application/index.js`) mention `calendar_UI.js`, but the current file name in this workspace is `calendarUI.js`.
+Note: Some code references (for example in `atome/src/application/index.js`) mention `calendar_UI.js`, but the current file name in this workspace is `calendarUI.js`.
 
 ## Purpose
 
-`calendarUI.js` is a demo UI that exercises `CalendarAPI` from `src/application/examples/calendar.js`.
+`calendarUI.js` is a demo UI that exercises `CalendarAPI` from `atome/src/application/examples/calendar.js`.
 
 It provides:
 

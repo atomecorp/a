@@ -22,8 +22,8 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DIRS=(
-  "$PROJECT_ROOT/src/assets/images/icons"
-  "$PROJECT_ROOT/src/assets/images/logos"
+  "$PROJECT_ROOT/atome/src/assets/images/icons"
+  "$PROJECT_ROOT/atome/src/assets/images/logos"
 )
 
 SANITIZER="$SCRIPT_DIR/sanitize-svgs-128fit.cjs"

@@ -18,7 +18,7 @@ Choose one of the developer stacks:
 npm run start:server
 ```
 
-Open `http://localhost:3001` and make sure `src/application/aBox/index.js` is imported (see `src/application/index.js`).
+Open `http://localhost:3001` and make sure `atome/src/application/aBox/index.js` is imported (see `atome/src/application/index.js`).
 
 ### Tauri desktop build
 
@@ -33,11 +33,11 @@ Tauri spawns two servers for you: Axum on `127.0.0.1:3000` (static files/upload 
 The chokidar watcher lives in `server/sync/fileSyncWatcher.js`. By default it tracks:
 
 ```text
-src/application/**/*.js
-src/squirrel/**/*.js
+atome/src/application/**/*.js
+atome/src/squirrel/**/*.js
 server/**/*.js
 scripts/**/*.js
-src/assets/**/*
+atome/src/assets/**/*
 ```
 
 You can override the watch list without touching the code:
@@ -46,18 +46,18 @@ You can override the watch list without touching the code:
 - **Temporary change**: export `SQUIRREL_SYNC_WATCH="/absolute/path/**/*"` before starting Fastify/Tauri. Separate multiple globs with commas. Example:
 
    ```bash
-   SQUIRREL_SYNC_WATCH="src/assets/uploads/**/*" npm run start:server
+   SQUIRREL_SYNC_WATCH="atome/src/assets/uploads/**/*" npm run start:server
    ```
 
 - To ignore extra folders, set `SQUIRREL_SYNC_IGNORE` with glob patterns (same comma-separated format).
 
 `./run.sh` now exposes `DEFAULT_MONITORED_PATH` next to `DEFAULT_UPLOADS_PATH`. Update those two lines (or export `SQUIRREL_UPLOADS_DIR` / `SQUIRREL_MONITORED_DIR` yourself) and the script will export the matching `SQUIRREL_SYNC_WATCH` globs for both folders automatically before launching Fastify/Tauri. Even if you customize `SQUIRREL_SYNC_WATCH`, the Fastify watcher forcibly adds both directories so uploads stay mirrored. The default monitored inbox is `/Users/Shared/monitored` and Fastify logs `📂 Watcher detected ...` when a change occurs there.
 
-Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastify-host>:3001/ws/sync`. The browser-side SyncEngine (see `src/squirrel/integrations/sync_engine.js`) converts them into `squirrel:adole-delta` events so you can listen for deltas anywhere in the UI.
+Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastify-host>:3001/ws/sync`. The browser-side SyncEngine (see `atome/src/squirrel/integrations/sync_engine.js`) converts them into `squirrel:adole-delta` events so you can listen for deltas anywhere in the UI.
 
 ## 4. Using the drag-and-drop UI
 
-1. Import `src/application/aBox/index.js` from `src/application/index.js`.
+1. Import `atome/src/application/aBox/index.js` from `atome/src/application/index.js`.
 2. Reload the app. You should see a dark drop zone plus a list of uploaded files.
 3. Drag files or folders into the blue square. Every drop triggers `sendFileToServer`, which POSTs the blob to `/api/uploads` with the original filename + auth header (if available).
 4. The "Uploaded files" list refreshes automatically by calling `GET /api/uploads` with the same auth context.
@@ -104,7 +104,7 @@ With this setup you have a lightweight Dropbox-style pipeline: chokidar detects 
 
 ## 7. Bidirectional sync details
 
-- `SQUIRREL_MONITORED_DIR` is the inbox you drag files into (defaults to `/Users/Shared/monitored`). `SQUIRREL_UPLOADS_DIR` is where Fastify writes the blobs (defaults to `src/assets/uploads`).
+- `SQUIRREL_MONITORED_DIR` is the inbox you drag files into (defaults to `/Users/Shared/monitored`). `SQUIRREL_UPLOADS_DIR` is where Fastify writes the blobs (defaults to `atome/src/assets/uploads`).
 - The watcher fires for both directories even if `SQUIRREL_SYNC_WATCH` was customized, because `server/aBoxServer.js` calls `watcher.add([monitoredDir, uploadsDir])` at startup.
 - When chokidar emits an add/change/unlink from either directory, the Fastify layer mirrors the change into the other directory (adds copy the file, deletes remove the mirrored copy). A short-lived guard prevents infinite loops when the mirrored write triggers another file event.
 - To verify in both directions, run Fastify, then:

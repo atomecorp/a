@@ -232,7 +232,7 @@ if (!isVideoAudioDescriptor && nativeDuration <= mtrackMinClipDuration) {
 
 | Fact | Detail |
 |---|---|
-| `isStrictNativeKiraPlaybackRuntime` | Defined in `src/application/audio_runtime/runtime_audio_backend.js`. Includes `isTauriAudioRuntime` — this makes Tauri "strict native". |
+| `isStrictNativeKiraPlaybackRuntime` | Defined in `atome/src/application/audio_runtime/runtime_audio_backend.js`. Includes `isTauriAudioRuntime` — this makes Tauri "strict native". |
 | `mtrackMinClipDuration` | `0.06` s. Minimum clip length **and** sentinel meaning "duration unknown". |
 | `auto_duration = true` | Set by `import_media_timeline.js` when no explicit duration is known at import time. Stored in clip extras. |
 | `resolveNativeAudioDuration` | Throws `audio_metadata_native_kira_required` in strict native mode. Cannot be used to probe duration. |

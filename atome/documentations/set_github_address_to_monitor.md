@@ -153,7 +153,7 @@ curl -X POST http://localhost:3001/api/admin/sync-from-zip \
   -H "Content-Type: application/json" \
   -d '{
     "zipUrl": "https://github.com/your-org/your-repo/archive/refs/heads/main.zip",
-    "protectedPaths": ["src/application/temp"]
+    "protectedPaths": ["atome/src/application/temp"]
   }'
 ```
 

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { selectIcloudAccount } from './icloud_account_discovery.mjs';
-import { normalizeRuntimeMailPreferences } from '../src/squirrel/mail/runtime_preferences.js';
+import { normalizeRuntimeMailPreferences } from '../atome/src/squirrel/mail/runtime_preferences.js';
 
 let envLoadedFromFiles = false;
 

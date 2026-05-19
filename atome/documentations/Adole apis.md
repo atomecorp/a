@@ -11,13 +11,13 @@ All functions attempt operations on both backends and return combined results, e
 ## Import
 
 ```javascript
-import { AdoleAPI } from './src/squirrel/apis/unified/adole_apis.js';
+import { AdoleAPI } from './atome/src/squirrel/apis/unified/adole_apis.js';
 ```
 
 Or use individual functions:
 
 ```javascript
-import { create_user, log_user, current_user } from './src/squirrel/apis/unified/adole_apis.js';
+import { create_user, log_user, current_user } from './atome/src/squirrel/apis/unified/adole_apis.js';
 ```
 
 ---

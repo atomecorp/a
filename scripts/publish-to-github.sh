@@ -11,8 +11,8 @@ cd "$(dirname "$0")"
 #   exit 1
 # fi
 
-# Read version from src/version.json
-VERSION=$(jq -r .version ../src/version.json 2>/dev/null || echo "")
+# Read version from atome/src/version.json
+VERSION=$(jq -r .version ../atome/src/version.json 2>/dev/null || echo "")
 
 # Add and commit automatically
 cd .. # go back to project root

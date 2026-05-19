@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createVoiceService } from '../src/squirrel/voice/service.js';
+import { createVoiceService } from '../atome/src/squirrel/voice/service.js';
 
 const OUTPUT_DIR = path.join(process.cwd(), 'tools', 'headless_output');
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'phase9_voice_latency_baseline.json');

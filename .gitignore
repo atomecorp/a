@@ -13,7 +13,7 @@ database_storage/
 *.db-shm
 
 # Build outputs
-src/svelte/build/
+atome/src/svelte/build/
 platforms/ios/atome-auv3/build/
 platforms/web/audio-wasm/target/
 /temp/
@@ -32,7 +32,7 @@ tests/*
 !tests/governance/master_cleanup_governance.test.mjs
 
 # Test files
-src/assets/uploads/
+atome/src/assets/uploads/
 
 
 # Logs
@@ -47,7 +47,7 @@ yarn-error.log*
 *.swo
 
 # Tauri
-src-tauri/target/
+platforms/desktop-tauri/target/
 
 # Local databases (outside src/ to avoid hot-reload)
 data/
@@ -79,9 +79,9 @@ server/data/*.json
 
 # Process files
 .watcher.pid
-src-tauri/Cargo.lock
-src-tauri/gen/schemas/acl-manifests.json
-src-tauri/gen/schemas/desktop-schema.json
-src/assets/videos/avengers.mp4
+platforms/desktop-tauri/Cargo.lock
+platforms/desktop-tauri/gen/schemas/acl-manifests.json
+platforms/desktop-tauri/gen/schemas/desktop-schema.json
+atome/src/assets/videos/avengers.mp4
 platforms/ios/atome-auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
 eve/application

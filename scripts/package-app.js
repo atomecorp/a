@@ -95,7 +95,7 @@ async function copyDirectory(src, dest) {
 
 async function main() {
     try {
-        const defaultSourcePath = path.join(projectRoot, 'src', 'application', 'index.js');
+        const defaultSourcePath = path.join(projectRoot, 'atome', 'src', 'application', 'index.js');
         const sourceInput = cliOptions.source ? cliOptions.source.trim() : defaultSourcePath;
         if (!sourceInput) {
             throw new Error('Aucun chemin fourni.');
@@ -134,11 +134,11 @@ async function main() {
 
         const exampleDest = path.join(targetDir, path.basename(sourcePath));
 
-        await copyDirectory(path.join(projectRoot, 'src', 'js'), path.join(targetDir, 'js'));
-        await copyDirectory(path.join(projectRoot, 'src', 'assets'), path.join(targetDir, 'assets'));
-        await copyDirectory(path.join(projectRoot, 'src', 'css'), path.join(targetDir, 'css'));
-        await copyDirectory(path.join(projectRoot, 'src', 'squirrel'), path.join(targetDir, 'squirrel'));
-        await copyDirectory(path.join(projectRoot, 'src', 'application'), path.join(targetDir, 'application'));
+        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'js'), path.join(targetDir, 'js'));
+        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'assets'), path.join(targetDir, 'assets'));
+        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'css'), path.join(targetDir, 'css'));
+        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'squirrel'), path.join(targetDir, 'squirrel'));
+        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'application'), path.join(targetDir, 'application'));
         await copyDirectory(path.join(projectRoot, 'atome'), path.join(targetDir, 'atome'));
         await copyDirectory(path.join(projectRoot, 'eVe'), path.join(targetDir, 'eVe'));
         await copyFile(sourcePath, exampleDest);

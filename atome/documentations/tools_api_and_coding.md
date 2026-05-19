@@ -6,8 +6,8 @@ et impose une seule source de verite pour creation, chargement, execution et his
 
 References:
 - `eVe/documentations/tools.md`
-- `documentations/ADOLE.md`
-- `documentations/Adole Time Machine.md`
+- `atome/documentations/ADOLE.md`
+- `atome/documentations/Adole Time Machine.md`
 
 ## 1) Principes non negociables
 
@@ -48,7 +48,7 @@ Regle:
     "updated_at": "2026-02-12T10:00:00Z"
   },
   "ui": {
-    "icon": "src/assets/images/icons/play.svg",
+    "icon": "atome/src/assets/images/icons/play.svg",
     "style_token": "tool-default",
     "size_mode": "default"
   },
@@ -173,7 +173,7 @@ Definition:
   "tool_key": "circle",
   "meta": { "name": "Circle" },
   "ui": {
-    "icon": "src/assets/images/icons/circle.svg",
+    "icon": "atome/src/assets/images/icons/circle.svg",
     "style_token": "tool-default"
   },
   "behavior": {

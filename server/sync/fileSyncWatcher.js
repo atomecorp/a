@@ -7,13 +7,13 @@ import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_INCLUDE = [
-    'src/application/**/*.js',
-    'src/squirrel/**/*.js',
-    'documentations/**/*.{md,json}',
+    'atome/src/application/**/*.js',
+    'atome/src/squirrel/**/*.js',
+    'atome/documentations/**/*.{md,json}',
     'database/**/*.js',
     'server/**/*.js',
     'scripts/**/*.js',
-    'src/assets/**/*'
+    'atome/src/assets/**/*'
 ];
 
 const DEFAULT_IGNORE = [
@@ -24,7 +24,7 @@ const DEFAULT_IGNORE = [
     '**/.DS_Store',
     'dist/**',
     'target/**',
-    'src-tauri/target/**'
+    'platforms/desktop-tauri/target/**'
 ];
 
 const MAX_HASH_BYTES = 1024 * 1024; // 1 MiB safeguard

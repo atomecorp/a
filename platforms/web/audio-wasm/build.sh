@@ -1,12 +1,12 @@
 #!/bin/bash
 # Build the WASM audio engine module
-# Output goes to src/wasm/ for use by the web frontend
+# Output goes to atome/src/wasm/ for use by the web frontend
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-OUT_DIR="$PROJECT_ROOT/src/wasm"
+OUT_DIR="$PROJECT_ROOT/atome/src/wasm"
 
 echo "[build] Building squirrel-audio-wasm..."
 

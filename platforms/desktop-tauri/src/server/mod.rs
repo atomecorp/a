@@ -1672,7 +1672,7 @@ async fn locate_server_config(static_dir: &Path, project_root: &Path) -> Option<
     let mut candidates: Vec<PathBuf> = Vec::new();
     candidates.push(static_dir.join("server_config.json"));
     candidates.push(project_root.join("server_config.json"));
-    candidates.push(project_root.join("src").join("server_config.json"));
+    candidates.push(project_root.join("atome").join("src").join("server_config.json"));
 
     for candidate in candidates {
         if fs::metadata(&candidate).await.is_ok() {
@@ -4158,20 +4158,20 @@ async fn update_file_handler(
     State(state): State<AppState>,
     Json(payload): Json<WriteUpdateFileRequest>,
 ) -> impl IntoResponse {
-    // Security: Only allow writes within src/ directory
+    // Security: Only allow writes within the explicit atome runtime roots.
     // static_dir points to 'src', so parent is project root
     let base_path = state.static_dir.parent().unwrap_or(&state.static_dir);
     let target_path = base_path.join(&payload.path);
 
     // Validate path is within allowed directories
     let allowed_prefixes = [
-        "src/squirrel",
-        "src/application/core",
+        "atome/src/squirrel",
+        "atome/src/application/core",
         "atome/security",
     ];
     // Fichiers spécifiques autorisés (en dehors des préfixes)
-    let allowed_files = ["src/version.json"];
-    let protected_prefixes = ["src/application/examples", "src/application/config"];
+    let allowed_files = ["atome/src/version.json"];
+    let protected_prefixes = ["atome/src/application/examples", "atome/src/application/config"];
 
     let path_str = payload.path.as_str();
 
@@ -4280,12 +4280,12 @@ async fn batch_update_handler(
     println!("📂 Base path (absolute): {:?}", base_path);
 
     let allowed_prefixes = [
-        "src/squirrel",
-        "src/application/core",
+        "atome/src/squirrel",
+        "atome/src/application/core",
         "atome/security",
     ];
-    let allowed_files = ["src/version.json"];
-    let protected_prefixes = ["src/application/examples", "src/application/config"];
+    let allowed_files = ["atome/src/version.json"];
+    let protected_prefixes = ["atome/src/application/examples", "atome/src/application/config"];
 
     let client = reqwest::Client::new();
     let mut updated_files = Vec::new();
@@ -4414,7 +4414,7 @@ pub struct SyncFromZipRequest {
     pub protected_paths: Vec<String>,
 }
 
-/// Handler for downloading ZIP from GitHub, extracting src/, and syncing
+/// Handler for downloading ZIP from GitHub, extracting a configured subtree, and syncing
 async fn sync_from_zip_handler(
     State(state): State<AppState>,
     Json(payload): Json<SyncFromZipRequest>,
@@ -4424,16 +4424,16 @@ async fn sync_from_zip_handler(
     println!("🛡️ Protected paths: {:?}", payload.protected_paths);
 
     // Get the PROJECT ROOT (not the bundle!)
-    // static_dir is something like: .../src-tauri/target/debug/_up_/src
+    // static_dir is something like: .../platforms/desktop-tauri/target/debug/_up_/atome/src
     // We need to go up to find the real project root
     let static_dir = state.static_dir.as_ref();
 
     // Try to find project root by looking for Cargo.toml or package.json
     let mut base_path = static_dir.to_path_buf();
 
-    // Go up until we find the project root (where src-tauri exists)
+    // Go up until we find the project root (where platforms/desktop-tauri exists)
     for _ in 0..10 {
-        if base_path.join("src-tauri").exists() || base_path.join("package.json").exists() {
+        if base_path.join("platforms/desktop-tauri").exists() || base_path.join("package.json").exists() {
             break;
         }
         if let Some(parent) = base_path.parent() {
@@ -4558,7 +4558,7 @@ async fn sync_from_zip_handler(
             continue;
         }
 
-        // Strip root prefix and check if it's in src/
+        // Strip root prefix and check if it's in the configured subtree.
         let relative_path = if name.starts_with(&root_prefix) {
             &name[root_prefix.len()..]
         } else {
@@ -4566,7 +4566,7 @@ async fn sync_from_zip_handler(
         };
 
         // Only process files that are exactly in the configured extract_path folder.
-        // For the default "src/" path, this excludes sibling roots such as "src-tauri/".
+        // For the default "atome/src/" path, this excludes sibling roots such as "platforms/desktop-tauri/".
         let extract_prefix = format!("{}/", payload.extract_path.trim_end_matches('/'));
         if !relative_path.starts_with(&extract_prefix) {
             continue;
@@ -5298,10 +5298,19 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     // Service principal
     let base_dir = static_dir.clone();
     let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
-    let project_root = static_dir_abs
-        .parent()
-        .unwrap_or(&static_dir_abs)
-        .to_path_buf();
+    let project_root = if static_dir_abs.file_name().and_then(|name| name.to_str()) == Some("src") {
+        static_dir_abs
+            .parent()
+            .filter(|atome_dir| atome_dir.file_name().and_then(|name| name.to_str()) == Some("atome"))
+            .and_then(|atome_dir| atome_dir.parent())
+            .unwrap_or_else(|| static_dir_abs.parent().unwrap_or(&static_dir_abs))
+            .to_path_buf()
+    } else {
+        static_dir_abs
+            .parent()
+            .unwrap_or(&static_dir_abs)
+            .to_path_buf()
+    };
 
     let serve_dir_root = ServeDir::new(base_dir.clone()).append_index_html_on_directories(true);
     let root_service = get_service(serve_dir_root).handle_error(|error| async move {

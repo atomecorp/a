@@ -1,6 +1,6 @@
 # Calendar API (EventCalendar)
 
-This document describes the APIs implemented in `src/application/examples/calendar.js`.
+This document describes the APIs implemented in `atome/src/application/examples/calendar.js`.
 
 ## Overview
 
@@ -11,10 +11,10 @@ The calendar logic is implemented as an API object exported as `CalendarAPI`.
 - Calendar atome type: `calendar`
 - Default calendar id: `calendar_default`
 
-When `src/application/examples/calendar.js` runs in a browser/webview environment, it also:
+When `atome/src/application/examples/calendar.js` runs in a browser/webview environment, it also:
 
 - Assigns the API to `window.CalendarAPI`
-- Attempts to load the UI demo from `src/application/examples/calendarUI.js`
+- Attempts to load the UI demo from `atome/src/application/examples/calendarUI.js`
 
 ## Data model
 
@@ -81,7 +81,7 @@ You can implement todos today by calling existing CRUD methods:
 - Complete: `CalendarAPI.updateEvent(id, { status: 'done', completedAt: new Date() })`
 - Reopen: `CalendarAPI.updateEvent(id, { status: 'open', completedAt: null })`
 
-Note: The current implementation of `src/application/examples/calendar.js` does not yet normalize/persist these fields automatically; the section above defines the intended contract to implement.
+Note: The current implementation of `atome/src/application/examples/calendar.js` does not yet normalize/persist these fields automatically; the section above defines the intended contract to implement.
 
 ### Alarm object
 
@@ -117,7 +117,7 @@ Safety limits:
 
 ## Public API
 
-`CalendarAPI` is exported from `src/application/examples/calendar.js`:
+`CalendarAPI` is exported from `atome/src/application/examples/calendar.js`:
 
 ```js
 import { CalendarAPI } from './calendar.js';

@@ -1,5 +1,5 @@
-import { createIcloudMailConnector } from '../src/squirrel/mail/icloud_connector.js';
-import { createMailService } from '../src/squirrel/mail/service.js';
+import { createIcloudMailConnector } from '../atome/src/squirrel/mail/icloud_connector.js';
+import { createMailService } from '../atome/src/squirrel/mail/service.js';
 import { resolveMailCredentials } from './icloud_live_credentials.mjs';
 
 const readPayload = () => {

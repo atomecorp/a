@@ -372,14 +372,14 @@ echo ""
 print_status "🦀 Checking Rust/Cargo for Tauri desktop apps..."
 if command -v cargo &> /dev/null; then
     print_success "✅ Rust/Cargo is installed"
-    if [ -d "src-tauri" ]; then
+    if [ -d "platforms/desktop-tauri" ]; then
         print_status "Updating Rust dependencies..."
-        cd src-tauri && cargo update && cd .. || print_warning "Cargo update failed"
+        cd platforms/desktop-tauri && cargo update && cd .. || print_warning "Cargo update failed"
     fi
 else
     print_warning "⚠️ Rust/Cargo not installed. For desktop apps with Tauri:"
     echo "   Install Rust: https://rustup.rs/"
-    echo "   Then run: cargo update in src-tauri/ folder"
+    echo "   Then run: cargo update in platforms/desktop-tauri/ folder"
 fi
 
 echo ""

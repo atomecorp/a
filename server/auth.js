@@ -1912,9 +1912,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
 
         // Security: Define allowed and protected paths
-        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'atome/security'];
-        const allowedFiles = ['src/version.json']; // Fichiers spécifiques autorisés
-        const protectedPrefixes = ['src/application/examples', 'src/application/config'];
+        const allowedPrefixes = ['atome/src/squirrel', 'atome/src/application/core', 'atome/security'];
+        const allowedFiles = ['atome/src/version.json']; // Fichiers spécifiques autorisés
+        const protectedPrefixes = ['atome/src/application/examples', 'atome/src/application/config'];
 
         // Check if path is protected
         for (const protectedPath of protectedPrefixes) {
@@ -1990,9 +1990,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             });
         }
 
-        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'atome/security'];
-        const allowedFiles = ['src/version.json'];
-        const protectedPrefixes = ['src/application/examples', 'src/application/config'];
+        const allowedPrefixes = ['atome/src/squirrel', 'atome/src/application/core', 'atome/security'];
+        const allowedFiles = ['atome/src/version.json'];
+        const protectedPrefixes = ['atome/src/application/examples', 'atome/src/application/config'];
 
         const { promises: fsPromises } = await import('fs');
         const pathModule = await import('path');
@@ -2137,7 +2137,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     : name;
 
                 // Only process files exactly in the configured extractPath folder.
-                // For the default "src/" path, this excludes sibling roots such as "src-tauri/".
+                // For the default "src/" path, this excludes sibling roots such as "platforms/desktop-tauri/".
                 const extractPrefix = extractPath.replace(/\/$/, '') + '/';
                 if (!relativePath.startsWith(extractPrefix)) {
                     continue;

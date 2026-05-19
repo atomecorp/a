@@ -41,7 +41,7 @@ Premier boot : Atome OS directement, logo Atome puis webview.
 
 ```
 installer/desktop/
-├── src-tauri/               # application Tauri
+├── platforms/desktop-tauri/               # application Tauri
 │   ├── src/
 │   │   ├── main.rs
 │   │   └── installer/       # logique flash + bootloader

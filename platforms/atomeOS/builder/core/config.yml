@@ -78,7 +78,7 @@ sources:
       - Gemfile
       - Gemfile.lock
       - Cargo.toml
-      - src-tauri/Cargo.toml
+      - platforms/desktop-tauri/Cargo.toml
       - CMakeLists.txt
     install_scripts:
       - install_full.sh

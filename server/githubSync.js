@@ -138,9 +138,9 @@ async function performSync() {
         const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
 
         // Get protected paths from remote version.json first
-        let protectedPaths = ['src/application/temp'];
+        let protectedPaths = ['atome/src/application/temp'];
         try {
-            const versionUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/src/version.json`;
+            const versionUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/atome/src/version.json`;
             const versionResponse = await fetch(versionUrl);
             if (versionResponse.ok) {
                 const versionData = await versionResponse.json();
@@ -174,7 +174,7 @@ async function performSync() {
         }
 
         let updatedCount = 0;
-        const extractPrefix = 'src/';
+        const extractPrefix = 'atome/src/';
 
         for (const entry of entries) {
             if (entry.isDirectory) continue;
@@ -184,7 +184,7 @@ async function performSync() {
                 ? name.substring(rootPrefix.length)
                 : name;
 
-            // Only extract src/ files
+            // Only extract atome/src/ files
             if (!relativePath.startsWith(extractPrefix)) continue;
 
             // Skip protected paths

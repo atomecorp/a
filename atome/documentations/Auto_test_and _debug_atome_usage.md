@@ -5,7 +5,7 @@ This guide explains how to enable, use, and disable the test/debug tooling that 
 ## Prerequisites (one-time)
 
 - Install JS deps: `npm install`
-- Build Rust deps (if you use Tauri/Axum): `cargo build` from `src-tauri`
+- Build Rust deps (if you use Tauri/Axum): `cargo build` from `platforms/desktop-tauri`
 
 ## Enable
 
@@ -69,7 +69,7 @@ Reports are stored in:
 
 ### Hard disable (code)
 
-In `src/squirrel/spark.js`, comment out:
+In `atome/src/squirrel/spark.js`, comment out:
 
 ```
 import './dev/logging.js';

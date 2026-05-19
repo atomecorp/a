@@ -10,11 +10,11 @@ const readText = (relativePath) => fs.readFileSync(resolvePath(relativePath), 'u
 
 const forbiddenByFile = [
     {
-        path: 'src/index.html',
+        path: 'atome/src/index.html',
         patterns: [/tauri-plugin-fs\/api-iife\.js/]
     },
     {
-        path: 'src/squirrel/apis/loader.js',
+        path: 'atome/src/squirrel/apis/loader.js',
         patterns: [/__TAURI__(?:\?\.|\.)fs/, /readTextFile/, /plugin:fs/]
     },
     {
@@ -31,39 +31,39 @@ const forbiddenByFile = [
         patterns: [/__TAURI__(?:\?\.|\.)fs/, /resolveFsApi/, /tauri_fs_unavailable/]
     },
     {
-        path: 'src-tauri/Cargo.toml',
+        path: 'platforms/desktop-tauri/Cargo.toml',
         patterns: [/tauri-plugin-fs/]
     },
     {
-        path: 'src-tauri/Cargo.lock',
+        path: 'platforms/desktop-tauri/Cargo.lock',
         patterns: [/name = "tauri-plugin-fs"/]
     },
     {
-        path: 'src-tauri/src/main.rs',
+        path: 'platforms/desktop-tauri/src/main.rs',
         patterns: [/tauri_plugin_fs/]
     },
     {
-        path: 'src-tauri/src/lib.rs',
+        path: 'platforms/desktop-tauri/src/lib.rs',
         patterns: [/tauri_plugin_fs/]
     },
     {
-        path: 'src-tauri/capabilities/default.json',
+        path: 'platforms/desktop-tauri/capabilities/default.json',
         patterns: [/"fs:default"/, /"fs:read-all"/, /"fs:write-all"/]
     },
     {
-        path: 'src-tauri/gen/schemas/desktop-schema.json',
+        path: 'platforms/desktop-tauri/gen/schemas/desktop-schema.json',
         patterns: [/"fs:default"/, /"fs:read-all"/, /"fs:write-all"/]
     },
     {
-        path: 'src-tauri/gen/schemas/macOS-schema.json',
+        path: 'platforms/desktop-tauri/gen/schemas/macOS-schema.json',
         patterns: [/"fs:default"/, /"fs:read-all"/, /"fs:write-all"/]
     },
     {
-        path: 'src-tauri/gen/schemas/iOS-schema.json',
+        path: 'platforms/desktop-tauri/gen/schemas/iOS-schema.json',
         patterns: [/"fs:default"/, /"fs:read-all"/, /"fs:write-all"/]
     },
     {
-        path: 'src-tauri/gen/schemas/mobile-schema.json',
+        path: 'platforms/desktop-tauri/gen/schemas/mobile-schema.json',
         patterns: [/"fs:default"/, /"fs:read-all"/, /"fs:write-all"/]
     }
 ];
@@ -83,7 +83,7 @@ for (const entry of forbiddenByFile) {
 }
 
 assert.equal(
-    fs.existsSync(path.join(rootDir, 'src/tauri-plugin-fs/api-iife.js')),
+    fs.existsSync(path.join(rootDir, 'atome/src/tauri-plugin-fs/api-iife.js')),
     false,
     'frontend Tauri FS IIFE shim must not exist'
 );

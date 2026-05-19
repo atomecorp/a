@@ -18,7 +18,7 @@ else
 fi
 
 # 3. Copy CSS to dist
-cp "$PROJECT_ROOT/src/css/squirrel.css" "$PROJECT_ROOT/dist/squirrel.css"
+cp "$PROJECT_ROOT/atome/src/css/squirrel.css" "$PROJECT_ROOT/dist/squirrel.css"
 
 echo "Build complete. Files generated in ./dist:"
 ls -lh "$PROJECT_ROOT"/dist/squirrel*.js "$PROJECT_ROOT"/dist/squirrel.css

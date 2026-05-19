@@ -1,7 +1,7 @@
 #import "AUv3NativeRecorderBackend.h"
 
-#include "../../../../engines/audio/core/recorder/recorder_core.cpp"
-#include "../../../../engines/audio/core/ring_buffer.cpp"
+#include "../../../../atome/engines/audio/core/recorder/recorder_core.cpp"
+#include "../../../../atome/engines/audio/core/ring_buffer.cpp"
 
 @interface AUv3NativeRecorderBackend ()
 @property (nonatomic, copy, readwrite) NSString *lastErrorMessage;

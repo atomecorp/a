@@ -36,8 +36,8 @@ Consolider le debug sur un seul flag évite la dispersion des contrôles (plus s
 ## Fichiers clés
 
 - Helper debug central : `atome/shared/debug.js` (utilisez `isDebugEnabled()` dans votre code).
-- Logging / envoi centralisé : `src/squirrel/dev/logging.js` (gestion emission/forwarding), désormais respectueux du flag central.
-- Point d'application automatique : `src/squirrel/apis/loadServerConfig.js` (après chargement de `server_config.json`).
+- Logging / envoi centralisé : `atome/src/squirrel/dev/logging.js` (gestion emission/forwarding), désormais respectueux du flag central.
+- Point d'application automatique : `atome/src/squirrel/apis/loadServerConfig.js` (après chargement de `server_config.json`).
 
 ## Migration / nettoyage
 
@@ -50,4 +50,4 @@ Si votre code ou vos déploiements définissaient auparavant d'autres flags (par
 
 ---
 
-Fichier créé : `documentations/debu_mode.md`
+Fichier créé : `atome/documentations/debu_mode.md`

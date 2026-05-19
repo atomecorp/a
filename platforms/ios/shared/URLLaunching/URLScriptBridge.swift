@@ -23,7 +23,7 @@ public final class URLScriptBridge: NSObject, WKScriptMessageHandler {
         contentController.removeScriptMessageHandler(forName: Self.channel)
         contentController.add(self, name: Self.channel)
 
-    // JS side is provided in src/application/examples/app_launcher.js
+    // JS side is provided in atome/src/application/examples/app_launcher.js
         print("🔗 URLScriptBridge registered channel: \(Self.channel)")
     }
 

@@ -4,10 +4,10 @@ This document describes the JS APIs for audio/video capture, camera preview, med
 The goal is a single, coherent API for Tauri and browser runtimes.
 
 Sources:
-- src/application/examples/record_audio.js
-- src/application/examples/record_audio_UI.js
-- src/application/examples/record_video.js
-- src/application/examples/record_video_UI.js
+- atome/src/application/examples/record_audio.js
+- atome/src/application/examples/record_audio_UI.js
+- atome/src/application/examples/record_video.js
+- atome/src/application/examples/record_video_UI.js
 
 ---
 

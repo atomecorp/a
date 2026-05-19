@@ -129,7 +129,7 @@ const DB_CONFIGURED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
-const staticRoot = path.join(projectRoot, 'src');
+const staticRoot = path.join(projectRoot, 'atome', 'src');
 const atomeStaticRoot = path.join(projectRoot, 'atome');
 const eveStaticRoot = path.join(projectRoot, 'eVe');
 const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
@@ -1111,7 +1111,7 @@ async function startServer() {
     }
 
     // Serve server_config.json from the real project root.
-    // Static assets are served from `src/`, so we need an explicit route.
+    // Static assets are served from `atome/src/`, so we need an explicit route.
     server.get('/server_config.json', async (request, reply) => {
       try {
         const raw = await fs.readFile(SERVER_CONFIG_FILE, 'utf8');
@@ -1252,7 +1252,7 @@ async function startServer() {
     // 1. PLUGINS DE BASE
     // ===========================
 
-    // Serve framework and product roots explicitly; the main app still boots from src/.
+    // Serve framework and product roots explicitly; the main app still boots from atome/src.
     await server.register(fastifyStatic, {
       root: atomeStaticRoot,
       prefix: '/atome/',
@@ -1271,7 +1271,7 @@ async function startServer() {
       decorateReply: false
     });
 
-    // Servir les fichiers statiques depuis staticRoot (../src en dev)
+    // Servir les fichiers statiques depuis staticRoot (../atome/src en dev)
     await server.register(fastifyStatic, {
       root: staticRoot,
       prefix: '/'

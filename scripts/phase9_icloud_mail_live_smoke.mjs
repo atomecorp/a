@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createIcloudMailConnector } from '../src/squirrel/mail/icloud_connector.js';
+import { createIcloudMailConnector } from '../atome/src/squirrel/mail/icloud_connector.js';
 import { selectIcloudAccount } from './icloud_account_discovery.mjs';
 import {
     boolEnv,

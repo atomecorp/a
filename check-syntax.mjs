@@ -50,7 +50,7 @@ function checkFile(filePath) {
 
 function main() {
     const roots = [
-        path.join(ROOT, 'src'),
+        path.join(ROOT, 'atome', 'src'),
         path.join(ROOT, 'server'),
         path.join(ROOT, 'scripts'),
         path.join(ROOT, 'tests')

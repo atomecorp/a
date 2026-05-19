@@ -54,7 +54,7 @@ This design works even when a host refuses to honor extension-initiated opens. T
   - `AppDelegate.swift` and `SceneDelegate.swift`
     - Start listeners, drain/flush inbox, handle `atomeapp://activate` and Universal Link `/activate` when app is brought forward.
 - Web UI (JS)
-  - `src/application/examples/iOS_app_launcher.js`
+  - `atome/src/application/examples/iOS_app_launcher.js`
     - Squirrel-based UI with input, quick tests, status pill.
     - Helper `openViaSquirrel(url)` calls `window.squirrel.openURL(url)` or WK handler fallback.
     - Includes a link “Open Atome app” which uses `atomeapp://activate` on demand.
@@ -102,7 +102,7 @@ This design works even when a host refuses to honor extension-initiated opens. T
   - In JS, call `window.squirrel.openURL('shortcuts://run-shortcut?name=Shazam')`.
   - In AUv3, if the host allows direct open, it may happen immediately; otherwise the request is queued and will be completed when the app is foregrounded.
 - Example locations:
-  - `src/application/examples/iOS_app_launcher.js`: copy patterns from here.
+  - `atome/src/application/examples/iOS_app_launcher.js`: copy patterns from here.
 - Provided helpers in the example:
   - Input + “Open” button.
   - Quick tests for `pdparty://` and `ibooks://`.
@@ -172,4 +172,4 @@ This matches tools like “URL Beamer” in hosts that permit direct UIApplicati
 
 ---
 
-If you need a minimal integration example or to toggle behaviors per-host, reach for the example JS in `src/application/examples/iOS_app_launcher.js` and the AUv3 opener in `platforms/ios/atome-auv3/Common/URLOpener.swift`.
+If you need a minimal integration example or to toggle behaviors per-host, reach for the example JS in `atome/src/application/examples/iOS_app_launcher.js` and the AUv3 opener in `platforms/ios/atome-auv3/Common/URLOpener.swift`.

@@ -768,7 +768,7 @@ if (window.AtomeFileSystem) {
 
 ### Usage Example
 
-The project includes a complete example in `src/application/examples/auv3_file_handling.js`:
+The project includes a complete example in `atome/src/application/examples/auv3_file_handling.js`:
 
 ```javascript
 // Open file management interface

@@ -48,7 +48,7 @@ intentionally blocked because Kira handles playback natively.
 
 The early-return block was added when `isTauriAudioRuntime` was included in
 `isStrictNativeKiraPlaybackRuntime` (see
-`src/application/audio_runtime/runtime_audio_backend.js`). Before that change,
+`atome/src/application/audio_runtime/runtime_audio_backend.js`). Before that change,
 Tauri fell through to `resolveNativeAudioDuration` just like the browser.
 
 The old iOS platform build
@@ -154,7 +154,7 @@ playback does not loop.
 
 | Fact | Detail |
 |---|---|
-| `isStrictNativeKiraPlaybackRuntime` | Defined in `src/application/audio_runtime/runtime_audio_backend.js`. Includes `isTauriAudioRuntime` — this makes Tauri "strict native". |
+| `isStrictNativeKiraPlaybackRuntime` | Defined in `atome/src/application/audio_runtime/runtime_audio_backend.js`. Includes `isTauriAudioRuntime` — this makes Tauri "strict native". |
 | `mtrackMinClipDuration` | A few milliseconds. Used as the minimum clip length. Also the sentinel that means "duration unknown". |
 | `auto_duration = true` | Set by `import_media_timeline.js` when no explicit duration is known at import time. |
 | `resolveNativeAudioDuration` | Throws `audio_metadata_native_kira_required` in strict native mode — cannot be used to probe duration. |

@@ -104,7 +104,7 @@ Le builder **audite dynamiquement** le dépôt framework Atome avant installatio
 
 - `package.json` → dépendances JS
 - `Gemfile` (si présent) → gems Ruby
-- `Cargo.toml` / `src-tauri/Cargo.toml` → crates Rust
+- `Cargo.toml` / `platforms/desktop-tauri/Cargo.toml` → crates Rust
 - `CMakeLists.txt` → deps natives C++
 
 Voir `scripts/install_runtime.sh` fonction `audit_framework_deps`.
