@@ -1453,6 +1453,26 @@ async function startServer() {
       return { user: null, userId: 'anonymous', source: 'anonymous' };
     };
 
+    const readMediaQueryUserId = (request) => {
+      const raw = request.query?.media_user_id
+        || request.query?.user_id
+        || request.query?.userId
+        || request.query?.x_user_id
+        || '';
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      const userId = String(value || '').trim();
+      if (!userId || userId === 'anonymous') return '';
+      return /^[a-zA-Z0-9_-]+$/.test(userId) ? userId : '';
+    };
+
+    const resolveMediaDownloadIdentity = async (request) => {
+      const identity = await resolveUploadIdentity(request);
+      if (identity.userId && identity.userId !== 'anonymous') return identity;
+      const queryUserId = readMediaQueryUserId(request);
+      if (queryUserId) return { user: null, userId: queryUserId, source: 'media_query' };
+      return identity;
+    };
+
     // Register authentication routes (login, register, logout, OTP, etc.)
     if (DATABASE_ENABLED) {
       // Get TypeORM-compatible adapter from Knex ORM
@@ -2174,7 +2194,7 @@ async function startServer() {
 
     server.get('/api/uploads/:file', async (request, reply) => {
       try {
-        const { userId } = await resolveUploadIdentity(request);
+        const { userId } = await resolveMediaDownloadIdentity(request);
         const fileParam = request.params.file || '';
         const target = await resolveDownloadTarget(fileParam, userId);
 
@@ -2241,7 +2261,7 @@ async function startServer() {
 
     server.get('/api/recordings/:file', async (request, reply) => {
       try {
-        const { userId } = await resolveUploadIdentity(request);
+        const { userId } = await resolveMediaDownloadIdentity(request);
         const fileParam = request.params.file || '';
         const target = await resolveDownloadTarget(fileParam, userId);
 
@@ -2304,7 +2324,7 @@ async function startServer() {
     // This endpoint extracts the audio track to .m4a (AAC in MP4 container) that all browsers support.
     server.get('/api/extract-audio/:file', async (request, reply) => {
       try {
-        const { userId } = await resolveUploadIdentity(request);
+        const { userId } = await resolveMediaDownloadIdentity(request);
         const fileParam = request.params.file || '';
         const target = await resolveDownloadTarget(fileParam, userId);
 
