@@ -1,4 +1,4 @@
-import { loadUserProfile } from '../../../eVe/domains/user/profile_api.js';
+import { loadUserProfile } from '../../../../eVe/domains/user/profile_api.js';
 import {
     AI_MODEL_CATALOG_TTL_MS,
     buildModelCatalogCacheRecord,

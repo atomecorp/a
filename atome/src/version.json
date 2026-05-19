@@ -3,6 +3,6 @@
   "updatedAt": "2025-12-01T22:00:00Z",
   "description": "Atome/Squirrel core version",
   "protectedPaths": [
-    "src/application/temp"
+    "atome/src/application/temp"
   ]
 }

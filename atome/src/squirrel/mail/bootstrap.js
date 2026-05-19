@@ -211,7 +211,7 @@ const loadPersistedMailPreferences = async (env) => {
     }
     if (typeof window === 'undefined' || env !== window) return null;
     try {
-        const mod = await import('../../../eVe/domains/user/profile_api.js');
+        const mod = await import('../../../../eVe/domains/user/profile_api.js');
         if (typeof mod?.loadUserProfile !== 'function') return null;
         const result = await mod.loadUserProfile();
         const profile = result?.profile && typeof result.profile === 'object' ? result.profile : null;

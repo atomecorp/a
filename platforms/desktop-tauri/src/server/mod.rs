@@ -1596,9 +1596,48 @@ async fn log_request_middleware(req: Request<Body>, next: middleware::Next) -> R
     response
 }
 
+fn project_root_from_static_dir(static_dir: &Path) -> PathBuf {
+    if static_dir.file_name().and_then(|name| name.to_str()) == Some("src") {
+        if let Some(atome_dir) = static_dir.parent() {
+            if atome_dir.file_name().and_then(|name| name.to_str()) == Some("atome") {
+                if let Some(root) = atome_dir.parent() {
+                    return root.to_path_buf();
+                }
+            }
+        }
+    }
+
+    static_dir
+        .parent()
+        .unwrap_or(static_dir)
+        .to_path_buf()
+}
+
+fn read_version_candidate(candidate: &Path) -> Option<String> {
+    let raw = stdfs::read_to_string(candidate).ok()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if candidate.extension().and_then(|ext| ext.to_str()) == Some("json") {
+        if let Ok(json) = serde_json::from_str::<JsonValue>(trimmed) {
+            return json
+                .get("version")
+                .and_then(|value| value.as_str())
+                .map(|version| version.trim().to_string())
+                .filter(|version| !version.is_empty());
+        }
+    }
+    Some(trimmed.to_string())
+}
+
 fn load_version(static_dir: &Path) -> String {
+    let project_root = project_root_from_static_dir(static_dir);
     let mut candidates = Vec::new();
+    candidates.push(project_root.join("version.txt"));
+    candidates.push(project_root.join("atome").join("src").join("version.json"));
     candidates.push(static_dir.join("version.txt"));
+    candidates.push(static_dir.join("version.json"));
     if let Some(parent) = static_dir.parent() {
         candidates.push(parent.join("version.txt"));
     }
@@ -1612,11 +1651,8 @@ fn load_version(static_dir: &Path) -> String {
     candidates.push(PathBuf::from("version.txt"));
 
     for candidate in candidates {
-        if let Ok(raw) = stdfs::read_to_string(&candidate) {
-            let trimmed = raw.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
+        if let Some(version) = read_version_candidate(&candidate) {
+            return version;
         }
     }
 
@@ -1624,7 +1660,9 @@ fn load_version(static_dir: &Path) -> String {
 }
 
 fn load_eve_version(static_dir: &Path) -> String {
+    let project_root = project_root_from_static_dir(static_dir);
     let mut candidates = Vec::new();
+    candidates.push(project_root.join("eVe").join("version.txt"));
     candidates.push(PathBuf::from("eVe/version.txt"));
     if let Some(parent) = static_dir.parent() {
         candidates.push(parent.join("eVe").join("version.txt"));
@@ -1636,11 +1674,8 @@ fn load_eve_version(static_dir: &Path) -> String {
     }
 
     for candidate in candidates {
-        if let Ok(raw) = stdfs::read_to_string(&candidate) {
-            let trimmed = raw.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
+        if let Some(version) = read_version_candidate(&candidate) {
+            return version;
         }
     }
 

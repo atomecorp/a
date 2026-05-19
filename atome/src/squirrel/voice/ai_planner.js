@@ -1,4 +1,4 @@
-import { getEveLocale } from '../../../eVe/i18n/i18n.js';
+import { getEveLocale } from '../../../../eVe/i18n/i18n.js';
 import {
     normalizeAiProviderError,
     requestProviderJsonCompletion,
