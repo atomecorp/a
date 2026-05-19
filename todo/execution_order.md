@@ -24,7 +24,8 @@ Regle de perimetre:
 
 - Cocher chaque tache terminee avec [x].
 - Ne pas commencer une phase dependante tant que ses prerequis ne sont pas totalement valides.
-- Avant chaque nouvelle tache, fournir a l'utilisateur un resume court de la tache, des fichiers sources concernes, des dependances, des tests prevus, et attendre sa validation explicite.
+- Avant chaque nouvelle tache, dire explicitement a l'utilisateur ce qui doit etre fait sur cette tache, quels fichiers sources sont concernes, quelles dependances s'appliquent, quels tests ou verifications sont prevus, et quel est le pourcentage de taches accomplies sur le total.
+- Ce point d'etape doit etre donne avant l'execution de la tache.
 - Aucune nouvelle tache ne demarre sans validation explicite de l'utilisateur.
 - Chaque tache terminee doit etre suivie d'au moins un test, une verification, ou un controle cible adapte a la tache.
 - Chaque cloture de tache doit produire un rapport avec: tache realisee, validation executee, resultat, nombre de taches accomplies sur le total, et pourcentage d'avancement global.
@@ -36,7 +37,7 @@ Regle de perimetre:
 ## Processus obligatoire par tache
 
 1. Identifier la prochaine tache non cochee la plus prioritaire dans l'ordre ci-dessous.
-2. Resumer la tache a l'utilisateur.
+2. Dire a l'utilisateur ce qui doit etre fait sur la tache, les fichiers sources concernes, les dependances, les tests prevus, et le pourcentage de taches accomplies sur le total.
 3. Attendre sa validation explicite.
 4. Executer la tache.
 5. Lancer le test ou la verification obligatoire.
