@@ -372,6 +372,7 @@ Sources principales:
 - todo/dev_ops/npm-publication-checklist.md
 - todo/dev_ops/rewrite_documentation.md
 - todo/dev_ops/eve_website_publishing.md
+- todo/ai_voice/ace_step_integration.md
 
 Taches:
 
@@ -385,6 +386,7 @@ Taches:
 - [ ] Publication npm.
 - [ ] Documentation.
 - [ ] Website publishing.
+- [ ] Ace Step integration in eVe.
 
 ## Fichiers de todo hors ordre actif
 
