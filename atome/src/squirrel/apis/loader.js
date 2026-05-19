@@ -6,24 +6,22 @@
  * - Provides SVG rendering helpers for UI.
  */
 import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
-import { getLocalServerUrl, isLocalAxumPage } from './serverUrls.js';
 
-const normalizeNoTrailingSlash = (value) => {
-  if (typeof value !== 'string') return '';
-  return value.trim().replace(/\/$/, '');
+const normalizeBundledAssetPath = (path) => {
+  let cleanPath = String(path || '').trim();
+  cleanPath = cleanPath.replace(/^(?:\.\/)+/, '').replace(/^\/+/, '');
+  if (!cleanPath) throw new Error('Empty path');
+  if (cleanPath.startsWith('assets/')) return cleanPath;
+  if (/^(images|audios|texts)\//.test(cleanPath)) return `assets/${cleanPath}`;
+  throw new Error(`Unsupported bundled asset path: ${cleanPath}`);
 };
 
-const joinBaseAndPath = (base, path) => {
-  const normalizedBase = normalizeNoTrailingSlash(base);
-  const normalizedPath = String(path || '').replace(/^\/+/, '');
-  if (!normalizedBase || !normalizedPath) return '';
-  return `${normalizedBase}/${normalizedPath}`;
+const resolveBundledAssetUrl = (path) => {
+  const assetPath = normalizeBundledAssetPath(path);
+  if (typeof window === 'undefined') return assetPath;
+  const protocol = String(window.location?.protocol || '').toLowerCase();
+  return protocol === 'http:' || protocol === 'https:' ? `/${assetPath}` : assetPath;
 };
-
-const encodeRoutePath = (path) => String(path || '')
-  .split('/')
-  .map((segment) => encodeURIComponent(segment))
-  .join('/');
 
 // --- Port persistence (survive refresh) -------------------------------------------------
 (function persistLocalPort() {
@@ -126,18 +124,11 @@ function dataFetcher(path, opts = {}) {
   if (typeof fetch !== 'function') return Promise.reject(new Error('fetch unavailable'));
 
   const p = (async () => {
-    // Normalize path: remove leading './' or '/', but keep first segment intact
-    let cleanPath = (path || '').trim();
-    // Remove any leading ./ sequences
-    cleanPath = cleanPath.replace(/^(?:\.\/)+/, '');
-    // Then strip remaining leading slashes
-    cleanPath = cleanPath.replace(/^\/+/, '');
-    // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
-    if (!cleanPath) throw new Error('Empty path');
+    const assetUrl = resolveBundledAssetUrl(path);
+    const cleanPath = assetUrl.replace(/^\/+/, '');
     const filename = cleanPath.split('/').pop();
     const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
     const looksSvg = ext === 'svg';
-    const port = (typeof window !== 'undefined') ? (window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__) : null;
 
     const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
     const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
@@ -145,129 +136,36 @@ function dataFetcher(path, opts = {}) {
     const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
     const looksAudio = audioExt.test(ext);
 
-    let assetPath = cleanPath;
-    if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
-    const canonicalAssetPath = assetPath.replace(/^src\/assets\//, 'assets/');
-    const assetCandidates = [];
-    const pushAssetCandidate = (candidate) => {
-      if (!candidate || assetCandidates.includes(candidate)) return;
-      assetCandidates.push(candidate);
-    };
-    pushAssetCandidate(canonicalAssetPath);
-    pushAssetCandidate(assetPath);
-    pushAssetCandidate(canonicalAssetPath.replace(/^assets\//, 'src/assets/'));
-
-    const serverPathCandidates = [];
-    const pushServerPathCandidate = (candidate) => {
-      if (!candidate || serverPathCandidates.includes(candidate)) return;
-      serverPathCandidates.push(candidate);
-    };
-    const projectRootAssetPath = canonicalAssetPath.replace(/^assets\//, 'src/assets/');
-    if (isLocalAxumPage()) {
-      pushServerPathCandidate(projectRootAssetPath);
-    }
-    pushServerPathCandidate(canonicalAssetPath);
-    pushServerPathCandidate(cleanPath);
-    pushServerPathCandidate(assetPath);
-    if (!isLocalAxumPage()) {
-      pushServerPathCandidate(projectRootAssetPath);
-    }
-
-    const serverCandidates = [];
-    const pushServerCandidate = (base, routePath) => {
-      const nextUrl = joinBaseAndPath(base, routePath);
-      if (!nextUrl || serverCandidates.includes(nextUrl)) return;
-      serverCandidates.push(nextUrl);
-    };
-    const localServerBase = normalizeNoTrailingSlash(getLocalServerUrl() || '');
-    if (localServerBase) {
-      for (const serverPath of serverPathCandidates) {
-        const encodedPath = encodeRoutePath(serverPath);
-        pushServerCandidate(localServerBase, `file/${encodedPath}`);
-        if (looksText) pushServerCandidate(localServerBase, `text/${encodedPath}`);
-        if (looksAudio) {
-          pushServerCandidate(localServerBase, `audio/${encodeURIComponent(filename)}`);
-          pushServerCandidate(localServerBase, `audio/${encodedPath}`);
-        }
-      }
-    }
-    if (port) {
-      const explicitPortBase = `http://127.0.0.1:${port}`;
-      for (const serverPath of serverPathCandidates) {
-        const encodedPath = encodeRoutePath(serverPath);
-        pushServerCandidate(explicitPortBase, `file/${encodedPath}`);
-        if (looksText) pushServerCandidate(explicitPortBase, `text/${encodedPath}`);
-        if (looksAudio) {
-          pushServerCandidate(explicitPortBase, `audio/${encodeURIComponent(filename)}`);
-          pushServerCandidate(explicitPortBase, `audio/${encodedPath}`);
-        }
-      }
-    }
-    const preferServerCandidatesFirst = serverCandidates.length > 0;
-    const primaryCandidates = preferServerCandidatesFirst ? serverCandidates : assetCandidates;
-    const secondaryCandidates = preferServerCandidatesFirst ? assetCandidates : serverCandidates;
-
     const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
 
     const isHtmlIndexResponse = (txt) => {
       if (!txt) return false; const t = txt.slice(0, 120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
     };
 
-    // Immediate bundled asset read only when no local server route is available.
-    if (!port && serverCandidates.length === 0) {
-      for (const u of assetCandidates) {
-        if (looksText || mode === 'text' || mode === 'preview') {
-          const r = await fetch(u); if (!r.ok) continue;
-          const txt = await r.text();
-          if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
-          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
-          return done(txt);
-        }
-        if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
-        if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
-        const r = await fetch(u); if (!r.ok) continue; return done(u);
-      }
-    }
-
     if (mode === 'url') {
-      const out = primaryCandidates[0] || secondaryCandidates[0];
-      return done(out);
-    }
-    for (const u of primaryCandidates) {
-      const r = await fetch(u);
-      if (!r.ok) continue;
-      if (mode === 'arraybuffer') return done(await r.arrayBuffer());
-      if (mode === 'blob') return done(await r.blob());
-      if (looksText || mode === 'text' || mode === 'preview') {
-        const txt = await r.text();
-        if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
-        if (mode === 'preview' || opts.preview) {
-          const max = opts.preview || 120; return done(txt.slice(0, max));
-        }
-        return done(txt);
-      }
-      if (looksAudio && mode === 'auto') return done(u); // streaming URL path
-      return done(u);
-    }
-    for (const u of secondaryCandidates) {
-      if (looksText || mode === 'text' || mode === 'preview') {
-        const r = await fetch(u); if (!r.ok) continue;
-        const txt = await r.text();
-        if (looksSvg && isHtmlIndexResponse(txt)) { continue; }
-        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
-        return done(txt);
-      }
-      if (mode === 'arraybuffer') {
-        const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer());
-      }
-      if (mode === 'blob') {
-        const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
-      }
-      return done(u);
+      return done(assetUrl);
     }
 
-    delete __inflightData[key];
-    throw new Error('Not found (candidates: ' + [...primaryCandidates, ...secondaryCandidates].join(', ') + ')');
+    const r = await fetch(assetUrl);
+    if (!r.ok) {
+      delete __inflightData[key];
+      throw new Error(`Not found: ${assetUrl}`);
+    }
+    if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+    if (mode === 'blob') return done(await r.blob());
+    if (looksText || mode === 'text' || mode === 'preview') {
+      const txt = await r.text();
+      if (looksSvg && isHtmlIndexResponse(txt)) {
+        delete __inflightData[key];
+        throw new Error(`Invalid asset response: ${assetUrl}`);
+      }
+      if (mode === 'preview' || opts.preview) {
+        const max = opts.preview || 120; return done(txt.slice(0, max));
+      }
+      return done(txt);
+    }
+    if (looksAudio && mode === 'auto') return done(assetUrl);
+    return done(assetUrl);
   })();
   __inflightData[key] = p;
   return p;
