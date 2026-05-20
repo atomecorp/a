@@ -13,6 +13,16 @@ Mandatory Use:
 - Do not add product design logic to Atome open modules unless it is product-neutral.
 - Do not treat generated or vendored CSS files as the source of truth for eVe product design.
 
+## Mandatory Pre-Implementation Gate
+
+No visual, UI, panel, tool, Matrix, Molecule/MTraX, asset, style, token, preset, JavaScript-generated CSS, or visual factory change may start until the relevant maps have been consulted:
+- Use `maps/CODEMAP.md` to locate the owning module and avoid creating duplicate visual systems.
+- Use `maps/API_MAP.md` when the visual change exposes, consumes, or changes runtime APIs, globals, tool capabilities, or panel APIs.
+- Use this file to identify the owning token source, style generator, factory, asset class, or generated CSS exception.
+- Use `maps/ARCHITECTURE_MAP.md` when the visual change crosses Atome/eVe ownership, layer contracts, lifecycle, rendering, command flow, or runtime mode boundaries.
+
+Implementation may proceed only after the design owner, existing reusable tokens or factories, boundary status, and required map updates are known.
+
 ## Design Model
 
 Atome/eVe does not use a classic static HTML plus authored CSS architecture for product UI. The maintained product UI is created at runtime through JavaScript:

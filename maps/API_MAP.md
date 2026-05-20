@@ -13,6 +13,16 @@ Mandatory Use:
 - Update this map when ownership, exposure, route shape, or boundary status changes.
 - Do not promote an eVe closed API into Atome without an explicit open contract.
 
+## Mandatory Pre-Implementation Gate
+
+No API, route, runtime global, MCP capability, tool exposure, store contract, persistence path, service facade, or exported method may be added or changed until the relevant maps have been consulted:
+- Use `maps/CODEMAP.md` first to locate the owning source area and verify that no reusable implementation already exists.
+- Use this file to classify the surface as public open, semi-public closed, internal, or `Status: To verify`.
+- Use `maps/DESIGN_MAP.md` when the API affects product UI, visual factories, panel behavior, tool visuals, generated styling, or design tokens.
+- Use `maps/ARCHITECTURE_MAP.md` when the API affects dependency direction, command/history flow, effectful operations, lifecycle, sync, security, or cross-layer access.
+
+Implementation may proceed only after the API owner, visibility, boundary status, effect model, and required map updates are known.
+
 ## Boundary Rules
 
 Atome open APIs live under `atome/`, `server/`, and `database/` when they are product-neutral. They own core Squirrel APIs, authenticated storage, Atome object/event/state contracts, product-neutral communication services, security, AI/MCP, voice, audio, sync, server routes, and database adapters.

@@ -12,6 +12,16 @@ Mandatory Use:
 - Reuse, extend, or factorize existing modules before creating a new one.
 - Update this map when ownership, structure, reusable APIs, or duplication risks change.
 
+## Mandatory Pre-Implementation Gate
+
+No implementation, refactor, cleanup, API work, UI work, tool work, persistence work, security work, or runtime behavior change may start until the relevant maps have been consulted:
+- Start with this file to identify source ownership, existing modules, reusable boundaries, entry points, and known duplication or size risks.
+- Consult `maps/API_MAP.md` before touching APIs, runtime globals, server routes, MCP surfaces, tools, persistence contracts, or exported methods.
+- Consult `maps/DESIGN_MAP.md` before touching tokens, JavaScript-generated styles, visual factories, panels, tools, Matrix, Molecule/MTraX visuals, or assets.
+- Consult `maps/ARCHITECTURE_MAP.md` before touching dependency direction, lifecycle, command/history flow, sync, server/database boundaries, cross-layer ownership, or runtime modes.
+
+Implementation may proceed only after the map check identifies the owning layer, confirms whether reusable code already exists, and determines which maps must be updated in the same task.
+
 ## Global Ownership
 
 ## Explicit Atome Open / eVe Closed Boundary
