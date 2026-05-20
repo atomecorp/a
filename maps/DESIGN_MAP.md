@@ -54,6 +54,20 @@ Allowed responsibilities:
 Forbidden responsibilities:
 - Generic Atome framework style rules that must be reusable outside eVe.
 
+## Explicit Open / Closed Design Contract
+
+Design ownership follows product specificity:
+- Atome open design may contain only product-neutral Squirrel component structure, reusable framework visual assets, shell-level CSS, vendor CSS, and generated framework artifacts.
+- eVe closed design owns product chrome, panels, menu, ribbon, flower, Matrix, Finder-facing product UI, private tool visuals, Molecule/MTraX visuals, branding, and product-specific Atome object rendering.
+- Static CSS files are not the source of truth for eVe product design. eVe product visuals must be driven by JavaScript tokens, factories, structured style objects, and documented generated style exceptions.
+- Generated or vendored CSS may be referenced as an exception only when this map records its ownership and purpose.
+
+Cross-boundary design rules:
+- Atome modules must not import or depend on eVe product tokens, panel chrome, product factories, branding, or closed style generators.
+- eVe design modules may consume Atome product-neutral assets or Squirrel component contracts, but must not redefine generic framework styling as closed product-only behavior.
+- Product object styling for Atome instances inside eVe remains closed design behavior unless a reusable rendering contract is explicitly promoted to Atome.
+- Any promotion of eVe visual behavior into Atome requires a product-neutral API, reusable token contract, tests or visual verification, and updates to `maps/CODEMAP.md`, `maps/API_MAP.md`, and `maps/ARCHITECTURE_MAP.md`.
+
 ## Core Token Sources
 
 ### System UI Tokens

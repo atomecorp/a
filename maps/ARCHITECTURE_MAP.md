@@ -27,6 +27,31 @@ The core invariant is deterministic, tool-driven, append-only state:
 - `state_current` is a projection, not the source of truth.
 - Snapshots and validation states are acceleration or approval anchors, not an alternate write path.
 
+## Explicit Atome Open / eVe Closed Boundary Contract
+
+The boundary is architectural, not cosmetic:
+- Atome is open only for product-neutral contracts, framework runtime, API surfaces, security, sync, server/database infrastructure, AI/MCP orchestration, voice orchestration, audio/AV boundaries, and reusable assets.
+- eVe is closed for product experience, product UI, private tools, panel chrome, Matrix/ribbon/flower/Finder workflows, product stores, branding, Molecule/MTraX behavior, and closed composition.
+- Server and database are open infrastructure when they do not depend on product UI or product-only workflows.
+- Tests may bridge layers to prove integration; source dependencies must still respect the owning layer.
+
+Allowed dependency direction:
+- eVe may depend on Atome open contracts.
+- Atome must not depend on eVe closed implementation details.
+- Atome may reach eVe capabilities only through injection, registered tools, runtime globals installed by product bootstrap, or explicit boundary modules with documented ownership.
+- Cross-boundary calls must preserve command bus, policy checks, capability validation, audit logging, idempotency, and deterministic history semantics where the operation is effectful.
+
+Forbidden boundary violations:
+- Closed product UI, tools, stores, branding, Molecule/MTraX workflows, or panel behavior inside Atome open modules.
+- eVe-local clones of open Atome security, sync, database, server, communication, audio, voice, AI, or MCP contracts.
+- Direct durable state mutation from UI, panels, stores, imports, scripts, or MCP tools outside the canonical command/history path.
+- Promotion of an eVe API, global, visual factory, or store to open framework status without an explicit Atome contract, tests, and synchronized map updates.
+
+Boundary debt:
+- Product bootstrap references from Atome into eVe remain documented exceptions requiring targeted verification before structural changes.
+- Product-named server routes and closed product globals must be reviewed before they are treated as stable open APIs.
+- Existing boundary debt is not permission for new cross-layer imports or duplicate service paths.
+
 ## Main Layers
 
 ### Atome Open Framework

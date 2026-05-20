@@ -21,6 +21,21 @@ eVe closed APIs live under `eVe/`. They own product UI, private tools, product s
 
 Atome must not contain eVe UI, private product workflows, or product-only tool composition. eVe must not duplicate generic Atome security, server, sync, or cross-platform contracts.
 
+## Explicit Open / Closed API Contract
+
+API classification is mandatory before an API is reused, exposed, moved, or extended:
+- Public open APIs are product-neutral Atome, server, or database contracts intended for framework use, AI/MCP access, durable state mutation, synchronization, or platform runtime behavior.
+- Semi-public closed APIs are eVe product runtime contracts that may be reused inside eVe and by approved Atome AI/MCP boundary calls only through capability checks, runtime registration, or explicit injection.
+- Internal APIs are implementation details of their owning layer and must not be imported across the Atome/eVe boundary.
+- `Status: To verify` means the source exists but its boundary stability is not established; new work must inspect the source module before depending on it.
+
+Cross-boundary API rules:
+- Atome may call eVe capabilities only through registered runtime tools, injected callbacks, or documented boundary modules.
+- eVe may call Atome APIs directly when the Atome API is product-neutral and documented here.
+- eVe product stores, panels, tools, Molecule/MTraX runtimes, and design factories must not become implicit Atome APIs because they are exported or attached to `window`.
+- Product-named server routes are open infrastructure only after route ownership, security, naming, and replay semantics are reviewed; until then they remain boundary debt.
+- Promotion from eVe closed to Atome open requires an explicit contract, deterministic mutation path, MCP compatibility when relevant, tests, and updates to `maps/CODEMAP.md`, this file, and `maps/ARCHITECTURE_MAP.md`.
+
 ## Verified API Families
 
 ### Squirrel Utility API

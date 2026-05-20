@@ -14,6 +14,25 @@ Mandatory Use:
 
 ## Global Ownership
 
+## Explicit Atome Open / eVe Closed Boundary
+
+The source tree is split by ownership, not by convenience:
+- `atome/`, `server/`, and `database/` are open framework or infrastructure surfaces only when the code remains product-neutral.
+- `eVe/` is the closed product layer for UI, product tools, workflows, branding, product stores, Molecule/MTraX behavior, and private composition.
+- `tests/` may cross both layers only to validate contracts, integration, and regression behavior.
+- `temp/` is the only approved location for temporary diagnostics, probes, and generated transient outputs.
+
+Dependency rule:
+- Open Atome code may not import closed eVe UI, product workflows, private tools, branding, or product stores.
+- When open Atome code needs a closed product capability, the capability must be injected, registered, or exposed through an explicit runtime boundary documented in `maps/API_MAP.md` and `maps/ARCHITECTURE_MAP.md`.
+- eVe may consume Atome open contracts, but it must not duplicate Atome security, sync, server, database, audio, communication, AI, MCP, or cross-platform framework services.
+- Product-specific code must stay in `eVe/` unless it is deliberately promoted to Atome through an open contract, tests, and map updates.
+
+Placement rule:
+- Framework APIs, reusable runtime contracts, security, sync, server, database, audio, voice orchestration, and MCP primitives belong to Atome/open infrastructure.
+- Product UI, panel chrome, tool composition, Finder-facing workflows, Matrix, ribbon, flower, closed voice surfaces, product persistence adapters, and Molecule/MTraX workflows belong to eVe.
+- Existing bootstrap touchpoints from Atome into eVe are boundary debt and must be verified before structural changes rather than normalized as generic dependency permission.
+
 ### Atome Open Layer
 
 Path: `atome/`
