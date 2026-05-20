@@ -193,7 +193,7 @@ Execution structurelle en cours:
 
 Statut:
 
-- [ ] Partiellement commencee
+- [x] Terminee
 
 Depend de:
 
@@ -216,16 +216,17 @@ Taches:
 - [x] Lister les APIs publiques, semi-publiques, et internes sans hallucination ni doublon.
 - [x] Faire apparaitre explicitement la frontiere Atome open / eVe closed dans les maps.
 - [x] Rendre ces maps obligatoires avant toute nouvelle implementation.
-- [ ] Produire un test ou une verification documentaire ciblee apres chaque sous-tache et un rapport d'avancement global.
+- [x] Produire un test ou une verification documentaire ciblee apres chaque sous-tache et un rapport d'avancement global.
 
 Rapports d'avancement Phase 2:
-- CODEMAP: creation de maps/CODEMAP.md comme carte operationnelle du codebase; validation par controle des references maps/docs, presence du fichier, sections documentaires obligatoires; resultat reussi; avancement 35/115, soit 30.43%.
-- API_MAP: creation de maps/API_MAP.md comme carte initiale des familles d'APIs verifiees; validation par controle de taille, presence, sections/frontieres rg, inspection ciblee des exports, globals, routes HTTP/WebSocket, et APIs bootstrap; resultat reussi; avancement 36/115, soit 31.30%.
+- CODEMAP: creation de maps/CODEMAP.md comme carte operationnelle du codebase; validation par controle des references maps/docs, presence du fichier, sections documentaires obligatoires; resultat reussi; avancement 35/116, soit 30.17%.
+- API_MAP: creation de maps/API_MAP.md comme carte initiale des familles d'APIs verifiees; validation par controle de taille, presence, sections/frontieres rg, inspection ciblee des exports, globals, routes HTTP/WebSocket, et APIs bootstrap; resultat reussi; avancement 36/116, soit 31.03%.
 - DESIGN_MAP: creation de maps/DESIGN_MAP.md comme carte du design JavaScript, tokens, factories, styles injectes, assets, et exceptions CSS framework/vendor/build; validation par controle de taille, sections rg, inventaire CSS, inspection des modules eVe/elements, eVe/intuition, eVe/domains/mtrax, atome/src/squirrel/components, atome/src/assets; resultat reussi; avancement 37/116, soit 31.90%.
 - ARCHITECTURE_MAP: creation de maps/ARCHITECTURE_MAP.md comme contrat de couches, directions de dependance, modes runtime, flux de mutation, separation UI/API/MCP/storage/sync, regles de placement et zones To verify; validation par controle de taille, sections rg obligatoires, references aux maps et documents sources, et existence des chemins documentaires references; resultat reussi; avancement 38/116, soit 32.76%.
 - API visibility inventory: mise a jour de maps/API_MAP.md avec inventaire classe Public, Semi-public, Internal, et Status: To verify; validation par extraction rg des exports, globals, routes Fastify/WebSocket, points runtime eVe, services Atome, stores eVe, MCP/AI/voice/audio, correction des entrees non confirmees SelectionAPI et AtomeAI, et controle rg des sections/statuts; resultat reussi; avancement 39/116, soit 33.62%.
 - Explicit open/closed boundary: updated maps/CODEMAP.md, maps/API_MAP.md, maps/DESIGN_MAP.md, and maps/ARCHITECTURE_MAP.md with explicit Atome open / eVe closed boundary contracts covering ownership, dependency direction, API exposure, design ownership, promotion rules, and boundary debt; validation by targeted rg checks for the new contract sections and cross-map references; result passed; progress 40/116, 34.48%.
 - Mandatory pre-implementation map gate: updated maps/CODEMAP.md, maps/API_MAP.md, maps/DESIGN_MAP.md, and maps/ARCHITECTURE_MAP.md with explicit mandatory pre-implementation gates defining which map must be consulted before code, API, design, architecture, runtime, persistence, sync, MCP, tool, UI, security, or cross-layer work; validation by targeted rg checks for the new gate sections and cross-map references; result passed; progress 41/116, 35.34%.
+- Phase 2 final documentary verification: verified that maps/CODEMAP.md, maps/API_MAP.md, maps/DESIGN_MAP.md, and maps/ARCHITECTURE_MAP.md exist and contain Mandatory Use sections, Mandatory Pre-Implementation Gate sections, explicit Atome open / eVe closed boundary contracts, cross-map references, and Phase 2 progress reports; corrected the two legacy Phase 2 progress totals from 115 to the current 116-task total; validation by targeted rg checks, map existence checks, and global checkbox recount; result passed; Phase 2 completed; progress 43/116, 37.07%.
 
 ### Phase 3 - Audit strict de securite framework / resolution des failles
 
@@ -262,7 +263,7 @@ Regles obligatoires de cette phase:
 
 Taches:
 
-- [ ] Inventorier toutes les surfaces de securite du framework: filesystem, reseau, websocket, bridges JS/natifs, tokens, secrets, permissions, stockage, MCP, sync, server, sandbox, et imports dynamiques.
+- [x] Inventorier toutes les surfaces de securite du framework: filesystem, reseau, websocket, bridges JS/natifs, tokens, secrets, permissions, stockage, MCP, sync, server, sandbox, et imports dynamiques.
 - [ ] Verifier en profondeur les risques de fuite de secrets, d'injection de commande, de traversal de chemin, d'elevation de privilege, de bypass de permissions, de bridge trop permissif, et de payloads non valides.
 - [ ] Auditer les flux auth, user preferences sensibles, token storage, journalisation, rate limiting, et separation des donnees utilisateur.
 - [ ] Auditer les surfaces MCP et IA pour confirmer l'absence de raccourcis dangereux, de mutations non autorisees, et de contournements du pipeline canonique.
@@ -271,6 +272,9 @@ Taches:
 - [ ] Documenter clairement les failles restantes avec impact, proprietaire, plan de remediation, et justification si elles ne sont pas corrigees immediatement.
 - [ ] Produire des tests et verifications de securite cibles apres chaque correction sensible.
 - [ ] Produire un rapport d'audit et de resolution des failles avec avancement global avant cloture de phase.
+
+Rapports d'avancement Phase 3:
+- Security surface inventory: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with a structured attack-surface inventory covering filesystem, uploads, user data separation, HTTP routes, WebSocket and sync channels, CORS, native commands, shell/process execution, JavaScript/native bridges, tokens, secrets, credentials, permissions, storage, MCP, AI, voice, command pipeline, sandbox boundaries, runtime modes, dynamic imports, debug paths, fallbacks, and generated artifacts; validation by targeted rg over maintained source paths plus source inspection of server/auth.js, server/server.js, server/fileStorage.js, atome/src/squirrel/security/token_vault.js, atome/src/squirrel/atome/mcp.js, atome/src/squirrel/ai/agent_gateway.js, server/shell.js, platforms/desktop-tauri native/server files, and iOS bridge files; result passed; progress 44/116, 37.93%.
 
 ### Phase 4 - Finalisation Molecule / MTraX
 
