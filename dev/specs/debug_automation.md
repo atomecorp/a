@@ -102,3 +102,21 @@ description:
   - Store snapshot JSON via /dev/snapshot.
 acceptance:
   - logs/snapshots/snapshot-<timestamp>.json created via UI button.
+
+## Task UI-TEST-008: Full Stack Media, Session, and Project Acceptance
+status: IN_PROGRESS
+files:
+  - tests/probes/ui_full_stack_acceptance_test8_probe.test.mjs
+  - tests/probes/audio_recording_quick_capture_probe.test.mjs
+  - tests/probes/video_recording_audio_integrity_probe.test.mjs
+  - tests/probes/tauri_recorded_video_mtrack_probe.test.mjs
+  - tests/probes/atome_persistence_probe.test.mjs
+description:
+  - Run autonomous DebugUI/Playwright checks for browser and Tauri runtimes.
+  - Cover account creation, audio recording/playback, video recording/playback, MTraX preview diagnostics, session refresh persistence, and project atome persistence.
+  - Use JavaScript/Ruby tooling only; Python is not part of this workflow.
+acceptance:
+  - `npm run probe:ui-full-stack-test8` writes `temp/probe_reports/ui_full_stack_acceptance_test8/report.json`.
+  - Browser steps pass for account creation, audio decode/playable media, video audio integrity, MTraX import, refresh persistence, and atome persistence.
+  - Tauri steps verify authenticated recorded-video streaming and report any UI playback or canvas-preview blockers explicitly instead of masking them.
+  - Future debugging requests that ask for autonomous validation should run this test after code changes, provided Fastify and Tauri are already running.

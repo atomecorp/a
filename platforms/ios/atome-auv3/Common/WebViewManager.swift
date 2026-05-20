@@ -333,7 +333,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         iCloudFileManager.shared.initializeFileStructure()
 
         webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        webView.configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        webView.configuration.setValue(false, forKey: "allowUniversalAccessFromFileURLs")
         
         // Pre-page HTML (black placeholder) to avoid any white flash before main content loads
         let placeholderHTML = """

@@ -68,7 +68,7 @@ function ensureSet(map, key) {
 export function createVisioService(options = {}) {
   const {
     databaseEnabled = false,
-    jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production',
+    jwtSecret = process.env.JWT_SECRET,
     logger = console,
     mediaCodecs = DEFAULT_MEDIA_CODECS,
     listenIp = process.env.MEDIASOUP_LISTEN_IP || DEFAULT_LISTEN_IP,
@@ -192,8 +192,12 @@ export function createVisioService(options = {}) {
     if (server?.jwt && typeof server.jwt.verify === 'function') {
       return server.jwt.verify(token);
     }
+    const configuredJwtSecret = String(jwtSecret || '').trim();
+    if (configuredJwtSecret.length < 32) {
+      throw new Error('JWT_SECRET must be configured with at least 32 characters');
+    }
     const jwt = await import('jsonwebtoken');
-    return jwt.default.verify(token, jwtSecret);
+    return jwt.default.verify(token, configuredJwtSecret);
   }
 
   async function resolveAuthUserFromRequest(request) {

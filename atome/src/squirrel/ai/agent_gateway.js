@@ -92,6 +92,18 @@ const normalizeStringArray = (value) => {
     .filter(Boolean);
 };
 
+const readActorCapabilities = (actor = {}) => normalizeStringArray(actor?.capabilities);
+
+const missingToolCapabilities = (tool, actor = {}) => {
+  const required = Array.from(new Set([
+    ...normalizeStringArray(tool?.capabilities),
+    ...normalizeStringArray(tool?.permissions_required)
+  ]));
+  if (!required.length) return [];
+  const granted = new Set(readActorCapabilities(actor));
+  return required.filter((capability) => !granted.has(capability));
+};
+
 const normalizeDomain = (value, name = '') => {
   const explicit = String(value || '').trim().toLowerCase();
   if (explicit) return explicit;
@@ -294,8 +306,7 @@ const normalizeToolDefinition = (tool) => {
   };
 };
 
-const shouldConfirmForTool = ({ tool, signals, confirmed }) => {
-  if (confirmed === true) return false;
+const shouldConfirmForTool = ({ tool, signals }) => {
   if (!tool) return false;
   if (tool.confirmation_policy === 'always') return true;
   if (tool.confirmation_policy === 'never') return false;
@@ -313,7 +324,7 @@ const defaultPolicyEngine = {
     let decision = POLICY_DECISION.ALLOW;
     const reasons = [];
 
-    if (shouldConfirmForTool({ tool, signals, confirmed })) {
+    if (shouldConfirmForTool({ tool, signals })) {
       decision = POLICY_DECISION.REQUIRE_CONFIRM;
       reasons.push(tool?.risk_tier === 'moderate' ? 'moderate_risk' : 'risk_tier');
     }
@@ -605,21 +616,15 @@ const validateToolchain = (steps = [], options = {}) => {
   };
   const stepLevelConfirmation = normalizedSteps.some((entry) => shouldConfirmForTool({
     tool: entry.tool,
-    signals: options.signals || {},
-    confirmed: options.confirmed === true
+    signals: options.signals || {}
   }));
 
-  const requiresConfirmation = options.confirmed === true
-    ? false
-    : (
-      stepLevelConfirmation
-      ||
-      normalizedSteps.length > limits.max_auto_steps
-      || mutatingSteps.length > limits.max_mutating_steps
-      || mutatingDomains.size > limits.max_mutating_domains
-      || aggregateRisk === 'high'
-      || aggregateRisk === 'irreversible'
-    );
+  const requiresConfirmation = stepLevelConfirmation
+    || normalizedSteps.length > limits.max_auto_steps
+    || mutatingSteps.length > limits.max_mutating_steps
+    || mutatingDomains.size > limits.max_mutating_domains
+    || aggregateRisk === 'high'
+    || aggregateRisk === 'irreversible';
 
   return {
     ok: true,
@@ -673,7 +678,7 @@ const AgentGateway = {
     const idempotency_key = request.idempotency_key || null;
     const dry_run = request.dry_run === true;
     const executionIds = buildExecutionIds(request);
-    const confirmed = request.confirmed === true;
+    const confirmed = false;
 
     const validation = validateParams(tool.parameters, params);
     if (!validation.ok) {
@@ -692,6 +697,34 @@ const AgentGateway = {
         source_layer: executionIds.source.layer || null
       });
       return { status: TOOL_STATUS.ERROR, error: validation.error, ...executionIds };
+    }
+
+    const missingCapabilities = missingToolCapabilities(tool, actor);
+    if (missingCapabilities.length) {
+      const denied = {
+        status: TOOL_STATUS.DENIED,
+        human_summary: buildHumanSummary(tool, params),
+        reason: ['missing_capability'],
+        missing_capabilities: missingCapabilities,
+        ...executionIds
+      };
+      recordAudit({
+        timestamp: toIso(),
+        tool_name: tool.name,
+        domain: tool.domain,
+        risk_tier: tool.risk_tier,
+        actor,
+        params_hash: makeParamsHash(params),
+        status: denied.status,
+        decision: POLICY_DECISION.DENY,
+        reason: denied.reason,
+        missing_capabilities: missingCapabilities,
+        trace_id: executionIds.trace_id,
+        intent_id: executionIds.intent_id,
+        source: executionIds.source.type || null,
+        source_layer: executionIds.source.layer || null
+      });
+      return denied;
     }
 
     const policy = policyEngine.evaluate({ tool, params, signals, actor, confirmed });
@@ -792,7 +825,7 @@ const AgentGateway = {
     const signals = request.signals || {};
     const steps = request.steps || request.toolchain || [];
     const validated = validateToolchain(steps, {
-      confirmed: request.confirmed === true,
+      confirmed: false,
       limits: request.limits,
       signals
     });
@@ -807,7 +840,7 @@ const AgentGateway = {
       };
     }
 
-    if (validated.requires_confirmation && request.confirmed !== true) {
+    if (validated.requires_confirmation) {
       return {
         status: TOOL_STATUS.CONFIRMATION_REQUIRED,
         human_summary: validated.summary_human,
@@ -833,7 +866,7 @@ const AgentGateway = {
         trace_id: executionIds.trace_id,
         intent_id: executionIds.intent_id,
         source: executionIds.source,
-        confirmed: request.confirmed === true
+        confirmed: false
       });
       results.push({
         tool_name: step.tool_name,

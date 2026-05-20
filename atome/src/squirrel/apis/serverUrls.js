@@ -82,7 +82,7 @@ export function getBrowserSameOriginServerUrl() {
     const host = String(loc?.hostname || '').trim().toLowerCase();
     if (!origin) return null;
     if (isTauri()) return null;
-    if (isLoopbackHost(host)) return null;
+    if (isLoopbackHost(host) && !isCurrentLoopbackPagePort(getCloudServerPort())) return null;
     return origin;
 }
 

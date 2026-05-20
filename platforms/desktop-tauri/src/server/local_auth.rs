@@ -1400,126 +1400,20 @@ fn error_response(request_id: Option<String>, error: &str) -> AuthResponse {
 
 /// Save a Fastify JWT token for a user (stored as a particle)
 async fn handle_save_fastify_token(
-    message: serde_json::Value,
-    state: &LocalAuthState,
+    _message: serde_json::Value,
+    _state: &LocalAuthState,
     request_id: Option<String>,
 ) -> AuthResponse {
-    let token = match message.get("token").and_then(|v| v.as_str()) {
-        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
-        _ => return error_response(request_id, "Token is required"),
-    };
-
-    let local_token = match message.get("localToken").and_then(|v| v.as_str()) {
-        Some(t) => t,
-        _ => return error_response(request_id, "Local token is required for authentication"),
-    };
-
-    // Verify the local token and get user ID
-    let claims = match verify_token(&state.jwt_secret, local_token) {
-        Ok(c) => c,
-        Err(e) => return error_response(request_id, &format!("Invalid local token: {}", e)),
-    };
-
-    let user_id = claims.sub;
-    let now = chrono::Utc::now().to_rfc3339();
-
-    let db = match state.db.lock() {
-        Ok(d) => d,
-        Err(e) => return error_response(request_id, &e.to_string()),
-    };
-
-    // Store the Fastify token as a particle
-    let token_json = serde_json::to_string(&token).unwrap_or_default();
-
-    // Try to update existing particle first
-    let updated = db
-        .execute(
-            "UPDATE particles SET particle_value = ?1, version = version + 1, updated_at = ?2
-             WHERE atome_id = ?3 AND particle_key = 'fastify_token'",
-            rusqlite::params![&token_json, &now, &user_id],
-        )
-        .unwrap_or(0);
-
-    if updated == 0 {
-        // Insert new particle
-        if let Err(e) = db.execute(
-            "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
-             VALUES (?1, 'fastify_token', ?2, 'string', 1, ?3, ?3)",
-            rusqlite::params![&user_id, &token_json, &now],
-        ) {
-            return error_response(request_id, &e.to_string());
-        }
-    }
-
-    println!(
-        "[Auth] Fastify token saved for user {}",
-        &user_id[..8.min(user_id.len())]
-    );
-
-    AuthResponse {
-        msg_type: "auth-response".into(),
-        request_id,
-        success: true,
-        already_exists: None,
-        error: None,
-        user: None,
-        token: None,
-    }
+    error_response(request_id, "Fastify token particle storage is disabled")
 }
 
 /// Get the stored Fastify token for a user
 async fn handle_get_fastify_token(
-    message: serde_json::Value,
-    state: &LocalAuthState,
+    _message: serde_json::Value,
+    _state: &LocalAuthState,
     request_id: Option<String>,
 ) -> AuthResponse {
-    let local_token = match message.get("token").and_then(|v| v.as_str()) {
-        Some(t) => t,
-        _ => return error_response(request_id, "Local token is required"),
-    };
-
-    // Verify the local token and get user ID
-    let claims = match verify_token(&state.jwt_secret, local_token) {
-        Ok(c) => c,
-        Err(e) => return error_response(request_id, &format!("Invalid token: {}", e)),
-    };
-
-    let user_id = claims.sub;
-
-    let db = match state.db.lock() {
-        Ok(d) => d,
-        Err(e) => return error_response(request_id, &e.to_string()),
-    };
-
-    // Get the Fastify token from particles
-    let token_result: Option<String> = db
-        .query_row(
-            "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = 'fastify_token'",
-            rusqlite::params![&user_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .unwrap_or(None);
-
-    match token_result {
-        Some(token_json) => {
-            // Parse the JSON string to get the actual token
-            let token: String = serde_json::from_str(&token_json).unwrap_or_default();
-            if token.is_empty() {
-                return error_response(request_id, "No Fastify token stored");
-            }
-            AuthResponse {
-                msg_type: "auth-response".into(),
-                request_id,
-                success: true,
-                already_exists: None,
-                error: None,
-                user: None,
-                token: Some(token),
-            }
-        }
-        None => error_response(request_id, "No Fastify token stored"),
-    }
+    error_response(request_id, "Fastify token particle storage is disabled")
 }
 
 /// Delete the stored Fastify token for the user associated with the provided local token

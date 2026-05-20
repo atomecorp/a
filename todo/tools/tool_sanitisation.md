@@ -83,6 +83,9 @@ Un tool conforme doit satisfaire tous les points suivants:
 - [ ] Le tool est obligatoirement chainable avec sorties machine-readables reutilisables par un autre tool ou un pipeline.
 - [ ] Le tool est obligatoirement utilisable programmatiquement sans UI.
 - [ ] Le tool est obligatoirement activable par un systeme de CRON ou de scheduling, en batch ou non.
+- [ ] Le tool expose un contrat d'avancement et de post-traitement: progression, etapes, statut, erreurs, annulation, reprise, et resultat final.
+- [ ] Le tool ne bloque pas sa reutilisation pendant un post-traitement long lorsque le domaine permet une execution en arriere-plan.
+- [ ] Le tool affiche son avancement via une projection visuelle canonique, claire, elegante, et derivee du runtime plutot que d'un etat local decoratif.
 - [ ] Le rendu visuel provient d'une factory unique, sans chemin clone/fallback specifique au support.
 - [ ] Le tool n'a qu'une seule source d'icone et n'utilise pas de fallback generique pour masquer une definition manquante.
 - [ ] Le tool n'expose pas de doublons de conventions techniques dans son contrat visible sauf migration explicitement bornee.
@@ -172,6 +175,94 @@ Consequence pour ce chantier:
 - chaque tool critique devra declarer s'il implemente un mode native_multi_target ou sequenced_single_target;
 - les tools de transformation et d'edition multi-cible devront converger vers un vrai contrat batch runtime.
 
+## Avancement, post-traitement, et execution non bloquante
+
+Tous les tools canoniques qui declenchent une operation longue, asynchrone, ou post-traitee doivent exposer un contrat d'avancement unifie.
+
+Ce contrat couvre notamment:
+
+- capture audio/video;
+- import media;
+- transcodage video;
+- extraction audio;
+- upload/download;
+- synchronisation;
+- generation, analyse, indexation, conversion, export, et toute operation differable.
+
+Regles obligatoires:
+
+1. Un tool ne doit pas cacher un post-traitement derriere un etat binaire actif/inactif.
+2. Le runtime doit publier des evenements d'avancement machine-readables: queued, running, post_processing, completed, failed, cancelled.
+3. Chaque evenement doit porter un trace_id, tool_id, action, job_id, phase, percent si disponible, label_key, detail technique optionnel, et resultat partiel ou final.
+4. Le post-traitement doit etre decouple de l'interaction UI initiale quand il peut durer plus qu'un instant perceptible.
+5. Quand le post-traitement est decouple, l'utilisateur doit pouvoir reutiliser le tool si cela ne viole pas les preconditions metier.
+6. Les jobs concurrents doivent etre visibles et distinguables: un enregistrement termine peut convertir en arriere-plan pendant qu'un nouvel enregistrement est prepare.
+7. Les operations non interruptibles doivent le declarer explicitement; les autres doivent exposer cancel, retry, dismiss, et open_result quand cela a du sens.
+8. L'UI doit consommer l'etat runtime du job; elle ne doit pas simuler une progression locale sans source runtime.
+9. Le rendu visuel doit rester lisible et coherent dans toutes les projections: bouton, palette, panel, footer, monitoring, MCP/AI feedback.
+10. Un echec de post-traitement ne doit pas bloquer la ressource principale si elle existe deja: par exemple, une video enregistree doit rester visible meme si l'extraction audio echoue.
+
+Etats minimaux:
+
+- idle: aucune operation active.
+- armed: tool pret ou latch arme.
+- requesting_permission: attente permission systeme.
+- recording: capture active.
+- stopping: finalisation de capture.
+- queued: job en file.
+- processing: travail long en cours.
+- post_processing: transcodage, extraction, indexation, upload, sync, ou autre suite technique.
+- ready: resultat utilisable.
+- degraded: resultat principal utilisable mais post-traitement partiel ou absent.
+- failed: operation echouee.
+- cancelled: operation annulee.
+
+Bloc conceptuel minimal attendu:
+
+```jsonc
+{
+  "progress": {
+    "enabled": true,
+    "runtime_surface": "runtime.jobs.watch",
+    "event_surface": "runtime.events.progress",
+    "job_id_strategy": "trace_id_plus_tool_action",
+    "phases": ["queued", "running", "post_processing", "ready", "degraded", "failed"],
+    "percent_policy": "best_effort",
+    "concurrency": {
+      "mode": "background_per_job",
+      "reuse_tool_while_processing": true,
+      "max_parallel_jobs": 2,
+      "conflict_policy": "precondition_checked"
+    },
+    "controls": ["cancel", "retry", "dismiss", "open_result"],
+    "outputs": ["job_id", "phase", "percent", "result", "warnings", "errors"]
+  },
+  "progress_ui": {
+    "projection": "tool_progress_badge",
+    "surfaces": ["button", "palette", "panel", "monitoring"],
+    "visual_tokens": ["pending", "running", "success", "warning", "error"],
+    "show_percent": "when_known",
+    "show_phase_label": true,
+    "avoid_blocking_primary_action": true
+  }
+}
+```
+
+Application directe au cas video Tauri:
+
+- le bouton capture video doit indiquer capture active, arret, puis post-traitement;
+- le transcodage video et l'extraction audio doivent devenir des jobs suivis;
+- le preview video doit utiliser la ressource video des qu'elle est disponible;
+- la piste audio native doit utiliser une ressource audio materialisee, pas decoder le conteneur video dans le chemin critique du Play;
+- si l'audio cache est absent ou en erreur, l'etat doit etre degraded: video visible, audio indisponible, aucun freeze.
+
+Consequence pour ce chantier:
+
+- la sanitisation des tools doit inclure une SSOT d'etat et de progression;
+- les tools media/capture sont le premier terrain d'application;
+- le systeme de monitoring des tools doit afficher aussi les jobs actifs et post-traitements;
+- une solution locale au record video ne doit pas court-circuiter ce contrat.
+
 ## Chainage, execution headless, et scheduling obligatoires
 
 Tous les tools canoniques doivent etre composables en pipeline, invocables sans UI, et planifiables.
@@ -201,6 +292,26 @@ Bloc conceptuel minimal attendu pour l'automation:
     "schedule_entrypoints": ["runtime.tools.call", "runtime.tools.batch_call"],
     "outputs": ["effect_summary", "machine_events", "target_ids", "result"],
     "requires_ui_projection": false
+  },
+  "progress": {
+    "enabled": true,
+    "runtime_surface": "runtime.jobs.watch",
+    "event_surface": "runtime.events.progress",
+    "phases": ["queued", "running", "post_processing", "ready", "degraded", "failed"],
+    "percent_policy": "best_effort",
+    "concurrency": {
+      "mode": "background_per_job",
+      "reuse_tool_while_processing": true,
+      "conflict_policy": "precondition_checked"
+    },
+    "controls": ["cancel", "retry", "dismiss", "open_result"],
+    "outputs": ["job_id", "phase", "percent", "result", "warnings", "errors"]
+  },
+  "progress_ui": {
+    "projection": "tool_progress_badge",
+    "surfaces": ["button", "palette", "panel", "monitoring"],
+    "visual_tokens": ["pending", "running", "success", "warning", "error"],
+    "avoid_blocking_primary_action": true
   }
 }
 ```
@@ -238,6 +349,26 @@ Chaque tool doit porter ou derivable sans ambiguite le bloc conceptuel suivant:
     "schedule_entrypoints": ["runtime.tools.call", "runtime.tools.batch_call"],
     "outputs": ["effect_summary", "machine_events", "target_ids", "result"],
     "requires_ui_projection": false
+  },
+  "progress": {
+    "enabled": true,
+    "runtime_surface": "runtime.jobs.watch",
+    "event_surface": "runtime.events.progress",
+    "phases": ["queued", "running", "post_processing", "ready", "degraded", "failed"],
+    "percent_policy": "best_effort",
+    "concurrency": {
+      "mode": "background_per_job",
+      "reuse_tool_while_processing": true,
+      "conflict_policy": "precondition_checked"
+    },
+    "controls": ["cancel", "retry", "dismiss", "open_result"],
+    "outputs": ["job_id", "phase", "percent", "result", "warnings", "errors"]
+  },
+  "progress_ui": {
+    "projection": "tool_progress_badge",
+    "surfaces": ["button", "palette", "panel", "monitoring"],
+    "visual_tokens": ["pending", "running", "success", "warning", "error"],
+    "avoid_blocking_primary_action": true
   }
 }
 ```
@@ -254,6 +385,15 @@ Matrice minimale obligatoire a maintenir pendant la sanitisation:
 | ui.capture.import | import media | expose_direct_runtime | runtime.tools.call | native_multi_target | oui | oui | oui | pointer.click | runtime.audit.list + AtomeAI.callTool si policy | surface a confirmer en detail |
 | ui.capture.screen | capture screen | expose_direct_runtime | runtime.tools.call | sequenced_single_target | oui | oui | oui | pointer.click, state.on, state.off | runtime.audit.list + AtomeAI.callTool si policy | surface a confirmer en detail |
 | ui.capture.validation | validation capture | expose_direct_runtime | runtime.tools.call | native_multi_target | oui | oui | oui | pointer.click | runtime.audit.list | semantics a clarifier |
+
+Progression minimale obligatoire pour la famille capture:
+
+| Tool canonique | Operations longues | Progression attendue | Reutilisation pendant post-traitement | Etat degrade autorise |
+| --- | --- | --- | --- | --- |
+| ui.capture.audio | finalisation, ecriture, indexation, sync | recording, stopping, post_processing, ready/failed | oui si aucune capture audio active conflictuelle | oui: fichier present, indexation/sync echouee |
+| ui.capture.video | finalisation, transcodage video, extraction audio, preview cache, sync | recording, stopping, post_processing, ready/degraded/failed | oui si la camera/source peut etre reacquise sans conflit | oui: video visible, audio cache absent |
+| ui.capture.import | copie, normalisation, extraction metadata, thumbnails, sync | queued, processing, post_processing, ready/degraded/failed | oui avec jobs multiples | oui: asset importe, metadata incomplete |
+| ui.capture.screen | capture, encodage, post-traitement, sync | recording, stopping, post_processing, ready/degraded/failed | oui selon permission/source | oui: capture presente, metadata incomplete |
 
 Consequence pour ce chantier:
 
@@ -409,6 +549,26 @@ Impact:
 - Les pipelines MCP, les automatisations, et les executions planifiees resteraient des comportements ad hoc au lieu de devenir des invariants de plateforme.
 - Les tools trop dependants du DOM ou d'un evenement visuel resteraient structurellement non conformes.
 
+#### Ecart 11 - L'avancement et le post-traitement ne sont pas encore un contrat runtime de tool
+
+Constat:
+
+- Les operations longues peuvent se cacher derriere un bouton actif/inactif ou un log technique.
+- Les post-traitements media comme transcodage video, extraction audio, upload, sync, et indexation peuvent bloquer l'experience ou echouer sans retour visuel clair.
+- La reutilisation d'un tool pendant un post-traitement n'est pas formalisee.
+
+Impact:
+
+- L'utilisateur ne sait pas si l'outil travaille, a fini, est degrade, ou a echoue.
+- Des operations couteuses peuvent etre placees dans le chemin critique de l'action suivante, comme le Play d'une video Tauri.
+- Chaque outil risque de reinventer son propre indicateur de progression, avec des UI incoherentes et des etats non auditables.
+
+Objectif de correction:
+
+- Faire de l'avancement un contrat runtime transverse aux tools.
+- Rendre les post-traitements visibles, non bloquants, annulables ou relancables quand possible.
+- Permettre une degradation explicite: resultat principal utilisable, suite technique incomplete.
+
 ## Template canonique cible pour un tool conforme
 
 Template cible a utiliser comme reference de convergence:
@@ -502,6 +662,28 @@ Template cible a utiliser comme reference de convergence:
     "schedule_entrypoints": ["runtime.tools.call", "runtime.tools.batch_call"],
     "outputs": ["effect_summary", "machine_events", "target_ids", "result"],
     "requires_ui_projection": false
+  },
+  "progress": {
+    "enabled": true,
+    "runtime_surface": "runtime.jobs.watch",
+    "event_surface": "runtime.events.progress",
+    "phases": ["queued", "running", "post_processing", "ready", "degraded", "failed"],
+    "percent_policy": "best_effort",
+    "concurrency": {
+      "mode": "background_per_job",
+      "reuse_tool_while_processing": true,
+      "conflict_policy": "precondition_checked"
+    },
+    "controls": ["cancel", "retry", "dismiss", "open_result"],
+    "outputs": ["job_id", "phase", "percent", "result", "warnings", "errors"]
+  },
+  "progress_ui": {
+    "projection": "tool_progress_badge",
+    "surfaces": ["button", "palette", "panel", "monitoring"],
+    "visual_tokens": ["pending", "running", "success", "warning", "error"],
+    "show_percent": "when_known",
+    "show_phase_label": true,
+    "avoid_blocking_primary_action": true
   }
 }
 ```
@@ -529,6 +711,7 @@ Taches:
 - [ ] Etablir pour chaque tool critique sa correspondance MCP explicite: statut, entrypoint, actions autorisees, audit, et policy.
 - [ ] Etablir pour chaque tool critique son mode batch explicite: native_multi_target, sequenced_single_target, ou non_conforme.
 - [ ] Etablir pour chaque tool critique son contrat d'automation explicite: MCP, chainage, headless, CRON.
+- [ ] Etablir pour chaque tool critique son contrat de progression et post-traitement: phases, jobs, evenements, UI, annulation, retry, degradation, et reutilisation possible.
 
 Critere de sortie:
 
@@ -562,6 +745,8 @@ Taches:
 - [ ] Nettoyer les attributs techniques exposes par duplication quand ils ne sont plus indispensables.
 - [ ] Revoir le contrat de taille, rayon, label, pressed-state, et icon tint pour qu'il soit semantique et pas seulement opportuniste.
 - [ ] Garantir que la factory commune rende le meme tool avec la meme identite visuelle dans tous les contextes.
+- [ ] Ajouter un rendu canonique d'avancement des tools: badge, anneau, barre fine, phase textuelle courte, et etat degrade/erreur lisibles sans surcharger le bouton.
+- [ ] Garantir que l'indicateur visuel lit les jobs runtime et non un timer local decoratif.
 
 Critere de sortie:
 
@@ -583,6 +768,8 @@ Taches:
 - [ ] Interdire toute exposition MCP d'un host UI ou d'un helper legacy quand un tool runtime canonique existe deja.
 - [ ] Interdire qu'un tool multi-cible laisse la logique de batch a la charge de l'appelant si une semantique runtime batch canonique est attendue.
 - [ ] Interdire qu'un tool depende d'une projection UI pour etre execute programmatiquement ou par scheduler.
+- [ ] Exposer les jobs et evenements d'avancement via le runtime, avec le meme trace_id que l'invocation du tool.
+- [ ] Garantir que les post-traitements longs ne s'executent pas dans le chemin critique d'une action interactive suivante quand ils peuvent etre differes.
 
 Critere de sortie:
 
@@ -599,6 +786,7 @@ Taches:
 - [ ] Sortir des fichiers specialises les resolvers DOM ou bridges qui ne relevent pas du contrat metier d'un tool.
 - [ ] Separer clairement logique metier, orchestration runtime, et presentation visuelle.
 - [ ] Reduire les fichiers qui melangent trop de couches si la sanitisation des tools y touche.
+- [ ] Extraire les post-traitements longs dans une couche job/runtime partagee plutot que dans les handlers UI des tools.
 
 Critere de sortie:
 
@@ -608,6 +796,7 @@ Critere de sortie:
 
 - [ ] Etablir la matrice de verite: definition canonique attendue vs definition effectivement consommee par chaque support.
 - [ ] Corriger en premier la famille capture, car elle expose a la fois les problemes de contrat, de legacy menu, d'icones, et d'API runtime.
+- [ ] Integrer l'avancement et le post-traitement non bloquant dans la famille capture avant de generaliser aux autres tools.
 - [ ] Generaliser ensuite la meme methode aux tools latch, palette, slider, finder, et panels.
 - [ ] Terminer par les suppressions de compatibilite devenue inutile.
 
@@ -619,6 +808,9 @@ Critere de sortie:
 - [ ] Verification correspondance MCP: chaque tool critique a un statut MCP explicite, un entrypoint unique, et aucune ambiguite entre runtime direct, AI policy, et host UI.
 - [ ] Verification batch: chaque tool critique declare explicitement s'il traite ou non les cibles par lots, avec contrat de cibles, atomicite, et politique d'erreur.
 - [ ] Verification automation: chaque tool critique est chainable, headless, et activable par scheduling/CRON via les memes entrypoints canoniques.
+- [ ] Verification progression: chaque tool critique publie des evenements d'avancement runtime, expose les jobs actifs, et affiche un etat visuel coherent.
+- [ ] Verification non-blocage: un post-traitement long n'empeche pas la reutilisation du tool quand les preconditions metier l'autorisent.
+- [ ] Verification degradation: un resultat principal utilisable reste accessible meme si un post-traitement secondaire echoue.
 - [ ] Verification visuelle: meme iconographie, meme label, meme style actif/inactif, meme comportement de latch ou momentary dans tous les contextes.
 - [ ] Verification de non-regression: persistence, historique, et audit restent intacts apres simplification.
 
@@ -632,6 +824,7 @@ Le premier lot de correction a executer sur ce chantier doit couvrir exactement:
 - la matrice MCP explicite de la famille capture;
 - la declaration batch explicite de la famille capture;
 - la declaration explicite de leur chainage, usage headless, et activation CRON;
+- la declaration explicite de leur progression, post-traitement, jobs non bloquants, degradation, retry/cancel, et rendu visuel d'avancement;
 - la suppression de la definition menu locale qui force icon = false si une source canonique equivalente existe deja.
 
 ## Definition de termine pour ce chantier
@@ -642,6 +835,8 @@ Ce chantier ne pourra etre considere comme termine que lorsque les conditions su
 - tous les tools critiques ont une correspondance MCP explicite et verifiable;
 - tous les tools critiques ont un mode batch explicite et coherent avec leur metier;
 - tous les tools critiques sont chainables, headless, et activables via scheduling/CRON;
+- tous les tools critiques exposent un contrat d'avancement et de post-traitement verifiable;
+- les operations longues sont suivies comme jobs runtime, visibles dans l'UI, et non bloquantes quand le domaine le permet;
 - aucun support UI ne reconstruit une variante metier locale d'un tool;
 - les icones et labels proviennent d'une source unique et explicite;
 - les chemins legacy de compatibilite restants sont borner, documentes, et limites a une migration residuelle strictement necessaire;

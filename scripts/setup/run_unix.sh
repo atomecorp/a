@@ -35,9 +35,6 @@ run_bootstrap_if_needed() {
 
 run_bootstrap_if_needed "${1:-}"
 
-# Dev-only: shared JWT secret so Tauri + Fastify accept the same tokens.
-DEV_SHARED_JWT_SECRET="squirrel_dev_shared_jwt_secret_change_me"
-
 # Guardrail: on production servers, running ./run.sh with no arguments starts dev mode
 # (foreground processes + dependency installs). This is almost always accidental and
 # will stop when the SSH terminal closes. Use service commands instead.
@@ -152,8 +149,17 @@ load_env_file() {
 load_env_file "$PROJECT_ROOT/.env"
 load_env_file "$PROJECT_ROOT/.env.local"
 
-write_jwt_secret_to_env() {
-    local secret="$1"
+generate_auth_secret() {
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 32
+        return 0
+    fi
+    node --input-type=module -e "import crypto from 'node:crypto'; console.log(crypto.randomBytes(32).toString('hex'));"
+}
+
+write_env_value() {
+    local key="$1"
+    local secret="$2"
     local env_file="$PROJECT_ROOT/.env"
     local tmp
 
@@ -161,24 +167,33 @@ write_jwt_secret_to_env() {
     trap 'rm -f "$tmp"' RETURN
 
     if [[ -f "$env_file" ]]; then
-        grep -v '^JWT_SECRET=' "$env_file" >"$tmp" || true
+        grep -v "^${key}=" "$env_file" >"$tmp" || true
     else
         : >"$tmp"
     fi
 
-    printf 'JWT_SECRET=%s\n' "$secret" >>"$tmp"
+    printf '%s=%s\n' "$key" "$secret" >>"$tmp"
     mv "$tmp" "$env_file"
     trap - RETURN
 
     chmod 600 "$env_file" 2>/dev/null || true
 }
 
-ensure_dev_jwt_secret() {
-    if [[ -z "${JWT_SECRET:-}" ]]; then
-        export JWT_SECRET="$DEV_SHARED_JWT_SECRET"
-        write_jwt_secret_to_env "$JWT_SECRET"
-        echo "🔐 JWT_SECRET absent: secret dev partagé écrit dans .env pour Tauri + Fastify."
+ensure_auth_secret() {
+    local key="$1"
+    local current="${!key:-}"
+    if [[ ${#current} -lt 32 ]] || [[ "$current" == *"change_me"* ]] || [[ "$current" == *"change_in_production"* ]]; then
+        local generated
+        generated="$(generate_auth_secret)"
+        export "$key=$generated"
+        write_env_value "$key" "$generated"
+        echo "🔐 $key absent ou insuffisant: secret local aléatoire écrit dans .env."
     fi
+}
+
+ensure_dev_auth_secrets() {
+    ensure_auth_secret "JWT_SECRET"
+    ensure_auth_secret "COOKIE_SECRET"
 }
 
 prepare_uploads_dir() {
@@ -708,7 +723,7 @@ fi
 
 # Mode --server uniquement (pas de Tauri)
 if [ "$SERVER_ONLY" = true ]; then
-    ensure_dev_jwt_secret
+    ensure_dev_auth_secrets
     echo "📡 Mode serveur uniquement (Fastify sur port 3001)"
     echo "📂 Répertoire: $(pwd)"
     echo "🔧 Node.js: $(node --version)"
@@ -737,7 +752,7 @@ fi
 
 # Mode --tauri uniquement (pas de Fastify local)
 if [ "$TAURI_ONLY" = true ]; then
-    ensure_dev_jwt_secret
+    ensure_dev_auth_secrets
     echo "🖥️  Mode Tauri uniquement (Axum sur port 3000)"
     echo "📂 Répertoire: $(pwd)"
     echo "🔧 Node.js: $(node --version)"
@@ -815,7 +830,7 @@ fi
 # =============================================================================
 
 echo "🚀 Mode complet: Tauri (port 3000) + Fastify (port 3001)"
-ensure_dev_jwt_secret
+ensure_dev_auth_secrets
 echo "📂 Répertoire: $(pwd)"
 echo "🔧 Node.js: $(node --version)"
 echo "📦 NPM: $(npm --version)"

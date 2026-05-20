@@ -4,11 +4,10 @@
  * This module handles:
  * 1. Queue of pending sync actions per user (create, update, delete)
  * 2. Automatic sync when cloud server becomes available
- * 3. Secure password storage for automatic sync
+ * 3. Auto-sync metadata without password persistence
  * 4. Multi-user support (multiple local accounts)
  * 
  * SECURITY:
- * - Passwords are encrypted with a device-specific key before storage
  * - Queue is stored in localStorage with encryption
  * - Actions are verified before execution
  * 
@@ -60,8 +59,7 @@ function getDeviceKey() {
 }
 
 /**
- * Simple encryption for localStorage (not for high-security data)
- * This is obfuscation, not true encryption - passwords are still at risk if device is compromised
+ * Simple obfuscation for non-secret localStorage metadata.
  */
 function encryptForStorage(data) {
     const key = getDeviceKey();
@@ -239,12 +237,10 @@ export function cleanupOldActions(days = 7) {
 // =============================================================================
 
 /**
- * Store credentials for automatic sync
- * WARNING: This stores the password encrypted in localStorage
- * Only use if user explicitly enables auto-sync
+ * Store non-secret auto-sync metadata.
  * 
  * @param {string} userId - Local user ID
- * @param {string} password - User's password
+ * @param {string} password - Deprecated; ignored to prevent password persistence
  * @param {boolean} enableAutoSync - Whether to enable auto-sync
  */
 export function storeCredentialsForSync(userId, password, enableAutoSync = true) {
@@ -252,7 +248,6 @@ export function storeCredentialsForSync(userId, password, enableAutoSync = true)
         const allCredentials = getStoredCredentials();
 
         allCredentials[userId] = {
-            password: password, // Will be encrypted when saved
             autoSync: enableAutoSync,
             storedAt: new Date().toISOString()
         };
@@ -281,7 +276,18 @@ function getStoredCredentials() {
     try {
         const encrypted = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
         if (!encrypted) return {};
-        return decryptFromStorage(encrypted) || {};
+        const stored = decryptFromStorage(encrypted) || {};
+        let changed = false;
+        for (const value of Object.values(stored)) {
+            if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'password')) {
+                delete value.password;
+                changed = true;
+            }
+        }
+        if (changed) {
+            localStorage.setItem(CREDENTIALS_STORAGE_KEY, encryptForStorage(stored));
+        }
+        return stored;
     } catch (e) {
         return {};
     }
@@ -393,7 +399,7 @@ export async function processAction(action, cloudServerUrl) {
     if (!credentials && action.type !== SyncAction.DELETE_ACCOUNT) {
         return {
             success: false,
-            error: 'No credentials stored for auto-sync',
+            error: 'Manual authentication required for auto-sync',
             requiresManualSync: true
         };
     }
@@ -450,110 +456,33 @@ export async function processAction(action, cloudServerUrl) {
  * Sync create account to cloud
  */
 async function syncCreateAccount(action, credentials, cloudServerUrl) {
-    const response = await fetch(`${cloudServerUrl}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: action.username,
-            phone: action.phone,
-            password: credentials.password
-        }),
-        credentials: 'include'
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (data.success || response.status === 409) {
-        // 409 = already exists, which is fine for sync
-        return {
-            success: true,
-            cloudId: data.user?.id,
-            alreadyExists: response.status === 409
-        };
-    }
-
-    return { success: false, error: data.error || `HTTP ${response.status}` };
+    return {
+        success: false,
+        error: 'Manual authentication required for account creation sync',
+        requiresManualSync: true
+    };
 }
 
 /**
  * Sync update account to cloud
  */
 async function syncUpdateAccount(action, credentials, cloudServerUrl) {
-    // First login to get a session
-    const loginResponse = await fetch(`${cloudServerUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            phone: action.phone,
-            password: credentials.password
-        }),
-        credentials: 'include'
-    });
-
-    if (!loginResponse.ok) {
-        const loginData = await loginResponse.json().catch(() => ({}));
-        return { success: false, error: loginData.error || 'Failed to authenticate' };
-    }
-
-    // Then update
-    const updateResponse = await fetch(`${cloudServerUrl}/api/auth/update`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action.data),
-        credentials: 'include'
-    });
-
-    const data = await updateResponse.json().catch(() => ({}));
-    return { success: data.success, error: data.error };
+    return {
+        success: false,
+        error: 'Manual authentication required for account update sync',
+        requiresManualSync: true
+    };
 }
 
 /**
  * Sync delete account to cloud
  */
 async function syncDeleteAccount(action, credentials, cloudServerUrl) {
-    // For deletion, we need the password
-    // If credentials are not available, check if password was stored in action.data
-    const password = credentials?.password || action.data?.password;
-
-    if (!password) {
-        return {
-            success: false,
-            error: 'Password required for account deletion',
-            requiresManualSync: true
-        };
-    }
-
-    // First login
-    const loginResponse = await fetch(`${cloudServerUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            phone: action.phone,
-            password: password
-        }),
-        credentials: 'include'
-    });
-
-    const loginData = await loginResponse.json().catch(() => ({}));
-
-    if (!loginData.success) {
-        // Account might already be deleted on cloud, or never existed
-        if (loginData.error?.includes('Invalid') || loginData.error?.includes('not found')) {
-            return { success: true, alreadyDeleted: true };
-        }
-        return { success: false, error: loginData.error || 'Failed to authenticate' };
-    }
-
-    // Then delete
-    const deleteResponse = await fetch(`${cloudServerUrl}/api/auth/delete-account`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-        credentials: 'include'
-    });
-
-    const data = await deleteResponse.json().catch(() => ({}));
-    return { success: data.success, error: data.error };
+    return {
+        success: false,
+        error: 'Manual authentication required for account deletion sync',
+        requiresManualSync: true
+    };
 }
 
 /**

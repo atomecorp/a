@@ -508,14 +508,14 @@ pub fn init_with_config(tween_config: TweenConfig) -> Result<(), String> {
 }
 
 pub fn load_clip(id: &str, path: &str) -> Result<ClipMetadata, String> {
-    let mut guard = ENGINE.write().map_err(lock_err)?;
-    let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
     // Decode from owned bytes even for file-backed assets so MP4-family media
     // can be extracted deterministically into PCM before Kira playback.
     let bytes = fs::read(path).map_err(|e| format!("Failed to read audio file {path}: {e}"))?;
     let extension_hint = clip_extension_hint(path);
     let data = decode_static_sound_data(bytes, extension_hint.as_deref(), path)?;
     let metadata = ClipMetadata::from_data(&data)?;
+    let mut guard = ENGINE.write().map_err(lock_err)?;
+    let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
     engine.clips.insert(
         id.to_string(),
         ClipEntry {
@@ -526,10 +526,10 @@ pub fn load_clip(id: &str, path: &str) -> Result<ClipMetadata, String> {
 }
 
 pub fn load_clip_from_bytes(id: &str, bytes: Vec<u8>) -> Result<ClipMetadata, String> {
-    let mut guard = ENGINE.write().map_err(lock_err)?;
-    let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
     let data = decode_static_sound_data(bytes, None, "audio bytes")?;
     let metadata = ClipMetadata::from_data(&data)?;
+    let mut guard = ENGINE.write().map_err(lock_err)?;
+    let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
     engine.clips.insert(
         id.to_string(),
         ClipEntry {

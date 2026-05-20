@@ -34,6 +34,7 @@ const ANONYMOUS_USERNAME = 'anonymous';
 const ANONYMOUS_PASSWORD = 'anonymous';
 const ANONYMOUS_VISIBILITY = 'private';
 const ANONYMOUS_OPTIONAL = { anonymous: true, local_only: true };
+const MIN_AUTH_SECRET_LENGTH = 32;
 
 // Namespace UUID for deterministic user ID generation
 // This MUST be the same in Fastify and Axum to generate identical user IDs
@@ -49,6 +50,14 @@ function normalizePhone(phone) {
         return `+${cleaned.slice(1).replace(/\+/g, '')}`;
     }
     return cleaned.replace(/\+/g, '');
+}
+
+function requireConfiguredAuthSecret(name, value) {
+    const secret = String(value || '').trim();
+    if (secret.length < MIN_AUTH_SECRET_LENGTH) {
+        throw new Error(`${name} must be configured with at least ${MIN_AUTH_SECRET_LENGTH} characters`);
+    }
+    return secret;
 }
 
 /**
@@ -233,6 +242,7 @@ async function upsertUserStateCurrent(dataSource, userId, username, phone, visib
 
 // In-memory OTP storage (use Redis in production for multi-instance deployments)
 const otpStore = new Map();
+const authRateStore = new Map();
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -304,6 +314,30 @@ export function verifyOTP(phone, code) {
     return { valid: true };
 }
 
+function readClientRateKey(request, identity = '') {
+    const forwarded = String(request.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+    const ip = forwarded || request.ip || request.socket?.remoteAddress || 'unknown';
+    return `${ip}:${String(identity || '').trim()}`;
+}
+
+function enforceAuthRateLimit(request, bucket, identity, limit = 8, windowMs = 15 * 60 * 1000) {
+    const now = Date.now();
+    const key = `${bucket}:${readClientRateKey(request, identity)}`;
+    const current = authRateStore.get(key);
+    if (!current || now >= current.resetAt) {
+        authRateStore.set(key, { count: 1, resetAt: now + windowMs });
+        return { ok: true };
+    }
+    current.count += 1;
+    if (current.count > limit) {
+        return {
+            ok: false,
+            retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000))
+        };
+    }
+    return { ok: true };
+}
+
 /**
  * Simulate sending an SMS (replace with real provider in production)
  * @param {string} phone
@@ -312,7 +346,9 @@ export function verifyOTP(phone, code) {
  */
 export async function sendSMS(phone, message) {
     // Development transport: production deployments must inject a provider before enabling OTP.
-    console.log(`📱 [SMS SIMULATION] To: ${phone} | Message: "${message}"`);
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('SMS provider is required in production');
+    }
     return true;
 }
 
@@ -818,22 +854,24 @@ async function syncUserToTauri(username, phone, passwordHash, userId = null, opt
  */
 export async function registerAuthRoutes(server, dataSource, options = {}) {
     const {
-        jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production',
-        cookieSecret = process.env.COOKIE_SECRET || 'squirrel_cookie_secret_change_in_production',
+        jwtSecret = process.env.JWT_SECRET,
+        cookieSecret = process.env.COOKIE_SECRET,
         isProduction = process.env.NODE_ENV === 'production'
     } = options;
+    const configuredJwtSecret = requireConfiguredAuthSecret('JWT_SECRET', jwtSecret);
+    const configuredCookieSecret = requireConfiguredAuthSecret('COOKIE_SECRET', cookieSecret);
 
     // Import and register plugins
     const fastifyJwt = (await import('@fastify/jwt')).default;
     const fastifyCookie = (await import('@fastify/cookie')).default;
 
     await server.register(fastifyJwt, {
-        secret: jwtSecret,
+        secret: configuredJwtSecret,
         sign: { expiresIn: JWT_EXPIRY }
     });
 
     await server.register(fastifyCookie, {
-        secret: cookieSecret,
+        secret: configuredCookieSecret,
         hook: 'onRequest'
     });
 
@@ -891,7 +929,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      * ADOLE v3.0: Users are atomes with atome_type='user', properties in particles
      */
     server.get('/api/auth/users', async (request, reply) => {
+        if (process.env.SQUIRREL_ENABLE_AUTH_USER_LIST !== '1') {
+            return reply.code(404).send({ success: false, error: 'Not found' });
+        }
         try {
+            const token = request.cookies.access_token
+                || String(request.headers.authorization || '').replace(/^Bearer\s+/i, '');
+            if (!token) {
+                return reply.code(401).send({ success: false, error: 'Not authenticated' });
+            }
+            server.jwt.verify(token);
             // Query user atomes with their particles (phone, username, etc.)
             const rows = await dataSource.query(
                 `SELECT 
@@ -1054,10 +1101,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             return {
                 success: true,
+                authenticated: true,
+                logged: true,
                 message: 'Account created successfully',
                 principalId,
                 synced: syncResult.success,
-                token,
                 user: {
                     id: principalId,
                     user_id: principalId,
@@ -1175,6 +1223,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
 
         const cleanPhone = normalizePhone(phone);
+        const rate = enforceAuthRateLimit(request, 'login', cleanPhone);
+        if (!rate.ok) {
+            reply.header('retry-after', String(rate.retryAfterSeconds));
+            return reply.code(429).send({ success: false, error: 'Too many authentication attempts' });
+        }
 
         try {
             // ADOLE v3.0: Find user by phone (query particles)
@@ -1249,7 +1302,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             return {
                 success: true,
-                token: token, // Also return token in response for cross-origin requests
+                authenticated: true,
+                logged: true,
                 user: {
                     id: user.user_id,
                     username: user.username,
@@ -1331,6 +1385,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             return {
                 success: true,
+                authenticated: true,
+                logged: true,
                 user: {
                     id: user.user_id,
                     username: user.username,
@@ -1415,6 +1471,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
 
         const cleanPhone = normalizePhone(phone);
+        const rate = enforceAuthRateLimit(request, 'otp_request', cleanPhone, 3);
+        if (!rate.ok) {
+            reply.header('retry-after', String(rate.retryAfterSeconds));
+            return reply.code(429).send({ success: false, error: 'Too many OTP requests' });
+        }
 
         try {
             // ADOLE v3.0: Check if user exists via particles
@@ -1432,7 +1493,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Send SMS
             await sendSMS(cleanPhone, `Your Squirrel verification code is: ${code}`);
 
-            console.log(`📱 OTP sent to ${cleanPhone}`);
+            console.log('OTP sent');
 
             return { success: true, message: 'Verification code sent' };
 
@@ -1458,6 +1519,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
 
         const cleanPhone = normalizePhone(phone);
+        const rate = enforceAuthRateLimit(request, 'password_reset', cleanPhone, 5);
+        if (!rate.ok) {
+            reply.header('retry-after', String(rate.retryAfterSeconds));
+            return reply.code(429).send({ success: false, error: 'Too many password reset attempts' });
+        }
 
         // Verify OTP
         const otpResult = verifyOTP(cleanPhone, code);
@@ -1479,7 +1545,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Update password_hash particle
             await updateUserParticle(dataSource, user.user_id, 'password_hash', newHash);
 
-            console.log(`✅ Password reset for ${cleanPhone}`);
+            console.log('Password reset completed');
 
             return { success: true, message: 'Password has been reset successfully' };
 
@@ -1571,6 +1637,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             if (!cleanPhone || cleanPhone.length < 6) {
                 return reply.code(400).send({ success: false, error: 'Valid phone number is required' });
             }
+            const rate = enforceAuthRateLimit(request, 'phone_change_request', cleanPhone, 3);
+            if (!rate.ok) {
+                reply.header('retry-after', String(rate.retryAfterSeconds));
+                return reply.code(429).send({ success: false, error: 'Too many phone change requests' });
+            }
 
             // ADOLE v3.0: Check if new phone is already in use via particles
             const existingUser = await findUserByPhone(dataSource, cleanPhone);
@@ -1587,7 +1658,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Send SMS to NEW phone
             await sendSMS(cleanPhone, `Your Squirrel verification code is: ${code}`);
 
-            console.log(`📱 Phone change OTP sent to ${cleanPhone}`);
+            console.log('Phone change OTP sent');
 
             return { success: true, message: 'Verification code sent to new phone number' };
 
@@ -1620,6 +1691,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
 
             const cleanPhone = normalizePhone(newPhone);
+            const rate = enforceAuthRateLimit(request, 'phone_change_verify', cleanPhone, 5);
+            if (!rate.ok) {
+                reply.header('retry-after', String(rate.retryAfterSeconds));
+                return reply.code(429).send({ success: false, error: 'Too many phone verification attempts' });
+            }
 
             // Verify OTP
             const otpResult = verifyOTP(cleanPhone, code);
@@ -1653,7 +1729,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 maxAge: COOKIE_MAX_AGE
             });
 
-            console.log(`✅ Phone changed for user ${String(resolvedUserId)}: ${cleanPhone}`);
+            console.log(`Phone changed for user ${String(resolvedUserId)}`);
 
             // Parse optional if it's a string
             let optional = current.optional;
@@ -2189,6 +2265,11 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     // =========================================================================
     server.post('/api/auth/refresh', async (request, reply) => {
         try {
+            const rate = enforceAuthRateLimit(request, 'token_refresh', 'session', 20);
+            if (!rate.ok) {
+                reply.header('retry-after', String(rate.retryAfterSeconds));
+                return reply.code(429).send({ success: false, error: 'Too many refresh attempts' });
+            }
             // Try to get token from cookie first, then from Authorization header
             let token = request.cookies.access_token;
 
@@ -2203,10 +2284,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(401).send({ success: false, error: 'No token provided' });
             }
 
-            // Verify the current token (allow expired tokens for refresh, but ALWAYS verify signature)
+            // Verify the current token. Expired access tokens are not refresh credentials.
             let decoded;
             try {
-                decoded = server.jwt.verify(token, { ignoreExpiration: true });
+                decoded = server.jwt.verify(token);
             } catch (error) {
         console.warn("[cleanup] operation failed", error);
                 return reply.code(401).send({ success: false, error: 'Invalid token' });
@@ -2240,7 +2321,6 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             return {
                 success: true,
-                token: newToken,
                 user: {
                     id: user.user_id,
                     username: user.username,

@@ -1288,6 +1288,14 @@ async function startServer() {
     // 2. ROUTES API
     // ===========================
 
+    const getRequiredJwtSecret = () => {
+        const secret = String(process.env.JWT_SECRET || '').trim();
+        if (secret.length < 32) {
+          throw new Error('JWT_SECRET must be configured with at least 32 characters');
+        }
+        return secret;
+      };
+
     // Helper function to validate token (for sharing routes)
     // SECURITY: always verify JWT signatures (never trust base64-decoded payload).
     const validateToken = async (request) => {
@@ -1312,8 +1320,7 @@ async function startServer() {
         }
 
         const jwt = await import('jsonwebtoken');
-        const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
-        return jwt.default.verify(token, jwtSecret, options);
+        return jwt.default.verify(token, getRequiredJwtSecret(), options);
       };
 
       // Try Bearer token first
@@ -1324,25 +1331,6 @@ async function startServer() {
           return await verifyJwt(token);
         } catch (error) {
           request.log.warn({ err: error }, 'Bearer token validation failed');
-          return null;
-        }
-      }
-
-      const requestPath = String(request.raw?.url || request.url || '').split('?')[0];
-      const allowsQueryMediaToken = ['GET', 'HEAD'].includes(String(request.method || '').toUpperCase())
-        && (
-          requestPath.startsWith('/api/uploads/')
-          || requestPath.startsWith('/api/recordings/')
-          || requestPath.startsWith('/api/extract-audio/')
-        );
-      const queryToken = allowsQueryMediaToken
-        ? (request.query?.access_token || request.query?.auth_token || request.query?.token)
-        : null;
-      if (queryToken) {
-        try {
-          return await verifyJwt(Array.isArray(queryToken) ? queryToken[0] : String(queryToken));
-        } catch (error) {
-          request.log.warn({ err: error }, 'Query token validation failed');
           return null;
         }
       }
@@ -2485,7 +2473,7 @@ async function startServer() {
 
     // Route WebSocket pour API calls (replaces HTTP fetch)
     server.register(async function (fastify) {
-      fastify.get('/ws/api', { websocket: true }, async (connection) => {
+      fastify.get('/ws/api', { websocket: true }, async (connection, request) => {
         // Assign a stable connection id for audit/debugging (server-side only)
         try {
           const crypto = await import('crypto');
@@ -2500,6 +2488,19 @@ async function startServer() {
         }
 
         try { wsApiConnections.add(connection); } catch (error) {
+          console.warn("[server] operation failed", error);
+        }
+
+        try {
+          const requestUser = await validateToken(request);
+          const requestUserId = resolveUserId(requestUser);
+          if (requestUserId) {
+            attachWsApiClientToUser(connection, requestUserId);
+            if (requestUser && typeof requestUser.exp === 'number') {
+              connection._wsApiAuthExpMs = requestUser.exp * 1000;
+            }
+          }
+        } catch (error) {
           console.warn("[server] operation failed", error);
         }
 
@@ -2930,7 +2931,7 @@ async function startServer() {
               if (!requesterId && data.token) {
                 try {
                   const jwt = await import('jsonwebtoken');
-                  const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                  const jwtSecret = getRequiredJwtSecret();
                   const decoded = jwt.default.verify(String(data.token), jwtSecret);
                   const decodedUserId = decoded?.userId || decoded?.id || decoded?.user_id || decoded?.sub || null;
                   if (decodedUserId) {
@@ -2947,12 +2948,21 @@ async function startServer() {
               }
 
               if (!requesterId) {
-                requesterId = data.user_id || data.owner_id || null;
+                return null;
               }
-              return requesterId || 'anonymous';
+              return requesterId;
             };
 
             const userId = await resolveRequesterId();
+            if (!userId) {
+              safeSend({
+                type: 'file-response',
+                requestId,
+                success: false,
+                error: 'file_request_auth_required'
+              });
+              return;
+            }
             const identifier = data.atome_id || data.id || data.file_id || data.identifier || data.file;
 
             const sendFileResponse = (payload) => {
@@ -3234,15 +3244,37 @@ async function startServer() {
             const { id, method, path, body, headers } = data;
 
             try {
+              const attachedUserId = connection?._wsApiUserId ? String(connection._wsApiUserId) : '';
+              if (!attachedUserId) {
+                throw new Error('api_request_auth_required');
+              }
+              const normalizedMethod = String(method || 'GET').trim().toUpperCase();
+              const normalizedPath = String(path || '').trim();
+              const allowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+              const allowedPath = normalizedPath.startsWith('/api/auth/me')
+                || normalizedPath.startsWith('/api/auth/update')
+                || normalizedPath.startsWith('/api/projects')
+                || normalizedPath.startsWith('/api/activities')
+                || normalizedPath.startsWith('/api/atomes')
+                || normalizedPath.startsWith('/api/sharing')
+                || normalizedPath.startsWith('/api/files')
+                || normalizedPath.startsWith('/api/uploads');
+              if (!allowedMethods.has(normalizedMethod) || !allowedPath) {
+                throw new Error('api_request_route_not_allowed');
+              }
+              const filteredHeaders = {
+                'content-type': 'application/json',
+                'x-ws-user-id': attachedUserId
+              };
+              if (headers && typeof headers === 'object' && typeof headers.authorization === 'string') {
+                filteredHeaders.authorization = headers.authorization;
+              }
               // Inject the request through Fastify's internal router
               const response = await server.inject({
-                method: method || 'GET',
-                url: path,
+                method: normalizedMethod,
+                url: normalizedPath,
                 payload: body,
-                headers: {
-                  'content-type': 'application/json',
-                  ...headers
-                }
+                headers: filteredHeaders
               });
 
               safeSend({
@@ -3392,7 +3424,7 @@ async function startServer() {
 
                 // Issue JWT immediately so first post-register commit has a token.
                 const jwt = await import('jsonwebtoken');
-                const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                const jwtSecret = getRequiredJwtSecret();
                 const token = jwt.default.sign(
                   { userId, phone: cleanPhone },
                   jwtSecret,
@@ -3489,7 +3521,7 @@ async function startServer() {
                 if (!targetUserId && token) {
                   try {
                     const jwt = await import('jsonwebtoken');
-                    const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                    const jwtSecret = getRequiredJwtSecret();
                     const decoded = jwt.default.verify(token, jwtSecret);
                     targetUserId = decoded.userId;
                   } catch (jwtError) {
@@ -3631,7 +3663,7 @@ async function startServer() {
 
                 // Generate JWT token
                 const jwt = await import('jsonwebtoken');
-                const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                const jwtSecret = getRequiredJwtSecret();
                 const token = jwt.default.sign(
                   { userId: user.user_id, phone: user.phone },
                   jwtSecret,
@@ -3691,7 +3723,7 @@ async function startServer() {
 
                 try {
                   const jwt = await import('jsonwebtoken');
-                  const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                  const jwtSecret = getRequiredJwtSecret();
                   const decoded = jwt.default.verify(token, jwtSecret);
                   const decodedUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
                   let user = decodedUserId ? await findUserById(dataSource, String(decodedUserId)) : null;
@@ -3845,7 +3877,7 @@ async function startServer() {
             if (!requesterId && data.token) {
               try {
                 const jwt = await import('jsonwebtoken');
-                const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+                  const jwtSecret = getRequiredJwtSecret();
                 const decoded = jwt.default.verify(String(data.token), jwtSecret);
                 const decodedUserId = decoded?.userId || decoded?.id || decoded?.user_id || decoded?.sub || null;
                 if (decodedUserId) {
@@ -3862,9 +3894,14 @@ async function startServer() {
               }
             }
 
-            // Last-resort logLine (previous callers). Prefer not to rely on this.
             if (!requesterId) {
-              requesterId = data.user_id || data.owner_id || null;
+              safeSend({
+                type: 'atome-response',
+                requestId,
+                success: false,
+                error: 'atome_request_auth_required'
+              });
+              return;
             }
 
             try {
@@ -3882,10 +3919,7 @@ async function startServer() {
                 }
                 const atomeType = data.atome_type || data.type || 'generic';
                 const parentId = data.parent_id || data.parent;
-                let ownerId = data.owner_id || data.user_id || data.owner;
-                if (!ownerId || ownerId === 'anonymous') {
-                  ownerId = requesterId || null;
-                }
+                let ownerId = requesterId || null;
                 if (!ownerId) {
                   safeSend({
                     type: 'atome-response',
@@ -4150,7 +4184,7 @@ async function startServer() {
                       particles?.kind
                     ),
                     parent_id: currentAtome?.parent_id || data.parent_id || null,
-                    owner_id: currentAtome?.owner_id || data.owner_id || requesterId || null,
+                    owner_id: currentAtome?.owner_id || requesterId || null,
                     particles
                   }, 'update');
                 } catch (error) {
@@ -4226,7 +4260,7 @@ async function startServer() {
                       particles?.kind
                     ),
                     parent_id: currentAtome?.parent_id || data.parent_id || null,
-                    owner_id: currentAtome?.owner_id || data.owner_id || requesterId || null,
+                    owner_id: currentAtome?.owner_id || requesterId || null,
                     particles
                   }, 'update');
                 } catch (error) {
@@ -4641,7 +4675,16 @@ async function startServer() {
           // Handle share requests (permissions) over ws/api
           if (data.type === 'share') {
             const requestId = data.requestId || data.request_id;
-            const userId = connection?._wsApiUserId || data.user_id || null;
+            const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+            if (!userId) {
+              safeSend({
+                type: 'share-response',
+                requestId,
+                success: false,
+                error: 'share_request_auth_required'
+              });
+              return;
+            }
 
             try {
               const response = await handleShareMessage(data, userId);

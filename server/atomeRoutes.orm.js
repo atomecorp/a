@@ -209,15 +209,18 @@ async function validateToken(request) {
     }
 
     const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return null;
-    }
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : null;
+    const cookieToken = request.cookies?.access_token || null;
+    if (!bearerToken && !cookieToken) return null;
 
-    const token = authHeader.substring(7);
-
-    try {
+    const verifyCandidate = async (token) => {
         const jwt = await import('jsonwebtoken');
-        const jwtSecret = process.env.JWT_SECRET || 'squirrel_jwt_secret_change_in_production';
+        const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+        if (jwtSecret.length < 32) {
+            throw new Error('JWT_SECRET must be configured with at least 32 characters');
+        }
         const decoded = jwt.default.verify(token, jwtSecret);
         return {
             id: decoded.sub || decoded.id || decoded.userId,
@@ -225,7 +228,18 @@ async function validateToken(request) {
             username: decoded.username,
             phone: decoded.phone
         };
+    };
+
+    try {
+        return await verifyCandidate(bearerToken || cookieToken);
     } catch (e) {
+        if (bearerToken && cookieToken) {
+            try {
+                return await verifyCandidate(cookieToken);
+            } catch (_) {
+                // Keep the original bearer-token diagnostic below.
+            }
+        }
         console.error('[Atome] Token verify error:', e.message);
         return null;
     }

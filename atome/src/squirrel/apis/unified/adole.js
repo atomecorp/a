@@ -616,32 +616,6 @@ function isCloudFastifyTarget() {
 }
 
 export function getToken(key) {
-    if (typeof localStorage !== 'undefined') {
-        const token = localStorage.getItem(key);
-        if (token) {
-            // Persistent storage is authoritative: native auth can refresh it after JS memory was hydrated.
-            tokenMemory.set(key, token);
-            return token;
-        }
-        const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
-        const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
-        if (key === cloudKey) {
-            // Previous migration: use auth_token as cloud token only.
-            const previous = localStorage.getItem('auth_token');
-            if (previous) {
-                localStorage.setItem(cloudKey, previous);
-                tokenMemory.set(cloudKey, previous);
-                return previous;
-            }
-        }
-    }
-    if (typeof sessionStorage !== 'undefined') {
-        const token = sessionStorage.getItem(key);
-        if (token) {
-            tokenMemory.set(key, token);
-            return token;
-        }
-    }
     if (tokenMemory.has(key)) {
         const cached = tokenMemory.get(key);
         if (cached) return cached;
@@ -655,12 +629,6 @@ export function getToken(key) {
  * @param {string} token - Token value
  */
 export function setToken(key, token) {
-    if (typeof localStorage !== 'undefined' && token) {
-        localStorage.setItem(key, token);
-    }
-    if (typeof sessionStorage !== 'undefined' && token) {
-        sessionStorage.setItem(key, token);
-    }
     if (token) {
         tokenMemory.set(key, token);
     }
@@ -1326,10 +1294,49 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
     const getWs = () => (resolvedBackend === 'fastify' ? getFastifyWs() : getTauriWs());
     const getBaseUrl = () => {
         if (resolvedBackend === 'fastify') {
-            const wsApi = getFastifyWsApiUrl();
-            return wsApi ? wsApi.replace(/\/ws\/api$/, '') : '';
+            return getFastifyHttpBaseUrl() || '';
         }
-        return getTauriWsUrl().replace(/\/ws\/api$/, '');
+        return getTauriHttpBaseUrl() || '';
+    };
+    const fastifyHttpAuthRequest = async (path, { method = 'GET', body = null } = {}) => {
+        const baseUrl = getBaseUrl() || getCloudServerUrl();
+        if (!baseUrl) {
+            return { ok: false, success: false, status: 0, error: 'Fastify HTTP auth unavailable' };
+        }
+        try {
+            const headers = { Accept: 'application/json' };
+            const request = {
+                method,
+                headers,
+                credentials: 'include'
+            };
+            if (body) {
+                headers['Content-Type'] = 'application/json';
+                request.body = JSON.stringify(body);
+            }
+            const response = await fetch(`${baseUrl}${path}`, request);
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (_) {
+                data = null;
+            }
+            const success = response.ok && data?.success !== false;
+            return {
+                ...(data || {}),
+                ok: success,
+                success,
+                status: response.status,
+                error: success ? null : (data?.error || response.statusText || 'request_failed')
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                success: false,
+                status: 0,
+                error: error?.message || String(error)
+            };
+        }
     };
 
     return {
@@ -1353,6 +1360,18 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
 
         auth: {
             async register(data) {
+                if (resolvedBackend === 'fastify') {
+                    return fastifyHttpAuthRequest('/api/auth/register', {
+                        method: 'POST',
+                        body: {
+                            username: data.username,
+                            phone: data.phone,
+                            password: data.password,
+                            visibility: data.visibility || 'public',
+                            optional: data.optional || undefined
+                        }
+                    });
+                }
                 const result = await getWs().send({
                     type: 'auth',
                     action: 'register',
@@ -1395,6 +1414,15 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 return result;
             },
             async login(data) {
+                if (resolvedBackend === 'fastify') {
+                    return fastifyHttpAuthRequest('/api/auth/login', {
+                        method: 'POST',
+                        body: {
+                            phone: data.phone,
+                            password: data.password
+                        }
+                    });
+                }
                 const result = await getWs().send({
                     type: 'auth',
                     action: 'login',
@@ -1414,10 +1442,16 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async logout() {
                 clearToken(tokenKey);
+                if (resolvedBackend === 'fastify') {
+                    return fastifyHttpAuthRequest('/api/auth/logout', { method: 'POST' });
+                }
                 await getWs().send({ type: 'auth', action: 'logout' });
                 return { ok: true, success: true };
             },
             async me() {
+                if (resolvedBackend === 'fastify') {
+                    return fastifyHttpAuthRequest('/api/auth/me');
+                }
                 const token = getToken(tokenKey);
                 return getWs().send({ type: 'auth', action: 'me', token });
             },

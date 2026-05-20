@@ -98,6 +98,16 @@ function cloneValue(value) {
     }
 }
 
+function stableStringify(value) {
+    if (value === null || value === undefined) return String(value);
+    if (typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) {
+        return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+    }
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+}
+
 function nowIso() {
     return new Date().toISOString();
 }
@@ -245,7 +255,6 @@ function resolveRateLimitRule(method, params = {}, policy = {}) {
     }
     if (
         normalizedMethod === 'runtime.tools.call'
-        && isSensitiveRuntimeTool(normalizeRuntimeToolIdentifier(params))
     ) {
         return MCP_RATE_LIMIT_RULES.find((entry) => entry.id === 'runtime.sensitive') || null;
     }
@@ -514,6 +523,24 @@ function sanitizeConfirmationParams(params = {}) {
     return cloneValue(cloned) || {};
 }
 
+function resolveAiToolCapabilities(params = {}) {
+    const toolName = String(params?.tool_name || params?.name || params?.tool || '').trim();
+    if (!toolName || typeof globalThis === 'undefined') return [];
+    const agent = globalThis.AtomeAI || null;
+    if (!agent) return [];
+    const tool = typeof agent.getTool === 'function'
+        ? agent.getTool(toolName)
+        : (
+            typeof agent.listTools === 'function'
+                ? agent.listTools().find((entry) => entry?.name === toolName)
+                : null
+        );
+    return Array.from(new Set([
+        ...normalizeStringList(tool?.capabilities),
+        ...normalizeStringList(tool?.permissions_required)
+    ]));
+}
+
 function listAclRules() {
     return {
         tools: [
@@ -639,49 +666,32 @@ function resolveAccessPolicy(method, params = {}) {
     }
     if (normalizedMethod === 'runtime.tools.call') {
         const toolId = normalizeRuntimeToolIdentifier(params);
-        if (isSensitiveRuntimeTool(toolId)) {
-            return {
-                ...defaultPolicy,
-                scope: 'tool',
-                subject: `runtime.tools.call:${toolId}`,
-                access: 'confirm',
-                required_capabilities: ['runtime.execute', 'runtime.sensitive'],
-                confirmation_required: true,
-                proposal_required: true,
-                sandbox_profile: 'desktop_local_owner',
-                sensitive: true,
-                idempotent: true
-            };
-        }
         return {
             ...defaultPolicy,
             scope: 'tool',
             subject: `runtime.tools.call:${toolId || 'unknown'}`,
-            required_capabilities: ['runtime.execute']
+            access: 'confirm',
+            required_capabilities: ['runtime.execute', 'runtime.sensitive'],
+            confirmation_required: true,
+            proposal_required: true,
+            sandbox_profile: 'desktop_local_owner',
+            sensitive: true,
+            idempotent: true
         };
     }
     if (normalizedMethod === 'runtime.tools.batch_call') {
-        const events = Array.isArray(params?.events) ? params.events : [];
-        const sensitive = events.some((entry) => isSensitiveRuntimeTool(normalizeRuntimeToolIdentifier(entry)));
-        return sensitive
-            ? {
-                ...defaultPolicy,
-                scope: 'tool',
-                subject: 'runtime.tools.batch_call:sensitive_batch',
-                access: 'confirm',
-                required_capabilities: ['runtime.execute', 'runtime.sensitive'],
-                confirmation_required: true,
-                proposal_required: true,
-                sandbox_profile: 'desktop_local_owner',
-                sensitive: true,
-                idempotent: true
-            }
-            : {
-                ...defaultPolicy,
-                scope: 'tool',
-                subject: 'runtime.tools.batch_call',
-                required_capabilities: ['runtime.execute']
-            };
+        return {
+            ...defaultPolicy,
+            scope: 'tool',
+            subject: 'runtime.tools.batch_call',
+            access: 'confirm',
+            required_capabilities: ['runtime.execute', 'runtime.sensitive'],
+            confirmation_required: true,
+            proposal_required: true,
+            sandbox_profile: 'desktop_local_owner',
+            sensitive: true,
+            idempotent: true
+        };
     }
     if (normalizedMethod === 'mcp.toolchains.execute') {
         const steps = Array.isArray(params?.steps) ? params.steps : [];
@@ -690,11 +700,8 @@ function resolveAccessPolicy(method, params = {}) {
             const stepMethod = String(step?.method || '').trim();
             if (stepMethod === 'runtime.tools.call') {
                 requiredCapabilities.push('runtime.execute');
-                if (isSensitiveRuntimeTool(normalizeRuntimeToolIdentifier(step?.params || {}))) {
-                    requiredCapabilities.push('runtime.sensitive');
-                    return true;
-                }
-                return false;
+                requiredCapabilities.push('runtime.sensitive');
+                return true;
             }
             if (stepMethod === 'mail.send') {
                 requiredCapabilities.push('mail.send');
@@ -801,10 +808,11 @@ function resolveAccessPolicy(method, params = {}) {
         };
     }
     if (normalizedMethod === 'ai.tools.call') {
+        const targetCapabilities = resolveAiToolCapabilities(params);
         return {
             ...defaultPolicy,
             subject: normalizedMethod,
-            required_capabilities: ['ai.execute']
+            required_capabilities: Array.from(new Set(['ai.execute', ...targetCapabilities]))
         };
     }
     if (normalizedMethod === 'ai.tools.list') {
@@ -860,6 +868,12 @@ function createConfirmationRecord(method, params, policy = {}, actor = {}, propo
     return record;
 }
 
+function sameConfirmationActor(record = {}, actor = {}) {
+    const actorId = String(actor.actor_id || 'local_owner').trim() || 'local_owner';
+    const role = String(actor.role || 'local_owner').trim() || 'local_owner';
+    return record.actor?.actor_id === actorId && record.actor?.role === role;
+}
+
 function validateConfirmation(method, params = {}, policy = {}, actor = {}) {
     if (policy.confirmation_required !== true) {
         return { ok: true };
@@ -911,6 +925,26 @@ function validateConfirmation(method, params = {}, policy = {}, actor = {}) {
             gate: {
                 ok: false,
                 error: 'mcp_confirmation_method_mismatch',
+                confirmation_id: confirmationId
+            }
+        };
+    }
+    if (!sameConfirmationActor(record, actor)) {
+        return {
+            ok: false,
+            gate: {
+                ok: false,
+                error: 'mcp_confirmation_actor_mismatch',
+                confirmation_id: confirmationId
+            }
+        };
+    }
+    if (stableStringify(record.params) !== stableStringify(sanitizeConfirmationParams(params))) {
+        return {
+            ok: false,
+            gate: {
+                ok: false,
+                error: 'mcp_confirmation_params_mismatch',
                 confirmation_id: confirmationId
             }
         };

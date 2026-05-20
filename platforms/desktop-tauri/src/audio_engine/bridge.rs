@@ -44,32 +44,41 @@ pub fn audio_init() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn audio_load_clip(
-    paths: tauri::State<crate::ProjectPaths>,
+pub async fn audio_load_clip(
+    paths: tauri::State<'_, crate::ProjectPaths>,
     id: String,
     path: String,
 ) -> Result<Value, String> {
-    let input_path_was_absolute = Path::new(&path).is_absolute();
-    let resolved_path = resolve_audio_clip_path(&paths.project_root, &path)?;
-    let decode_path = transcode::prepare_native_audio_decode_path(&resolved_path)?;
-    let metadata = match playback::load_clip(&id, &decode_path.to_string_lossy()) {
-        Ok(metadata) => metadata,
-        Err(first_error)
-            if decode_path != resolved_path
-                && transcode::is_video_container_requiring_native_audio_extract(&resolved_path) =>
-        {
-            let rebuilt_decode_path = transcode::rebuild_native_audio_decode_path(&resolved_path)?;
-            playback::load_clip(&id, &rebuilt_decode_path.to_string_lossy()).map_err(|retry_error| {
-                format!(
-                    "native_audio_decode_failed_after_cache_rebuild: first={first_error}; retry={retry_error}"
-                )
-            })?
-        }
-        Err(error) => return Err(error),
-    };
+    let project_root = paths.project_root.clone();
+    let asset_id = id.clone();
+    let input_path = path.clone();
+    let input_path_was_absolute = Path::new(&input_path).is_absolute();
+    let load_result = tauri::async_runtime::spawn_blocking(move || {
+        let resolved_path = resolve_audio_clip_path(&project_root, &input_path)?;
+        let decode_path = transcode::prepare_native_audio_decode_path(&resolved_path)?;
+        let metadata = match playback::load_clip(&id, &decode_path.to_string_lossy()) {
+            Ok(metadata) => metadata,
+            Err(first_error)
+                if decode_path != resolved_path
+                    && transcode::is_video_container_requiring_native_audio_extract(&resolved_path) =>
+            {
+                let rebuilt_decode_path = transcode::rebuild_native_audio_decode_path(&resolved_path)?;
+                playback::load_clip(&id, &rebuilt_decode_path.to_string_lossy()).map_err(|retry_error| {
+                    format!(
+                        "native_audio_decode_failed_after_cache_rebuild: first={first_error}; retry={retry_error}"
+                    )
+                })?
+            }
+            Err(error) => return Err(error),
+        };
+        Ok::<_, String>((resolved_path, decode_path, metadata))
+    })
+    .await
+    .map_err(|error| format!("audio_load_clip_task_failed: {error}"))?;
+    let (resolved_path, decode_path, metadata) = load_result?;
     Ok(json!({
         "success": true,
-        "id": id,
+        "id": asset_id,
         "path": resolved_path.to_string_lossy().to_string(),
         "decode_path": decode_path.to_string_lossy().to_string(),
         "input_path": path,
@@ -82,10 +91,15 @@ pub fn audio_load_clip(
 }
 
 #[tauri::command]
-pub fn audio_load_clip_from_bytes(id: String, bytes: Vec<u8>) -> Result<Value, String> {
+pub async fn audio_load_clip_from_bytes(id: String, bytes: Vec<u8>) -> Result<Value, String> {
     let byte_len = bytes.len();
-    // Pass owned Vec to avoid an extra .to_vec() copy inside playback
-    let metadata = playback::load_clip_from_bytes(&id, bytes)?;
+    let asset_id = id.clone();
+    let metadata = tauri::async_runtime::spawn_blocking(move || {
+        // Pass owned Vec to avoid an extra .to_vec() copy inside playback
+        playback::load_clip_from_bytes(&asset_id, bytes)
+    })
+    .await
+    .map_err(|error| format!("audio_load_clip_from_bytes_task_failed: {error}"))??;
     Ok(json!({
         "success": true,
         "id": id,
