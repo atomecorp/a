@@ -97,6 +97,10 @@ Path: `tests/`, plus colocated `*.test.mjs` files under `atome/` and `eve/`.
 
 Role: Validation for framework, eVe runtime, probes, server, UI scenarios, media, security, and governance.
 
+Fixtures:
+- `tests/fixtures/media/` contains Git-tracked media fixtures used by media, Molecule, and MTraX probes.
+- Runtime probes should prefer `ATOME_MEDIA_TEST_DIR` when supplied and fall back to `tests/fixtures/media/`.
+
 Main entry points:
 - `npm run check:syntax`
 - `npm run check:no-fallbacks`

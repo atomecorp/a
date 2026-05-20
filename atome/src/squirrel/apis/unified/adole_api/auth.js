@@ -213,6 +213,35 @@ const persistFastifyLoginCache = ({ phone, password } = {}) => {
     
 };
 
+const FASTIFY_RELOGIN_RETRY_MS = 60000;
+const FASTIFY_RELOGIN_FAILURE_MS = 10000;
+let fastifyTokenEnsurePromise = null;
+let fastifyReloginBlockedUntil = 0;
+let fastifyReloginBlockedReason = null;
+
+const readNow = () => Date.now();
+
+const blockFastifyRelogin = (reason, durationMs) => {
+    const delay = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : FASTIFY_RELOGIN_FAILURE_MS;
+    fastifyReloginBlockedUntil = readNow() + delay;
+    fastifyReloginBlockedReason = reason || 'login_failed';
+};
+
+const readFastifyReloginBlock = () => {
+    if (!fastifyReloginBlockedUntil) return null;
+    const remainingMs = fastifyReloginBlockedUntil - readNow();
+    if (remainingMs <= 0) {
+        fastifyReloginBlockedUntil = 0;
+        fastifyReloginBlockedReason = null;
+        return null;
+    }
+    return {
+        ok: false,
+        reason: fastifyReloginBlockedReason || 'login_retry_delayed',
+        retry_after_ms: remainingMs
+    };
+};
+
 const ensureFastifyTokenLocal = async () => {
     const existing = FastifyAdapter?.getToken?.();
     if (existing) return { ok: true, reason: 'token_present' };
@@ -220,6 +249,18 @@ const ensureFastifyTokenLocal = async () => {
     const state = getSessionState();
     if (state?.mode !== 'authenticated') {
         return { ok: false, reason: 'not_authenticated' };
+    }
+
+    try {
+        const cookieSession = await meBackend('fastify');
+        const expectedUserId = state?.user?.id ? String(state.user.id) : null;
+        const resolvedUserId = cookieSession?.user?.id ? String(cookieSession.user.id) : null;
+        if (cookieSession?.ok && resolvedUserId && (!expectedUserId || resolvedUserId === expectedUserId)) {
+            if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
+            return { ok: true, reason: 'cookie_session' };
+        }
+    } catch (_) {
+        // Continue with token bridge or cached credentials.
     }
 
     // In dev/local Tauri setups, Fastify and Tauri can share JWT secret.
@@ -245,6 +286,9 @@ const ensureFastifyTokenLocal = async () => {
         }
     }
 
+    const blocked = readFastifyReloginBlock();
+    if (blocked) return blocked;
+
     const cached = loadFastifyLoginCache();
     if (!cached?.phone || !cached?.password) {
         return { ok: false, reason: 'missing_login_cache' };
@@ -262,12 +306,19 @@ const ensureFastifyTokenLocal = async () => {
         password: cached.password
     });
     if (!loginResult.ok) {
+        const status = Number(loginResult?.raw?.status || 0);
+        blockFastifyRelogin(
+            status === 429 ? 'login_rate_limited' : 'cache_login_failed',
+            status === 429 ? FASTIFY_RELOGIN_RETRY_MS : FASTIFY_RELOGIN_FAILURE_MS
+        );
         return {
             ok: false,
-            reason: 'cache_login_failed',
+            reason: status === 429 ? 'login_rate_limited' : 'cache_login_failed',
             error: loginResult.error || null
         };
     }
+    fastifyReloginBlockedUntil = 0;
+    fastifyReloginBlockedReason = null;
     
         if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
     
@@ -589,39 +640,72 @@ export const auth = {
 
         const primary = stored.backend || getPrimaryBackend();
         if (stored.mode === 'authenticated') {
-            if (!hasToken(primary)) {
-                clearSessionState();
-                return { authenticated: false, user: null };
-            }
-
-            // Optimistically restore session to avoid spurious logout on startup.
             const restoredUser = normalizeSessionUser(stored.user);
             if (!restoredUser) {
                 clearSessionState();
                 return { authenticated: false, user: null };
             }
+            const restoreSession = (user, backend = primary) => {
+                setSessionState({
+                    mode: 'authenticated',
+                    user,
+                    backend
+                });
+                return { authenticated: true, user };
+            };
+
+            // Optimistically restore session to avoid spurious logout on startup.
             setSessionState({
                 mode: 'authenticated',
                 user: restoredUser,
                 backend: primary
             }, { silent: true });
 
-            
-                const me = await meBackend(primary);
-                if (me.ok && me.user) {
-                    setSessionState({
-                        mode: 'authenticated',
-                        user: me.user,
-                        backend: primary
+            const me = await meBackend(primary);
+            if (me.ok && me.user) {
+                return restoreSession(me.user, primary);
+            }
+
+            const secondary = getSecondaryBackend();
+            if (secondary !== primary) {
+                const secondaryMe = await meBackend(secondary);
+                if (secondaryMe.ok && secondaryMe.user) {
+                    return restoreSession(secondaryMe.user, secondary);
+                }
+            }
+
+            const cached = loadFastifyLoginCache();
+            const cachedMatchesStored = cached?.phone && (!restoredUser.phone || normalizePhone(restoredUser.phone) === cached.phone);
+            if (cachedMatchesStored) {
+                const relogin = await loginBackend(primary, {
+                    phone: cached.phone,
+                    password: cached.password
+                });
+                if (relogin.ok && relogin.user) {
+                    return restoreSession(relogin.user, primary);
+                }
+                if (secondary !== primary) {
+                    const secondaryRelogin = await loginBackend(secondary, {
+                        phone: cached.phone,
+                        password: cached.password
                     });
-                    return { authenticated: true, user: me.user };
+                    if (secondaryRelogin.ok && secondaryRelogin.user) {
+                        return restoreSession(secondaryRelogin.user, secondary);
+                    }
                 }
-                // If backend refuses auth explicitly, clear. Otherwise keep optimistic session.
-                if (me.error === 'unauthenticated') {
-                    clearSessionState();
-                    return { authenticated: false, user: null };
-                }
-            
+            }
+
+            // Fastify cookie auth is authoritative for browser refreshes. Clear
+            // only when the server explicitly refuses the restored session.
+            const primaryRefusedAuth = me?.raw?.authenticated === false || me?.raw?.status === 401;
+            if (primary === 'fastify' && primaryRefusedAuth) {
+                clearSessionState();
+                return { authenticated: false, user: null };
+            }
+            if (primary !== 'fastify' && !hasToken(primary)) {
+                clearSessionState();
+                return { authenticated: false, user: null };
+            }
 
             return { authenticated: true, user: getSessionState().user };
         }
@@ -713,6 +797,8 @@ export const auth = {
     },
 
     async ensureFastifyToken() {
+        if (fastifyTokenEnsurePromise) return fastifyTokenEnsurePromise;
+        fastifyTokenEnsurePromise = (async () => {
         const token = FastifyAdapter?.getToken?.();
         if (token) {
             
@@ -741,6 +827,12 @@ export const auth = {
             };
         } catch (error) {
             return { ok: false, reason: 'ensure_failed', error: error?.message || String(error) };
+        }
+        })();
+        try {
+            return await fastifyTokenEnsurePromise;
+        } finally {
+            fastifyTokenEnsurePromise = null;
         }
     },
 

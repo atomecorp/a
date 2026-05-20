@@ -87,7 +87,9 @@
     "test:server-verification": "node scripts/test-server-verification.js",
     "dev:logs": "node dev/daemon/index.js",
     "dev:test-ui": "node tests/ui/runner/run-scenario.js",
-    "probe:browser-media-acceptance": "node tests/probes/browser_media_acceptance_probe.test.mjs"
+    "probe:media-fixtures": "node tests/probes/media_fixture_import_playback_probe.test.mjs",
+    "probe:browser-media-acceptance": "node tests/probes/browser_media_acceptance_probe.test.mjs",
+    "probe:ui-full-stack-test8": "node tests/probes/ui_full_stack_acceptance_test8_probe.test.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
