@@ -1,4 +1,5 @@
 import Intuition from '../../squirrel/components/intuition_builder/index.js';
+import { normalizeApiMediaRouteSourceFromProperties } from '../../../eVe/domains/media/shared/media_source.js';
 
 const CHECK_DEBUG = typeof window !== 'undefined' && window.__CHECK_DEBUG__ === true;
 function checkDebugPuts(message) {
@@ -659,7 +660,14 @@ async function loadProjectAtomes(projectId) {
   for (const atome of projectAtomes) {
     let atomeId = atome.atome_id || atome.id;
     let atomeType = atome.atome_type || atome.type;
-    let particles = atome.particles || atome.data || {};
+    let particles = { ...(atome.particles || atome.data || {}) };
+    const atomeOwnerId = atome.owner_id || atome.ownerId || atome.user_id || atome.userId || '';
+    if (atomeOwnerId) {
+      particles.owner_id = particles.owner_id || atomeOwnerId;
+      particles.ownerId = particles.ownerId || atomeOwnerId;
+      particles.media_user_id = particles.media_user_id || atomeOwnerId;
+      particles.mediaUserId = particles.mediaUserId || atomeOwnerId;
+    }
 
     // Get stored position or default with detailed logging
     const savedLeft = particles.left;
@@ -714,21 +722,7 @@ function createMediaAtome(atomeId, mediaType, left, top, borderRadius, opacity, 
   let src = particles.src || particles.media_url || particles.url || particles.path || '';
   const name = particles.name || particles.label || atomeId.substring(0, 8);
 
-  const tauriUrl = window.__SQUIRREL_TAURI_URL__ || 'http://127.0.0.1:3000';
-  const fastifyUrl = window.__SQUIRREL_FASTIFY_URL__ || 'http://127.0.0.1:3001';
-
-  // Resolve media URL only if relative path
-  if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
-    // Relative path - resolve to full URL using Fastify as main asset server
-    const ownerId = particles.owner_id || particles.ownerId || particles.sharedOwnerId || 'shared';
-    if (src.startsWith('assets/')) {
-      src = `${fastifyUrl}/${src}`;
-    } else {
-      src = `${fastifyUrl}/assets/${ownerId}/${src}`;
-    }
-    console.log('[User] Resolved relative media path:', src);
-  }
-  // For absolute URLs (http://...), use them as-is since both servers are on localhost
+  src = normalizeApiMediaRouteSourceFromProperties(src, particles) || '';
 
   console.log('[User] Final media src:', src);
 
@@ -759,7 +753,8 @@ function createMediaAtome(atomeId, mediaType, left, top, borderRadius, opacity, 
     css: containerCss,
     attrs: {
       'data-atome-type': mediaType,
-      'data-media-src': src
+      'data-media-src': src,
+      'data-eve-media-source': src
     },
     onClick: (e) => {
       e.stopPropagation();

@@ -281,6 +281,8 @@ Public namespaces:
 - `machine`
 - `security`
 
+Runtime rule: in Tauri, Adole `atomes` project-state reads must not issue secondary `/api/state_current` fetches to a loopback Fastify origin that differs from the page origin; local state remains authoritative and cloud/non-loopback Fastify reads remain explicit.
+
 Owner: Atome open.
 
 Use before creating: authenticated user, project, activity, atome, sharing, sync, machine, or security browser calls.
@@ -308,6 +310,8 @@ Public entry points:
 Owner: Canonical Atome mutation boundary installed from the eVe closed runtime bootstrap.
 
 Use before creating: any durable Atome mutation, snapshot, current-state read, or event-list read from product runtime code.
+
+Runtime rule: Tauri/local-Axum commit and current-state requests must not target cross-origin loopback Fastify for `/api/events/commit*` or `/api/state_current*`; the fetch boundary rewrites those protected routes to the local backend to avoid Safari CORS timing races.
 
 Do not duplicate in: UI components, panels, tools, import handlers, media runtimes, or product stores.
 
@@ -662,6 +666,8 @@ Evidence: exports in `eVe/domains/media/api/` and `eVe/domains/media/media_diagn
 Entry point families:
 - Media API shared helpers and media source normalization.
 - Shared media source normalization is the required route canonicalization contract for MTraX/WebGPU media playback before any browser media element receives a source, including timestamped recording names that arrive as bare or root-relative paths.
+- Legacy Atome product-bootstrap renderers that still mount media atomes must also call this contract before assigning `src` attributes; they must not synthesize `/assets/shared` media paths for persisted recordings.
+- Video recording atome creation must persist owner metadata (`owner_id` / `media_user_id`) and resolve `/api/recordings/:file` URLs with that owner before the first browser media request.
 - Audio API and video API product facades.
 - `VideoRecordingAPI` and `VideoPlaybackAPI` from `video_facade.js`.
 - Media persistence service exports.

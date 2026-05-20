@@ -210,6 +210,24 @@ const resolveHttpBaseUrl = (backend, adapter) => {
     return `http://127.0.0.1:${port}`;
 };
 
+const isLoopbackHost = (hostname = '') => {
+    const host = String(hostname || '').trim().toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1' || host === '[::1]' || host === 'tauri.localhost';
+};
+
+const shouldSkipFastifyStateCurrentOnTauri = (backend, baseUrl) => {
+    if (backend !== 'fastify') return false;
+    if (!isTauriRuntime()) return false;
+    if (typeof window === 'undefined') return false;
+    try {
+        const parsed = new URL(baseUrl || '', window.location?.href || 'http://127.0.0.1/');
+        const pageOrigin = String(window.location?.origin || '').trim();
+        return isLoopbackHost(parsed.hostname) && pageOrigin && parsed.origin !== pageOrigin;
+    } catch (_) {
+        return false;
+    }
+};
+
 const buildBackendAuthHeaders = (backend, token) => {
     const headers = {};
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -223,6 +241,9 @@ const buildBackendAuthHeaders = (backend, token) => {
 const listStateCurrentOnBackend = async (backend, options) => {
     const adapter = adapters[backend];
     const baseUrl = resolveHttpBaseUrl(backend, adapter);
+    if (shouldSkipFastifyStateCurrentOnTauri(backend, baseUrl)) {
+        return { ok: false, list: [], error: 'fastify_state_current_cross_origin_loopback_blocked' };
+    }
     const token = adapter?.getToken?.();
     if (!baseUrl || !token) return { ok: false, list: [], error: 'state_current_unavailable' };
     const params = new URLSearchParams();
@@ -249,7 +270,7 @@ const listStateCurrentOnBackend = async (backend, options) => {
     }
 };
 
-export const __ATOMES_TEST_ONLY__ = { buildBackendAuthHeaders };
+export const __ATOMES_TEST_ONLY__ = { buildBackendAuthHeaders, shouldSkipFastifyStateCurrentOnTauri };
 
 const canUseFastify = async (currentUserId) => {
     if (!FastifyAdapter?.getToken?.()) return false;

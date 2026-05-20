@@ -59,6 +59,8 @@ Forbidden boundary violations:
 
 Boundary debt:
 - Product bootstrap references from Atome into eVe remain documented exceptions requiring targeted verification before structural changes.
+- The legacy `atome/src/application/examples/user.js` media renderer is boundary debt and may only consume the shared eVe media source canonicalization contract for route normalization until ownership is moved into a product media rendering boundary.
+- Legacy record-video bootstrap files still contain product media atome creation paths; they must preserve owner-scoped recording URLs until that ownership moves behind the shared media persistence boundary.
 - Product-named server routes and closed product globals must be reviewed before they are treated as stable open APIs.
 - Existing boundary debt is not permission for new cross-layer imports or duplicate service paths.
 
@@ -342,6 +344,7 @@ Before creating a new file:
 Reuse first:
 - Squirrel APIs for product-neutral framework behavior.
 - Adole unified APIs for authenticated data and sync semantics.
+- In Tauri, local loopback state/mutation paths are authoritative during bootstrap and media opening; optional Fastify mirrors or secondary state reads must not race through cross-origin loopback HTTP.
 - Atome security and sync primitives for trust, verification, cloud sync, and queue behavior.
 - Communication service facades for mail, contacts, calendar, and bank.
 - Atome audio/AV runtime facade for playback, recording, STT, device, codec, and graph behavior.

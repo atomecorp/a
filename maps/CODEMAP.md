@@ -234,6 +234,7 @@ Primary dependencies:
 - `atome/src/js/` for bundled browser libraries.
 - `atome/src/wasm/` for audio WASM artifacts.
 - eVe bootstrap/version product references still exist in `atome/src/application/index.js` and `atome/src/squirrel/kickstart.js`.
+- `atome/src/application/examples/user.js` is legacy product-bootstrap rendering debt and must use the shared eVe media source canonicalization contract for media atome sources instead of reconstructing recording or upload paths locally.
 
 Should be extended by:
 - Framework bootstrap and open runtime composition.
@@ -243,6 +244,7 @@ Should not be extended by:
 
 Known risks:
 - Product bootstrap references need targeted verification during architecture map work.
+- The legacy examples user renderer is above the normal file-size threshold and remains critical boundary debt; media behavior changes there must stay narrowly scoped and validated against the shared media route contract.
 - `atome/src/js/` contains vendored/minified assets and should not be edited manually unless regenerating assets through the owning build process.
 
 Status: Verified.
@@ -320,6 +322,7 @@ Reusable APIs:
 - Essential wait/runtime helpers.
 - Platform and server URL utilities.
 - ADOLE auth, session, projects, storage, sharing, activities, atomes, and runtime modules.
+- ADOLE atome project-state reads keep Tauri loopback state authoritative and avoid secondary cross-origin loopback Fastify `/api/state_current` fetches.
 - Realtime dedupe and text DOM contracts.
 
 Should be extended by:
@@ -580,6 +583,8 @@ Main areas:
 Reusable APIs:
 - Media API facades, persistence service, diagnostics, media source and identifier helpers.
 - Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff.
+- Recorded video atome creation must carry the recording owner into `resolveMediaUrl` and persist owner/media-user particles so the first load uses the user-scoped recordings route.
+- Atome double-click to MTraX timeline resolution must merge persisted state owner metadata before normalizing recording sources, including older atomes whose properties lack owner fields.
 - Video preview renderers and preview panel services.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
 - User profile API.

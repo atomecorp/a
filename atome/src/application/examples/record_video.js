@@ -141,6 +141,12 @@
         return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
 
+    function buildRecordingMediaUrl(fileName, ownerId) {
+        const route = `/api/recordings/${encodeURIComponent(fileName)}`;
+        const userId = (typeof ownerId === 'string') ? ownerId.trim() : '';
+        return userId ? `${route}?media_user_id=${encodeURIComponent(userId)}` : route;
+    }
+
     function sanitizeFileName(name, fallbackExt) {
         const raw = (typeof name === 'string' && name.trim()) ? name.trim() : `recording_${Date.now()}`;
         const base = raw.split('/').pop().split('\\').pop();
@@ -450,10 +456,15 @@
             throw new Error('AdoleAPI.atomes.create() is not available');
         }
         const atomeId = `${atomeType}_${randomId()}`;
-        const mediaUrl = `/api/recordings/${encodeURIComponent(fileName)}`;
+        const mediaUrl = buildRecordingMediaUrl(fileName, ownerId);
         const particles = {
             kind: atomeType,
             type: atomeType,
+            owner_id: ownerId || null,
+            ownerId: ownerId || null,
+            media_user_id: ownerId || null,
+            mediaUserId: ownerId || null,
+            storage_root: 'recordings',
             file_name: fileName,
             file_path: relPath || null,
             media_url: mediaUrl,

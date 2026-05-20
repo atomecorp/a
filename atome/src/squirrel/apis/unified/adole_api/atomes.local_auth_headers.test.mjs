@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 
-globalThis.window = {};
+globalThis.window = {
+    addEventListener() { },
+    removeEventListener() { },
+    dispatchEvent() { }
+};
+globalThis.CustomEvent = class CustomEvent {
+    constructor(name, options = {}) {
+        this.type = name;
+        this.detail = options.detail;
+    }
+};
 
 const localStorageStore = new Map();
 
@@ -29,5 +39,24 @@ const headers = __ATOMES_TEST_ONLY__.buildBackendAuthHeaders('tauri', 'token-xyz
 
 assert.equal(headers.Authorization, 'Bearer token-xyz', 'state_current requests should keep the bearer token');
 assert.equal(headers['X-User-Id'], 'anon_user_local_42', 'state_current requests should include session user id for local Axum');
+
+window.location = {
+    protocol: 'http:',
+    hostname: 'tauri.localhost',
+    origin: 'http://tauri.localhost',
+    href: 'http://tauri.localhost/'
+};
+
+assert.equal(
+    __ATOMES_TEST_ONLY__.shouldSkipFastifyStateCurrentOnTauri('fastify', 'http://localhost:3001'),
+    true,
+    'Tauri pages should not fetch cross-origin loopback Fastify state_current'
+);
+
+assert.equal(
+    __ATOMES_TEST_ONLY__.shouldSkipFastifyStateCurrentOnTauri('fastify', 'https://atome.one'),
+    false,
+    'Tauri pages may still use non-loopback Fastify state_current'
+);
 
 console.log('atomes_local_auth_headers: ok');
