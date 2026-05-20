@@ -264,7 +264,7 @@ Regles obligatoires de cette phase:
 Taches:
 
 - [x] Inventorier toutes les surfaces de securite du framework: filesystem, reseau, websocket, bridges JS/natifs, tokens, secrets, permissions, stockage, MCP, sync, server, sandbox, et imports dynamiques.
-- [ ] Verifier en profondeur les risques de fuite de secrets, d'injection de commande, de traversal de chemin, d'elevation de privilege, de bypass de permissions, de bridge trop permissif, et de payloads non valides.
+- [x] Verifier en profondeur les risques de fuite de secrets, d'injection de commande, de traversal de chemin, d'elevation de privilege, de bypass de permissions, de bridge trop permissif, et de payloads non valides.
 - [ ] Auditer les flux auth, user preferences sensibles, token storage, journalisation, rate limiting, et separation des donnees utilisateur.
 - [ ] Auditer les surfaces MCP et IA pour confirmer l'absence de raccourcis dangereux, de mutations non autorisees, et de contournements du pipeline canonique.
 - [ ] Prioriser les failles par severite: critique, haute, moyenne, basse.
@@ -275,6 +275,7 @@ Taches:
 
 Rapports d'avancement Phase 3:
 - Security surface inventory: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with a structured attack-surface inventory covering filesystem, uploads, user data separation, HTTP routes, WebSocket and sync channels, CORS, native commands, shell/process execution, JavaScript/native bridges, tokens, secrets, credentials, permissions, storage, MCP, AI, voice, command pipeline, sandbox boundaries, runtime modes, dynamic imports, debug paths, fallbacks, and generated artifacts; validation by targeted rg over maintained source paths plus source inspection of server/auth.js, server/server.js, server/fileStorage.js, atome/src/squirrel/security/token_vault.js, atome/src/squirrel/atome/mcp.js, atome/src/squirrel/ai/agent_gateway.js, server/shell.js, platforms/desktop-tauri native/server files, and iOS bridge files; result passed; progress 44/116, 37.93%.
+- Deep security risk verification: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with verified open risk candidates covering default JWT/cookie secrets, localStorage sync credentials, media query tokens, WebSocket internal request injection, client-supplied file identity fallback, broad iOS filesystem bridge exposure, shell policy misconfiguration risk, path traversal controls and gaps, and inconsistent WebSocket payload validation; validation by targeted rg plus source inspection of server/auth.js, server/server.js, server/shell.js, server/fileStorage.js, server/userExportImport.js, atome/security/syncQueue.js, platforms/desktop-tauri/src/server/mod.rs, platforms/ios/atome-auv3/Common/WebViewManager.swift, platforms/ios/atome-auv3/Common/FileSystemBridge.swift, and atome/src/squirrel/atome/mcp.js; result passed; progress 45/116, 38.79%.
 
 ### Phase 4 - Finalisation Molecule / MTraX
 

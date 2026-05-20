@@ -141,6 +141,7 @@ For already-written code:
 Validation is mandatory for every modified file:
 
 - run the narrowest relevant executable validation after each substantive edit when one exists;
+- verify that every code addition or modification does not introduce a security weakness, vulnerability, exposure, privilege bypass, unsafe trust boundary, or regression in validation, authorization, sanitization, or secret handling;
 - verify the final line count and module boundary of every touched file;
 - verify that the change did not scatter previously cohesive logic across an unjustified number of files;
 - verify that factorization improved or at minimum did not regress;
@@ -886,6 +887,8 @@ For every modification, repair, refactor, or cleanup operation, the assistant MU
 - remove unnecessary complexity;
 
 - clean the implementation thoroughly;
+
+- perform a targeted security verification for every code addition or modification to ensure that no new vulnerability, unsafe exposure, trust-boundary violation, authorization gap, validation gap, injection path, or secret-handling regression has been introduced;
 
 - remove unsuccessful attempts, abandoned experiments, invalid probes, and superseded debug edits as soon as they are no longer needed, not only at the very end;
 
