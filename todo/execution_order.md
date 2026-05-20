@@ -213,7 +213,7 @@ Taches:
 - [x] Creer ou mettre a jour maps/API_MAP.md apres validation de la phase 1.
 - [x] Creer maps/DESIGN_MAP.md pour cartographier le design JavaScript, les tokens, les factories visuelles, les styles injectes, les assets, et les exceptions CSS generees ou vendorisees.
 - [x] Creer ou mettre a jour maps/ARCHITECTURE_MAP.md apres validation de la phase 1.
-- [ ] Lister les APIs publiques, semi-publiques, et internes sans hallucination ni doublon.
+- [x] Lister les APIs publiques, semi-publiques, et internes sans hallucination ni doublon.
 - [ ] Faire apparaitre explicitement la frontiere Atome open / eVe closed dans les maps.
 - [ ] Rendre ces maps obligatoires avant toute nouvelle implementation.
 - [ ] Produire un test ou une verification documentaire ciblee apres chaque sous-tache et un rapport d'avancement global.
@@ -223,6 +223,7 @@ Rapports d'avancement Phase 2:
 - API_MAP: creation de maps/API_MAP.md comme carte initiale des familles d'APIs verifiees; validation par controle de taille, presence, sections/frontieres rg, inspection ciblee des exports, globals, routes HTTP/WebSocket, et APIs bootstrap; resultat reussi; avancement 36/115, soit 31.30%.
 - DESIGN_MAP: creation de maps/DESIGN_MAP.md comme carte du design JavaScript, tokens, factories, styles injectes, assets, et exceptions CSS framework/vendor/build; validation par controle de taille, sections rg, inventaire CSS, inspection des modules eVe/elements, eVe/intuition, eVe/domains/mtrax, atome/src/squirrel/components, atome/src/assets; resultat reussi; avancement 37/116, soit 31.90%.
 - ARCHITECTURE_MAP: creation de maps/ARCHITECTURE_MAP.md comme contrat de couches, directions de dependance, modes runtime, flux de mutation, separation UI/API/MCP/storage/sync, regles de placement et zones To verify; validation par controle de taille, sections rg obligatoires, references aux maps et documents sources, et existence des chemins documentaires references; resultat reussi; avancement 38/116, soit 32.76%.
+- API visibility inventory: mise a jour de maps/API_MAP.md avec inventaire classe Public, Semi-public, Internal, et Status: To verify; validation par extraction rg des exports, globals, routes Fastify/WebSocket, points runtime eVe, services Atome, stores eVe, MCP/AI/voice/audio, correction des entrees non confirmees SelectionAPI et AtomeAI, et controle rg des sections/statuts; resultat reussi; avancement 39/116, soit 33.62%.
 
 ### Phase 3 - Audit strict de securite framework / resolution des failles
 
