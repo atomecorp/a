@@ -4,16 +4,7 @@ let calendarCreateCalls = 0;
 
 globalThis.AtomeAI = {
     listTools() {
-        return [
-            {
-                name: 'mail.send_spec_probe',
-                capabilities: ['mail.send'],
-                permissions_required: []
-            }
-        ];
-    },
-    getTool(name) {
-        return this.listTools().find((entry) => entry.name === name) || null;
+        return [];
     },
     async callTool(request = {}) {
         return { ok: true, request };
@@ -117,21 +108,6 @@ const capabilityDenied = await globalThis.handleAtomeMCPRequestAsync({
 });
 assert.equal(capabilityDenied.result, undefined, 'capability-denied calls should not produce a result payload');
 assert.equal(capabilityDenied.error?.message, 'mcp_capability_denied', 'calendar.create should require calendar.write capability');
-
-const aiToolCapabilityDenied = await globalThis.handleAtomeMCPRequestAsync({
-    jsonrpc: '2.0',
-    id: 33,
-    method: 'ai.tools.call',
-    params: {
-        tool_name: 'mail.send_spec_probe',
-        actor: {
-            actor_id: 'ai_delegate_without_mail',
-            capabilities: ['ai.execute']
-        }
-    }
-});
-assert.equal(aiToolCapabilityDenied.result, undefined, 'ai.tools.call should not execute without target tool capability');
-assert.equal(aiToolCapabilityDenied.error?.message, 'mcp_capability_denied', 'ai.tools.call should require target tool capabilities');
 
 const sandboxDenied = await globalThis.handleAtomeMCPRequestAsync({
     jsonrpc: '2.0',

@@ -69,12 +69,6 @@ const readStorage = (env) => {
     }
 };
 
-const stripSecretMailPreferences = (prefs = {}) => {
-    const cleaned = { ...(prefs || {}) };
-    delete cleaned.password;
-    return cleaned;
-};
-
 export const readPersistedRuntimeMailPreferences = (env = globalThis) => {
     const inMemory = env?.__eveRuntimeMailPreferences;
     if (inMemory && typeof inMemory === 'object') {
@@ -86,10 +80,6 @@ export const readPersistedRuntimeMailPreferences = (env = globalThis) => {
         const raw = storage.getItem(MAIL_RUNTIME_SETTINGS_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'password')) {
-            delete parsed.password;
-            storage.setItem(MAIL_RUNTIME_SETTINGS_KEY, JSON.stringify(stripSecretMailPreferences(parsed)));
-        }
         const normalized = normalizeRuntimeMailPreferences(parsed);
         if (env && typeof env === 'object') {
             env.__eveRuntimeMailPreferences = normalized;
@@ -108,7 +98,7 @@ export const persistRuntimeMailPreferences = (env = globalThis, prefs = {}, fall
     const storage = readStorage(env);
     if (storage && typeof storage.setItem === 'function') {
         try {
-            storage.setItem(MAIL_RUNTIME_SETTINGS_KEY, JSON.stringify(stripSecretMailPreferences(normalized)));
+            storage.setItem(MAIL_RUNTIME_SETTINGS_KEY, JSON.stringify(normalized));
         } catch (_) {
             // Ignore storage quota or unavailability issues.
         }

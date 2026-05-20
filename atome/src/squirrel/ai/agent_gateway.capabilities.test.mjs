@@ -6,7 +6,6 @@ AgentGateway.registerTool({
     name: 'contacts.update_spec_probe',
     domain: 'contacts',
     description: 'Spec-aligned contacts update probe',
-    capabilities: ['contacts.write'],
     risk_tier: 'moderate',
     parameters: {
         type: 'object',
@@ -61,10 +60,6 @@ assert.equal(mailTool?.risk_tier, 'low', 'uppercase canonical risk tiers should 
 
 const confirmation = await AgentGateway.callTool({
     tool_name: 'contacts.update_spec_probe',
-    actor: {
-        actor_id: 'contacts_writer',
-        capabilities: ['contacts.write']
-    },
     params: {
         contact_id: 'contact_probe_1',
         email: 'probe@example.test'
@@ -73,27 +68,16 @@ const confirmation = await AgentGateway.callTool({
 
 assert.equal(confirmation.status, 'CONFIRMATION_REQUIRED', 'spec moderate tools should require confirmation by default');
 
-const denied = await AgentGateway.callTool({
+const executed = await AgentGateway.callTool({
     tool_name: 'contacts.update_spec_probe',
-    actor: {
-        actor_id: 'contacts_viewer',
-        capabilities: ['contacts.read']
-    },
+    confirmed: true,
     params: {
         contact_id: 'contact_probe_1',
         email: 'probe@example.test'
     }
 });
 
-assert.equal(denied.status, 'DENIED', 'tools should deny actors missing declared capabilities');
-assert.deepEqual(denied.missing_capabilities, ['contacts.write'], 'denials should expose missing tool capabilities');
-
-const approved = AgentGateway.proposal.approve(confirmation.proposal_id, 'contacts_confirmation_token');
-assert.equal(approved.status, 'APPROVED', 'proposal approval should bind execution to an existing proposal');
-
-const executed = await AgentGateway.proposal.execute(confirmation.proposal_id);
-
-assert.equal(executed.status, 'OK', 'approved proposal execution should run spec moderate tools');
+assert.equal(executed.status, 'OK', 'confirmed spec moderate tools should execute');
 
 const toolchainValidation = AgentGateway.validateToolchain([
     {

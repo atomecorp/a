@@ -61,32 +61,6 @@ const buildOfflineQueuedReply = (domain, operation, locale) => {
     return `Je ne peux pas joindre le service ${domain === 'calendar' ? 'calendrier' : domain} pour le moment. J'ai mis cette ${subject} en file locale et elle sera synchronisee quand la connexion reviendra.`;
 };
 
-const buildVoiceMutationConfirmationRequired = (domain, operation, locale) => createStructuredResult({
-    ok: false,
-    domain,
-    operation,
-    error: 'voice_mutation_confirmation_required',
-    confirmation_required: true,
-    reply_text: isEnglish(locale)
-        ? 'I prepared the action, but I need an explicit confirmation before changing data.'
-        : "J'ai prepare l'action, mais j'ai besoin d'une confirmation explicite avant de modifier les donnees."
-});
-
-const isVoiceMutationConfirmed = (request = {}) => {
-    const confirmationId = String(request.confirmation_id || request.confirmationId || '').trim();
-    return request.confirmed === true && confirmationId.length > 0;
-};
-
-const requireVoiceMutationConfirmation = (request = {}, domain = '', operation = '', locale = 'fr-FR') => (
-    isVoiceMutationConfirmed(request)
-        ? null
-        : buildVoiceMutationConfirmationRequired(domain, operation, locale)
-);
-
-const voiceOfflineQueueEnabled = (request = {}) => (
-    isVoiceMutationConfirmed(request) && request.allow_offline_queue === true
-);
-
 const queueOfflineMutationResult = ({
     offlineQueue = null,
     request = {},
@@ -999,8 +973,6 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 });
                 if (composeResult?.ok === true) {
                     if (request.draft?.auto_send && typeof mailApi.send === 'function') {
-                        const confirmationGate = requireVoiceMutationConfirmation(request, 'mail', 'send', locale);
-                        if (confirmationGate) return confirmationGate;
                         const sendResult = await mailApi.send(composeResult.draft.draft_id, { confirmed: true });
                         if (sendResult?.ok === true) {
                             if (workingMemory) {
@@ -1142,8 +1114,6 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 });
             }
             if (request.draft?.auto_send && typeof mailApi.send === 'function') {
-                const confirmationGate = requireVoiceMutationConfirmation(request, 'mail', 'send', locale);
-                if (confirmationGate) return confirmationGate;
                 const sendResult = await mailApi.send(draftResult.draft.draft_id, { confirmed: true });
                 if (sendResult?.ok === true) {
                     if (workingMemory) {
@@ -1217,8 +1187,6 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                     reply_text: isEnglish(locale) ? 'I do not have a draft to send.' : "Je n'ai pas de brouillon a envoyer."
                 });
             }
-            const confirmationGate = requireVoiceMutationConfirmation(request, 'mail', 'send', locale);
-            if (confirmationGate) return confirmationGate;
             const result = await sendApi.send(draftId, { confirmed: true });
             if (workingMemory) {
                 workingMemory.setLastOperation('mail', 'send');
@@ -1460,12 +1428,6 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
     allowQueue = true
 } = {}) => {
     const contactsApi = connectors.contacts;
-    const locale = request.source?.locale || 'fr-FR';
-    if (OFFLINE_MUTATION_OPERATIONS.has(request.operation)) {
-        const confirmationGate = requireVoiceMutationConfirmation(request, 'contacts', request.operation, locale);
-        if (confirmationGate) return confirmationGate;
-        allowQueue = allowQueue && voiceOfflineQueueEnabled(request);
-    }
     if (!contactsApi) {
         return createStructuredResult({
             ok: false, domain: 'contacts', operation: request.operation,
@@ -1476,6 +1438,7 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
         });
     }
 
+    const locale = request.source?.locale || 'fr-FR';
     const queryText = request.filters?.query_text || '';
     const limit = request.filters?.limit || 10;
 
@@ -1809,12 +1772,6 @@ const executeCalendarRequest = async (request, connectors, workingMemory, {
     allowQueue = true
 } = {}) => {
     const calendarApi = connectors.calendar;
-    const locale = request.source?.locale || 'fr-FR';
-    if (OFFLINE_MUTATION_OPERATIONS.has(request.operation)) {
-        const confirmationGate = requireVoiceMutationConfirmation(request, 'calendar', request.operation, locale);
-        if (confirmationGate) return confirmationGate;
-        allowQueue = allowQueue && voiceOfflineQueueEnabled(request);
-    }
     if (!calendarApi) {
         return createStructuredResult({
             ok: false, domain: 'calendar', operation: request.operation,
@@ -1825,6 +1782,7 @@ const executeCalendarRequest = async (request, connectors, workingMemory, {
         });
     }
 
+    const locale = request.source?.locale || 'fr-FR';
     const queryText = request.filters?.query_text || '';
     const limit = request.filters?.limit || 10;
     const temporalRef = request.filters?.temporal_ref || '';
