@@ -661,6 +661,7 @@ Evidence: exports in `eVe/domains/media/api/` and `eVe/domains/media/media_diagn
 
 Entry point families:
 - Media API shared helpers and media source normalization.
+- Shared media source normalization is the required route canonicalization contract for MTraX/WebGPU media playback before any browser media element receives a source, including timestamped recording names that arrive as bare or root-relative paths.
 - Audio API and video API product facades.
 - `VideoRecordingAPI` and `VideoPlaybackAPI` from `video_facade.js`.
 - Media persistence service exports.

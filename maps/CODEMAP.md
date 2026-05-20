@@ -579,6 +579,7 @@ Main areas:
 
 Reusable APIs:
 - Media API facades, persistence service, diagnostics, media source and identifier helpers.
+- Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff.
 - Video preview renderers and preview panel services.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
 - User profile API.
