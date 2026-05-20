@@ -193,7 +193,7 @@ Execution structurelle en cours:
 
 Statut:
 
-- [ ] Non commencee
+- [ ] Partiellement commencee
 
 Depend de:
 
@@ -209,14 +209,19 @@ Objectif:
 - Cartographier correctement le framework, les APIs et les responsabilites du code a partir d'une architecture deja clarifiee.
 
 Taches:
-
-- [ ] Creer ou mettre a jour docs/CODEMAP.md apres validation de la phase 1.
-- [ ] Creer ou mettre a jour docs/API_MAP.md apres validation de la phase 1.
-- [ ] Creer ou mettre a jour docs/ARCHITECTURE_MAP.md apres validation de la phase 1.
+- [x] Creer ou mettre a jour maps/CODEMAP.md apres validation de la phase 1.
+- [x] Creer ou mettre a jour maps/API_MAP.md apres validation de la phase 1.
+- [x] Creer maps/DESIGN_MAP.md pour cartographier le design JavaScript, les tokens, les factories visuelles, les styles injectes, les assets, et les exceptions CSS generees ou vendorisees.
+- [ ] Creer ou mettre a jour maps/ARCHITECTURE_MAP.md apres validation de la phase 1.
 - [ ] Lister les APIs publiques, semi-publiques, et internes sans hallucination ni doublon.
 - [ ] Faire apparaitre explicitement la frontiere Atome open / eVe closed dans les maps.
 - [ ] Rendre ces maps obligatoires avant toute nouvelle implementation.
 - [ ] Produire un test ou une verification documentaire ciblee apres chaque sous-tache et un rapport d'avancement global.
+
+Rapports d'avancement Phase 2:
+- CODEMAP: creation de maps/CODEMAP.md comme carte operationnelle du codebase; validation par controle des references maps/docs, presence du fichier, sections documentaires obligatoires; resultat reussi; avancement 35/115, soit 30.43%.
+- API_MAP: creation de maps/API_MAP.md comme carte initiale des familles d'APIs verifiees; validation par controle de taille, presence, sections/frontieres rg, inspection ciblee des exports, globals, routes HTTP/WebSocket, et APIs bootstrap; resultat reussi; avancement 36/115, soit 31.30%.
+- DESIGN_MAP: creation de maps/DESIGN_MAP.md comme carte du design JavaScript, tokens, factories, styles injectes, assets, et exceptions CSS framework/vendor/build; validation par controle de taille, sections rg, inventaire CSS, inspection des modules eVe/elements, eVe/intuition, eVe/domains/mtrax, atome/src/squirrel/components, atome/src/assets; resultat reussi; avancement 37/116, soit 31.90%.
 
 ### Phase 3 - Audit strict de securite framework / resolution des failles
 

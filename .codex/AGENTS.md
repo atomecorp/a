@@ -88,6 +88,10 @@ The codebase MUST respect explicit file-size and structure limits.
 
 File size policy:
 
+- This policy applies to source code and maintained executable or configuration modules.
+- Markdown files, maps, plans, reports, and documentation files are exempt from the 300/500/800/1000 line thresholds because their role is documentary, not executable.
+- Documentation may exceed 500 lines, including 2000+ lines, when the length is justified by the document's purpose, structure, and traceability requirements.
+- Documentation must still remain clear, navigable, non-duplicative, and architecturally consistent.
 - ideal file: under 300 lines;
 - transitional zone: 300 to 500 lines only when the module remains cohesive and the boundary is architecturally justified;
 - hard maximum for a normal module: 500 lines;
@@ -255,8 +259,33 @@ The authoritative architecture documentation is located under:
 
 - eve/application/documentations/
 - documentations/
+- maps/
 
 Before generating or modifying code, the assistant MUST ensure full consistency with these documents.
+
+────────────────────────────────
+MANDATORY MAP MAINTENANCE POLICY
+────────────────────────────────
+
+The framework maps are active architectural contracts, not optional notes.
+
+Mandatory maps:
+
+- maps/CODEMAP.md
+- maps/API_MAP.md
+- maps/DESIGN_MAP.md
+- maps/ARCHITECTURE_MAP.md once it exists
+
+Whenever a task changes structure, creates new files, moves modules, changes ownership boundaries, adds or modifies code, adds or modifies APIs, changes runtime exposure, changes design tokens, changes JavaScript-generated styling, changes visual factories, or changes product design behavior, the relevant map or maps MUST be updated in the same task.
+
+Map responsibilities:
+
+- CODEMAP must reflect source structure, ownership, reusable modules, entry points, and major responsibility boundaries.
+- API_MAP must reflect API families, runtime exposure, public or internal surfaces, and open/closed ownership.
+- DESIGN_MAP must reflect JavaScript-generated design, tokens, presets, factories, injected styles, visual assets, and CSS exceptions.
+- ARCHITECTURE_MAP must reflect cross-layer architecture, dependency direction, lifecycle, and open/closed boundaries once available.
+
+It is forbidden to create or move architectural surfaces and leave the maps stale.
 
 ────────────────────────────────
 GIT USAGE POLICY
@@ -299,22 +328,19 @@ Strictly forbidden without explicit user request:
 Even when the user explicitly requests a Git write operation, the assistant must remain cautious, avoid destructive behavior unless explicitly requested, and never mutate repository state implicitly.
 
 ────────────────────────────────
-TRANSITIONAL FRAMEWORK REUSE RULE
+MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE
 ────────────────────────────────
 
-There is a transitional activation condition tied to:
+This rule is permanently active and applies to every implementation, refactor, cleanup, migration, API change, design change, and structural change.
 
-- ./todo/ai_voice/eVe_MCP_APIS_Tools.md
+Before creating, modifying, or adding any file, module, API, component, helper, adapter, service, utility, design token, style generator, visual factory, runtime surface, or documentation-driven architecture contract, you must first inspect the existing framework and codebase.
 
-Until that task is fully completed, the assistant MUST already inspect the existing framework and codebase before creating new code, but the repository-wide codemap/API-map driven workflow is not yet considered fully available.
+The relevant maps MUST be consulted before implementation:
 
-As soon as ./todo/ai_voice/eVe_MCP_APIS_Tools.md is completed and the required framework maps exist and are validated, the following rule becomes mandatory for every implementation task and must be applied systematically.
-
-Once that task is completed, this transitional condition must be removed from this document and the rule below must remain active without condition.
-
-Mandatory Framework Reuse and Factorization Rule
-
-Before creating, modifying, or adding any file, module, API, component, helper, adapter, service, or utility, you must first inspect the existing framework and codebase.
+- maps/CODEMAP.md for source structure, ownership, modules, and reusable areas;
+- maps/API_MAP.md for API families, runtime exposures, and open/closed ownership;
+- maps/DESIGN_MAP.md for JavaScript-generated design, tokens, factories, injected styles, visual assets, and CSS exceptions;
+- maps/ARCHITECTURE_MAP.md once it exists for cross-layer architecture and dependency direction.
 
 You must verify whether an equivalent, similar, partial, or reusable implementation already exists somewhere in the project.
 
@@ -322,16 +348,17 @@ Your task is not to reinvent the wheel.
 
 You must:
 
-1. Search the existing codebase thoroughly before writing new code.
-2. Identify existing APIs, helpers, services, components, adapters, patterns, abstractions, naming conventions, and architectural rules that can be reused.
-3. Prefer extending, connecting to, or factorizing existing code rather than creating a duplicate implementation.
-4. Avoid creating parallel systems, duplicated logic, redundant adapters, temporary wrappers, fallback layers, or isolated implementations.
-5. If similar code already exists, refactor or centralize the logic cleanly instead of adding another version.
-6. Ensure the new work integrates naturally into the existing architecture and respects the global vision of the framework.
-7. When creating a new file is truly necessary, justify why no existing file, module, API, or abstraction can correctly host the change.
-8. Keep the implementation minimal, coherent, maintainable, and aligned with the framework’s existing structure.
-9. After implementation, remove any obsolete, redundant, unused, temporary, or duplicated code introduced or discovered during the task.
-10. Never leave test code, debug code, probes, traces, temporary logs, or experimental logic in the final result.
+1. Consult the relevant maps before writing new code.
+2. Search the existing codebase thoroughly before writing new code.
+3. Identify existing APIs, helpers, services, components, adapters, patterns, abstractions, naming conventions, design tokens, factories, visual modules, and architectural rules that can be reused.
+4. Prefer extending, connecting to, or factorizing existing code rather than creating a duplicate implementation.
+5. Avoid creating parallel systems, duplicated logic, redundant adapters, temporary wrappers, fallback layers, or isolated implementations.
+6. If similar code already exists, refactor or centralize the logic cleanly instead of adding another version.
+7. Ensure the new work integrates naturally into the existing architecture and respects the global vision of the framework.
+8. When creating a new file is truly necessary, justify why no existing file, module, API, abstraction, token module, or visual factory can correctly host the change.
+9. Keep the implementation minimal, coherent, maintainable, and aligned with the framework’s existing structure.
+10. After implementation, remove any obsolete, redundant, unused, temporary, or duplicated code introduced or discovered during the task.
+11. Never leave test code, debug code, probes, traces, temporary logs, or experimental logic in the final result.
 
 Before coding, provide a short implementation plan explaining:
 
@@ -456,6 +483,23 @@ Standalone unmanaged UI nodes are forbidden.
 ━━━━━━━━━━━━━━━━
 STYLING RULES
 ━━━━━━━━━━━━━━━━
+
+Product styling MUST NOT be maintained as a classic static CSS layer.
+
+Atome/eVe product design is JavaScript-driven:
+
+- design tokens are JavaScript constants or JavaScript-installed CSS variables;
+- presets are JavaScript structured definitions;
+- DOM is created by JavaScript factories;
+- styles are applied through JavaScript object literals, structured style objects, or controlled JavaScript style generators;
+- product HTML and product CSS must not become parallel static source-of-truth layers.
+
+Allowed CSS exceptions:
+
+- framework shell CSS when product-neutral;
+- vendored library CSS;
+- generated distribution CSS;
+- JavaScript-generated style tags when they are produced by an approved structured design module and remain documented in maps/DESIGN_MAP.md.
 
 Strictly forbidden:
 

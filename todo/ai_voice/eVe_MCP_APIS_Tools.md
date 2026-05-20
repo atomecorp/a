@@ -303,9 +303,9 @@ Required Output Files
 
 Create or update:
 
-* `./docs/CODEMAP.md`
-* `./docs/API_MAP.md`
-* `./docs/ARCHITECTURE_MAP.md`
+* `./maps/CODEMAP.md`
+* `./maps/API_MAP.md`
+* `./maps/ARCHITECTURE_MAP.md`
 
 If `./docs` does not exist, create it.
 
@@ -438,9 +438,9 @@ Mandatory Usage Rule
 
 Before implementing any new feature, bug fix, refactor, API, component, service, adapter, helper, utility, or tool, the coding agent must first consult:
 
-* `./docs/CODEMAP.md`
-* `./docs/API_MAP.md`
-* `./docs/ARCHITECTURE_MAP.md`
+* `./maps/CODEMAP.md`
+* `./maps/API_MAP.md`
+* `./maps/ARCHITECTURE_MAP.md`
 
 Then it must perform only targeted verification in the codebase.
 
@@ -456,9 +456,9 @@ Any future implementation prompt must include this rule:
 
 Before creating, modifying, or adding any file, module, API, component, helper, adapter, service, or utility, first consult:
 
-* `./docs/CODEMAP.md`
-* `./docs/API_MAP.md`
-* `./docs/ARCHITECTURE_MAP.md`
+* `./maps/CODEMAP.md`
+* `./maps/API_MAP.md`
+* `./maps/ARCHITECTURE_MAP.md`
 
 Then perform a targeted verification in the codebase.
 
@@ -526,7 +526,7 @@ The AI coding pre-prompt must require:
 8. Every API to support deterministic behavior.
 9. Every component to avoid hidden implicit dependencies.
 10. Every implementation to prioritize maintainability and clarity.
-11. Every implementation task to consult `./docs/CODEMAP.md`, `./docs/API_MAP.md`, and `./docs/ARCHITECTURE_MAP.md` before broad codebase search.
+11. Every implementation task to consult `./maps/CODEMAP.md`, `./maps/API_MAP.md`, and `./maps/ARCHITECTURE_MAP.md` before broad codebase search.
 12. Every task to reuse, extend, or factorize existing framework code before creating new modules.
 13. Every structural or API change to update the relevant framework maps in the same task.
 
