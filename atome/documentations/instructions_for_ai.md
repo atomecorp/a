@@ -2,14 +2,15 @@
 
 **Important:** Before generating any code for Squirrel.js, always read and follow the rules and examples in this document. Refer to the official documentation and resources below for up-to-date API usage and best practices.
 
-- Official GitHub: https://github.com/atomecorp/a
-- Official CDN (jsDelivr): https://cdn.jsdelivr.net/gh/atomecorp/a@latest/dist/squirrel.min.js
+- Official GitHub: <https://github.com/atomecorp/a>
+- Official CDN (jsDelivr): <https://cdn.jsdelivr.net/gh/atomecorp/a@latest/dist/squirrel.min.js>
 
 This guide is for AI code assistants (such as Copilot, ChatGPT, etc.) and developers using code generation tools. It provides best practices and explicit rules to ensure all generated code leverages the Squirrel.js API effectively, instead of defaulting to vanilla JavaScript or other frameworks.
 
 ---
 
 ## General Principles
+
 - **Always use Squirrel.js APIs for DOM manipulation, component creation, and event handling.**
 - **Do not use `document.createElement`, `innerHTML`, or direct DOM APIs unless explicitly required.**
 - **Prefer Squirrel.js components (e.g., `Squirrel.Slider`) over custom or vanilla JS widgets.**
@@ -21,6 +22,7 @@ This guide is for AI code assistants (such as Copilot, ChatGPT, etc.) and develo
 ## Squirrel.js Coding Patterns
 
 ### 1. Creating Elements
+
 ```js
 // Good:
 Squirrel.$('div', { id: 'myDiv', parent: '#view', text: 'Hello', css: { color: 'blue' } });
@@ -31,6 +33,7 @@ document.getElementById('view').appendChild(...);
 ```
 
 ### 2. Using Components
+
 ```js
 // Good:
 const slider = Squirrel.Slider({ parent: '#view', min: 0, max: 100, value: 50 });
@@ -40,6 +43,7 @@ const slider = Squirrel.Slider({ parent: '#view', min: 0, max: 100, value: 50 })
 ```
 
 ### 3. Handling Events
+
 ```js
 // Good:
 Squirrel.$('button', { parent: '#view', text: 'Click', onClick: () => alert('Clicked!') });
@@ -49,6 +53,7 @@ Squirrel.$('button', { parent: '#view', text: 'Click', onClick: () => alert('Cli
 ```
 
 ### 4. Waiting for Squirrel.js Readiness
+
 ```js
 window.addEventListener('squirrel:ready', () => {
   // Safe to use Squirrel.$ and components here
@@ -56,12 +61,14 @@ window.addEventListener('squirrel:ready', () => {
 ```
 
 ### 5. Defining and Using Templates
+
 ```js
 Squirrel.define('my-box', { tag: 'div', class: 'box', css: { border: '1px solid #ccc' } });
 Squirrel.$('my-box', { parent: '#view', text: 'Reusable!' });
 ```
 
 ### 6. System Abstraction
+
 ```js
 // Good:
 runShellCommand('ls').then(result => console.log(result.stdout));
@@ -73,6 +80,7 @@ runShellCommand('ls').then(result => console.log(result.stdout));
 ---
 
 ## Best Practices for AI
+
 - **Prefer Squirrel.js idioms and patterns in all generated code.**
 - **Use the `Squirrel` global for all framework features.**
 - **Document code with clear, English comments.**
@@ -83,6 +91,7 @@ runShellCommand('ls').then(result => console.log(result.stdout));
 - **Always write minimal and concise code and comments; avoid verbosity.**
 - **Always use an array for the `children` property in Squirrel.js, even for a single child.**
   - Example:
+
     ```js
     // Correct:
     children: [Squirrel.$('span', { text: 'Child' })]
@@ -93,6 +102,7 @@ runShellCommand('ls').then(result => console.log(result.stdout));
 ---
 
 ## Example: Complete Squirrel.js App
+
 ```js
 window.addEventListener('squirrel:ready', () => {
   Squirrel.$('h1', { parent: '#view', text: 'Welcome!' });
@@ -104,6 +114,7 @@ window.addEventListener('squirrel:ready', () => {
 ---
 
 ## FAQ for AI
+
 - **Q: Should I use `document.createElement`?**
   - A: No. Always use `Squirrel.$`.
 - **Q: How do I create a custom component?**
