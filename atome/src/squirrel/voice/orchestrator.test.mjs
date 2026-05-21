@@ -983,13 +983,21 @@ await replyOrchestrator.executeUtterance('Fais moi un resume de mes derniers mai
 const replyResult = await replyOrchestrator.executeUtterance('Reponds a Jean-Eric que j ai bien recu le mail', {
     session_id: replySession.session_id
 });
-assert.equal(replyResult.ok, true, 'mail reply should succeed when recent mail context exists');
-assert.equal(replyResult.executed, true, 'mail reply should execute through the mail api');
-assert.equal(replyResult.transport, 'mail_api', 'mail reply should stay on the mail api transport');
-assert.equal(replyResult.result?.draft?.in_reply_to, 'voice_mail_reply_1', 'mail reply should target the matched sender mail');
-assert.equal(replyResult.result?.draft?.body_text, 'j ai bien recu le mail', 'mail reply should sanitize the dictated body');
-assert.equal(replyResult.result?.draft?.status, 'queued_local_only', 'mail reply with dictated body should send immediately');
-assert.match(replyResult.reply_text, /mail a ete envoye|reponse a ete envoyee|file d'attente locale/i, 'mail reply with dictated body should acknowledge direct sending');
+assert.equal(replyResult.ok, true, 'mail reply should resolve recent mail context');
+assert.equal(replyResult.executed, false, 'mail reply should wait for durable confirmation before sending');
+assert.equal(replyResult.confirmation_required, true, 'mail reply should expose the confirmation requirement');
+const confirmedReplyResult = await replyOrchestrator.executeIntent(replyResult.intent, {
+    session_id: replySession.session_id,
+    confirmation: replyResult.confirmation,
+    idempotency_key: replyResult.confirmation.idempotency_key
+});
+assert.equal(confirmedReplyResult.ok, true, 'confirmed mail reply should succeed when recent mail context exists');
+assert.equal(confirmedReplyResult.executed, true, 'confirmed mail reply should execute through the mail api');
+assert.equal(confirmedReplyResult.transport, 'mail_api', 'confirmed mail reply should stay on the mail api transport');
+assert.equal(confirmedReplyResult.result?.draft?.in_reply_to, 'voice_mail_reply_1', 'confirmed mail reply should target the matched sender mail');
+assert.equal(confirmedReplyResult.result?.draft?.body_text, 'j ai bien recu le mail', 'confirmed mail reply should sanitize the dictated body');
+assert.equal(confirmedReplyResult.result?.draft?.status, 'queued_local_only', 'confirmed mail reply with dictated body should send immediately');
+assert.match(confirmedReplyResult.reply_text, /mail a ete envoye|reponse a ete envoyee|file d'attente locale/i, 'confirmed mail reply with dictated body should acknowledge direct sending');
 const sendResult = await replyOrchestrator.executeUtterance('Envoie le mail', {
     session_id: replySession.session_id
 });
@@ -1019,9 +1027,14 @@ const directReplyOrchestrator = createVoiceOrchestrator({
 });
 const directReplyResult = await directReplyOrchestrator.executeUtterance('Reponds a Jean-Eric que j ai bien recu le mail');
 assert.equal(directReplyResult.ok, true, 'mail reply should work even without a prior mail summary step');
-assert.equal(directReplyResult.executed, true, 'mail reply should execute directly from a generic reply utterance');
-assert.equal(directReplyResult.result?.draft?.in_reply_to, 'voice_mail_direct_reply_1', 'mail reply should still resolve the matching recent mail');
-assert.equal(directReplyResult.result?.draft?.status, 'queued_local_only', 'generic direct reply should send immediately when body text is provided');
+assert.equal(directReplyResult.confirmation_required, true, 'generic direct reply should require durable confirmation before sending');
+const directReplyConfirmed = await directReplyOrchestrator.executeIntent(directReplyResult.intent, {
+    confirmation: directReplyResult.confirmation,
+    idempotency_key: directReplyResult.confirmation.idempotency_key
+});
+assert.equal(directReplyConfirmed.executed, true, 'confirmed mail reply should execute directly from a generic reply utterance');
+assert.equal(directReplyConfirmed.result?.draft?.in_reply_to, 'voice_mail_direct_reply_1', 'mail reply should still resolve the matching recent mail');
+assert.equal(directReplyConfirmed.result?.draft?.status, 'queued_local_only', 'generic direct reply should send after confirmation when body text is provided');
 
 const misflaggedReplyEnv = {};
 const misflaggedReplyMailApi = createGlobalMailApi({ env: misflaggedReplyEnv });
@@ -1040,7 +1053,7 @@ const misflaggedReplyOrchestrator = createVoiceOrchestrator({
     env: misflaggedReplyEnv,
     sessionRuntime: createVoiceSessionRuntime()
 });
-const misflaggedReplyResult = await misflaggedReplyOrchestrator.executeIntent({
+const misflaggedReplyIntent = {
     intent_id: 'voice_intent_reply_misflagged',
     type: 'connector_tool',
     domain: 'mail',
@@ -1065,7 +1078,13 @@ const misflaggedReplyResult = await misflaggedReplyOrchestrator.executeIntent({
             }
         }]
     }
-}, { confirmed: true });
+};
+const misflaggedGate = await misflaggedReplyOrchestrator.executeIntent(misflaggedReplyIntent);
+assert.equal(misflaggedGate.confirmation_required, true, 'misflagged reply should require durable confirmation');
+const misflaggedReplyResult = await misflaggedReplyOrchestrator.executeIntent(misflaggedGate.intent, {
+    confirmation: misflaggedGate.confirmation,
+    idempotency_key: misflaggedGate.confirmation.idempotency_key
+});
 assert.equal(misflaggedReplyResult.executed, true, 'mail reply with confirmed:true should execute despite confirmation flag');
 assert.equal(misflaggedReplyResult.result?.draft?.in_reply_to, 'voice_mail_misflagged_reply_1');
 assert.equal(misflaggedReplyResult.result?.draft?.status, 'queued_local_only', 'misflagged reply should still send immediately');
@@ -1149,11 +1168,17 @@ const contextualReplyResult = await contextualReplyOrchestrator.executeUtterance
     session_id: contextualReplySession.session_id
 });
 assert.equal(contextualReplyResult.ok, true, 'contextual reply should succeed after a mail status question');
-assert.equal(contextualReplyResult.executed, true, 'contextual reply should execute immediately');
-assert.equal(contextualReplyResult.transport, 'mail_api', 'contextual reply should stay on the mail api');
-assert.equal(contextualReplyResult.result?.draft?.in_reply_to, 'voice_mail_contextual_reply_1', 'contextual reply should target the current unread mail');
-assert.equal(contextualReplyResult.result?.draft?.body_text, 'oui tout va bien', 'contextual reply should preserve the dictated reply body');
-assert.match(contextualReplyResult.reply_text, /mail a ete envoye|reponse a ete envoyee|file d'attente locale/i, 'contextual reply should acknowledge sending instead of listing unread mails');
+assert.equal(contextualReplyResult.confirmation_required, true, 'contextual reply should require confirmation before sending');
+const contextualReplyConfirmed = await contextualReplyOrchestrator.executeIntent(contextualReplyResult.intent, {
+    session_id: contextualReplySession.session_id,
+    confirmation: contextualReplyResult.confirmation,
+    idempotency_key: contextualReplyResult.confirmation.idempotency_key
+});
+assert.equal(contextualReplyConfirmed.executed, true, 'confirmed contextual reply should execute');
+assert.equal(contextualReplyConfirmed.transport, 'mail_api', 'confirmed contextual reply should stay on the mail api');
+assert.equal(contextualReplyConfirmed.result?.draft?.in_reply_to, 'voice_mail_contextual_reply_1', 'contextual reply should target the current unread mail');
+assert.equal(contextualReplyConfirmed.result?.draft?.body_text, 'oui tout va bien', 'contextual reply should preserve the dictated reply body');
+assert.match(contextualReplyConfirmed.reply_text, /mail a ete envoye|reponse a ete envoyee|file d'attente locale/i, 'confirmed contextual reply should acknowledge sending instead of listing unread mails');
 
 const journal = orchestrator.listJournal({ limit: 10 });
 assert.ok(journal.length >= 4, 'orchestrator should record planning/execution journal entries');

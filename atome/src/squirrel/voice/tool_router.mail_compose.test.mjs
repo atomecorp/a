@@ -44,6 +44,12 @@ const mailApi = {
     }
 };
 
+const confirmation = {
+    confirmation_id: 'confirm_mail_test',
+    actor_id: 'actor_mail_test',
+    idempotency_key: 'idem_mail_test'
+};
+
 const router = createToolRouter({
     connectors: {
         contacts: contactsApi,
@@ -64,6 +70,15 @@ const composeIntent = {
 };
 
 const structuredRequest = intentToStructuredRequest(composeIntent);
+const confirmedStructuredRequest = {
+    ...structuredRequest,
+    source: {
+        ...structuredRequest.source,
+        actor_id: confirmation.actor_id
+    },
+    confirmation,
+    idempotency_key: confirmation.idempotency_key
+};
 assert.equal(structuredRequest.domain, 'mail', 'compose intent should map to mail domain');
 assert.equal(structuredRequest.operation, 'compose', 'compose intent action should map to compose operation');
 assert.equal(structuredRequest.draft.reply_target, 'Sylvain', 'compose intent should preserve reply_target');
@@ -77,7 +92,11 @@ assert.equal(composeMail.operation, 'compose', 'compose_mail action should also 
 // Test 3: tool_router executes compose with auto_send and resolves contact email
 composedDrafts.length = 0;
 sentDrafts.length = 0;
-const composeResult = await router.execute(structuredRequest);
+const unconfirmedComposeResult = await router.execute(structuredRequest);
+assert.equal(unconfirmedComposeResult.ok, false, 'auto-send compose should require explicit confirmation');
+assert.equal(unconfirmedComposeResult.confirmation_required, true, 'auto-send compose should expose confirmation requirement');
+
+const composeResult = await router.execute(confirmedStructuredRequest);
 assert.equal(composeResult.ok, true, 'compose execution should succeed');
 assert.equal(composeResult.domain, 'mail', 'compose result domain should be mail');
 assert.equal(composeResult.operation, 'compose', 'compose result operation should be compose');
@@ -86,6 +105,7 @@ assert.equal(composedDrafts[0].to[0].address, 'sylvain@example.test', 'compose s
 assert.equal(composedDrafts[0].to[0].name, 'Sylvain Godard', 'compose should resolve contact name from contacts API');
 assert.equal(composedDrafts[0].body_text, 'Comment vas-tu ?', 'compose should pass draft_text as body_text');
 assert.ok(sentDrafts.length >= 1, 'send should have been called (auto_send=true)');
+assert.equal(sentDrafts[0].confirmed, undefined, 'voice router must not inject raw confirmed=true');
 assert.match(composeResult.reply_text || '', /envoye|sent/i, 'compose+send reply should confirm sending');
 
 // Test 4: compose without auto_send creates draft only

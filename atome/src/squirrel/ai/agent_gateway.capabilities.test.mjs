@@ -70,7 +70,12 @@ assert.equal(confirmation.status, 'CONFIRMATION_REQUIRED', 'spec moderate tools 
 
 const executed = await AgentGateway.callTool({
     tool_name: 'contacts.update_spec_probe',
-    confirmed: true,
+    confirmation: {
+        confirmation_id: 'confirm_capability_probe',
+        actor_id: 'agent_gateway_test',
+        idempotency_key: 'idem_capability_probe'
+    },
+    idempotency_key: 'idem_capability_probe',
     params: {
         contact_id: 'contact_probe_1',
         email: 'probe@example.test'

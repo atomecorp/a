@@ -178,6 +178,69 @@ Persistent test files MUST be created exclusively under ./tests.
 
 Temporary files MUST NEVER be created in source directories, documentation directories, tool directories, project root, or anywhere outside ./temp.
 
+## AUTONOMOUS TEST EXECUTION POLICY
+
+The assistant MUST drive validation autonomously and MUST NOT stop at a partial diagnosis, an unverified assumption, or a probable fix.
+
+Operational obligations:
+
+- Continue working until the reproduced problem is resolved, or until an evidence-backed architectural blocker makes resolution impossible without user clarification.
+- Never guess the cause of a failure and never repair blindly.
+- Add the minimum precise temporary logs, probes, or diagnostics required to identify the owning layer and the root cause.
+- Always read the relevant execution logs before and after each attempted fix.
+- Never stop while relevant error logs or warning logs remain unexplained.
+- Remove temporary logs and diagnostics once the issue is proven fixed, then rerun the validation path to confirm clean output.
+
+Mandatory console coverage by runtime:
+
+- Browser mode: read the browser console, network failures, test runner output, and any Fastify-side logs involved in the scenario.
+- Tauri mode: read the WebView console, the Tauri terminal output, Rust or Axum logs, and any paired Fastify logs when the scenario crosses that boundary.
+- iOS mode: read Xcode console output, native iOS logs, WebView console output when available, and any backend logs participating in the failing path.
+- Server-side or integration scenarios: read the relevant server and test process logs, not only the final failure summary.
+
+Mandatory test selection strategy:
+
+1. Reproduce the issue with the narrowest deterministic command or scenario.
+2. Run the smallest validation that can falsify the current hypothesis.
+3. After a local fix, rerun that same narrow validation first.
+4. Only then widen to the next relevant suite or guardrail.
+5. Do not declare success until the direct reproduction path and the relevant surrounding checks both pass.
+
+Repository validation entry points:
+
+- Focused Vitest file or folder: npm run test:run -- path/to/test-or-folder
+- Full Vitest run: npm run test:run
+- Watch-mode test development: npm run test
+- Coverage when explicitly needed: npm run test:coverage
+- Syntax validation: npm run check:syntax
+- Guardrail baseline: npm run check:m0
+- Molecule validation: npm run test:molecule
+- Extended guardrails plus molecule: npm run check:m1
+- Full milestone validation currently exposed by the repo: npm run check:m2
+- Server verification: npm run test:server-verification
+- UI scenario runner: npm run dev:test-ui
+- Targeted probes when the failing area matches an existing probe: npm run probe:media-fixtures, npm run probe:browser-media-acceptance, npm run probe:ui-full-stack-test8
+
+Test routing rules:
+
+- For a single touched JavaScript module with an existing nearby test, run the focused test path first, not the full suite.
+- For parser, syntax, or repository-wide safety changes, include npm run check:syntax.
+- For architecture or policy-sensitive changes, include the relevant guardrail path and prefer at least npm run check:m0.
+- For Molecule-related changes, include npm run test:molecule and widen to npm run check:m1 when the change can affect guardrails.
+- For server or API behavior, include npm run test:server-verification when the touched path reaches the verification surface.
+- For UI issues, use the documented UI debug process and the UI scenario runner when applicable; do not rely on visual inspection alone.
+- If an existing probe already targets the failing surface, run it before inventing a new temporary script.
+
+Autonomous completion criteria:
+
+- The original issue is reproduced, explained, fixed at the root cause, and revalidated.
+- The narrowest relevant test or scenario passes.
+- The next relevant suite or guardrail passes when applicable.
+- Browser, Tauri, Xcode, server, and test logs relevant to the scenario contain no unexplained errors or warnings.
+- Temporary diagnostics have been removed and the cleaned validation path has been rerun successfully.
+
+If these conditions are not met, the assistant MUST keep investigating instead of stopping early.
+
 ## ARCHITECTURAL AUTHORITY
 
 The authoritative architecture documentation is located under eve/application/documentations/, documentations/, and maps/. Before generating or modifying code, the assistant MUST ensure full consistency with these documents.

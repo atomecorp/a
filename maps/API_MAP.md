@@ -538,6 +538,7 @@ Entry points:
 - `createVisioService` in `server/visio.js`.
 - `initServerIdentity`, `signChallenge`, `getServerIdentity`, `verifySignature`, `isConfigured` in `server/serverIdentity.js`.
 - `startFileSyncWatcher`, `getSyncEventBus` in `server/sync/fileSyncWatcher.js`.
+- `normalizeWsApiRequest` in `server/ws_api_schema.js`.
 
 Owner: Atome open server infrastructure.
 
@@ -665,7 +666,7 @@ Evidence: exports in `eVe/domains/media/api/` and `eVe/domains/media/media_diagn
 
 Entry point families:
 - Media API shared helpers and media source normalization.
-- Shared media source normalization is the required route canonicalization contract for MTraX/WebGPU media playback before any browser media element receives a source, including timestamped recording names that arrive as bare or root-relative paths.
+- Shared media source normalization is the required route canonicalization contract for MTraX/WebGPU media playback before any browser media element receives a source, including timestamped recording names that arrive as bare, root-relative, or loopback Fastify API paths in Tauri.
 - Legacy Atome product-bootstrap renderers that still mount media atomes must also call this contract before assigning `src` attributes; they must not synthesize `/assets/shared` media paths for persisted recordings.
 - Video recording atome creation must persist owner metadata (`owner_id` / `media_user_id`) and resolve `/api/recordings/:file` URLs with that owner before the first browser media request.
 - Audio API and video API product facades.

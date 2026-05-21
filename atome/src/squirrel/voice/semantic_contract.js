@@ -184,9 +184,20 @@ export const createStructuredRequest = (raw = {}) => {
         utterance_normalized: ensureString(raw.source?.utterance_normalized),
         intent_id: ensureString(raw.source?.intent_id),
         session_id: ensureString(raw.source?.session_id),
+        actor_id: ensureString(raw.source?.actor_id || raw.source?.actorId),
         locale: ensureString(raw.source?.locale, 'fr-FR'),
         confidence: Number.isFinite(Number(raw.source?.confidence)) ? Number(raw.source.confidence) : null
     };
+    const confirmation = raw.confirmation && typeof raw.confirmation === 'object' && !Array.isArray(raw.confirmation)
+        ? {
+            confirmation_id: ensureString(raw.confirmation.confirmation_id || raw.confirmation.confirmationId),
+            actor_id: ensureString(raw.confirmation.actor_id || raw.confirmation.actorId),
+            idempotency_key: ensureString(raw.confirmation.idempotency_key || raw.confirmation.idempotencyKey)
+        }
+        : {};
+    const audit = raw.audit && typeof raw.audit === 'object' && !Array.isArray(raw.audit)
+        ? { ...raw.audit }
+        : {};
 
     const VALID_CONTACT_FIELDS = ['phone', 'email', 'organization', 'name', 'updated_at'];
     const rawContactField = ensureString(raw.contact_field);
@@ -208,6 +219,9 @@ export const createStructuredRequest = (raw = {}) => {
         payload,
         contact_field,
         surfaces,
+        confirmation,
+        audit,
+        idempotency_key: ensureString(raw.idempotency_key || raw.idempotencyKey),
         status_only: raw.status_only === true
     });
 };

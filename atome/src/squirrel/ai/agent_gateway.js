@@ -603,13 +603,14 @@ const validateToolchain = (steps = [], options = {}) => {
     ...DEFAULT_TOOLCHAIN_LIMITS,
     ...(options.limits && typeof options.limits === 'object' ? options.limits : {})
   };
+  const confirmedByRecord = !!options.confirmation?.confirmation_id;
   const stepLevelConfirmation = normalizedSteps.some((entry) => shouldConfirmForTool({
     tool: entry.tool,
     signals: options.signals || {},
-    confirmed: options.confirmed === true
+    confirmed: confirmedByRecord
   }));
 
-  const requiresConfirmation = options.confirmed === true
+  const requiresConfirmation = confirmedByRecord
     ? false
     : (
       stepLevelConfirmation
@@ -631,6 +632,23 @@ const validateToolchain = (steps = [], options = {}) => {
     mutating_domains: Array.from(mutatingDomains),
     summary_human: buildToolchainSummary(normalizedSteps)
   };
+};
+
+const normalizeExecutionConfirmation = (request = {}) => {
+  const confirmation = request.confirmation && typeof request.confirmation === 'object'
+    ? request.confirmation
+    : {};
+  const confirmation_id = String(confirmation.confirmation_id || confirmation.confirmationId || '').trim();
+  const actor_id = String(confirmation.actor_id || confirmation.actorId || request.actor?.user_id || '').trim();
+  const idempotency_key = String(
+    request.idempotency_key
+    || request.idempotencyKey
+    || confirmation.idempotency_key
+    || confirmation.idempotencyKey
+    || ''
+  ).trim();
+  if (!confirmation_id || !actor_id || !idempotency_key) return null;
+  return { confirmation_id, actor_id, idempotency_key };
 };
 
 const AgentGateway = {
@@ -673,7 +691,8 @@ const AgentGateway = {
     const idempotency_key = request.idempotency_key || null;
     const dry_run = request.dry_run === true;
     const executionIds = buildExecutionIds(request);
-    const confirmed = request.confirmed === true;
+    const confirmation = normalizeExecutionConfirmation(request);
+    const confirmed = !!confirmation;
 
     const validation = validateParams(tool.parameters, params);
     if (!validation.ok) {
@@ -689,7 +708,8 @@ const AgentGateway = {
         trace_id: executionIds.trace_id,
         intent_id: executionIds.intent_id,
         source: executionIds.source.type || null,
-        source_layer: executionIds.source.layer || null
+        source_layer: executionIds.source.layer || null,
+        confirmation_id: confirmation?.confirmation_id || null
       });
       return { status: TOOL_STATUS.ERROR, error: validation.error, ...executionIds };
     }
@@ -715,7 +735,8 @@ const AgentGateway = {
         trace_id: executionIds.trace_id,
         intent_id: executionIds.intent_id,
         source: executionIds.source.type || null,
-        source_layer: executionIds.source.layer || null
+        source_layer: executionIds.source.layer || null,
+        confirmation_id: confirmation?.confirmation_id || null
       });
       return denied;
     }
@@ -744,7 +765,8 @@ const AgentGateway = {
         trace_id: executionIds.trace_id,
         intent_id: executionIds.intent_id,
         source: executionIds.source.type || null,
-        source_layer: executionIds.source.layer || null
+        source_layer: executionIds.source.layer || null,
+        confirmation_id: confirmation?.confirmation_id || null
       });
       return {
         status: TOOL_STATUS.CONFIRMATION_REQUIRED,
@@ -760,7 +782,7 @@ const AgentGateway = {
         params,
         actor,
         signals,
-        idempotency_key,
+        idempotency_key: confirmation?.idempotency_key || idempotency_key,
         dry_run,
         trace_id: executionIds.trace_id,
         intent_id: executionIds.intent_id,
@@ -780,7 +802,8 @@ const AgentGateway = {
         trace_id: executionIds.trace_id,
         intent_id: executionIds.intent_id,
         source: executionIds.source.type || null,
-        source_layer: executionIds.source.layer || null
+        source_layer: executionIds.source.layer || null,
+        confirmation_id: confirmation?.confirmation_id || null
       });
       return { status: TOOL_STATUS.ERROR, error: message, ...executionIds };
     }
@@ -791,8 +814,9 @@ const AgentGateway = {
     const actor = request.actor || {};
     const signals = request.signals || {};
     const steps = request.steps || request.toolchain || [];
+    const confirmation = normalizeExecutionConfirmation(request);
     const validated = validateToolchain(steps, {
-      confirmed: request.confirmed === true,
+      confirmation,
       limits: request.limits,
       signals
     });
@@ -807,7 +831,7 @@ const AgentGateway = {
       };
     }
 
-    if (validated.requires_confirmation && request.confirmed !== true) {
+    if (validated.requires_confirmation && !confirmation) {
       return {
         status: TOOL_STATUS.CONFIRMATION_REQUIRED,
         human_summary: validated.summary_human,
@@ -826,14 +850,14 @@ const AgentGateway = {
         params: step.params,
         actor,
         signals,
-        idempotency_key: request.idempotency_key
-          ? `${request.idempotency_key}:${step.tool_name}:${makeParamsHash(step.params)}`
+        idempotency_key: confirmation?.idempotency_key || request.idempotency_key
+          ? `${confirmation?.idempotency_key || request.idempotency_key}:${step.tool_name}:${makeParamsHash(step.params)}`
           : null,
         dry_run: request.dry_run === true,
         trace_id: executionIds.trace_id,
         intent_id: executionIds.intent_id,
         source: executionIds.source,
-        confirmed: request.confirmed === true
+        confirmation
       });
       results.push({
         tool_name: step.tool_name,

@@ -582,7 +582,7 @@ Main areas:
 
 Reusable APIs:
 - Media API facades, persistence service, diagnostics, media source and identifier helpers.
-- Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff.
+- Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff and Tauri-local canonicalization away from loopback Fastify media URLs.
 - Recorded video atome creation must carry the recording owner into `resolveMediaUrl` and persist owner/media-user particles so the first load uses the user-scoped recordings route.
 - Atome double-click to MTraX timeline resolution must merge persisted state owner metadata before normalizing recording sources, including older atomes whose properties lack owner fields.
 - Video preview renderers and preview panel services.
@@ -740,6 +740,7 @@ Main files:
 - `server/atomeRealtime.js`
 - `server/wsApiState.js`
 - `server/wsSend.js`
+- `server/ws_api_schema.js`
 - `server/sharing.js`
 - `server/notificationStack.js`
 - `server/fileStorage.js`

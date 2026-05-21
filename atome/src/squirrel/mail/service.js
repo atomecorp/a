@@ -381,9 +381,11 @@ export const createMailService = ({
                 draft: { ...draft }
             };
         },
-        async mailSend(draftId, {
-            confirmed = false
-        } = {}) {
+        async mailSend(draftId, options = {}) {
+            const confirmation = options.confirmation && typeof options.confirmation === 'object'
+                ? options.confirmation
+                : {};
+            const confirmed = options.confirmed === true || !!String(confirmation.confirmation_id || confirmation.confirmationId || '').trim();
             const draft = drafts.get(String(draftId || ''));
             if (!draft) {
                 return { ok: false, error: 'mail_draft_not_found' };
@@ -407,7 +409,8 @@ export const createMailService = ({
                 };
             }
             const delivery = await activeConnector.sendDraft({ ...draft }, {
-                confirmed: true
+                confirmation,
+                idempotency_key: options.idempotency_key || confirmation.idempotency_key || confirmation.idempotencyKey || ''
             });
             if (!delivery || delivery.ok !== true) {
                 draft.status = 'send_failed';

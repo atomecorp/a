@@ -117,6 +117,44 @@ const normalizeInvocationSource = (intent, options = {}) => ({
     action: String(intent?.action || 'unknown')
 });
 
+const createVoiceConfirmation = (intent, options = {}) => {
+    const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const actorId = String(options.actor?.user_id || options.actor_id || 'local_user').trim();
+    const idempotencyKey = String(options.idempotency_key || `voice_idem_${suffix}`).trim();
+    return {
+        confirmation_id: `voice_confirm_${suffix}`,
+        actor_id: actorId,
+        idempotency_key: idempotencyKey,
+        created_at: new Date().toISOString(),
+        intent_id: String(intent?.intent_id || options.intent_id || ''),
+        domain: String(intent?.domain || ''),
+        action: String(intent?.action || '')
+    };
+};
+
+const normalizeVoiceConfirmation = (options = {}) => {
+    const confirmation = options.confirmation && typeof options.confirmation === 'object'
+        ? options.confirmation
+        : {};
+    const confirmationId = String(confirmation.confirmation_id || confirmation.confirmationId || '').trim();
+    const actorId = String(confirmation.actor_id || confirmation.actorId || options.actor?.user_id || options.actor_id || '').trim();
+    const idempotencyKey = String(
+        options.idempotency_key
+        || options.idempotencyKey
+        || confirmation.idempotency_key
+        || confirmation.idempotencyKey
+        || ''
+    ).trim();
+    if (!confirmationId || !actorId || !idempotencyKey) return null;
+    return {
+        confirmation_id: confirmationId,
+        actor_id: actorId,
+        idempotency_key: idempotencyKey
+    };
+};
+
 const normalizeBatchEvents = (intent, options = {}) => ensureToolchain(intent).map((step) => ({
     tool_id: step.tool_id,
     action: step.action || 'pointer.click',
@@ -1010,14 +1048,28 @@ class VoiceOrchestrator {
             this.#pushJournal('voice.intent.executed', response);
             return response;
         }
-        if (normalizedIntent.execution.confirmation_required === true && options.confirmed !== true) {
+        const confirmation = normalizeVoiceConfirmation(options);
+        if (
+            normalizedIntent.execution.confirmation_required === true
+            && normalizedIntent.execution.target !== 'pending_connector'
+            && !confirmation
+        ) {
+            const createdConfirmation = createVoiceConfirmation(normalizedIntent, options);
+            const pendingIntent = {
+                ...normalizedIntent,
+                context: {
+                    ...(normalizedIntent.context || {}),
+                    voice_confirmation: createdConfirmation
+                }
+            };
             const response = {
                 ok: true,
                 executed: false,
                 transport: normalizedIntent.execution.target,
-                intent: normalizedIntent,
+                intent: pendingIntent,
                 reason: 'confirmation_required',
                 confirmation_required: true,
+                confirmation: createdConfirmation,
                 confirmation_prompt: options.confirmation_prompt
                     || (String(normalizedIntent?.locale || '').toLowerCase().startsWith('fr')
                         ? `Confirmation demandee avant execution de ${normalizedIntent.domain}:${normalizedIntent.action}.`
@@ -1452,9 +1504,9 @@ class VoiceOrchestrator {
                 signals,
                 trace_id: options.trace_id,
                 intent_id: options.intent_id || intent.intent_id,
-                idempotency_key: options.idempotency_key,
+                idempotency_key: confirmation?.idempotency_key || options.idempotency_key,
                 source,
-                confirmed: options.confirmed === true
+                confirmation
             });
 
             if (toolchainResult?.status === 'CONFIRMATION_REQUIRED') {
@@ -1570,6 +1622,47 @@ class VoiceOrchestrator {
     }
 
     async #executePendingConnector(intent, toolchain, options = {}) {
+        const confirmation = normalizeVoiceConfirmation(options);
+        const hostEnv = resolveHostEnv(this.env);
+        const canBootstrapMail = !!(
+            hostEnv?.location
+            || hostEnv?.document
+            || hostEnv?.navigator
+            || hostEnv?.fetch
+            || hostEnv?.__TAURI__
+            || hostEnv?.__TAURI_INTERNALS__
+            || typeof window !== 'undefined'
+        );
+        if (
+            String(intent?.domain || '').trim() === 'mail'
+            && !hasExplicitBusinessConnectorHost(this.env)
+            && !canBootstrapMail
+        ) {
+            const english = String(intent?.locale || options?.locale || 'fr-FR').toLowerCase().startsWith('en');
+            return {
+                ok: false,
+                executed: false,
+                transport: 'mail_api',
+                intent,
+                error: 'mail_credentials_missing',
+                reply_text: english
+                    ? 'Mail is not configured yet. Check the mail settings first.'
+                    : 'La configuration mail est absente. Verifie les reglages mail d abord.',
+                spoken_reply: english
+                    ? 'Mail is not configured yet. Check the mail settings first.'
+                    : 'La configuration mail est absente. Verifie les reglages mail d abord.'
+            };
+        }
+        if (!this.toolRouter && String(intent?.domain || '').trim() === 'mail') {
+            const mail = readExistingMailApi(this.env);
+            if (mail) {
+                this.toolRouter = createToolRouter({
+                    connectors: { mail },
+                    workingMemory: this.sessionRuntime?.workingMemory ?? null,
+                    bridge: this.bridge
+                });
+            }
+        }
         if (!this.toolRouter && BUSINESS_CONNECTOR_DOMAINS.has(String(intent?.domain || '').trim())) {
             this.ensureExistingToolRouter();
         }
@@ -1607,10 +1700,19 @@ class VoiceOrchestrator {
         }
 
         try {
-            const structuredRequest = intentToStructuredRequest(intent, {
+            const baseStructuredRequest = intentToStructuredRequest(intent, {
                 toolchain,
                 locale: intent?.locale || options?.locale
             });
+            const structuredRequest = {
+                ...baseStructuredRequest,
+                source: {
+                    ...(baseStructuredRequest.source || {}),
+                    actor_id: confirmation?.actor_id || options.actor?.user_id || options.actor_id || ''
+                },
+                ...(confirmation ? { confirmation } : {}),
+                ...(confirmation?.idempotency_key ? { idempotency_key: confirmation.idempotency_key } : {})
+            };
             if (!structuredRequest || !structuredRequest.domain) return null;
 
             this.#pushJournal('voice.tool_router.dispatch', {
@@ -1623,23 +1725,32 @@ class VoiceOrchestrator {
 
             // Trust gate: if the tool router signals that confirmation is required
             // due to trust scoring, surface it as a confirmation response.
-            if (result?.confirmation_required === true && result?.trust_level) {
+            if (result?.confirmation_required === true) {
+                const pendingConfirmation = confirmation || createVoiceConfirmation(intent, options);
+                const pendingIntent = {
+                    ...intent,
+                    context: {
+                        ...(intent.context || {}),
+                        voice_confirmation: pendingConfirmation
+                    }
+                };
                 this.#pushJournal('voice.trust_gate.triggered', {
                     domain: structuredRequest.domain,
                     operation: structuredRequest.operation,
-                    trust_score: result.trust_score,
-                    trust_level: result.trust_level
+                    trust_score: result.trust_score || null,
+                    trust_level: result.trust_level || null
                 });
                 return {
                     ok: true,
                     executed: false,
                     transport: `${structuredRequest.domain}_api`,
-                    intent,
-                    reason: 'mail_trust_warning',
+                    intent: pendingIntent,
+                    reason: result.trust_level ? 'mail_trust_warning' : 'confirmation_required',
                     confirmation_required: true,
-                    trust_score: result.trust_score,
-                    trust_level: result.trust_level,
-                    trust_signals: result.trust_signals,
+                    confirmation: pendingConfirmation,
+                    ...(result.trust_score !== undefined ? { trust_score: result.trust_score } : {}),
+                    ...(result.trust_level ? { trust_level: result.trust_level } : {}),
+                    ...(result.trust_signals ? { trust_signals: result.trust_signals } : {}),
                     confirmation_prompt: result.reply_text,
                     reply_text: result.reply_text,
                     spoken_reply: result.reply_text

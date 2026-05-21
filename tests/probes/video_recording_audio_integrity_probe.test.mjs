@@ -175,6 +175,24 @@ const run = async () => {
             try { canvas.remove(); } catch (_) { }
             const fileName = String(result?.fileName || '').trim();
             const filePath = String(result?.file_path || result?.path || '').trim();
+            const ownerId = String(result?.media_user_id || result?.owner_id || current?.user?.user_id || current?.user?.id || '').trim();
+            const buildExtractAudioUrl = (mediaUrl) => {
+                const safeName = encodeURIComponent(fileName);
+                if (!safeName) return '';
+                try {
+                    const parsed = new URL(String(mediaUrl || ''), location.href);
+                    const params = new URLSearchParams();
+                    params.set('source', parsed.pathname.includes('/api/recordings/') ? 'recording' : 'upload');
+                    const mediaUserId = parsed.searchParams.get('media_user_id') || ownerId || '';
+                    if (mediaUserId) params.set('media_user_id', mediaUserId);
+                    return `/api/extract-audio/${safeName}?${params.toString()}`;
+                } catch (_) {
+                    const params = new URLSearchParams();
+                    params.set('source', 'recording');
+                    if (ownerId) params.set('media_user_id', ownerId);
+                    return `/api/extract-audio/${safeName}?${params.toString()}`;
+                }
+            };
             let token = window.AdoleAPI?.auth?.getCurrentToken?.() || window.__authToken || '';
             if (!token) {
                 try {
@@ -182,14 +200,15 @@ const run = async () => {
                     token = shared.getAuthToken?.() || shared.getCloudAuthToken?.() || shared.getLocalAuthToken?.() || '';
                 } catch (_) { }
             }
-            const mediaUrl = `/api/recordings/${encodeURIComponent(fileName)}${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
-            const extractUrl = `/api/extract-audio/${encodeURIComponent(fileName)}${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
+            const mediaUrl = String(result?.media_url || result?.src || '').trim()
+                || `/api/recordings/${encodeURIComponent(fileName)}${ownerId ? `?media_user_id=${encodeURIComponent(ownerId)}` : (token ? `?access_token=${encodeURIComponent(token)}` : '')}`;
+            const extractUrl = buildExtractAudioUrl(mediaUrl);
             return {
                 ok: result?.ok === true,
                 stopped,
                 result,
                 project: stopped?.project || null,
-                user_id: current?.user?.user_id || current?.user?.id || null,
+                user_id: ownerId || current?.user?.user_id || current?.user?.id || null,
                 fileName,
                 filePath,
                 mediaUrl,

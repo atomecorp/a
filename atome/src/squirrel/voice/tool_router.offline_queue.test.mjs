@@ -55,6 +55,12 @@ const router = createToolRouter({
     }
 });
 
+const confirmation = {
+    confirmation_id: 'confirm_voice_test',
+    actor_id: 'actor_voice_test',
+    idempotency_key: 'idem_voice_test'
+};
+
 const queuedContact = await router.execute(createContactsRequest({
     operation: 'create',
     payload: {
@@ -62,8 +68,11 @@ const queuedContact = await router.execute(createContactsRequest({
         phone: '0611223344'
     },
     source: {
-        locale: 'fr-FR'
-    }
+        locale: 'fr-FR',
+        actor_id: confirmation.actor_id
+    },
+    confirmation,
+    idempotency_key: confirmation.idempotency_key
 }));
 
 assert.equal(queuedContact.ok, true, 'offline contact creation should still succeed as a queued mutation');
@@ -93,8 +102,15 @@ const queuedEvent = await router.execute(createCalendarRequest({
         start_at: '2026-03-26T09:00:00.000Z'
     },
     source: {
-        locale: 'fr-FR'
-    }
+        locale: 'fr-FR',
+        actor_id: confirmation.actor_id
+    },
+    confirmation: {
+        ...confirmation,
+        confirmation_id: 'confirm_calendar_test',
+        idempotency_key: 'idem_calendar_test'
+    },
+    idempotency_key: 'idem_calendar_test'
 }));
 
 assert.equal(queuedEvent.ok, true, 'offline calendar creation should be accepted into the queue');

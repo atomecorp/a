@@ -1287,10 +1287,12 @@ export const mountHomeVoiceSurface = async ({
                     });
                 }
                 if (!response && confirmationRequired && typeof state.api?.executeIntent === 'function') {
+                    const confirmation = activeIntent?.context?.voice_confirmation || activeIntent?.confirmation || null;
                     response = await state.api.executeIntent(activeIntent, {
                         session_id: state.sessionId,
                         locale: locale(),
-                        confirmed: true
+                        confirmation,
+                        idempotency_key: confirmation?.idempotency_key || ''
                     });
                 }
             } else {

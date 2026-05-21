@@ -29,6 +29,10 @@ const SALT_ROUNDS = 10;
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const JWT_EXPIRY = '7d'; // 7 days
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days in seconds
+const REFRESH_COOKIE_NAME = 'refresh_token';
+const REFRESH_SESSION_PARTICLE_KEY = 'auth_refresh_sessions';
+const REFRESH_SESSION_TTL_MS = 60 * 60 * 24 * 7 * 1000;
+const MAX_REFRESH_SESSIONS_PER_USER = 8;
 const ANONYMOUS_PHONE = '0000000000';
 const ANONYMOUS_USERNAME = 'anonymous';
 const ANONYMOUS_PASSWORD = 'anonymous';
@@ -96,7 +100,8 @@ const RESERVED_USER_PARTICLE_KEYS = new Set([
     'phone',
     'username',
     'visibility',
-    'access'
+    'access',
+    REFRESH_SESSION_PARTICLE_KEY
 ]);
 
 function normalizeUserOptional(optional) {
@@ -336,6 +341,137 @@ function enforceAuthRateLimit(request, bucket, identity, limit = 8, windowMs = 1
         };
     }
     return { ok: true };
+}
+
+function hashRefreshSecret(secret) {
+    return crypto.createHash('sha256').update(String(secret || '')).digest('hex');
+}
+
+function createRefreshSecret() {
+    return crypto.randomBytes(32).toString('base64url');
+}
+
+function readRefreshTokenFromRequest(request) {
+    const cookieToken = request.cookies?.[REFRESH_COOKIE_NAME];
+    if (cookieToken) return String(cookieToken);
+    const bodyToken = request.body?.refresh_token || request.body?.refreshToken;
+    if (bodyToken) return String(bodyToken);
+    const headerToken = request.headers?.['x-refresh-token'];
+    return headerToken ? String(headerToken) : '';
+}
+
+async function readRefreshSessions(dataSource, userId) {
+    const rows = await dataSource.query(
+        'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ? LIMIT 1',
+        [userId, REFRESH_SESSION_PARTICLE_KEY]
+    );
+    if (!rows?.[0]?.particle_value) return [];
+    try {
+        const parsed = JSON.parse(rows[0].particle_value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+async function writeRefreshSessions(dataSource, userId, sessions) {
+    const nowMs = Date.now();
+    const retained = (Array.isArray(sessions) ? sessions : [])
+        .filter((session) => session && typeof session === 'object')
+        .filter((session) => session.revoked_at || Date.parse(session.expires_at || '') > nowMs)
+        .slice(-(MAX_REFRESH_SESSIONS_PER_USER * 2));
+    await updateUserParticle(dataSource, userId, REFRESH_SESSION_PARTICLE_KEY, retained);
+    return retained;
+}
+
+async function createRefreshSession(dataSource, userId, reason = 'login') {
+    const now = new Date();
+    const secret = createRefreshSecret();
+    const session = {
+        session_id: crypto.randomUUID(),
+        token_hash: hashRefreshSecret(secret),
+        created_at: now.toISOString(),
+        expires_at: new Date(now.getTime() + REFRESH_SESSION_TTL_MS).toISOString(),
+        last_used_at: null,
+        revoked_at: null,
+        reason
+    };
+    const existing = await readRefreshSessions(dataSource, userId);
+    await writeRefreshSessions(dataSource, userId, [...existing, session]);
+    return {
+        session_id: session.session_id,
+        refresh_token: `${session.session_id}.${secret}`
+    };
+}
+
+async function consumeRefreshSession(dataSource, userId, refreshToken) {
+    const [sessionId, secret] = String(refreshToken || '').split('.');
+    if (!sessionId || !secret) {
+        return { ok: false, error: 'Invalid refresh session' };
+    }
+    const sessions = await readRefreshSessions(dataSource, userId);
+    const now = new Date();
+    const tokenHash = hashRefreshSecret(secret);
+    let matched = null;
+    const updatedSessions = sessions.map((session) => {
+        if (session?.session_id !== sessionId) return session;
+        matched = session;
+        return {
+            ...session,
+            last_used_at: now.toISOString(),
+            revoked_at: now.toISOString(),
+            revoke_reason: 'rotated'
+        };
+    });
+    if (!matched || matched.revoked_at || matched.token_hash !== tokenHash || Date.parse(matched.expires_at || '') <= now.getTime()) {
+        return { ok: false, error: 'Refresh session rejected' };
+    }
+    const next = await createRefreshSession(dataSource, userId, 'rotation');
+    await writeRefreshSessions(dataSource, userId, [
+        ...updatedSessions,
+        {
+            session_id: next.session_id,
+            token_hash: hashRefreshSecret(next.refresh_token.split('.')[1]),
+            created_at: now.toISOString(),
+            expires_at: new Date(now.getTime() + REFRESH_SESSION_TTL_MS).toISOString(),
+            last_used_at: null,
+            revoked_at: null,
+            reason: 'rotation'
+        }
+    ]);
+    return { ok: true, session_id: next.session_id, refresh_token: next.refresh_token };
+}
+
+async function revokeRefreshToken(dataSource, userId, refreshToken, reason = 'logout') {
+    const [sessionId] = String(refreshToken || '').split('.');
+    if (!sessionId) return false;
+    const now = new Date().toISOString();
+    const sessions = await readRefreshSessions(dataSource, userId);
+    let changed = false;
+    const updated = sessions.map((session) => {
+        if (session?.session_id !== sessionId || session.revoked_at) return session;
+        changed = true;
+        return { ...session, revoked_at: now, revoke_reason: reason };
+    });
+    if (changed) await updateUserParticle(dataSource, userId, REFRESH_SESSION_PARTICLE_KEY, updated);
+    return changed;
+}
+
+function setAuthCookies(reply, accessToken, refreshToken, isProduction) {
+    reply.setCookie('access_token', accessToken, {
+        path: '/',
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+        maxAge: COOKIE_MAX_AGE
+    });
+    reply.setCookie(REFRESH_COOKIE_NAME, refreshToken, {
+        path: '/api/auth/refresh',
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+        maxAge: COOKIE_MAX_AGE
+    });
 }
 
 /**
@@ -1054,21 +1190,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             console.log(`✅ User registered (ADOLE atome): ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
-            // Issue JWT immediately so first post-register commit has a token.
+            const refreshSession = await createRefreshSession(dataSource, principalId, 'register');
             const token = server.jwt.sign({
                 id: principalId,
                 tenantId: 'local-tenant',
                 phone: cleanPhone,
-                username: cleanUsername
+                username: cleanUsername,
+                refresh_session_id: refreshSession.session_id
             });
 
-            reply.setCookie('access_token', token, {
-                path: '/',
-                httpOnly: true,
-                secure: isProduction,
-                sameSite: 'strict',
-                maxAge: COOKIE_MAX_AGE
-            });
+            setAuthCookies(reply, token, refreshSession.refresh_token, isProduction);
 
             // Sync to Tauri server (async, don't block response)
             let syncResult = { success: false };
@@ -1271,22 +1402,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 // Ignore state_current sync issues on login.
             }
 
-            // Generate JWT (ADOLE v3.0: no tenant_id, user_id is atome_id)
+            const refreshSession = await createRefreshSession(dataSource, user.user_id, 'login');
             const token = server.jwt.sign({
                 id: user.user_id,
                 tenantId: 'local-tenant', // ADOLE: flat tenant model
                 phone: user.phone,
-                username: user.username
+                username: user.username,
+                refresh_session_id: refreshSession.session_id
             });
 
-            // Set HttpOnly cookie
-            reply.setCookie('access_token', token, {
-                path: '/',
-                httpOnly: true,
-                secure: isProduction,
-                sameSite: 'strict',
-                maxAge: COOKIE_MAX_AGE
-            });
+            setAuthCookies(reply, token, refreshSession.refresh_token, isProduction);
 
             console.log(`✅ User logged in (ADOLE): ${user.username} (${user.phone})`);
 
@@ -1323,8 +1448,25 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      * Clear session cookie
      */
     server.post('/api/auth/logout', async (request, reply) => {
+        try {
+            const refreshToken = readRefreshTokenFromRequest(request);
+            const accessToken = request.cookies?.access_token || '';
+            if (refreshToken && accessToken) {
+                const decoded = server.jwt.verify(accessToken);
+                const userId = String(decoded.id || decoded.sub || '').trim();
+                if (userId) await revokeRefreshToken(dataSource, userId, refreshToken, 'logout');
+            }
+        } catch {
+            // Logout must clear local cookies even when the presented session is already invalid.
+        }
         reply.clearCookie('access_token', {
             path: '/',
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: 'strict'
+        });
+        reply.clearCookie(REFRESH_COOKIE_NAME, {
+            path: '/api/auth/refresh',
             httpOnly: true,
             secure: isProduction,
             sameSite: 'strict'
@@ -2270,54 +2412,46 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 reply.header('retry-after', String(rate.retryAfterSeconds));
                 return reply.code(429).send({ success: false, error: 'Too many refresh attempts' });
             }
-            // Try to get token from cookie first, then from Authorization header
-            let token = request.cookies.access_token;
-
-            if (!token) {
-                const authHeader = request.headers.authorization;
-                if (authHeader && authHeader.startsWith('Bearer ')) {
-                    token = authHeader.substring(7);
-                }
+            const refreshToken = readRefreshTokenFromRequest(request);
+            if (!refreshToken) {
+                return reply.code(401).send({ success: false, error: 'No refresh session provided' });
             }
 
-            if (!token) {
-                return reply.code(401).send({ success: false, error: 'No token provided' });
+            const [refreshSessionId] = refreshToken.split('.');
+            if (!refreshSessionId) {
+                return reply.code(401).send({ success: false, error: 'Invalid refresh session' });
             }
 
-            // Verify the current token. Expired access tokens are not refresh credentials.
-            let decoded;
-            try {
-                decoded = server.jwt.verify(token);
-            } catch (error) {
-        console.warn("[cleanup] operation failed", error);
-                return reply.code(401).send({ success: false, error: 'Invalid token' });
+            const sessionRows = await dataSource.query(
+                'SELECT atome_id FROM particles WHERE particle_key = ? AND particle_value LIKE ? LIMIT 1',
+                [REFRESH_SESSION_PARTICLE_KEY, `%${refreshSessionId}%`]
+            );
+            const userId = sessionRows?.[0]?.atome_id ? String(sessionRows[0].atome_id) : '';
+            if (!userId) {
+                return reply.code(401).send({ success: false, error: 'Refresh session not found' });
             }
 
             // ADOLE v3.0: Verify user atome still exists
-            const user = await findUserById(dataSource, decoded.id || decoded.sub);
+            const user = await findUserById(dataSource, userId);
 
             if (!user) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            // Generate new token with fresh expiry
+            const refreshSession = await consumeRefreshSession(dataSource, user.user_id, refreshToken);
+            if (refreshSession.ok !== true) {
+                return reply.code(401).send({ success: false, error: 'Refresh session rejected' });
+            }
+
             const newToken = server.jwt.sign({
                 sub: user.user_id,
                 id: user.user_id,
                 username: user.username,
-                phone: user.phone
+                phone: user.phone,
+                refresh_session_id: refreshSession.session_id
             });
 
-            // Set new cookie
-            reply.setCookie('access_token', newToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                path: '/',
-                maxAge: COOKIE_MAX_AGE
-            });
-
-            console.log(`🔄 Token refreshed for user ${user.user_id}`);
+            setAuthCookies(reply, newToken, refreshSession.refresh_token, isProduction);
 
             return {
                 success: true,

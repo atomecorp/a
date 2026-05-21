@@ -49,7 +49,12 @@ assert.equal(gated.status, 'CONFIRMATION_REQUIRED', 'mixed read/mutate toolchain
 assert.equal(calls.length, 0, 'toolchain confirmation should prevent premature execution');
 
 const executed = await AgentGateway.executeToolchain({
-    confirmed: true,
+    confirmation: {
+        confirmation_id: 'confirm_toolchain_probe',
+        actor_id: 'agent_gateway_test',
+        idempotency_key: 'idem_toolchain_probe'
+    },
+    idempotency_key: 'idem_toolchain_probe',
     steps: [{
         tool_name: 'toolchain.read_probe',
         params: { label: 'first' }

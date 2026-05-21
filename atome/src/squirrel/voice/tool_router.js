@@ -94,6 +94,88 @@ const queueOfflineMutationResult = ({
     });
 };
 
+const EFFECTFUL_VOICE_OPERATIONS = new Set(['create', 'update', 'delete', 'send']);
+
+const normalizeVoiceMutationSecurity = (request = {}) => {
+    const confirmation = request.confirmation && typeof request.confirmation === 'object'
+        ? request.confirmation
+        : {};
+    const confirmationId = String(
+        confirmation.confirmation_id
+        || confirmation.confirmationId
+        || request.confirmation_id
+        || request.confirmationId
+        || ''
+    ).trim();
+    const actorId = String(
+        confirmation.actor_id
+        || confirmation.actorId
+        || request.source?.actor_id
+        || request.source?.actorId
+        || ''
+    ).trim();
+    const idempotencyKey = String(
+        request.idempotency_key
+        || request.idempotencyKey
+        || confirmation.idempotency_key
+        || confirmation.idempotencyKey
+        || ''
+    ).trim();
+    if (!confirmationId || !actorId || !idempotencyKey) {
+        return {
+            ok: false,
+            error: 'voice_mutation_confirmation_required'
+        };
+    }
+    return {
+        ok: true,
+        confirmation: {
+            confirmation_id: confirmationId,
+            actor_id: actorId,
+            idempotency_key: idempotencyKey
+        },
+        audit: {
+            ...(request.audit && typeof request.audit === 'object' ? cloneValue(request.audit) : {}),
+            source: 'voice_tool_router'
+        },
+        idempotency_key: idempotencyKey
+    };
+};
+
+const requireVoiceMutationSecurity = (request = {}, domain = '', operation = '') => {
+    if (!EFFECTFUL_VOICE_OPERATIONS.has(String(operation || request.operation || '').trim().toLowerCase())) {
+        return { ok: true, options: {} };
+    }
+    const security = normalizeVoiceMutationSecurity(request);
+    if (security.ok !== true) {
+        return createStructuredResult({
+            ok: false,
+            domain,
+            operation: operation || request.operation,
+            error: security.error,
+            confirmation_required: true,
+            executed: false,
+            reply_text: isEnglish(request.source?.locale)
+                ? 'This action needs explicit confirmation before I can execute it.'
+                : "Cette action necessite une confirmation explicite avant execution."
+        });
+    }
+    return {
+        ok: true,
+        options: {
+            confirmation: security.confirmation,
+            audit: security.audit,
+            idempotency_key: security.idempotency_key
+        },
+        request: {
+            ...cloneValue(request),
+            confirmation: security.confirmation,
+            audit: security.audit,
+            idempotency_key: security.idempotency_key
+        }
+    };
+};
+
 const formatSenderLabel = (item) => String(
     item?.from?.name || item?.from?.address || ''
 ).trim();
@@ -973,7 +1055,9 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 });
                 if (composeResult?.ok === true) {
                     if (request.draft?.auto_send && typeof mailApi.send === 'function') {
-                        const sendResult = await mailApi.send(composeResult.draft.draft_id, { confirmed: true });
+                        const security = requireVoiceMutationSecurity(request, 'mail', 'send');
+                        if (security.ok !== true) return security;
+                        const sendResult = await mailApi.send(composeResult.draft.draft_id, security.options);
                         if (sendResult?.ok === true) {
                             if (workingMemory) {
                                 workingMemory.setLastOperation('mail', 'compose_sent');
@@ -1114,7 +1198,9 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                 });
             }
             if (request.draft?.auto_send && typeof mailApi.send === 'function') {
-                const sendResult = await mailApi.send(draftResult.draft.draft_id, { confirmed: true });
+                const security = requireVoiceMutationSecurity(request, 'mail', 'send');
+                if (security.ok !== true) return security;
+                const sendResult = await mailApi.send(draftResult.draft.draft_id, security.options);
                 if (sendResult?.ok === true) {
                     if (workingMemory) {
                         workingMemory.setLastOperation('mail', 'reply_sent');
@@ -1187,7 +1273,9 @@ const executeMailRequest = async (request, connectors, workingMemory) => {
                     reply_text: isEnglish(locale) ? 'I do not have a draft to send.' : "Je n'ai pas de brouillon a envoyer."
                 });
             }
-            const result = await sendApi.send(draftId, { confirmed: true });
+            const security = requireVoiceMutationSecurity(request, 'mail', 'send');
+            if (security.ok !== true) return security;
+            const result = await sendApi.send(draftId, security.options);
             if (workingMemory) {
                 workingMemory.setLastOperation('mail', 'send');
                 workingMemory.setCurrentItem('mail_draft', null, null);
@@ -1441,6 +1529,13 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
     const locale = request.source?.locale || 'fr-FR';
     const queryText = request.filters?.query_text || '';
     const limit = request.filters?.limit || 10;
+    let mutationOptions = {};
+    if (EFFECTFUL_VOICE_OPERATIONS.has(String(request.operation || '').trim().toLowerCase())) {
+        const security = requireVoiceMutationSecurity(request, 'contacts', request.operation);
+        if (security.ok !== true) return security;
+        request = security.request;
+        mutationOptions = security.options;
+    }
 
     if (typeof contactsApi.syncPull === 'function') {
         try { await contactsApi.syncPull({ limit: 100 }); } catch (_) { /* keep going */ }
@@ -1564,7 +1659,8 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
                 delete changes.query;
                 delete changes.query_text;
                 const updated = await executeConnectorCall(() => contactsApi.updateLocalContact(targetId, changes, {
-                    source: 'voice'
+                    source: 'voice',
+                    ...mutationOptions
                 }), 'contacts_update_failed');
                 const updatedContact = updated?.contact || existingContact;
                 if (allowQueue && offlineQueue && isOfflineLikeFailure(updated)) {
@@ -1606,7 +1702,8 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
                 });
             }
             const result = await executeConnectorCall(() => contactsApi.createLocalContact(payload, {
-                source: 'voice'
+                source: 'voice',
+                ...mutationOptions
             }), 'contacts_create_failed');
             const createdContact = result?.contact || (Array.isArray(result?.items) ? result.items[0] : null) || null;
             if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
@@ -1676,7 +1773,8 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
                 });
             }
             const result = await executeConnectorCall(() => contactsApi.updateLocalContact(targetId, changes, {
-                source: 'voice'
+                source: 'voice',
+                ...mutationOptions
             }), 'contacts_update_failed');
             const updatedContact = result?.contact || null;
             if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
@@ -1726,7 +1824,8 @@ const executeContactsRequest = async (request, connectors, workingMemory, {
                 });
             }
             const result = await executeConnectorCall(() => contactsApi.deleteLocalContact(targetId, {
-                source: 'voice'
+                source: 'voice',
+                ...mutationOptions
             }), 'contacts_delete_failed');
             if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
                 return queueOfflineMutationResult({
@@ -1786,6 +1885,13 @@ const executeCalendarRequest = async (request, connectors, workingMemory, {
     const queryText = request.filters?.query_text || '';
     const limit = request.filters?.limit || 10;
     const temporalRef = request.filters?.temporal_ref || '';
+    let mutationOptions = {};
+    if (EFFECTFUL_VOICE_OPERATIONS.has(String(request.operation || '').trim().toLowerCase())) {
+        const security = requireVoiceMutationSecurity(request, 'calendar', request.operation);
+        if (security.ok !== true) return security;
+        request = security.request;
+        mutationOptions = security.options;
+    }
 
     if (typeof calendarApi.syncPull === 'function') {
         try { await calendarApi.syncPull({}); } catch (_) { /* keep going */ }
@@ -1866,7 +1972,10 @@ const executeCalendarRequest = async (request, connectors, workingMemory, {
                 ? { ...request.draft }
                 : {};
             const payload = Object.keys(requestPayload).length ? requestPayload : draftPayload;
-            const result = await executeConnectorCall(() => calendarApi.create(payload, request.payload || request.draft || {}), 'calendar_create_failed');
+            const result = await executeConnectorCall(() => calendarApi.create(payload, {
+                ...(request.payload || request.draft || {}),
+                ...mutationOptions
+            }), 'calendar_create_failed');
             if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
                 return queueOfflineMutationResult({
                     offlineQueue,
@@ -1916,7 +2025,10 @@ const executeCalendarRequest = async (request, connectors, workingMemory, {
                         : "J'ai besoin d'au moins une modification pour mettre a jour le rendez-vous."
                 });
             }
-            const result = await executeConnectorCall(() => calendarApi.update(targetId, changes, request.payload || {}), 'calendar_update_failed');
+            const result = await executeConnectorCall(() => calendarApi.update(targetId, changes, {
+                ...(request.payload || {}),
+                ...mutationOptions
+            }), 'calendar_update_failed');
             if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
                 return queueOfflineMutationResult({
                     offlineQueue,
@@ -1964,7 +2076,10 @@ const executeCalendarRequest = async (request, connectors, workingMemory, {
                     reply_text: isEnglish(locale) ? 'I do not know which event to delete.' : 'Je ne sais pas quel rendez-vous supprimer.'
                 });
             }
-            const result = await executeConnectorCall(() => calendarApi.delete(targetId, request.payload || {}), 'calendar_delete_failed');
+            const result = await executeConnectorCall(() => calendarApi.delete(targetId, {
+                ...(request.payload || {}),
+                ...mutationOptions
+            }), 'calendar_delete_failed');
             if (allowQueue && offlineQueue && isOfflineLikeFailure(result)) {
                 return queueOfflineMutationResult({
                     offlineQueue,

@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import { execFile } from 'child_process';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../atome/shared/logging.js';
+import { normalizeWsApiRequest } from './ws_api_schema.js';
 
 const SERVER_LOG_LEVEL = (process.env.SQUIRREL_LOG_LEVEL || 'warn').toLowerCase();
 const SERVER_INFO_ENABLED = SERVER_LOG_LEVEL === 'info' || SERVER_LOG_LEVEL === 'debug';
@@ -707,6 +708,74 @@ async function resolveDownloadTarget(fileParam, userId) {
   const raw = typeof fileParam === 'string' ? fileParam : String(fileParam || '');
   const safeParam = raw.trim();
 
+  const resolveLegacyOwnerlessTarget = async () => {
+    if (!DATABASE_ENABLED || !safeParam || userId !== 'anonymous') return null;
+    try {
+      const rows = await db.query('all', `
+        SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at, a.updated_at
+        FROM atomes a
+        JOIN particles p ON a.atome_id = p.atome_id
+        WHERE p.particle_key IN ('file_name', 'original_name')
+          AND p.particle_value = ?
+          AND a.deleted_at IS NULL
+        ORDER BY COALESCE(a.updated_at, a.created_at) DESC
+        LIMIT 12
+      `, [JSON.stringify(safeParam)]);
+      for (const row of (rows || [])) {
+        const particles = await db.query('all', `
+          SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
+        `, [row.atome_id]);
+        const meta = {
+          atome_id: row.atome_id,
+          atome_type: row.atome_type,
+          owner_id: row.owner_id,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        };
+        for (const particle of (particles || [])) {
+          try {
+            meta[particle.particle_key] = JSON.parse(particle.particle_value);
+          } catch (_) {
+            meta[particle.particle_key] = particle.particle_value;
+          }
+        }
+        const safeName = typeof meta.file_name === 'string' && meta.file_name.trim()
+          ? meta.file_name
+          : sanitizeFileName(meta.original_name || safeParam);
+        const downloadName = typeof meta.original_name === 'string' && meta.original_name.trim()
+          ? meta.original_name
+          : safeName;
+        const rawPath = meta.file_path || meta.filePath || null;
+        try {
+          if (rawPath) {
+            const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
+            if (normalizedRelative) {
+              const resolved = await resolveUserAssetPath(
+                projectRoot,
+                { id: meta.owner_id || userId },
+                normalizedRelative
+              );
+              await fs.access(resolved.filePath);
+              return { filePath: resolved.filePath, downloadName, meta };
+            }
+          }
+          const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
+          await fs.access(filePath);
+          return { filePath, downloadName, meta };
+        } catch (_) {
+          // Try the next legacy metadata candidate.
+        }
+      }
+    } catch (error) {
+      console.warn('[Uploads] Legacy ownerless media fallback failed', {
+        userId,
+        fileParam: safeParam,
+        error: error?.message || String(error || '')
+      });
+    }
+    return null;
+  };
+
   if (DATABASE_ENABLED && safeParam) {
     let meta = await getFileMetadata(safeParam);
     if (meta && meta.atome_id !== safeParam) {
@@ -754,6 +823,9 @@ async function resolveDownloadTarget(fileParam, userId) {
       return { filePath, downloadName, meta };
     }
   }
+
+  const legacyTarget = await resolveLegacyOwnerlessTarget();
+  if (legacyTarget?.filePath) return legacyTarget;
 
   const safeRequestedName = sanitizeFileName(safeParam);
   const userPath = await resolveUserFilePath(projectRoot, userId, safeRequestedName);
@@ -3241,45 +3313,19 @@ async function startServer() {
 
           // Handle API requests
           if (data.type === 'api-request') {
-            const { id, method, path, body, headers } = data;
-
             try {
               const attachedUserId = connection?._wsApiUserId ? String(connection._wsApiUserId) : '';
-              if (!attachedUserId) {
-                throw new Error('api_request_auth_required');
-              }
-              const normalizedMethod = String(method || 'GET').trim().toUpperCase();
-              const normalizedPath = String(path || '').trim();
-              const allowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
-              const allowedPath = normalizedPath.startsWith('/api/auth/me')
-                || normalizedPath.startsWith('/api/auth/update')
-                || normalizedPath.startsWith('/api/projects')
-                || normalizedPath.startsWith('/api/activities')
-                || normalizedPath.startsWith('/api/atomes')
-                || normalizedPath.startsWith('/api/sharing')
-                || normalizedPath.startsWith('/api/files')
-                || normalizedPath.startsWith('/api/uploads');
-              if (!allowedMethods.has(normalizedMethod) || !allowedPath) {
-                throw new Error('api_request_route_not_allowed');
-              }
-              const filteredHeaders = {
-                'content-type': 'application/json',
-                'x-ws-user-id': attachedUserId
-              };
-              if (headers && typeof headers === 'object' && typeof headers.authorization === 'string') {
-                filteredHeaders.authorization = headers.authorization;
-              }
-              // Inject the request through Fastify's internal router
+              const apiRequest = normalizeWsApiRequest(data, attachedUserId);
               const response = await server.inject({
-                method: normalizedMethod,
-                url: normalizedPath,
-                payload: body,
-                headers: filteredHeaders
+                method: apiRequest.method,
+                url: apiRequest.path,
+                payload: apiRequest.body,
+                headers: apiRequest.headers
               });
 
               safeSend({
                 type: 'api-response',
-                id,
+                id: apiRequest.id,
                 response: {
                   status: response.statusCode,
                   headers: response.headers,

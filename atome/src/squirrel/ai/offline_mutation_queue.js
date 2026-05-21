@@ -23,6 +23,9 @@ const normalizeRequest = (request = {}) => {
         payload: request.payload && typeof request.payload === 'object' ? cloneValue(request.payload) : {},
         draft: request.draft && typeof request.draft === 'object' ? cloneValue(request.draft) : {},
         source: request.source && typeof request.source === 'object' ? cloneValue(request.source) : {},
+        confirmation: request.confirmation && typeof request.confirmation === 'object' ? cloneValue(request.confirmation) : {},
+        audit: request.audit && typeof request.audit === 'object' ? cloneValue(request.audit) : {},
+        idempotency_key: String(request.idempotency_key || request.idempotencyKey || '').trim(),
         surfaces: Array.isArray(request.surfaces) ? cloneValue(request.surfaces) : []
     };
 };

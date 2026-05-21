@@ -13,9 +13,10 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::{
+    collections::HashMap,
     env,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 use uuid::Uuid;
 
@@ -40,6 +41,30 @@ const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
 
 /// Default Fastify server URL for sync (port 3001 in dev mode)
 const DEFAULT_FASTIFY_URL: &str = "http://localhost:3001";
+const AUTH_ATTEMPT_WINDOW_SECONDS: i64 = 15 * 60;
+const AUTH_ATTEMPT_LIMIT: u32 = 8;
+
+static AUTH_ATTEMPT_STORE: OnceLock<Mutex<HashMap<String, (u32, i64)>>> = OnceLock::new();
+
+fn enforce_local_auth_attempt_limit(bucket: &str, identity: &str) -> Result<(), String> {
+    let now = Utc::now().timestamp();
+    let reset_at = now + AUTH_ATTEMPT_WINDOW_SECONDS;
+    let key = format!("{}:{}", bucket, identity.trim().to_lowercase());
+    let store = AUTH_ATTEMPT_STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut attempts = store
+        .lock()
+        .map_err(|_| "Authentication rate limiter unavailable".to_string())?;
+    let entry = attempts.entry(key).or_insert((0, reset_at));
+    if now >= entry.1 {
+        *entry = (1, reset_at);
+        return Ok(());
+    }
+    entry.0 += 1;
+    if entry.0 > AUTH_ATTEMPT_LIMIT {
+        return Err("Too many authentication attempts".to_string());
+    }
+    Ok(())
+}
 
 // =============================================================================
 // TYPES
@@ -666,6 +691,10 @@ async fn handle_login(
         Some(p) => p,
         None => return error_response(request_id, "Password is required"),
     };
+
+    if let Err(error) = enforce_local_auth_attempt_limit("login", &phone) {
+        return error_response(request_id, &error);
+    }
 
     let db = match state.db.lock() {
         Ok(d) => d,
