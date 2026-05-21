@@ -63,7 +63,10 @@ export const normalizeRuntimeMailPreferences = (prefs = {}, fallbackEmail = '') 
 
 const readStorage = (env) => {
     try {
-        return env?.localStorage || globalThis?.localStorage || null;
+        if (env && typeof env === 'object' && env !== globalThis) {
+            return env.localStorage || null;
+        }
+        return globalThis?.localStorage || null;
     } catch (_) {
         return null;
     }

@@ -49,6 +49,7 @@ const calendarApi = {
 };
 
 const router = createToolRouter({
+    env: {},
     connectors: {
         contacts: contactsApi,
         calendar: calendarApi

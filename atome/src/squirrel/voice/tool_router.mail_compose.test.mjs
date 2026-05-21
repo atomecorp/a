@@ -51,6 +51,7 @@ const confirmation = {
 };
 
 const router = createToolRouter({
+    env: {},
     connectors: {
         contacts: contactsApi,
         mail: mailApi

@@ -889,6 +889,7 @@ class VoiceOrchestrator {
         const contacts = await resolveContactsApi(this.env);
         const calendar = await resolveCalendarApi(this.env);
         this.toolRouter = createToolRouter({
+            env: this.env,
             connectors: { mail, messages, contacts, calendar },
             workingMemory: workingMemory
                 || (this.sessionRuntime?.workingMemory ?? null),
@@ -907,6 +908,7 @@ class VoiceOrchestrator {
         };
         if (!Object.values(connectors).some(Boolean)) return null;
         this.toolRouter = createToolRouter({
+            env: this.env,
             connectors,
             workingMemory: workingMemory
                 || (this.sessionRuntime?.workingMemory ?? null),
@@ -1657,6 +1659,7 @@ class VoiceOrchestrator {
             const mail = readExistingMailApi(this.env);
             if (mail) {
                 this.toolRouter = createToolRouter({
+                    env: this.env,
                     connectors: { mail },
                     workingMemory: this.sessionRuntime?.workingMemory ?? null,
                     bridge: this.bridge
