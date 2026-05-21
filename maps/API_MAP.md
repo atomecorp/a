@@ -3,11 +3,13 @@
 Status: Initial API map after the Atome open / eVe closed boundary validation.
 
 Purpose:
+
 - Identify verified API families, ownership, and stable entry points.
 - Make the Atome open / eVe closed boundary explicit before new implementation work.
 - Provide an orientation map. The exhaustive public, semi-public, and internal API list is a separate execution task.
 
 Mandatory Use:
+
 - Before adding or changing an API, consult this file and `maps/CODEMAP.md`.
 - Verify the referenced source module directly before relying on a method or route.
 - Update this map when ownership, exposure, route shape, or boundary status changes.
@@ -16,6 +18,7 @@ Mandatory Use:
 ## Mandatory Pre-Implementation Gate
 
 No API, route, runtime global, MCP capability, tool exposure, store contract, persistence path, service facade, or exported method may be added or changed until the relevant maps have been consulted:
+
 - Use `maps/CODEMAP.md` first to locate the owning source area and verify that no reusable implementation already exists.
 - Use this file to classify the surface as public open, semi-public closed, internal, or `Status: To verify`.
 - Use `maps/DESIGN_MAP.md` when the API affects product UI, visual factories, panel behavior, tool visuals, generated styling, or design tokens.
@@ -34,12 +37,14 @@ Atome must not contain eVe UI, private product workflows, or product-only tool c
 ## Explicit Open / Closed API Contract
 
 API classification is mandatory before an API is reused, exposed, moved, or extended:
+
 - Public open APIs are product-neutral Atome, server, or database contracts intended for framework use, AI/MCP access, durable state mutation, synchronization, or platform runtime behavior.
 - Semi-public closed APIs are eVe product runtime contracts that may be reused inside eVe and by approved Atome AI/MCP boundary calls only through capability checks, runtime registration, or explicit injection.
 - Internal APIs are implementation details of their owning layer and must not be imported across the Atome/eVe boundary.
 - `Status: To verify` means the source exists but its boundary stability is not established; new work must inspect the source module before depending on it.
 
 Cross-boundary API rules:
+
 - Atome may call eVe capabilities only through registered runtime tools, injected callbacks, or documented boundary modules.
 - eVe may call Atome APIs directly when the Atome API is product-neutral and documented here.
 - eVe product stores, panels, tools, Molecule/MTraX runtimes, and design factories must not become implicit Atome APIs because they are exported or attached to `window`.
@@ -69,6 +74,7 @@ Primary sources: `atome/src/squirrel/spark.js`, `atome/src/squirrel/components/b
 Exposure: runtime bootstrap through the Squirrel component registry installed by `spark.js`.
 
 Verified responsibilities:
+
 - Load and register canonical Squirrel system controls.
 - Expose the canonical registry to runtime consumers through the Squirrel bootstrap globals.
 - Provide the current canonical Atome-owned control set for Button, Slider, Input, and Console.
@@ -96,6 +102,7 @@ Ownership: Atome open server layer.
 Primary sources: `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/mailRoutes.js`, `server/sharing.js`, `server/userFiles.js`, `server/visio.js`, `server/wsApiState.js`, `server/wsSend.js`, `server/serverIdentity.js`.
 
 Verified route families:
+
 - Health and diagnostics: `/health`, `/healthz`, `/__whoami`, `/dev/state`, `/dev/client-log`, `/client-log`, `/dev/snapshot`.
 - Authentication and identity: `/api/auth/*`, `/api/server/identity`, `/api/server/verify`, `/api/server/status`.
 - Atome object and state: `/api/atome/*`, `/api/events`, `/api/events/commit`, `/api/events/commit-batch`, `/api/state_current`, `/api/snapshots`.
@@ -117,6 +124,7 @@ Primary sources: `database/adole.js`, `database/driver.js`, `database/index.js`.
 Exposure: JavaScript module exports for database adapters and object persistence helpers.
 
 Verified entry points:
+
 - Driver lifecycle: `connect`, `getDatabase`, `getDriverType`, `isSqlite`, `isLibsql`, `closeDatabase`.
 - Serialization: `serializeJson`, `deserializeJson`.
 - Object aliases: `createObject`, `getObject`, `getObjectById`, `getObjectsByOwner`, `getObjectChildren`, `updateObject`, `deleteObject`.
@@ -224,6 +232,7 @@ Primary sources: `eVe/core/media_engine/`, `eVe/intuition/tools/molecule/`, `eVe
 Exposure: `window.Molecule`, `window.eveMediaApi`, `window.eveMtrackApi`, `window.open_mtrack_panel`, `window.close_mtrack_panel`, and JavaScript module exports for internal runtimes.
 
 Verified entry points:
+
 - Molecule engine/API: `createMoleculeEngine`, `ensureMoleculeEngine`, `getMoleculeCommandCatalog`, `createMoleculeApi`, `ensureMoleculeApi`, `ensureMoleculeMediaRuntime`.
 - Molecule tool modules: timeline schemas, reducers, session registry, persistence controller, media resolver, panel runtime, gestures, recording, nesting, and multi-instance controllers.
 - MTraX window API: `createMtrackWindowApiRuntime`, `createWindowApiBridgeRuntime`, transport, recording, clip move/crop, track record source, misc, and record-state runtimes.
@@ -235,6 +244,7 @@ Known constraints: MTraX/Molecule naming remains transitional and is tracked in 
 ## Public, Semi-Public, and Internal API Inventory
 
 Classification rules:
+
 - Public: intended runtime, server, framework, MCP, or product-facing entry point. These APIs may be called across ownership boundaries when their boundary status allows it.
 - Semi-public: exported or globally installed for a specific subsystem, integration, test harness, or product runtime. These APIs are reusable only inside the documented owner and must not be treated as stable framework contracts without promotion.
 - Internal: helpers, adapters, implementation classes, test utilities, debug probes, generated diagnostics, or feature-local runtimes. These APIs must be used only through their owning public or semi-public facade.
@@ -249,6 +259,7 @@ Visibility: Public.
 Evidence: module exports in `atome/src/squirrel/apis.js`.
 
 Public entry points:
+
 - `wait`
 - `current_platform`
 - `dataFetcher`
@@ -287,6 +298,7 @@ Visibility: Public runtime API.
 Evidence: `AdoleAPI` module/global use in `atome/src/squirrel/apis/unified/adole_apis.js` and eVe consumers.
 
 Public namespaces:
+
 - `auth`
 - `projects`
 - `activities`
@@ -313,6 +325,7 @@ Visibility: Public runtime API.
 Evidence: `eVe/core/atome_commit.js` attaches methods to `window.Atome` and `window.__atomeCommitApi`.
 
 Public entry points:
+
 - `window.Atome.commit`
 - `window.Atome.commitBatch`
 - `window.Atome.snapshot`
@@ -339,6 +352,7 @@ Visibility: Public server API for runtime clients and infrastructure, except pro
 Evidence: Fastify route declarations in `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/mailRoutes.js`, and `server/visio.js`.
 
 Public route families:
+
 - Health and config: `GET /health`, `GET /healthz`, `GET /__whoami`, `GET /server_config.json`, `GET /api/server-info`.
 - Authentication and account: `/api/auth/check-phone`, `/api/auth/users`, `/api/auth/register`, `/api/auth/sync-register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/update`, `/api/auth/request-otp`, `/api/auth/reset-password`, `/api/auth/change-password`, `/api/auth/request-phone-change`, `/api/auth/verify-phone-change`, `/api/auth/delete-account`, `/api/auth/refresh`.
 - Server identity and verification: `/api/server/identity`, `/api/server/verify`, `/api/server/status`.
@@ -360,6 +374,7 @@ Visibility: Public server/database module API.
 Evidence: exports in `database/index.js`, `database/adole.js`, and `database/driver.js`.
 
 Public entry points:
+
 - Lifecycle and driver: `initDatabase`, `withTransaction`, `getDatabase`, `closeDatabase`, `connectDriver`, `getDriverDatabase`, `isDriverSqlite`, `isDriverLibsql`.
 - Atome objects: `createAtome`, `getAtomeById`, `getAtome`, `getAtomesByOwner`, `getAtomesAccessibleToUser`, `getAtomeChildren`, `updateAtomeMetadata`, `updateAtome`, `deleteAtome`, `listAtomes`.
 - Particles/properties: `setParticle`, `setParticles`, `getParticle`, `getParticles`, `deleteParticle`, `getParticleHistory`, `restoreParticleVersion`.
@@ -385,6 +400,7 @@ Visibility: Public framework APIs.
 Evidence: exports in `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/cloudSync.js`, and `atome/security/syncQueue.js`.
 
 Public entry points:
+
 - Trusted server lookup: `TRUSTED_SERVERS`, `VERIFICATION_SETTINGS`, `getTrustedServer`, `findServerByFingerprint`, `findServerByUrl`, `getServersByEnvironment`, `isDevelopmentMode`.
 - Verification: `verifyServer`, `getVerificationStatus`, `clearVerificationCache`, `requiresVerification`, `getStatusMessage`, `getStatusIcon`.
 - Cloud sync: `SyncState`, `SyncResult`, `syncToCloud`, `getSyncStatus`, `resolveConflict`.
@@ -403,12 +419,14 @@ Visibility: Public framework service APIs.
 Evidence: exports in `atome/src/squirrel/{mail,contacts,calendar,bank}/index.js`, `bootstrap.js`, and `service.js`.
 
 Public entry points:
+
 - Mail: `createGlobalMailApi`, `bootstrapGlobalMail`, `createMailService`, `createMailIndex`, `createMailSyncState`, `createMailConnectorContract`, `createIcloudMailConnector`, `normalizeIcloudMailRecord`, `createNodeIcloudImapClient`, `createNodeIcloudSmtpClient`.
 - Contacts: `createGlobalContactsApi`, `bootstrapGlobalContacts`, `createContactsService`, `createContactsConnectorContract`, `createLocalContactsSource`, `createMacosContactsSource`, `createIcloudContactsConnector`, `createNodeCarddavClient`.
 - Calendar: `createGlobalCalendarApi`, `bootstrapGlobalCalendar`, `createCalendarService`, `createCalendarConnectorContract`, `createCalendarApiSource`, `normalizeCalendarApiEvent`, `createCalendarSyncState`, `createNodeCaldavClient`, `parseCalendarData`.
 - Bank: `createGlobalBankApi`, `bootstrapGlobalBank`, `createBankService`, `createBankIndex`, `createBankConnectorContract`.
 
 Runtime globals consumed by MCP/AI where installed:
+
 - `globalThis.atome.mail` or `window.atome.mail`
 - `globalThis.atome.contacts` or `window.atome.contacts`
 - `globalThis.atome.calendar` or `window.atome.calendar`
@@ -428,6 +446,7 @@ Visibility: Public framework and MCP-facing APIs.
 Evidence: exports and globals in `atome/src/squirrel/ai/agent_gateway.js`, `atome/src/squirrel/ai/default_tools.js`, and `atome/src/squirrel/atome/mcp.js`.
 
 Public entry points:
+
 - `AgentGateway`
 - `TOOL_STATUS`
 - `POLICY_DECISION`
@@ -464,6 +483,7 @@ Visibility: Public framework service APIs.
 Evidence: exports in `atome/src/squirrel/voice/index.js`, `bootstrap.js`, `service.js`, `orchestrator.js`, `tool_router.js`, `ai_planner.js`, `session_runtime.js`, `working_memory.js`, `semantic_contract.js`, `telemetry.js`, and `vad.js`.
 
 Public entry points:
+
 - `createGlobalVoiceApi`
 - `bootstrapGlobalVoice`
 - `createVoiceService`
@@ -497,6 +517,7 @@ Visibility: Public framework runtime API.
 Evidence: exports in `atome/src/application/audio_runtime/*` and `window.Squirrel.av` installation in `audio.facade.js`.
 
 Public entry points:
+
 - `AudioPlaybackAPI`
 - `AudioRecordingAPI`
 - `PlayRecordCore`
@@ -545,6 +566,7 @@ Visibility: Semi-public infrastructure modules.
 Evidence: module exports in server files.
 
 Entry points:
+
 - `commitAtomeEvent`, `commitAtomeEvents`, `syncAtomeViaWebSocket` in `server/atomeRoutes.orm.js`.
 - `registerSharingWebSocket`, `registerSharingRoutes` in `server/sharing.js`.
 - `registerFileUpload`, `getFileMetadata`, `getUserFiles`, `getAccessibleFiles`, `canAccessFile`, `setFilePublic`, `deleteFile`, `getFileStats`, `handleFileMessage`, `registerFileWebSocket`, `initUserFiles`, `shareFile`, `unshareFile` in `server/userFiles.js`.
@@ -568,6 +590,7 @@ Visibility: Semi-public closed product runtime APIs.
 Evidence: exports and global installs in `eVe/intuition/runtime/tool.js`, `eVe/intuition/tools/index.js`, `eVe/intuition/tools/core/tool_registry.js`, `tool_instances.js`, and `tool_runtime.js`.
 
 Entry points:
+
 - `registerTool`
 - `registerUiAction`
 - `registerAtomeTool`
@@ -590,6 +613,7 @@ Entry points:
 - `window.registerToolHandler`
 
 Panel runtime contract:
+
 - `eVe/intuition/panel_definitions.js` owns `PANEL_SURFACE_DEFINITIONS` and exports `buildPanelRuntimeConfigByToolId()`.
 - `eVe/intuition/tools/core/tool_runtime.js` must derive panel open/close routing from that exported config rather than declaring a parallel `tool_id -> panel` table.
 - Runtime panel open/close calls continue through `eVe/intuition/runtime/panel_api.js`, which delegates to `panelCreatorV2` after product bootstrap registers the API.
@@ -607,6 +631,7 @@ Visibility: Semi-public closed product runtime APIs.
 Evidence: exports in `eVe/intuition/runtime/index.js`, `command_bus.js`, `panel_api.js`, `layer_contract.js`, `selection.js`, `selection_snapshot.js`, `tool_gateway.js`, `history_policy.js`, `in_flight_lock.js`, `group_timeline_api.js`, and related runtime modules.
 
 Entry point families:
+
 - Command bus: `commandBusV2` and command-bus exports from `command_bus.js`.
 - Tool gateway: `invokeToolGateway`, `readExplicitLatched`, `resolveStranglerFlags`, `warmupToolGatewayRuntime`.
 - Panel API: `openPanelSurface`, `closePanelSurface`, and panel surface exports from `panel_api.js`.
@@ -629,6 +654,7 @@ Visibility: Semi-public closed product design APIs.
 Evidence: exports in `eVe/elements/design.js`, `eVe/elements/eVe_look.js`, `eVe/elements/system_ui_tokens.js`, `eVe/elements/design/panel_chrome.js`, `panel_chrome_tokens.js`, and `panel_overflow_indicators.js`; `window.eveUI` install in `design.js`.
 
 Entry point families:
+
 - Dialog and panel factories: `createEveDialog`, `revealEveDialog`, panel chrome helpers, bounds helpers, fullscreen helpers, overflow indicators.
 - UI primitives: rows, buttons, inputs, editable text, text helpers, and `eveUI` namespace.
 - Tokens and presets: system UI tokens, eVe tokens, CSS variable application, base style installation, panel chrome tokens and metrics.
@@ -647,6 +673,7 @@ Visibility: Semi-public closed product persistence APIs.
 Evidence: exports in `eVe/core/event_store/index.js`, `project_store/index.js`, `media_store/index.js`, `browser_store/indexeddb_backend.js`, `tauri_store/tauri_sqlite_backend.js`, `ios_store/ios_sqlite_backend.js`, and `molecule_store_bootstrap.js`.
 
 Entry points:
+
 - Event store: `createEventStore`, `createMemoryEventAdapter`, `EventStoreError`.
 - Project store: `createProjectStore`, `createMemoryProjectAdapter`, `ProjectStoreError`.
 - Media store: `createMediaStore`, `createMemoryMediaAdapter`, `buildMediaRef`, `validateProbe`, `validateRuntimeAssets`, `MediaStoreError`.
@@ -666,6 +693,7 @@ Visibility: Semi-public closed product APIs.
 Evidence: module exports and globals in `eVe/core/media_engine/`, `eVe/domains/mtrax/api/`, and MTraX integration modules.
 
 Entry points:
+
 - Molecule engine/API: `createMoleculeEngine`, `ensureMoleculeEngine`, `getMoleculeCommandCatalog`, `createMoleculeApi`, `ensureMoleculeApi`, `ensureMoleculeMediaRuntime`.
 - Molecule globals: `window.Molecule.engine`, `window.Molecule.api`, `window.Molecule.media`, `window.Molecule.createSession`, `window.Molecule.getSession`, `window.Molecule.disposeSession`, `window.Molecule.describeApi`, `window.Molecule.execute`, `window.Molecule.listCommands`, `window.eveMediaApi`.
 - MTraX window API creators: `createMtrackWindowApiRuntime`, `createWindowApiBridgeRuntime`.
@@ -685,6 +713,7 @@ Visibility: Semi-public closed product APIs.
 Evidence: exports in `eVe/domains/media/api/` and `eVe/domains/media/media_diagnostics.js`.
 
 Entry point families:
+
 - Media API shared helpers and media source normalization.
 - Shared media source normalization is the required route canonicalization contract for MTraX/WebGPU media playback before any browser media element receives a source, including timestamped recording names that arrive as bare, root-relative, or loopback Fastify API paths in Tauri.
 - Legacy Atome product-bootstrap renderers that still mount media atomes must also call this contract before assigning `src` attributes; they must not synthesize `/assets/shared` media paths for persisted recordings.
@@ -708,6 +737,7 @@ Status: Semi-public closed product API. Generic playback/recording belongs to At
 Visibility: Internal or implementation-specific.
 
 Examples verified by exports:
+
 - `createOfflineMutationQueue`
 - `createAiQuotaTracker`
 - `createPersistentMemoryStore`
@@ -730,6 +760,7 @@ Status: Internal unless a future registry promotes a specific helper.
 Visibility: Internal closed product implementation.
 
 Examples verified by exports:
+
 - MTraX project runtimes such as `createProjectAutomationSessionRuntime`, `createProjectPlaybackTimelineRuntime`, `createProjectAutomationPatchRuntime`, `createProjectLocalDragRuntime`, `createProjectPlaybackPatchRuntime`, `createProjectAtomeTimelineRuntime`, `createProjectPlaybackMirrorRuntime`, `createProjectAtomeDropRuntime`, `createProjectRecordTimingRuntime`, `createProjectTargetAutomationRuntime`, `createProjectRecordHostRuntime`, `createProjectAutomationBootstrapRuntime`, `createProjectPlaybackAutomationBundleRuntime`, `createMtrackCommitBridgeRuntime`, `createProjectRecordBridgeRuntime`, `createProjectRecordSessionRuntime`, `createProjectPlaybackTargetRuntime`.
 - MTraX shared helpers such as `waitMs`, `dedupeIdsBy`, `cloneData`, `stableStringify`, primitive coercion helpers, loop cell keys, timeline timing helpers, and media detection helpers.
 - Tool core implementation helpers such as SVG draw model functions, latch aliases, palette behavior, finder projection helpers, record action state helpers, and MTraX renderer adapters.
@@ -747,6 +778,7 @@ Status: Internal. Do not treat these as stable API contracts.
 Visibility: Internal or out of active API contract.
 
 Examples:
+
 - APIs in `atome/src/application/examples/`.
 - Test-only exports and probe utilities.
 - Vendored browser libraries under `atome/src/js/`.
@@ -760,5 +792,6 @@ Status: Not part of the maintained public/semi-public API inventory.
 ## Required Follow-Up Work
 
 The next execution tasks must refine this map by:
+
 - Making map consultation mandatory before future implementation.
 - Adding automated validation for map/source consistency where practical.

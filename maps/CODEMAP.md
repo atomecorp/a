@@ -3,11 +3,13 @@
 Status: Initial framework map after the Atome open / eVe closed boundary validation.
 
 Purpose:
+
 - Provide the mandatory first navigation layer before future implementation work.
 - Identify ownership, reusable modules, entry points, duplication risks, and areas that require targeted verification.
 - Avoid using `docs/` as a root map directory. Framework maps live under `maps/`; product and framework documentation remain in `eve/documentations/` and `atome/documentations/`.
 
 Mandatory Use:
+
 - Before adding or changing code, consult this file first, then perform targeted code verification.
 - Reuse, extend, or factorize existing modules before creating a new one.
 - Update this map when ownership, structure, reusable APIs, or duplication risks change.
@@ -15,6 +17,7 @@ Mandatory Use:
 ## Mandatory Pre-Implementation Gate
 
 No implementation, refactor, cleanup, API work, UI work, tool work, persistence work, security work, or runtime behavior change may start until the relevant maps have been consulted:
+
 - Start with this file to identify source ownership, existing modules, reusable boundaries, entry points, and known duplication or size risks.
 - Consult `maps/API_MAP.md` before touching APIs, runtime globals, server routes, MCP surfaces, tools, persistence contracts, or exported methods.
 - Consult `maps/DESIGN_MAP.md` before touching tokens, JavaScript-generated styles, visual factories, panels, tools, Matrix, Molecule/MTraX visuals, or assets.
@@ -27,18 +30,21 @@ Implementation may proceed only after the map check identifies the owning layer,
 ## Explicit Atome Open / eVe Closed Boundary
 
 The source tree is split by ownership, not by convenience:
+
 - `atome/`, `server/`, and `database/` are open framework or infrastructure surfaces only when the code remains product-neutral.
 - `eVe/` is the closed product layer for UI, product tools, workflows, branding, product stores, Molecule/MTraX behavior, and private composition.
 - `tests/` may cross both layers only to validate contracts, integration, and regression behavior.
 - `temp/` is the only approved location for temporary diagnostics, probes, and generated transient outputs.
 
 Dependency rule:
+
 - Open Atome code may not import closed eVe UI, product workflows, private tools, branding, or product stores.
 - When open Atome code needs a closed product capability, the capability must be injected, registered, or exposed through an explicit runtime boundary documented in `maps/API_MAP.md` and `maps/ARCHITECTURE_MAP.md`.
 - eVe may consume Atome open contracts, but it must not duplicate Atome security, sync, server, database, audio, communication, AI, MCP, or cross-platform framework services.
 - Product-specific code must stay in `eVe/` unless it is deliberately promoted to Atome through an open contract, tests, and map updates.
 
 Placement rule:
+
 - Framework APIs, reusable runtime contracts, security, sync, server, database, audio, voice orchestration, and MCP primitives belong to Atome/open infrastructure.
 - Product UI, panel chrome, tool composition, Finder-facing workflows, Matrix, ribbon, flower, closed voice surfaces, product persistence adapters, and Molecule/MTraX workflows belong to eVe.
 - Existing bootstrap touchpoints from Atome into eVe are boundary debt and must be verified before structural changes rather than normalized as generic dependency permission.
@@ -50,6 +56,7 @@ Path: `atome/`
 Role: Open framework, reusable runtime, cross-platform infrastructure, security, server-facing contracts, Squirrel APIs, AI/voice contracts, and generic assets.
 
 Main responsibilities:
+
 - Core Squirrel framework and public API surface.
 - Cross-platform runtime bootstrap for browser, Tauri, iOS, AUv3, and FreeBSD targets.
 - Shared security and synchronization primitives that must remain product-neutral.
@@ -57,11 +64,13 @@ Main responsibilities:
 - AI, voice, mail, contacts, calendar, bank, and MCP-facing contracts when they are product-neutral.
 
 Should be extended by:
+
 - Framework-level APIs and runtime contracts.
 - Open security, sync, server, and cross-platform modules.
 - Generic components that are not eVe product UI.
 
 Should not contain:
+
 - Closed eVe product UI.
 - eVe workflows, branding, private tool composition, or product-specific panels.
 - Product-only MTraX/Molecule UI internals unless promoted through an explicit open contract.
@@ -75,6 +84,7 @@ Path: `eve/`
 Role: Closed product layer containing eVe UI, product tools, workflows, composition, branding, persistence adapters, and product-specific media/Molecule/MTraX runtime.
 
 Main responsibilities:
+
 - eVe application bootstrap and product composition.
 - Intuition UI, panels, tools, menu, ribbon, flower, matrix, and product interaction runtime.
 - Closed media domains and MTraX/Molecule product workflows.
@@ -82,10 +92,12 @@ Main responsibilities:
 - Product i18n and design systems.
 
 Should be extended by:
+
 - eVe UI, panels, product tools, product workflows, branding, and closed runtime bridges.
 - Product-specific media editing, MTraX/Molecule panels, and private persistence flows.
 
 Should not contain:
+
 - Open Atome framework primitives that must be reused outside the eVe product.
 - Generic security or cross-platform server contracts that belong in Atome.
 
@@ -98,10 +110,12 @@ Path: `tests/`, plus colocated `*.test.mjs` files under `atome/` and `eve/`.
 Role: Validation for framework, eVe runtime, probes, server, UI scenarios, media, security, and governance.
 
 Fixtures:
+
 - `tests/fixtures/media/` contains Git-tracked media fixtures used by media, Molecule, and MTraX probes.
 - Runtime probes should prefer `ATOME_MEDIA_TEST_DIR` when supplied and fall back to `tests/fixtures/media/`.
 
 Main entry points:
+
 - `npm run check:syntax`
 - `npm run check:no-fallbacks`
 - `npm run check:palette-ssot`
@@ -122,6 +136,7 @@ Path: `temp/`
 Role: Only approved location for temporary probes, debug scripts, reports, generated test outputs, and transient diagnostics.
 
 Rules:
+
 - Do not create temporary files in source, root, tool, or documentation directories.
 - Remove temporary probes when no longer needed.
 
@@ -138,6 +153,7 @@ Owner: Atome open layer.
 Purpose: Existing Atome-specific documentation, API notes, audio documentation, server setup, sync protocol, security architecture, and historical troubleshooting notes.
 
 Main files:
+
 - `atome/documentations/AI.md`
 - `atome/documentations/AUv3_API_Reference.md`
 - `atome/documentations/CRUD_apis.md`
@@ -150,9 +166,11 @@ Main files:
 Reusable logic exposed: No runtime logic. Use as source material only after validating against code.
 
 Should be extended by:
+
 - Atome-specific user or developer documentation.
 
 Should not be duplicated by:
+
 - Framework maps. Cross-layer maps belong in `maps/`.
 
 Status: Verified.
@@ -166,28 +184,34 @@ Owner: Atome open layer.
 Purpose: Product-neutral security, cloud sync, server verification, trusted key metadata, and offline sync queue primitives.
 
 Main files:
+
 - `atome/security/cloudSync.js`
 - `atome/security/serverVerification.js`
 - `atome/security/syncQueue.js`
 - `atome/security/trusted_keys.js`
 
 Reusable APIs:
+
 - Trusted server lookup and fingerprint matching.
 - Server verification status and cache control.
 - Sync queue action lifecycle and retry processing.
 - Cloud sync status and conflict resolution entry points.
 
 Primary dependencies:
+
 - `atome/src/squirrel/apis/serverUrls.js` for server URL resolution in cloud sync.
 - Browser storage and fetch-like runtime services. Status: To verify before mutation.
 
 Should be extended by:
+
 - Open security checks, trusted server policy, sync queue behavior, and framework-level verification.
 
 Should not be duplicated by:
+
 - eVe product security surfaces. Product flows should call or wrap explicit Atome security contracts, not reimplement trust checks.
 
 Known risks:
+
 - `syncQueue.js` is oversized and should be reduced before feature growth.
 - Security phase must audit secrets, token storage, bridge permissions, and command injection surfaces.
 
@@ -202,17 +226,21 @@ Owner: Atome open layer.
 Purpose: Shared product-neutral utility contracts.
 
 Main files:
+
 - `atome/shared/logging.js`
 - `atome/shared/recipient_access.js`
 
 Reusable APIs:
+
 - Structured log envelope building, coercion, validation, and serialization.
 - Recipient access classification and summary helpers.
 
 Should be extended by:
+
 - Generic framework helpers with stable ownership and reuse beyond eVe.
 
 Should not contain:
+
 - eVe-specific i18n, UI, tool, or workflow helpers.
 
 Status: Verified.
@@ -226,6 +254,7 @@ Owner: Atome open layer with product bootstrap touchpoints.
 Purpose: Web entrypoint, static runtime assets, framework bootstrap, bundled third-party browser libraries, and WASM assets.
 
 Main files:
+
 - `atome/src/index.html`
 - `atome/src/application/index.js`
 - `atome/src/squirrel/spark.js`
@@ -235,6 +264,7 @@ Main files:
 - `atome/src/version.json`
 
 Primary dependencies:
+
 - `atome/src/js/` for bundled browser libraries.
 - `atome/src/wasm/` for audio WASM artifacts.
 - eVe bootstrap/version product references still exist in `atome/src/application/index.js` and `atome/src/squirrel/kickstart.js`.
@@ -242,12 +272,15 @@ Primary dependencies:
 - Legacy application example menu files under `atome/src/application/examples/`, `atome/src/application/vie/`, `atome/src/application/lyrix/`, and `atome/src/application/jeezs/` must not mutate `window.new_menu_v2` content or theme. The eVe Intuition menu is owned by `eVe/intuition/`; app-specific menu replacement requires an explicit product runtime boundary.
 
 Should be extended by:
+
 - Framework bootstrap and open runtime composition.
 
 Should not be extended by:
+
 - Closed product UI or product-only tool workflows.
 
 Known risks:
+
 - Product bootstrap references need targeted verification during architecture map work.
 - The legacy examples user renderer is above the normal file-size threshold and remains critical boundary debt; media behavior changes there must stay narrowly scoped and validated against the shared media route contract.
 - `atome/src/js/` contains vendored/minified assets and should not be edited manually unless regenerating assets through the owning build process.
@@ -263,6 +296,7 @@ Owner: Atome open layer.
 Purpose: Public audio/video runtime contracts, Kira command normalization, play/record core, backend resolution, AV contracts, playback and recording API facades.
 
 Main files:
+
 - `audio.facade.js`
 - `audio_playback_api.js`
 - `audio_recording_api.js`
@@ -275,6 +309,7 @@ Main files:
 - `stt_api.js`
 
 Reusable APIs:
+
 - `getPlayRecordCore()`
 - `PLAY_RECORD_API_CONTRACT`
 - Kira payload normalization and command invocation helpers.
@@ -282,17 +317,21 @@ Reusable APIs:
 - Audio playback and recording API facades.
 
 Tests:
+
 - `play_record_core.test.mjs`
 - `runtime_audio_backend.strict_native.test.mjs`
 - `av_api_boundaries.test.mjs`
 
 Should be extended by:
+
 - Open audio playback, recording, STT, and backend boundary work.
 
 Should not be duplicated by:
+
 - eVe media domains or MTraX runtime. Product code should depend on these contracts where possible.
 
 Known risks:
+
 - `play_record_core.js` is above the normal file-size threshold and must be reduced when touched.
 - `av_api_boundaries.test.mjs` still has eVe integration context and belongs to later AV boundary cleanup.
 
@@ -307,6 +346,7 @@ Owner: Atome open layer.
 Purpose: Core Squirrel APIs and unified ADOLE API modules.
 
 Main files:
+
 - `atome/src/squirrel/apis.js`
 - `apis/essentials.js`
 - `apis/utils.js`
@@ -324,6 +364,7 @@ Main files:
 - `apis/unified/text_dom.js`
 
 Reusable APIs:
+
 - Essential wait/runtime helpers.
 - Platform and server URL utilities.
 - ADOLE auth, session, projects, storage, sharing, activities, atomes, and runtime modules.
@@ -331,9 +372,11 @@ Reusable APIs:
 - Realtime dedupe and text DOM contracts.
 
 Should be extended by:
+
 - Open Squirrel APIs and product-neutral backend contracts.
 
 Should not be duplicated by:
+
 - eVe product APIs. eVe should call open Squirrel APIs or create closed adapters only when product-specific behavior is required.
 
 Status: Verified.
@@ -347,20 +390,24 @@ Owner: Atome open layer.
 Purpose: Atome object integration and MCP-facing platform, communication, security, and runtime bridge surfaces.
 
 Main files:
+
 - `atome.js`
 - `mcp.js`
 - `runtime_tool_resolution.js`
 
 Tests:
+
 - `mcp.communication_surface.test.mjs`
 - `mcp.platform_surface.test.mjs`
 - `mcp.runtime_bridge.test.mjs`
 - `mcp.security_surface.test.mjs`
 
 Should be extended by:
+
 - MCP-compatible Atome public contracts.
 
 Should not be duplicated by:
+
 - eVe hidden tool bridges or direct runtime mutations.
 
 Status: Verified.
@@ -374,6 +421,7 @@ Owner: Atome open layer.
 Purpose: AI gateway, trace policy, provider/model catalog, memory, quota, proactive scheduling, offline mutation queue, and runtime profile loading.
 
 Main files:
+
 - `agent_gateway.js`
 - `default_tools.js`
 - `model_catalog_cache.js`
@@ -389,6 +437,7 @@ Main files:
 - `trace_store.js`
 
 Reusable APIs:
+
 - `AgentGateway`
 - Tool status, policy, and risk constants.
 - Model catalog cache and refresh contracts.
@@ -397,12 +446,15 @@ Reusable APIs:
 - Offline mutation queue.
 
 Should be extended by:
+
 - Product-neutral AI/MCP contracts and deterministic AI execution policies.
 
 Should not be duplicated by:
+
 - eVe product AI tools. eVe tools should integrate through explicit tool or gateway contracts.
 
 Known risks:
+
 - `agent_gateway.js` is above the hard threshold and must be reduced before feature growth.
 
 Status: Verified.
@@ -416,20 +468,24 @@ Owner: Atome open layer.
 Purpose: Product-neutral service/bootstrap/contracts for communication and account-adjacent domains.
 
 Main files:
+
 - `mail/bootstrap.js`, `mail/service.js`, `mail/connector_contract.js`, `mail/icloud_connector.js`, `mail/node_protocol_clients.js`
 - `contacts/bootstrap.js`, `contacts/service.js`, `contacts/connector_contract.js`, `contacts/icloud_connector.js`, `contacts/local_source.js`, `contacts/macos_source.js`
 - `calendar/bootstrap.js`, `calendar/service.js`, `calendar/calendar_api_source.js`, `calendar/node_protocol_clients.js`
 - `bank/bootstrap.js`, `bank/service.js`, `bank/connector_contract.js`, `bank/local_index.js`
 
 Reusable APIs:
+
 - Bootstrap installers for runtime registration.
 - Service contracts and connector contracts.
 - Local, iCloud, macOS, and protocol client adapters.
 
 Should be extended by:
+
 - Open domain contracts and service logic.
 
 Should not be duplicated by:
+
 - eVe UI panels, tools, or voice routing. Product code should route through these services.
 
 Status: Verified.
@@ -443,6 +499,7 @@ Owner: Atome open layer.
 Purpose: Generic Squirrel component builders and product-neutral component contracts.
 
 Main files:
+
 - `button_builder.js`
 - `editor_builder.js`
 - `input_builder.js`
@@ -454,17 +511,21 @@ Main files:
 - `intuition_builder/layer_contract.js`
 
 Reusable APIs:
+
 - Component builders for common Squirrel UI structures.
 - Canonical Squirrel system control builders now include Button, Slider, Input, and Console via the spark bootstrap registry.
 - Minimal Intuition builder and layer contract isolated from eVe closed UI.
 
 Should be extended by:
+
 - Product-neutral component builders.
 
 Should not be duplicated by:
+
 - eVe product UI components when the generic builder can be reused.
 
 Known risks:
+
 - Some builder implementations may still use DOM patterns that need later WebGPU/Squirrel policy review.
 
 Status: Verified for placement, To verify for rendering policy compliance.
@@ -478,6 +539,7 @@ Owner: Atome open layer for semantic contracts and voice orchestration.
 Purpose: Voice service, semantic request contracts, AI planner, orchestrator, STT normalization, tool routing, session runtime, identity resolution, working memory, telemetry, and runtime bridges.
 
 Main files:
+
 - `semantic_contract.js`
 - `service.js`
 - `orchestrator.js`
@@ -491,18 +553,22 @@ Main files:
 - `panel.js`
 
 Reusable APIs:
+
 - Structured mail, contacts, calendar, and Atome semantic requests.
 - Structured result contracts.
 - Voice orchestration and tool routing.
 - STT normalization and VAD helpers.
 
 Should be extended by:
+
 - Open semantic and voice contracts.
 
 Should not contain:
+
 - Closed eVe product panels. `eve/voice/dilas_panel.js` owns the moved closed Dilas panel.
 
 Known risks:
+
 - `home_surface.js` and `tool_router.js` need line-count review before feature growth.
 - UI-related voice modules need targeted ownership verification during API and architecture map work.
 
@@ -519,6 +585,7 @@ Owner: eVe closed layer.
 Purpose: Product entrypoint, closed bootstrap, concepts, defaults, and versioning.
 
 Main files:
+
 - `eve/eVe.js`
 - `eve/README.md`
 - `eve/version.txt`
@@ -526,9 +593,11 @@ Main files:
 - `eve/default_data/default_project.js`
 
 Should be extended by:
+
 - Product composition and closed bootstrapping.
 
 Should not be duplicated by:
+
 - Atome open framework bootstrap.
 
 Status: Verified.
@@ -542,6 +611,7 @@ Owner: eVe closed layer.
 Purpose: Product event commits, timelines, stores, persistence adapters, media engine, project security, and platform-specific storage backends.
 
 Main files:
+
 - `atome_commit.js`
 - `atome_events.js`
 - `atome_timeline.js`
@@ -556,18 +626,22 @@ Main files:
 - `media_engine/*`
 
 Reusable APIs:
+
 - eVe commit and event runtime.
 - Event, media, and project store APIs with memory adapters.
 - Platform-specific storage backends.
 - Molecule engine, command catalog, API, native audio, and WebGPU renderer.
 
 Should be extended by:
+
 - Closed product persistence and media engine workflows.
 
 Should not be duplicated by:
+
 - New product stores outside `eve/core/*_store/`.
 
 Known risks:
+
 - Molecule engine files include large cohesive runtimes and must be reduced when touched.
 - Store adapters need API map coverage before new storage features.
 
@@ -582,12 +656,14 @@ Owner: eVe closed layer.
 Purpose: Product-specific domain logic for Atome genesis, media, user profile, and MTraX/Molecule workflows.
 
 Main areas:
+
 - `eve/domains/atome/`
 - `eve/domains/media/`
 - `eve/domains/mtrax/`
 - `eve/domains/user/`
 
 Reusable APIs:
+
 - Media API facades, persistence service, diagnostics, media source and identifier helpers.
 - Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff and Tauri-local canonicalization away from loopback Fastify media URLs.
 - Recorded video atome creation must carry the recording owner into `resolveMediaUrl` and persist owner/media-user particles so the first load uses the user-scoped recordings route.
@@ -597,13 +673,16 @@ Reusable APIs:
 - User profile API.
 
 Should be extended by:
+
 - Product-specific media and MTraX features.
 
 Should not be duplicated by:
+
 - Intuition tools when a domain runtime already owns the behavior.
 - Atome open APIs unless the behavior is product-neutral and explicitly promoted.
 
 Known risks:
+
 - `eve/domains/media/asset_box.js` is critically oversized and must be split before feature growth.
 - MTraX still has legacy aliases and naming (`mtrack`, `mtrax`, `hmtracks`) pending Molecule stabilization and rename phase.
 
@@ -618,6 +697,7 @@ Owner: eVe closed layer.
 Purpose: Product UI shell, tools, panels, matrix, menu, ribbon, flower menu, projection, runtime, contracts, and shared closed UI helpers.
 
 Main areas:
+
 - `eve/intuition/eVeIntuition.js`
 - `eve/intuition/bootstrap.js`
 - `eve/intuition/panel_definitions.js`
@@ -632,6 +712,7 @@ Main areas:
 - `eve/intuition/shared/`
 
 Reusable APIs:
+
 - Command bus and tool gateway.
 - Tool registry and interaction runtime.
 - `PANEL_SURFACE_DEFINITIONS` as the single source of truth for panel ids, module keys, open/close function names, TTL policy, and pointer-toggle behavior.
@@ -642,13 +723,16 @@ Reusable APIs:
 - Tool definition SSOT and tool instances.
 
 Should be extended by:
+
 - Closed product tools, panels, and interaction flows.
 
 Should not be duplicated by:
+
 - New unmanaged UI systems.
 - Direct DOM product tools when an Intuition runtime API already exists.
 
 Known risks:
+
 - Several UI/tool runtime files exceed size thresholds and require reduction when touched.
 - Direct DOM helpers exist in this layer; compliance with the WebGPU/Squirrel rendering policy needs targeted review before broad UI rewrites.
 
@@ -663,6 +747,7 @@ Owner: eVe closed layer.
 Purpose: Product design tokens, panel chrome, dialog runtime, presets, i18n bindings, messages, and system UI tokens.
 
 Main files:
+
 - `eve/elements/design.js`
 - `eve/elements/eVe_look.js`
 - `eve/elements/design/panel_chrome.js`
@@ -674,20 +759,24 @@ Main files:
 - `eve/i18n/languages.js`
 
 Reusable APIs:
+
 - `eveT`, `eveTList`, locale helpers.
 - Panel chrome and overflow indicator contracts.
 - Dialog bounds/fullscreen runtime.
 - Preset and token APIs.
 
 Should be extended by:
+
 - Product-visible text through i18n keys only.
 - Product design tokens and panel chrome behavior.
 
 Should not be duplicated by:
+
 - Hardcoded visible labels in tools or panels.
 - New local styling systems outside the existing design token structure.
 
 Known risks:
+
 - `design.js`, `eVe_look.js`, and `languages.js` are critically oversized and must be reduced when touched.
 
 Status: Verified.
@@ -701,12 +790,15 @@ Owner: eVe closed layer.
 Purpose: Closed product voice UI modules moved out of Atome.
 
 Main files:
+
 - `eve/voice/dilas_panel.js`
 
 Should be extended by:
+
 - Closed eVe voice panels and product-facing voice UI.
 
 Should not be duplicated by:
+
 - Atome open voice contracts.
 
 Status: Verified.
@@ -720,6 +812,7 @@ Owner: eVe closed layer.
 Purpose: Product documentation, persistence contracts, security/sharing notes, realtime sync architecture, runtime AI/MCP entrypoints, and product manual validation checklists.
 
 Main files:
+
 - `runtime_ai_mcp_entrypoints.md`
 - `atome_persistence_contract.md`
 - `realtime_sync_architecture.md`
@@ -731,6 +824,7 @@ Main files:
 Reusable logic exposed: No runtime logic. Use as source material only after validating against code.
 
 Should not be duplicated by:
+
 - Cross-layer framework maps under `maps/`.
 
 Status: Verified.
@@ -746,6 +840,7 @@ Owner: Open server infrastructure unless product-specific ownership is later nar
 Purpose: Fastify server, authentication, realtime state, routes, mail routes, notifications, sharing, file storage, sync watcher, shell, and WebSocket send/state APIs.
 
 Main files:
+
 - `server/server.js`
 - `server/auth.js`
 - `server/atomeRealtime.js`
@@ -760,9 +855,11 @@ Main files:
 - `server/userHome.js`
 
 Should be extended by:
+
 - Server-side source-of-truth behavior, websocket communication, auth, sharing, sync, and file APIs.
 
 Should not be duplicated by:
+
 - Browser-side REST/polling fallbacks or parallel communication systems.
 
 Status: Verified for file ownership, To verify for open/closed boundary and API map.
@@ -776,18 +873,22 @@ Owner: Cross-platform runtime layer.
 Purpose: Tauri desktop, iOS/AUv3, web audio WASM, and AtomeOS platform assets.
 
 Main areas:
+
 - `platforms/desktop-tauri/`
 - `platforms/ios/atome-auv3/`
 - `platforms/web/audio-wasm/`
 - `platforms/atomeOS/`
 
 Should be extended by:
+
 - Platform-specific native runtime boundaries, not product UI.
 
 Should not be duplicated by:
+
 - Browser-side filesystem or audio shortcuts that bypass the native boundary.
 
 Known risks:
+
 - AV phase has explicit pending work around Rust bridge extraction, CPAL callback disk writes, callback allocations, Swift debug paths, and legacy recorder FFI.
 
 Status: Verified.
@@ -801,6 +902,7 @@ Owner: Development and validation tooling.
 Purpose: Build scripts, setup workflows, syntax/fallback guardrails, Tauri boundary checks, Molecule guardrails, Fastify runner, static server, publishing scripts, and live smoke/probe suites.
 
 Main files:
+
 - `scripts/check_no_fallbacks.mjs`
 - `scripts/check_tauri_fs_boundary.mjs`
 - `scripts/check_molecule_guardrails.mjs`
@@ -811,9 +913,11 @@ Main files:
 - `scripts/rollup.config.npm.js`
 
 Should be extended by:
+
 - Persistent validation and build tooling.
 
 Should not contain:
+
 - Temporary probes. Use `temp/` for disposable diagnostics.
 
 Status: Verified.
@@ -823,12 +927,14 @@ Status: Verified.
 ### New API
 
 Start with:
+
 - `atome/src/squirrel/apis/` for open framework APIs.
 - `atome/src/squirrel/atome/mcp.js` for MCP-facing Atome surfaces.
 - `eve/domains/*/api/` for closed product domain APIs.
 - `eve/intuition/runtime/` for closed UI/tool runtime APIs.
 
 Do not create:
+
 - Parallel API facades without checking existing domain API modules.
 - Hidden effectful paths bypassing command bus, policy, capability validation, audit, idempotency, or history.
 
@@ -837,6 +943,7 @@ Status: Initial rule, to be refined by `maps/API_MAP.md`.
 ### New Tool Or Panel
 
 Start with:
+
 - `eve/intuition/tools/core/tool_definition_ssot.js`
 - `eve/intuition/tools/core/tool_registry.js`
 - `eve/intuition/tools/core/tool_runtime.js`
@@ -845,6 +952,7 @@ Start with:
 - `eve/elements/design/panel_chrome.js`
 
 Do not create:
+
 - Unregistered tools.
 - New panel chrome systems.
 - User-visible strings outside `eve/i18n/`.
@@ -854,6 +962,7 @@ Status: Verified.
 ### New Media Or MTraX Feature
 
 Start with:
+
 - `eve/domains/media/api/`
 - `eve/domains/media/shared/`
 - `eve/domains/mtrax/`
@@ -861,6 +970,7 @@ Start with:
 - `atome/src/application/audio_runtime/` when the feature touches open audio contracts.
 
 Do not create:
+
 - Duplicate preview, media source, timeline, track, transport, or playback layers.
 - New native audio boundaries without checking Kira and PlayRecord contracts.
 
@@ -869,6 +979,7 @@ Status: Verified.
 ### New Voice / AI / MCP Feature
 
 Start with:
+
 - `atome/src/squirrel/ai/`
 - `atome/src/squirrel/voice/`
 - `atome/src/squirrel/atome/mcp.js`
@@ -876,6 +987,7 @@ Start with:
 - `eve/voice/` only for closed product UI.
 
 Do not create:
+
 - Direct runtime mutation from AI.
 - Voice actions outside semantic request/tool routing.
 - MCP shortcuts with hidden side effects.
@@ -885,12 +997,14 @@ Status: Verified.
 ### New Communication / Mail / Contacts / Calendar Feature
 
 Start with:
+
 - `atome/src/squirrel/mail/`
 - `atome/src/squirrel/contacts/`
 - `atome/src/squirrel/calendar/`
 - `server/mailRoutes.js` and WebSocket server modules when server behavior is involved.
 
 Do not create:
+
 - Product-level duplicate mail/contact/calendar state models before checking these services.
 - HTTP polling or REST fallback transport paths.
 
@@ -899,6 +1013,7 @@ Status: Verified.
 ### New Security Or Sharing Feature
 
 Start with:
+
 - `atome/security/`
 - `atome/src/squirrel/security/`
 - `server/auth.js`
@@ -907,6 +1022,7 @@ Start with:
 - `eve/documentations/Security_and_sharing.md` as source material, then verify in code.
 
 Do not create:
+
 - Silent permission bypasses.
 - Token storage outside the existing security/token surfaces without explicit architecture review.
 
@@ -915,6 +1031,7 @@ Status: Verified.
 ## Duplication And Cleanup Risks
 
 High priority risks:
+
 - Oversized files: `eve/domains/media/asset_box.js`, `eve/elements/design.js`, `eve/elements/eVe_look.js`, `eve/i18n/languages.js`, `atome/src/squirrel/ai/agent_gateway.js`, `atome/src/application/jeezs/index.js`, `atome/security/syncQueue.js`, `atome/src/application/audio_runtime/play_record_core.js`.
 - Legacy naming overlap: `mtrack`, `mtrax`, `hmtracks`, and `Molecule` remain mixed pending the Molecule rename phase.
 - Product bootstrap references still exist in Atome bootstrap paths and need architecture-map treatment.
@@ -922,6 +1039,7 @@ High priority risks:
 - Server ownership is likely open infrastructure, but exact product/open boundary needs explicit architecture-map verification.
 
 General risks:
+
 - Avoid adding logic to vendored/minified assets under `atome/src/js/`.
 - Avoid creating new temporary scripts outside `temp/`.
 - Avoid creating new maps under `docs/`; use `maps/`.
@@ -938,10 +1056,13 @@ General risks:
 ## Search Keywords
 
 Atome:
+
 - `squirrel`, `adole`, `mcp`, `agent_gateway`, `semantic_contract`, `voice`, `provider_client`, `play_record`, `kira`, `serverVerification`, `syncQueue`, `token_vault`.
 
 eVe:
+
 - `intuition`, `tool_registry`, `tool_gateway`, `panel_api`, `panel_chrome`, `molecule`, `mtrax`, `hmtracks`, `media_store`, `project_store`, `event_store`, `eveT`, `layer_contract`.
 
 Server/platform:
+
 - `Fastify`, `websocket`, `sharing`, `auth`, `wsSend`, `Tauri`, `Axum`, `AUv3`, `WebGPU`, `Kira`, `Symphonia`.
