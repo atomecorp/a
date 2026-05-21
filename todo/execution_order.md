@@ -238,7 +238,7 @@ Rapports d'avancement Phase 2:
 
 Statut:
 
-- [ ] Non commencee
+- [x] Terminee
 
 Depend de:
 
@@ -246,7 +246,7 @@ Depend de:
 
 Sources principales:
 
-- todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md
+- done/planning_audit/framework_security_audit_and_vulnerability_remediation.md
 - todo/cleanup_architecture/eve_atome_master_cleanup_plan.md
 - todo/communication_social/user_auth.md
 - todo/communication_social/apple_mail_security.md
@@ -277,7 +277,7 @@ Taches:
 - [x] Corriger toutes les failles critiques et hautes avant de poursuivre.
 - [x] Documenter clairement les failles restantes avec impact, proprietaire, plan de remediation, et justification si elles ne sont pas corrigees immediatement.
 - [x] Produire des tests et verifications de securite cibles apres chaque correction sensible.
-- [ ] Produire un rapport d'audit et de resolution des failles avec avancement global avant cloture de phase.
+- [x] Produire un rapport d'audit et de resolution des failles avec avancement global avant cloture de phase.
 
 Rapports d'avancement Phase 3:
 
@@ -289,6 +289,7 @@ Rapports d'avancement Phase 3:
 - Critical/high remediation completion: hardened the remaining Phase 3 blockers by adding canonical WebSocket `api-request` schema gating, Tauri local auth attempt limits, server-side rotating refresh sessions, and durable confirmation/audit/idempotency metadata for effectful voice/AI connector mutations. Updated maps for `server/ws_api_schema.js`. Validations passed: targeted `node --check` runs, `node tests/server/ws_api_schema.test.mjs`, `node tests/server/auth_refresh_sessions.test.mjs`, voice/router/orchestrator/agent/mail tests, `npm run check:syntax`, `cargo check` in `platforms/desktop-tauri`, `git diff --check`, and targeted `rg` security checks. Result: critical/high security remediation task complete; remaining Phase 3 work is documentation of medium/residual risks and final audit validation. Progress 49/118, 41.53%.
 - Residual medium-risk documentation: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with explicit owner, impact, current mitigation, priority, remediation plan, and immediate-deferral justification for SEC-FIND-007, SEC-FIND-008, and SEC-FIND-017. Validation passed by targeted rg checks for residual finding coverage, required documentation fields, source checklist status, and global checkbox recount. Result: residual risk documentation task complete; remaining Phase 3 work is targeted security validation and final audit report. Progress 50/118, 42.37%.
 - Targeted security validation: added/tightened tests for refresh responses without JSON bearer tokens, sync queue password non-persistence, isolated voice router storage, orchestrator environment propagation, and runtime mail preference storage isolation. Validations passed: WebSocket schema, refresh sessions, sync queue credentials, AI gateway capability and toolchain policy, MCP security surface, voice router mail/offline queue, voice orchestrator, mail service, media auth playback, token vault, auth access Vitest, targeted `node --check`, `npm run check:syntax`, `cargo check` in `platforms/desktop-tauri`, `git diff --check`, and targeted `rg` checks. Result: targeted security validation task complete; SEC-FIND-017 diagnostic-redaction candidates remain explicitly carried to the final Phase 3 audit report. Progress 51/118, 43.22%.
+- Final Phase 3 audit report: updated done/planning_audit/framework_security_audit_and_vulnerability_remediation.md with the final security audit and remediation report covering scope, all resolved critical/high findings, residual medium risks SEC-FIND-007, SEC-FIND-008, and SEC-FIND-017, validation summary, and closure decision, then moved the completed source todo file to done/planning_audit. Validation passed by targeted rg checks for final report sections, residual finding coverage, source checklist status, global checkbox recount, and git diff whitespace check. Result: Phase 3 complete; dependent phases may proceed with residual security debt explicitly tracked. Progress 53/118, 44.92%.
 
 ### Phase 4 - Finalisation Molecule / MTraX
 
