@@ -506,6 +506,7 @@ Main files:
 - `matrix_builder.js`
 - `menu_builder.js`
 - `slider_builder.js`
+- `tool_slider_builder.js`
 - `table_builder.js`
 - `intuition_builder/index.js`
 - `intuition_builder/layer_contract.js`
@@ -513,7 +514,7 @@ Main files:
 Reusable APIs:
 
 - Component builders for common Squirrel UI structures.
-- Canonical Squirrel system control builders now include Button, Slider, Input, and Console via the spark bootstrap registry.
+- Canonical Squirrel system control builders now include Button, Slider, ToolSlider, Input, and Console via the spark bootstrap registry.
 - Minimal Intuition builder and layer contract isolated from eVe closed UI.
 
 Should be extended by:
@@ -522,7 +523,7 @@ Should be extended by:
 
 Should not be duplicated by:
 
-- eVe product UI components when the generic builder can be reused.
+- eVe product UI components when the generic builder or tool-slider runtime can be reused.
 
 Known risks:
 
@@ -719,7 +720,7 @@ Reusable APIs:
 - `buildPanelRuntimeConfigByToolId()` derives tool-runtime panel config from `PANEL_SURFACE_DEFINITIONS`; do not add a second panel config table in tool runtime code.
 - `panelCreatorV2` owns panel lifecycle registration, lazy loading, attach-to-layer, open/close, destroy policy, and panel bounds mode.
 - Panel API, panel layout policy, layer contract, layer ownership, selection, latched state.
-- Shared media types, DOM utilities, SVG runtime, color values, group state, slider content, tool drag.
+- Shared media types, DOM utilities, SVG runtime, color values, group state, slider content, slider DOM/data-role selectors, shared slider direct-drag control, and tool drag.
 - Tool definition SSOT and tool instances.
 
 Should be extended by:
@@ -735,6 +736,7 @@ Known risks:
 
 - Several UI/tool runtime files exceed size thresholds and require reduction when touched.
 - Direct DOM helpers exist in this layer; compliance with the WebGPU/Squirrel rendering policy needs targeted review before broad UI rewrites.
+- Slider styling still relies on toolbox/editor compatibility classes in visual token modules, even though behavioral readers now target the canonical slider data-role contract.
 
 Status: Verified.
 

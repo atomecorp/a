@@ -252,7 +252,7 @@ runShellCommand('echo Hello').then(result => {
 ## FAQ
 
 **Q: How do I access a component from the CDN?**
-A: Use `window.Squirrel.ComponentName`, e.g., `window.Squirrel.Slider`.
+A: Use `window.Squirrel.ComponentName`, e.g., `window.Squirrel.Slider` for the generic content slider and `window.Squirrel.ToolSlider` for the canonical product tool slider.
 
 **Q: Can I use Squirrel.js with frameworks like React or Vue?**
 A: Yes, but Squirrel.js is designed for direct DOM manipulation and may not fit the virtual DOM paradigm.

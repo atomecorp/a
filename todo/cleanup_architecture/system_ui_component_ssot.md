@@ -1,6 +1,6 @@
 # System UI Component SSOT Cleanup
 
-Status: pending
+Status: in progress
 Priority: high
 
 ## Audit summary
@@ -18,13 +18,14 @@ Priority: high
 - Parallel eVe factories: eVe/elements/design.js
 - Local projected tool button and slider implementation: eVe/intuition/projection/button.js
 - Local flower buttons: eVe/intuition/flower/menu.js
-- Local tool slider implementation: eVe/intuition/shared/slider_tool_content.js
+- Canonical tool slider owner: atome/src/squirrel/components/tool_slider_builder.js
+- Product wrapper for tool slider runtime: eVe/intuition/shared/slider_tool_content.js
 - Local toolbox slider implementation: eVe/intuition/tools/ui/tool_button_factory.js
 - Additional direct system button or input creation remains in multiple runtime modules, including calendar, detail, layer, color, finder, user, molecule, track, and shared runtime surfaces.
 
 ## Slider source of truth to preserve
 
-- The canonical product-tool slider behavior is currently implemented in eVe/intuition/shared/slider_tool_content.js and consumed by the ribbon/projection tool surfaces.
+- The canonical product-tool slider behavior is now owned by atome/src/squirrel/components/tool_slider_builder.js and consumed through the eVe shared wrapper/runtime surfaces.
 - This slider is not a plain always-visible range input.
 - The canonical behavior is: compact square tool at rest, expand on pointer down or touch down, manipulate while expanded, collapse again on pointer up or pointer cancel unless the interaction is explicitly pinned by the current model.
 - Any future Atome/Squirrel canonical slider promotion must preserve this exact tool behavior and geometry contract.
@@ -43,6 +44,7 @@ Make Atome/Squirrel the single source of truth for all system UI controls and re
 - Eliminate direct document.createElement usage for product system controls wherever a canonical control exists.
 - Centralize visual tokens, interaction semantics, focus behavior, accessibility attributes, and gesture behavior for system controls in one owning layer.
 - Add focused tests proving that canonical controls are reused across the main UI surfaces.
+- Keep the strict distinction explicit: `Slider` is the generic content slider builder, while `ToolSlider` is the canonical product-tool slider owner. Revisit unification only if both contracts can be preserved without reintroducing parallel sources of truth.
 
 ## Acceptance criteria
 
@@ -52,3 +54,4 @@ Make Atome/Squirrel the single source of truth for all system UI controls and re
 - Slider controls keep the current compact-square to expanded-slider behavior from the Intuition ribbon/projection runtime instead of regressing to a plain persistent range input.
 - Projection, flower, footer, ribbon, toolbox, panel, and dialog controls reuse the same canonical interaction and design contract.
 - No new product system UI control is introduced through ad-hoc DOM creation or a feature-local factory.
+- The shared product-tool slider runtime is owned in Atome/Squirrel, while eVe slider modules are reduced to composition, token injection, or compatibility re-exports only.

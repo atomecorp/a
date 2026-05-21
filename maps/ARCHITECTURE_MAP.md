@@ -138,6 +138,7 @@ Responsibilities:
 - Molecule/MTraX workflow, timeline, media editing, panel, preview, and product media runtime.
 - Closed product voice surfaces that consume Atome voice contracts.
 - Panel source-of-truth ownership: `eVe/intuition/panel_definitions.js` owns panel surface metadata and `PanelCreatorV2` owns lifecycle execution. Tool runtime and menu surfaces must consume those contracts instead of declaring independent panel routing tables.
+- Shared product-tool slider ownership now lives in the open Atome/Squirrel component layer at `atome/src/squirrel/components/tool_slider_builder.js`; eVe consumers must use that owner through the shared wrapper/re-export surfaces instead of keeping feature-local slider DOM or gesture logic.
 
 Dependency direction:
 
@@ -162,6 +163,7 @@ Must not be duplicated by:
 - New product stores outside the existing store families without a documented ownership reason.
 - Panel-local styling or tool behavior that bypasses the shared eVe visual and tool runtime contracts.
 - Application example files that replace the eVe `new_menu_v2` product menu content or theme directly.
+- Feature-local slider interaction readers keyed only to legacy toolbox/projection class names when the canonical shared slider data-role contract already exists.
 
 Status: Verified for major layer responsibilities through current maps and targeted source inspection.
 

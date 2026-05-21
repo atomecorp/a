@@ -826,6 +826,12 @@ export {
 
 // Alias pour compatibilité
 const Slider = createSlider;
+createSlider.controlKind = 'generic-content-slider';
+createSlider.isToolSlider = false;
+createSlider.canonicalToolOwner = 'ToolSlider';
+Slider.controlKind = createSlider.controlKind;
+Slider.isToolSlider = createSlider.isToolSlider;
+Slider.canonicalToolOwner = createSlider.canonicalToolOwner;
 export { Slider };
 
 // Export par défaut - fonction directe pour usage: Slider({...})

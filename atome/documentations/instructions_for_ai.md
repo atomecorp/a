@@ -109,7 +109,7 @@ window.addEventListener('squirrel:ready', () => {
 - **Q: How do I create a custom component?**
   - A: Use `Squirrel.define` and then `Squirrel.$`.
 - **Q: How do I access Squirrel.js components from the CDN?**
-  - A: Use `window.Squirrel.ComponentName` (e.g., `window.Squirrel.Slider`).
+  - A: Use `window.Squirrel.ComponentName` (e.g., `window.Squirrel.Slider` for generic content sliders and `window.Squirrel.ToolSlider` for canonical product tool sliders).
 
 ---
 

@@ -69,7 +69,7 @@ Boundary status: Open framework helpers. Keep product-neutral.
 
 Ownership: Atome open.
 
-Primary sources: `atome/src/squirrel/spark.js`, `atome/src/squirrel/components/button_builder.js`, `atome/src/squirrel/components/slider_builder.js`, `atome/src/squirrel/components/input_builder.js`, `atome/src/squirrel/components/console_builder.js`.
+Primary sources: `atome/src/squirrel/spark.js`, `atome/src/squirrel/components/button_builder.js`, `atome/src/squirrel/components/slider_builder.js`, `atome/src/squirrel/components/tool_slider_builder.js`, `atome/src/squirrel/components/input_builder.js`, `atome/src/squirrel/components/console_builder.js`.
 
 Exposure: runtime bootstrap through the Squirrel component registry installed by `spark.js`.
 
@@ -77,7 +77,7 @@ Verified responsibilities:
 
 - Load and register canonical Squirrel system controls.
 - Expose the canonical registry to runtime consumers through the Squirrel bootstrap globals.
-- Provide the current canonical Atome-owned control set for Button, Slider, Input, and Console.
+- Provide the current canonical Atome-owned control set for Button, Slider, ToolSlider, Input, and Console.
 
 Boundary status: Open framework component contract. eVe wrappers may compose these controls but should not redefine their core system-control contract in parallel.
 
@@ -203,11 +203,17 @@ Known constraints: `play_record_core.js` is above the normal size threshold and 
 
 Ownership: eVe closed.
 
-Primary sources: `eVe/intuition/tools/core/tool_registry.js`, `eVe/intuition/tools/core/tool_runtime.js`, `eVe/intuition/tools/core/tool_instances.js`, `eVe/intuition/tools/core/tool_definition_ssot.js`, `eVe/intuition/tools/core/tool_interaction.js`, `eVe/intuition/tools/index.js`.
+Primary sources: `eVe/intuition/tools/core/tool_registry.js`, `eVe/intuition/tools/core/tool_runtime.js`, `eVe/intuition/tools/core/tool_instances.js`, `eVe/intuition/tools/core/tool_definition_ssot.js`, `eVe/intuition/tools/core/tool_interaction.js`, `eVe/intuition/tools/index.js`, `atome/src/squirrel/components/tool_slider_builder.js`, `eVe/intuition/shared/slider_tool_content.js`, `eVe/intuition/shared/slider_tool_dom.js`, `eVe/intuition/shared/slider_direct_drag.js`, `eVe/intuition/projection/button.js`, `eVe/intuition/tools/ui/tool_button_factory.js`.
 
 Exposure: closed product runtime installed under `window.atome.tools`, plus tool registry/runtime module exports.
 
-Verified responsibilities: tool definition registration/update, tool invocation, action routing, tool instance creation, persistence flows, Finder/tool projection helpers, latch, selection propagation, and interaction routing.
+Verified responsibilities: tool definition registration/update, tool invocation, action routing, tool instance creation, persistence flows, Finder/tool projection helpers, latch, selection propagation, interaction routing, and consumption of the canonical Atome-owned product-tool slider runtime.
+
+Verified shared slider runtime responsibilities:
+
+- `atome/src/squirrel/components/tool_slider_builder.js` exports the canonical slider DOM/data-role selector contract, shared direct-drag controller, and expanding-square slider-tool runtime behavior.
+- `eVe/intuition/shared/slider_tool_content.js` is the product wrapper that injects ribbon text tokens into the Atome-owned tool-slider runtime.
+- `eVe/intuition/shared/slider_tool_dom.js` and `eVe/intuition/shared/slider_direct_drag.js` are compatibility re-export surfaces for existing eVe imports.
 
 Boundary status: Closed product API. Atome AI/MCP may invoke it only through explicit runtime tool resolution and capability checks.
 
@@ -291,7 +297,7 @@ Use before creating: selection state readers or writers for UI/tool flows.
 
 Status: To verify before mutation because selection is shared by product UI and runtime tools.
 
-#### Adole Browser API
+#### Public Adole Browser API Details
 
 Visibility: Public runtime API.
 
@@ -412,7 +418,7 @@ Use before creating: trusted server, cloud sync, sync queue, or verification beh
 
 Status: Public framework surface; security phase must audit credentials, storage, and bridge assumptions before expansion.
 
-#### Communication Service APIs
+#### Public Communication Service API Details
 
 Visibility: Public framework service APIs.
 
@@ -476,7 +482,7 @@ Do not duplicate in: eVe product tool modules. eVe capabilities must register th
 
 Status: Public orchestration surface; individual default tool names should be regenerated from `default_tools.js` before building a formal registry.
 
-#### Voice APIs
+#### Public Voice API Details
 
 Visibility: Public framework service APIs.
 
@@ -510,7 +516,7 @@ Use before creating: voice orchestration, semantic contracts, session memory, la
 
 Status: Public framework surface, with closed eVe panels injected only through product boundary modules.
 
-#### Audio and AV Runtime APIs
+#### Public Audio and AV Runtime API Details
 
 Visibility: Public framework runtime API.
 
@@ -583,7 +589,7 @@ Use only from: server bootstrap, route modules, tests, or explicitly documented 
 
 Status: Semi-public because these are module APIs, not browser/product APIs.
 
-#### eVe Tool Runtime APIs
+#### Semi-Public eVe Tool Runtime APIs
 
 Visibility: Semi-public closed product runtime APIs.
 
@@ -611,6 +617,12 @@ Entry points:
 - `window.registerUiAction`
 - `window.registerAtomeTool`
 - `window.registerToolHandler`
+- `CANONICAL_SLIDER_TOOL_SHELL_SELECTOR`
+- `CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR`
+- `CANONICAL_SLIDER_TOOL_INPUT_SELECTOR`
+- `CANONICAL_SLIDER_TOOL_VALUE_SELECTOR`
+- `CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR`
+- `mountIntuitionXSliderToolContent`
 
 Panel runtime contract:
 
@@ -666,7 +678,7 @@ Use only from: eVe product UI and closed panels/tools.
 
 Status: Semi-public product design API. Exact function names must be verified in `design.js` before use because the file is large and exports many helpers.
 
-#### eVe Store APIs
+#### Semi-Public eVe Store APIs
 
 Visibility: Semi-public closed product persistence APIs.
 

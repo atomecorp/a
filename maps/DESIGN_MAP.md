@@ -189,19 +189,24 @@ Design rule: z-index values should come from layer contracts or visual tokens, n
 
 Primary sources:
 
+- `atome/src/squirrel/components/tool_slider_builder.js`
 - `eVe/intuition/tools/visual/tool_visual_tokens.js`
 - `eVe/intuition/tools/ui/tool_button_factory.js`
 - `eVe/intuition/tools/core/tool_definition_ssot.js`
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/projection/button.js`
 - `eVe/intuition/projection/tool_strip.js`
+- `eVe/intuition/shared/slider_tool_dom.js`
+- `eVe/intuition/shared/slider_direct_drag.js`
 - `eVe/intuition/shared/slider_tool_content.js`
 
 Role:
 
 - Owns the current shared product tool surface contract for tool shape, dimensions, active/latched state colors, icon behavior, inline slider visuals, projections, and editor-related visual tokens.
 - Product tools should share this runtime instead of duplicating button CSS or DOM structure.
-- For sliders specifically, the current canonical product-tool behavior lives in `eVe/intuition/shared/slider_tool_content.js`: the control rests as a compact square tool, expands on pointer down or touch down, exposes the manipuable slider while expanded, and collapses again on pointer up or pointer cancel unless pinned by the interaction model.
+- For sliders specifically, the canonical product-tool behavior now lives in `atome/src/squirrel/components/tool_slider_builder.js`: the control rests as a compact square tool, expands on pointer down or touch down, exposes the manipulable slider while expanded, and collapses again on pointer up or pointer cancel unless pinned by the interaction model.
+- `atome/src/squirrel/components/tool_slider_builder.js` now owns both the canonical slider DOM/data-role contract and the shared direct-drag gesture semantics for the product-tool slider.
+- `eVe/intuition/shared/slider_tool_content.js`, `eVe/intuition/shared/slider_tool_dom.js`, and `eVe/intuition/shared/slider_direct_drag.js` are product wrappers and compatibility re-exports around the Atome owner.
 
 Design rule: a business capability has one visual tool identity across toolbox, projection, panel, Finder, and MCP-triggered contexts.
 
@@ -231,6 +236,7 @@ Current ownership note:
 
 - When identifying the real current tool design for product tools, prefer the Intuition ribbon/projection stack (`projection/button.js`, `shared/slider_tool_content.js`, `ribbon/tokens.js`, `ribbon/menu.js`) over legacy local button or input builders. Parallel feature-local DOM definitions should converge toward this stack and then toward the canonical Atome/Squirrel system-control layer where applicable.
 - For slider design specifically, the Intuition expanding-square slider pattern is the product source of truth that must be preserved during centralization; a plain always-open range input is not an equivalent replacement.
+- Runtime readers should now prefer the canonical slider data-role selectors exposed through the Atome-owned tool-slider runtime; legacy toolbox/projection slider classes remain compatibility or styling hooks only and must not regain behavioral ownership.
 
 ### Panel and Component Visuals
 
