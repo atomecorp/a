@@ -60,6 +60,21 @@ Verified entry points: `wait`, `current_platform`, `dataFetcher`, `render_svg`, 
 
 Boundary status: Open framework helpers. Keep product-neutral.
 
+### Squirrel Bootstrap and Component Registry API
+
+Ownership: Atome open.
+
+Primary sources: `atome/src/squirrel/spark.js`, `atome/src/squirrel/components/button_builder.js`, `atome/src/squirrel/components/slider_builder.js`, `atome/src/squirrel/components/input_builder.js`, `atome/src/squirrel/components/console_builder.js`.
+
+Exposure: runtime bootstrap through the Squirrel component registry installed by `spark.js`.
+
+Verified responsibilities:
+- Load and register canonical Squirrel system controls.
+- Expose the canonical registry to runtime consumers through the Squirrel bootstrap globals.
+- Provide the current canonical Atome-owned control set for Button, Slider, Input, and Console.
+
+Boundary status: Open framework component contract. eVe wrappers may compose these controls but should not redefine their core system-control contract in parallel.
+
 ### Adole Browser API
 
 Ownership: Atome open.
@@ -573,6 +588,11 @@ Entry points:
 - `window.registerUiAction`
 - `window.registerAtomeTool`
 - `window.registerToolHandler`
+
+Panel runtime contract:
+- `eVe/intuition/panel_definitions.js` owns `PANEL_SURFACE_DEFINITIONS` and exports `buildPanelRuntimeConfigByToolId()`.
+- `eVe/intuition/tools/core/tool_runtime.js` must derive panel open/close routing from that exported config rather than declaring a parallel `tool_id -> panel` table.
+- Runtime panel open/close calls continue through `eVe/intuition/runtime/panel_api.js`, which delegates to `panelCreatorV2` after product bootstrap registers the API.
 
 Owner: eVe closed.
 

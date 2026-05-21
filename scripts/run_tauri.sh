@@ -29,6 +29,46 @@ load_env_file "$PROJECT_ROOT/.env.local"
 
 echo "🖥️ Démarrage de Tauri..."
 
+stop_stale_tauri_dev_runtime() {
+    local patterns=(
+        "target/debug/squirrel"
+        "tauri dev"
+        "npm run tauri:dev"
+    )
+    local current_pid="$$"
+    local parent_pid="${PPID:-}"
+
+    for pattern in "${patterns[@]}"; do
+        local pids
+        pids="$(pgrep -f "$pattern" 2>/dev/null || true)"
+        if [[ -z "$pids" ]]; then
+            continue
+        fi
+
+        echo "INFO: Closing stale Tauri dev process for '$pattern': $pids"
+        while IFS= read -r pid; do
+            [[ -z "$pid" ]] && continue
+            [[ "$pid" == "$current_pid" ]] && continue
+            [[ -n "$parent_pid" && "$pid" == "$parent_pid" ]] && continue
+            kill "$pid" 2>/dev/null || true
+        done <<< "$pids"
+    done
+
+    sleep 1
+
+    local remaining
+    remaining="$(pgrep -f "target/debug/squirrel" 2>/dev/null || true)"
+    if [[ -n "$remaining" ]]; then
+        echo "WARN: Stale Tauri dev runtime did not exit after SIGTERM; forcing shutdown: $remaining"
+        while IFS= read -r pid; do
+            [[ -z "$pid" ]] && continue
+            [[ "$pid" == "$current_pid" ]] && continue
+            [[ -n "$parent_pid" && "$pid" == "$parent_pid" ]] && continue
+            kill -9 "$pid" 2>/dev/null || true
+        done <<< "$remaining"
+    fi
+}
+
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
 
@@ -87,6 +127,8 @@ else
     echo "✅ Dépendances déjà installées (utilisez --force pour forcer la mise à jour)"
     echo ""
 fi
+
+stop_stale_tauri_dev_runtime
 
 # Lancer Tauri
 npm run tauri:dev

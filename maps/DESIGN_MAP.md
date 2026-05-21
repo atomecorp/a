@@ -43,6 +43,7 @@ Role: Product-neutral assets, generic Squirrel component builders, framework CSS
 Allowed responsibilities:
 - Generic icons, logos, and reusable assets under `atome/src/assets/`.
 - Generic Squirrel component builders under `atome/src/squirrel/components/`.
+- Canonical open system-control builders for Button, Slider, Input, and Console when the control contract is product-neutral.
 - Framework-level CSS artifacts such as `atome/src/css/squirrel.css`.
 - Vendored library CSS such as `atome/src/js/event-calendar.css` and `atome/src/js/leaflet.min.css`.
 
@@ -144,6 +145,10 @@ Role:
 - Applies eVe CSS variables and base styles during module load.
 - Creates panel DOM and style objects through JavaScript, using `evePresets` and panel chrome helpers.
 
+Constraint:
+- This layer is a closed product composition layer, not the canonical owner of generic system tool controls. When Button, Slider, Input, Toggle, or similar controls become canonical in Atome/Squirrel, this layer should compose them instead of re-owning their contract.
+- `createEveInputBase()` now composes the canonical Atome/Squirrel `input_builder.js` control instead of instantiating a raw product-local input node directly.
+
 Boundary status: Closed product design API.
 
 ### Intuition Layers and Layout Runtime
@@ -169,10 +174,12 @@ Primary sources:
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/projection/button.js`
 - `eVe/intuition/projection/tool_strip.js`
+- `eVe/intuition/shared/slider_tool_content.js`
 
 Role:
-- Owns canonical tool shape, dimensions, active/latched state colors, icon behavior, inline input visuals, projections, and editor-related visual tokens.
+- Owns the current shared product tool surface contract for tool shape, dimensions, active/latched state colors, icon behavior, inline slider visuals, projections, and editor-related visual tokens.
 - Product tools should share this runtime instead of duplicating button CSS or DOM structure.
+- For sliders specifically, the current canonical product-tool behavior lives in `eVe/intuition/shared/slider_tool_content.js`: the control rests as a compact square tool, expands on pointer down or touch down, exposes the manipuable slider while expanded, and collapses again on pointer up or pointer cancel unless pinned by the interaction model.
 
 Design rule: a business capability has one visual tool identity across toolbox, projection, panel, Finder, and MCP-triggered contexts.
 
@@ -180,6 +187,7 @@ Design rule: a business capability has one visual tool identity across toolbox, 
 
 Primary sources:
 - `eVe/intuition/ribbon/tokens.js`
+- `eVe/intuition/ribbon/menu.js`
 - `eVe/intuition/menu/visual/toolbox_styles.js`
 - `eVe/intuition/menu/visual/toolbox_runtime_visual.js`
 - `eVe/intuition/flower/menu.js`
@@ -189,23 +197,33 @@ Primary sources:
 
 Role:
 - Ribbon tokens define handle icons, tool sizes, flower metrics, drag thresholds, and animation timing.
+- The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
 - Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
 
 Design rule: menu/ribbon/flower/Matrix changes must preserve shared tool visual semantics and layer ordering.
 
+Current ownership note:
+- When identifying the real current tool design for product tools, prefer the Intuition ribbon/projection stack (`projection/button.js`, `shared/slider_tool_content.js`, `ribbon/tokens.js`, `ribbon/menu.js`) over legacy local button or input builders. Parallel feature-local DOM definitions should converge toward this stack and then toward the canonical Atome/Squirrel system-control layer where applicable.
+- For slider design specifically, the Intuition expanding-square slider pattern is the product source of truth that must be preserved during centralization; a plain always-open range input is not an equivalent replacement.
+
 ### Panel and Component Visuals
 
 Primary sources:
+- `eVe/intuition/panel_definitions.js`
 - `eVe/intuition/panels/visual/panel_visual_tokens.js`
 - `eVe/intuition/panels/core/panel_creator.js`
 - `eVe/intuition/components/visual/component_visual_tokens.js`
 - `eVe/intuition/components/core/component_creator.js`
 
 Role:
-- Owns panel surfaces, panel layer style, component tokens, and reusable product component visuals.
+- `panel_definitions.js` owns the canonical panel surface identity and lifecycle metadata consumed by runtime and tool routing.
+- `panel_creator.js` owns panel lifecycle, layer attach, bounds mode, open/close, destroy policy, and shared panel visual application.
+- Panel visual tokens and component visual tokens own reusable product component visuals.
 
 Design rule: new panels should use the panel creator and shared panel chrome before adding panel-local styling.
+
+Menu ownership rule: application example files must not call `window.new_menu_v2.updateContent()` or `updateTheme()` to replace the product menu. Main menu visual and content ownership stays in the Intuition ribbon/menu stack and panel definitions.
 
 ### Atome Visual Objects
 
@@ -236,6 +254,7 @@ Primary sources:
 Role:
 - Owns MTraX panel styling, timeline layout, loop cells, preview styling, embedded footer visuals, and Molecule panel/tool composition.
 - Styles are injected or applied by JavaScript and rely on system/eVe CSS custom properties.
+- Preview/tracks separator sizing is owned by `eVe/domains/mtrax/preview/preview_layout_runtime.js`; bounds must be computed from the rendered MTraX stack, including the real tracks viewport, so WebView layout differences cannot collapse the separator resize range to the preview minimum.
 
 Design rule: MTraX/Molecule visuals are closed product workflow design unless promoted through a deliberate Atome media contract.
 

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { PANEL_SURFACE_DEFINITIONS } from '../../eve/application/intuition/panel_definitions.js';
+import { PANEL_SURFACE_DEFINITIONS } from '../../eVe/intuition/panel_definitions.js';
 
 const TARGET_PANEL_FILES = Object.freeze({
-    home: 'eve/application/intuition/tools/user.js',
-    finder: 'eve/application/intuition/tools/finder.js',
-    communicate: 'eve/application/intuition/tools/communication.js',
-    calendar: 'eve/application/intuition/tools/calendar.js'
+    home: 'eVe/intuition/tools/user.js',
+    finder: 'eVe/intuition/tools/finder.js',
+    communicate: 'eVe/intuition/tools/communication.js',
+    calendar: 'eVe/intuition/tools/calendar.js'
 });
 
 const TARGET_PANEL_KEYS = Object.freeze([
@@ -47,9 +47,9 @@ assertSourceCreatesCanonicalDialog('communicate');
 assertSourceCreatesCanonicalDialog('calendar');
 
 const mtrackDef = PANEL_SURFACE_DEFINITIONS.mtrack;
-const mtrackDialogRuntime = readFileSync('eve/application/domains/mtrax/ui/panel_dialog_runtime.js', 'utf8');
-const mtrackEmbedRuntime = readFileSync('eve/application/domains/mtrax/ui/panel_embed_bootstrap_runtime.js', 'utf8');
-const mtrackToolSource = readFileSync('eve/application/intuition/tools/mtrack.js', 'utf8');
+const mtrackDialogRuntime = readFileSync('eVe/domains/mtrax/ui/panel_dialog_runtime.js', 'utf8');
+const mtrackEmbedRuntime = readFileSync('eVe/domains/mtrax/ui/panel_embed_bootstrap_runtime.js', 'utf8');
+const mtrackToolSource = readFileSync('eVe/intuition/tools/mtrack.js', 'utf8');
 
 assert.equal(mtrackDef.custom, true, 'mtrack must remain a custom complex panel in the registry');
 assert.equal(mtrackDialogRuntime.includes('createEveDialog({'), true, 'mtrack dialog runtime must create the panel through createEveDialog');

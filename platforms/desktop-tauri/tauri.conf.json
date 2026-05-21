@@ -10,6 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "squirrel",
         "width": 800,
         "height": 600,

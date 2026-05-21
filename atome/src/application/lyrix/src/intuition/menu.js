@@ -1,8 +1,3 @@
-import Intuition from '../../../../squirrel/components/intuition_builder/index.js';
-
-
-
-
 function tools_test_touch() {
     puts('Tools test touch triggered');
 }
@@ -173,30 +168,3 @@ intuition_content = {
     fullscreen: { type: 'tool', touch: fullscreenMode, action: 'momentary' },
 
 };
-
-Intuition({
-    name: 'newMenu',
-    theme: {
-        // tool_bg: 'linear-gradient(180deg, #ff7000 0%, #994400 100%)',
-        option_bg: '#442200cc',
-        item_size: '39px',
-        anim_duration_ms: 200,
-        toolboxOffsetMain: "3px",
-        toolboxOffsetEdge: "3px",
-        support_gap: '35px',
-        satellite_bg: 'red',
-        // tool_active_bg: "yellow",
-        // tool_lock_bg: '#ff5555', 
-
-    },
-    content: intuition_content,
-    orientation: 'top_left_horizontal'
-});
-
-
-// touch_up: openSettingsPanel,
-//    toggleSettingsPanel('settings_button');
-
-
-
-// grab('toolbox').style.display = 'none';

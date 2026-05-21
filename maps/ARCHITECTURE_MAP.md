@@ -47,6 +47,7 @@ The boundary is architectural, not cosmetic:
 
 Allowed dependency direction:
 - eVe may depend on Atome open contracts.
+- Generic system UI controls such as Button, Slider, Input, and Console belong to Atome when the control contract is product-neutral; eVe may compose them for ribbon, projection, flower, footer, toolbox, and panel surfaces but must not keep a parallel control source of truth.
 - Atome must not depend on eVe closed implementation details.
 - Atome may reach eVe capabilities only through injection, registered tools, runtime globals installed by product bootstrap, or explicit boundary modules with documented ownership.
 - Cross-boundary calls must preserve command bus, policy checks, capability validation, audit logging, idempotency, and deterministic history semantics where the operation is effectful.
@@ -121,6 +122,7 @@ Responsibilities:
 - Product stores for events, projects, media, browser, Tauri, and iOS adapters.
 - Molecule/MTraX workflow, timeline, media editing, panel, preview, and product media runtime.
 - Closed product voice surfaces that consume Atome voice contracts.
+- Panel source-of-truth ownership: `eVe/intuition/panel_definitions.js` owns panel surface metadata and `PanelCreatorV2` owns lifecycle execution. Tool runtime and menu surfaces must consume those contracts instead of declaring independent panel routing tables.
 
 Dependency direction:
 - eVe may consume Atome open contracts.
@@ -141,6 +143,7 @@ Must not be duplicated by:
 - Atome open product-specific UI.
 - New product stores outside the existing store families without a documented ownership reason.
 - Panel-local styling or tool behavior that bypasses the shared eVe visual and tool runtime contracts.
+- Application example files that replace the eVe `new_menu_v2` product menu content or theme directly.
 
 Status: Verified for major layer responsibilities through current maps and targeted source inspection.
 

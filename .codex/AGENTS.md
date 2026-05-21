@@ -379,6 +379,14 @@ Direct DOM manipulation is forbidden unless explicitly authorized. Forbidden pat
 
 All UI elements MUST have unique ids, exist as canonical Atome objects or properties of existing Atomes, and remain fully traceable in the Atome structure. Anonymous UI elements and standalone unmanaged UI nodes are forbidden.
 
+All system UI controls, including buttons, sliders, inputs, toggles, selects, tool buttons, palette items, ribbon controls, footer controls, projected tool controls, and equivalent primitives, MUST depend on the canonical Atome/Squirrel component code and on the canonical Atome system design definitions. They MUST NOT define or preserve a parallel source of truth in eVe-local factories, feature-local DOM builders, ad-hoc document.createElement code, local presets, or surface-specific styling contracts.
+
+If a required system control does not yet exist in the canonical Atome/Squirrel registry, that control MUST be implemented or completed in Atome first and then consumed everywhere else. Recreating the same control in eVe panels, projections, ribbons, flowers, footers, palettes, dialogs, or tool-specific modules is forbidden.
+
+Button, Slider, Input, Toggle, Select, and equivalent system controls MUST each have one owning implementation surface and one owning visual contract. Local wrappers may compose, configure, or place a canonical control, but they MUST NOT redefine interaction semantics, rendering behavior, geometry rules, state ownership, or styling tokens.
+
+For product tool sliders, the canonical visual and interaction contract is the Intuition slider-tool pattern currently implemented around `eVe/intuition/shared/slider_tool_content.js` and consumed by the main ribbon/projection tool surfaces: a slider is first rendered as the same compact square tool surface as the other tools, expands on pointer down or touch down to reveal the manipulable slider content, and collapses back on pointer up or pointer cancel unless it is explicitly pinned by the interaction model. Any refactor, migration, or Atome/Squirrel promotion of slider controls MUST preserve this exact product-tool behavior instead of replacing it with a plain always-open range input.
+
 Product styling MUST NOT be maintained as a classic static CSS layer. Atome/eVe product design is JavaScript-driven: design tokens are JavaScript constants or JavaScript-installed CSS variables, presets are structured JavaScript definitions, DOM is created by JavaScript factories, and styles are applied through JavaScript object literals, structured style objects, or controlled style generators. Product HTML and product CSS must not become parallel static source-of-truth layers.
 
 Allowed CSS exceptions are framework shell CSS when product-neutral, vendored library CSS, generated distribution CSS, and JavaScript-generated style tags produced by an approved structured design module and documented in maps/DESIGN_MAP.md.

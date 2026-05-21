@@ -37,6 +37,9 @@ tests/*
 !tests/probes/tauri_recorded_video_mtrack_probe.test.mjs
 !tests/probes/ui_full_stack_acceptance_test8_probe.test.mjs
 !tests/probes/video_recording_audio_integrity_probe.test.mjs
+!tests/strangler_v2/
+!tests/strangler_v2/_env.mjs
+!tests/strangler_v2/palette_ssot_guard.test.mjs
 
 # Test files
 atome/src/assets/uploads/

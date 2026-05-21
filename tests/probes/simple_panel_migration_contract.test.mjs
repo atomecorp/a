@@ -5,23 +5,23 @@ import {
     COMPLEX_PANEL_SURFACE_KEYS,
     PANEL_SURFACE_DEFINITIONS,
     SIMPLE_PANEL_SURFACE_KEYS
-} from '../../eve/application/intuition/panel_definitions.js';
+} from '../../eVe/intuition/panel_definitions.js';
 
 const SIMPLE_PANEL_MODULE_FILES = Object.freeze({
-    home: 'eve/application/intuition/tools/user.js',
-    contact: 'eve/application/intuition/tools/contact.js',
-    info: 'eve/application/intuition/tools/infos.js',
-    ai: 'eve/application/intuition/tools/AI.js',
-    delete: 'eve/application/intuition/tools/delete.js',
-    undo: 'eve/application/intuition/tools/undo.js',
-    paste: 'eve/application/intuition/tools/paste.js',
-    timeline: 'eve/application/intuition/tools/timeline.js',
-    background: 'eve/application/intuition/tools/background.js',
-    couleur: 'eve/application/intuition/tools/couleur.js',
-    size: 'eve/application/intuition/tools/size.js',
-    font: 'eve/application/intuition/tools/font.js',
-    detail: 'eve/application/intuition/tools/detail.js',
-    layer: 'eve/application/intuition/tools/layer.js'
+    home: 'eVe/intuition/tools/user.js',
+    contact: 'eVe/intuition/tools/contact.js',
+    info: 'eVe/intuition/tools/infos.js',
+    ai: 'eVe/intuition/tools/AI.js',
+    delete: 'eVe/intuition/tools/delete.js',
+    undo: 'eVe/intuition/tools/undo.js',
+    paste: 'eVe/intuition/tools/paste.js',
+    timeline: 'eVe/intuition/tools/timeline.js',
+    background: 'eVe/intuition/tools/background.js',
+    couleur: 'eVe/intuition/tools/couleur.js',
+    size: 'eVe/intuition/tools/size.js',
+    font: 'eVe/intuition/tools/font.js',
+    detail: 'eVe/intuition/tools/detail.js',
+    layer: 'eVe/intuition/tools/layer.js'
 });
 
 const allGroupedKeys = new Set([

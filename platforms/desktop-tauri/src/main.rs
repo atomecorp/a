@@ -12,6 +12,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State}; // pour get_webview_window
 
+const TAURI_LOCAL_HTTP_PORT: u16 = 3000;
+const TAURI_LOCAL_HTTP_URL: &str = "http://127.0.0.1:3000/";
+
 macro_rules! println {
     ($($arg:tt)*) => {
         if crate::runtime_logging::xcode_logs_enabled() {
@@ -291,7 +294,7 @@ fn main() {
                     eprintln!("[tauri] Unable to navigate main window: window not found");
                     return;
                 };
-                let Ok(url) = tauri::Url::parse("http://127.0.0.1:3000/") else {
+                let Ok(url) = tauri::Url::parse(TAURI_LOCAL_HTTP_URL) else {
                     eprintln!("[tauri] Unable to parse local Axum URL");
                     return;
                 };
@@ -304,7 +307,11 @@ fn main() {
             {
                 let handle = app.handle();
                 if let Some(win) = handle.get_webview_window("main") {
-                    let _ = win.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
+                    let _ = win.eval(&format!(
+                        "window.__ATOME_LOCAL_HTTP_PORT__={};window.__SQUIRREL_TAURI_CANONICAL_URL__={:?};",
+                        TAURI_LOCAL_HTTP_PORT,
+                        TAURI_LOCAL_HTTP_URL
+                    ));
                     let root_js = format!(
                         "window.__ATOME_PROJECT_ROOT__={:?};",
                         project_root.to_string_lossy()
@@ -313,7 +320,11 @@ fn main() {
                 } else {
                     // Secondary: essaye toute fenêtre disponible
                     for (_, w) in app.webview_windows() {
-                        let _ = w.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
+                        let _ = w.eval(&format!(
+                            "window.__ATOME_LOCAL_HTTP_PORT__={};window.__SQUIRREL_TAURI_CANONICAL_URL__={:?};",
+                            TAURI_LOCAL_HTTP_PORT,
+                            TAURI_LOCAL_HTTP_URL
+                        ));
                         let root_js = format!(
                             "window.__ATOME_PROJECT_ROOT__={:?};",
                             project_root.to_string_lossy()

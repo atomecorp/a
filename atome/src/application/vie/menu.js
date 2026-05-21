@@ -1,7 +1,3 @@
-
-import Intuition from '../../squirrel/components/intuition_builder/index.js';
-
-
 const shadowLeft = 0,
   shadowTop = 0,
   shadowBlur = 12;
@@ -118,8 +114,6 @@ const light_theme = {
   zonespecial_bg: 'rgba(72,71,71,0)',
 
 };
-Intuition.addTheme(light_theme)
-
 const DEFAULT_ORIENTATION = (light_theme.direction || 'top_left_horizontal').toLowerCase();
 
 function tools_test_touch() {
@@ -235,18 +229,3 @@ const intuition_content = {
   R: { type: 'particle', unit: ['%', 'px', 'em', 'rem', 'vw'], value: 20, ext: 3 },
 
 };
-
-Intuition({
-  name: 'newMenu',
-  theme: light_theme,
-  content: intuition_content,
-  orientation: DEFAULT_ORIENTATION,
-  position: {
-    left: 172,
-    top: 645,
-    units: { left: 'px', top: 'px' }
-  }
-});
-
-
-

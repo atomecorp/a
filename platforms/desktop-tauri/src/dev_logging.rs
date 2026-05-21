@@ -114,14 +114,14 @@ pub fn init_tracing() -> Option<WorkerGuard> {
 
 #[tauri::command]
 pub fn log_from_webview(payload: WebviewLogPayload) {
-    if !xcode_logs_enabled() {
+    let component = payload.component.as_deref().unwrap_or("ui");
+    if !xcode_logs_enabled() && !component.starts_with("mtrack_") {
         return;
     }
 
     let level = payload.level.as_deref().unwrap_or("info");
     let webview_source = payload.source.as_deref().unwrap_or("tauri_webview");
     let webview_timestamp = payload.timestamp.as_deref().unwrap_or("");
-    let component = payload.component.as_deref().unwrap_or("ui");
     let message = payload.message.as_deref().unwrap_or("");
     let request_id = payload.request_id.as_deref().unwrap_or("");
     let session_id = payload.session_id.as_deref().unwrap_or("");

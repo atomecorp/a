@@ -766,7 +766,7 @@ const createButton = (config = {}) => {
         ...userStateStyles      // 4) User state styles (highest priority)
       };
 
-      // --- Preserve externally imposed size (e.g. Intuition master scale) ---
+      // Preserve externally imposed size.
       // If the button already has inline width/height coming from another system (and caller didn't explicitly set new ones in finalStyles), keep them.
       if (button && button.id && /_toggle$/.test(button.id)) {
         // Recompute width/height from stored base size * external master scale if available

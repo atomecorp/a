@@ -1596,6 +1596,29 @@ async fn log_request_middleware(req: Request<Body>, next: middleware::Next) -> R
     response
 }
 
+async fn no_store_static_asset_middleware(req: Request<Body>, next: middleware::Next) -> Response {
+    let path = req.uri().path().to_string();
+    let mut response = next.run(req).await;
+    let is_static_runtime_asset = path == "/"
+        || path.starts_with("/eVe/")
+        || path.starts_with("/atome/")
+        || path.starts_with("/src/")
+        || path.ends_with(".html")
+        || path.ends_with(".js")
+        || path.ends_with(".mjs")
+        || path.ends_with(".css");
+    if is_static_runtime_asset {
+        let headers = response.headers_mut();
+        headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"),
+        );
+        headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+        headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
+    }
+    response
+}
+
 fn project_root_from_static_dir(static_dir: &Path) -> PathBuf {
     if static_dir.file_name().and_then(|name| name.to_str()) == Some("src") {
         if let Some(atome_dir) = static_dir.parent() {
@@ -5478,8 +5501,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     // Must specify exact origins when credentials are used (not wildcard *)
     let cors = CorsLayer::new()
         .allow_origin([
-            "http://127.0.0.1:1430".parse::<HeaderValue>().unwrap(),
-            "http://localhost:1430".parse::<HeaderValue>().unwrap(),
             "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
             "http://localhost:3000".parse::<HeaderValue>().unwrap(),
             "http://127.0.0.1:3001".parse::<HeaderValue>().unwrap(),
@@ -5602,6 +5623,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
+        .layer(middleware::from_fn(no_store_static_asset_middleware))
         .layer(middleware::from_fn(log_request_middleware))
         .with_state(state);
 

@@ -106,6 +106,7 @@ const sparkBootModules = [
   { id: 'squirrel.core', path: './squirrel.js' },
   { id: 'components.button', path: './components/button_builder.js' },
   { id: 'components.slider', path: './components/slider_builder.js' },
+  { id: 'components.input', path: './components/input_builder.js' },
   { id: 'components.table', path: './components/table_builder.js' },
   { id: 'components.matrix', path: './components/matrix_builder.js' },
   { id: 'components.list', path: './components/List_builder.js' },
@@ -169,6 +170,7 @@ const bootstrapSpark = async () => {
   const { $, define, observeMutations } = loadedModules['squirrel.core'];
   const Button = loadedModules['components.button'].default;
   const Slider = loadedModules['components.slider'].default;
+  const Input = loadedModules['components.input'].default;
   const Table = loadedModules['components.table'].default;
   const Matrix = loadedModules['components.matrix'].default;
   const List = loadedModules['components.list'].default;
@@ -209,6 +211,7 @@ const bootstrapSpark = async () => {
 
   squirrelComponentRegistry.Button = Button;
   squirrelComponentRegistry.Slider = Slider;
+  squirrelComponentRegistry.Input = Input;
   squirrelComponentRegistry.Table = Table;
   squirrelComponentRegistry.Matrix = Matrix;
   squirrelComponentRegistry.List = List;

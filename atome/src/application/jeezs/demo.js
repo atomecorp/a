@@ -1,5 +1,4 @@
 import createModularBlocks, { DEFAULT_THEME } from './index.js';
-import Intuition from '../../squirrel/components/intuition_builder/index.js';
 
 function ensureI18nHelpers() {
   const fallbackSource = (typeof window !== 'undefined' && window.ModularBlocks) || createModularBlocks;
@@ -334,11 +333,12 @@ function toNumber(value, fallback = 0) {
 }
 
 function computeMenuVerticalOffset() {
-  const theme = (globalWindow && globalWindow.Intuition_theme && globalWindow.Intuition_theme.basic) || {};
-  const support = toNumber(theme.support_thickness, toNumber(theme.item_size, 54));
-  const offsetEdge = toNumber(theme.toolboxOffsetEdge, 0);
-  const offsetMain = toNumber(theme.toolboxOffsetMain, 0);
-  const itemsSpacing = toNumber(theme.items_spacing, 0);
+  const root = typeof document !== 'undefined' ? document.documentElement : null;
+  const styles = root && typeof getComputedStyle === 'function' ? getComputedStyle(root) : null;
+  const support = toNumber(styles?.getPropertyValue('--eve-v2-toolbox-handle-size'), 54);
+  const offsetEdge = toNumber(styles?.getPropertyValue('--eve-v2-toolbox-inset'), 0);
+  const offsetMain = 0;
+  const itemsSpacing = toNumber(styles?.getPropertyValue('--eve-tool-gap'), 0);
   const safetyMargin = 24;
   return support + offsetEdge + offsetMain + itemsSpacing + safetyMargin;
 }
@@ -415,7 +415,7 @@ function requestMenuSync() {
 function ensureMenuObserver(attempt = 0) {
   if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
   if (menuObserver) return;
-  const support = document.getElementById('toolbox_support');
+  const support = document.getElementById('menu_container_v2');
   if (!support) {
     const schedule = () => ensureMenuObserver(attempt + 1);
     if (typeof requestAnimationFrame === 'function') {
@@ -431,10 +431,11 @@ function ensureMenuObserver(attempt = 0) {
 }
 
 function resolveMenuTheme() {
-  const theme = (globalWindow && globalWindow.Intuition_theme && globalWindow.Intuition_theme.basic) || {};
+  const root = typeof document !== 'undefined' ? document.documentElement : null;
+  const styles = root && typeof getComputedStyle === 'function' ? getComputedStyle(root) : null;
   return {
-    inactive: theme.tool_bg || '',
-    active: theme.tool_bg_active || theme.tool_active_bg || theme.tool_bg || '#7a7c73ff'
+    inactive: styles?.getPropertyValue('--eve-v2-tool-background') || '',
+    active: styles?.getPropertyValue('--eve-v2-tool-active-background') || '#7a7c73ff'
   };
 }
 
@@ -523,7 +524,6 @@ MENU_KEYS_IN_ORDER.forEach((key) => {
   };
 });
 
-Intuition({ name: 'menu_test', content: menu_content });
 refreshMenuStates();
 if (typeof requestAnimationFrame === 'function') {
   requestAnimationFrame(refreshMenuStates);

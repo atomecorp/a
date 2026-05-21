@@ -104,10 +104,14 @@ Fixtures:
 Main entry points:
 - `npm run check:syntax`
 - `npm run check:no-fallbacks`
+- `npm run check:palette-ssot`
 - `npm run check:tauri-fs-boundary`
 - `npm run check:molecule-guardrails`
 - `npm run test:run`
 - Targeted `node --test ...` or `node ...test.mjs` commands depending on the touched module.
+- `tests/strangler_v2/_env.mjs` owns the maintained mock browser fixture for colocated eVe Intuition runtime tests.
+- `tests/strangler_v2/palette_ssot_guard.test.mjs` guards the menu/palette source-of-truth contract by preventing legacy example entrypoints from mutating `new_menu_v2` directly.
+- `tests/probes/user_panel_content_contract.test.mjs` verifies the home/user panel module still mounts non-empty auth and profile dialog bodies from the canonical panel controls.
 
 Status: Verified by current tree inspection.
 
@@ -235,6 +239,7 @@ Primary dependencies:
 - `atome/src/wasm/` for audio WASM artifacts.
 - eVe bootstrap/version product references still exist in `atome/src/application/index.js` and `atome/src/squirrel/kickstart.js`.
 - `atome/src/application/examples/user.js` is legacy product-bootstrap rendering debt and must use the shared eVe media source canonicalization contract for media atome sources instead of reconstructing recording or upload paths locally.
+- Legacy application example menu files under `atome/src/application/examples/`, `atome/src/application/vie/`, `atome/src/application/lyrix/`, and `atome/src/application/jeezs/` must not mutate `window.new_menu_v2` content or theme. The eVe Intuition menu is owned by `eVe/intuition/`; app-specific menu replacement requires an explicit product runtime boundary.
 
 Should be extended by:
 - Framework bootstrap and open runtime composition.
@@ -440,6 +445,7 @@ Purpose: Generic Squirrel component builders and product-neutral component contr
 Main files:
 - `button_builder.js`
 - `editor_builder.js`
+- `input_builder.js`
 - `matrix_builder.js`
 - `menu_builder.js`
 - `slider_builder.js`
@@ -449,6 +455,7 @@ Main files:
 
 Reusable APIs:
 - Component builders for common Squirrel UI structures.
+- Canonical Squirrel system control builders now include Button, Slider, Input, and Console via the spark bootstrap registry.
 - Minimal Intuition builder and layer contract isolated from eVe closed UI.
 
 Should be extended by:
@@ -613,6 +620,7 @@ Purpose: Product UI shell, tools, panels, matrix, menu, ribbon, flower menu, pro
 Main areas:
 - `eve/intuition/eVeIntuition.js`
 - `eve/intuition/bootstrap.js`
+- `eve/intuition/panel_definitions.js`
 - `eve/intuition/contracts/`
 - `eve/intuition/runtime/`
 - `eve/intuition/tools/`
@@ -626,6 +634,9 @@ Main areas:
 Reusable APIs:
 - Command bus and tool gateway.
 - Tool registry and interaction runtime.
+- `PANEL_SURFACE_DEFINITIONS` as the single source of truth for panel ids, module keys, open/close function names, TTL policy, and pointer-toggle behavior.
+- `buildPanelRuntimeConfigByToolId()` derives tool-runtime panel config from `PANEL_SURFACE_DEFINITIONS`; do not add a second panel config table in tool runtime code.
+- `panelCreatorV2` owns panel lifecycle registration, lazy loading, attach-to-layer, open/close, destroy policy, and panel bounds mode.
 - Panel API, panel layout policy, layer contract, layer ownership, selection, latched state.
 - Shared media types, DOM utilities, SVG runtime, color values, group state, slider content, tool drag.
 - Tool definition SSOT and tool instances.

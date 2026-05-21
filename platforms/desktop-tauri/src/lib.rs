@@ -8,6 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State};
 
+const TAURI_LOCAL_HTTP_PORT: u16 = 3000;
+const TAURI_LOCAL_HTTP_URL: &str = "http://127.0.0.1:3000/";
+
 macro_rules! println {
     ($($arg:tt)*) => {
         if crate::runtime_logging::xcode_logs_enabled() {
@@ -277,10 +280,30 @@ pub fn run() {
                 });
             });
 
+            let navigation_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let Some(win) = navigation_handle.get_webview_window("main") else {
+                    eprintln!("[tauri] Unable to navigate main window: window not found");
+                    return;
+                };
+                let Ok(url) = tauri::Url::parse(TAURI_LOCAL_HTTP_URL) else {
+                    eprintln!("[tauri] Unable to parse local Axum URL");
+                    return;
+                };
+                if let Err(err) = win.navigate(url) {
+                    eprintln!("[tauri] Unable to navigate main window to local Axum server: {}", err);
+                }
+            });
+
             {
                 let handle = app.handle();
                 if let Some(win) = handle.get_webview_window("main") {
-                    let _ = win.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
+                    let _ = win.eval(&format!(
+                        "window.__ATOME_LOCAL_HTTP_PORT__={};window.__SQUIRREL_TAURI_CANONICAL_URL__={:?};",
+                        TAURI_LOCAL_HTTP_PORT,
+                        TAURI_LOCAL_HTTP_URL
+                    ));
                     let root_js = format!(
                         "window.__ATOME_PROJECT_ROOT__={:?};",
                         project_root.to_string_lossy()
@@ -288,7 +311,11 @@ pub fn run() {
                     let _ = win.eval(&root_js);
                 } else {
                     for (_, w) in app.webview_windows() {
-                        let _ = w.eval("window.__ATOME_LOCAL_HTTP_PORT__=3000;");
+                        let _ = w.eval(&format!(
+                            "window.__ATOME_LOCAL_HTTP_PORT__={};window.__SQUIRREL_TAURI_CANONICAL_URL__={:?};",
+                            TAURI_LOCAL_HTTP_PORT,
+                            TAURI_LOCAL_HTTP_URL
+                        ));
                         let root_js = format!(
                             "window.__ATOME_PROJECT_ROOT__={:?};",
                             project_root.to_string_lossy()

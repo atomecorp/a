@@ -89,7 +89,6 @@
 //     direction: "top_left_horizontal"
 
 // };
-// Intuition.addTheme(light_theme)
 
 
 
@@ -140,7 +139,3 @@
 //         }
 //     }, 2000); // Disparaît après 2 secondes
 // }
-
-// const new_menu = Intuition({ name: 'newMenu', theme: 'light', content: intuition_content, orientation: 'bottom_right_horizontal' });
-
-
