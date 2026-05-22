@@ -237,6 +237,8 @@ Primary sources: `eVe/core/media_engine/`, `eVe/intuition/tools/molecule/`, `eVe
 
 Exposure: `window.Molecule`, `window.eveMediaApi`, `window.eveMtrackApi`, `window.open_mtrack_panel`, `window.close_mtrack_panel`, and JavaScript module exports for internal runtimes.
 
+Atome-to-Molecule open requests are routed through a source-layered request path (`atome_mtrack_open_request`) rather than being semantically bound to the originating double-click event. The current UI trigger may still be double-click, but downstream MTraX/Molecule open handling must key on the request source layer so the trigger can be moved later without changing panel/runtime semantics.
+
 Verified entry points:
 
 - Molecule engine/API: `createMoleculeEngine`, `ensureMoleculeEngine`, `getMoleculeCommandCatalog`, `createMoleculeApi`, `ensureMoleculeApi`, `ensureMoleculeMediaRuntime`.

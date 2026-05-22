@@ -669,6 +669,7 @@ Reusable APIs:
 - Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff and Tauri-local canonicalization away from loopback Fastify media URLs.
 - Recorded video atome creation must carry the recording owner into `resolveMediaUrl` and persist owner/media-user particles so the first load uses the user-scoped recordings route.
 - Atome double-click to MTraX timeline resolution must merge persisted state owner metadata before normalizing recording sources, including older atomes whose properties lack owner fields.
+- Atome-triggered Molecule opening is intentionally routed through `requestMtrackOpenForAtome` and the `atome_mtrack_open_request` source layer. Double-click is only the current UI trigger; Molecule open handling must stay movable to another event/context by preserving the source-layer request contract.
 - Video preview renderers and preview panel services.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
 - User profile API.
