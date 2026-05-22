@@ -306,6 +306,7 @@ Role:
 - Styles are injected or applied by JavaScript and rely on system/eVe CSS custom properties.
 - Preview/tracks separator sizing is owned by `eVe/domains/mtrax/preview/preview_layout_runtime.js`; bounds must be computed from the rendered MTraX stack, including the real tracks viewport, so WebView layout differences cannot collapse the separator resize range to the preview minimum.
 - MTraX integrated tools keep horizontal overflow while hiding native scrollbars, and the position indicator is placed inside the ruler-left column above track headers.
+- MTraX content, preview section, preview host, and preview surface containers stay square-edged; rounded corners remain reserved for explicit controls or timeline affordances, not the Molecule composition frame.
 - Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
 
 Design rule: MTraX/Molecule visuals are closed product workflow design unless promoted through a deliberate Atome media contract.
