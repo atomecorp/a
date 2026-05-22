@@ -57,11 +57,11 @@ Cross-boundary API rules:
 
 Ownership: Atome open.
 
-Primary sources: `atome/src/squirrel/apis.js`, `atome/src/squirrel/apis/essentials.js`, `atome/src/squirrel/apis/utils.js`, `atome/src/squirrel/apis/loader.js`.
+Primary sources: `atome/src/squirrel/apis.js`, `atome/src/squirrel/apis/essentials.js`, `atome/src/squirrel/apis/utils.js`, `atome/src/squirrel/apis/loader.js`, `atome/src/squirrel/apis/dragdrop.js`.
 
 Exposure: JavaScript module exports and default `Apis` object.
 
-Verified entry points: `wait`, `current_platform`, `dataFetcher`, `render_svg`, `fetch_and_render_svg`, `resize`, `strokeColor`, `fillColor`, `sanitizeSVG`.
+Verified entry points: `wait`, `current_platform`, `dataFetcher`, `render_svg`, `fetch_and_render_svg`, `resize`, `strokeColor`, `fillColor`, `sanitizeSVG`, `DragDrop.createDropZone`, `DragDrop.collectFilesFromDataTransfer`, `DragDrop.summarizeFiles`.
 
 Boundary status: Open framework helpers. Keep product-neutral.
 
@@ -207,7 +207,7 @@ Primary sources: `eVe/intuition/tools/core/tool_registry.js`, `eVe/intuition/too
 
 Exposure: closed product runtime installed under `window.atome.tools`, plus tool registry/runtime module exports.
 
-Verified responsibilities: tool definition registration/update, tool invocation, action routing, tool instance creation, persistence flows, Finder/tool projection helpers, latch, selection propagation, interaction routing, and consumption of the canonical Atome-owned product-tool slider runtime.
+Verified responsibilities: tool definition registration/update, protected system-tool contract reconciliation, tool invocation, action routing, tool instance creation, persistence flows, Finder/tool projection helpers, latch, selection propagation, interaction routing, and consumption of the canonical Atome-owned product-tool slider runtime.
 
 Verified shared slider runtime responsibilities:
 

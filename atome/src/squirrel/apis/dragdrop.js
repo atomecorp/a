@@ -37,20 +37,57 @@ async function _entryToFiles(entry, pathPrefix = '') {
     });
 }
 
+async function _fileSystemHandleToFiles(handle) {
+    if (!handle) return [];
+    if (handle.kind === 'file' && typeof handle.getFile === 'function') {
+        const file = await handle.getFile();
+        return file ? [file] : [];
+    }
+    if (handle.kind === 'directory' && typeof handle.values === 'function') {
+        const files = [];
+        for await (const child of handle.values()) {
+            const childFiles = await _fileSystemHandleToFiles(child);
+            childFiles.forEach((file) => files.push(file));
+        }
+        return files;
+    }
+    return [];
+}
+
+function _pushUniqueFile(files, file) {
+    if (!file) return;
+    const name = String(file.name || file.path || file.fullPath || '');
+    const size = typeof file.size === 'number' ? file.size : null;
+    const type = String(file.type || '');
+    const alreadyPresent = files.some((entry) => (
+        entry === file
+        || (
+            String(entry?.name || entry?.path || entry?.fullPath || '') === name
+            && (typeof entry?.size === 'number' ? entry.size : null) === size
+            && String(entry?.type || '') === type
+        )
+    ));
+    if (!alreadyPresent) files.push(file);
+}
+
+const _toArray = (value) => Array.from(value || []);
+
 function _reportCallbackError(error) {
     queueMicrotask(() => {
         throw error;
     });
 }
 
-async function _collectFilesFromDataTransfer(dt) {
+export async function collectFilesFromDataTransfer(dt) {
     const files = [];
 
     if (dt.items && dt.items.length) {
-        // Prefer items: may allow directory traversal
+        // Prefer items: they may allow directory traversal and are the only
+        // populated surface in some WebView drops.
         const promises = [];
-        for (let i = 0; i < dt.items.length; i++) {
-            const item = dt.items[i];
+        const items = _toArray(dt.items);
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
             if (item.kind !== 'file') continue;
 
             // webkitGetAsEntry is available in Chromium-based browsers
@@ -61,19 +98,33 @@ async function _collectFilesFromDataTransfer(dt) {
             }
 
             const file = item.getAsFile ? item.getAsFile() : null;
-            if (file) files.push(file);
+            if (file) {
+                _pushUniqueFile(files, file);
+                continue;
+            }
+
+            if (typeof item.getAsFileSystemHandle === 'function') {
+                promises.push(
+                    item.getAsFileSystemHandle()
+                        .then((handle) => _fileSystemHandleToFiles(handle))
+                );
+            }
         }
 
         // Wait for all promises before continuing
         const results = await Promise.all(promises);
         results.forEach(fileList => {
             if (fileList && fileList.length) {
-                fileList.forEach((f) => files.push(f));
+                fileList.forEach((f) => _pushUniqueFile(files, f));
             }
         });
-    } else if (dt.files && dt.files.length) {
-        // Fallback: use DataTransfer.files
-        for (let i = 0; i < dt.files.length; i++) files.push(dt.files[i]);
+    }
+
+    if (dt.files && dt.files.length) {
+        // Always inspect DataTransfer.files as a fallback. Some WebViews expose
+        // items without readable File objects while files is still populated.
+        const fallbackFiles = _toArray(dt.files);
+        fallbackFiles.forEach((file) => _pushUniqueFile(files, file));
     }
 
     return files;
@@ -139,7 +190,7 @@ export function createDropZone(target, options = {}) {
 
         if (!matchesAllowedId(e)) return;
 
-        const rawFiles = await _collectFilesFromDataTransfer(e.dataTransfer);
+        const rawFiles = await collectFilesFromDataTransfer(e.dataTransfer);
         let normalized = rawFiles.map(_normalizeFile);
 
         // Apply accept filter
@@ -205,4 +256,4 @@ export function summarizeFiles(files) {
     return files.map(f => ({ name: f.name, type: f.type, size: f.size, path: f.path || f.fullPath || null }));
 }
 
-export default { createDropZone, registerGlobalDrop, summarizeFiles };
+export default { createDropZone, registerGlobalDrop, summarizeFiles, collectFilesFromDataTransfer };
