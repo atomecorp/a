@@ -540,15 +540,26 @@ const run = async () => {
             && Math.round(Number(afterFullscreenViewportResize.host_rect?.bottom || 0)) === resizedToolbarTop
         ), { before: afterHeaderDblClick, after: afterFullscreenViewportResize, resizedToolbarTop });
 
+        await dragElement(page, '#eve_mtrack_dialog__header', 90, 42);
+        const afterFullscreenDragRestore = await readPanelState(page);
+        assertCheck(report, 'dragging_fullscreen_molecule_restores_user_size_before_move', (
+            Math.abs(Number(afterFullscreenDragRestore.host_rect?.width || 0) - Number(afterFooterDrag.host_rect?.width || 0)) <= 4
+            && Math.abs(Number(afterFullscreenDragRestore.host_rect?.height || 0) - Number(afterFooterDrag.host_rect?.height || 0)) <= 4
+            && Math.abs(Number(afterFullscreenDragRestore.host_rect?.left || 0) - Number(afterFooterDrag.host_rect?.left || 0)) > 20
+            && Number(afterFullscreenDragRestore.host_rect?.bottom || 0) <= Number(afterFullscreenDragRestore.toolbar_rect?.top || 0) + 1
+        ), { before: afterFullscreenViewportResize, restored: afterFooterDrag, after: afterFullscreenDragRestore });
+
+        await page.locator('#eve_mtrack_dialog__header').dblclick();
+        await page.waitForTimeout(450);
         await page.locator('#eve_mtrack_dialog__footer').dblclick();
         await page.waitForTimeout(450);
         const afterFooterDblClick = await readPanelState(page);
         assertCheck(report, 'footer_double_click_restores_user_size', (
-            Math.abs(Number(afterFooterDrag.host_rect?.width || 0) - Number(afterFooterDblClick.host_rect?.width || 0)) <= 4
-            && Math.abs(Number(afterFooterDrag.host_rect?.height || 0) - Number(afterFooterDblClick.host_rect?.height || 0)) <= 4
+            Math.abs(Number(afterFullscreenDragRestore.host_rect?.width || 0) - Number(afterFooterDblClick.host_rect?.width || 0)) <= 4
+            && Math.abs(Number(afterFullscreenDragRestore.host_rect?.height || 0) - Number(afterFooterDblClick.host_rect?.height || 0)) <= 4
             && Number(afterFooterDblClick.host_rect?.bottom || 0) <= Number(afterFooterDblClick.toolbar_rect?.top || 0) + 1
         ), {
-            expected: afterFooterDrag,
+            expected: afterFullscreenDragRestore,
             after: afterFooterDblClick
         });
 

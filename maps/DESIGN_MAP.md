@@ -155,6 +155,7 @@ Role:
 - Dialog fullscreen geometry is direct: left/top are `0`, width matches the dialog container, and height stops exactly at the main toolbar top when the toolbar is present.
 - Dialog viewport helpers no longer own margin-based clamping; placement uses the dialog container and main toolbar bounds directly.
 - Fullscreen dialogs and docked Molecules track `window` and `visualViewport` resize events; restored/custom-sized panels do not track viewport size changes.
+- Dragging a fullscreen Molecule first restores its previous user-sized geometry, then moves that reduced Molecule.
 - Keeps panel fullscreen double-click scoped to explicit chrome handles, while body/tool double-clicks remain available to feature runtimes.
 
 Design rule: all eVe panel chrome changes must route through this layer or `eVe/elements/design.js`, not through isolated panel-local clones.
