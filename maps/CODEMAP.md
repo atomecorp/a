@@ -742,7 +742,7 @@ Status: Verified.
 
 ### eVe Design System And i18n
 
-Path: `eve/elements/`, `eve/i18n/`
+Path: `eVe/elements/`, `eVe/i18n/`
 
 Owner: eVe closed layer.
 
@@ -750,21 +750,21 @@ Purpose: Product design tokens, panel chrome, dialog runtime, presets, i18n bind
 
 Main files:
 
-- `eve/elements/design.js`
-- `eve/elements/eVe_look.js`
-- `eve/elements/design/panel_chrome.js`
-- `eve/elements/design/panel_chrome_tokens.js`
-- `eve/elements/design/panel_overflow_indicators.js`
-- `eve/elements/design/dialog_runtime.js`
-- `eve/elements/system_ui_tokens.js`
-- `eve/i18n/i18n.js`
-- `eve/i18n/languages.js`
+- `eVe/elements/design.js`
+- `eVe/elements/eVe_look.js`
+- `eVe/elements/design/panel_chrome.js`
+- `eVe/elements/design/panel_chrome_tokens.js`
+- `eVe/elements/design/panel_overflow_indicators.js`
+- `eVe/elements/design/dialog_runtime.js`
+- `eVe/elements/system_ui_tokens.js`
+- `eVe/i18n/i18n.js`
+- `eVe/i18n/languages.js`
 
 Reusable APIs:
 
 - `eveT`, `eveTList`, locale helpers.
 - Panel chrome and overflow indicator contracts.
-- Dialog bounds/fullscreen runtime.
+- Dialog bounds/fullscreen runtime, including viewport resize reflow while fullscreen is active.
 - Preset and token APIs.
 
 Should be extended by:

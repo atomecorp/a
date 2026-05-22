@@ -317,6 +317,10 @@ Taches:
 - [ ] Lancer le renommage progressif Molecule seulement apres stabilisation fonctionnelle.
 - [ ] Garder les aliases legacy uniquement aux frontieres publiques documentees.
 
+Rapports d'avancement Phase 4:
+
+- Trouble solving Task 1 / clip disappearance during drag: reused the existing browser-driven `tests/probes/mtrack_clip_drag_invariant_probe.test.mjs` probe against the active Fastify app on port 3001. The report at `temp/probe_reports/mtrack_clip_drag_invariant_probe/report.json` validated horizontal drag, drag to previous track, drag to next track, repeated stress movements with track creation and return, and autoscroll edge dragging. Result passed: clip identity and persisted identity stayed present, track and clip counts stayed valid, DOM parent tracks matched model track ids, no stale clip node remained attached to the wrong lane, and console error count was 0. Additional validations passed: `npm run check:molecule-guardrails`; `npm run check:no-fallbacks`. No source edit was required because the current implementation already satisfies Task 1 invariants. The global Phase 4 execution-order checkbox remains open until the remaining trouble solving tasks are validated in order. Progress remains 53/118, 44.92%.
+
 ### Phase 5 - AV APIs / recording / preview
 
 Statut:

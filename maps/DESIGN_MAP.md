@@ -147,6 +147,7 @@ Role:
 - Defines the shared panel header/footer/tools dock chrome.
 - Converts system panel chrome values into eVe CSS variables and style objects.
 - Supports the current panel contract: header, body, tools dock, footer, close control, resize grip, and overflow indicators.
+- Owns fullscreen panel geometry reflow on viewport resize; custom and restored panel sizes must not track viewport changes.
 
 Design rule: all eVe panel chrome changes must route through this layer or `eVe/elements/design.js`, not through isolated panel-local clones.
 

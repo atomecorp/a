@@ -54,7 +54,7 @@ globalThis.$ = (tag, options = {}) => {
     return node;
 };
 
-const { createEveDialog } = await import('../../eve/application/elements/design.js');
+const { createEveDialog } = await import('../../eVe/elements/design.js');
 
 const installStyleRect = (node) => {
     Object.defineProperty(node, 'offsetWidth', {
@@ -353,6 +353,15 @@ assert.equal(resizedDialog.root.style.top, '0px', 'maximized panel must start at
 assert.equal(resizedDialog.root.style.width, `${window.innerWidth}px`, 'maximized panel must use the viewport width');
 assert.equal(resizedDialog.root.style.height, `${window.innerHeight - 52}px`, 'maximized panel must reserve one tool height at the bottom');
 
+Object.defineProperty(window, 'innerWidth', { configurable: true, value: 900 });
+Object.defineProperty(window, 'innerHeight', { configurable: true, value: 640 });
+panelLayer.style.width = `${window.innerWidth}px`;
+panelLayer.style.height = `${window.innerHeight}px`;
+window.dispatchEvent(new window.Event('resize'));
+await new Promise((resolve) => setTimeout(resolve, 10));
+assert.equal(resizedDialog.root.style.width, '900px', 'fullscreen panel must follow viewport width changes');
+assert.equal(resizedDialog.root.style.height, '588px', 'fullscreen panel must follow viewport height changes while reserving the tool band');
+
 resizedDialog.header.dispatchEvent(new window.MouseEvent('dblclick', {
     bubbles: true,
     button: 0,
@@ -360,14 +369,23 @@ resizedDialog.header.dispatchEvent(new window.MouseEvent('dblclick', {
     clientY: 12
 }));
 assert.equal(resizedDialog.root.dataset.eveDialogFullscreen, 'false', 'header double click must restore defined panel bounds');
-assert.equal(resizedDialog.root.style.left, definedBounds.left, 'restored panel must keep defined left');
-assert.equal(resizedDialog.root.style.top, definedBounds.top, 'restored panel must keep defined top');
+assert.equal(Number.parseFloat(resizedDialog.root.style.left) <= Number.parseFloat(definedBounds.left), true, 'restored panel left may clamp inside the resized viewport');
+assert.equal(Number.parseFloat(resizedDialog.root.style.top) <= Number.parseFloat(definedBounds.top), true, 'restored panel top may clamp inside the resized viewport');
 assert.equal(resizedDialog.root.style.width, definedBounds.width, 'restored panel must keep defined width');
 assert.equal(resizedDialog.root.style.height, definedBounds.height, 'restored panel must keep defined height');
 
+Object.defineProperty(window, 'innerWidth', { configurable: true, value: 760 });
+Object.defineProperty(window, 'innerHeight', { configurable: true, value: 560 });
+panelLayer.style.width = `${window.innerWidth}px`;
+panelLayer.style.height = `${window.innerHeight}px`;
+window.dispatchEvent(new window.Event('resize'));
+await new Promise((resolve) => setTimeout(resolve, 10));
+assert.equal(resizedDialog.root.style.width, definedBounds.width, 'restored custom panel width must not track viewport changes');
+assert.equal(resizedDialog.root.style.height, definedBounds.height, 'restored custom panel height must not track viewport changes');
+
 const forbiddenSourceChecks = [
     {
-        file: 'eve/application/domains/mtrax/ui/styles.js',
+        file: 'eVe/domains/mtrax/ui/styles.js',
         patterns: [
             '--mtrack-footer-height',
             'eve-mtrack-footer-resize-corner',
@@ -375,7 +393,7 @@ const forbiddenSourceChecks = [
         ]
     },
     {
-        file: 'eve/application/intuition/runtime/mtrack_dock_controller.js',
+        file: 'eVe/intuition/runtime/mtrack_dock_controller.js',
         patterns: [
             'eve-mtrack-dock-close-button',
             'eve-mtrack-dock-move-header',
