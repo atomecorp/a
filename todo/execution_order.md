@@ -388,15 +388,22 @@ Depend de:
 Sources principales:
 
 - todo/cleanup_architecture/file_size_and_coding_standards_remediation.md
+- todo/cleanup_architecture/system_ui_component_ssot.md
 - todo/cleanup_architecture/v2_full_migration_framework.md
 - todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md
 - todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md
 - todo/cleanup_architecture/ios_fullscreen_surface_compliance.md
 - todo/tools/tool_sanitisation.md
 
+Regles obligatoires de cette phase:
+
+- Toute reduction ou unification des styles systeme doit partir de eVe/elements/system_ui_tokens.js comme source unique deja existante pour les couleurs, opacites, blur et shadows communs.
+- Il est interdit de creer une source parallele de tokens partages pour les panels, tools, components, Molecule, lists et surfaces systeme voisines.
+- Les styles partages doivent etre reduits au minimum: une teinte generale, puis des variantes derivees par opacite, contraste, et etat au lieu de multiplier les palettes locales.
+
 Taches:
 
-- [ ] Executer le nettoyage profond de conformite des fichiers source: tailles, annotations verbeuses, duplication verifiee via les maps, recherche de code mort/inoperant/problematique, factorisation, et simplification sans regression.
+- [ ] Executer le nettoyage profond de conformite des fichiers source: tailles, annotations verbeuses, duplication verifiee via les maps, recherche de code mort/inoperant/problematique, factorisation, simplification sans regression, et unification stricte des styles systeme partages a partir de eVe/elements/system_ui_tokens.js sans doubler les sources de couleurs, blur, shadow ou fonds derives.
 - [ ] Supprimer progressivement les bridges eveGoeyMenuApi.
 - [ ] Supprimer l'alias legacy new_menu.
 - [ ] Normaliser les IDs tools en _intuition_v2_*.

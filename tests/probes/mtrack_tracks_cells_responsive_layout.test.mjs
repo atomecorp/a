@@ -12,8 +12,8 @@ const {
     createMtrackPanelLayoutRuntime,
     resolveContentLayout,
     resolveContentLayoutAxis
-} = await import('../../eve/application/domains/mtrax/ui/panel_layout_runtime.js');
-const { createLoopCellsRuntime } = await import('../../eve/application/domains/mtrax/timeline/loop_cells_runtime.js');
+} = await import('../../eVe/domains/mtrax/ui/panel_layout_runtime.js');
+const { createLoopCellsRuntime } = await import('../../eVe/domains/mtrax/timeline/loop_cells_runtime.js');
 
 const createNode = (id) => {
     const node = document.createElement('div');

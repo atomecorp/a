@@ -8,7 +8,7 @@ globalThis.window = window;
 globalThis.document = window.document;
 globalThis.HTMLElement = window.HTMLElement;
 
-const { ensureMtrackStyles } = await import('../../eve/application/domains/mtrax/ui/styles.js');
+const { ensureMtrackStyles } = await import('../../eVe/domains/mtrax/ui/styles.js');
 
 assert.doesNotThrow(() => ensureMtrackStyles(), 'MTrack styles must render without missing constants');
 

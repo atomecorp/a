@@ -412,6 +412,8 @@ const run = async () => {
         report.initial = initial;
         const viewport = page.viewportSize();
         const toolbarTop = Number(initial.toolbar_rect?.top || viewport.height);
+        const expectedToolbarTop = Math.round(toolbarTop);
+        const expectedViewportWidth = Math.round(Number(viewport?.width || 0));
         assertCheck(report, 'canonical_chrome_present', initial.header && initial.body && initial.footer && initial.tools_dock, initial);
         assertCheck(report, 'canonical_tools_dock_above_footer', initial.tools_dock_above_footer === true, initial);
         assertCheck(report, 'canonical_close_and_resize_present', initial.close_button && initial.resize_grip, initial);
@@ -422,11 +424,11 @@ const run = async () => {
             && Number(initial.splitter_rect?.bottom || 0) <= Number(initial.scroll_rect?.top || 0) + 1
         ), initial);
         assertCheck(report, 'panel_not_docked_into_media_atome', !['video', 'audio', 'sound', 'image', 'video_recording', 'audio_recording'].includes(initial.parent_kind), initial);
-        assertCheck(report, 'initial_open_uses_allowed_fullscreen_height', (
-            Number(initial.host_rect?.top || 0) <= 12
-            && Number(initial.host_rect?.left || 0) <= 12
-            && Number(initial.host_rect?.bottom || 0) <= toolbarTop + 1
-            && Number(initial.host_rect?.height || 0) >= Math.max(320, toolbarTop - 32)
+        assertCheck(report, 'initial_open_uses_exact_fullscreen_edges', (
+            Math.round(Number(initial.host_rect?.left || 0)) === 0
+            && Math.round(Number(initial.host_rect?.top || 0)) === 0
+            && Math.round(Number(initial.host_rect?.right || 0)) === expectedViewportWidth
+            && Math.round(Number(initial.host_rect?.bottom || 0)) === expectedToolbarTop
         ), { initial, toolbarTop, viewport });
 
         const beforeSplitter = await readPanelState(page);
@@ -519,19 +521,46 @@ const run = async () => {
         await page.locator('#eve_mtrack_dialog__header').dblclick();
         await page.waitForTimeout(450);
         const afterHeaderDblClick = await readPanelState(page);
-        assertCheck(report, 'header_double_click_enters_fullscreen_bounds', (
-            Number(afterHeaderDblClick.host_rect?.left || 0) <= 12
-            && Number(afterHeaderDblClick.host_rect?.top || 0) <= 12
-            && Number(afterHeaderDblClick.host_rect?.bottom || 0) <= toolbarTop + 1
+        assertCheck(report, 'header_double_click_enters_exact_fullscreen_edges', (
+            Math.round(Number(afterHeaderDblClick.host_rect?.left || 0)) === 0
+            && Math.round(Number(afterHeaderDblClick.host_rect?.top || 0)) === 0
+            && Math.round(Number(afterHeaderDblClick.host_rect?.right || 0)) === expectedViewportWidth
+            && Math.round(Number(afterHeaderDblClick.host_rect?.bottom || 0)) === expectedToolbarTop
             && Number(afterHeaderDblClick.host_rect?.height || 0) > Number(afterFooterDrag.host_rect?.height || 0) + 40
         ), { before: afterFooterDrag, after: afterHeaderDblClick, toolbarTop });
+
+        await page.setViewportSize({ width: 1180, height: 760 });
+        await page.waitForTimeout(450);
+        const afterFullscreenViewportResize = await readPanelState(page);
+        const resizedToolbarTop = Math.round(Number(afterFullscreenViewportResize.toolbar_rect?.top || 760));
+        assertCheck(report, 'fullscreen_molecule_follows_webview_resize', (
+            Math.round(Number(afterFullscreenViewportResize.host_rect?.left || 0)) === 0
+            && Math.round(Number(afterFullscreenViewportResize.host_rect?.top || 0)) === 0
+            && Math.round(Number(afterFullscreenViewportResize.host_rect?.right || 0)) === 1180
+            && Math.round(Number(afterFullscreenViewportResize.host_rect?.bottom || 0)) === resizedToolbarTop
+        ), { before: afterHeaderDblClick, after: afterFullscreenViewportResize, resizedToolbarTop });
 
         await page.locator('#eve_mtrack_dialog__footer').dblclick();
         await page.waitForTimeout(450);
         const afterFooterDblClick = await readPanelState(page);
-        assertCheck(report, 'footer_double_click_restores_user_size', rectDelta(afterFooterDrag.host_rect, afterFooterDblClick.host_rect) <= 4, {
+        assertCheck(report, 'footer_double_click_restores_user_size', (
+            Math.abs(Number(afterFooterDrag.host_rect?.width || 0) - Number(afterFooterDblClick.host_rect?.width || 0)) <= 4
+            && Math.abs(Number(afterFooterDrag.host_rect?.height || 0) - Number(afterFooterDblClick.host_rect?.height || 0)) <= 4
+            && Number(afterFooterDblClick.host_rect?.bottom || 0) <= Number(afterFooterDblClick.toolbar_rect?.top || 0) + 1
+        ), {
             expected: afterFooterDrag,
             after: afterFooterDblClick
+        });
+
+        await page.setViewportSize({ width: 1320, height: 840 });
+        await page.waitForTimeout(450);
+        const afterRestoredViewportResize = await readPanelState(page);
+        assertCheck(report, 'restored_molecule_does_not_follow_webview_resize', (
+            Math.abs(Number(afterFooterDblClick.host_rect?.width || 0) - Number(afterRestoredViewportResize.host_rect?.width || 0)) <= 4
+            && Math.abs(Number(afterFooterDblClick.host_rect?.height || 0) - Number(afterRestoredViewportResize.host_rect?.height || 0)) <= 4
+        ), {
+            expected: afterFooterDblClick,
+            after: afterRestoredViewportResize
         });
 
         const toolDoubleClickResult = await safeEval(page, () => {

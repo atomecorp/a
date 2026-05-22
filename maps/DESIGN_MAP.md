@@ -152,6 +152,9 @@ Role:
 - Converts system panel chrome values into eVe CSS variables and style objects.
 - Supports the current panel contract: header, body, tools dock, footer, close control, resize grip, and overflow indicators.
 - Owns fullscreen panel geometry reflow on viewport resize; custom and restored panel sizes must not track viewport changes.
+- Dialog fullscreen geometry is direct: left/top are `0`, width matches the dialog container, and height stops exactly at the main toolbar top when the toolbar is present.
+- Dialog viewport helpers no longer own margin-based clamping; placement uses the dialog container and main toolbar bounds directly.
+- Fullscreen dialogs and docked Molecules track `window` and `visualViewport` resize events; restored/custom-sized panels do not track viewport size changes.
 - Keeps panel fullscreen double-click scoped to explicit chrome handles, while body/tool double-clicks remain available to feature runtimes.
 
 Design rule: all eVe panel chrome changes must route through this layer or `eVe/elements/design.js`, not through isolated panel-local clones.
@@ -188,6 +191,7 @@ Role:
 
 - Owns visual stacking, layer targets, panel layer contracts, and z-index semantics.
 - Design changes that move UI between layers must be checked against these contracts.
+- Current global order is project tools, floating project palettes, Molecule/dialog panels, component/docked floating palettes, main ribbon, then active drag items.
 
 Design rule: z-index values should come from layer contracts or visual tokens, not one-off literals.
 
@@ -233,6 +237,7 @@ Role:
 
 - Ribbon tokens define handle icons, tool sizes, flower metrics, drag thresholds, and animation timing.
 - The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
+- The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-left or bottom-right edge according to handedness.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
 - Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
 
@@ -298,6 +303,8 @@ Role:
 - Owns MTraX panel styling, timeline layout, loop cells, preview styling, embedded footer visuals, and Molecule panel/tool composition.
 - Styles are injected or applied by JavaScript and rely on system/eVe CSS custom properties.
 - Preview/tracks separator sizing is owned by `eVe/domains/mtrax/preview/preview_layout_runtime.js`; bounds must be computed from the rendered MTraX stack, including the real tracks viewport, so WebView layout differences cannot collapse the separator resize range to the preview minimum.
+- MTraX integrated tools keep horizontal overflow while hiding native scrollbars, and the position indicator is placed inside the ruler-left column above track headers.
+- Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
 
 Design rule: MTraX/Molecule visuals are closed product workflow design unless promoted through a deliberate Atome media contract.
 

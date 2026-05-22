@@ -332,8 +332,8 @@ document.dispatchEvent(new window.PointerEvent('pointerup', {
     bubbles: true,
     pointerId: 5
 }));
-const bottomReserveTop = window.innerHeight - 52 - Number.parseFloat(resizedDialog.root.style.height);
-assert.equal(resizedDialog.root.style.top, `${Math.round(bottomReserveTop)}px`, 'panel drag must reserve one tool height above the viewport bottom');
+const bottomFlushTop = window.innerHeight - Number.parseFloat(resizedDialog.root.style.height);
+assert.equal(resizedDialog.root.style.top, `${Math.round(bottomFlushTop)}px`, 'panel drag must allow flush placement against the viewport bottom when no main toolbar is present');
 
 const definedBounds = {
     left: resizedDialog.root.style.left,
@@ -351,7 +351,7 @@ assert.equal(resizedDialog.root.dataset.eveDialogFullscreen, 'true', 'footer dou
 assert.equal(resizedDialog.root.style.left, '0px', 'maximized panel must start at the left viewport edge');
 assert.equal(resizedDialog.root.style.top, '0px', 'maximized panel must start at the top viewport edge');
 assert.equal(resizedDialog.root.style.width, `${window.innerWidth}px`, 'maximized panel must use the viewport width');
-assert.equal(resizedDialog.root.style.height, `${window.innerHeight - 52}px`, 'maximized panel must reserve one tool height at the bottom');
+assert.equal(resizedDialog.root.style.height, `${window.innerHeight}px`, 'maximized panel must use the viewport height when no main toolbar is present');
 
 Object.defineProperty(window, 'innerWidth', { configurable: true, value: 900 });
 Object.defineProperty(window, 'innerHeight', { configurable: true, value: 640 });
@@ -360,7 +360,7 @@ panelLayer.style.height = `${window.innerHeight}px`;
 window.dispatchEvent(new window.Event('resize'));
 await new Promise((resolve) => setTimeout(resolve, 10));
 assert.equal(resizedDialog.root.style.width, '900px', 'fullscreen panel must follow viewport width changes');
-assert.equal(resizedDialog.root.style.height, '588px', 'fullscreen panel must follow viewport height changes while reserving the tool band');
+assert.equal(resizedDialog.root.style.height, '640px', 'fullscreen panel must follow viewport height changes when no main toolbar is present');
 
 resizedDialog.header.dispatchEvent(new window.MouseEvent('dblclick', {
     bubbles: true,

@@ -721,6 +721,7 @@ Reusable APIs:
 - `buildPanelRuntimeConfigByToolId()` derives tool-runtime panel config from `PANEL_SURFACE_DEFINITIONS`; do not add a second panel config table in tool runtime code.
 - `panelCreatorV2` owns panel lifecycle registration, lazy loading, attach-to-layer, open/close, destroy policy, and panel bounds mode.
 - Panel API, panel layout policy, layer contract, layer ownership, selection, latched state.
+- Layer contract owns the global stack order: project tools, floating project palettes, Molecule/dialog panels, component/docked palettes, main ribbon, active drag.
 - `project_drop.js` owns project-layer native file drop routing, including document-level drops that resolve back to a `project_view_*` surface before entering the product media import path, plus project tool shortcut drag intent routing back to the main ribbon trash target for canonical soft-delete handling.
 - `tool_runtime.js` owns protected system-tool contract reconciliation before gateway execution, including `ui.creator` recovery when persisted registry state has a stale execution mode.
 - Shared media types, DOM utilities, SVG runtime, color values, group state, slider content, slider DOM/data-role selectors, shared slider direct-drag control, and tool drag.
@@ -771,7 +772,8 @@ Reusable APIs:
 
 - `eveT`, `eveTList`, locale helpers.
 - Panel chrome and overflow indicator contracts.
-- Dialog bounds/fullscreen runtime, including viewport resize reflow while fullscreen is active. Fullscreen double-click is limited to explicit panel chrome handles so tool/body double-clicks stay context-owned.
+- Dialog bounds/fullscreen runtime, including viewport resize reflow while fullscreen is active. Fullscreen dialogs use exact container edges and stop at the main toolbar top; no margin-based viewport constraint helper owns this geometry.
+- Fullscreen double-click is limited to explicit panel chrome handles so tool/body double-clicks stay context-owned.
 - Preset and token APIs.
 
 Should be extended by:
