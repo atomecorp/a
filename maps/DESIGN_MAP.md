@@ -192,7 +192,8 @@ Role:
 
 - Owns visual stacking, layer targets, panel layer contracts, and z-index semantics.
 - Design changes that move UI between layers must be checked against these contracts.
-- Current global order is project tools, floating project palettes, Molecule/dialog panels, component/docked floating palettes, main ribbon, then active drag items.
+- Current global order is project tools, floating project palettes, Molecules, component/docked floating palettes, panels/dialogs, main ribbon, then active drag items.
+- Each global order tier is represented by its own HTML layer under `#intuition`; project tools must not share a DOM layer with Molecules or panels.
 
 Design rule: z-index values should come from layer contracts or visual tokens, not one-off literals.
 

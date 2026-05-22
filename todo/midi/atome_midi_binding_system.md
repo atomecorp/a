@@ -37,6 +37,8 @@ The system must avoid:
 - UI-dependent bindings
 - unpredictable runtime behavior
 
+Implementation requirement: the binding system must target a Rust midir-based MIDI ingestion layer as the primary integration path, so the architecture stays aligned with the WebAssembly direction and with Kira.
+
 Bindings must be **object-driven**, not **UI-driven**.
 
 ---

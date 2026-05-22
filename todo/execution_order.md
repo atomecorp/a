@@ -128,6 +128,40 @@ Les points Molecule non termines sont repris plus bas dans l'ordre obligatoire r
 
 ## Ordre obligatoire des phases restantes
 
+### Phase 3 bis - Analyse prioritaire Bevy / Kira / CPAL / WebAssembly / MIDI
+
+Statut:
+
+- [ ] Non commencee
+
+Depend de:
+
+- Phase 3 terminee
+
+Sources principales:
+
+- todo/planning_audit/bevy_kira_cpal_wasm_midi_feasibility.md
+- done/cpal_Kira_integration.md
+- todo/media_handling/AV_APIS.md
+- todo/midi/Midi_implementation.md
+- todo/midi/atome_midi_binding_system.md
+
+Objectif:
+
+- Verifier l'etat reel du couple Kira/CPAL dans le framework et produire une analyse prioritaire sur l'interet et la faisabilite d'une direction Bevy pour audio, video, timeline, tracks et MIDI, y compris la piste WebAssembly et les implications energetiques.
+
+Taches:
+
+- [ ] Verifier factuellement les chemins runtime actuels Kira et CPAL, y compris les contraintes WebAssembly deja connues.
+- [ ] Evaluer l'interet reel de Bevy comme moteur applicatif et non seulement jeu, y compris le mode idle et l'impact energie.
+- [ ] Evaluer la faisabilite d'un runtime Bevy/WebAssembly pour audio, video, timeline et remplacement complet des pistes actuelles.
+- [ ] Evaluer la faisabilite MIDI de bout en bout, y compris midir, tracks MIDI, grid editor, scheduling deterministe et interop avec Kira/CPAL.
+- [ ] Produire une recommandation go/no-go, les risques, les prerequis et les options de migration avant tout chantier structurel Bevy.
+
+Contrainte de blocage:
+
+- Aucun remplacement structurel base sur Bevy pour timeline, tracks, audio, video ou MIDI ne doit commencer avant la cloture de cette phase et validation explicite de sa recommandation.
+
 ### Phase 1 - Gouvernance architecture Atome/eVe
 
 Statut:
@@ -502,6 +536,7 @@ Sources principales:
 
 Taches:
 
+- [ ] Ne pas lancer l'implementation MIDI ni un remplacement structurel des timelines/tracks par Bevy avant la cloture de la Phase 3 bis.
 - [ ] MIDI.
 - [ ] Vector editing layer.
 - [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.
