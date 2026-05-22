@@ -759,6 +759,10 @@ Main files:
 - `eVe/elements/design/panel_chrome_tokens.js`
 - `eVe/elements/design/panel_overflow_indicators.js`
 - `eVe/elements/design/dialog_runtime.js`
+- `eVe/elements/design/dialog_drag_runtime.js`
+- `eVe/elements/design/dialog_geometry_runtime.js`
+- `eVe/elements/design/dialog_reveal_runtime.js`
+- `eVe/elements/design/dialog_viewport_runtime.js`
 - `eVe/elements/system_ui_tokens.js`
 - `eVe/i18n/i18n.js`
 - `eVe/i18n/languages.js`
@@ -767,7 +771,7 @@ Reusable APIs:
 
 - `eveT`, `eveTList`, locale helpers.
 - Panel chrome and overflow indicator contracts.
-- Dialog bounds/fullscreen runtime, including viewport resize reflow while fullscreen is active.
+- Dialog bounds/fullscreen runtime, including viewport resize reflow while fullscreen is active. Fullscreen double-click is limited to explicit panel chrome handles so tool/body double-clicks stay context-owned.
 - Preset and token APIs.
 
 Should be extended by:

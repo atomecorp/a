@@ -496,7 +496,7 @@ Taches:
 
 - [ ] MIDI.
 - [ ] Vector editing layer.
-- [ ] Universal canvas.
+- [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.
 - [ ] MediaSoup.
 - [ ] Matrix social/news wall.
 - [ ] Presets/skins.

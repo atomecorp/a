@@ -534,6 +534,42 @@ const run = async () => {
             after: afterFooterDblClick
         });
 
+        const toolDoubleClickResult = await safeEval(page, () => {
+            const tool = document.querySelector(
+                '#eve_mtrack_dialog__tools_dock [data-role="eve_intuitionx-tool-host"], '
+                + '#eve_mtrack_dialog__tools_dock .tool, '
+                + '#eve_mtrack_dialog__tools_dock button, '
+                + '#eve_mtrack_dialog__tools_dock [role="button"]'
+            );
+            if (!(tool instanceof HTMLElement)) return { ok: false, error: 'tool_target_missing' };
+            tool.dispatchEvent(new MouseEvent('dblclick', {
+                bubbles: true,
+                cancelable: true,
+                view: window
+            }));
+            return {
+                ok: true,
+                tag: tool.tagName,
+                role: String(tool.dataset?.role || tool.getAttribute('role') || ''),
+                class_name: String(tool.className || '')
+            };
+        });
+        assertCheck(report, 'tool_double_click_target_available', toolDoubleClickResult?.ok === true, toolDoubleClickResult);
+        await page.waitForTimeout(250);
+        const afterToolDblClick = await readPanelState(page);
+        assertCheck(report, 'tool_double_click_does_not_toggle_fullscreen', (
+            rectDelta(afterFooterDblClick.host_rect, afterToolDblClick.host_rect) <= 4
+            && String(afterToolDblClick.data?.eveDialogFullscreen || '') !== 'true'
+        ), { before: afterFooterDblClick, after: afterToolDblClick, target: toolDoubleClickResult });
+
+        await page.locator('#eve_mtrack_dialog__body').dblclick({ position: { x: 24, y: 24 } });
+        await page.waitForTimeout(250);
+        const afterBodyDblClick = await readPanelState(page);
+        assertCheck(report, 'body_double_click_does_not_toggle_fullscreen', (
+            rectDelta(afterToolDblClick.host_rect, afterBodyDblClick.host_rect) <= 4
+            && String(afterBodyDblClick.data?.eveDialogFullscreen || '') !== 'true'
+        ), { before: afterToolDblClick, after: afterBodyDblClick });
+
         await page.locator('#eve_mtrack_dialog__close, #eve_mtrack_dialog [data-eve-panel-close="true"]').first().click({ timeout: 12000 });
         assertCheck(report, 'close_button_click_invoked', true, { ok: true });
         const closed = await waitFor(page, () => {

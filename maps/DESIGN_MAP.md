@@ -138,6 +138,10 @@ Related sources:
 
 - `eVe/elements/design/panel_chrome.js`
 - `eVe/elements/design/dialog_runtime.js`
+- `eVe/elements/design/dialog_drag_runtime.js`
+- `eVe/elements/design/dialog_geometry_runtime.js`
+- `eVe/elements/design/dialog_reveal_runtime.js`
+- `eVe/elements/design/dialog_viewport_runtime.js`
 - `eVe/elements/design/dialog_bounds.js`
 - `eVe/elements/design/panel_overflow_indicators.js`
 - `eVe/elements/design/panel_fullscreen_runtime.js`
@@ -148,6 +152,7 @@ Role:
 - Converts system panel chrome values into eVe CSS variables and style objects.
 - Supports the current panel contract: header, body, tools dock, footer, close control, resize grip, and overflow indicators.
 - Owns fullscreen panel geometry reflow on viewport resize; custom and restored panel sizes must not track viewport changes.
+- Keeps panel fullscreen double-click scoped to explicit chrome handles, while body/tool double-clicks remain available to feature runtimes.
 
 Design rule: all eVe panel chrome changes must route through this layer or `eVe/elements/design.js`, not through isolated panel-local clones.
 
