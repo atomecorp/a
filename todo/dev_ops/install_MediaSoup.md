@@ -45,7 +45,7 @@ Important naming note:
 - Hosts Atome APIs (auth, contacts, account lifecycle, local policies).
 - Provisions or links Matrix accounts during Atome account creation.
 - Hosts the Matrix integration boundary used by clients for room/account actions.
-- Hosts the mediasoup signaling endpoints used by clients to negotiate WebRTC once Matrix membership and call state allow it.
+- Hosts the mediasoup signaling commands used by clients to negotiate WebRTC once Matrix membership and call state allow it.
 
 1. **mediasoup Media Service (Node.js module inside Atome core)**
 
@@ -139,16 +139,16 @@ Before a user can call / invite another user, they must be connected (or at leas
   - `status`: `pending | accepted | rejected | blocked`
   - `created_at`, `updated_at`
 
-### Endpoints (MVP)
+### WS commands (MVP)
 
-- `POST /contacts/request`
+- `contacts.request`
 
   - body: `{ to_phone_e164 }`
   - action: create request
-- `POST /contacts/respond`
+- `contacts.respond`
 
   - body: `{ request_id, decision: "accepted" | "rejected" | "blocked" }`
-- `GET /contacts`
+- `contacts.list`
 
   - returns accepted connections
 
@@ -178,23 +178,23 @@ Before a user can call / invite another user, they must be connected (or at leas
 - `visibility`: `private | connections | public` (optional; default `private`)
 - `created_at`
 
-### Minimal endpoints
+### Minimal WS commands
 
-- `POST /rooms`
+- `rooms.create`
 
   - body: `{ name, visibility }`
   - creates a Matrix room and returns: `{ matrix_room_id }`
-- `GET /rooms/:matrix_room_id`
+- `rooms.get`
 
   - returns Matrix-backed metadata
-- `POST /rooms/:matrix_room_id/invite`
+- `rooms.invite`
 
   - body: `{ to_phone_e164 }`
   - requires connection accepted (if room private)
-- `POST /rooms/:matrix_room_id/join`
+- `rooms.join`
 
   - joins the Matrix room or verifies existing membership
-- `POST /rooms/:matrix_room_id/call/join`
+- `rooms.call.join`
 
   - returns: mediasoup capabilities + join token only after Matrix membership/call authorization passes
 
@@ -208,7 +208,7 @@ Membership is durable in Matrix. mediasoup participant state is ephemeral and ex
 
 Signaling is just JSON messages over **WebSocket**.
 
-### WS endpoint
+### WS channel
 
 - `WS /ws`
 
@@ -319,13 +319,13 @@ Record the room’s audio/video to disk from the server.
   - **single-speaker** recording (choose one producer)
   - OR record **separate tracks per producer** (still non-trivial but simpler than compositing)
 
-### Minimal endpoints
+### Minimal WS commands
 
-- `POST /rooms/:room_id/record/start`
+- `rooms.record.start`
 
   - body: `{ mode: "singleProducer"|"perProducer", producer_id? }`
   - returns: `{ recording_id }`
-- `POST /rooms/:room_id/record/stop`
+- `rooms.record.stop`
 
   - body: `{ recording_id }`
 
@@ -387,7 +387,7 @@ All UI is Atome-native (no mediasoup UI).
 
 MVP must include:
 
-- TLS for HTTP/WS in non-local deployments.
+- TLS for the server and WebSocket transport in non-local deployments.
 - Basic auth token per user.
 - Basic access control: private rooms require invite/connection.
 - Minimal rate limits:
@@ -415,7 +415,7 @@ Everything required on the server must be installed and configured via **one scr
 - Install project dependencies (`npm ci` / lockfile-based)
 - Provision environment (`.env` from template + required secrets placeholders)
 - Configure and enable the service (systemd or rc.d depending on host OS)
-- Open required ports (HTTP/WS + WebRTC UDP port range)
+- Open required ports (server WebSocket + WebRTC UDP port range)
 - Run a health check and print final status
 
 ### Script properties
@@ -435,8 +435,8 @@ Everything required on the server must be installed and configured via **one scr
 - Create communication plugin entry that registers:
 
   - WS signaling handler
-  - Matrix-backed room endpoints
-  - contacts endpoints
+  - Matrix-backed room commands
+  - contacts commands
   - Atome account creation hooks for Matrix provisioning/linking
 
 ### Step B — Atome account creation + Matrix identity

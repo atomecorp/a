@@ -527,6 +527,7 @@ Sources principales:
 - todo/rendering_graphics/universal_canvas.md
 - todo/dev_ops/install_MediaSoup.md
 - todo/communication_social/social_network_tool.md
+- todo/communication_social/user_auth.md
 - todo/eve_features/presets-system.md
 - todo/dev_ops/api-sugar.md
 - todo/dev_ops/npm-publication-checklist.md
@@ -540,8 +541,7 @@ Taches:
 - [ ] MIDI.
 - [ ] Vector editing layer.
 - [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.
-- [ ] MediaSoup.
-- [ ] Matrix social/news wall.
+- [ ] Matrix protocol + MediaSoup communication stack: Matrix accounts, exchange rooms, social/news wall, telephony/call state, and mediasoup media-plane integration.
 - [ ] Presets/skins.
 - [ ] API sugar.
 - [ ] Publication npm.
