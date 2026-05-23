@@ -715,6 +715,7 @@ Entry points:
 - MTraX window API creators: `createMtrackWindowApiRuntime`, `createWindowApiBridgeRuntime`.
 - MTraX globals: `window.open_mtrack_panel`, `window.close_mtrack_panel`, `window.eveMtrackApi`.
 - MTraX runtime families exposed under `window.eveMtrackApi`: transport, project automation, record state, record media, track record source, clip move/crop/split/join, SVG layer control, timeline export, preview export, renderer/WebGPU diagnostics, selection context, and group timeline loading.
+- MTraX clip split target resolution: explicit clip inputs keep highest precedence for programmatic calls. Interactive `ui.split` resolves selected clips at the playhead first, then clips on selected tracks at the playhead, and never expands to linked audio/video companions. Non-selected clips under the playhead are not split.
 
 Owner: eVe closed product media workflow.
 
