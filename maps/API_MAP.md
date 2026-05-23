@@ -245,6 +245,8 @@ Verified entry points:
 - Molecule tool modules: timeline schemas, reducers, session registry, persistence controller, media resolver, panel runtime, gestures, recording, nesting, and multi-instance controllers.
 - MTraX window API: `createMtrackWindowApiRuntime`, `createWindowApiBridgeRuntime`, transport, recording, clip move/crop, track record source, misc, and record-state runtimes.
 
+Transport contract: Molecule `play()` resumes from the current transport position when no explicit `startSeconds` value is supplied. MTraX `playTimeline()` starts from the current playhead and must not rewind at play start. Same-group timeline reloads triggered as part of play preserve the current playhead and must not issue an internal stop before play. `startSeconds: 0` remains an explicit Molecule rewind request, while user-visible `stop()` is the transport command that resets position to zero.
+
 Boundary status: Closed product media workflow. Public promotion requires a deliberate Atome media contract and tests.
 
 Known constraints: MTraX/Molecule naming remains transitional and is tracked in later execution tasks.

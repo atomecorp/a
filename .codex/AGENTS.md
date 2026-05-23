@@ -266,6 +266,7 @@ Test routing rules:
 - For parser, syntax, or repository-wide safety changes, include npm run check:syntax.
 - For architecture or policy-sensitive changes, include the relevant guardrail path and prefer at least npm run check:m0.
 - For Molecule-related changes, include npm run test:molecule and widen to npm run check:m1 when the change can affect guardrails.
+- During any Molecule-related debug, feature addition, repair, cleanup, or refactor, progressively rename remaining `MTrax` references to `molecule` whenever the touched scope makes the rename coherent and verifiable.
 - For server or API behavior, include npm run test:server-verification when the touched path reaches the verification surface.
 - For UI issues, use the documented UI debug process and the UI scenario runner when applicable; do not rely on visual inspection alone.
 - If an existing probe already targets the failing surface, run it before inventing a new temporary script.

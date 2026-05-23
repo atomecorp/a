@@ -123,6 +123,9 @@ Main entry points:
 - `npm run check:molecule-guardrails`
 - `npm run test:run`
 - Targeted `node --test ...` or `node ...test.mjs` commands depending on the touched module.
+- `tests/probes/mtrax_play_resume_position.test.mjs` guards the MTraX transport contract that `playTimeline()` starts from the current playhead and does not rewind at play start.
+- `tests/probes/mtrax_group_reload_preserve_playhead.test.mjs` guards same-group MTraX timeline reloads so play-triggered reloads do not issue stop before play and preserve the current playhead.
+- `tests/probes/mtrax_keyboard_space_toggle_resume.test.mjs` guards the Molecule space-key shortcut cycle so it calls play, pause, then play again without resetting the playhead.
 - `tests/strangler_v2/_env.mjs` owns the maintained mock browser fixture for colocated eVe Intuition runtime tests.
 - `tests/strangler_v2/palette_ssot_guard.test.mjs` guards the menu/palette source-of-truth contract by preventing legacy example entrypoints from mutating `new_menu_v2` directly.
 - `tests/probes/user_panel_content_contract.test.mjs` verifies the home/user panel module still mounts non-empty auth and profile dialog bodies from the canonical panel controls.
