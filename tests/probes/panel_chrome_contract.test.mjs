@@ -55,6 +55,13 @@ globalThis.$ = (tag, options = {}) => {
 };
 
 const { createEveDialog } = await import('../../eVe/elements/design.js');
+const { createEveCloseControl, createEvePanelCloseControl } = await import('../../eVe/elements/design/panel_chrome.js');
+
+assert.equal(createEveCloseControl, createEvePanelCloseControl, 'generic and panel close factories must share one implementation');
+const closeControl = createEveCloseControl();
+assert.equal(closeControl.style.width, '16px', 'shared close control should stay compact inside panel chrome');
+assert.equal(closeControl.style.height, '16px', 'shared close control should preserve square geometry');
+assert.equal(closeControl.style.borderRadius, '3px', 'shared close control should keep a restrained rounded corner');
 
 const installStyleRect = (node) => {
     Object.defineProperty(node, 'offsetWidth', {
@@ -105,6 +112,8 @@ const assertCanonicalPanelChrome = (dialog, id) => {
     assert.equal(footer.contains(dialog.title), true, `${id} title must live in the footer`);
     assert.equal(footer.contains(close), true, `${id} close control must live in the footer`);
     assert.equal(close.dataset.evePanelClose, 'true', `${id} close control must use the shared close marker`);
+    assert.equal(footer.style.paddingLeft, '5px', `${id} close control left inset must match its vertical chrome inset`);
+    assert.equal(footer.style.paddingRight, '5px', `${id} footer horizontal inset must stay symmetric`);
 
     const grips = Array.from(root.querySelectorAll('[data-role="dialog-resize-grip"]'));
     assert.equal(grips.length, 1, `${id} must expose exactly one canonical resize grip`);

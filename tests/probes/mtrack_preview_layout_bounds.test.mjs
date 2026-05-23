@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createPreviewLayoutBindingsRuntime } from '../../eve/application/domains/mtrax/preview/preview_layout_bindings_runtime.js';
+import { createPreviewLayoutBindingsRuntime } from '../../eVe/domains/mtrax/preview/preview_layout_bindings_runtime.js';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>');
 const { window } = dom;

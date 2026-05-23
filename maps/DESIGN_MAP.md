@@ -99,6 +99,7 @@ Role:
 
 - Root source for product-neutral-looking UI values used by eVe surfaces.
 - Defines theme colors, CSS variable names, input tokens, tool metrics, panel chrome metrics, shadows, blur, and close button values.
+- Close button metrics are intentionally compact and less rounded than general tool buttons so shared panel chrome controls stay visually light; the shared 16px close control is centered in the 26px chrome band with a 5px optical inset.
 
 Exports verified:
 
@@ -151,6 +152,7 @@ Role:
 - Defines the shared panel header/footer/tools dock chrome.
 - Converts system panel chrome values into eVe CSS variables and style objects.
 - Supports the current panel contract: header, body, tools dock, footer, close control, resize grip, and overflow indicators.
+- `createEveCloseControl` is the generic close-control entry point for eVe panels and close affordances; `createEvePanelCloseControl` remains an alias to the same implementation for existing panel code.
 - Owns fullscreen panel geometry reflow on viewport resize; custom and restored panel sizes must not track viewport changes.
 - Dialog fullscreen geometry is direct: left/top are `0`, width matches the dialog container, and height stops exactly at the main toolbar top when the toolbar is present.
 - Dialog viewport helpers no longer own margin-based clamping; placement uses the dialog container and main toolbar bounds directly.
@@ -307,6 +309,7 @@ Role:
 - Preview/tracks separator sizing is owned by `eVe/domains/mtrax/preview/preview_layout_runtime.js`; bounds must be computed from the rendered MTraX stack, including the real tracks viewport, so WebView layout differences cannot collapse the separator resize range to the preview minimum.
 - MTraX integrated tools keep horizontal overflow while hiding native scrollbars, and the position indicator is placed inside the ruler-left column above track headers.
 - MTraX content, preview section, preview host, and preview surface containers stay square-edged; rounded corners remain reserved for explicit controls or timeline affordances, not the Molecule composition frame.
+- Docked MTraX keeps the preview section, preview/tracks splitter, and tracks content directly adjacent; the splitter owns the only reserved space between preview and tracks.
 - Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
 
 Design rule: MTraX/Molecule visuals are closed product workflow design unless promoted through a deliberate Atome media contract.

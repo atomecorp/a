@@ -669,7 +669,7 @@ Evidence: exports in `eVe/elements/design.js`, `eVe/elements/eVe_look.js`, `eVe/
 
 Entry point families:
 
-- Dialog and panel factories: `createEveDialog`, `revealEveDialog`, panel chrome helpers, bounds helpers, fullscreen helpers with viewport resize tracking only while fullscreen is active, chrome-scoped fullscreen double-click handles, overflow indicators.
+- Dialog and panel factories: `createEveDialog`, `revealEveDialog`, `createEveCloseControl`, panel chrome helpers, bounds helpers, fullscreen helpers with viewport resize tracking only while fullscreen is active, chrome-scoped fullscreen double-click handles, overflow indicators.
 - UI primitives: rows, buttons, inputs, editable text, text helpers, and `eveUI` namespace.
 - Tokens and presets: system UI tokens, eVe tokens, CSS variable application, base style installation, panel chrome tokens and metrics.
 - i18n binding helpers for visible text.
