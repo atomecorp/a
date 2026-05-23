@@ -672,6 +672,7 @@ Reusable APIs:
 - Atome-triggered Molecule opening is intentionally routed through `requestMtrackOpenForAtome` and the `atome_mtrack_open_request` source layer. Double-click is only the current UI trigger; Molecule open handling must stay movable to another event/context by preserving the source-layer request contract.
 - Video preview renderers and preview panel services.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
+- MTraX preview frame dispatch owns visual track priority: during playback and transport scrub, video/image clips are resolved by top visible track order; paused editing may temporarily promote selected clips for manipulation, while audio clips remain outside visual priority filtering.
 - User profile API.
 
 Should be extended by:

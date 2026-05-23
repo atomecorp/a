@@ -312,6 +312,7 @@ Role:
 - Docked MTraX keeps the preview section, preview/tracks splitter, and tracks content directly adjacent; the splitter owns the only reserved space between preview and tracks.
 - Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
 - Molecule/MTraX panel titles are placed in the top header and centered; the bottom-right footer slot is reserved for the visible resize grip, not product text. The grip uses the bundled `assets/images/icons/resize.svg` icon inside the same visible button footprint as the shared close control while preserving its larger resize hit target.
+- MTraX preview compositing treats the top visible track as the playback and scrub priority for video/image clips. Selection may temporarily promote clips while playback and scrub are stopped so editing handles remain reachable, but transport playback/scrub returns to deterministic track-order compositing.
 
 Design rule: MTraX/Molecule visuals are closed product workflow design unless promoted through a deliberate Atome media contract.
 
