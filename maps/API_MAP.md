@@ -718,6 +718,8 @@ Entry points:
 - MTraX globals: `window.open_mtrack_panel`, `window.close_mtrack_panel`, `window.eveMtrackApi`.
 - MTraX runtime families exposed under `window.eveMtrackApi`: transport, project automation, record state, record media, track record source, clip move/crop/split/join, SVG layer control, timeline export, preview export, renderer/WebGPU diagnostics, selection context, and group timeline loading.
 - MTraX clip split target resolution: explicit clip inputs keep highest precedence for programmatic calls. Interactive `ui.split` resolves selected clips at the playhead first, then clips on selected tracks at the playhead, and never expands to linked audio/video companions. Non-selected clips under the playhead are not split.
+- MTraX clip selection APIs: `getSelectionContext` reads selected clips with `selected_clip_ids`, `selected_clip_selection_ids`, `selected_clip_runtime_ids`, and `selected_clips`; `setClipSelection` / `selectClips` resolves incoming `clip_id`, `clip_ids`, or `selection_ids` through the clip target resolver before writing runtime selection. MCP-facing `ui.mtrack.clip_selection` uses the same read/write path.
+- MTraX clip deletion target resolution: interactive delete and `deleteSelection` remove only currently selected clips, or clips on selected tracks when no clips are selected. The operation does not expand selected clips through linked audio/video metadata or shared `sync_group_id`; linked companion deletion must be represented by explicit clip selection.
 
 Owner: eVe closed product media workflow.
 
