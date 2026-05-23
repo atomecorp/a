@@ -313,6 +313,8 @@ Role:
 - Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
 - Molecule/MTraX panel titles are placed in the top header and centered; the bottom-right footer slot is reserved for the visible resize grip, not product text. The grip uses the bundled `assets/images/icons/resize.svg` icon inside the same visible button footprint as the shared close control while preserving its larger resize hit target.
 - MTraX preview compositing treats the top visible track as the playback and scrub priority for video/image clips. Selection may temporarily promote clips while playback and scrub are stopped so editing handles remain reachable, but transport playback/scrub returns to deterministic track-order compositing.
+- MTraX clip preview metadata renders audio waveforms and video thumbnails from the clip source window before visual layout. Split and crop operations must display the `in`/`out` media interval without restarting from the source beginning or stretching the full-source waveform/thumbnails into the cropped clip width.
+- During active MTraX clip crop gestures, the clip preview is temporarily kept at its pre-gesture width and clipped by the body overflow so the cropped waveform or thumbnails are hidden live without resampling; the final source-window redraw runs after the gesture ends.
 
 Design rule: MTraX/Molecule visuals are closed product workflow design unless promoted through a deliberate Atome media contract.
 

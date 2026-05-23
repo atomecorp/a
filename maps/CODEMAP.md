@@ -673,6 +673,8 @@ Reusable APIs:
 - Video preview renderers and preview panel services.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
 - MTraX preview frame dispatch owns visual track priority: during playback and transport scrub, video/image clips are resolved by top visible track order; paused editing may temporarily promote selected clips for manipulation, while audio clips remain outside visual priority filtering.
+- MTraX clip preview metadata owns source-window rendering for audio waveforms and video thumbnails, so split/crop edits must preserve the source `in`/`out` interval visually instead of resampling the full media source.
+- MTraX clip crop preview masking lives in `eVe/domains/mtrax/clips/crop_preview_mask_runtime.js`; crop gestures use it for live visual feedback while the final preview metadata redraw remains owned by `preview_metadata_runtime.js`.
 - User profile API.
 
 Should be extended by:
