@@ -8,14 +8,21 @@ Read and strictly apply:
 
 If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
 
-# Atome + mediasoup MVP (JS-only)
+# Atome + Matrix + mediasoup MVP (JS-only)
 
-Goal: integrate **mediasoup** into the Atome core as a first-class plugin (same integration philosophy as CodeMirror / Leaflet / GSAP), while keeping everything **minimal**:
+Goal: integrate **Matrix protocol** and **mediasoup** into the Atome core as first-class communication infrastructure, while keeping everything **minimal**:
 
 - **JS-only** (no TypeScript requirement).
 - **Multi-room (basic)**
 - **Recording (if possible)** via a simple server-side pipeline.
-- **Phone-number identity**: users are identified by phone number; users send **connection requests** before joining rooms.
+- **Matrix-backed identity and rooms**: Atome account creation must provision or link a Matrix account; exchange rooms are Matrix rooms.
+- **Matrix call control, mediasoup media plane**: Matrix owns accounts, rooms, membership, invitations, chat/event history, call signaling, telephony, and video session orchestration. mediasoup owns the lower media transport layers for video/audio RTP/WebRTC routing.
+- **Phone-number identity remains an Atome onboarding input**: phone numbers can be used for local identity, contact discovery, and connection requests, but the canonical exchange surface must be Matrix-compatible.
+
+Important naming note:
+
+- **Matrix protocol** in this file means the open communication framework used by Element X.
+- It is distinct from the existing **Project Matrix** UI feature documented under `todo/communication_social/matrix.md`.
 
 ---
 
@@ -35,23 +42,68 @@ Goal: integrate **mediasoup** into the Atome core as a first-class plugin (same 
 
 1. **Atome Core (Fastify server)**
 
-- Hosts Atome APIs (auth, contacts, connection requests, rooms metadata).
-- Hosts **Signaling** endpoints used by clients to negotiate WebRTC.
+- Hosts Atome APIs (auth, contacts, account lifecycle, local policies).
+- Provisions or links Matrix accounts during Atome account creation.
+- Hosts the Matrix integration boundary used by clients for room/account actions.
+- Hosts the mediasoup signaling endpoints used by clients to negotiate WebRTC once Matrix membership and call state allow it.
 
 1. **mediasoup Media Service (Node.js module inside Atome core)**
 
 - Runs mediasoup Workers and Routers.
 - Exposes an internal API to the Atome core (function calls, not a separate microservice in MVP).
 
+1. **Matrix Service / Homeserver Integration**
+
+- Provides the canonical account, room, invitation, membership, and event layer.
+- Creates exchange rooms as Matrix rooms.
+- Provides the telephony/video call state and invitation surface.
+- May be backed by an embedded/dev homeserver for MVP or an external homeserver for production, but the Atome API boundary must stay stable.
+
 1. **Client (Atome UI / Tauri WebView / Browser)**
 
 - Uses `mediasoup-client` + WebRTC APIs.
+- Uses Atome communication APIs that bridge to Matrix rather than talking directly to ad-hoc room metadata.
 - Renders UI with Atome primitives (your own interface).
 
 ### Why “inside core”
 
 - mediasoup is integrated like other core plugins: shipped and initialized by Atome core.
 - The plugin registers routes + internal APIs.
+- Matrix integration must be treated as the communication control plane, not as a decorative chat add-on.
+
+---
+
+## 1.5) Matrix protocol responsibilities
+
+### Required scope
+
+Matrix must own:
+
+- account provisioning/linking from Atome account creation;
+- exchange room creation and membership;
+- room invitations and acceptance/rejection flows;
+- chat/event history for exchange rooms;
+- call session metadata for telephony and video;
+- authorization context that decides whether a user may join a mediasoup room.
+
+mediasoup must not duplicate:
+
+- durable room identity;
+- user accounts;
+- invitations;
+- membership history;
+- chat/event history.
+
+### Atome account creation refactor
+
+Atome account creation must be refactored so that a successful account creation can deterministically create or link:
+
+- the Atome user record;
+- the Matrix user/account identifier;
+- the default user communication room(s), if required;
+- the local identity/contact metadata needed by Atome.
+
+This refactor is part of the Matrix integration, not a separate optional cleanup.
 
 ---
 
@@ -113,12 +165,14 @@ Before a user can call / invite another user, they must be connected (or at leas
 
 ### Definition
 
-- A **Room** is an Atome entity.
-- Each room maps to a **mediasoup Router**.
+- A durable **Room** is a Matrix room.
+- Atome may keep a local indexed projection/cache of Matrix room metadata for search, UI, permissions, and offline sync.
+- Each active call/video session maps one Matrix room or Matrix call session to a **mediasoup Router**.
 
 ### Room fields (conceptual)
 
-- `room_id`
+- `matrix_room_id`
+- `atome_room_projection_id` (optional local cache object)
 - `owner_user_id`
 - `name`
 - `visibility`: `private | connections | public` (optional; default `private`)
@@ -129,24 +183,24 @@ Before a user can call / invite another user, they must be connected (or at leas
 - `POST /rooms`
 
   - body: `{ name, visibility }`
-  - returns: `{ room_id }`
-- `GET /rooms/:room_id`
+  - creates a Matrix room and returns: `{ matrix_room_id }`
+- `GET /rooms/:matrix_room_id`
 
-  - returns metadata
-- `POST /rooms/:room_id/invite`
+  - returns Matrix-backed metadata
+- `POST /rooms/:matrix_room_id/invite`
 
   - body: `{ to_phone_e164 }`
   - requires connection accepted (if room private)
-- `POST /rooms/:room_id/join`
+- `POST /rooms/:matrix_room_id/join`
 
-  - returns: mediasoup capabilities + join token
+  - joins the Matrix room or verifies existing membership
+- `POST /rooms/:matrix_room_id/call/join`
+
+  - returns: mediasoup capabilities + join token only after Matrix membership/call authorization passes
 
 ### Membership
 
-For MVP, membership can be ephemeral:
-
-- user joins => server keeps an in-memory `roomParticipants` map
-- optional: persist memberships later
+Membership is durable in Matrix. mediasoup participant state is ephemeral and exists only while a user is actively connected to a call.
 
 ---
 
@@ -377,31 +431,46 @@ Everything required on the server must be installed and configured via **one scr
 ### Step A — Plugin skeleton
 
 - Add `mediasoup` + `mediasoup-client` dependencies.
-- Create plugin entry that registers:
+- Add Matrix homeserver/integration configuration and the minimal Matrix client/server dependency selected for the JS-only runtime.
+- Create communication plugin entry that registers:
 
   - WS signaling handler
-  - room endpoints
+  - Matrix-backed room endpoints
   - contacts endpoints
+  - Atome account creation hooks for Matrix provisioning/linking
 
-### Step B — Single worker, single room
+### Step B — Atome account creation + Matrix identity
+
+- Refactor Atome account creation so every created user deterministically creates or links a Matrix account.
+- Persist the Matrix user identifier in the Atome user profile/projection.
+- Verify duplicate phone/account cases are explicit and do not create orphan Matrix accounts.
+
+### Step C — Matrix room creation and membership
+
+- Create exchange rooms through Matrix.
+- Invite users through Matrix room membership.
+- Keep Atome local room projections synchronized from Matrix events.
+
+### Step D — Single worker, single Matrix call room
 
 - Start 1 mediasoup Worker.
-- Create 1 Router.
+- Create 1 Router for an authorized Matrix room call.
 - Implement signaling: createTransport/connect/produce/consume.
 - Verify Tauri + browser can call each other.
 
-### Step C — Multi-room basic
+### Step E — Multi-room basic
 
-- Map `room_id -> Router`.
+- Map `matrix_room_id/call_session_id -> Router`.
 - Ensure room cleanup when empty.
-- Implement invite/join rules.
+- Implement join rules from Matrix membership and call state.
 
-### Step D — Phone-based connections
+### Step F — Phone-based contact discovery
 
 - Implement connection requests + accept/reject.
-- Gate invitations by accepted connections.
+- Map accepted connections to Matrix invitations where applicable.
+- Gate room invitations by accepted connections or Matrix membership policy.
 
-### Step E — Optional recording
+### Step G — Optional recording
 
 - Implement PlainTransport output.
 - Spawn FFmpeg process per recording.
@@ -411,11 +480,14 @@ Everything required on the server must be installed and configured via **one scr
 
 ## 11) MVP acceptance checklist
 
-- [ ] User login identity includes `phone_e164`.
+- [ ] User login identity includes `phone_e164` where phone onboarding is enabled.
+- [ ] Atome account creation creates or links a Matrix account.
+- [ ] Atome user profile stores the Matrix user identifier.
 - [ ] Send + accept connection request.
-- [ ] Create room.
-- [ ] Invite connection.
-- [ ] Join room from Tauri and/or browser.
+- [ ] Create a Matrix exchange room through Atome.
+- [ ] Invite connection through Matrix membership.
+- [ ] Join Matrix room from Tauri and/or browser.
+- [ ] Join Matrix-backed call session through Atome mediasoup signaling.
 - [ ] Publish mic/cam.
 - [ ] Receive remote tracks.
 - [ ] Leave room cleans resources.

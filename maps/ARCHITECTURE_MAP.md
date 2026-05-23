@@ -158,6 +158,7 @@ Canonical extension points:
 - `eVe/domains/*/api/` for closed domain APIs.
 - `eVe/core/*_store/` for closed product store adapters.
 - `eVe/domains/mtrax/` and `eVe/intuition/tools/molecule/` for closed Molecule/MTraX workflows.
+- Linked audio for dropped video files is owned inside `eVe/domains/mtrax/clips/` and must consume the existing MTraX descriptor media resolver and extraction/conversion path instead of introducing a parallel audio import pipeline.
 
 Must not be duplicated by:
 
@@ -271,6 +272,7 @@ Rules:
 - Tool execution emits intentions and property-level diffs; history must not depend on re-executing arbitrary tool code to rebuild state.
 - Runtime state is derived and rebuildable.
 - Event history and property versions are authoritative.
+- Molecule session history is timeline-scoped: durable Molecule commands append history events, undo/redo restore deterministic timeline snapshots, and keyboard handling inside a Molecule must not fall through to global Atome selection undo.
 - Validation states and snapshots are explicit and immutable anchors.
 - Direct UI, panel, import handler, store, or domain mutation of durable Atome state is forbidden.
 - Soft-delete is the durable deletion model for canonical Atome history.

@@ -126,6 +126,7 @@ Main entry points:
 - `tests/probes/mtrax_play_resume_position.test.mjs` guards the MTraX transport contract that `playTimeline()` starts from the current playhead and does not rewind at play start.
 - `tests/probes/mtrax_group_reload_preserve_playhead.test.mjs` guards same-group MTraX timeline reloads so play-triggered reloads do not issue stop before play and preserve the current playhead.
 - `tests/probes/mtrax_keyboard_space_toggle_resume.test.mjs` guards the Molecule space-key shortcut cycle so it calls play, pause, then play again without resetting the playhead.
+- `tests/probes/molecule_session_history.test.mjs` guards Molecule session undo/redo, append-only history events, and persistence of restored timeline snapshots.
 - `tests/strangler_v2/_env.mjs` owns the maintained mock browser fixture for colocated eVe Intuition runtime tests.
 - `tests/strangler_v2/palette_ssot_guard.test.mjs` guards the menu/palette source-of-truth contract by preventing legacy example entrypoints from mutating `new_menu_v2` directly.
 - `tests/probes/user_panel_content_contract.test.mjs` verifies the home/user panel module still mounts non-empty auth and profile dialog bodies from the canonical panel controls.
@@ -675,6 +676,7 @@ Reusable APIs:
 - Atome-triggered Molecule opening is intentionally routed through `requestMtrackOpenForAtome` and the `atome_mtrack_open_request` source layer. Double-click is only the current UI trigger; Molecule open handling must stay movable to another event/context by preserving the source-layer request contract.
 - Video preview renderers and preview panel services.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
+- MTraX local file drops create linked video/audio clip pairs through `eVe/domains/mtrax/clips/add_clip_runtime.js` and `linked_video_audio_drop_runtime.js`; the audio side must keep the existing `video_audio` descriptor path so server/native extraction and conversion remain centralized.
 - MTraX preview frame dispatch owns visual track priority: during playback and transport scrub, video/image clips are resolved by top visible track order; paused editing may temporarily promote selected clips for manipulation, while audio clips remain outside visual priority filtering.
 - MTraX clip preview metadata owns source-window rendering for audio waveforms and video thumbnails, so split/crop edits must preserve the source `in`/`out` interval visually instead of resampling the full media source.
 - MTraX clip split/join editing is split by responsibility: `split_join_runtime.js` owns split execution and selected-target filtering, while `join_runtime.js` owns join segment construction and replacement. Split targets are explicit clip inputs, selected clips at the playhead, or clips on selected tracks at the playhead; linked audio/video companions are never auto-added by split.
