@@ -124,6 +124,79 @@ The most serious regression reported after these changes:
 - but when the recording was appended into the molecule/timeline, the video track could be empty;
 - this means the workflow still had a hidden dependency between upload completion, metadata loading, and timeline media creation.
 
+## Duplicate Atome Creation On Video Record
+
+The duplicate atome issue must also be treated as unresolved.
+
+There was a historical bug where one video recording could create multiple project-visible atomes. During the attempt, I changed the workflow so the persisted `video_recording_*` atome was reused directly instead of creating an additional `video_*` atome. That reduced one observed duplication path, but it should not be considered a proven final fix.
+
+The next implementation must trace the full recording strategy before changing code:
+
+- when the UI tool starts recording;
+- when the preview session starts;
+- when browser/Tauri/iOS native recording starts;
+- when audio is attached or separately captured;
+- when WebM/MP4/MOV conversion starts;
+- when upload/persistence completes;
+- when `Atome.commit` creates the recording atome;
+- when the project surface renders the result;
+- when the recording is appended into a molecule/timeline;
+- when video and audio tracks are created or linked.
+
+The exact order matters. Any confusion between these stages can create duplicate atomes or empty video/audio tracks.
+
+Special care is required because the record workflow crosses multiple runtime contexts:
+
+- browser/web;
+- Tauri desktop;
+- iOS standalone app;
+- AUv3/iOS extension;
+- Fastify server upload;
+- local/native media paths;
+- server-side playback/transcode cache.
+
+Each context may produce different filenames, MIME types, paths, and timing:
+
+- browser may produce `.webm` or `.mp4`;
+- iOS/native may produce `.mov` or another native path;
+- server playback may serve a `.webm` request as cached `.mp4`;
+- audio may be embedded in the video, extracted separately, or represented as a linked audio clip;
+- conversion can finish after the recording atome already exists;
+- project rendering and timeline append can happen before media metadata is ready.
+
+The future fix must make one canonical ownership decision:
+
+- which layer creates the recording atome;
+- which layer is allowed to render it on the project surface;
+- which layer appends it into the molecule;
+- whether audio is embedded, extracted, or linked;
+- which layer creates separate audio clips, if any.
+
+There must be a hard invariant:
+
+- one user video record action creates exactly one canonical video recording atome;
+- optional audio extraction/linking must not create a second visible video atome;
+- timeline append may create clips, but not additional project atomes;
+- conversion/cache steps must not create new project atomes;
+- project poster generation must not create project atomes.
+
+Before any future correction, add a trace that records every creation point with:
+
+- atome id;
+- atome type;
+- project id;
+- parent id;
+- source layer;
+- filename;
+- file path;
+- media URL;
+- MIME type;
+- duration;
+- runtime context;
+- whether the creation is persistence, project render, timeline clip, audio extraction, or conversion.
+
+No duplicate-atome fix should be accepted without this trace proving the exact creation order and proving that only one project-visible video atome is created per record.
+
 ## Suspected Root Problems
 
 ### 1. Poster Work Was Mixed With Recording Workflow
