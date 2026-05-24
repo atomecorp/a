@@ -516,7 +516,7 @@ Synchronization must remain:
 Per-mode mandatory stacks and constraints:
 
 - Web Browser mode: Fastify, WebGPU, Kira WASM, Symphonia WASM.
-- Tauri mode: Axum, WebGPU, native Kira, native Symphonia. All filesystem access MUST pass through Axum. Forbidden: browser File APIs, direct WebView filesystem access, browser-side filesystem hacks.
+- Tauri mode: Axum, WebGPU, native Kira, native Symphonia. Axum is the single allowed backend/runtime entry point for all Tauri work, including tests, debugging, implementation, APIs, filesystem access, local services, and integration flows. All filesystem access MUST pass through Axum. Forbidden: browser File APIs, direct WebView filesystem access, browser-side filesystem hacks, alternate Tauri server paths, ad hoc test ports, temporary dev bridges, and the test port 1430. Tauri must always target the Axum stack and must never rely on port 1430.
 - iOS mode: AIS server, native SQLite iOS, WebGPU, native Kira, native Symphonia. Must be optimized for low latency, battery efficiency, offline-first operation, and mobile stability.
 - AUv3 mode: AIS server, native SQLite iOS, WebGPU, native Kira, native Symphonia. Realtime constraints are mandatory: no blocking operations, no disk access in audio thread, no nondeterministic latency, and no runtime allocation in realtime audio thread.
 - Pure OS FreeBSD mode: native FreeBSD runtime, Fastify server, auto-launched WebView, native Kira, native Symphonia. The system must behave as a standalone creative operating system.

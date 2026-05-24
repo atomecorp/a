@@ -4,13 +4,16 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { PNG } from 'pngjs';
 
-const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:1430';
+const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3000';
 const PHONE = process.env.ADOLE_TEST_PHONE || '77777777';
 const PASSWORD = process.env.ADOLE_TEST_PASSWORD || '77777777';
 const OUT_DIR = path.resolve('temp/probe_reports/tauri_recorded_video_mtrack_probe');
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
 const CANVAS_SCREENSHOT_FILE = path.join(OUT_DIR, 'mtrack_canvas.png');
+const PROJECT_POSTER_BEFORE_FILE = path.join(OUT_DIR, 'project_poster_before_open.png');
+const PROJECT_POSTER_AFTER_FILE = path.join(OUT_DIR, 'project_poster_after_close.png');
 const FORCE_TAURI_RUNTIME = process.env.PROBE_TAURI_RUNTIME === '1';
+const USE_FAKE_CAPTURE = process.env.PROBE_USE_FAKE_CAPTURE === '1';
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -243,7 +246,7 @@ const run = async () => {
         headless: process.env.HEADLESS !== '0',
         args: [
             '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream',
+            ...(USE_FAKE_CAPTURE ? ['--use-fake-device-for-media-stream'] : []),
             '--autoplay-policy=no-user-gesture-required'
         ]
     });
@@ -398,60 +401,70 @@ const run = async () => {
         if (report.project?.ok !== true) throw new Error(`project_failed:${report.project?.error || 'unknown'}`);
 
         mark('record_start');
-        report.record = await safeEval(page, async () => {
+        report.record = await safeEval(page, async ({ useFakeCapture }) => {
             const videoApi = await import('/eVe/domains/media/api/video_api.js');
-            const audioContext = new AudioContext({ sampleRate: 48000 });
-            await audioContext.resume();
-            const oscillator = audioContext.createOscillator();
-            const gain = audioContext.createGain();
-            const destination = audioContext.createMediaStreamDestination();
-            oscillator.frequency.value = 660;
-            gain.gain.value = 0.24;
-            oscillator.connect(gain);
-            gain.connect(destination);
-            oscillator.start();
-
-            const canvas = document.createElement('canvas');
-            canvas.width = 640;
-            canvas.height = 360;
-            canvas.style.cssText = 'position:fixed;left:-10000px;top:0;width:640px;height:360px;';
-            document.body.appendChild(canvas);
-            const ctx = canvas.getContext('2d');
-            let frame = 0;
-            const draw = () => {
-                frame += 1;
-                ctx.fillStyle = `rgb(${(frame * 5) % 255}, ${(frame * 9) % 255}, ${(frame * 13) % 255})`;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#fff';
-                ctx.fillRect((frame * 8) % canvas.width, 86, 90, 72);
-                ctx.fillStyle = '#111';
-                ctx.font = '32px sans-serif';
-                ctx.fillText(`f${frame}`, 24, 48);
-            };
-            draw();
-            const timer = setInterval(draw, 33);
-            const videoStream = canvas.captureStream(30);
-            const stream = new MediaStream([
-                ...videoStream.getVideoTracks(),
-                ...destination.stream.getAudioTracks()
-            ]);
             const fileBase = `video_tauri_mtrack_probe_${Date.now()}`;
-            const started = await videoApi.startVideoRecording({
+            let cleanup = async () => {};
+            const input = {
                 fileName: fileBase,
                 mode: 'video',
-                stream,
-                stopExternalStream: true,
                 audio: true,
                 videoBitsPerSecond: 1600000,
-                audioBitsPerSecond: 128000
-            });
-            if (started?.ok !== true) return { ok: false, step: 'start', started };
+                audioBitsPerSecond: 128000,
+                videoOpenTimeoutMs: 20000,
+                audioOpenTimeoutMs: 8000
+            };
+            if (useFakeCapture) {
+                const audioContext = new AudioContext({ sampleRate: 48000 });
+                await audioContext.resume();
+                const oscillator = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                const destination = audioContext.createMediaStreamDestination();
+                oscillator.frequency.value = 660;
+                gain.gain.value = 0.24;
+                oscillator.connect(gain);
+                gain.connect(destination);
+                oscillator.start();
+                const canvas = document.createElement('canvas');
+                canvas.width = 640;
+                canvas.height = 360;
+                canvas.style.cssText = 'position:fixed;left:-10000px;top:0;width:640px;height:360px;';
+                document.body.appendChild(canvas);
+                const ctx = canvas.getContext('2d');
+                let frame = 0;
+                const draw = () => {
+                    frame += 1;
+                    ctx.fillStyle = `rgb(${(frame * 5) % 255}, ${(frame * 9) % 255}, ${(frame * 13) % 255})`;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect((frame * 8) % canvas.width, 86, 90, 72);
+                    ctx.fillStyle = '#111';
+                    ctx.font = '32px sans-serif';
+                    ctx.fillText(`f${frame}`, 24, 48);
+                };
+                draw();
+                const timer = setInterval(draw, 33);
+                const videoStream = canvas.captureStream(30);
+                input.stream = new MediaStream([
+                    ...videoStream.getVideoTracks(),
+                    ...destination.stream.getAudioTracks()
+                ]);
+                input.stopExternalStream = true;
+                cleanup = async () => {
+                    clearInterval(timer);
+                    try { oscillator.stop(); } catch (_) { }
+                    try { await audioContext.close(); } catch (_) { }
+                    try { canvas.remove(); } catch (_) { }
+                };
+            }
+            const started = await videoApi.startVideoRecording(input);
+            if (started?.ok !== true) {
+                await cleanup();
+                return { ok: false, step: 'start', started };
+            }
             await new Promise((resolve) => setTimeout(resolve, 3100));
             const stopped = await videoApi.stopVideoRecording();
-            clearInterval(timer);
-            try { oscillator.stop(); } catch (_) { }
-            try { await audioContext.close(); } catch (_) { }
-            try { canvas.remove(); } catch (_) { }
+            await cleanup();
             return {
                 ok: stopped?.ok === true && stopped?.status === 'stopped' && stopped?.project?.ok === true,
                 started,
@@ -463,7 +476,7 @@ const run = async () => {
                 mime_type: stopped?.result?.mime_type || '',
                 project: stopped?.project || null
             };
-        }, null, 120000);
+        }, { useFakeCapture: USE_FAKE_CAPTURE }, 120000);
         mark(`record_done:${report.record?.ok === true}`);
         if (report.record?.ok !== true) throw new Error(`record_failed:${report.record?.step || report.record?.error || 'unknown'}`);
 

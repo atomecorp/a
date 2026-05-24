@@ -9,6 +9,7 @@ The intended behavior was:
 - after a video recording, the project atome must show a stable image;
 - after importing a video, the project atome must show a stable image;
 - after opening a molecule, moving the playhead to another frame, and closing it, the project atome should show that selected frame;
+- when a molecule is closed, the project poster must be captured from the current timeline playhead and must not reset to the beginning before capture;
 - the visual must be an image/poster layer, not a live thumbnail placeholder;
 - the project surface must never fall back to a grey or black square.
 
