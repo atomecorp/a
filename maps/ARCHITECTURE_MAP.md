@@ -40,7 +40,8 @@ The core invariant is deterministic, tool-driven, append-only state:
 - Server writes flow through the event commit helpers and database persistence boundary.
 - `state_current` is a projection, not the source of truth.
 - Snapshots and validation states are acceleration or approval anchors, not an alternate write path.
-- Atome property sanitization is centralized in `atome/shared/atome_contract.js`; envelope fields such as id, type, owner, parent, and timestamps must not become durable Atome properties.
+- Atome envelope normalization and property sanitization are centralized in `atome/shared/atome_contract.js` for server/database boundaries; envelope fields such as id, type, owner, parent, and timestamps must not become durable Atome properties.
+- Transitional Atome aliases are adapter inputs only. Normalized records must leave boundaries as `{ id, type, kind, renderer, meta, traits, properties }`.
 
 ## Explicit Atome Open / eVe Closed Boundary Contract
 

@@ -39,3 +39,27 @@ test('ADOLE persistence removes reserved Atome envelope fields from particles', 
         try { fs.unlinkSync(dbPath); } catch (_) {}
     }
 });
+
+test('ADOLE createAtome rejects records without canonical type', async () => {
+    const dbPath = path.join(os.tmpdir(), `adole-canonical-type-${process.pid}-${Date.now()}.db`);
+    process.env.SQLITE_PATH = dbPath;
+    const db = await import(`./adole.js?canonical_type=${Date.now()}`);
+
+    try {
+        await db.initDatabase();
+        await assert.rejects(
+            () => db.createAtome({
+                id: 'missing_type',
+                owner: 'missing_type',
+                creator: 'missing_type',
+                properties: {
+                    left: '12px'
+                }
+            }),
+            /Canonical Atome requires id and type/
+        );
+    } finally {
+        await db.closeDatabase().catch(() => {});
+        try { fs.unlinkSync(dbPath); } catch (_) {}
+    }
+});

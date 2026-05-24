@@ -143,7 +143,13 @@ Primary source: `atome/shared/atome_contract.js`.
 
 Exposure: JavaScript module exports consumed by the ADOLE client API, Fastify Atome routes, and database persistence.
 
-Verified entry points: `sanitizeAtomeProperties`, `assertCanonicalPropertyKey`, `resolveCanonicalProperties`, `formatCanonicalAtome`.
+Verified entry points: `normalizeCanonicalAtome`, `sanitizeAtomeProperties`, `assertCanonicalPropertyKey`, `resolveCanonicalProperties`, `formatCanonicalAtome`, `AtomeContractError`.
+
+Boundary rules:
+
+- `normalizeCanonicalAtome` is the strict contract entry point. Transitional aliases such as `atome_id`, `atome_type`, `particles`, and `data` are accepted only when called with an explicit boundary-adapter option.
+- `formatCanonicalAtome` remains a tolerant server/database response formatter and emits only the canonical envelope.
+- Browser-served modules under `atome/src/` must not import `atome/shared/atome_contract.js` unless the serving graph exposes that shared path.
 
 Boundary status: Open framework contract helper. It owns reserved Atome envelope-field filtering and canonical envelope formatting so route, client, and database layers do not define competing schemas.
 

@@ -20,6 +20,7 @@ import {
 } from './atomeRealtime.js';
 import {
     formatCanonicalAtome,
+    normalizeCanonicalAtome,
     sanitizeAtomeProperties
 } from '../atome/shared/atome_contract.js';
 
@@ -421,7 +422,22 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         const objectId = id || uuidv4();
         const parentValue = parent_id || parent || null;
         const resolvedOwnerId = owner_id || user.id;
-        const createProperties = sanitizeAtomeProperties(properties || data || {});
+        let canonicalCreate = null;
+        try {
+            canonicalCreate = normalizeCanonicalAtome({
+                id: objectId,
+                type,
+                kind: kind || null,
+                properties: properties || data || {}
+            }, {
+                boundaryAdapter: true
+            }).atome;
+        } catch (error) {
+            return reply.code(400).send({
+                success: false,
+                error: error.message
+            });
+        }
 
         try {
             if (parentValue) {
@@ -437,11 +453,11 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             // Create object with properties
             const atome = await db.createAtome({
                 id: objectId,
-                type: type || 'shape',
-                kind: kind || null,
+                type: canonicalCreate.type,
+                kind: canonicalCreate.kind,
                 parent: parentValue,
                 owner: resolvedOwnerId,
-                properties: createProperties,
+                properties: canonicalCreate.properties,
                 creator: user.id
             });
 

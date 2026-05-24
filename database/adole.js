@@ -26,6 +26,7 @@ import {
 } from './driver.js';
 import {
     assertCanonicalPropertyKey,
+    normalizeCanonicalAtome,
     sanitizeAtomeProperties
 } from '../atome/shared/atome_contract.js';
 
@@ -492,12 +493,20 @@ async function upsertStateCurrentFromMutation({
  */
 export async function createAtome({ id, type, kind, parent, owner, creator, properties = {} }) {
     const atomeId = id || uuidv4();
+    const canonical = normalizeCanonicalAtome({
+        id: atomeId,
+        type,
+        kind,
+        properties
+    }, {
+        boundaryAdapter: true
+    }).atome;
     const now = new Date().toISOString();
     const ownerId = owner;
     const creatorId = creator || owner;
-    const canonicalProperties = sanitizeAtomeProperties(properties);
+    const canonicalProperties = canonical.properties;
 
-    console.log('[createAtome Debug] Creating with id:', atomeId, 'type:', type, 'owner:', ownerId, 'parent:', parent);
+    console.log('[createAtome Debug] Creating with id:', atomeId, 'type:', canonical.type, 'owner:', ownerId, 'parent:', parent);
 
     const parentId = parent || null;
     const selfOwner = ownerId && ownerId === atomeId;
@@ -538,7 +547,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
 						   sync_status, created_source, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, 'local', 'fastify',
 				COALESCE((SELECT created_at FROM atomes WHERE atome_id = ?), ?), ?)
-	`, [atomeId, type, insertParentId, insertOwnerId, creatorId, atomeId, now, now]);
+	`, [atomeId, canonical.type, insertParentId, insertOwnerId, creatorId, atomeId, now, now]);
 
     // Store deferred FK references AFTER the atome row exists (particles.atome_id FK)
     if (pendingOwnerId) {
@@ -569,8 +578,8 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     try {
         await upsertStateCurrentFromMutation({
             atomeId,
-            type,
-            kind,
+            type: canonical.type,
+            kind: canonical.kind || kind,
             parentId: parentId,
             properties: canonicalProperties,
             ts: now
@@ -581,8 +590,8 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
 
     return {
         atome_id: atomeId,
-        atome_type: type,
-        kind,
+        atome_type: canonical.type,
+        kind: canonical.kind || kind,
         parent_id: parent || null,
         owner_id: ownerId,
         creator_id: creatorId,

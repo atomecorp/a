@@ -233,9 +233,11 @@ Main files:
 
 Reusable APIs:
 
-- Canonical Atome property sanitization.
+- Canonical Atome envelope normalization through `normalizeCanonicalAtome`.
+- Boundary-only alias normalization for `atome_id`, `atome_type`, `particles`, and `data`.
+- Canonical Atome property sanitization with reserved-key rejection and schema hooks.
 - Reserved envelope-field rejection for durable property writes.
-- Canonical Atome envelope formatting.
+- Canonical Atome envelope formatting for tolerant server/database responses.
 
 Should be extended by:
 

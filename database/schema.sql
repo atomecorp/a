@@ -2,6 +2,20 @@
 -- ADOLE Schema v3.0 - UNIFIED (Atome-Particle Model)
 -- Single source of truth for Tauri (SQLite) and Fastify (LibSQL)
 -- ============================================================================
+--
+-- Canonical Atome mapping:
+--   - `atomes.atome_id` stores canonical envelope `id`.
+--   - `atomes.atome_type` stores canonical envelope `type`.
+--   - `particles` stores canonical `properties` only; envelope fields must not be
+--     inserted as particle keys.
+--   - `events` stores append-only canonical mutations and is the durable history
+--     source for replay.
+--   - `state_current` stores a materialized projection cache derived from events
+--     and particles; it is not an authoritative write source.
+--   - `snapshots` are acceleration or restoration checkpoints and must not
+--     replace append-only history.
+--   - `permissions`, `sync_queue`, and `sync_state` attach operational metadata to
+--     canonical Atome ids without becoming Atome properties.
 -- 
 -- PRINCIPE: Tout est un ATOME (users, documents, organizations, etc.)
 -- Les propriétés sont stockées dans PARTICLES (clé-valeur dynamique)
