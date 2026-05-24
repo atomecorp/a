@@ -97,6 +97,7 @@ Mandatory rules:
 - Do not keep extending a file already above 500 lines unless the current task is explicitly reducing or restructuring it.
 - Do not multiply files artificially to satisfy line-count targets; split only along stable responsibilities or real shared reusable logic.
 - Do not create pass-through files, proxy wrappers, useless micro-modules, or scattered file fragments just to lower a line count.
+- File-size thresholds and legacy complexity never authorize skipping, deferring, or aborting the treatment of an important file during debugging, optimization, cleanup, or refactoring work.
 - Every touched file, including legacy files, inherits the same size, factorization, cleanup, and optimization obligations as new code.
 - If a touched file can be brought into compliance within the current scope, it must be.
 - If compliance requires a broader architectural split, that split becomes part of the task rather than an optional follow-up.
@@ -280,6 +281,29 @@ Autonomous completion criteria:
 - Temporary diagnostics have been removed and the cleaned validation path has been rerun successfully.
 
 If these conditions are not met, the assistant MUST keep investigating instead of stopping early.
+
+## MANDATORY FULL-SCOPE DEBUG AND OPTIMIZATION COVERAGE
+
+This rule is strict, non-negotiable, and applies to every debugging, optimization, performance, cleanup, and architectural repair task.
+
+The assistant MUST treat every important file involved in the owning code path, even when that file is large, very large, legacy, tangled, highly connected, or architecturally tentacular.
+
+Strictly forbidden reasons to stop, defer, narrow away, or leave the task incomplete:
+
+- the file has too many lines;
+- the file is too large to read in a single pass;
+- the file has too many dependencies or callers;
+- the file is old, messy, central, or spans several responsibilities;
+- the code path crosses too many modules, layers, or synchronization boundaries.
+
+Mandatory behavior:
+
+- If an important file is too large to inspect in one pass, inspect it in as many sequential passes as necessary until the relevant logic is fully covered.
+- If the bug, regression, or optimization surface crosses several files, continue through the full controlling chain: owners, callers, callees, shared helpers, state holders, renderers, sync layers, tests, and validation entry points.
+- Never declare a task complete, blocked, or out of scope while an important controlling file or dependency chain remains unread, unexplained, or untreated.
+- Never use file size, fan-out, complexity, or architectural entanglement as justification for a partial fix, a superficial optimization, or an early stop.
+- When a large or tentacular file must be changed, perform the necessary structured refactor, decomposition, or cleanup required to make the repair or optimization complete and maintainable.
+- When the relevant scope includes a large legacy file, treating that file thoroughly is mandatory work, not optional follow-up.
 
 ## ARCHITECTURAL AUTHORITY
 
