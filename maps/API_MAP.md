@@ -135,6 +135,18 @@ Boundary status: Open persistence contract. eVe closed stores may use it through
 
 Known constraints: `database/adole.js` is a critical oversized legacy file and must be reduced before feature growth.
 
+### Atome Contract Helper API
+
+Ownership: Atome open shared layer.
+
+Primary source: `atome/shared/atome_contract.js`.
+
+Exposure: JavaScript module exports consumed by the ADOLE client API, Fastify Atome routes, and database persistence.
+
+Verified entry points: `sanitizeAtomeProperties`, `assertCanonicalPropertyKey`, `resolveCanonicalProperties`, `formatCanonicalAtome`.
+
+Boundary status: Open framework contract helper. It owns reserved Atome envelope-field filtering and canonical envelope formatting so route, client, and database layers do not define competing schemas.
+
 ### Security and Sync APIs
 
 Ownership: Atome open.

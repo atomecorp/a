@@ -1,5 +1,30 @@
 const safeString = (value) => String(value ?? '').trim();
 
+const RESERVED_ATOME_PROPERTY_KEYS = new Set([
+    'id', 'atome_id', 'atomeId',
+    'type', 'atome_type', 'atomeType',
+    'owner', 'owner_id', 'ownerId',
+    'parent', 'parent_id', 'parentId',
+    'project_id', 'projectId',
+    'creator_id', 'creatorId',
+    'created_at', 'createdAt',
+    'updated_at', 'updatedAt',
+    'deleted_at', 'deletedAt',
+    'last_sync', 'lastSync',
+    'sync_status', 'syncStatus',
+    'created_source', 'createdSource'
+]);
+
+const sanitizeAtomeProperties = (properties = {}) => {
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return {};
+    const sanitized = {};
+    Object.entries(properties).forEach(([key, value]) => {
+        if (!key || value === undefined || RESERVED_ATOME_PROPERTY_KEYS.has(key)) return;
+        sanitized[key] = value;
+    });
+    return sanitized;
+};
+
 const nowIso = () => {
     try { return new Date().toISOString(); } catch (_) { return String(Date.now()); }
 };
@@ -287,7 +312,7 @@ export class AVAtomeObjectStore {
             kind: 'set',
             atome_id: item.id,
             project_id: item.project_id || null,
-            props: item
+            props: sanitizeAtomeProperties(item)
         });
         if (result?.ok === false || result?.success === false) {
             throw new AVTypedError('av_persistence_commit_failed', {

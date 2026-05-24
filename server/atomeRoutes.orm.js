@@ -18,6 +18,10 @@ import {
     broadcastAtomeDelete,
     broadcastAtomeRealtimePatch
 } from './atomeRealtime.js';
+import {
+    formatCanonicalAtome,
+    sanitizeAtomeProperties
+} from '../atome/shared/atome_contract.js';
 
 const SYNC_DEBUG =
     process.env.SQUIRREL_SYNC_DEBUG === '1'
@@ -98,42 +102,44 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             return;
         }
 
-        const atomeId = atome?.atome_id || atome?.id;
+        const atomeId = atome?.id || atome?.atome_id;
         if (!atomeId) {
             syncDebugLog('Missing atome id for sync payload');
             return;
         }
-        const atomeType = resolveSyncAtomeType(atome?.atome_type, atome?.type);
-        const parentId = atome?.parent_id || atome?.parent || null;
-        const ownerId = atome?.owner_id || atome?.owner || null;
-        const particles = atome?.particles || atome?.data || atome?.properties || {};
-        const resolvedOperation = normalizeSyncOperation(operation, atome, particles);
+        const properties = sanitizeAtomeProperties(atome?.properties || atome?.particles || atome?.data || {});
+        const atomeType = resolveSyncAtomeType(atome?.type, atome?.atome_type, properties.kind);
+        const parentId = atome?.parent_id || atome?.parent || atome?.meta?.parent_id || null;
+        const ownerId = atome?.owner_id || atome?.owner || atome?.meta?.owner_id || null;
+        const resolvedOperation = normalizeSyncOperation(operation, atome, properties);
         if (resolvedOperation === 'create' && !atomeType) {
             syncDebugLog('Skipping create sync payload without valid atome type');
             return;
         }
-        const deletedAt = atome?.deleted_at || atome?.deletedAt || particles?.deleted_at || particles?.deletedAt || null;
+        const deletedAt = atome?.deleted_at || atome?.deletedAt || properties?.deleted_at || properties?.deletedAt || null;
+        const canonicalAtome = formatCanonicalAtome({
+            id: atomeId,
+            type: atomeType || null,
+            kind: atome?.kind || properties.kind || null,
+            renderer: atome?.renderer || null,
+            meta: {
+                owner_id: ownerId,
+                parent_id: parentId,
+                created_at: atome.created_at || atome?.meta?.created_at || null,
+                updated_at: atome.updated_at || atome?.meta?.updated_at || null,
+                deleted: resolvedOperation === 'delete',
+                deleted_at: deletedAt
+            },
+            traits: Array.isArray(atome?.traits) ? atome.traits : [],
+            properties
+        });
 
         // Emit sync event - clients MUST validate owner_id before local mirroring
         // The owner_id is critical for client-side security filtering
         eventBus.emit('event', {
             type: 'atome-sync',
             operation: resolvedOperation,
-            atome: {
-                atome_id: atomeId,
-                atome_type: atomeType || null,
-                parent_id: parentId,
-                owner_id: ownerId,  // SECURITY: Clients filter on this field
-                created_at: atome.created_at,
-                updated_at: atome.updated_at,
-                particles,
-                deleted: resolvedOperation === 'delete',
-                deleted_at: deletedAt,
-                id: atomeId,
-                type: atomeType || null,
-                properties: particles,
-                data: particles
-            },
+            atome: canonicalAtome,
             timestamp: new Date().toISOString()
         });
 
@@ -250,24 +256,19 @@ async function validateToken(request) {
  */
 function formatAtome(obj) {
     if (!obj) return null;
-
-    // Support both old format and new ADOLE v3.0 format
-    return {
-        // ADOLE v3.0 format
-        atome_id: obj.atome_id || obj.id,
-        atome_type: obj.atome_type || obj.type,
-        parent_id: obj.parent_id || obj.parent,
-        owner_id: obj.owner_id || obj.owner,
-        created_at: obj.created_at,
-        updated_at: obj.updated_at,
-        particles: obj.particles || obj.properties || obj.data || {},
-        // Previous format aliases for backward compatibility
-        id: obj.atome_id || obj.id,
-        type: obj.atome_type || obj.type,
-        parent: obj.parent_id || obj.parent,
-        owner: obj.owner_id || obj.owner,
-        data: obj.particles || obj.properties || obj.data || {}
-    };
+    const properties = sanitizeAtomeProperties(obj.properties || obj.particles || obj.data || {});
+    return formatCanonicalAtome({
+        id: obj.id || obj.atome_id,
+        type: obj.type || obj.atome_type,
+        kind: obj.kind || properties.kind || null,
+        renderer: obj.renderer || properties.renderer || null,
+        meta: {
+            created_at: obj.created_at || null,
+            updated_at: obj.updated_at || null
+        },
+        traits: Array.isArray(obj.traits) ? obj.traits : [],
+        properties
+    });
 }
 
 function resolveSyncOperation(kind) {
@@ -299,12 +300,10 @@ async function resolveAtomeForSync(event) {
         db.getAtome(atomeId)
     ]);
 
-    const properties = state?.properties || atome?.data || atome?.properties || {};
+    const properties = sanitizeAtomeProperties(state?.properties || atome?.properties || atome?.data || {});
     const atomeType = resolveSyncAtomeType(
         atome?.atome_type,
         atome?.type,
-        properties.atome_type,
-        properties.type,
         properties.kind
     );
     const parentId = atome?.parent_id
@@ -321,9 +320,9 @@ async function resolveAtomeForSync(event) {
         owner_id: ownerId,
         created_at: atome?.created_at || state?.updated_at || null,
         updated_at: state?.updated_at || atome?.updated_at || null,
-        particles: properties,
         id: atomeId,
         type: atomeType || null,
+        kind: properties.kind || null,
         properties
     };
 }
@@ -418,10 +417,11 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { id, type, kind, parent_id, parent, data, owner_id } = request.body;
+        const { id, type, kind, parent_id, parent, properties, data, owner_id } = request.body;
         const objectId = id || uuidv4();
         const parentValue = parent_id || parent || null;
         const resolvedOwnerId = owner_id || user.id;
+        const createProperties = sanitizeAtomeProperties(properties || data || {});
 
         try {
             if (parentValue) {
@@ -441,7 +441,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                 kind: kind || null,
                 parent: parentValue,
                 owner: resolvedOwnerId,
-                properties: data || {},
+                properties: createProperties,
                 creator: user.id
             });
 
@@ -472,7 +472,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
                     atomeId: objectId,
                     atomeType: type || 'shape',
                     parentId: parentValue,
-                    particles: data || {},
+                    particles: createProperties,
                     senderUserId: user.id
                 });
             } catch (error) {
@@ -612,8 +612,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const { id } = request.params;
-        const { data, type, kind, parent_id } = request.body;
-        const patch = (data && typeof data === 'object') ? data : null;
+        const { properties, data, type, kind, parent_id } = request.body;
+        const patch = sanitizeAtomeProperties(properties || data || {});
 
         try {
             const existing = await db.getObjectById(id);
@@ -643,8 +643,8 @@ export async function registerAtomeRoutes(server, dataSource = null) {
             }
 
             // Update properties
-            if (data && typeof data === 'object') {
-                await db.setProperties(id, data, user.id);
+            if (Object.keys(patch).length) {
+                await db.setProperties(id, patch, user.id);
             }
 
             const updated = await db.getAtome(id);
@@ -696,7 +696,7 @@ export async function registerAtomeRoutes(server, dataSource = null) {
         }
 
         const { id } = request.params;
-        const changes = request.body;
+        const changes = sanitizeAtomeProperties(request.body?.properties || request.body || {});
         const patch = {};
 
         try {

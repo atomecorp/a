@@ -40,6 +40,7 @@ The core invariant is deterministic, tool-driven, append-only state:
 - Server writes flow through the event commit helpers and database persistence boundary.
 - `state_current` is a projection, not the source of truth.
 - Snapshots and validation states are acceleration or approval anchors, not an alternate write path.
+- Atome property sanitization is centralized in `atome/shared/atome_contract.js`; envelope fields such as id, type, owner, parent, and timestamps must not become durable Atome properties.
 
 ## Explicit Atome Open / eVe Closed Boundary Contract
 
@@ -64,6 +65,7 @@ Forbidden boundary violations:
 - eVe-local clones of open Atome security, sync, database, server, communication, audio, voice, AI, or MCP contracts.
 - Direct durable state mutation from UI, panels, stores, imports, scripts, or MCP tools outside the canonical command/history path.
 - Promotion of an eVe API, global, visual factory, or store to open framework status without an explicit Atome contract, tests, and synchronized map updates.
+- Gesture, resize, and placement code reading canonical Atome geometry from DOM style or DOM offsets instead of described Atome state or an explicit description-derived cache.
 
 Boundary debt:
 

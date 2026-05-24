@@ -2,6 +2,31 @@ import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../ad
 import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
 
+const RESERVED_ATOME_PROPERTY_KEYS = new Set([
+    'id', 'atome_id', 'atomeId',
+    'type', 'atome_type', 'atomeType',
+    'owner', 'owner_id', 'ownerId',
+    'parent', 'parent_id', 'parentId',
+    'project_id', 'projectId',
+    'creator_id', 'creatorId',
+    'created_at', 'createdAt',
+    'updated_at', 'updatedAt',
+    'deleted_at', 'deletedAt',
+    'last_sync', 'lastSync',
+    'sync_status', 'syncStatus',
+    'created_source', 'createdSource'
+]);
+
+const sanitizeAtomeProperties = (properties = {}) => {
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return {};
+    const sanitized = {};
+    Object.entries(properties).forEach(([key, value]) => {
+        if (!key || value === undefined || RESERVED_ATOME_PROPERTY_KEYS.has(key)) return;
+        sanitized[key] = value;
+    });
+    return sanitized;
+};
+
 const adapters = {
     tauri: TauriAdapter,
     fastify: FastifyAdapter
@@ -82,24 +107,6 @@ const resolveAtomeProjectId = (record) => (
     || null
 );
 
-const sanitizeProperties = (properties = {}) => {
-    const cleaned = { ...(properties || {}) };
-    delete cleaned.id;
-    delete cleaned.atome_id;
-    delete cleaned.atomeId;
-    delete cleaned.owner_id;
-    delete cleaned.ownerId;
-    delete cleaned.parent_id;
-    delete cleaned.parentId;
-    delete cleaned.project_id;
-    delete cleaned.projectId;
-    delete cleaned.created_at;
-    delete cleaned.updated_at;
-    delete cleaned.deleted_at;
-    delete cleaned.last_sync;
-    return cleaned;
-};
-
 const buildUpsertPayload = (record, ownerIdFallback) => {
     const id = resolveAtomeId(record);
     if (!id) return null;
@@ -107,12 +114,14 @@ const buildUpsertPayload = (record, ownerIdFallback) => {
     if (!type || type === 'atome') return null;
     const ownerId = record?.owner_id || record?.ownerId || record?.owner || ownerIdFallback || null;
     const parentId = resolveAtomeParentId(record);
-    const properties = sanitizeProperties(record?.properties || record?.particles || record?.data || {});
+    const properties = sanitizeAtomeProperties(record?.properties || record?.particles || record?.data || {});
     return {
         id,
-        atome_id: id,
         type,
-        atome_type: type,
+        kind: record?.kind || properties.kind || null,
+        renderer: record?.renderer || null,
+        meta: {},
+        traits: Array.isArray(record?.traits) ? record.traits : [],
         owner_id: ownerId,
         parent_id: parentId,
         properties
@@ -370,16 +379,27 @@ export async function create_atome(options = {}, callback) {
     const secondary = runtimeTauri ? 'fastify' : 'tauri';
 
     const atomeId = options.id || generateUUID();
-    const atomeType = options.type || options.kind || 'shape';
+    const atomeType = String(options.type || '').trim();
+    if (!atomeType) {
+        const error = 'Missing canonical atome type.';
+        const result = {
+            tauri: { success: false, error },
+            fastify: { success: false, error }
+        };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     const projectId = options.projectId || options.project_id || null;
     const parentId = options.parentId || options.parent_id || projectId || null;
-    const properties = options.properties || options.particles || options.data || options || {};
+    const properties = sanitizeAtomeProperties(options.properties || {});
 
     const payload = {
         id: atomeId,
-        atome_id: atomeId,
         type: atomeType,
-        atome_type: atomeType,
+        kind: options.kind || null,
+        renderer: options.renderer || null,
+        meta: options.meta && typeof options.meta === 'object' ? options.meta : {},
+        traits: Array.isArray(options.traits) ? options.traits.slice() : [],
         parent_id: parentId,
         owner_id: options.owner_id || options.ownerId || currentUserId,
         properties

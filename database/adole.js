@@ -24,6 +24,10 @@ import {
     getDatabase as getDriverDb,
     closeDatabase as closeDriver
 } from './driver.js';
+import {
+    assertCanonicalPropertyKey,
+    sanitizeAtomeProperties
+} from '../atome/shared/atome_contract.js';
 
 let db = null;
 let isAsync = false;
@@ -238,7 +242,7 @@ function stripEventMetaPatch(patch) {
         if (EVENT_META_PARTICLE_KEYS.has(key)) continue;
         filtered[key] = value;
     }
-    return filtered;
+    return sanitizeAtomeProperties(filtered);
 }
 
 async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts, deleted, properties }) {
@@ -491,6 +495,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     const now = new Date().toISOString();
     const ownerId = owner;
     const creatorId = creator || owner;
+    const canonicalProperties = sanitizeAtomeProperties(properties);
 
     console.log('[createAtome Debug] Creating with id:', atomeId, 'type:', type, 'owner:', ownerId, 'parent:', parent);
 
@@ -557,8 +562,8 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     }
 
     // Store all properties as particles
-    if (properties && Object.keys(properties).length > 0) {
-        await setParticles(atomeId, properties, creatorId);
+    if (Object.keys(canonicalProperties).length > 0) {
+        await setParticles(atomeId, canonicalProperties, creatorId);
     }
 
     try {
@@ -567,7 +572,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
             type,
             kind,
             parentId: parentId,
-            properties,
+            properties: canonicalProperties,
             ts: now
         });
     } catch (e) {
@@ -581,7 +586,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
         parent_id: parent || null,
         owner_id: ownerId,
         creator_id: creatorId,
-        data: properties,
+        properties: canonicalProperties,
         sync_status: 'local',
         created_source: 'fastify',
         created_at: now,
@@ -994,6 +999,7 @@ export async function listAtomes(ownerId, options = {}) {
  * Also records the change in particles_versions for history
  */
 export async function setParticle(atomeId, key, value, author = null) {
+    const propertyKey = assertCanonicalPropertyKey(key);
     const now = new Date().toISOString();
     const valueStr = typeof value === 'object' ? JSON.stringify(value) : JSON.stringify(value);
     const valueType = typeof value === 'object' ? 'json' : typeof value;
@@ -1001,7 +1007,7 @@ export async function setParticle(atomeId, key, value, author = null) {
     // Check if particle exists
     const existing = await query('get',
         'SELECT particle_id, version FROM particles WHERE atome_id = ? AND particle_key = ?',
-        [atomeId, key]
+        [atomeId, propertyKey]
     );
 
     let particleId;
@@ -1021,7 +1027,7 @@ export async function setParticle(atomeId, key, value, author = null) {
         await query('run', `
 			UPDATE particles SET particle_value = ?, value_type = ?, version = ?, updated_at = ?
 			WHERE atome_id = ? AND particle_key = ?
-		`, [valueStr, valueType, version, now, atomeId, key]);
+		`, [valueStr, valueType, version, now, atomeId, propertyKey]);
         particleId = existing.particle_id;
     } else {
         // Create new particle (particle_id is AUTOINCREMENT, don't specify it)
@@ -1029,12 +1035,12 @@ export async function setParticle(atomeId, key, value, author = null) {
         await query('run', `
 			INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, [atomeId, key, valueStr, valueType, version, now, now]);
+		`, [atomeId, propertyKey, valueStr, valueType, version, now, now]);
 
         // Get the auto-generated particle_id
         const inserted = await query('get',
             'SELECT particle_id FROM particles WHERE atome_id = ? AND particle_key = ?',
-            [atomeId, key]
+            [atomeId, propertyKey]
         );
         particleId = inserted?.particle_id;
     }
@@ -1043,7 +1049,7 @@ export async function setParticle(atomeId, key, value, author = null) {
     await query('run', `
 		INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, [particleId, atomeId, key, version, oldValue, valueStr, author, now]);
+	`, [particleId, atomeId, propertyKey, version, oldValue, valueStr, author, now]);
 
     // Update atome's updated_at and sync_status
     await query('run',
@@ -1065,7 +1071,7 @@ export async function setParticles(atomeId, particles, author = null) {
         return;
     }
 
-    const entries = Object.entries(particles);
+    const entries = Object.entries(sanitizeAtomeProperties(particles));
     if (entries.length === 0) return;
 
     // For small batches (1-3 particles), use sequential for simplicity

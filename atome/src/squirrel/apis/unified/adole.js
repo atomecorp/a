@@ -19,7 +19,6 @@ import {
     isCurrentLoopbackPagePort,
     isTauri as isCanonicalTauriRuntime
 } from '../serverUrls.js';
-
 // ============================================
 // CONSTANTS
 // ============================================
@@ -55,6 +54,29 @@ const _connectionState = {
 };
 const MEDIA_PATCH_KIND_HINTS = new Set(['video', 'audio', 'sound', 'image']);
 const mediaPatchHintsByAtomeId = new Map();
+const RESERVED_ATOME_PROPERTY_KEYS = new Set([
+    'id', 'atome_id', 'atomeId',
+    'type', 'atome_type', 'atomeType',
+    'owner', 'owner_id', 'ownerId',
+    'parent', 'parent_id', 'parentId',
+    'project_id', 'projectId',
+    'creator_id', 'creatorId',
+    'created_at', 'createdAt',
+    'updated_at', 'updatedAt',
+    'deleted_at', 'deletedAt',
+    'last_sync', 'lastSync',
+    'sync_status', 'syncStatus',
+    'created_source', 'createdSource'
+]);
+const sanitizeAtomeProperties = (properties = {}) => {
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return {};
+    const sanitized = {};
+    Object.entries(properties).forEach(([key, value]) => {
+        if (!key || value === undefined || RESERVED_ATOME_PROPERTY_KEYS.has(key)) return;
+        sanitized[key] = value;
+    });
+    return sanitized;
+};
 const normalizeMediaPatchKindHint = (value) => String(value || '').trim().toLowerCase();
 const hasMediaSourceHintsInPatch = (properties = {}) => {
     if (!properties || typeof properties !== 'object') return false;
@@ -1457,7 +1479,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             async create(data) {
                 const token = getToken(tokenKey);
                 const ownerId = data.owner_id || data.user_id || data.ownerId || data.owner || null;
-                const properties = data?.properties || data?.particles || data;
+                const properties = sanitizeAtomeProperties(data?.properties || data?.particles || data);
                 const resolvedId = data.atome_id || data.id || data.atomeId || null;
                 const resolvedType = data.atome_type || data.type || data.kind || data.atomeType || null;
                 const parentId = data.parent_id || data.parent || data.parentId || null;
@@ -1518,7 +1540,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async alter(id, data) {
                 const token = getToken(tokenKey);
-                const properties = data?.properties || data?.particles || data;
+                const properties = sanitizeAtomeProperties(data?.properties || data?.particles || data);
                 return getWs().send({
                     type: 'atome',
                     action: 'alter',
@@ -1529,7 +1551,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             },
             async update(id, data) {
                 const token = getToken(tokenKey);
-                const properties = data?.properties || data?.particles || data;
+                const properties = sanitizeAtomeProperties(data?.properties || data?.particles || data);
                 return getWs().send({
                     type: 'atome',
                     action: 'update',
@@ -1553,7 +1575,7 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             // Broadcast-only realtime patch (no DB write)
             async realtime(atomeId, particles) {
                 const token = getToken(tokenKey);
-                const properties = particles?.properties || particles?.particles || particles;
+                const properties = sanitizeAtomeProperties(particles?.properties || particles?.particles || particles);
                 const ws = getWs();
                 const message = {
                     type: 'atome',

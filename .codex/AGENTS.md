@@ -429,6 +429,10 @@ All styles MUST use JavaScript object literals or other declarative structured o
 
 ## ATOME MODEL POLICY
 
+Mandatory reference for any code touching Atomes, Atome persistence, Atome synchronization, Atome replay, or Atome rendering:
+
+- [atome/documentations/atome_structur_to_respect.md](../atome/documentations/atome_structur_to_respect.md)
+
 Canonical Atome structure:
 
 - id
@@ -445,6 +449,10 @@ Rules:
 - type is canonical;
 - renderer is a UI hint only;
 - unknown properties are forbidden unless schema-authorized.
+- rendering code MUST create visual output from the Atome description and MUST NOT become a parallel source of truth;
+- DOM, canvas, WebGPU, native views, and any other rendering resources are disposable projections only and MUST NEVER own canonical Atome state;
+- gesture, drag, resize, placement, and interaction code MUST start from described Atome state, then emit canonical mutations through the commit pipeline;
+- any touched file that mixes Atome description with rendering state MUST be sanitized before feature growth continues.
 
 atome.create MUST always include:
 

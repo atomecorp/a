@@ -219,6 +219,34 @@ Known risks:
 - `syncQueue.js` is oversized and should be reduced before feature growth.
 - Security phase must audit secrets, token storage, bridge permissions, and command injection surfaces.
 
+### Atome Shared Contracts
+
+Path: `atome/shared/`
+
+Owner: Atome open layer.
+
+Purpose: Product-neutral framework contracts shared by browser, server, and database layers.
+
+Main files:
+
+- `atome/shared/atome_contract.js`
+
+Reusable APIs:
+
+- Canonical Atome property sanitization.
+- Reserved envelope-field rejection for durable property writes.
+- Canonical Atome envelope formatting.
+
+Should be extended by:
+
+- Open Atome description, validation, history, and persistence contracts needed across client/server/database boundaries.
+
+Should not be duplicated by:
+
+- Server route formatters, ADOLE client helpers, database property writers, or eVe product tools.
+
+Status: Added for Atome sanitization.
+
 Status: Verified.
 
 ### Atome Shared Utilities
