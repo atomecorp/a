@@ -26,22 +26,9 @@ platforms/web/audio-wasm/target/
 *.old
 logs
 tests
-!tests/
+
 tests/*
-!tests/governance/
-!tests/governance/master_cleanup_governance.test.mjs
-!tests/probes/
-!tests/probes/audio_recording_quick_capture_probe.test.mjs
-!tests/probes/atome_persistence_probe.test.mjs
-!tests/probes/media_fixture_import_playback_probe.test.mjs
-!tests/probes/mtrax_split_selected_targets.test.mjs
-!tests/probes/mtrax_preview_frame_track_priority.test.mjs
-!tests/probes/tauri_recorded_video_mtrack_probe.test.mjs
-!tests/probes/ui_full_stack_acceptance_test8_probe.test.mjs
-!tests/probes/video_recording_audio_integrity_probe.test.mjs
-!tests/strangler_v2/
-!tests/strangler_v2/_env.mjs
-!tests/strangler_v2/palette_ssot_guard.test.mjs
+
 
 # Test files
 atome/src/assets/uploads/

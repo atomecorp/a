@@ -671,13 +671,18 @@ Reusable APIs:
 
 - Media API facades, persistence service, diagnostics, media source and identifier helpers.
 - Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff and Tauri-local canonicalization away from loopback Fastify media URLs.
+- Browser video recording owns a single persisted project atome: the `video_recording_*` atome created during recording persistence is reused and rendered on the project surface after stop. `ensureProjectMediaAtome` remains for media paths that do not already return a recording atome, such as native/file-only captures and image capture.
+- `eVe/intuition/shared/media_video_poster_runtime.js` owns reusable video frame poster capture for project-visible video media and molecule previews; normal video atomes and group previews must consume it instead of duplicating video seek/canvas capture logic.
+- `eVe/intuition/shared/capture_video_poster_runtime.js` owns live capture-tool poster extraction from the active preview overlay, persistence of poster fields, and DOM mounting for recorded video atomes; `capture.js` may only wire this shared runtime into UI stop paths.
 - Recorded video atome creation must carry the recording owner into `resolveMediaUrl` and persist owner/media-user particles so the first load uses the user-scoped recordings route.
 - Atome double-click to MTraX timeline resolution must merge persisted state owner metadata before normalizing recording sources, including older atomes whose properties lack owner fields.
 - Atome-triggered Molecule opening is intentionally routed through `requestMtrackOpenForAtome` and the `atome_mtrack_open_request` source layer. Double-click is only the current UI trigger; Molecule open handling must stay movable to another event/context by preserving the source-layer request contract.
 - Video preview renderers and preview panel services.
+- `eVe/intuition/shared/group_video_poster_runtime.js` owns conversion of project-visible video molecule previews into persisted image posters, so imported or recorded video molecules do not render live black video placeholders in the project grid.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
 - MTraX local file drops create linked video/audio clip pairs through `eVe/domains/mtrax/clips/add_clip_runtime.js` and `linked_video_audio_drop_runtime.js`; the audio side must keep the existing `video_audio` descriptor path so server/native extraction and conversion remain centralized.
 - MTraX preview frame dispatch owns visual track priority: during playback and transport scrub, video/image clips are resolved by top visible track order; paused editing may temporarily promote selected clips for manipulation, while audio clips remain outside visual priority filtering.
+- MTraX molecule poster capture is split between `preview_poster_capture_runtime.js` for media/source selection and `preview_poster_canvas_runtime.js` for canvas drawing, image-detail validation, and poster encoding; project-visible molecule posters must reject flat empty preview surfaces before persisting.
 - MTraX clip preview metadata owns source-window rendering for audio waveforms and video thumbnails, so split/crop edits must preserve the source `in`/`out` interval visually instead of resampling the full media source.
 - MTraX clip split/join editing is split by responsibility: `split_join_runtime.js` owns split execution and selected-target filtering, while `join_runtime.js` owns join segment construction and replacement. Split targets are explicit clip inputs, selected clips at the playhead, or clips on selected tracks at the playhead; linked audio/video companions are never auto-added by split.
 - MTraX clip deletion is split by responsibility: `deletion_runtime.js` owns selected clip/track deletion and source cleanup, while `loop_cell_deletion_runtime.js` owns loop-cell range deletion and intra-cell split preservation. Interactive clip deletion uses the same selected clip/track scope model as split and must not auto-expand through linked audio/video metadata or `sync_group_id`.
@@ -750,6 +755,7 @@ Should not be duplicated by:
 Known risks:
 
 - Several UI/tool runtime files exceed size thresholds and require reduction when touched.
+- `eVe/intuition/runtime/tool_genesis.js` remains a critical legacy owner for project group visual mounting. New group-preview behavior must be extracted into shared modules and only wired there until group visual rendering is split out; the intended reduction path is to move group host preview rendering, project-layer refresh, and persisted-preview mounting into focused Intuition group visual runtime modules.
 - Direct DOM helpers exist in this layer; compliance with the WebGPU/Squirrel rendering policy needs targeted review before broad UI rewrites.
 - Slider styling still relies on toolbox/editor compatibility classes in visual token modules, even though behavioral readers now target the canonical slider data-role contract.
 
