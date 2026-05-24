@@ -28,6 +28,13 @@ logs
 tests
 
 tests/*
+!tests/
+!tests/eve/
+tests/eve/*
+!tests/eve/atome_commit.sanitization.test.mjs
+!tests/eve/media_persistence_service.sanitization.test.mjs
+!tests/eve/mtrax_project_duplication.sanitization.test.mjs
+!tests/eve/selection.sanitization.test.mjs
 
 
 # Test files

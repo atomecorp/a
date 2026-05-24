@@ -41,6 +41,9 @@ The core invariant is deterministic, tool-driven, append-only state:
 - `state_current` is a projection, not the source of truth.
 - Snapshots and validation states are acceleration or approval anchors, not an alternate write path.
 - Atome envelope normalization and property sanitization are centralized in `atome/shared/atome_contract.js` for server/database boundaries; envelope fields such as id, type, owner, parent, and timestamps must not become durable Atome properties.
+- eVe client mutations apply the same property/envelope separation at `eVe/core/atome_commit.js`: raw `props`/`properties`/`patch`/`delta` are collapsed into sanitized `payload.props`, while project, parent, actor, transaction, and gesture ids stay top-level event metadata.
+- Selection, lasso focus, SVG layer focus, tool latch state, and editor/session state are transient UI/runtime state unless explicitly modeled as schema-owned Atome properties. They must not be persisted as generic `selected`, `selection`, or DOM-derived properties.
+- Media and MTraX creation paths use `kind`, `media_kind`, `media_source`, `media_url`, and schema-owned timeline/poster fields. Legacy render aliases such as `media_type` and `visualType` are adapter read inputs only, not durable write fields.
 - Transitional Atome aliases are adapter inputs only. Normalized records must leave boundaries as `{ id, type, kind, renderer, meta, traits, properties }`.
 
 ## Explicit Atome Open / eVe Closed Boundary Contract

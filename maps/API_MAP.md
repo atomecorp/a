@@ -153,6 +153,23 @@ Boundary rules:
 
 Boundary status: Open framework contract helper. It owns reserved Atome envelope-field filtering and canonical envelope formatting so route, client, and database layers do not define competing schemas.
 
+### eVe Atome Commit Boundary
+
+Ownership: eVe closed client mutation boundary over the open Atome event API.
+
+Primary source: `eVe/core/atome_commit.js`.
+
+Exposure: `window.Atome.commit`, `window.Atome.commitBatch`, and the injected `__atomeCommitApi` test/runtime surface.
+
+Boundary rules:
+
+- Client mutations must enter through `commit` or `commitBatch`; direct durable Atome state mutation from tools, media helpers, Molecule, or MTraX runtimes is not a valid source of truth.
+- `props`, `properties`, `patch`, and `delta` are normalized into `payload.props` before transport.
+- Reserved envelope fields such as `id`, `type`, `owner_id`, `project_id`, `parent_id`, timestamps, sync fields, selection fields, and media render aliases such as `media_type` or `visualType` must not be emitted as durable properties.
+- Top-level event fields such as `atome_id`, `project_id`, `parent_id`, `actor`, transaction id, and gesture id remain event envelope fields.
+
+Boundary status: Closed product adapter over an open Atome event contract. It mirrors the canonical server/database property boundary without importing `atome/shared/atome_contract.js` into browser-served eVe modules.
+
 ### Security and Sync APIs
 
 Ownership: Atome open.

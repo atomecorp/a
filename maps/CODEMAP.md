@@ -105,7 +105,7 @@ Status: Verified by current tree inspection.
 
 ### Tests
 
-Path: `tests/`, plus colocated `*.test.mjs` files under `atome/` and `eve/`.
+Path: `tests/`.
 
 Role: Validation for framework, eVe runtime, probes, server, UI scenarios, media, security, and governance.
 
@@ -122,7 +122,7 @@ Main entry points:
 - `npm run check:tauri-fs-boundary`
 - `npm run check:molecule-guardrails`
 - `npm run test:run`
-- Targeted `node --test ...` or `node ...test.mjs` commands depending on the touched module.
+- Targeted `node --test ...` commands for persistent regression coverage. New persistent tests must be placed under `tests/`; temporary probes belong under `temp/`.
 - `tests/probes/mtrax_play_resume_position.test.mjs` guards the MTraX transport contract that `playTimeline()` starts from the current playhead and does not rewind at play start.
 - `tests/probes/mtrax_group_reload_preserve_playhead.test.mjs` guards same-group MTraX timeline reloads so play-triggered reloads do not issue stop before play and preserve the current playhead.
 - `tests/probes/mtrax_keyboard_space_toggle_resume.test.mjs` guards the Molecule space-key shortcut cycle so it calls play, pause, then play again without resetting the playhead.

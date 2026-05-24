@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+
+const createStorage = () => ({
+    store: new Map(),
+    getItem(key) {
+        return this.store.has(key) ? this.store.get(key) : null;
+    },
+    setItem(key, value) {
+        this.store.set(key, String(value));
+    },
+    removeItem(key) {
+        this.store.delete(key);
+    }
+});
+
+globalThis.window = {
+    location: { protocol: 'http:', hostname: 'localhost', port: '3000', origin: 'http://localhost:3000' },
+    addEventListener() { },
+    removeEventListener() { },
+    dispatchEvent() { }
+};
+globalThis.localStorage = createStorage();
+globalThis.sessionStorage = createStorage();
+
+const { __ATOME_COMMIT_TEST_ONLY__ } = await import('../../eVe/core/atome_commit.js');
+
+const event = __ATOME_COMMIT_TEST_ONLY__.normalizeEventInput({
+    kind: 'set',
+    atome_id: 'shape_a',
+    props: {
+        id: 'wrong_id',
+        atome_id: 'wrong_atome',
+        type: 'wrong_type',
+        owner_id: 'wrong_owner',
+        project_id: 'wrong_project',
+        left: '10px',
+        top: '20px'
+    }
+});
+
+assert.deepEqual(event.payload.props, {
+    left: '10px',
+    top: '20px'
+});
+assert.equal(event.props, undefined);
+assert.equal(event.properties, undefined);
+assert.equal(event.patch, undefined);
+assert.equal(event.delta, undefined);
+
+console.log('atome_commit_sanitization: ok');
