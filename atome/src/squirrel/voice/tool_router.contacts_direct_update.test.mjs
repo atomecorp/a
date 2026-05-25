@@ -37,7 +37,13 @@ const router = createToolRouter({
     connectors: { contacts: contactsApi }
 });
 
-const emailUpdate = await router.execute(createStructuredRequest({
+const createConfirmation = (suffix) => ({
+    confirmation_id: `confirm_contacts_update_${suffix}`,
+    actor_id: 'voice_test_user',
+    idempotency_key: `voice_contacts_update_${suffix}`
+});
+
+const emailUpdateRequest = {
     domain: 'contacts',
     operation: 'update',
     filters: { query_text: 'Regis' },
@@ -47,11 +53,24 @@ const emailUpdate = await router.execute(createStructuredRequest({
         utterance_raw: 'Ajoute le mail suivant a Regis : jeezs@jeezs.net',
         utterance_normalized: 'ajoute le mail suivant a regis jeezs jeezs net'
     }
+};
+
+const unconfirmedEmailUpdate = await router.execute(createStructuredRequest(emailUpdateRequest));
+assert.equal(unconfirmedEmailUpdate.ok, false, 'contacts.update should require explicit confirmation before mutation');
+assert.equal(unconfirmedEmailUpdate.confirmation_required, true, 'contacts.update should expose confirmation requirement');
+assert.equal(contactsStore[0].email, '');
+
+const emailConfirmation = createConfirmation('email');
+const emailUpdate = await router.execute(createStructuredRequest({
+    ...emailUpdateRequest,
+    confirmation: emailConfirmation,
+    idempotency_key: emailConfirmation.idempotency_key
 }));
 
 assert.equal(emailUpdate.ok, true, 'contacts.update should resolve the target contact from query_text when no current contact id exists');
 assert.equal(contactsStore[0].email, 'jeezs@jeezs.net');
 
+const phoneConfirmation = createConfirmation('phone');
 const phoneUpdate = await router.execute(createStructuredRequest({
     domain: 'contacts',
     operation: 'update',
@@ -61,12 +80,15 @@ const phoneUpdate = await router.execute(createStructuredRequest({
         locale: 'fr-FR',
         utterance_raw: 'Change le numero de Regis en 06 11 22 33 44',
         utterance_normalized: 'change le numero de regis en 06 11 22 33 44'
-    }
+    },
+    confirmation: phoneConfirmation,
+    idempotency_key: phoneConfirmation.idempotency_key
 }));
 
 assert.equal(phoneUpdate.ok, true);
 assert.match(String(contactsStore[0].phone || ''), /0611223344/, 'phone update should be persisted on the matched contact');
 
+const createConfirmationForExisting = createConfirmation('create_existing');
 const createConflict = await router.execute(createStructuredRequest({
     domain: 'contacts',
     operation: 'create',
@@ -78,7 +100,9 @@ const createConflict = await router.execute(createStructuredRequest({
         locale: 'fr-FR',
         utterance_raw: 'Cree Regis avec le mail jeezs@jeezs.net',
         utterance_normalized: 'cree regis avec le mail jeezs jeezs net'
-    }
+    },
+    confirmation: createConfirmationForExisting,
+    idempotency_key: createConfirmationForExisting.idempotency_key
 }));
 
 assert.equal(createConflict.ok, true);

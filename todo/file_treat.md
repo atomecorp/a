@@ -184,11 +184,11 @@ These files are above the hard maximum and must be reduced when touched.
 | 614 | `eVe/domains/mtrax/media/authorized_playback_runtime.js` | Split auth source resolution, playback URL generation, and cache behavior. |
 | 608 | `atome/src/squirrel/contacts/node_protocol_clients.js` | Split contacts protocol clients, transport, parsing, and auth. |
 | 597 | `eVe/domains/media/preview/video_preview_panel_service.js` | Split preview panel lifecycle, source handling, controls, and cleanup. |
-| 591 | `atome/src/squirrel/contacts/service.js` | Split contact service operations, source registry, sync, and CRUD. |
-| 585 | `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift` | Split sync scheduling, file diffing, conflict policy, and bridge notifications. |
-| 579 | `atome/src/application/audio_runtime/play_record_core.js` | Split playback/record core state, backend calls, and API helpers. |
-| 567 | `platforms/desktop-tauri/src/audio_engine/recorder.rs` | Split recorder stream, file writing, device setup, and metadata. |
-| 557 | `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift` | Split AUv3 recorder state, rendering callbacks, file output, and errors. |
+| 591 | `atome/src/squirrel/contacts/service.js` | Completed: extracted contact normalization, matching, cloning, source snapshots, and query helpers to `atome/src/squirrel/contacts/service_contact_utils.js`; service is now below 500 lines. |
+| 585 | `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift` | Completed: extracted root discovery, inventory building, file copy/delete helpers, and cleanup operations to `platforms/ios/atome-auv3/Common/FileSyncCoordinatorFileOperations.swift`; coordinator is now below 500 lines. |
+| 579 | `atome/src/application/audio_runtime/play_record_core.js` | Completed: extracted public play-record contract constants and media source canonicalization to dedicated audio runtime modules; core is now below 500 lines. |
+| 567 | `platforms/desktop-tauri/src/audio_engine/recorder.rs` | Completed: extracted desktop WAV format/file-writing/thread-drain responsibilities to `platforms/desktop-tauri/src/audio_engine/recorder_wav.rs`; recorder is now below 500 lines. |
+| 557 | `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift` | Completed: extracted recorded WAV analysis to `platforms/ios/atome-auv3/auv3/AUv3RecorderAnalysis.swift`; recorder is now below 500 lines. |
 | 550 | `platforms/ios/atome-auv3/Common/MIDIController.swift` | Split MIDI session, device enumeration, event routing, and bridge. |
 | 550 | `atome/src/squirrel/voice/ai_planner.js` | Split planning prompt, tool selection, quota handling, and output validation. |
 | 542 | `eVe/intuition/tools/paste.js` | Split clipboard parsing, Atome creation, selection, and commit handling. |
@@ -487,3 +487,355 @@ The AI MUST NOT behave as:
 - a scoped optimizer.
 
 Execution MUST continue until total exhaustion of remaining work.
+
+# HARD ENFORCEMENT — LARGE FILE REDUCTION POLICY
+
+The existence of architectural ownership boundaries, runtime boundaries, stable public APIs, maps, registries, stores, adapters, service containers, lookup tables, routing layers, or internal module ownership DOES NOT exempt files from mandatory reduction and refactoring.
+
+ALL files exceeding the defined maximum size threshold MUST be processed.
+
+No exception is allowed for:
+
+- maps;
+- registries;
+- stores;
+- routers;
+- dispatchers;
+- managers;
+- runtime owners;
+- API containers;
+- configuration hubs;
+- orchestration layers;
+- centralization files;
+- aggregation files;
+- bridge files;
+- compatibility layers;
+- legacy wrappers.
+
+The AI MUST:
+
+- split oversized files;
+- extract responsibilities;
+- isolate concerns;
+- factorize logic;
+- modularize implementations;
+- reduce complexity;
+- preserve behavior.
+
+Preserving architecture does NOT justify preserving oversized files.
+
+Stable public APIs are NOT a valid reason to avoid internal refactoring.
+
+The AI MUST preserve:
+
+- runtime behavior;
+- API compatibility;
+- platform compatibility;
+- synchronization integrity;
+- architectural semantics;
+
+WHILE STILL reducing file size below the required threshold.
+
+---
+
+# MANDATORY SIZE TARGET POLICY
+
+Every file above the maximum authorized line count MUST be reduced below the threshold.
+
+Completion condition:
+
+files_above_threshold == 0
+
+The task is NOT complete while any oversized file remains.
+
+Inventorying remaining oversized files is forbidden as a final state.
+
+The AI MUST continue processing automatically until:
+
+remaining_oversized_files == 0
+
+# AUTONOMOUS CONTINUATION LOOP — NO USER CONFIRMATION
+
+The AI MUST NOT ask the user whether to continue.
+
+When a tranche, batch, file, or refactor is completed, the AI MUST automatically select the next remaining item from todo/file_treat.md and continue execution.
+
+The following response is forbidden:
+
+"I can continue with the next item."
+
+Instead, the AI MUST immediately continue.
+
+Completion is only allowed when:
+
+remaining_P0_items == 0
+remaining_P1_items == 0
+remaining_P2_items == 0
+remaining_files_above_500_lines == 0
+remaining_maps_to_update == 0
+remaining_validations_to_run == 0
+
+Any intermediate state MUST NOT be presented as final.
+
+---
+
+# FORBIDDEN STOPPING BEHAVIOR
+
+The AI MUST NOT stop with:
+
+- "I treated a first tranche"
+- "I can continue"
+- "next realistic item"
+- "this would require a long series"
+- "remaining items exist"
+- "large architectural refactors remain"
+
+These are not valid stopping conditions.
+
+If remaining items exist, the AI MUST continue automatically.
+
+---
+
+# EXECUTION LOOP
+
+The AI MUST follow this loop:
+
+1. Read the full remaining inventory.
+2. Pick the highest-priority remaining item:
+   - P0 first
+   - then P1
+   - then P2
+   - then all files above 500 lines
+3. Refactor the selected item completely.
+4. Update all related maps.
+5. Preserve public APIs and runtime boundaries.
+6. Run required validations.
+7. Update the remaining inventory.
+8. Repeat from step 1.
+
+The AI MUST repeat this loop until the inventory is empty.
+
+---
+
+# NO "REALISTIC ITEM" ESCAPE
+
+The AI is forbidden from choosing only "realistic", "small", "safe", or "coherent" items while leaving larger required refactors untreated.
+
+Large architectural refactors are mandatory.
+
+The AI MUST decompose large refactors internally and continue until complete.
+
+---
+
+# FINAL ANSWER CONDITION
+
+The AI may answer only when the following is true:
+
+remaining_actionable_items == 0
+
+If this condition is false, the AI MUST continue working and MUST NOT produce a final answer.
+
+# GIT READ-ONLY CLARIFICATION
+
+The repository Git history MUST remain read-only.
+
+The AI MUST NOT run mutating Git commands such as:
+
+- git commit
+- git push
+- git pull
+- git reset
+- git checkout
+- git switch
+- git rebase
+- git merge
+- git clean
+- git stash
+- git restore
+
+However, this Git read-only policy DOES NOT mean the filesystem is read-only.
+
+The AI IS explicitly allowed and required to:
+
+- edit source files;
+- create new source files;
+- split oversized files;
+- move code into new modules;
+- update imports;
+- update maps;
+- update registries;
+- update tests;
+- update validation scripts;
+- delete obsolete source files when safe.
+
+The AI MUST treat the working tree as writable.
+
+Git read-only means:
+
+- do not mutate Git history;
+- do not create commits;
+- do not change branches;
+- do not reset files through Git.
+
+Git read-only DOES NOT mean:
+
+- do not edit files;
+- do not refactor;
+- do not split files;
+- do not complete the task.
+
+Using Git read-only as a reason to stop is forbidden.
+
+# OVERSIZED FILE CONTINUATION POLICY
+
+If a file remains above the line threshold after extraction, the AI MUST continue extracting responsibilities from that same file until it is below the threshold.
+
+The AI MUST NOT mark a file as partially processed if it remains above the threshold.
+
+For any file still above threshold, the AI MUST:
+
+1. re-open the file;
+2. identify the next separable responsibility;
+3. extract it into a dedicated module;
+4. update imports and maps;
+5. run validation;
+6. re-check line count;
+7. repeat until the file is below threshold.
+
+Completion condition for each oversized file:
+
+file_line_count <= 500
+
+A file remaining above 500 lines means the task for that file is NOT complete.
+
+# NO INTERMEDIATE REPORTING POLICY
+
+The AI MUST NOT stop after a successful extraction, validation, map update, or refactor to provide a progress report.
+
+Successful completion of:
+
+- a file split;
+- a module extraction;
+- a validation pass;
+- a map update;
+- a syntax check;
+- a runtime check;
+
+MUST immediately trigger continuation toward the next remaining actionable item.
+
+The AI MUST continue automatically after every successful step.
+
+Progress reports are forbidden until the global task is complete.
+
+---
+
+# FORBIDDEN PROGRESS REPORTING
+
+The AI MUST NOT emit messages such as:
+
+- "I applied the rules"
+- "I started with the first P0"
+- "Change performed"
+- "Maps updated"
+- "Validations passed"
+- "The worktree already contained changes"
+- "I did not perform Git mutations"
+
+These are intermediate execution details, not completion conditions.
+
+Execution MUST continue immediately after such operations.
+
+---
+
+# CONTINUOUS EXECUTION MODE
+
+The AI MUST remain in execution mode continuously.
+
+Execution mode means:
+
+- process item;
+- validate;
+- continue;
+- process next item;
+- validate;
+- continue recursively.
+
+The AI MUST NOT switch into conversational mode between items.
+
+The AI MUST behave like a continuous autonomous refactoring engine.
+
+---
+
+# GLOBAL COMPLETION CONDITION
+
+The AI MUST continue until ALL of the following are true:
+
+remaining_P0_items == 0
+remaining_P1_items == 0
+remaining_P2_items == 0
+remaining_files_above_threshold == 0
+remaining_required_refactors == 0
+remaining_map_updates == 0
+remaining_validations == 0
+remaining_actionable_items == 0
+
+If any value is non-zero, the AI MUST continue automatically.
+
+---
+
+# NO MICRO-COMPLETION POLICY
+
+Reducing a file from 17948 lines to 17471 lines is NOT considered meaningful completion.
+
+A file remains actionable until:
+file_line_count <= threshold
+
+The AI MUST continue decomposing the file recursively until the threshold is reached.
+
+Large files MUST undergo repeated extractions without interruption.
+
+---
+
+# AUTONOMOUS RECURSIVE DECOMPOSITION
+
+For oversized files, the AI MUST:
+
+1. identify the next extractable responsibility;
+2. extract it;
+3. update imports and maps;
+4. validate;
+5. immediately repeat on the same file;
+6. continue until below threshold;
+7. only then move to the next item.
+
+The AI MUST NOT pause between recursive decompositions.
+
+# PERSISTENT REFACTORING PROTOCOL
+
+The AI MUST process this task across multiple executions if necessary.
+
+Each execution MUST:
+
+1. recalculate the remaining inventory;
+2. select the highest-priority remaining item;
+3. fully reduce that item below 500 lines;
+4. update maps;
+5. run validations;
+6. update todo/file_treat.md by marking the item as completed;
+7. immediately continue with the next item until execution limits are reached.
+
+If execution limits are reached, the AI MUST stop only after:
+
+- completing the current item fully;
+- updating the remaining inventory;
+- writing an exact resume point into todo/file_treat.md.
+
+The next run MUST resume from that exact point without redoing completed work.
+
+Continue from the current state.
+
+Do not restart from the beginning.
+
+Recalculate the remaining inventory, pick the highest-priority remaining file above 500 lines, reduce it below 500 lines, update maps, run validations, mark it completed in todo/file_treat.md, then continue automatically with the next remaining item until the execution limit is reached.
+
+If you must stop, stop only after a fully completed item and write the exact resume point into todo/file_treat.md.

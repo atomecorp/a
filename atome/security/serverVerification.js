@@ -22,143 +22,25 @@
  */
 
 import {
-    TRUSTED_SERVERS,
     VERIFICATION_SETTINGS,
     getTrustedServer,
     findServerByFingerprint,
     findServerByUrl,
     isDevelopmentMode
 } from './trusted_keys.js';
-
-// =============================================================================
-// VERIFICATION STATE
-// =============================================================================
-
-// Cache for verification results
-const verificationCache = new Map();
-
-// Current verification status
-let currentServerStatus = {
-    url: null,
-    verified: false,
-    official: false,
-    serverId: null,
-    serverName: null,
-    lastVerified: null,
-    error: null
-};
-
-// =============================================================================
-// CRYPTOGRAPHIC UTILITIES
-// =============================================================================
-
-/**
- * Generate a cryptographically secure random challenge
- * 
- * @param {number} length - Length in bytes (default: 32)
- * @returns {string} Hex-encoded challenge string
- */
-function generateChallenge(length = 32) {
-    const array = new Uint8Array(length);
-    crypto.getRandomValues(array);
-    return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Convert PEM-encoded public key to ArrayBuffer
- * 
- * @param {string} pem - PEM-encoded public key
- * @returns {ArrayBuffer} Key as ArrayBuffer
- */
-function pemToArrayBuffer(pem) {
-    const base64 = pem
-        .replace(/-----BEGIN PUBLIC KEY-----/, '')
-        .replace(/-----END PUBLIC KEY-----/, '')
-        .replace(/[\r\n\s]/g, '');
-
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-/**
- * Convert Base64 string to ArrayBuffer
- * 
- * @param {string} base64 - Base64 encoded string
- * @returns {ArrayBuffer} Decoded ArrayBuffer
- */
-function base64ToArrayBuffer(base64) {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-/**
- * Compute SHA-256 fingerprint of a public key
- * 
- * @param {string} publicKeyPem - PEM-encoded public key
- * @returns {Promise<string>} Fingerprint in format "sha256:hexstring"
- */
-async function computeFingerprint(publicKeyPem) {
-    const keyBuffer = pemToArrayBuffer(publicKeyPem);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', keyBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return `sha256:${hashHex}`;
-}
-
-/**
- * Verify RSA-PSS signature using Web Crypto API
- * 
- * @param {string} publicKeyPem - PEM-encoded public key
- * @param {string} data - Original data that was signed
- * @param {string} signatureBase64 - Base64-encoded signature
- * @returns {Promise<boolean>} True if signature is valid
- */
-async function verifySignature(publicKeyPem, data, signatureBase64) {
-    try {
-        // Import the public key
-        const keyBuffer = pemToArrayBuffer(publicKeyPem);
-        const cryptoKey = await crypto.subtle.importKey(
-            'spki',
-            keyBuffer,
-            {
-                name: 'RSA-PSS',
-                hash: 'SHA-256'
-            },
-            false,
-            ['verify']
-        );
-
-        // Convert signature from base64
-        const signatureBuffer = base64ToArrayBuffer(signatureBase64);
-
-        // Encode data as UTF-8
-        const dataBuffer = new TextEncoder().encode(data);
-
-        // Verify signature
-        const isValid = await crypto.subtle.verify(
-            {
-                name: 'RSA-PSS',
-                saltLength: 32
-            },
-            cryptoKey,
-            signatureBuffer,
-            dataBuffer
-        );
-
-        return isValid;
-
-    } catch (err) {
-        return false;
-    }
-}
+import {
+    computeFingerprint,
+    generateChallenge,
+    verifySignature
+} from './serverVerificationCrypto.js';
+import {
+    cacheVerificationResult,
+    clearVerificationCache,
+    getCachedVerificationResult,
+    getStatusIcon,
+    getStatusMessage,
+    getVerificationStatus
+} from './serverVerificationState.js';
 
 // =============================================================================
 // SERVER VERIFICATION
@@ -181,10 +63,8 @@ export async function verifyServer(serverUrl, options = {}) {
 
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
-        const cached = verificationCache.get(normalizedUrl);
-        if (cached && Date.now() - cached.timestamp < VERIFICATION_SETTINGS.cacheDurationMs) {
-            return cached.result;
-        }
+        const cached = getCachedVerificationResult(normalizedUrl, VERIFICATION_SETTINGS.cacheDurationMs);
+        if (cached) return cached;
     }
 
     // Initialize result
@@ -213,7 +93,7 @@ export async function verifyServer(serverUrl, options = {}) {
                 result.official = false;
                 result.serverName = trustedByUrl.name || 'Local Development Server';
                 result.warnings.push('Development mode: localhost trusted without cryptographic verification');
-                return cacheResult(normalizedUrl, result);
+                return cacheVerificationResult(normalizedUrl, result);
             }
         }
 
@@ -242,7 +122,7 @@ export async function verifyServer(serverUrl, options = {}) {
                 result.warnings.push('Connecting to unverified server (allowed by settings)');
             }
 
-            return cacheResult(normalizedUrl, result);
+            return cacheVerificationResult(normalizedUrl, result);
         }
 
         const identity = await identityResponse.json();
@@ -258,7 +138,7 @@ export async function verifyServer(serverUrl, options = {}) {
                 result.success = true;
             }
 
-            return cacheResult(normalizedUrl, result);
+            return cacheVerificationResult(normalizedUrl, result);
         }
 
         // Step 2: Check if server ID is in trusted list
@@ -289,21 +169,21 @@ export async function verifyServer(serverUrl, options = {}) {
 
         if (!verifyResponse.ok) {
             result.error = 'Server verification endpoint failed';
-            return cacheResult(normalizedUrl, result);
+            return cacheVerificationResult(normalizedUrl, result);
         }
 
         const verifyData = await verifyResponse.json();
 
         if (!verifyData.success || !verifyData.verified) {
             result.error = verifyData.error || 'Server verification failed';
-            return cacheResult(normalizedUrl, result);
+            return cacheVerificationResult(normalizedUrl, result);
         }
 
         // Step 4: Verify the timestamp is fresh
         const responseAge = Date.now() - verifyData.timestamp;
         if (responseAge > VERIFICATION_SETTINGS.maxResponseAgeMs) {
             result.error = 'Server response too old (possible replay attack)';
-            return cacheResult(normalizedUrl, result);
+            return cacheVerificationResult(normalizedUrl, result);
         }
 
         // Step 5: Verify the signature
@@ -314,7 +194,7 @@ export async function verifyServer(serverUrl, options = {}) {
 
         if (!keyToUse) {
             result.error = 'No public key available for verification';
-            return cacheResult(normalizedUrl, result);
+            return cacheVerificationResult(normalizedUrl, result);
         }
 
 
@@ -326,7 +206,7 @@ export async function verifyServer(serverUrl, options = {}) {
 
         if (!signatureValid) {
             result.error = 'Invalid server signature';
-            return cacheResult(normalizedUrl, result);
+            return cacheVerificationResult(normalizedUrl, result);
         }
 
         // Step 6: Verify fingerprint matches trusted server
@@ -339,7 +219,7 @@ export async function verifyServer(serverUrl, options = {}) {
             if (computedFingerprint !== trustedServer.fingerprint) {
                 result.error = 'Server fingerprint does not match trusted record';
                 result.warnings.push('Possible key substitution attack');
-                return cacheResult(normalizedUrl, result);
+                return cacheVerificationResult(normalizedUrl, result);
             }
 
             // Server is verified AND official
@@ -361,7 +241,7 @@ export async function verifyServer(serverUrl, options = {}) {
         result.verified = true;
 
 
-        return cacheResult(normalizedUrl, result);
+        return cacheVerificationResult(normalizedUrl, result);
 
     } catch (err) {
         if (err.name === 'AbortError') {
@@ -377,56 +257,8 @@ export async function verifyServer(serverUrl, options = {}) {
             result.warnings.push('Connection allowed despite verification failure');
         }
 
-        return cacheResult(normalizedUrl, result);
+        return cacheVerificationResult(normalizedUrl, result);
     }
-}
-
-/**
- * Cache verification result
- */
-function cacheResult(url, result) {
-    verificationCache.set(url, {
-        result,
-        timestamp: Date.now()
-    });
-
-    // Update current status
-    currentServerStatus = {
-        url,
-        ...result,
-        lastVerified: Date.now()
-    };
-
-    return result;
-}
-
-// =============================================================================
-// STATUS & UTILITIES
-// =============================================================================
-
-/**
- * Get current server verification status
- * 
- * @returns {object} Current verification status
- */
-export function getVerificationStatus() {
-    return { ...currentServerStatus };
-}
-
-/**
- * Clear verification cache
- */
-export function clearVerificationCache() {
-    verificationCache.clear();
-    currentServerStatus = {
-        url: null,
-        verified: false,
-        official: false,
-        serverId: null,
-        serverName: null,
-        lastVerified: null,
-        error: null
-    };
 }
 
 /**
@@ -449,53 +281,14 @@ export function requiresVerification(url) {
     return true;
 }
 
-/**
- * Get human-readable verification status message
- * 
- * @param {object} result - Verification result
- * @returns {string} Status message
- */
-export function getStatusMessage(result) {
-    if (!result) {
-        return 'Not verified';
-    }
-
-    if (result.official) {
-        return `✅ Official Server: ${result.serverName || result.serverId}`;
-    }
-
-    if (result.verified) {
-        return `⚠️ Verified but unofficial: ${result.serverName || result.serverId}`;
-    }
-
-    if (result.success && result.warnings?.length > 0) {
-        return `⚠️ Connected with warnings: ${result.warnings[0]}`;
-    }
-
-    if (result.error) {
-        return `❌ Verification failed: ${result.error}`;
-    }
-
-    return '❓ Unknown status';
-}
-
-/**
- * Get verification icon based on status
- * 
- * @param {object} result - Verification result
- * @returns {string} Emoji icon
- */
-export function getStatusIcon(result) {
-    if (!result) return '❓';
-    if (result.official) return '✅';
-    if (result.verified) return '⚠️';
-    if (result.success) return '🔓';
-    return '❌';
-}
-
-// =============================================================================
-// EXPORTS
-// =============================================================================
+export {
+    clearVerificationCache,
+    computeFingerprint,
+    generateChallenge,
+    getStatusIcon,
+    getStatusMessage,
+    getVerificationStatus
+};
 
 export default {
     verifyServer,

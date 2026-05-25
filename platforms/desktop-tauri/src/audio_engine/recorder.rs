@@ -12,15 +12,15 @@
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
-use hound::{WavSpec, WavWriter};
 use ringbuf::{traits::*, HeapRb};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
-use std::time::Duration;
 
 use super::metering;
+use super::recorder_wav::{create_wav_writer, spawn_wav_writer_thread};
+pub use super::recorder_wav::{BufferSizeHint, OutputFormat};
 
 macro_rules! eprintln {
     ($($arg:tt)*) => {
@@ -28,97 +28,6 @@ macro_rules! eprintln {
             std::eprintln!($($arg)*);
         }
     };
-}
-
-/// Output format for WAV recording.
-#[derive(Clone, Copy, Debug, serde::Deserialize)]
-pub enum OutputFormat {
-    /// 16-bit signed integer PCM (CD quality, smaller files)
-    Int16,
-    /// 24-bit signed integer PCM (professional quality)
-    Int24,
-    /// 32-bit IEEE float (maximum precision, larger files)
-    Float32,
-}
-
-impl Default for OutputFormat {
-    fn default() -> Self {
-        Self::Int24 // Professional default
-    }
-}
-
-impl OutputFormat {
-    fn wav_spec(&self, sample_rate: u32, channels: u16) -> WavSpec {
-        match self {
-            Self::Int16 => WavSpec {
-                channels,
-                sample_rate,
-                bits_per_sample: 16,
-                sample_format: hound::SampleFormat::Int,
-            },
-            Self::Int24 => WavSpec {
-                channels,
-                sample_rate,
-                bits_per_sample: 24,
-                sample_format: hound::SampleFormat::Int,
-            },
-            Self::Float32 => WavSpec {
-                channels,
-                sample_rate,
-                bits_per_sample: 32,
-                sample_format: hound::SampleFormat::Float,
-            },
-        }
-    }
-
-    fn write_f32_sample<W: std::io::Write + std::io::Seek>(
-        &self,
-        writer: &mut WavWriter<W>,
-        sample: f32,
-    ) -> Result<(), hound::Error> {
-        match self {
-            Self::Int16 => {
-                let s = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-                writer.write_sample(s)
-            }
-            Self::Int24 => {
-                let s = (sample * 8_388_607.0).clamp(-8_388_608.0, 8_388_607.0) as i32;
-                writer.write_sample(s)
-            }
-            Self::Float32 => writer.write_sample(sample),
-        }
-    }
-}
-
-/// Preferred buffer size hint for CPAL.
-#[derive(Clone, Copy, Debug)]
-#[allow(dead_code)]
-pub enum BufferSizeHint {
-    /// Let CPAL choose (usually ~2048 samples)
-    Default,
-    /// Low latency (~256 samples, higher CPU)
-    Low,
-    /// Medium (~512 samples, balanced)
-    Medium,
-    /// Custom frame count
-    Frames(u32),
-}
-
-impl BufferSizeHint {
-    fn to_cpal(self) -> cpal::BufferSize {
-        match self {
-            Self::Default => cpal::BufferSize::Default,
-            Self::Low => cpal::BufferSize::Fixed(256),
-            Self::Medium => cpal::BufferSize::Fixed(512),
-            Self::Frames(n) => cpal::BufferSize::Fixed(n),
-        }
-    }
-}
-
-impl Default for BufferSizeHint {
-    fn default() -> Self {
-        Self::Default
-    }
 }
 
 struct StopSignal {
@@ -180,45 +89,6 @@ pub struct RecordResult {
     pub sample_rate: u32,
     pub channels: u16,
     pub output_format: String,
-}
-
-fn write_f32_buffer<W: std::io::Write + std::io::Seek>(
-    writer: &mut WavWriter<W>,
-    format: OutputFormat,
-    samples: &[f32],
-) -> Result<(), String> {
-    for &sample in samples {
-        format
-            .write_f32_sample(writer, sample)
-            .map_err(|error| format!("Failed to write WAV sample: {error}"))?;
-    }
-    Ok(())
-}
-
-fn spawn_wav_writer_thread(
-    mut consumer: ringbuf::HeapCons<f32>,
-    mut writer: WavWriter<std::io::BufWriter<std::fs::File>>,
-    output_format: OutputFormat,
-    writer_stop: Arc<AtomicBool>,
-) -> std::thread::JoinHandle<Result<(), String>> {
-    std::thread::spawn(move || {
-        let mut buffer = vec![0.0_f32; 4096];
-        loop {
-            let count = consumer.pop_slice(&mut buffer);
-            if count > 0 {
-                write_f32_buffer(&mut writer, output_format, &buffer[..count])?;
-                continue;
-            }
-            if writer_stop.load(Ordering::Acquire) && consumer.is_empty() {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(2));
-        }
-        writer
-            .finalize()
-            .map_err(|error| format!("Failed to finalize WAV: {error}"))?;
-        Ok(())
-    })
 }
 
 pub fn start(
@@ -317,10 +187,7 @@ pub fn start_with_options(
                 buffer_size: buf_hint.to_cpal(),
             };
 
-            let wav_spec = fmt.wav_spec(actual_sr, actual_ch);
-
-            let writer = WavWriter::create(&path_owned, wav_spec)
-                .map_err(|e| format!("Failed to create WAV file {path_owned}: {e}"))?;
+            let writer = create_wav_writer(&path_owned, fmt, actual_sr, actual_ch)?;
             let rb_capacity = usize::try_from(actual_sr)
                 .unwrap_or(48_000)
                 .saturating_mul(usize::from(actual_ch.max(1)))

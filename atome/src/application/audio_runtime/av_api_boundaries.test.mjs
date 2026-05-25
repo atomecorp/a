@@ -16,6 +16,11 @@ test.beforeEach(() => {
 });
 
 const createNativeAudioEnv = (calls = []) => ({
+    atome: {
+        tools: {
+            v2CommandBus: commandBusV2
+        }
+    },
     __SQUIRREL_FORCE_TAURI_RUNTIME: true,
     __TAURI_INTERNALS__: {
         invoke: async (command, args = {}) => {

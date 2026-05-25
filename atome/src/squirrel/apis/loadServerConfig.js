@@ -17,6 +17,9 @@ import {
     isLocalAxumPage,
     resolveCanonicalFastifyHttpBase
 } from './serverUrls.js';
+import { applyDebugConfig } from './loadServerConfigDebug.js';
+import { buildDefaultServerConfig } from './loadServerConfigDefaults.js';
+import { buildFastifyWsUrl } from './loadServerConfigWs.js';
 
 let _loadPromise = null;
 
@@ -45,25 +48,6 @@ function clearFastifyRuntimeGlobals() {
     window.__SQUIRREL_TAURI_FASTIFY_URL__ = '';
     window.__SQUIRREL_FASTIFY_WS_API_URL__ = '';
     window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = '';
-}
-
-function applyDebugConfig(config) {
-    if (typeof window === 'undefined') return;
-    const logging = config?.logging;
-    if (!logging) return;
-    if (!isInTauriRuntime() && typeof window.__CHECK_DEBUG__ === 'boolean') {
-        globalThis.__CHECK_DEBUG__ = window.__CHECK_DEBUG__;
-        return;
-    }
-    if (typeof logging.debugEnabled === 'boolean') {
-        window.__CHECK_DEBUG__ = logging.debugEnabled;
-        globalThis.__CHECK_DEBUG__ = window.__CHECK_DEBUG__;
-        return;
-    }
-    if (logging.disableUiLogs === true) {
-        window.__CHECK_DEBUG__ = false;
-        globalThis.__CHECK_DEBUG__ = window.__CHECK_DEBUG__;
-    }
 }
 
 function isInTauriRuntime() {
@@ -267,12 +251,6 @@ function readTauriFastifyOverride() {
     }
 }
 
-function toWsBase(httpBase) {
-    return normalizeNoTrailingSlash(httpBase)
-        .replace(/^https:/, 'wss:')
-        .replace(/^http:/, 'ws:');
-}
-
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
     const base = resolveCanonicalFastifyHttpBase(httpBase);
     if (!base) return;
@@ -398,25 +376,6 @@ function buildFastifyHttpBase(config) {
     return candidate;
 }
 
-function buildFastifyWsUrl(httpBase, path) {
-    const wsBase = toWsBase(httpBase);
-    const p = typeof path === 'string' && path.startsWith('/') ? path : '/ws/api';
-    return `${wsBase}${p}`;
-}
-
-function buildDefaultServerConfig() {
-    return {
-        fastify: {
-            host: '127.0.0.1',
-            port: 3001,
-            serverInfoPath: '/api/server-info',
-            syncWsPath: '/ws/sync',
-            apiWsPath: '/ws/api'
-        },
-        generated: true
-    };
-}
-
 export async function loadServerConfigOnce() {
     if (typeof window === 'undefined') return null;
     if (_loadPromise) return _loadPromise;
@@ -467,7 +426,7 @@ export async function loadServerConfigOnce() {
         if (isTauriRuntime && !forceFetch) {
             const config = buildDefaultServerConfig();
             window.__SQUIRREL_SERVER_CONFIG__ = config;
-            applyDebugConfig(config);
+            applyDebugConfig(config, { isInTauriRuntime });
             if (tauriOverride) {
                 window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;
                 applyFastifyGlobalsFromHttpBase(tauriOverride, config);
@@ -500,7 +459,7 @@ export async function loadServerConfigOnce() {
 
             const config = await res.json();
             window.__SQUIRREL_SERVER_CONFIG__ = config;
-            applyDebugConfig(config);
+            applyDebugConfig(config, { isInTauriRuntime });
 
             if (isTauriProdWebview()) {
                 applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), config);

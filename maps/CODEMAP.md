@@ -197,13 +197,19 @@ Main files:
 
 - `atome/security/cloudSync.js`
 - `atome/security/serverVerification.js`
+- `atome/security/serverVerificationCrypto.js`
+- `atome/security/serverVerificationState.js`
 - `atome/security/syncQueue.js`
+- `atome/security/sync_queue_constants.js`
+- `atome/security/sync_queue_storage.js`
+- `atome/security/sync_queue_items.js`
+- `atome/security/sync_queue_credentials.js`
 - `atome/security/trusted_keys.js`
 
 Reusable APIs:
 
 - Trusted server lookup and fingerprint matching.
-- Server verification status and cache control.
+- Server verification orchestration, cryptographic challenge helpers, status presentation, and cache control.
 - Sync queue action lifecycle and retry processing.
 - Cloud sync status and conflict resolution entry points.
 
@@ -222,7 +228,7 @@ Should not be duplicated by:
 
 Known risks:
 
-- `syncQueue.js` is oversized and should be reduced before feature growth.
+- `syncQueue.js` owns sync execution and scheduler orchestration; queue constants, storage obfuscation, item operations, and auto-sync metadata are split into focused `sync_queue_*` modules.
 - Security phase must audit secrets, token storage, bridge permissions, and command injection surfaces.
 
 ### Atome Shared Contracts
@@ -298,6 +304,10 @@ Main files:
 - `atome/src/index.html`
 - `atome/src/application/index.js`
 - `atome/src/squirrel/spark.js`
+- `atome/src/squirrel/apis/loadServerConfig.js`
+- `atome/src/squirrel/apis/loadServerConfigDebug.js`
+- `atome/src/squirrel/apis/loadServerConfigDefaults.js`
+- `atome/src/squirrel/apis/loadServerConfigWs.js`
 - `atome/src/squirrel/kickstart.js`
 - `atome/src/squirrel/squirrel.js`
 - `atome/src/squirrel/apis.js`
@@ -307,9 +317,11 @@ Primary dependencies:
 
 - `atome/src/js/` for bundled browser libraries.
 - `atome/src/wasm/` for audio WASM artifacts.
+- Server config loading is split between runtime fetch/exposure in `loadServerConfig.js`, debug flag application in `loadServerConfigDebug.js`, generated defaults in `loadServerConfigDefaults.js`, and WebSocket URL construction in `loadServerConfigWs.js`.
 - eVe bootstrap/version product references still exist in `atome/src/application/index.js` and `atome/src/squirrel/kickstart.js`.
 - `atome/src/application/examples/user.js` is legacy product-bootstrap rendering debt and must use the shared eVe media source canonicalization contract for media atome sources instead of reconstructing recording or upload paths locally.
 - Legacy application example menu files under `atome/src/application/examples/`, `atome/src/application/vie/`, `atome/src/application/lyrix/`, and `atome/src/application/jeezs/` must not mutate `window.new_menu_v2` content or theme. The eVe Intuition menu is owned by `eVe/intuition/`; app-specific menu replacement requires an explicit product runtime boundary.
+- `atome/src/application/jeezs/demo.js` owns only the Jeezs demo mounting/runtime menu synchronization; `demo_messages.js` owns localized demo copy, and `demo_blocks.js` owns demo block payload construction.
 
 Should be extended by:
 
@@ -343,23 +355,29 @@ Main files:
 - `av_contracts.js`
 - `backend.kira.js`
 - `kira_audio_commands.js`
+- `play_record_contract.js`
 - `play_record_core.js`
+- `play_record_media_source.js`
 - `record_audio_api.js`
 - `runtime_audio_backend.js`
+- `auv3_host_playback.js`
 - `stt_api.js`
 
 Reusable APIs:
 
 - `getPlayRecordCore()`
 - `PLAY_RECORD_API_CONTRACT`
+- `canonicalizePlayRecordMediaSource()`
 - Kira payload normalization and command invocation helpers.
 - Runtime audio backend resolution.
+- AUv3 host-routed media playback commands and source-to-native-path resolution.
 - Audio playback and recording API facades.
 
 Tests:
 
 - `play_record_core.test.mjs`
 - `runtime_audio_backend.strict_native.test.mjs`
+- `auv3_host_playback.test.mjs`
 - `av_api_boundaries.test.mjs`
 
 Should be extended by:
@@ -372,7 +390,7 @@ Should not be duplicated by:
 
 Known risks:
 
-- `play_record_core.js` is above the normal file-size threshold and must be reduced when touched.
+- `play_record_core.js` owns the PlayRecordCore class and delegates public contract constants and media source canonicalization to focused runtime modules.
 - `av_api_boundaries.test.mjs` still has eVe integration context and belongs to later AV boundary cleanup.
 
 Status: Verified.
@@ -509,8 +527,8 @@ Purpose: Product-neutral service/bootstrap/contracts for communication and accou
 
 Main files:
 
-- `mail/bootstrap.js`, `mail/service.js`, `mail/connector_contract.js`, `mail/icloud_connector.js`, `mail/node_protocol_clients.js`
-- `contacts/bootstrap.js`, `contacts/service.js`, `contacts/connector_contract.js`, `contacts/icloud_connector.js`, `contacts/local_source.js`, `contacts/macos_source.js`
+- `mail/bootstrap.js`, `mail/service.js`, `mail/connector_contract.js`, `mail/icloud_connector.js`, `mail/icloud_connector_normalization.js`, `mail/node_protocol_clients.js`
+- `contacts/bootstrap.js`, `contacts/service.js`, `contacts/service_contact_utils.js`, `contacts/connector_contract.js`, `contacts/icloud_connector.js`, `contacts/local_source.js`, `contacts/macos_source.js`
 - `calendar/bootstrap.js`, `calendar/service.js`, `calendar/calendar_api_source.js`, `calendar/node_protocol_clients.js`
 - `bank/bootstrap.js`, `bank/service.js`, `bank/connector_contract.js`, `bank/local_index.js`
 
@@ -519,6 +537,7 @@ Reusable APIs:
 - Bootstrap installers for runtime registration.
 - Service contracts and connector contracts.
 - Local, iCloud, macOS, and protocol client adapters.
+- iCloud mail connector normalization for config, mailbox names, read payloads, and connector records.
 
 Should be extended by:
 
@@ -548,12 +567,14 @@ Main files:
 - `slider_builder.js`
 - `tool_slider_builder.js`
 - `table_builder.js`
+- `table_visual_contract.js`
 - `intuition_builder/index.js`
 - `intuition_builder/layer_contract.js`
 
 Reusable APIs:
 
 - Component builders for common Squirrel UI structures.
+- `table_builder.js` owns table runtime creation and interactions; `table_visual_contract.js` owns the product-neutral table templates and style variants.
 - Canonical Squirrel system control builders now include Button, Slider, ToolSlider, Input, and Console via the spark bootstrap registry.
 - Minimal Intuition builder and layer contract isolated from eVe closed UI.
 
@@ -586,6 +607,7 @@ Main files:
 - `orchestrator.js`
 - `tool_router.js`
 - `ai_planner.js`
+- `ai_planner_runtime_context.js`
 - `main_handle_bridge.js`
 - `session_runtime.js`
 - `stt_normalizer.js`
@@ -728,6 +750,7 @@ Reusable APIs:
 - MTraX clip deletion is split by responsibility: `deletion_runtime.js` owns selected clip/track deletion and source cleanup, while `loop_cell_deletion_runtime.js` owns loop-cell range deletion and intra-cell split preservation. Interactive clip deletion uses the same selected clip/track scope model as split and must not auto-expand through linked audio/video metadata or `sync_group_id`.
 - MTraX clip selection API ownership lives in `selection_context_runtime.js`: selection reads expose runtime clip ids, selection/persistence ids, and per-clip descriptors; selection writes resolve incoming clip identifiers through the existing clip target resolver before mutating `selectedClipIds`.
 - MTraX clip crop preview masking lives in `eVe/domains/mtrax/clips/crop_preview_mask_runtime.js`; crop gestures use it for live visual feedback while the final preview metadata redraw remains owned by `preview_metadata_runtime.js`.
+- MTraX karaoke detail is split by responsibility: `karaoke/detail_runtime.js` owns detail state and mutation application, while `karaoke/detail_record_schedule_state.js` owns selection-only record-schedule detail projection.
 - User profile API.
 
 Should be extended by:
@@ -776,6 +799,9 @@ Reusable APIs:
 - `PANEL_SURFACE_DEFINITIONS` as the single source of truth for panel ids, module keys, open/close function names, TTL policy, and pointer-toggle behavior.
 - `buildPanelRuntimeConfigByToolId()` derives tool-runtime panel config from `PANEL_SURFACE_DEFINITIONS`; do not add a second panel config table in tool runtime code.
 - `panelCreatorV2` owns panel lifecycle registration, lazy loading, attach-to-layer, open/close, destroy policy, and panel bounds mode.
+- `eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js` owns eVeIntuition panel surface registration, window-function payload normalization, surface id lookup, and PanelCreatorV2 open/close bridging.
+- `eVe/intuition/runtime/eve_intuition/tool_latched_state_runtime.js` owns eVeIntuition tool latched-state cache, menu sync, surface-state/dialog-close listeners, and panel tool-state event emission.
+- `eVe/intuition/runtime/eve_intuition/debug_runtime.js` owns the eVeIntuition `window.__DEBUG__` diagnostic facade, deterministic test-mode style injection, footer/selection/timeline debug readers, and project persistence diagnostics.
 - Panel API, panel layout policy, layer contract, layer ownership, selection, latched state.
 - Layer contract owns the global stack order and its distinct HTML layer nodes: project tools, floating project palettes, Molecules, component/docked palettes, panels/dialogs, main ribbon, active drag.
 - `project_drop.js` owns project-layer native file drop routing, including document-level drops that resolve back to a `project_view_*` surface before entering the product media import path, plus project tool shortcut drag intent routing back to the main ribbon trash target for canonical soft-delete handling.
@@ -785,7 +811,9 @@ Reusable APIs:
 - `eVe/intuition/shared/dom_utils.js` also owns reusable CSS declaration/rule serialization through `serializeCssDeclarations()` and `serializeCssRule()`; generated style modules such as toolbox visual CSS must consume those helpers instead of local serializers.
 - `eVe/intuition/shared/tool_shortcut_visual.js` owns the tool-shortcut visual role, tokens, and canonical create-spec builder. `buildToolShortcutCreateSpec()` must expose the Atome envelope (`id`, `type`, `kind`, `renderer`, `meta`, `properties`) and keep persistable tool-shortcut data inside `properties`.
 - `eVe/intuition/tools/visual/atome_editor_runtime_style.js` owns Atome editor footer/fullscreen generated runtime style rules; `eVeIntuition.js` may install the style node but must not own the rule construction.
+- `eVe/intuition/tools/clipboard/` owns shared copy/paste clipboard state, Atome record normalization for clipboard payloads, system clipboard writes, and paste event generation. `copy.js` and `paste.js` remain product tool entrypoints and panel/action registration surfaces.
 - `eVe/intuition/flower/menu.js` owns flower menu DOM orchestration; `menu_layout.js` owns radial geometry, `menu_items.js` owns item/icon normalization, `context_target.js` owns context target resolution, and `context_pointer_lock.js` owns flower pointer locks.
+- `eVe/intuition/matrix/ui/view.js` owns Matrix root/project-view/tile DOM orchestration; `eVe/intuition/matrix/ui/matrix_layout.js` owns Matrix viewport fitting, toolbar-aware row/column sizing, scroll positioning, and layout observers.
 - Tool definition SSOT and tool instances.
 
 Should be extended by:
@@ -953,6 +981,20 @@ Main areas:
 - `platforms/web/audio-wasm/`
 - `platforms/atomeOS/`
 
+Verified iOS/AUv3 native owners:
+
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift` owns file sync scheduling, safe-mode gating, tombstone state, move/deletion tracking, and the core newest-wins sync pass.
+- `platforms/ios/atome-auv3/Common/FileSyncCoordinatorFileOperations.swift` owns visible/App Group/iCloud root discovery, syncable file inventory, file copy/delete helpers, and cleanup of leaked or duplicated sync artifacts.
+- `platforms/ios/atome-auv3/Common/MIDIController.swift` owns MIDI client lifecycle, input monitoring, source discovery, notifications, and parsed input logging.
+- `platforms/ios/atome-auv3/Common/MIDIOutputSender.swift` owns JS-to-MIDI packet output to host destinations.
+- `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift` owns AUv3 recording session state, source start/stop, mic engine lifecycle, render buffer capture, and browser event emission.
+- `platforms/ios/atome-auv3/auv3/AUv3RecorderAnalysis.swift` owns recorded WAV metadata analysis for peak and first-peak frame reporting after capture stops.
+
+Verified desktop audio native owners:
+
+- `platforms/desktop-tauri/src/audio_engine/recorder.rs` owns desktop recorder session state, CPAL input stream setup, capture callbacks, ring buffer production, and public recorder controls.
+- `platforms/desktop-tauri/src/audio_engine/recorder_wav.rs` owns desktop recorder WAV output format selection, CPAL buffer-size hints, sample conversion, file creation, and writer-thread draining/finalization.
+
 Should be extended by:
 
 - Platform-specific native runtime boundaries, not product UI.
@@ -1106,7 +1148,7 @@ Status: Verified.
 
 High priority risks:
 
-- Oversized files: `eve/domains/media/asset_box.js`, `eve/elements/design.js`, `eve/elements/eVe_look.js`, `eve/i18n/languages.js`, `atome/src/squirrel/ai/agent_gateway.js`, `atome/src/application/jeezs/index.js`, `atome/security/syncQueue.js`, `atome/src/application/audio_runtime/play_record_core.js`.
+- Oversized files: `eve/domains/media/asset_box.js`, `eve/elements/design.js`, `eve/elements/eVe_look.js`, `eve/i18n/languages.js`, `atome/src/squirrel/ai/agent_gateway.js`, `atome/src/application/jeezs/index.js`, `atome/src/application/audio_runtime/play_record_core.js`.
 - Legacy naming overlap: `mtrack`, `mtrax`, `hmtracks`, and `Molecule` remain mixed pending the Molecule rename phase.
 - Product bootstrap references still exist in Atome bootstrap paths and need architecture-map treatment.
 - Direct DOM helper modules exist in eVe Intuition and need targeted policy review before UI expansion.

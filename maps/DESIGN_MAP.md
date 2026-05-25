@@ -48,6 +48,7 @@ Allowed responsibilities:
 
 - Generic icons, logos, and reusable assets under `atome/src/assets/`.
 - Generic Squirrel component builders under `atome/src/squirrel/components/`.
+- Product-neutral Squirrel table templates and table style variants in `atome/src/squirrel/components/table_visual_contract.js`.
 - Canonical open system-control builders for Button, Slider, Input, and Console when the control contract is product-neutral.
 - Framework-level CSS artifacts such as `atome/src/css/squirrel.css`.
 - Vendored library CSS such as `atome/src/js/event-calendar.css` and `atome/src/js/leaflet.min.css`.
@@ -241,6 +242,7 @@ Primary sources:
 - `eVe/intuition/flower/menu_items.js`
 - `eVe/intuition/tools/contextual/flower_menu_visual.js`
 - `eVe/intuition/matrix/visual/matrix_visual_tokens.js`
+- `eVe/intuition/matrix/ui/matrix_layout.js`
 - `eVe/intuition/matrix/ui/view.js`
 
 Role:
@@ -251,6 +253,7 @@ Role:
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
 - Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`.
 - Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
+- Matrix layout runtime owns toolbar-aware viewport fitting, CSS grid variable updates, and scroll positioning; Matrix view runtime owns project and tile DOM composition.
 
 Design rule: menu/ribbon/flower/Matrix changes must preserve shared tool visual semantics and layer ordering.
 

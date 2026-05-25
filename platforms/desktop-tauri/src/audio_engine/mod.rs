@@ -5,6 +5,7 @@ pub mod bridge;
 pub mod metering;
 pub mod playback;
 pub mod recorder;
+mod recorder_wav;
 pub mod transcode;
 
 #[cfg(test)]

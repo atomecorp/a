@@ -6,8 +6,8 @@ import Foundation
 
 final class FileSyncCoordinator {
     static let shared = FileSyncCoordinator()
-    private let allowedTopLevelEntries: Set<String> = ["Projects", "Exports", "Recordings", "Templates", "Downloads", "data", "README.txt"]
-    private let leakedInternalTopLevelEntries: Set<String> = ["src"]
+    let allowedTopLevelEntries: Set<String> = ["Projects", "Exports", "Recordings", "Templates", "Downloads", "data", "README.txt"]
+    let leakedInternalTopLevelEntries: Set<String> = ["src"]
     private static let runningInExtension: Bool = {
         let path = Bundle.main.bundlePath
         if path.hasSuffix(".appex") { return true }
@@ -15,7 +15,7 @@ final class FileSyncCoordinator {
         return false
     }()
     private let lowTrafficModeEnabled = FileSyncCoordinator.runningInExtension
-    private let fm = FileManager.default
+    let fm = FileManager.default
     private let queue = DispatchQueue(label: "filesync.coordinator.queue", qos: .utility)
     private var syncing = false
     private(set) var lastSync: Date? = nil
@@ -460,126 +460,4 @@ final class FileSyncCoordinator {
         return lowTrafficModeEnabled ? 1.2 : 2.0
     }
 
-    private struct FileMeta { let isDir: Bool; let size: UInt64; let modDate: Date }
-
-    private func shouldSyncRelativePath(_ rel: String) -> Bool {
-        let trimmed = rel.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        if trimmed.hasPrefix(".") { return false }
-        let firstComponent = trimmed.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? trimmed
-        return allowedTopLevelEntries.contains(firstComponent)
-    }
-
-    private func buildInventory(root: URL) -> [String: FileMeta] {
-        var map: [String: FileMeta] = [:]
-        guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey], options: [.skipsHiddenFiles]) else { return map }
-        let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
-        for case let url as URL in enumerator {
-            let itemPath = url.resolvingSymlinksInPath().standardizedFileURL.path
-            guard itemPath.hasPrefix(rootPath + "/") else { continue }
-            let rel = String(itemPath.dropFirst(rootPath.count + 1))
-            if rel.isEmpty { continue }
-            if !shouldSyncRelativePath(rel) { continue }
-            if rel.contains("/var/mobile/Containers/Data") { continue }
-            do {
-                let res = try url.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey])
-                let isDir = res.isDirectory ?? false
-                let size = UInt64(res.fileSize ?? 0)
-                let mod = res.contentModificationDate ?? Date(timeIntervalSince1970: 0)
-                map[rel] = FileMeta(isDir: isDir, size: size, modDate: mod)
-            } catch { continue }
-        }
-        return map
-    }
-
-    private func ensureDirectory(_ url: URL) { do { try fm.createDirectory(at: url, withIntermediateDirectories: true) } catch { } }
-
-    private func copyFile(from: URL, to: URL) {
-        do {
-            if fm.fileExists(atPath: to.path) { try fm.removeItem(at: to) }
-            try fm.copyItem(at: from, to: to)
-            if let attrs = try? fm.attributesOfItem(atPath: from.path), let mod = attrs[.modificationDate] as? Date {
-                try? fm.setAttributes([.modificationDate: mod], ofItemAtPath: to.path)
-            }
-        } catch { print("⚠️ Sync copy failed: \(error)") }
-    }
-
-    private func deleteItemIfExists(_ url: URL) {
-        if fm.fileExists(atPath: url.path) {
-            do { try fm.removeItem(at: url) } catch { print("⚠️ Delete failed: \(error)") }
-        }
-    }
-
-    private func availableRoots() -> [URL] {
-        var roots: [URL] = []
-    // Option A: prioritize App Group as canonical; still include visible Documents as mirror, plus iCloud if present.
-    if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) { roots.append(group) }
-    if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first { roots.append(docs) }
-    if let ubiq = fm.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents", isDirectory: true) { roots.append(ubiq) }
-        var seen: Set<String> = []
-        return roots.filter { r in let k = r.path; if seen.contains(k) { return false }; seen.insert(k); return true }
-    }
-
-    private func cleanupLeakedInternalContent(in roots: [URL]) {
-        for root in roots {
-            for name in leakedInternalTopLevelEntries {
-                let leakedURL = root.appendingPathComponent(name, isDirectory: true)
-                guard fm.fileExists(atPath: leakedURL.path) else { continue }
-                do {
-                    try fm.removeItem(at: leakedURL)
-                } catch {
-                    print("⚠️ Failed to remove leaked internal folder \(name): \(error)")
-                }
-            }
-        }
-    }
-
-    // MARK: - Cleanup of spurious duplicated private* folders and nested canonical dirs
-    private func cleanupSpuriousArtifacts(in roots: [URL]) {
-        let canonical = Set(["Projects","Exports","Recordings","Templates","Testing"])
-        for root in roots {
-            // Remove repeated private* artifacts at root level
-            if let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
-                for dir in entries {
-                    guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-                    let name = dir.lastPathComponent
-                    if let match = canonical.first(where: { name.hasSuffix($0) }) {
-                        let prefix = name.replacingOccurrences(of: match, with: "")
-                        if !prefix.isEmpty, prefix.replacingOccurrences(of: "private", with: "").isEmpty {
-                            // Move contents then remove folder
-                            let target = root.appendingPathComponent(match, isDirectory: true)
-                            try? fm.createDirectory(at: target, withIntermediateDirectories: true)
-                            if let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
-                                for f in files {
-                                    let dest = target.appendingPathComponent(f.lastPathComponent)
-                                    if fm.fileExists(atPath: dest.path) { continue }
-                                    do { try fm.moveItem(at: f, to: dest) } catch { print("⚠️ Cleanup move failed: \(error)") }
-                                }
-                            }
-                            do { try fm.removeItem(at: dir) } catch { print("⚠️ Cleanup remove failed: \(error)") }
-                        }
-                    }
-                }
-            }
-            // Flatten nested canonical folders inside Exports
-            let exports = root.appendingPathComponent("Exports", isDirectory: true)
-            if fm.fileExists(atPath: exports.path) {
-                for sub in canonical.subtracting(["Exports"]) {
-                    let nested = exports.appendingPathComponent(sub, isDirectory: true)
-                    if fm.fileExists(atPath: nested.path) {
-                        let top = root.appendingPathComponent(sub, isDirectory: true)
-                        try? fm.createDirectory(at: top, withIntermediateDirectories: true)
-                        if let files = try? fm.contentsOfDirectory(at: nested, includingPropertiesForKeys: nil) {
-                            for f in files {
-                                let dest = top.appendingPathComponent(f.lastPathComponent)
-                                if fm.fileExists(atPath: dest.path) { continue }
-                                do { try fm.moveItem(at: f, to: dest) } catch { print("⚠️ Flatten move failed: \(error)") }
-                            }
-                        }
-                        try? fm.removeItem(at: nested)
-                    }
-                }
-            }
-        }
-    }
 }

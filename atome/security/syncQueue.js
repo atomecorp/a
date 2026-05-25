@@ -8,316 +8,48 @@
  * 4. Multi-user support (multiple local accounts)
  * 
  * SECURITY:
- * - Queue is stored in localStorage with encryption
+ * - Queue is stored in localStorage with device-local obfuscation
  * - Actions are verified before execution
  * 
  * @module atome/security/syncQueue
  */
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
+import {
+    ActionStatus,
+    SYNC_CONFIG_KEY,
+    SyncAction
+} from './sync_queue_constants.js';
+import {
+    addToQueue,
+    cleanupOldActions,
+    getAllPendingActions,
+    getPendingActionsForUser,
+    getQueue,
+    removeFromQueue,
+    updateActionStatus
+} from './sync_queue_items.js';
+import {
+    getCredentialsForUser,
+    isAutoSyncEnabled,
+    removeCredentials,
+    storeCredentialsForSync
+} from './sync_queue_credentials.js';
 
-const QUEUE_STORAGE_KEY = 'squirrel_sync_queue';
-const CREDENTIALS_STORAGE_KEY = 'squirrel_sync_credentials';
-const SYNC_CONFIG_KEY = 'squirrel_sync_config';
-
-// Action types
-export const SyncAction = {
-    CREATE_ACCOUNT: 'create_account',
-    UPDATE_ACCOUNT: 'update_account',
-    DELETE_ACCOUNT: 'delete_account',
-    SYNC_DATA: 'sync_data'
+export {
+    ActionStatus,
+    SyncAction,
+    addToQueue,
+    cleanupOldActions,
+    getAllPendingActions,
+    getCredentialsForUser,
+    getPendingActionsForUser,
+    getQueue,
+    isAutoSyncEnabled,
+    removeCredentials,
+    removeFromQueue,
+    storeCredentialsForSync,
+    updateActionStatus
 };
-
-// Action status
-export const ActionStatus = {
-    PENDING: 'pending',
-    IN_PROGRESS: 'in_progress',
-    COMPLETED: 'completed',
-    FAILED: 'failed',
-    RETRY: 'retry'
-};
-
-// =============================================================================
-// ENCRYPTION HELPERS (Simple XOR-based for localStorage, not military-grade)
-// =============================================================================
-
-/**
- * Generate a device-specific key based on available entropy
- */
-function getDeviceKey() {
-    // Try to get a stable device identifier
-    let deviceId = localStorage.getItem('squirrel_device_id');
-    if (!deviceId) {
-        // Generate a random device ID on first run
-        deviceId = crypto.randomUUID ? crypto.randomUUID() :
-            'dev_' + Math.random().toString(36).substr(2, 16) + Date.now().toString(36);
-        localStorage.setItem('squirrel_device_id', deviceId);
-    }
-    return deviceId;
-}
-
-/**
- * Simple obfuscation for non-secret localStorage metadata.
- */
-function encryptForStorage(data) {
-    const key = getDeviceKey();
-    const str = JSON.stringify(data);
-    let result = '';
-    for (let i = 0; i < str.length; i++) {
-        result += String.fromCharCode(str.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-    }
-    return btoa(result);
-}
-
-/**
- * Decrypt data from localStorage
- */
-function decryptFromStorage(encrypted) {
-    try {
-        const key = getDeviceKey();
-        const str = atob(encrypted);
-        let result = '';
-        for (let i = 0; i < str.length; i++) {
-            result += String.fromCharCode(str.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-        }
-        return JSON.parse(result);
-    } catch (e) {
-        return null;
-    }
-}
-
-// =============================================================================
-// QUEUE MANAGEMENT
-// =============================================================================
-
-/**
- * Get the current sync queue
- * @returns {Array} Array of pending actions
- */
-export function getQueue() {
-    try {
-        const encrypted = localStorage.getItem(QUEUE_STORAGE_KEY);
-        if (!encrypted) return [];
-        return decryptFromStorage(encrypted) || [];
-    } catch (e) {
-        return [];
-    }
-}
-
-/**
- * Save the sync queue
- * @param {Array} queue - Array of actions to save
- */
-function saveQueue(queue) {
-    try {
-        const encrypted = encryptForStorage(queue);
-        localStorage.setItem(QUEUE_STORAGE_KEY, encrypted);
-    } catch (e) {
-    }
-}
-
-/**
- * Add an action to the sync queue
- * @param {object} action - Action to add
- * @param {string} action.type - Action type (SyncAction)
- * @param {string} action.userId - Local user ID
- * @param {string} action.username - Username
- * @param {string} action.phone - Phone number
- * @param {object} action.data - Additional data for the action
- * @returns {string} Action ID
- */
-export function addToQueue(action) {
-    const queue = getQueue();
-
-    const actionId = `action_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
-
-    const queueItem = {
-        id: actionId,
-        type: action.type,
-        userId: action.userId,
-        username: action.username,
-        phone: action.phone,
-        data: action.data || {},
-        status: ActionStatus.PENDING,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        retryCount: 0,
-        maxRetries: 3,
-        lastError: null
-    };
-
-    // Check for duplicate actions (same type + userId)
-    const existingIndex = queue.findIndex(q =>
-        q.type === action.type && q.userId === action.userId && q.status === ActionStatus.PENDING
-    );
-
-    if (existingIndex >= 0) {
-        // Update existing action instead of adding duplicate
-        queue[existingIndex] = { ...queue[existingIndex], ...queueItem, id: queue[existingIndex].id };
-    } else {
-        queue.push(queueItem);
-    }
-
-    saveQueue(queue);
-    return existingIndex >= 0 ? queue[existingIndex].id : actionId;
-}
-
-/**
- * Remove an action from the queue
- * @param {string} actionId - Action ID to remove
- */
-export function removeFromQueue(actionId) {
-    const queue = getQueue();
-    const newQueue = queue.filter(q => q.id !== actionId);
-    saveQueue(newQueue);
-}
-
-/**
- * Update an action's status
- * @param {string} actionId - Action ID
- * @param {string} status - New status
- * @param {string} error - Error message (optional)
- */
-export function updateActionStatus(actionId, status, error = null) {
-    const queue = getQueue();
-    const action = queue.find(q => q.id === actionId);
-
-    if (action) {
-        action.status = status;
-        action.updatedAt = new Date().toISOString();
-        if (error) action.lastError = error;
-        if (status === ActionStatus.RETRY) action.retryCount++;
-        saveQueue(queue);
-    }
-}
-
-/**
- * Get pending actions for a specific user
- * @param {string} userId - Local user ID
- * @returns {Array} Pending actions for the user
- */
-export function getPendingActionsForUser(userId) {
-    return getQueue().filter(q =>
-        q.userId === userId &&
-        (q.status === ActionStatus.PENDING || q.status === ActionStatus.RETRY)
-    );
-}
-
-/**
- * Get all pending actions
- * @returns {Array} All pending actions
- */
-export function getAllPendingActions() {
-    return getQueue().filter(q =>
-        q.status === ActionStatus.PENDING || q.status === ActionStatus.RETRY
-    );
-}
-
-/**
- * Clear completed actions older than specified days
- * @param {number} days - Number of days to keep
- */
-export function cleanupOldActions(days = 7) {
-    const queue = getQueue();
-    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-
-    const newQueue = queue.filter(q =>
-        q.status !== ActionStatus.COMPLETED || q.updatedAt > cutoff
-    );
-
-    if (newQueue.length !== queue.length) {
-        saveQueue(newQueue);
-    }
-}
-
-// =============================================================================
-// CREDENTIALS MANAGEMENT (for auto-sync)
-// =============================================================================
-
-/**
- * Store non-secret auto-sync metadata.
- * 
- * @param {string} userId - Local user ID
- * @param {string} password - Deprecated; ignored to prevent password persistence
- * @param {boolean} enableAutoSync - Whether to enable auto-sync
- */
-export function storeCredentialsForSync(userId, password, enableAutoSync = true) {
-    try {
-        const allCredentials = getStoredCredentials();
-
-        allCredentials[userId] = {
-            autoSync: enableAutoSync,
-            storedAt: new Date().toISOString()
-        };
-
-        const encrypted = encryptForStorage(allCredentials);
-        localStorage.setItem(CREDENTIALS_STORAGE_KEY, encrypted);
-    } catch (e) {
-    }
-}
-
-/**
- * Get stored credentials for a user
- * @param {string} userId - Local user ID
- * @returns {object|null} Credentials or null
- */
-export function getCredentialsForUser(userId) {
-    const allCredentials = getStoredCredentials();
-    return allCredentials[userId] || null;
-}
-
-/**
- * Get all stored credentials
- * @returns {object} All credentials by userId
- */
-function getStoredCredentials() {
-    try {
-        const encrypted = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
-        if (!encrypted) return {};
-        const stored = decryptFromStorage(encrypted) || {};
-        let changed = false;
-        for (const value of Object.values(stored)) {
-            if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'password')) {
-                delete value.password;
-                changed = true;
-            }
-        }
-        if (changed) {
-            localStorage.setItem(CREDENTIALS_STORAGE_KEY, encryptForStorage(stored));
-        }
-        return stored;
-    } catch (e) {
-        return {};
-    }
-}
-
-/**
- * Remove stored credentials for a user
- * @param {string} userId - Local user ID
- */
-export function removeCredentials(userId) {
-    const allCredentials = getStoredCredentials();
-    delete allCredentials[userId];
-
-    if (Object.keys(allCredentials).length === 0) {
-        localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
-    } else {
-        const encrypted = encryptForStorage(allCredentials);
-        localStorage.setItem(CREDENTIALS_STORAGE_KEY, encrypted);
-    }
-}
-
-/**
- * Check if auto-sync is enabled for a user
- * @param {string} userId - Local user ID
- * @returns {boolean}
- */
-export function isAutoSyncEnabled(userId) {
-    const creds = getCredentialsForUser(userId);
-    return creds?.autoSync === true;
-}
 
 // =============================================================================
 // SYNC CONFIGURATION

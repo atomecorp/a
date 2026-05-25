@@ -1,8 +1,7 @@
 import {
     getTauriInvoke,
     isIosHostAppRuntime,
-    resolveAudioRuntime,
-    resolveNativeMediaLocalPath
+    resolveAudioRuntime
 } from './runtime_audio_backend.js';
 import {
     buildFacadeKiraAudioPayload,
@@ -11,62 +10,21 @@ import {
     normalizeKiraPlayInstancePayload,
     normalizeKiraStopInstancePayload
 } from './kira_audio_commands.js';
+import {
+    PLAY_RECORD_API_CONTRACT,
+    PLAY_RECORD_API_VERSION
+} from './play_record_contract.js';
+import { canonicalizePlayRecordMediaSource } from './play_record_media_source.js';
+
+export {
+    PLAY_RECORD_API_CONTRACT,
+    PLAY_RECORD_API_VERSION
+} from './play_record_contract.js';
+export { canonicalizePlayRecordMediaSource } from './play_record_media_source.js';
 
 const safeString = (value) => String(value ?? '').trim();
 
 const readAudioFacade = (env = globalThis) => env?.Squirrel?.av?.audio || null;
-
-export const PLAY_RECORD_API_VERSION = 1;
-
-export const PLAY_RECORD_API_CONTRACT = Object.freeze({
-    schema_version: PLAY_RECORD_API_VERSION,
-    tool_key: 'play_record',
-    operations: Object.freeze([
-        Object.freeze({ name: 'loadAsset', effect: 'persistent', command_action: 'PATCH' }),
-        Object.freeze({ name: 'playAsset', effect: 'ephemeral', command_action: 'PATCH' }),
-        Object.freeze({ name: 'playVoice', effect: 'ephemeral', command_action: 'PATCH' }),
-        Object.freeze({ name: 'stopAsset', effect: 'ephemeral', command_action: 'PATCH' }),
-        Object.freeze({ name: 'stopVoice', effect: 'ephemeral', command_action: 'PATCH' }),
-        Object.freeze({ name: 'jumpAsset', effect: 'ephemeral', command_action: 'PATCH' }),
-        Object.freeze({ name: 'destroyAsset', effect: 'persistent', command_action: 'SOFT_DELETE' }),
-        Object.freeze({ name: 'setVoiceGain', effect: 'ephemeral', command_action: 'PATCH' }),
-        Object.freeze({ name: 'setVoiceRate', effect: 'ephemeral', command_action: 'PATCH' }),
-        Object.freeze({ name: 'recordStart', effect: 'persistent', command_action: 'PATCH' }),
-        Object.freeze({ name: 'recordStop', effect: 'persistent', command_action: 'PATCH' })
-    ])
-});
-
-const normalizeLocalMediaPath = (value = '') => {
-    const raw = safeString(value);
-    if (!raw) return '';
-    try {
-        const parsed = new URL(raw, 'http://127.0.0.1/');
-        const path = decodeURIComponent(safeString(parsed.pathname));
-        if (/^\/file\//i.test(path)) return path.slice('/file/'.length);
-        if (/^\/data\/users\//i.test(path)) return path.slice(1);
-        return raw;
-    } catch (_) {
-        if (/^\/file\//i.test(raw)) return raw.slice('/file/'.length);
-        if (/^file\//i.test(raw)) return raw.slice('file/'.length);
-        return raw;
-    }
-};
-
-const readCanonicalSourceValue = (source = {}) => safeString(
-    source.native_audio_path
-    || source.nativeAudioPath
-    || source.local_path
-    || source.localPath
-    || source.file_path
-    || source.filePath
-    || source.path_or_bookmark
-    || source.pathOrBookmark
-    || source.path
-    || source.media_url
-    || source.mediaUrl
-    || source.url
-    || source.source
-);
 
 const stableSerialize = (value) => {
     if (value === null || value === undefined) return 'null';
@@ -89,45 +47,6 @@ const stableHash = (value = '') => {
 const resolveOperationContract = (operation = '') => (
     PLAY_RECORD_API_CONTRACT.operations.find((entry) => entry.name === operation) || null
 );
-
-export const canonicalizePlayRecordMediaSource = (input = {}) => {
-    const source = input && typeof input === 'object' ? input : {};
-    const sourceValue = readCanonicalSourceValue(source);
-    const localPath = normalizeLocalMediaPath(resolveNativeMediaLocalPath(
-        source.native_audio_path,
-        source.nativeAudioPath,
-        source.local_path,
-        source.localPath,
-        source.file_path,
-        source.filePath,
-        source.path_or_bookmark,
-        source.pathOrBookmark,
-        source.path,
-        source.media_url,
-        source.mediaUrl,
-        source.url,
-        source.source
-    ));
-    const mediaRef = safeString(
-        source.media_ref
-        || source.mediaRef
-        || source.assetId
-        || source.asset_id
-        || source.clipId
-        || source.clip_id
-        || source.id
-        || localPath
-        || sourceValue
-    );
-    return Object.freeze({
-        mediaRef,
-        assetId: safeString(source.assetId || source.asset_id || source.clipId || source.clip_id || source.id || mediaRef),
-        source: sourceValue,
-        localPath,
-        url: safeString(source.url || source.media_url || source.mediaUrl),
-        bytes: source.bytes || null
-    });
-};
 
 export class PlayRecordCore {
     constructor(env = globalThis) {

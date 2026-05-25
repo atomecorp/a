@@ -78,8 +78,20 @@ const emailResult = await orchestrator.executeUtterance('Ajoute le mail suivant 
 });
 
 assert.equal(emailResult.ok, true);
-assert.equal(emailResult.executed, true);
+assert.equal(emailResult.executed, false);
+assert.equal(emailResult.confirmation_required, true);
 assert.equal(emailResult.transport, 'contacts_api');
+assert.equal(contactsStore[0].email, '');
+
+const confirmedEmailResult = await orchestrator.executeIntent(emailResult.intent, {
+    session_id: 'voice_contacts_direct_update_session',
+    confirmation: emailResult.confirmation,
+    idempotency_key: emailResult.confirmation.idempotency_key
+});
+
+assert.equal(confirmedEmailResult.ok, true);
+assert.equal(confirmedEmailResult.executed, true);
+assert.equal(confirmedEmailResult.transport, 'contacts_api');
 assert.equal(contactsStore[0].email, 'jeezs@jeezs.net');
 
 const phoneResult = await orchestrator.executeUtterance('Change le numero de Regis en 06 11 22 33 44', {
@@ -87,8 +99,19 @@ const phoneResult = await orchestrator.executeUtterance('Change le numero de Reg
 });
 
 assert.equal(phoneResult.ok, true);
-assert.equal(phoneResult.executed, true);
+assert.equal(phoneResult.executed, false);
+assert.equal(phoneResult.confirmation_required, true);
 assert.equal(phoneResult.transport, 'contacts_api');
+
+const confirmedPhoneResult = await orchestrator.executeIntent(phoneResult.intent, {
+    session_id: 'voice_contacts_direct_update_session',
+    confirmation: phoneResult.confirmation,
+    idempotency_key: phoneResult.confirmation.idempotency_key
+});
+
+assert.equal(confirmedPhoneResult.ok, true);
+assert.equal(confirmedPhoneResult.executed, true);
+assert.equal(confirmedPhoneResult.transport, 'contacts_api');
 assert.match(String(contactsStore[0].phone || ''), /0611223344/);
 
 console.log('orchestrator.contacts_direct_update.test: PASS');

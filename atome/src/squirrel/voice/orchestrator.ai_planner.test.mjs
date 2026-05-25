@@ -66,8 +66,20 @@ const result = await orchestrator.executeUtterance('Ajoute le mail suivant a Reg
 });
 
 assert.equal(result.ok, true);
-assert.equal(result.executed, true);
+assert.equal(result.executed, false);
+assert.equal(result.confirmation_required, true);
 assert.equal(result.transport, 'contacts_api');
+assert.equal(contactsStore[0].email, '');
+
+const confirmedResult = await orchestrator.executeIntent(result.intent, {
+    session_id: 'voice_orchestrator_ai_planner_structured_session',
+    confirmation: result.confirmation,
+    idempotency_key: result.confirmation.idempotency_key
+});
+
+assert.equal(confirmedResult.ok, true);
+assert.equal(confirmedResult.executed, true);
+assert.equal(confirmedResult.transport, 'contacts_api');
 assert.equal(contactsStore[0].email, 'jeezs@jeezs.net');
 
 console.log('voice_orchestrator_ai_planner: ok');

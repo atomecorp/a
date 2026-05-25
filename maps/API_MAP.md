@@ -57,11 +57,11 @@ Cross-boundary API rules:
 
 Ownership: Atome open.
 
-Primary sources: `atome/src/squirrel/apis.js`, `atome/src/squirrel/apis/essentials.js`, `atome/src/squirrel/apis/utils.js`, `atome/src/squirrel/apis/loader.js`, `atome/src/squirrel/apis/dragdrop.js`.
+Primary sources: `atome/src/squirrel/apis.js`, `atome/src/squirrel/apis/essentials.js`, `atome/src/squirrel/apis/utils.js`, `atome/src/squirrel/apis/loader.js`, `atome/src/squirrel/apis/dragdrop.js`, `atome/src/squirrel/apis/loadServerConfig.js`, `atome/src/squirrel/apis/loadServerConfigDebug.js`, `atome/src/squirrel/apis/loadServerConfigDefaults.js`, `atome/src/squirrel/apis/loadServerConfigWs.js`.
 
 Exposure: JavaScript module exports and default `Apis` object.
 
-Verified entry points: `wait`, `current_platform`, `dataFetcher`, `render_svg`, `fetch_and_render_svg`, `resize`, `strokeColor`, `fillColor`, `sanitizeSVG`, `DragDrop.createDropZone`, `DragDrop.collectFilesFromDataTransfer`, `DragDrop.summarizeFiles`.
+Verified entry points: `wait`, `current_platform`, `dataFetcher`, `render_svg`, `fetch_and_render_svg`, `resize`, `strokeColor`, `fillColor`, `sanitizeSVG`, `DragDrop.createDropZone`, `DragDrop.collectFilesFromDataTransfer`, `DragDrop.summarizeFiles`, `loadServerConfigOnce`, `getServerConfigSync`.
 
 Boundary status: Open framework helpers. Keep product-neutral.
 
@@ -69,7 +69,7 @@ Boundary status: Open framework helpers. Keep product-neutral.
 
 Ownership: Atome open.
 
-Primary sources: `atome/src/squirrel/spark.js`, `atome/src/squirrel/components/button_builder.js`, `atome/src/squirrel/components/slider_builder.js`, `atome/src/squirrel/components/tool_slider_builder.js`, `atome/src/squirrel/components/input_builder.js`, `atome/src/squirrel/components/console_builder.js`.
+Primary sources: `atome/src/squirrel/spark.js`, `atome/src/squirrel/components/button_builder.js`, `atome/src/squirrel/components/slider_builder.js`, `atome/src/squirrel/components/tool_slider_builder.js`, `atome/src/squirrel/components/input_builder.js`, `atome/src/squirrel/components/console_builder.js`, `atome/src/squirrel/components/table_builder.js`, `atome/src/squirrel/components/table_visual_contract.js`.
 
 Exposure: runtime bootstrap through the Squirrel component registry installed by `spark.js`.
 
@@ -78,6 +78,7 @@ Verified responsibilities:
 - Load and register canonical Squirrel system controls.
 - Expose the canonical registry to runtime consumers through the Squirrel bootstrap globals.
 - Provide the current canonical Atome-owned control set for Button, Slider, ToolSlider, Input, and Console.
+- Provide the generic Table builder and table visual contract for product-neutral tabular UI.
 
 Boundary status: Open framework component contract. eVe wrappers may compose these controls but should not redefine their core system-control contract in parallel.
 
@@ -177,11 +178,29 @@ Boundary rules:
 
 Boundary status: Closed product adapter over an open Atome event contract. It mirrors the canonical server/database property boundary without importing `atome/shared/atome_contract.js` into browser-served eVe modules.
 
+### eVe Clipboard Tool APIs
+
+Ownership: eVe closed product tools over the Atome commit boundary.
+
+Primary sources: `eVe/intuition/tools/copy.js`, `eVe/intuition/tools/paste.js`, and `eVe/intuition/tools/clipboard/`.
+
+Exposure: registered UI actions `ui.copy.action` and `ui.paste.action`, plus existing runtime globals `window.eve_copy_selection`, `window.eve_paste_selection`, and `window.eveClipboardStore`.
+
+Verified responsibilities: clipboard group state, persisted clipboard Atome payloads, record normalization for copy/paste, optional system clipboard writes for user-owned Atomes, paste event generation, and paste panel selection/drag-drop integration.
+
+Boundary rules:
+
+- Durable clipboard persistence must use `window.Atome.commit`.
+- Pasted Atome creation must use `window.Atome.commitBatch`.
+- Clipboard payloads must keep project, parent, type, owner, selection, and media render aliases out of durable `props`.
+
+Boundary status: Closed product tool API. It consumes the eVe Atome commit boundary and must not duplicate open server/database persistence contracts.
+
 ### Security and Sync APIs
 
 Ownership: Atome open.
 
-Primary sources: `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/cloudSync.js`, `atome/security/syncQueue.js`, `atome/src/squirrel/security/bootstrap.js`, `atome/src/squirrel/security/token_vault.js`.
+Primary sources: `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/serverVerificationCrypto.js`, `atome/security/serverVerificationState.js`, `atome/security/cloudSync.js`, `atome/security/syncQueue.js`, `atome/security/sync_queue_constants.js`, `atome/security/sync_queue_storage.js`, `atome/security/sync_queue_items.js`, `atome/security/sync_queue_credentials.js`, `atome/src/squirrel/security/bootstrap.js`, `atome/src/squirrel/security/token_vault.js`.
 
 Verified responsibilities: trusted server metadata, fingerprint lookup, server verification, cloud sync status, sync queue behavior, token vault bootstrap, and token vault tests.
 
@@ -191,7 +210,7 @@ Boundary status: Open framework security. eVe may call these contracts but must 
 
 Ownership: Atome open services with eVe closed UI consumers.
 
-Primary sources: `atome/src/squirrel/mail/bootstrap.js`, `atome/src/squirrel/mail/service.js`, `atome/src/squirrel/contacts/bootstrap.js`, `atome/src/squirrel/contacts/service.js`, `atome/src/squirrel/calendar/bootstrap.js`, `atome/src/squirrel/calendar/service.js`, `atome/src/squirrel/bank/bootstrap.js`, `atome/src/squirrel/bank/service.js`.
+Primary sources: `atome/src/squirrel/mail/bootstrap.js`, `atome/src/squirrel/mail/service.js`, `atome/src/squirrel/mail/icloud_connector.js`, `atome/src/squirrel/mail/icloud_connector_normalization.js`, `atome/src/squirrel/contacts/bootstrap.js`, `atome/src/squirrel/contacts/service.js`, `atome/src/squirrel/contacts/service_contact_utils.js`, `atome/src/squirrel/calendar/bootstrap.js`, `atome/src/squirrel/calendar/service.js`, `atome/src/squirrel/bank/bootstrap.js`, `atome/src/squirrel/bank/service.js`.
 
 Exposure: `createGlobalMailApi`, `bootstrapGlobalMail`, `createGlobalContactsApi`, `bootstrapGlobalContacts`, `createGlobalCalendarApi`, `bootstrapGlobalCalendar`, `createGlobalBankApi`, `bootstrapGlobalBank`, plus runtime globals installed on the provided environment.
 
@@ -221,7 +240,7 @@ Boundary status: Open orchestration contract. Calls into eVe tool runtime must g
 
 Ownership: Atome open voice runtime.
 
-Primary sources: `atome/src/squirrel/voice/bootstrap.js`, `atome/src/squirrel/voice/service.js`, `atome/src/squirrel/voice/orchestrator.js`, `atome/src/squirrel/voice/tool_router.js`, `atome/src/squirrel/voice/ai_planner.js`, `atome/src/squirrel/voice/main_handle_bridge.js`, `atome/src/squirrel/voice/home_surface.js`.
+Primary sources: `atome/src/squirrel/voice/bootstrap.js`, `atome/src/squirrel/voice/service.js`, `atome/src/squirrel/voice/orchestrator.js`, `atome/src/squirrel/voice/tool_router.js`, `atome/src/squirrel/voice/ai_planner.js`, `atome/src/squirrel/voice/ai_planner_runtime_context.js`, `atome/src/squirrel/voice/main_handle_bridge.js`, `atome/src/squirrel/voice/home_surface.js`.
 
 Exposure: voice bootstrap modules, runtime services, tool router, communication surfaces, AI planner, main handle bridge, and home surface contract.
 
@@ -231,15 +250,17 @@ Boundary status: Open voice orchestration with closed eVe surfaces injected wher
 
 Ownership: Atome open.
 
-Primary sources: `atome/src/application/audio_runtime/audio.facade.js`, `atome/src/application/audio_runtime/audio_playback_api.js`, `atome/src/application/audio_runtime/audio_recording_api.js`, `atome/src/application/audio_runtime/av_contracts.js`, `atome/src/application/audio_runtime/play_record_core.js`, `atome/src/application/audio_runtime/runtime_audio_backend.js`, `atome/src/application/audio_runtime/stt_api.js`.
+Primary sources: `atome/src/application/audio_runtime/audio.facade.js`, `atome/src/application/audio_runtime/audio_playback_api.js`, `atome/src/application/audio_runtime/audio_recording_api.js`, `atome/src/application/audio_runtime/av_contracts.js`, `atome/src/application/audio_runtime/play_record_contract.js`, `atome/src/application/audio_runtime/play_record_core.js`, `atome/src/application/audio_runtime/play_record_media_source.js`, `atome/src/application/audio_runtime/runtime_audio_backend.js`, `atome/src/application/audio_runtime/auv3_host_playback.js`, `atome/src/application/audio_runtime/stt_api.js`.
 
 Exposure: `Squirrel.av.audio`, `Squirrel.av.devices`, `Squirrel.av.codec`, `Squirrel.av.graph`.
 
 Verified facade methods: `on`, `off`, `set_backend`, `get_backend`, `get_runtime`, `detect_and_set_backend`, `create_clip`, `destroy_clip`, `play`, `play_instance`, `stop`, `stop_instance`, `stop_clip`, `jump`, `set_param`, `map_midi`, `add_marker`, `remove_marker`, `set_marker_follow_actions`, `clear_marker_follow_actions`, `query_clip`, `createRecordingSession`, `prepareRecordingSession`, `armRecordingSession`, `startRecordingSession`, `stopRecordingSession`, `listAudioInputs`, `listAudioOutputs`, `selectAudioInput`, `selectAudioOutput`, `createAudioProfile`, `createAudioNode`.
 
+Verified AUv3 host playback methods: `shouldUseAuv3HostPlayback`, `auv3PlayMedia`, `auv3StopMedia`, `auv3StopSlot`, `auv3ClearAuxSlots`, `auv3StopNode`.
+
 Boundary status: Open media runtime contract. eVe media and MTraX code should consume this facade for product playback/recording instead of owning engine semantics.
 
-Known constraints: `play_record_core.js` is above the normal size threshold and must be reduced when touched.
+Known constraints: `play_record_core.js` must stay focused on runtime orchestration; public contract constants and source canonicalization are owned by dedicated modules.
 
 ### eVe Tool Runtime APIs
 
@@ -275,7 +296,7 @@ Boundary status: Closed product stores unless a product-neutral persistence cont
 
 Ownership: eVe closed.
 
-Primary sources: `eVe/core/media_engine/`, `eVe/intuition/tools/molecule/`, `eVe/domains/mtrax/api/`, `eVe/domains/mtrax/clips/`, `eVe/domains/mtrax/preview/`, `eVe/domains/mtrax/audio/`, `eVe/domains/mtrax/timeline/`.
+Primary sources: `eVe/core/media_engine/`, `eVe/intuition/tools/molecule/`, `eVe/domains/mtrax/api/`, `eVe/domains/mtrax/clips/`, `eVe/domains/mtrax/preview/`, `eVe/domains/mtrax/audio/`, `eVe/domains/mtrax/timeline/`, `eVe/domains/mtrax/karaoke/`.
 
 Exposure: `window.Molecule`, `window.eveMediaApi`, `window.eveMtrackApi`, `window.open_mtrack_panel`, `window.close_mtrack_panel`, and JavaScript module exports for internal runtimes.
 
@@ -286,6 +307,7 @@ Verified entry points:
 - Molecule engine/API: `createMoleculeEngine`, `ensureMoleculeEngine`, `getMoleculeCommandCatalog`, `createMoleculeApi`, `ensureMoleculeApi`, `ensureMoleculeMediaRuntime`.
 - Molecule tool modules: timeline schemas, reducers, session registry, persistence controller, media resolver, panel runtime, gestures, recording, nesting, and multi-instance controllers.
 - MTraX window API: `createMtrackWindowApiRuntime`, `createWindowApiBridgeRuntime`, transport, recording, clip move/crop, track record source, misc, and record-state runtimes.
+- MTraX karaoke detail: `detail_runtime.js` owns detail state and mutation application; `detail_record_schedule_state.js` owns the selection-only record-schedule detail projection.
 - MTraX dropped-video import: `addClipFromEntry` keeps the public drop entry point and delegates linked audio creation to the existing descriptor media resolver with `audio_source_role: video_audio`.
 
 Transport contract: Molecule `play()` resumes from the current transport position when no explicit `startSeconds` value is supplied. MTraX `playTimeline()` starts from the current playhead and must not rewind at play start. Same-group timeline reloads triggered as part of play preserve the current playhead and must not issue an internal stop before play. `startSeconds: 0` remains an explicit Molecule rewind request, while user-visible `stop()` is the transport command that resets position to zero.
@@ -475,7 +497,7 @@ Evidence: exports in `atome/src/squirrel/{mail,contacts,calendar,bank}/index.js`
 
 Public entry points:
 
-- Mail: `createGlobalMailApi`, `bootstrapGlobalMail`, `createMailService`, `createMailIndex`, `createMailSyncState`, `createMailConnectorContract`, `createIcloudMailConnector`, `normalizeIcloudMailRecord`, `createNodeIcloudImapClient`, `createNodeIcloudSmtpClient`.
+- Mail: `createGlobalMailApi`, `bootstrapGlobalMail`, `createMailService`, `createMailIndex`, `createMailSyncState`, `createMailConnectorContract`, `createIcloudMailConnector`, `normalizeIcloudMailConnectorConfig`, `normalizeIcloudMailRecord`, `createNodeIcloudImapClient`, `createNodeIcloudSmtpClient`.
 - Contacts: `createGlobalContactsApi`, `bootstrapGlobalContacts`, `createContactsService`, `createContactsConnectorContract`, `createLocalContactsSource`, `createMacosContactsSource`, `createIcloudContactsConnector`, `createNodeCarddavClient`.
 - Calendar: `createGlobalCalendarApi`, `bootstrapGlobalCalendar`, `createCalendarService`, `createCalendarConnectorContract`, `createCalendarApiSource`, `normalizeCalendarApiEvent`, `createCalendarSyncState`, `createNodeCaldavClient`, `parseCalendarData`.
 - Bank: `createGlobalBankApi`, `bootstrapGlobalBank`, `createBankService`, `createBankIndex`, `createBankConnectorContract`.
@@ -535,7 +557,7 @@ Status: Public orchestration surface; individual default tool names should be re
 
 Visibility: Public framework service APIs.
 
-Evidence: exports in `atome/src/squirrel/voice/index.js`, `bootstrap.js`, `service.js`, `orchestrator.js`, `tool_router.js`, `ai_planner.js`, `session_runtime.js`, `working_memory.js`, `semantic_contract.js`, `telemetry.js`, and `vad.js`.
+Evidence: exports in `atome/src/squirrel/voice/index.js`, `bootstrap.js`, `service.js`, `orchestrator.js`, `tool_router.js`, `ai_planner.js`, `ai_planner_runtime_context.js`, `session_runtime.js`, `working_memory.js`, `semantic_contract.js`, `telemetry.js`, and `vad.js`.
 
 Public entry points:
 
@@ -610,7 +632,7 @@ Owner: Atome open audio/AV runtime.
 
 Use before creating: playback, recording, device, codec, graph, AV store, or backend bridge behavior.
 
-Status: Public framework API; `play_record_core.js` is oversized and must be reduced when touched.
+Status: Public framework API; `play_record_core.js` owns orchestration while `play_record_contract.js` and `play_record_media_source.js` own extracted public helpers.
 
 ### Semi-Public APIs
 
@@ -695,7 +717,8 @@ Entry point families:
 
 - Command bus: `commandBusV2` and command-bus exports from `command_bus.js`.
 - Tool gateway: `invokeToolGateway`, `readExplicitLatched`, `resolveStranglerFlags`, `warmupToolGatewayRuntime`.
-- Panel API: `openPanelSurface`, `closePanelSurface`, and panel surface exports from `panel_api.js`.
+- Panel API: `openPanelSurface`, `closePanelSurface`, and panel surface exports from `panel_api.js`; eVeIntuition-specific surface registration and PanelCreatorV2 bridging live in `runtime/eve_intuition/panel_surface_runtime.js`.
+- Diagnostics: `window.__DEBUG__` is installed by `runtime/eve_intuition/debug_runtime.js` and remains an internal eVe diagnostic facade for app snapshots, footer state, selection state, project-layer state, persistence diagnostics, and deterministic test mode.
 - Layer contracts: exported layer ids, layer ownership helpers, z-index constants, and panel layer contracts.
 - Selection: selection prefix constants, selection readers, snapshot normalization, and selection application helpers.
 - History policy: history and recording mode resolution.

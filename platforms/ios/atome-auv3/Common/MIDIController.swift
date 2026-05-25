@@ -21,6 +21,12 @@ public class MIDIController: NSObject {
     
     // Logger for Xcode console
     private let logger = Logger(subsystem: "com.atomecorp.atome", category: "MIDI")
+    private lazy var outputSender = MIDIOutputSender(
+        logger: logger,
+        objectNameResolver: { [weak self] object in
+            self?.getMIDIObjectName(object)
+        }
+    )
     
     // OPTIMIZATION: Rate limiting for MIDI logs to reduce CPU usage
     private var lastLogTime: CFTimeInterval = 0
@@ -468,83 +474,20 @@ public class MIDIController: NSObject {
     
     /// Send MIDI Note On message to host
     public func sendNoteOn(note: UInt8, velocity: UInt8, channel: UInt8 = 0) {
-        let noteOnStatus: UInt8 = 0x90 | (channel & 0x0F)
-        let midiData: [UInt8] = [noteOnStatus, note & 0x7F, velocity & 0x7F]
-        sendMIDIMessage(data: midiData)
-        logger.info("🎹 MIDI OUT: Note ON \(note) vel:\(velocity) ch:\(channel)")
+        outputSender.sendNoteOn(note: note, velocity: velocity, channel: channel, port: inputPort)
     }
     
     /// Send MIDI Note Off message to host
     public func sendNoteOff(note: UInt8, velocity: UInt8, channel: UInt8 = 0) {
-        let noteOffStatus: UInt8 = 0x80 | (channel & 0x0F)
-        let midiData: [UInt8] = [noteOffStatus, note & 0x7F, velocity & 0x7F]
-        sendMIDIMessage(data: midiData)
-        logger.info("🎹 MIDI OUT: Note OFF \(note) vel:\(velocity) ch:\(channel)")
+        outputSender.sendNoteOff(note: note, velocity: velocity, channel: channel, port: inputPort)
     }
     
     /// Send MIDI Control Change message to host
     public func sendControlChange(controller: UInt8, value: UInt8, channel: UInt8 = 0) {
-        let ccStatus: UInt8 = 0xB0 | (channel & 0x0F)
-        let midiData: [UInt8] = [ccStatus, controller & 0x7F, value & 0x7F]
-        sendMIDIMessage(data: midiData)
-        logger.info("🎹 MIDI OUT: CC \(controller) val:\(value) ch:\(channel)")
-    }
-    
-    /// Send raw MIDI message to first available destination
-    private func sendMIDIMessage(data: [UInt8]) {
-        guard data.count > 0 && data.count <= 3 else {
-            logger.error("❌ Invalid MIDI data length: \(data.count)")
-            return
-        }
-        
-        // Find first available destination
-        let destCount = MIDIGetNumberOfDestinations()
-        logger.info("🔍 MIDI Destinations available: \(destCount)")
-        
-        guard destCount > 0 else {
-            logger.warning("⚠️ No MIDI destinations available - Cannot send MIDI")
-            return
-        }
-        
-        let destination = MIDIGetDestination(0)
-        guard destination != 0 else {
-            logger.error("❌ Failed to get MIDI destination")
-            return
-        }
-        
-        // Get destination name for debugging
-        if let destName = getMIDIObjectName(destination) {
-            logger.info("📤 Sending MIDI to destination: '\(destName)'")
-        } else {
-            logger.info("📤 Sending MIDI to destination ID: \(destination)")
-        }
-        
-        // Create MIDI packet
-        var packetListBuffer = Data(count: 1024)
-        let packetListPtr = packetListBuffer.withUnsafeMutableBytes { ptr in
-            return ptr.bindMemory(to: MIDIPacketList.self).baseAddress!
-        }
-        
-        let packet = MIDIPacketListInit(packetListPtr)
-        let timestamp = mach_absolute_time()
-        
-        // Add the MIDI packet to the packet list
-        _ = MIDIPacketListAdd(packetListPtr, 1024, packet, timestamp, data.count, data)
-        
-        // Log the MIDI data being sent
-        let dataString = data.map { String(format: "0x%02X", $0) }.joined(separator: " ")
-        logger.info("📤 MIDI Data: [\(dataString)] -> Destination: \(destination)")
-        
-        // Send MIDI packet
-        let result = MIDISend(inputPort, destination, packetListPtr)
-        if result != noErr {
-            logger.error("❌ Failed to send MIDI: \(result)")
-        } else {
-            logger.info("✅ MIDI sent successfully to host")
-        }
+        outputSender.sendControlChange(controller: controller, value: value, channel: channel, port: inputPort)
     }
     
     public func sendRaw(bytes: [UInt8]) {
-        sendMIDIMessage(data: bytes)
+        outputSender.sendRaw(bytes: bytes, port: inputPort)
     }
 }

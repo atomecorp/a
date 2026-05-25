@@ -114,6 +114,7 @@ Canonical extension points:
 - `atome/src/squirrel/voice/` for open voice orchestration and semantic contracts.
 - `atome/src/squirrel/{mail,contacts,calendar,bank}/` for open communication service facades.
 - `atome/src/application/audio_runtime/` for open audio and AV runtime contracts.
+- `atome/src/application/audio_runtime/auv3_host_playback.js` for AUv3 host-routed media playback commands; eVe and MTraX consumers import this owner directly instead of mixing AUv3 playback command ownership into backend detection.
 - `atome/security/` for product-neutral security and sync primitives.
 
 Must not be duplicated by:
@@ -144,9 +145,11 @@ Responsibilities:
 - Product stores for events, projects, media, browser, Tauri, and iOS adapters.
 - Molecule/MTraX workflow, timeline, media editing, panel, preview, and product media runtime.
 - Closed product voice surfaces that consume Atome voice contracts.
-- Panel source-of-truth ownership: `eVe/intuition/panel_definitions.js` owns panel surface metadata and `PanelCreatorV2` owns lifecycle execution. Tool runtime and menu surfaces must consume those contracts instead of declaring independent panel routing tables.
+- Panel source-of-truth ownership: `eVe/intuition/panel_definitions.js` owns panel surface metadata, `eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js` owns eVeIntuition surface registration/open-close bridging, and `PanelCreatorV2` owns lifecycle execution. Tool runtime and menu surfaces must consume those contracts instead of declaring independent panel routing tables.
+- Tool latched-state ownership inside eVeIntuition is isolated in `eVe/intuition/runtime/eve_intuition/tool_latched_state_runtime.js`; menu state, panel surface events, and dialog-close synchronization must route through that runtime instead of local event listeners.
 - Intuition layer ordering is centralized in `eVe/intuition/runtime/layer_contract.js`: project tools, floating project palettes, Molecules, component/docked palettes, panels/dialogs, main ribbon, active drag.
 - MTraX diagnostics are runtime-owned: `eVe/intuition/runtime/eve_intuition/mtrax_bridge_runtime.js` owns diagnostic flags and stack capture, while `eVe/intuition/runtime/mtrack_debug_snapshot.js` owns debug snapshot DOM cloning.
+- eVeIntuition app diagnostics are runtime-owned by `eVe/intuition/runtime/eve_intuition/debug_runtime.js`; `eVeIntuition.js` injects footer, media, selection, and Atome footer dependencies but must not own the `window.__DEBUG__` implementation or deterministic test-mode style rules.
 - Global visual tiers must use distinct HTML layer nodes under `#intuition`; z-index values alone are not sufficient when tools, Molecules, docked palettes, panels, and drag items coexist.
 - Shared product-tool slider ownership now lives in the open Atome/Squirrel component layer at `atome/src/squirrel/components/tool_slider_builder.js`; eVe consumers must use that owner through the shared wrapper/re-export surfaces instead of keeping feature-local slider DOM or gesture logic.
 
@@ -162,6 +165,7 @@ Canonical extension points:
 - `eVe/intuition/runtime/` for closed UI/tool runtime surfaces.
 - `eVe/intuition/tools/core/` for tool registry, runtime, interaction, and tool definition SSOT.
 - `eVe/intuition/tools/` for product tools.
+- `eVe/intuition/tools/clipboard/` for shared closed copy/paste state, clipboard payload normalization, system clipboard bridge behavior, and paste event generation behind the copy/paste product tools.
 - `eVe/elements/` for product design factories, tokens, and i18n-bound UI construction.
 - `eVe/domains/*/api/` for closed domain APIs.
 - `eVe/core/*_store/` for closed product store adapters.
