@@ -974,8 +974,13 @@ export const auth = {
         const userId = authCheck.user.id;
         const primary = getPrimaryBackend();
         const adapter = adapters[primary];
-        if (!adapter?.atome?.alter) return { ok: false, error: 'alter_unavailable' };
-        return adapter.atome.alter(userId, { visibility: visibility || 'public' });
+        if (!adapter?.atome?.commit) return { ok: false, error: 'commit_unavailable' };
+        return adapter.atome.commit({
+            kind: 'set',
+            atome_id: userId,
+            props: { visibility: visibility || 'public' },
+            actor: { type: 'user', id: String(userId) }
+        });
     },
 
     // Compatibility stubs for legacy sync/machine APIs.

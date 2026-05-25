@@ -296,7 +296,7 @@ export class AVAtomeObjectStore {
         await this.#commitItem({
             ...previous,
             state: 'disposed',
-            deleted_at: nowIso(),
+            deleted_iso: nowIso(),
             updated_at: nowIso()
         });
         this.items.delete(key);

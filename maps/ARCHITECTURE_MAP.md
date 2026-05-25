@@ -45,6 +45,7 @@ The core invariant is deterministic, tool-driven, append-only state:
 - Selection, lasso focus, SVG layer focus, tool latch state, and editor/session state are transient UI/runtime state unless explicitly modeled as schema-owned Atome properties. They must not be persisted as generic `selected`, `selection`, or DOM-derived properties.
 - Media and MTraX creation paths use `kind`, `media_kind`, `media_source`, `media_url`, and schema-owned timeline/poster fields. Legacy render aliases such as `media_type` and `visualType` are adapter read inputs only, not durable write fields.
 - Transitional Atome aliases are adapter inputs only. Normalized records must leave boundaries as `{ id, type, kind, renderer, meta, traits, properties }`.
+- Adole compatibility methods may keep historical names such as `atomes.create` and `atomes.alter`, but framework writes behind those methods must enter the append-only event pipeline through `adapter.atome.commit` / `adapter.atome.commitBatch`.
 
 ## Explicit Atome Open / eVe Closed Boundary Contract
 
@@ -145,6 +146,7 @@ Responsibilities:
 - Closed product voice surfaces that consume Atome voice contracts.
 - Panel source-of-truth ownership: `eVe/intuition/panel_definitions.js` owns panel surface metadata and `PanelCreatorV2` owns lifecycle execution. Tool runtime and menu surfaces must consume those contracts instead of declaring independent panel routing tables.
 - Intuition layer ordering is centralized in `eVe/intuition/runtime/layer_contract.js`: project tools, floating project palettes, Molecules, component/docked palettes, panels/dialogs, main ribbon, active drag.
+- MTraX diagnostics are runtime-owned: `eVe/intuition/runtime/eve_intuition/mtrax_bridge_runtime.js` owns diagnostic flags and stack capture, while `eVe/intuition/runtime/mtrack_debug_snapshot.js` owns debug snapshot DOM cloning.
 - Global visual tiers must use distinct HTML layer nodes under `#intuition`; z-index values alone are not sufficient when tools, Molecules, docked palettes, panels, and drag items coexist.
 - Shared product-tool slider ownership now lives in the open Atome/Squirrel component layer at `atome/src/squirrel/components/tool_slider_builder.js`; eVe consumers must use that owner through the shared wrapper/re-export surfaces instead of keeping feature-local slider DOM or gesture logic.
 
@@ -353,6 +355,7 @@ Storage:
 
 - Durable Atome persistence belongs to `database/adole.js` and the server commit helpers.
 - eVe product stores own closed product state and adapters, but durable Atome writes still route through the canonical commit flow.
+- Detached profile, sharing, and sync adapters use the Adole WebSocket event commit surface for Atome mutations. Direct WebSocket `atome.create` / `atome.alter` actions remain legacy protocol edges, not framework mutation owners.
 - Raw SQL outside the database layer is forbidden for Atome persistence.
 
 Sync:

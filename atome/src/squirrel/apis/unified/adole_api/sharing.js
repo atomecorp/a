@@ -62,15 +62,17 @@ const ensureFastifyAtomeExists = async (atomeId) => {
             return { ok: false, error: 'invalid_atome_type' };
         }
         const payload = {
-            id: normalized.id,
+            kind: 'set',
             atome_id: normalized.id,
-            type: normalizedType,
-            atome_type: normalizedType,
-            owner_id: normalized.ownerId,
             parent_id: normalized.parentId,
-            properties: normalized.properties || {}
+            owner_id: normalized.ownerId,
+            actor: normalized.ownerId ? { type: 'user', id: String(normalized.ownerId) } : undefined,
+            props: {
+                ...(normalized.properties || {}),
+                kind: normalizedType
+            }
         };
-        const createRes = await FastifyAdapter.atome.create(payload);
+        const createRes = await FastifyAdapter.atome.commit(payload);
         const ok = !!(createRes?.ok || createRes?.success);
         return { ok, source: ok ? 'fastify' : 'fastify_create_failed' };
     } catch (e) {

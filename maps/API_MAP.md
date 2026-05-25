@@ -95,6 +95,8 @@ Boundary status: Open application/data API. eVe tools may consume it, but must n
 
 Known constraints: `atome/src/squirrel/apis/unified/adole.js` is a large legacy surface and requires targeted verification before mutation.
 
+Atome mutation rule: `AdoleAPI.atomes.create` and `AdoleAPI.atomes.alter` are public compatibility method names, but their framework implementation must emit canonical event commits through `adapter.atome.commit`. Direct adapter-level `atome.create` / `atome.alter` calls are legacy WebSocket protocol adapters only and must not be used as durable framework write paths.
+
 ### Server HTTP and WebSocket APIs
 
 Ownership: Atome open server layer.
@@ -386,6 +388,8 @@ Owner: Canonical Atome mutation boundary installed from the eVe closed runtime b
 Use before creating: any durable Atome mutation, snapshot, current-state read, or event-list read from product runtime code.
 
 Runtime rule: Tauri/local-Axum commit and current-state requests must not target cross-origin loopback Fastify for `/api/events/commit*` or `/api/state_current*`; the fetch boundary rewrites those protected routes to the local backend to avoid Safari CORS timing races.
+
+Adole rule: detached WebSocket adapters expose `adapter.atome.commit` and `adapter.atome.commitBatch` for event writes. Profile, sharing, and Atome API synchronization code must use those event methods instead of direct `create` / `alter` adapter writes.
 
 Do not duplicate in: UI components, panels, tools, import handlers, media runtimes, or product stores.
 

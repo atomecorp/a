@@ -77,6 +77,12 @@ Should not contain:
 
 Status: Verified by current tree inspection.
 
+Adole mutation boundary:
+
+- `atome/src/squirrel/apis/unified/adole_api/atomes.js` owns public `AdoleAPI.atomes.*` compatibility methods.
+- `atome/src/squirrel/apis/unified/adole.js` owns detached WebSocket adapters, including `adapter.atome.commit` and `adapter.atome.commitBatch`.
+- Framework code must route durable Atome writes through the event commit surface even when the public method name is still `create` or `alter`.
+
 ### eVe Closed Layer
 
 Path: `eve/`
@@ -785,7 +791,8 @@ Should not be duplicated by:
 Known risks:
 
 - Several UI/tool runtime files exceed size thresholds and require reduction when touched.
-- `eVe/intuition/runtime/tool_genesis.js` remains a critical legacy owner for project group visual mounting. New group-preview behavior must be extracted into shared modules and only wired there until group visual rendering is split out; the intended reduction path is to move group host preview rendering, project-layer refresh, and persisted-preview mounting into focused Intuition group visual runtime modules.
+- `eVe/intuition/runtime/tool_genesis.js` remains a critical legacy owner for project group visual mounting. New group-preview behavior must be extracted into shared modules and only wired there until group visual rendering is split out; the intended reduction path is to move group host preview rendering, project-layer refresh, and persisted-preview mounting into focused Intuition group visual runtime modules. Group placeholder creation must use the existing `ensureGroupPlaceholderLayer` helper instead of feature-local DOM duplication.
+- `eVe/intuition/runtime/mtrack_debug_snapshot.js` owns MTraX panel debug snapshot DOM cloning. `eVe/intuition/eVeIntuition.js` may request snapshots, but must not own the snapshot DOM construction.
 - Direct DOM helpers exist in this layer; compliance with the WebGPU/Squirrel rendering policy needs targeted review before broad UI rewrites.
 - Slider styling still relies on toolbox/editor compatibility classes in visual token modules, even though behavioral readers now target the canonical slider data-role contract.
 

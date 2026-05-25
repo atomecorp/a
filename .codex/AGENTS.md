@@ -305,6 +305,30 @@ Mandatory behavior:
 - When a large or tentacular file must be changed, perform the necessary structured refactor, decomposition, or cleanup required to make the repair or optimization complete and maintainable.
 - When the relevant scope includes a large legacy file, treating that file thoroughly is mandatory work, not optional follow-up.
 
+## MANDATORY LEGACY FILE PRIORITY AND REMOVAL POLICY
+
+This rule is strict, non-negotiable, and applies to every task without exception: feature work, bug fixes, optimization, refactor, cleanup, migration, API work, rendering work, synchronization work, tests, tooling, and documentation-driven architecture changes.
+
+If the assistant encounters a legacy file, legacy module, legacy code path, legacy adapter, legacy wrapper, legacy bypass, or obsolete implementation involved in the requested scope, that legacy surface immediately becomes a priority of the task.
+
+Mandatory behavior:
+
+- The assistant MUST NOT ignore, preserve by habit, or postpone a legacy surface merely because the user's original request targeted something else.
+- A legacy file encountered in scope MUST be analyzed as a first-class architectural liability and treated before the task can be considered complete.
+- Legacy files are not allowed to remain in place when their responsibility can be migrated, factorized, replaced by the canonical owner, or removed safely.
+- The target state for a legacy file is removal, not coexistence.
+- If safe direct deletion is not immediately possible, the assistant MUST perform the necessary migration, call-site cleanup, dependency cleanup, ownership transfer, validation, and structural refactor required to make deletion correct and verifiable.
+- Before deleting a legacy file, verify all imports, runtime references, dynamic loading paths, tests, synchronization dependencies, generated outputs, and map or documentation contracts that still depend on it.
+- After deleting or replacing a legacy file, run the narrowest relevant executable validations first, then widen as needed to prove that nothing was broken.
+- The assistant MUST NOT keep a legacy file as a dormant backup, compatibility layer, fallback, safety copy, or historical duplicate.
+
+Strictly forbidden:
+
+- leaving a known legacy file untouched in the active scope without an evidence-backed reason;
+- treating legacy cleanup as optional follow-up when the file is already on the controlling path;
+- deleting a legacy file without dependency verification and targeted validation;
+- preserving parallel old and new implementations when the legacy surface can be removed.
+
 ## ARCHITECTURAL AUTHORITY
 
 The authoritative architecture documentation is located under eve/application/documentations/, documentations/, and maps/. Before generating or modifying code, the assistant MUST ensure full consistency with these documents.

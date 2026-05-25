@@ -57,9 +57,20 @@ const mediaPatchHintsByAtomeId = new Map();
 const RESERVED_ATOME_PROPERTY_KEYS = new Set([
     'id', 'atome_id', 'atomeId',
     'type', 'atome_type', 'atomeType',
+    'renderer',
+    'meta',
+    'traits',
+    'properties',
+    'props',
+    'particles',
+    'data',
     'owner', 'owner_id', 'ownerId',
     'parent', 'parent_id', 'parentId',
     'project_id', 'projectId',
+    'media_type', 'mediaType',
+    'visualType',
+    'selected',
+    'selection',
     'creator_id', 'creatorId',
     'created_at', 'createdAt',
     'updated_at', 'updatedAt',
@@ -1476,6 +1487,67 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         },
 
         atome: {
+            async commit(event = {}) {
+                const token = getToken(tokenKey);
+                const rawProps = event.props || event.properties || event.patch || event.delta || event.payload?.props || null;
+                const normalizedEvent = {
+                    ...event,
+                    kind: event.kind || event.event || 'set',
+                    atome_id: event.atome_id || event.atomeId || event.id || null,
+                    project_id: event.project_id || event.projectId || null,
+                    ...(event.parent_id || event.parentId ? { parent_id: event.parent_id || event.parentId } : {}),
+                    payload: rawProps && typeof rawProps === 'object'
+                        ? { props: sanitizeAtomeProperties(rawProps) }
+                        : event.payload
+                };
+                delete normalizedEvent.id;
+                delete normalizedEvent.atomeId;
+                delete normalizedEvent.projectId;
+                delete normalizedEvent.parentId;
+                delete normalizedEvent.props;
+                delete normalizedEvent.properties;
+                delete normalizedEvent.patch;
+                delete normalizedEvent.delta;
+                return getWs().send({
+                    type: 'events',
+                    action: 'commit',
+                    token,
+                    event: normalizedEvent
+                });
+            },
+            async commitBatch(events = []) {
+                const token = getToken(tokenKey);
+                const normalizedEvents = Array.isArray(events)
+                    ? events.map((event) => {
+                        const rawProps = event?.props || event?.properties || event?.patch || event?.delta || event?.payload?.props || null;
+                        const normalizedEvent = {
+                            ...event,
+                            kind: event?.kind || event?.event || 'set',
+                            atome_id: event?.atome_id || event?.atomeId || event?.id || null,
+                            project_id: event?.project_id || event?.projectId || null,
+                            ...(event?.parent_id || event?.parentId ? { parent_id: event.parent_id || event.parentId } : {}),
+                            payload: rawProps && typeof rawProps === 'object'
+                                ? { props: sanitizeAtomeProperties(rawProps) }
+                                : event?.payload
+                        };
+                        delete normalizedEvent.id;
+                        delete normalizedEvent.atomeId;
+                        delete normalizedEvent.projectId;
+                        delete normalizedEvent.parentId;
+                        delete normalizedEvent.props;
+                        delete normalizedEvent.properties;
+                        delete normalizedEvent.patch;
+                        delete normalizedEvent.delta;
+                        return normalizedEvent;
+                    })
+                    : [];
+                return getWs().send({
+                    type: 'events',
+                    action: 'commit-batch',
+                    token,
+                    events: normalizedEvents
+                });
+            },
             async create(data) {
                 const token = getToken(tokenKey);
                 const ownerId = data.owner_id || data.user_id || data.ownerId || data.owner || null;

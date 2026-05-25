@@ -123,14 +123,10 @@ const buildUpsertPayload = (record, ownerIdFallback) => {
         meta: {},
         traits: Array.isArray(record?.traits) ? record.traits : [],
         owner_id: ownerId,
+        project_id: resolveAtomeProjectId(record),
         parent_id: parentId,
         properties
     };
-};
-
-const isAlreadyExistsError = (payload) => {
-    const msg = String(payload?.error || payload?.message || '').toLowerCase();
-    return msg.includes('already') || msg.includes('exists');
 };
 
 const topologicalSortByParent = (items = []) => {
@@ -394,18 +390,22 @@ export async function create_atome(options = {}, callback) {
     const properties = sanitizeAtomeProperties(options.properties || {});
 
     const payload = {
-        id: atomeId,
-        type: atomeType,
-        kind: options.kind || null,
-        renderer: options.renderer || null,
-        meta: options.meta && typeof options.meta === 'object' ? options.meta : {},
-        traits: Array.isArray(options.traits) ? options.traits.slice() : [],
+        kind: 'set',
+        atome_id: atomeId,
+        project_id: projectId,
         parent_id: parentId,
         owner_id: options.owner_id || options.ownerId || currentUserId,
-        properties
+        actor: { type: 'user', id: String(options.owner_id || options.ownerId || currentUserId) },
+        props: {
+            ...properties,
+            kind: options.kind || atomeType,
+            ...(options.renderer ? { renderer: options.renderer } : {}),
+            ...(options.meta && typeof options.meta === 'object' ? { meta: options.meta } : {}),
+            ...(Array.isArray(options.traits) ? { traits: options.traits.slice() } : {})
+        }
     };
 
-    const primaryResult = await adapters[primary].atome.create(payload);
+    const primaryResult = await adapters[primary].atome.commit(payload);
     const okPrimary = !!(primaryResult?.ok || primaryResult?.success);
     const results = {
         tauri: { success: false, data: null, error: null },
@@ -415,7 +415,7 @@ export async function create_atome(options = {}, callback) {
 
     if (okPrimary && runtimeTauri && !isAnonymous() && adapters[secondary]?.getToken?.()) {
         try {
-            const secondaryResult = await adapters[secondary].atome.create(payload);
+            const secondaryResult = await adapters[secondary].atome.commit(payload);
             const okSecondary = !!(secondaryResult?.ok || secondaryResult?.success);
             results[secondary] = { success: okSecondary, data: secondaryResult, error: okSecondary ? null : secondaryResult?.error };
         } catch (e) {
@@ -524,8 +524,19 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
         const payload = buildUpsertPayload(project, currentUserId);
         if (!payload) continue;
         try {
-            const res = await FastifyAdapter.atome.create(payload);
-            const ok = !!(res?.ok || res?.success) || isAlreadyExistsError(res);
+            const res = await FastifyAdapter.atome.commit({
+                kind: 'set',
+                atome_id: payload.id,
+                project_id: payload.project_id || payload.id,
+                parent_id: payload.parent_id || null,
+                owner_id: payload.owner_id || currentUserId,
+                actor: { type: 'user', id: String(payload.owner_id || currentUserId) },
+                props: {
+                    ...payload.properties,
+                    kind: payload.kind || payload.type
+                }
+            });
+            const ok = !!(res?.ok || res?.success);
             if (ok) {
                 result.projects.created += 1;
             } else {
@@ -542,8 +553,19 @@ export async function syncLocalProjectsToFastify({ reason = 'auto' } = {}) {
         const payload = buildUpsertPayload(record, currentUserId);
         if (!payload) continue;
         try {
-            const res = await FastifyAdapter.atome.create(payload);
-            const ok = !!(res?.ok || res?.success) || isAlreadyExistsError(res);
+            const res = await FastifyAdapter.atome.commit({
+                kind: 'set',
+                atome_id: payload.id,
+                project_id: payload.project_id || null,
+                parent_id: payload.parent_id || payload.project_id || null,
+                owner_id: payload.owner_id || currentUserId,
+                actor: { type: 'user', id: String(payload.owner_id || currentUserId) },
+                props: {
+                    ...payload.properties,
+                    kind: payload.kind || payload.type
+                }
+            });
+            const ok = !!(res?.ok || res?.success);
             if (ok) {
                 result.atomes.created += 1;
             } else {
@@ -575,9 +597,14 @@ export async function alter_atome(atomeId, properties = {}, callback) {
     const primary = runtimeTauri ? 'tauri' : 'fastify';
     const secondary = runtimeTauri ? 'fastify' : 'tauri';
 
-    const payload = properties?.properties || properties?.particles || properties || {};
+    const payload = sanitizeAtomeProperties(properties?.properties || properties?.particles || properties || {});
 
-    const primaryResult = await adapters[primary].atome.alter(atomeId, payload);
+    const primaryResult = await adapters[primary].atome.commit({
+        kind: 'set',
+        atome_id: atomeId,
+        props: payload,
+        actor: { type: 'user', id: String(currentUserId) }
+    });
     const okPrimary = !!(primaryResult?.ok || primaryResult?.success);
     const results = {
         tauri: { success: false, data: null, error: null },
@@ -587,7 +614,12 @@ export async function alter_atome(atomeId, properties = {}, callback) {
 
     if (okPrimary && runtimeTauri && !isAnonymous() && adapters[secondary]?.getToken?.()) {
         try {
-            const secondaryResult = await adapters[secondary].atome.alter(atomeId, payload);
+            const secondaryResult = await adapters[secondary].atome.commit({
+                kind: 'set',
+                atome_id: atomeId,
+                props: payload,
+                actor: { type: 'user', id: String(currentUserId) }
+            });
             const okSecondary = !!(secondaryResult?.ok || secondaryResult?.success);
             results[secondary] = { success: okSecondary, data: secondaryResult, error: okSecondary ? null : secondaryResult?.error };
         } catch (e) {
