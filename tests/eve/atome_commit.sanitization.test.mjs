@@ -34,6 +34,10 @@ const event = __ATOME_COMMIT_TEST_ONLY__.normalizeEventInput({
         type: 'wrong_type',
         owner_id: 'wrong_owner',
         project_id: 'wrong_project',
+        media_type: 'image',
+        visualType: 'video',
+        selected: true,
+        selection: ['shape_a'],
         left: '10px',
         top: '20px'
     }

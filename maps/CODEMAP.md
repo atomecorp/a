@@ -654,6 +654,8 @@ Purpose: Product event commits, timelines, stores, persistence adapters, media e
 Main files:
 
 - `atome_commit.js`
+- `atome_commit_gesture_trace.js`
+- `atome_property_sanitizer.js`
 - `atome_events.js`
 - `atome_timeline.js`
 - `event_bus.js`
@@ -669,6 +671,8 @@ Main files:
 Reusable APIs:
 
 - eVe commit and event runtime.
+- Local gesture trace recording for commit diagnostics is owned by `atome_commit_gesture_trace.js`; `atome_commit.js` may call it but must not own trace-store internals.
+- Shared Atome property sanitization for eVe commit and project Atome creation boundaries.
 - Event, media, and project store APIs with memory adapters.
 - Platform-specific storage backends.
 - Molecule engine, command catalog, API, native audio, and WebGPU renderer.

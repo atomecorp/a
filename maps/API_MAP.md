@@ -159,7 +159,11 @@ Boundary status: Open framework contract helper. It owns reserved Atome envelope
 
 Ownership: eVe closed client mutation boundary over the open Atome event API.
 
-Primary source: `eVe/core/atome_commit.js`.
+Primary sources:
+
+- `eVe/core/atome_commit.js`
+- `eVe/core/atome_commit_gesture_trace.js`
+- `eVe/core/atome_property_sanitizer.js`
 
 Exposure: `window.Atome.commit`, `window.Atome.commitBatch`, and the injected `__atomeCommitApi` test/runtime surface.
 
@@ -167,6 +171,7 @@ Boundary rules:
 
 - Client mutations must enter through `commit` or `commitBatch`; direct durable Atome state mutation from tools, media helpers, Molecule, or MTraX runtimes is not a valid source of truth.
 - `props`, `properties`, `patch`, and `delta` are normalized into `payload.props` before transport.
+- `atome_property_sanitizer.js` owns eVe-side removal of reserved Atome envelope fields from durable property payloads; project Atome creation code and commit code must consume it rather than maintaining parallel reserved-key lists.
 - Reserved envelope fields such as `id`, `type`, `owner_id`, `project_id`, `parent_id`, timestamps, sync fields, selection fields, and media render aliases such as `media_type` or `visualType` must not be emitted as durable properties.
 - Top-level event fields such as `atome_id`, `project_id`, `parent_id`, `actor`, transaction id, and gesture id remain event envelope fields.
 
@@ -370,7 +375,7 @@ Status: Public, with route details and legacy breadth to verify before mutation.
 
 Visibility: Public runtime API.
 
-Evidence: `eVe/core/atome_commit.js` attaches methods to `window.Atome` and `window.__atomeCommitApi`.
+Evidence: `eVe/core/atome_commit.js` attaches methods to `window.Atome` and `window.__atomeCommitApi`; `eVe/core/atome_property_sanitizer.js` owns eVe-side property payload sanitization.
 
 Public entry points:
 
