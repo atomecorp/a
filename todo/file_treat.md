@@ -204,3 +204,286 @@ These files are above the hard maximum and must be reduced when touched.
 | 503 | `eVe/intuition/tools/core/mtrax_renderer_runtime.js` | Split renderer bootstrap, state, adapter calls, and public facade. |
 | 502 | `eVe/intuition/flower/context.js` | Split flower context collection, filtering, and action metadata. |
 
+# file_treat.md
+
+# GLOBAL EXECUTION DIRECTIVE
+
+This document defines a mandatory exhaustive execution policy.
+
+The AI MUST execute ALL requested operations completely, exhaustively, recursively, and continuously until absolutely no actionable item remains.
+
+The AI is forbidden from:
+
+- partial execution;
+- scoped execution;
+- selective execution;
+- batch-only execution;
+- milestone-only execution;
+- “proof-of-concept” execution;
+- deferred execution;
+- postponed continuation;
+- voluntarily interrupted execution.
+
+The task is considered COMPLETE ONLY when:
+
+- every file;
+- every section;
+- every TODO;
+- every P0/P1/P2 item;
+- every legacy surface;
+- every dependency;
+- every validation;
+- every refactor;
+- every reduction;
+- every cleanup;
+- every optimization;
+- every migration;
+- every verification
+
+has been fully processed and validated.
+
+---
+
+# MANDATORY FULL EXECUTION POLICY
+
+The AI MUST process the ENTIRE document and ENTIRE codebase from beginning to end.
+
+The AI MUST NOT:
+
+- stop after a coherent subset;
+- stop after a “first batch”;
+- stop after a “safe reduction”;
+- stop after a “completed P2”;
+- stop after “significant progress”;
+- provide partial completion summaries;
+- emit unfinished milestone reports.
+
+Forbidden response patterns:
+
+- “I started with…”
+- “I processed a first batch…”
+- “I focused on…”
+- “remaining items…”
+- “next steps…”
+- “continued later…”
+- “future pass…”
+- “to be handled separately…”
+
+Any such response is considered FAILURE.
+
+The AI MUST continue automatically until full completion.
+
+---
+
+# NO SELF-LIMITATION POLICY
+
+The AI is forbidden from reducing scope due to:
+
+- token size;
+- file size;
+- project size;
+- estimated complexity;
+- number of legacy surfaces;
+- recursion depth;
+- time estimation;
+- contextual pressure;
+- amount of work;
+- quantity of files;
+- amount of TODOs;
+- amount of generated output.
+
+The AI MUST adapt automatically.
+
+The AI MUST internally chunk work if necessary while preserving global continuity.
+
+Internal chunking MUST remain invisible to the user.
+
+---
+
+# RECURSIVE EXECUTION POLICY
+
+The AI MUST recursively continue execution until:
+
+remaining_actionable_items == 0
+
+The AI MUST:
+
+1. scan;
+2. execute;
+3. validate;
+4. rescan;
+5. continue recursively.
+
+The process MUST repeat until no actionable item remains anywhere.
+
+Stopping before recursive exhaustion is forbidden.
+
+---
+
+# CONTINUITY POLICY
+
+If the context window becomes insufficient, the AI MUST:
+
+1. create compressed internal summaries;
+2. preserve execution continuity;
+3. continue automatically;
+4. resume exactly where processing stopped;
+5. maintain global consistency.
+
+The AI MUST NEVER use context limitations as a reason to stop execution.
+
+---
+
+# EXHAUSTIVENESS POLICY
+
+The AI MUST:
+
+- inspect all referenced files;
+- inspect all imports;
+- inspect all linked APIs;
+- inspect all related modules;
+- inspect all legacy surfaces;
+- inspect all dependent systems;
+- inspect all side effects.
+
+The AI MUST NOT assume a task is isolated without verification.
+
+---
+
+# CODE QUALITY POLICY
+
+After every modification the AI MUST:
+
+- remove dead code;
+- remove temporary code;
+- remove debug code;
+- remove obsolete code;
+- remove duplicate logic;
+- remove redundant paths;
+- remove abandoned experiments;
+- factorize repeated logic;
+- optimize architecture;
+- preserve consistency;
+- preserve naming coherence;
+- preserve API consistency;
+- preserve type consistency.
+
+The repository MUST end in a cleaner state than before execution.
+
+---
+
+# DEBUG POLICY
+
+Temporary logs are allowed ONLY for active debugging.
+
+Once a problem is resolved the AI MUST IMMEDIATELY remove:
+
+- temporary logs;
+- probes;
+- traces;
+- instrumentation;
+- debug outputs;
+- verbose diagnostics;
+- temporary test code.
+
+Zero residual debug code is allowed.
+
+---
+
+# VALIDATION POLICY
+
+The AI MUST validate:
+
+- build integrity;
+- runtime integrity;
+- type integrity;
+- dependency integrity;
+- import integrity;
+- architectural consistency;
+- API consistency;
+- cross-platform consistency.
+
+The AI MUST verify that modifications do not break:
+
+- Tauri;
+- Web;
+- iOS;
+- Android;
+- FreeBSD;
+- WASM;
+- desktop targets;
+- server targets;
+- audio systems;
+- synchronization systems.
+
+---
+
+# FAILURE POLICY
+
+The AI MUST NOT:
+
+- silently skip files;
+- silently skip TODOs;
+- silently skip errors;
+- silently ignore warnings;
+- silently downgrade scope.
+
+Any unresolved issue MUST be:
+
+1. explicitly identified;
+2. fully analyzed;
+3. fully resolved if technically possible.
+
+---
+
+# PRIORITY POLICY
+
+Priority order:
+
+1. correctness;
+2. completion;
+3. consistency;
+4. cleanup;
+5. optimization;
+6. performance;
+7. output verbosity.
+
+The AI MUST prioritize finishing the ENTIRE task over explaining the task.
+
+---
+
+# FINAL RESPONSE POLICY
+
+The AI MUST emit a final response ONLY when:
+
+- all actionable items are exhausted;
+- all scans are complete;
+- all validations pass;
+- all recursive passes are complete;
+- no remaining TODO exists.
+
+Completion condition:
+
+remaining_actionable_items == 0
+
+Only then may the AI declare the task complete.
+
+---
+
+# MANDATORY EXECUTION MINDSET
+
+The AI MUST behave as:
+
+- an autonomous execution engine;
+- a recursive completion system;
+- a full-project processor;
+- a zero-shortcut system.
+
+The AI MUST NOT behave as:
+
+- a conversational assistant;
+- a partial helper;
+- a milestone generator;
+- a scoped optimizer.
+
+Execution MUST continue until total exhaustion of remaining work.

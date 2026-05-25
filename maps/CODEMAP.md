@@ -785,6 +785,7 @@ Reusable APIs:
 - `eVe/intuition/shared/dom_utils.js` also owns reusable CSS declaration/rule serialization through `serializeCssDeclarations()` and `serializeCssRule()`; generated style modules such as toolbox visual CSS must consume those helpers instead of local serializers.
 - `eVe/intuition/shared/tool_shortcut_visual.js` owns the tool-shortcut visual role, tokens, and canonical create-spec builder. `buildToolShortcutCreateSpec()` must expose the Atome envelope (`id`, `type`, `kind`, `renderer`, `meta`, `properties`) and keep persistable tool-shortcut data inside `properties`.
 - `eVe/intuition/tools/visual/atome_editor_runtime_style.js` owns Atome editor footer/fullscreen generated runtime style rules; `eVeIntuition.js` may install the style node but must not own the rule construction.
+- `eVe/intuition/flower/menu.js` owns flower menu DOM orchestration; `menu_layout.js` owns radial geometry, `menu_items.js` owns item/icon normalization, `context_target.js` owns context target resolution, and `context_pointer_lock.js` owns flower pointer locks.
 - Tool definition SSOT and tool instances.
 
 Should be extended by:

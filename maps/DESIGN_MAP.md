@@ -237,6 +237,8 @@ Primary sources:
 - `eVe/intuition/menu/visual/toolbox_styles.js`
 - `eVe/intuition/menu/visual/toolbox_runtime_visual.js`
 - `eVe/intuition/flower/menu.js`
+- `eVe/intuition/flower/menu_layout.js`
+- `eVe/intuition/flower/menu_items.js`
 - `eVe/intuition/tools/contextual/flower_menu_visual.js`
 - `eVe/intuition/matrix/visual/matrix_visual_tokens.js`
 - `eVe/intuition/matrix/ui/view.js`
@@ -247,6 +249,7 @@ Role:
 - The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
 - The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-left or bottom-right edge according to handedness.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
+- Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`.
 - Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
 
 Design rule: menu/ribbon/flower/Matrix changes must preserve shared tool visual semantics and layer ordering.
