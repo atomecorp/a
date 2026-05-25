@@ -205,6 +205,7 @@ Primary sources:
 
 - `atome/src/squirrel/components/tool_slider_builder.js`
 - `eVe/intuition/tools/visual/tool_visual_tokens.js`
+- `eVe/intuition/tools/visual/atome_editor_runtime_style.js`
 - `eVe/intuition/tools/ui/tool_button_factory.js`
 - `eVe/intuition/tools/core/tool_definition_ssot.js`
 - `eVe/intuition/tools/core/tool_runtime.js`
@@ -213,10 +214,13 @@ Primary sources:
 - `eVe/intuition/shared/slider_tool_dom.js`
 - `eVe/intuition/shared/slider_direct_drag.js`
 - `eVe/intuition/shared/slider_tool_content.js`
+- `eVe/intuition/shared/tool_shortcut_visual.js`
 
 Role:
 
 - Owns the current shared product tool surface contract for tool shape, dimensions, active/latched state colors, icon behavior, inline slider visuals, projections, and editor-related visual tokens.
+- `tool_visual_tokens.js` owns base product tool/editor tokens and reusable visual values; `atome_editor_runtime_style.js` owns the generated Atome editor footer/fullscreen runtime rules consumed by `eVeIntuition.js`.
+- `tool_shortcut_visual.js` owns tool-shortcut visual tokens and applies only transient host/text styling; its create-spec builder must keep persisted shortcut fields under canonical Atome `properties`.
 - Product tools should share this runtime instead of duplicating button CSS or DOM structure.
 - For sliders specifically, the canonical product-tool behavior now lives in `atome/src/squirrel/components/tool_slider_builder.js`: the control rests as a compact square tool, expands on pointer down or touch down, exposes the manipulable slider while expanded, and collapses again on pointer up or pointer cancel unless pinned by the interaction model.
 - `atome/src/squirrel/components/tool_slider_builder.js` now owns both the canonical slider DOM/data-role contract and the shared direct-drag gesture semantics for the product-tool slider.

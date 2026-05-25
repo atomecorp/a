@@ -37,6 +37,7 @@ tests/eve/*
 !tests/eve/selection.sanitization.test.mjs
 !tests/eve/copy_clipboard.sanitization.test.mjs
 !tests/eve/adole_commit_boundary.test.mjs
+!tests/eve/tool_shortcut_visual.sanitization.test.mjs
 
 
 # Test files
