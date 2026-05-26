@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,5 +53,9 @@ assert.equal(record.tool_key, 'code', 'code tool must keep its finder projection
 assert.equal(record.visibility, 'visible', 'code tool must be catalog-visible');
 assert.equal(record.ui.icon, './atome/src/assets/images/icons/code.svg', 'catalog definition must use the requested icon path');
 assert.equal(typeof window.atome.tools.handlers.get(CODE_TOOL_ID), 'function', 'code tool must expose its runtime handler');
+
+const codeToolSource = readFileSync(resolve('eVe/intuition/tools/code.js'), 'utf8');
+assert.ok(codeToolSource.includes('ensureIntuitionPanelLayer'), 'code editor must open on the canonical panel layer');
+assert.equal(codeToolSource.includes("attach: normalizedInput.attach || 'body'"), false, 'code editor must not attach behind the intuition layers');
 
 console.log('code_tool.finder_only.test: PASS');
