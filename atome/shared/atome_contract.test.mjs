@@ -13,6 +13,10 @@ test('sanitizeAtomeProperties removes reserved envelope fields', () => {
             id: 'shape_a',
             type: 'shape',
             owner_id: 'user_a',
+            media_type: 'video',
+            visualType: 'poster',
+            selected: true,
+            selection: ['shape_a'],
             left: '10px',
             top: '20px',
             width: '50px'

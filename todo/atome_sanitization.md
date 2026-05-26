@@ -70,6 +70,26 @@ Rendering must become a projection of that structure. Runtime/editor/session sta
 9. Add targeted tests before each sanitization step.
 10. Do not add feature logic to any non-compliant Atome file before sanitizing the relevant ownership boundary.
 
+## Completed In Current Sanitization Pass
+
+- Closed the cited server persistence bypasses in `server/auth.js`, `server/server.js`, and `server/sharing.js` by routing durable creates and property updates through the event pipeline instead of direct `state_current`, `createAtome`, `updateAtome`, or `setParticle` calls.
+- Removed the eVe-local `eVe/core/atome_property_sanitizer.js` authority and switched `eVe/core/atome_commit.js`, `eVe/intuition/runtime/tool_genesis.js`, and `atome/src/squirrel/apis/unified/adole_api/atomes.js` to the shared `atome/shared/atome_contract.js` sanitizer.
+- Extended the shared contract reserved-property list to cover `media_type`, `visualType`, `selected`, and `selection`, keeping media aliases and UI selection state out of canonical Atome properties unless explicitly modeled elsewhere.
+- Consolidated `properties` / `particles` / `data` normalization in `server/atomeRoutes.orm.js` behind a single boundary adapter helper, so those aliases do not remain ordinary route-level working contracts.
+- Added `tests/server/atome_persistence_boundary.test.mjs` as a guard against reintroducing the removed direct server persistence calls or local sanitizer duplication.
+
+Validation completed:
+
+- `node --test atome/shared/atome_contract.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/eve/atome_commit.sanitization.test.mjs tests/eve/adole_commit_boundary.test.mjs`
+- `npx vitest run tests/server/share_notifications.test.js tests/server/notification_stack.test.js tests/server/state_current_shared.test.js`
+- `node --check` on the modified server, runtime, and client modules.
+
+Still open:
+
+- DOM and `dataset` decoupling in `tool_genesis.js`, `tool_runtime.js`, and import/tool surfaces.
+- Drag, resize, placement, and geometry cleanup so the DOM is only a projection.
+- P1 media/import/poster and MTraX/Molecule sanitization.
+
 ## Priority Audit Files
 
 ### P0 - Canonical Contract And Persistence Boundary

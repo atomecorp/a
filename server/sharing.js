@@ -13,11 +13,66 @@
  */
 
 import db, { withTransaction } from '../database/adole.js';
+import { v4 as uuidv4 } from 'uuid';
 import { pushNotificationToUserStack } from './notificationStack.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { wsSendJsonToUser } from './wsApiState.js';
 import { broadcastAtomeCreate } from './atomeRealtime.js';
 import { isPublicAccess } from '../atome/shared/recipient_access.js';
+import { commitAtomeEvent } from './atomeRoutes.orm.js';
+
+async function commitSharingAtomeCreate({
+    id = null,
+    type,
+    kind = null,
+    parent = null,
+    owner,
+    creator,
+    properties = {}
+}) {
+    const atomeId = id || uuidv4();
+    await commitAtomeEvent({
+        authenticatedUserId: creator || owner,
+        event: {
+            atome_id: atomeId,
+            project_id: properties.project_id || properties.projectId || parent || null,
+            kind: 'set',
+            payload: {
+                props: {
+                    ...properties,
+                    type,
+                    ...(kind ? { kind } : {}),
+                    ...(parent ? { parent_id: parent } : {}),
+                    ...(owner ? { owner_id: owner } : {})
+                }
+            },
+            actor: { type: 'user', id: creator || owner }
+        }
+    });
+    return {
+        id: atomeId,
+        atome_id: atomeId,
+        type,
+        atome_type: type,
+        parent_id: parent || null,
+        owner_id: owner || null,
+        creator_id: creator || owner || null,
+        properties
+    };
+}
+
+async function commitSharingAtomePatch(atomeId, properties, actorId) {
+    if (!atomeId || !actorId) return null;
+    return await commitAtomeEvent({
+        authenticatedUserId: actorId,
+        event: {
+            atome_id: atomeId,
+            kind: 'set',
+            payload: { props: properties || {} },
+            actor: { type: 'user', id: actorId }
+        }
+    });
+}
 
 /**
  * Permission levels (bitmask compatible)
@@ -118,7 +173,7 @@ async function ensureProjectContainer({ projectId, ownerId }) {
     }
 
     try {
-        await db.createAtome({
+        await commitSharingAtomeCreate({
             id: projectId,
             type: 'project',
             kind: 'project',
@@ -526,11 +581,11 @@ async function upsertSharePolicy(ownerId, peerUserId, policy, permissions) {
     };
 
     if (existing?.id) {
-        await db.updateAtome(existing.id, payload);
+        await commitSharingAtomePatch(existing.id, payload, ownerId);
         return existing.id;
     }
 
-    const created = await db.createAtome({
+    const created = await commitSharingAtomeCreate({
         id: null,
         type: 'share_policy',
         parent: null,
@@ -758,7 +813,7 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
         timestamp: new Date().toISOString()
     };
 
-    const inbox = await db.createAtome({
+    const inbox = await commitSharingAtomeCreate({
         id: null,
         type: 'share_request',
         parent: null,
@@ -767,7 +822,7 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
         properties: { ...baseParticles, status, box: 'inbox' }
     });
 
-    const outbox = await db.createAtome({
+    const outbox = await commitSharingAtomeCreate({
         id: null,
         type: 'share_request',
         parent: null,
@@ -782,8 +837,8 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
     try {
         if (inboxId || outboxId) {
             const linkPayload = { inbox_id: inboxId, outbox_id: outboxId };
-            if (inboxId) await db.updateAtome(inboxId, linkPayload);
-            if (outboxId) await db.updateAtome(outboxId, linkPayload);
+            if (inboxId) await commitSharingAtomePatch(inboxId, linkPayload, sharerId);
+            if (outboxId) await commitSharingAtomePatch(outboxId, linkPayload, sharerId);
         }
     } catch (error) {
         console.warn("[cleanup] operation failed", error); }
@@ -896,7 +951,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
             if (original.creator_id) properties.original_creator_id = original.creator_id;
 
             console.log('[Share] Creating copy with parent:', resolvedParent, 'for owner:', targetUserId);
-            const created = await db.createAtome({
+            const created = await commitSharingAtomeCreate({
                 id: null,
                 type: original.atome_type || original.type || 'shape',
                 kind: original.kind || null,
@@ -938,7 +993,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
         properties.share_type = 'copy';
         if (original.creator_id) properties.original_creator_id = original.creator_id;
 
-        const created = await db.createAtome({
+        const created = await commitSharingAtomeCreate({
             id: null,
             type: original.atome_type || original.type || 'shape',
             kind: original.kind || null,
@@ -1419,8 +1474,8 @@ export async function handleShareMessage(message, userId) {
                         }
                     }
 
-                    if (inboxId) await db.updateAtome(inboxId, updates);
-                    if (outboxId) await db.updateAtome(outboxId, updates);
+                    if (inboxId) await commitSharingAtomePatch(inboxId, updates, userId);
+                    if (outboxId) await commitSharingAtomePatch(outboxId, updates, userId);
 
                     if (!outboxId && requestIdResolved) {
                         const related = await loadShareRequestsByRequestId(requestIdResolved);
@@ -1428,7 +1483,7 @@ export async function handleShareMessage(message, userId) {
                             if (String(item.owner_id || '') !== String(sharerId)) continue;
                             const id = item.atome_id || item.id;
                             if (!id) continue;
-                            await db.updateAtome(id, updates);
+                            await commitSharingAtomePatch(id, updates, userId);
                         }
                     }
 
@@ -1496,7 +1551,11 @@ export async function handleShareMessage(message, userId) {
                     }
                 });
 
-                await db.updateAtome(requestRecord.atome_id || requestRecord.id, { published_at: new Date().toISOString() });
+                await commitSharingAtomePatch(
+                    requestRecord.atome_id || requestRecord.id,
+                    { published_at: new Date().toISOString() },
+                    sharerId
+                );
 
                 return { requestId, success: true };
             }

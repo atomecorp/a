@@ -53,6 +53,21 @@ function fastifyEventDebugLog(message, data = null) {
     console.log(`[Fastify] ${message}`, data);
 }
 
+function sanitizeBoundaryAtomeProperties(record = {}) {
+    const source = record && typeof record === 'object' ? record : {};
+    const id = source.id || source.atome_id || source.atomeId || 'boundary_atome';
+    const type = source.type || source.atome_type || source.atomeType || source.kind || 'generic';
+    return normalizeCanonicalAtome({
+        id,
+        type,
+        properties: source.properties,
+        particles: source.particles,
+        data: source.data
+    }, {
+        boundaryAdapter: true
+    }).atome.properties;
+}
+
 // =============================================================================
 // WEBSOCKET SYNC - Using EventBus (replaces POST-based sync)
 // =============================================================================
@@ -108,7 +123,7 @@ function syncAtomeViaWebSocket(atome, operation = 'create') {
             syncDebugLog('Missing atome id for sync payload');
             return;
         }
-        const properties = sanitizeAtomeProperties(atome?.properties || atome?.particles || atome?.data || {});
+        const properties = sanitizeBoundaryAtomeProperties(atome);
         const atomeType = resolveSyncAtomeType(atome?.type, atome?.atome_type, properties.kind);
         const parentId = atome?.parent_id || atome?.parent || atome?.meta?.parent_id || null;
         const ownerId = atome?.owner_id || atome?.owner || atome?.meta?.owner_id || null;
@@ -257,7 +272,7 @@ async function validateToken(request) {
  */
 function formatAtome(obj) {
     if (!obj) return null;
-    const properties = sanitizeAtomeProperties(obj.properties || obj.particles || obj.data || {});
+    const properties = sanitizeBoundaryAtomeProperties(obj);
     return formatCanonicalAtome({
         id: obj.id || obj.atome_id,
         type: obj.type || obj.atome_type,
@@ -301,7 +316,11 @@ async function resolveAtomeForSync(event) {
         db.getAtome(atomeId)
     ]);
 
-    const properties = sanitizeAtomeProperties(state?.properties || atome?.properties || atome?.data || {});
+    const properties = sanitizeBoundaryAtomeProperties({
+        properties: state?.properties || null,
+        id: state?.atome_id || atome?.atome_id || atome?.id || null,
+        type: atome?.atome_type || atome?.type || null
+    });
     const atomeType = resolveSyncAtomeType(
         atome?.atome_type,
         atome?.type,

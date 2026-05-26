@@ -1,31 +1,7 @@
 import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
-
-const RESERVED_ATOME_PROPERTY_KEYS = new Set([
-    'id', 'atome_id', 'atomeId',
-    'type', 'atome_type', 'atomeType',
-    'owner', 'owner_id', 'ownerId',
-    'parent', 'parent_id', 'parentId',
-    'project_id', 'projectId',
-    'creator_id', 'creatorId',
-    'created_at', 'createdAt',
-    'updated_at', 'updatedAt',
-    'deleted_at', 'deletedAt',
-    'last_sync', 'lastSync',
-    'sync_status', 'syncStatus',
-    'created_source', 'createdSource'
-]);
-
-const sanitizeAtomeProperties = (properties = {}) => {
-    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return {};
-    const sanitized = {};
-    Object.entries(properties).forEach(([key, value]) => {
-        if (!key || value === undefined || RESERVED_ATOME_PROPERTY_KEYS.has(key)) return;
-        sanitized[key] = value;
-    });
-    return sanitized;
-};
+import { sanitizeAtomeProperties } from '/atome/shared/atome_contract.js';
 
 const adapters = {
     tauri: TauriAdapter,

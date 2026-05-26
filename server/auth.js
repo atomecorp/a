@@ -15,6 +15,7 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { ensureUserHome } from './userHome.js';
+import { appendEvent } from '../database/adole.js';
 
 // Get project root (parent of server/)
 const __filename = fileURLToPath(import.meta.url);
@@ -206,43 +207,15 @@ async function upsertUserStateCurrent(dataSource, userId, username, phone, visib
         access: visibility
     };
     const optionalPatch = normalizeUserOptional(optional);
-
-    let existing = [];
-    try {
-        existing = await dataSource.query(
-            'SELECT properties, version, project_id FROM state_current WHERE atome_id = ?',
-            [userId]
-        );
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error);
-        existing = [];
-    }
-
-    let currentProps = {};
-    if (existing.length > 0 && existing[0]?.properties) {
-        try {
-            currentProps = JSON.parse(existing[0].properties);
-        } catch (error) {
-        console.warn("[cleanup] operation failed", error);
-            currentProps = {};
-        }
-    }
-
-    const nextProps = { ...currentProps, ...patch, ...optionalPatch };
-    const nextVersion = Number(existing[0]?.version || 0) + 1;
-    const projectId = existing[0]?.project_id || null;
-
-    if (existing.length > 0) {
-        await dataSource.query(
-            'UPDATE state_current SET properties = ?, updated_at = ?, version = ?, project_id = COALESCE(?, project_id) WHERE atome_id = ?',
-            [JSON.stringify(nextProps), now, nextVersion, projectId, userId]
-        );
-    } else {
-        await dataSource.query(
-            'INSERT INTO state_current (atome_id, project_id, properties, updated_at, version) VALUES (?, ?, ?, ?, ?)',
-            [userId, projectId, JSON.stringify(nextProps), now, nextVersion]
-        );
-    }
+    await appendEvent({
+        atome_id: userId,
+        kind: 'set',
+        ts: now,
+        payload: {
+            props: { ...patch, ...optionalPatch }
+        },
+        actor: { type: 'user', id: userId }
+    });
 }
 
 // In-memory OTP storage (use Redis in production for multi-instance deployments)

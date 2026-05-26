@@ -2881,16 +2881,25 @@ async function startServer() {
                   unread: true,
                   box: 'inbox'
                 };
-                const created = await db.createAtome({
-                  id: null,
-                  type: 'message',
-                  parent: null,
-                  owner: targetUserId,
-                  creator: senderUserId,
-                  properties: messageProps
+                const messageAtomeId = uuidv4();
+                const created = await commitAtomeEvent({
+                  authenticatedUserId: senderUserId,
+                  event: {
+                    atome_id: messageAtomeId,
+                    kind: 'set',
+                    payload: {
+                      props: {
+                        ...messageProps,
+                        type: 'message',
+                        kind: 'message',
+                        owner_id: targetUserId
+                      }
+                    },
+                    actor: { type: 'user', id: senderUserId }
+                  }
                 });
-                if (created?.atome_id && SERVER_INFO_ENABLED) {
-                  console.log('[direct-message] persisted message atome:', created.atome_id);
+                if (created?.ok && SERVER_INFO_ENABLED) {
+                  console.log('[direct-message] persisted message atome:', messageAtomeId);
                 }
                 // Persist in user notification stack (single source of truth)
                 try {
@@ -3983,14 +3992,23 @@ async function startServer() {
                   }
                 }
 
-                const result = await db.createAtome({
-                  id: atomeId,
-                  type: atomeType,
-                  kind: data.kind,
-                  parent: parentId,
-                  owner: ownerId,
-                  creator: data.creator,
-                  properties: particles
+                const result = await commitAtomeEvent({
+                  authenticatedUserId: requesterId || ownerId,
+                  event: {
+                    atome_id: atomeId,
+                    project_id: data.project_id || data.projectId || parentId || null,
+                    kind: 'set',
+                    payload: {
+                      props: {
+                        ...particles,
+                        type: atomeType,
+                        ...(data.kind ? { kind: data.kind } : {}),
+                        ...(parentId ? { parent_id: parentId } : {}),
+                        ...(ownerId ? { owner_id: ownerId } : {})
+                      }
+                    },
+                    actor: { type: 'user', id: requesterId || ownerId }
+                  }
                 });
 
                 // After creating an atome, try to resolve any pending owner references
@@ -4199,7 +4217,15 @@ async function startServer() {
                   return;
                 }
 
-                await db.updateAtome(atomeId, particles, author);
+                await commitAtomeEvent({
+                  authenticatedUserId: requesterId,
+                  event: {
+                    atome_id: atomeId,
+                    kind: 'set',
+                    payload: { props: particles },
+                    actor: { type: 'user', id: author || requesterId }
+                  }
+                });
                 const currentAtome = await db.getAtome(atomeId).catch(() => null);
 
                 // Realtime collaboration: broadcast patch to share recipients
@@ -4274,8 +4300,15 @@ async function startServer() {
                   return;
                 }
 
-                // Alter uses updateAtome with partial particles
-                await db.updateAtome(atomeId, particles);
+                await commitAtomeEvent({
+                  authenticatedUserId: requesterId,
+                  event: {
+                    atome_id: atomeId,
+                    kind: 'set',
+                    payload: { props: particles },
+                    actor: { type: 'user', id: requesterId }
+                  }
+                });
                 const currentAtome = await db.getAtome(atomeId).catch(() => null);
 
                 // Realtime collaboration: broadcast patch to share recipients
@@ -4653,7 +4686,15 @@ async function startServer() {
                 });
               } else if (action === 'set-particle') {
                 const { atome_id, key, value, author } = data;
-                await db.setParticle(atome_id, key, value, author);
+                await commitAtomeEvent({
+                  authenticatedUserId: requesterId || author,
+                  event: {
+                    atome_id,
+                    kind: 'set',
+                    payload: { props: { [key]: value } },
+                    actor: { type: 'user', id: requesterId || author }
+                  }
+                });
 
                 safeSend({
                   type: 'atome-response',
