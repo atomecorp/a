@@ -2608,6 +2608,75 @@ async function startServer() {
           //   return;
           // }
 
+          // Handle incoming event commits over ws/api to allow low-latency client->server sync
+          if (data.type === 'events') {
+            const requestId = data.requestId || data.request_id;
+            const action = data.action || data.action_type || data.op || null;
+            const attachedSenderUserId = connection && connection._wsApiUserId ? String(connection._wsApiUserId) : null;
+            if (!attachedSenderUserId) {
+              safeSend({
+                type: 'events-response',
+                requestId,
+                success: false,
+                error: 'Unauthenticated ws/api connection (auth required)'
+              });
+              return;
+            }
+
+            try {
+              if (action === 'commit') {
+                const event = data.event || data.body || data.payload || null;
+                if (!event || typeof event !== 'object') {
+                  safeSend({ type: 'events-response', requestId, success: false, error: 'Invalid event payload' });
+                  return;
+                }
+                const syncSource = String(event.sync_source || data.sync_source || '').toLowerCase();
+                const result = await commitAtomeEvent({
+                  event,
+                  authenticatedUserId: attachedSenderUserId,
+                  syncSource
+                });
+                if (!result.ok) {
+                  safeSend({ type: 'events-response', requestId, success: false, error: result.error || 'commit_failed' });
+                  return;
+                }
+
+                safeSend({ type: 'events-response', requestId, success: true, event: result.event });
+                return;
+              }
+
+              if (action === 'commit-batch') {
+                const body = data.body || data || {};
+                const events = Array.isArray(body) ? body : (body.events || []);
+                if (!Array.isArray(events) || !events.length) {
+                  safeSend({ type: 'events-response', requestId, success: false, error: 'Missing events array' });
+                  return;
+                }
+
+                const syncSource = String(body.sync_source || '').toLowerCase();
+                const result = await commitAtomeEvents({
+                  events,
+                  authenticatedUserId: attachedSenderUserId,
+                  actor: body.actor || null,
+                  txId: body.tx_id || null,
+                  syncSource
+                });
+                if (!result.ok) {
+                  safeSend({ type: 'events-response', requestId, success: false, error: result.error || 'commit_batch_failed' });
+                  return;
+                }
+
+                safeSend({ type: 'events-response', requestId, success: true, events: result.events });
+                return;
+              }
+              safeSend({ type: 'events-response', requestId, success: false, error: `Unknown events action: ${action || 'missing'}` });
+              return;
+            } catch (error) {
+              safeSend({ type: 'events-response', requestId, success: false, error: error?.message || String(error) });
+              return;
+            }
+          }
+
           // Handle direct messages (targeted, console-only)
           if (data.type === 'direct-message') {
             const requestId = data.requestId || data.request_id;
@@ -2638,68 +2707,6 @@ async function startServer() {
                 queueSize: 0
               });
               return;
-            }
-
-            // Handle incoming event commits over ws/api to allow low-latency client->server sync
-            if (data.type === 'events') {
-              const action = data.action || data.action_type || data.op || null;
-              // Require authenticated ws/api connection
-              const attachedSenderUserId = connection && connection._wsApiUserId ? String(connection._wsApiUserId) : null;
-              if (!attachedSenderUserId) {
-                safeSend({ type: 'events-response', success: false, error: 'Unauthenticated ws/api connection (auth required)' });
-                return;
-              }
-
-              try {
-                if (action === 'commit') {
-                  const event = data.event || data.body || data.payload || null;
-                  if (!event || typeof event !== 'object') {
-                    safeSend({ type: 'events-response', success: false, error: 'Invalid event payload' });
-                    return;
-                  }
-                  const syncSource = String(event.sync_source || data.sync_source || '').toLowerCase();
-                  const result = await commitAtomeEvent({
-                    event,
-                    authenticatedUserId: attachedSenderUserId,
-                    syncSource
-                  });
-                  if (!result.ok) {
-                    safeSend({ type: 'events-response', success: false, error: result.error || 'commit_failed' });
-                    return;
-                  }
-
-                  safeSend({ type: 'events-response', success: true, event: result.event });
-                  return;
-                }
-
-                if (action === 'commit-batch') {
-                  const body = data.body || data || {};
-                  const events = Array.isArray(body) ? body : (body.events || []);
-                  if (!Array.isArray(events) || !events.length) {
-                    safeSend({ type: 'events-response', success: false, error: 'Missing events array' });
-                    return;
-                  }
-
-                  const syncSource = String(body.sync_source || '').toLowerCase();
-                  const result = await commitAtomeEvents({
-                    events,
-                    authenticatedUserId: attachedSenderUserId,
-                    actor: body.actor || null,
-                    txId: body.tx_id || null,
-                    syncSource
-                  });
-                  if (!result.ok) {
-                    safeSend({ type: 'events-response', success: false, error: result.error || 'commit_batch_failed' });
-                    return;
-                  }
-
-                  safeSend({ type: 'events-response', success: true, events: result.events });
-                  return;
-                }
-              } catch (error) {
-                safeSend({ type: 'events-response', success: false, error: error?.message || String(error) });
-                return;
-              }
             }
             // Reject stale/expired attached identity.
             // We only authenticate once per connection for performance, but we still enforce token expiry.
