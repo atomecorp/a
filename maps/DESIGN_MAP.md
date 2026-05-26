@@ -228,6 +228,22 @@ Role:
 
 Design rule: a business capability has one visual tool identity across toolbox, projection, panel, Finder, and MCP-triggered contexts.
 
+### Capture Recording Reveal Animation
+
+Primary sources:
+
+- `eVe/intuition/tools/capture.js`
+- `eVe/intuition/tools/capture_reveal_runtime.js`
+- `eVe/intuition/tools/capture_export_geometry.js`
+
+Role:
+
+- Owns the capture-tool export/reveal motion for recorded audio, recorded video, and photos.
+- Creates the project media atome at the source tool bounds, animates it to the computed project position above the main toolbar, then persists the final geometry after the animation frame window.
+- The final geometry commit is intentionally delayed until the reveal animation has settled so commit-driven rehydration cannot collapse the motion into an instant creation.
+
+Design rule: capture media reveal changes must preserve the source-tool-to-project animation and keep the final media host above `#eve_intuitionx_main_ribbon`; validation must measure intermediate frames, not only final DOM presence.
+
 ### Menu, Ribbon, Flower, Matrix
 
 Primary sources:
