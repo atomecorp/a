@@ -22,7 +22,6 @@ try {
     window.__DEBUG__?.setDeterministicTestMode?.(true);
     await import('/eVe/intuition/tools/project_drop.js');
     await import('/eVe/intuition/tools/delete.js');
-    const shortcutModule = await import('/eVe/intuition/shared/tool_shortcut_visual.js');
     const api = window.AdoleAPI;
     if (!api?.auth?.login || !api?.projects?.list || !api?.projects?.setCurrent) {
       return { ok: false, error: 'project_api_missing' };
@@ -68,29 +67,46 @@ try {
     await api.projects.setCurrent(projectId, readProjectName(project) || preferredName, project?.owner_id || project?.ownerId || null, true);
     await window.eveToolBase.loadProjectAtomes?.(projectId, { force: true }).catch(() => null);
 
-    const spec = shortcutModule.buildToolShortcutCreateSpec({
-      projectId,
-      left: 260,
-      top: 220,
-      label: 'Probe Delete',
-      toolId: 'ui.delete.selection',
-      toolNameKey: 'delete',
-      toolIcon: './assets/images/icons/delete.svg',
-      toolActionMode: 'momentary',
-      mountLayer: 'intuition'
+    const runtime = window.atome?.tools?.v2Runtime;
+    const mountProjection = window.eveProjectDropApi?.mountToolProjectionInstance;
+    if (!runtime?.instantiateToolFromDrop || typeof mountProjection !== 'function') {
+      return { ok: false, error: 'tool_projection_runtime_missing' };
+    }
+    const instanceResult = await runtime.instantiateToolFromDrop({
+      tool_id: 'ui.delete.selection',
+      drop: { left: 260, top: 220 },
+      context: { type: 'project', id: projectId, project_id: projectId },
+      actor: { type: 'probe' }
     });
-    const created = await window.eveToolBase.createAtome(spec);
-    const createdId = String(created?.atome_id || created?.atomeId || created?.id || spec.id || '').trim();
-    await window.eveToolBase.loadProjectAtomes?.(projectId, { force: true }).catch(() => null);
-    return { ok: !!createdId, projectId, createdId };
+    if (!instanceResult?.ok || !instanceResult.instance) {
+      return { ok: false, error: instanceResult?.error || 'tool_instance_create_failed' };
+    }
+    const mounted = await mountProjection({
+      instance: instanceResult.instance,
+      payload: {
+        type: 'tool',
+        kind: 'tool',
+        tool_id: 'ui.delete.selection',
+        tool_name: 'Probe Delete',
+        name_key: 'delete',
+        icon: './assets/images/icons/delete.svg',
+        action_mode: 'momentary',
+        drag_mode: 'move_instance'
+      },
+      toolId: 'ui.delete.selection',
+      projectId,
+      event: { clientX: 260, clientY: 220 },
+      projectEl: document.getElementById(projectId) || document.getElementById('intuition') || document.body
+    });
+    return { ok: mounted === true, projectId, createdId: String(instanceResult.instance.id || '') };
   }, { phone: PHONE, password: PASSWORD });
 
   assert.equal(setup.ok, true, setup.error || 'setup_failed');
-  await page.waitForFunction((id) => !!document.querySelector(`[data-atome-id="${id}"]`), setup.createdId, { timeout: 30000 });
+  await page.waitForFunction((id) => !!document.querySelector(`[data-tool-instance-id="${id}"]`), setup.createdId, { timeout: 30000 });
   await page.waitForTimeout(300);
 
   const geometry = await page.evaluate((createdId) => {
-    const host = document.querySelector(`[data-atome-id="${createdId}"]`);
+    const host = document.querySelector(`[data-tool-instance-id="${createdId}"]`);
     const button = host?.querySelector?.('[data-eve-tool-projection="true"]') || host;
     const handle = document.querySelector('#eve_intuitionx_main_ribbon [data-role="eve_intuitionx-handle"]');
     const buttonRect = button?.getBoundingClientRect?.();
@@ -101,7 +117,7 @@ try {
     };
   }, setup.createdId);
 
-  assert.ok(geometry.buttonRect, 'tool_shortcut_button_missing');
+  assert.ok(geometry.buttonRect, 'tool_instance_button_missing');
   assert.ok(geometry.handleRect, 'main_toolbar_handle_missing');
 
   const start = {
@@ -121,16 +137,15 @@ try {
   await page.waitForTimeout(700);
 
   const result = await page.evaluate(async (createdId) => {
-    const state = await window.Atome.getStateCurrent(createdId).catch((error) => ({ error: String(error?.message || error) }));
+    const state = window.atome?.tools?.v2ProjectionStore?.listInstances?.({})?.find?.((entry) => String(entry?.id || '') === String(createdId)) || null;
     return {
-      hostStillPresent: !!document.querySelector(`[data-atome-id="${createdId}"]`),
+      hostStillPresent: !!document.querySelector(`[data-tool-instance-id="${createdId}"]`),
       state
     };
   }, setup.createdId);
 
-  assert.equal(result.hostStillPresent, false, 'tool_shortcut_still_visible_after_trash_drop');
-  assert.equal(result.state?.properties?.__deleted, true, 'tool_shortcut_not_soft_deleted');
-  assert.ok(result.state?.properties?.deleted_at, 'tool_shortcut_deleted_at_missing');
+  assert.equal(result.hostStillPresent, false, 'tool_instance_still_visible_after_trash_drop');
+  assert.equal(result.state, null, 'tool_instance_not_removed_from_store');
   assert.equal(pageErrors.length, 0, `page_errors:${pageErrors.join('\n')}`);
 } finally {
   await browser.close();
