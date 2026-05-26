@@ -123,4 +123,79 @@ assert.equal(renders[0].record.properties.media_kind, 'video');
 assertNoEnvelopeOrAliasProps(renders[0].record.properties);
 assert.match(renders[0].record.properties.media_url, /^\/api\/recordings\/video_1779220000001\.webm/);
 
+commits.length = 0;
+renders.length = 0;
+
+const hydrated = await ensureProjectMediaAtome({
+    kind: 'sound',
+    fileName: 'audio_1779220000002.wav',
+    result: {
+        project_atome_id: 'audio_recording_pending',
+        file_path: 'data/users/user_a/recordings/audio_1779220000002.wav',
+        path: 'data/users/user_a/recordings/audio_1779220000002.wav',
+        duration_sec: 1.25
+    },
+    accessToken: true,
+    requireAdoleApi: true,
+    resolvePlacement: () => ({ left: 33, top: 44, zIndex: 55 })
+});
+
+assert.equal(hydrated.ok, true);
+assert.equal(hydrated.atomeId, 'audio_recording_pending');
+assert.equal(commits.length, 1);
+assert.equal(commits[0].atome_id, 'audio_recording_pending');
+assert.equal(commits[0].props.kind, 'audio_recording');
+assert.equal(commits[0].props.pending, false);
+assert.equal(commits[0].props.media_pending, false);
+assert.equal(commits[0].props.left, 33);
+assert.equal(commits[0].props.top, 44);
+assert.equal(renders.length, 1);
+assert.equal(renders[0].record.id, 'audio_recording_pending');
+assert.equal(renders[0].record.properties.kind, 'audio_recording');
+
+commits.length = 0;
+renders.length = 0;
+
+class ExistingHost {
+    constructor() {
+        this.style = {};
+        this.dataset = { atomeId: 'video_recording_pending', atomeKind: 'video_recording' };
+    }
+}
+
+globalThis.HTMLElement = ExistingHost;
+const existingHost = new ExistingHost();
+globalThis.document = {
+    querySelector: (selector) => selector.includes('video_recording_pending') ? existingHost : null,
+    getElementById: () => null
+};
+
+const existingHydrated = await ensureProjectMediaAtome({
+    kind: 'video',
+    fileName: 'video_1779220000003.webm',
+    result: {
+        project_atome_id: 'video_recording_pending',
+        file_path: 'data/users/user_a/recordings/video_1779220000003.webm',
+        path: 'data/users/user_a/recordings/video_1779220000003.webm',
+        duration_sec: 2.75,
+        width: 320,
+        height: 180
+    },
+    accessToken: true,
+    requireAdoleApi: true,
+    resolvePlacement: () => ({ left: 77, top: 88, zIndex: 99 })
+});
+
+assert.equal(existingHydrated.ok, true);
+assert.equal(existingHydrated.atomeId, 'video_recording_pending');
+assert.equal(commits.length, 1);
+assert.equal(commits[0].atome_id, 'video_recording_pending');
+assert.equal(renders.length, 0);
+assert.equal(existingHost.style.left, '77px');
+assert.equal(existingHost.style.top, '88px');
+assert.equal(existingHost.style.width, '333px');
+assert.equal(existingHost.style.height, '187px');
+assert.equal(existingHost.style.zIndex, '99');
+assert.equal(existingHost.dataset.eveMediaSource.startsWith('/api/recordings/video_1779220000003.webm'), true);
+
 console.log('media_persistence_service_sanitization: ok');
