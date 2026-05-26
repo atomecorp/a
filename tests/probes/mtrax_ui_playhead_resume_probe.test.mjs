@@ -268,50 +268,28 @@ const state = async (page, label) => safeEval(page, (sampleLabel) => {
 
 const clickTransport = async (page, key) => {
     if (key === 'play') {
-        const child = page.locator('#eve_mtrack_dialog button[data-name-key="play_media"]:visible, #eve_mtrack_dialog button[data-tool-id="ui.media.reader"]:visible').first();
-        const visible = await child.count().catch(() => 0);
-        if (visible < 1) {
-            await openTransportPalette(page);
-        }
-        await child.waitFor({ state: 'visible', timeout: 15000 });
-        await child.click({ timeout: 15000 });
+        const playButton = page.locator('#eve_mtrack_dialog button[data-name-key="play"]:visible, #eve_mtrack_dialog button[data-tool-id="ui.play"]:visible').first();
+        await playButton.waitFor({ state: 'visible', timeout: 15000 });
+        await playButton.click({ timeout: 15000 });
         return;
     }
     if (key === 'stop') {
-        const playHost = page.locator('#eve_mtrack_dialog button[data-name-key="play"], #eve_mtrack_dialog button[data-tool-id="ui.play"]').first();
-        await playHost.hover({ timeout: 15000 });
-        await sleep(300);
+        const stopped = await safeEval(page, async () => {
+            if (typeof window.eveMtrackApi?.stop !== 'function') return { ok: false, error: 'stop_api_missing' };
+            return window.eveMtrackApi.stop({ source: 'mtrax_ui_playhead_resume_probe' });
+        }, null, 15000);
+        if (!stopped?.ok) throw new Error(`stop_failed:${JSON.stringify(stopped)}`);
+        return;
     }
-    const selector = key === 'stop'
-        ? '#eve_mtrack_dialog button[data-name-key="play_stop"]:visible, #eve_mtrack_dialog button[data-tool-id="ui.stop"]:visible'
-        : `#eve_mtrack_dialog button[data-name-key="${key}"]:visible, #eve_mtrack_dialog button[data-tool-id*="${key}"]:visible, #eve_mtrack_dialog button[data-label="${key}"]:visible`;
+    const selector = `#eve_mtrack_dialog button[data-name-key="${key}"]:visible, #eve_mtrack_dialog button[data-tool-id*="${key}"]:visible, #eve_mtrack_dialog button[data-label="${key}"]:visible`;
     const locator = page.locator(selector).first();
-    if (key === 'stop') {
-        const visible = await locator.count().catch(() => 0);
-        if (visible < 1) {
-            const dispatched = await safeEval(page, () => {
-                const button = document.querySelector('#eve_mtrack_dialog button[data-name-key="play_stop"], #eve_mtrack_dialog button[data-tool-id="ui.stop"]');
-                if (!button) return { ok: false, error: 'stop_button_missing' };
-                button.dispatchEvent(new MouseEvent('click', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window
-                }));
-                return { ok: true };
-            }, null, 10000);
-            if (!dispatched?.ok) throw new Error(`stop_dispatch_failed:${JSON.stringify(dispatched)}`);
-            return;
-        }
-    }
     await locator.waitFor({ state: 'visible', timeout: 15000 });
     await locator.click({ timeout: 15000 });
 };
 
-const openTransportPalette = async (page) => {
+const waitForDirectPlayButton = async (page) => {
     const host = page.locator('#eve_mtrack_dialog button[data-name-key="play"], #eve_mtrack_dialog button[data-tool-id="ui.play"]').first();
     await host.waitFor({ state: 'visible', timeout: 15000 });
-    await host.click({ timeout: 15000 });
-    await sleep(250);
 };
 
 const seekTo = async (page, seconds) => {
@@ -401,11 +379,11 @@ const run = async () => {
         await waitForAudioSessionReady(page);
         report.steps.push(await state(page, 'seek_10_before_click_play'));
         await page.screenshot({ path: path.join(outDir, '01_seek_10_before_play.png'), fullPage: true });
-        await openTransportPalette(page);
-        const afterOpenTransportPalette = await state(page, 'after_open_transport_palette');
-        report.steps.push(afterOpenTransportPalette);
-        assertPaused(afterOpenTransportPalette, 'open_transport_palette');
-        assertNotReset(afterOpenTransportPalette, 9.75, 'open_transport_palette');
+        await waitForDirectPlayButton(page);
+        const afterPlayButtonVisible = await state(page, 'after_play_button_visible');
+        report.steps.push(afterPlayButtonVisible);
+        assertPaused(afterPlayButtonVisible, 'play_button_visible');
+        assertNotReset(afterPlayButtonVisible, 9.75, 'play_button_visible');
         await clickTransport(page, 'play');
         const afterClickPlay = await waitForPlayingState(page, true, 'after_click_play');
         report.steps.push(afterClickPlay);
