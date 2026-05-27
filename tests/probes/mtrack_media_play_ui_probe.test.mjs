@@ -88,7 +88,7 @@ const bootstrapImport = async (page) => {
     window.__EVE_MTRACK_DEBUG__ = true;
     window.__EVE_MTRACK_TRACE__ = true;
     if (!window.eveProjectDropApi?.importFilesToProjectViaCreator) {
-      await import('/eve/application/intuition/tools/project_drop.js');
+      await import('/eVe/intuition/tools/project_drop.js');
     }
     const projectEl = document.querySelector('[id^="project_view_"]');
     const projectId = window.__currentProject?.id || projectEl?.id?.replace(/^project_view_/, '') || null;

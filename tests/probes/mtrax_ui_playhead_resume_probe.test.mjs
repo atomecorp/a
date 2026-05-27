@@ -98,7 +98,7 @@ const bootstrapImport = async (page) => {
         window.__EVE_HMTRACKS_AUDIO_DEBUG_LOGS__ = true;
         window.__EVE_MTRAX_FORCE_WEBGPU__ = true;
         if (!window.eveProjectDropApi?.importFilesToProjectViaCreator) {
-            await import('/eve/application/intuition/tools/project_drop.js');
+            await import('/eVe/intuition/tools/project_drop.js');
         }
         window.__DEBUG__?.setDeterministicTestMode?.(true);
         const projectEl = document.querySelector('[id^="project_view_"]');

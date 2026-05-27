@@ -1,6 +1,6 @@
 # eVe / Atome Unified AI Coding & Architecture Guideline
 
-Version: 2.3
+Version: 2.4
 Status: Active – Strict Enforcement
 Scope: Architecture, code generation, review, integration, synchronization, rendering, communication, storage, multimedia, realtime systems, and framework consistency.
 
@@ -22,6 +22,30 @@ Compliance is mandatory and non-negotiable.
 
 The ABSOLUTE GIT READ-ONLY POLICY defined in this document is part of that non-negotiable precedence and must never be overridden.
 
+## NON-NEGOTIABLE STATE AND DOM AUTHORITY
+
+This section is always active, has the same priority level as the rest of this document, and MUST be treated as a strict architectural authority for every UI, state, sync, replay, rendering, debug, refactor, review, and test task.
+
+Mandatory rules:
+
+- canonical truth MUST live outside the DOM;
+- a minimal DOM is mandatory;
+- business logic MUST NOT be stored in the view layer;
+- large JSON payloads in data-* attributes are forbidden;
+- Atome verbosity MUST be reduced to the minimum required by deterministic replay, persistence, sync, auditability, and rendering;
+- the Atome contract MUST remain minimal, explicit, canonical, and schema-driven;
+- all mutations MUST use one single canonical mutation pipeline;
+- events, state_current, particles, DOM, timeline cache, and realtime patches MUST each have a single explicit role and MUST NOT become overlapping writable sources of truth;
+- regression coverage MUST explicitly verify that the DOM never becomes the source of truth;
+- audit graphs and architecture graphs MUST be used as explicit references when correcting ownership, mutation flow, replay, rendering, or synchronization defects.
+
+Strict interpretation rules:
+
+- the DOM is a projection layer only and MUST remain disposable;
+- data-* attributes may carry narrow view metadata only and MUST NEVER carry business state snapshots, mutation payloads, replay data, ownership maps, or serialized Atome structures;
+- view code may render canonical state and emit user intent, but it MUST NOT own business rules, persistence rules, sync decisions, replay logic, or authoritative mutation ordering;
+- if two layers appear to own the same business fact, the task is incomplete until one canonical owner is restored outside the DOM.
+
 ## TASK ROUTING AND SECTION APPLICABILITY
 
 This document is cumulative. When several contexts apply, the assistant MUST apply the strict union of all relevant sections, never the weakest subset.
@@ -36,6 +60,7 @@ Apply this decision order before acting:
 Always-active sections:
 
 - ABSOLUTE PRECEDENCE;
+- NON-NEGOTIABLE STATE AND DOM AUTHORITY;
 - CORE ROLE;
 - MANDATORY CODE QUALITY RULES;
 - MANDATORY FILE SIZE AND CODING STANDARDS;
@@ -314,7 +339,7 @@ Test routing rules:
 - For parser, syntax, or repository-wide safety changes, include npm run check:syntax.
 - For architecture or policy-sensitive changes, include the relevant guardrail path and prefer at least npm run check:m0.
 - For Molecule-related changes, include npm run test:molecule and widen to npm run check:m1 when the change can affect guardrails.
-- During any Molecule-related debug, feature addition, repair, cleanup, or refactor, progressively rename remaining `MTrax` references to `molecule` whenever the touched scope makes the rename coherent and verifiable.
+- During any debug, feature addition, repair, cleanup, or refactor, check whether the touched scope still contains legacy `MTrax` references for Molecule-owned behavior and progressively rename or remove them whenever the migration is coherent and verifiable.
 - For server or API behavior, include npm run test:server-verification when the touched path reaches the verification surface.
 - For UI issues, use the documented UI debug process and the UI scenario runner when applicable; do not rely on visual inspection alone, and exercise the real UI path when the bug depends on interaction.
 - If an existing probe already targets the failing surface, run it before inventing a new temporary script.
@@ -414,18 +439,27 @@ You must:
 3. If similar code already exists, refactor or centralize it cleanly instead of adding another version.
 4. Ensure new work integrates naturally into the existing architecture and respects the global vision of the framework.
 5. Create a new file only when no existing file, module, API, abstraction, token module, or visual factory can correctly host the change.
-6. Keep the implementation minimal, coherent, maintainable, and aligned with the framework’s existing structure.
-7. After implementation, remove obsolete, redundant, unused, temporary, or duplicated code introduced or discovered during the task.
-8. Never leave test code, debug code, probes, traces, temporary logs, or experimental logic in the final result.
+6. Keep the implementation minimal, smaller when possible, less complex, coherent, maintainable, and aligned with the framework’s existing structure.
+7. During every bug fix, debug session, cleanup, refactor, or feature addition, simplify the touched scope whenever possible: remove unnecessary branches, collapse redundant indirection, reduce moving parts, and keep responsibilities tight.
+8. Preserve or restore a single canonical source of truth for each responsibility, state, configuration, rendering contract, and business rule touched by the task.
+9. If the touched scope contains duplicated ownership, mirrored writable state, competing implementations, or parallel source-of-truth layers, converge them to the canonical owner instead of keeping both alive.
+10. Always wire new behavior into the existing canonical module, API, component, state owner, or design contract when it can host the change correctly.
+11. Whenever the touched scope still carries legacy `MTrax` naming, identifiers, comments, labels, modules, or references for behavior now owned by Molecule, verify whether they can be renamed or removed coherently and do so whenever the change is safe and verifiable.
+12. After implementation, remove obsolete, redundant, unused, temporary, duplicated, or legacy transitional code introduced or discovered during the task.
+13. Never leave test code, debug code, probes, traces, temporary logs, or experimental logic in the final result.
 
 Before coding, provide a short implementation plan stating:
 
 - what existing files or modules were inspected;
 - what reusable logic or architecture was found;
+- what the canonical owner or single source of truth is for the touched behavior;
+- whether legacy `MTrax` references in the touched scope can be migrated to Molecule now;
 - whether the change will reuse, extend, refactor, or create new code;
 - why the chosen approach is the cleanest and most consistent one.
 
 If the codebase already contains the required functionality, do not recreate it. Use it, expose it properly, factorize it, or connect to it.
+
+If multiple sources of truth exist in the touched area, the task is not complete until the change clearly restores or preserves one canonical owner.
 
 If architectural uncertainty exists, stop immediately, request clarification, and never guess architecture behavior.
 
@@ -543,9 +577,12 @@ Rules:
 - id is immutable;
 - type is canonical;
 - renderer is a UI hint only;
+- the Atome contract MUST stay minimal and MUST NOT grow with view-local, DOM-local, or debug-local verbosity;
+- Atome payloads MUST contain only the canonical data required for deterministic creation, replay, sync, and rendering;
 - unknown properties are forbidden unless schema-authorized.
 - rendering code MUST create visual output from the Atome description and MUST NOT become a parallel source of truth;
 - DOM, canvas, WebGPU, native views, and any other rendering resources are disposable projections only and MUST NEVER own canonical Atome state;
+- DOM-facing adapters MUST remain minimal and MUST NOT duplicate business fields, serialized particle trees, or large JSON payloads for view convenience;
 - gesture, drag, resize, placement, and interaction code MUST start from described Atome state, then emit canonical mutations through the commit pipeline;
 - any touched file that mixes Atome description with rendering state MUST be sanitized before feature growth continues.
 
@@ -565,12 +602,23 @@ All visible writes MUST pass through:
 - window.Atome.commit
 - window.Atome.commitBatch
 
+The mutation pipeline is unique and exclusive. No DOM write, local widget state, ad hoc cache, view model, renderer state bucket, or sync helper may become a parallel writable path for business mutations.
+
 Event logs are append-only.
 
 State must always derive from:
 
 - snapshots;
 - deterministic replay.
+
+Authoritative role split is mandatory:
+
+- events: immutable intent and mutation history;
+- state_current: canonical projected present state derived from validated history;
+- particles: canonical structural decomposition of Atome-owned data, never a shadow UI store;
+- DOM: disposable rendered projection for display, interaction wiring, accessibility, and editing surfaces only;
+- timeline cache: performance optimization derived from canonical history, never an authority;
+- realtime patches: transport or synchronization deltas that must fold back into the canonical mutation pipeline and MUST NEVER become standalone truth.
 
 History rules:
 
@@ -579,6 +627,23 @@ History rules:
 - deterministic restore;
 - deterministic replay;
 - property-level timelines as first-class entities.
+
+Required prohibitions:
+
+- the DOM MUST NEVER be used as the source of truth during restore, replay, sync reconciliation, inspection, or test assertions about business state;
+- view-local logic MUST NEVER decide canonical business rules or authoritative mutation ordering;
+- large serialized JSON blobs in data-* attributes, dataset mirrors, or DOM annotations are forbidden;
+- if a debug or repair task discovers DOM-owned truth, duplicated writable state, or view-owned business logic, the correction MUST restore a single canonical owner outside the DOM.
+
+Mandatory regression coverage:
+
+- touched scopes involving rendering, interaction, replay, sync, projection, or Atome serialization MUST include or update regression tests that fail when the DOM becomes authoritative;
+- such tests MUST verify canonical state survives DOM teardown, rerender, hydration, replay, or reconciliation without reading truth back from the DOM.
+
+Mandatory correction guidance:
+
+- when diagnosing or correcting ownership or replay defects, consult the relevant audit graphs in maps/ and the authoritative architecture documentation;
+- fixes MUST align the code with those audit graphs instead of preserving ambiguous ownership between DOM, state_current, particles, caches, or transport patches.
 
 Non-deterministic replay is forbidden.
 

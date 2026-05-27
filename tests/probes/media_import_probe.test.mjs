@@ -137,7 +137,7 @@ const run = async () => {
 
   const bootstrap = await safeEval(page, async () => {
     if (!window.eveProjectDropApi?.importFilesToProjectViaCreator) {
-      await import('/eve/application/intuition/tools/project_drop.js');
+      await import('/eVe/intuition/tools/project_drop.js');
     }
     if (!window.eveMediaDiagnostics?.runFullSuite) {
       const mod = await import('/eve/application/domains/media/media_diagnostics.js');

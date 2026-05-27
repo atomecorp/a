@@ -171,7 +171,7 @@ const bootstrapImport = async (page) => {
         window.__EVE_MTRACK_TRACE__ = true;
         window.__EVE_MTRACK_BRIDGE_LOGS__ = true;
         if (!window.eveProjectDropApi?.importFilesToProjectViaCreator) {
-            await import('/eve/application/intuition/tools/project_drop.js');
+            await import('/eVe/intuition/tools/project_drop.js');
         }
         if (typeof window.__DEBUG__?.setDeterministicTestMode === 'function') {
             window.__DEBUG__.setDeterministicTestMode(true);

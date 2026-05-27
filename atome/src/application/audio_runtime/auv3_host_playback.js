@@ -78,7 +78,8 @@ const playVisualOnlyElement = (node) => {
 
 const resolveNativePlaybackPath = (node) => {
     const src = String(node.currentSrc || node.src || '').trim();
-    const stableSource = String(node?.dataset?.eveMediaSource || '').trim();
+    const projectionState = node?.__eveMediaProjectionState || node?.__atomeMediaProjectionState || {};
+    const stableSource = String(projectionState.source || '').trim();
     return extractRelativePath(src)
         || (stableSource ? extractFilenameFromSource(stableSource) : null)
         || extractFilenameFromSource(src);

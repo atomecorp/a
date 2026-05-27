@@ -165,15 +165,19 @@ Primary sources:
 
 - `eVe/core/atome_commit.js`
 - `eVe/core/atome_commit_gesture_trace.js`
-- `eVe/core/atome_property_sanitizer.js`
+- `atome/shared/atome_contract.js`
 
 Exposure: `window.Atome.commit`, `window.Atome.commitBatch`, and the injected `__atomeCommitApi` test/runtime surface.
 
 Boundary rules:
 
 - Client mutations must enter through `commit` or `commitBatch`; direct durable Atome state mutation from tools, media helpers, Molecule, or MTraX runtimes is not a valid source of truth.
+- `window.eveToolBase.createAtome` is a product runtime creation API over this commit boundary. Its return contract includes `id`/`atomeId`, `canonicalState`, nullable `view`, `committed`, and `rendered`; callers that need model-only creation must pass `{ render: false }`, which keeps DOM projection disabled after the canonical commit.
+- `scripts/check_mutation_ownership_guardrails.mjs` is the guardrail entry point for this API boundary. It rejects direct client/runtime mutation of `state_current` and direct event-commit transport calls outside canonical commit/server owners.
+- `scripts/check_squirrel_dom_adapter_guardrails.mjs` is the guardrail entry point for the legacy Squirrel Atome DOM adapter boundary. `this.element` may remain a projection handle, but model/business state must stay on Atome instance data or canonical persistence surfaces.
+- Database event projection APIs: `database/adole.js` exposes `appendEvent`, `appendEvents`, `getStateCurrent`, `listStateCurrent`, and `restoreStateSnapshot`. Event projection must sanitize reserved Atome envelope keys before writing `state_current.properties`, keeping `state_current` coherent with `particles`; controlled state snapshot restore must replay through `appendEvents` instead of writing `state_current` or DOM state directly.
 - `props`, `properties`, `patch`, and `delta` are normalized into `payload.props` before transport.
-- `atome_property_sanitizer.js` owns eVe-side removal of reserved Atome envelope fields from durable property payloads; project Atome creation code and commit code must consume it rather than maintaining parallel reserved-key lists.
+- `atome/shared/atome_contract.js` owns removal of reserved Atome envelope fields from durable property payloads; project Atome creation code and commit code must consume this shared contract rather than maintaining local sanitizer modules or parallel reserved-key lists.
 - Reserved envelope fields such as `id`, `type`, `owner_id`, `project_id`, `parent_id`, timestamps, sync fields, selection fields, and media render aliases such as `media_type` or `visualType` must not be emitted as durable properties.
 - Top-level event fields such as `atome_id`, `project_id`, `parent_id`, `actor`, transaction id, and gesture id remain event envelope fields.
 
@@ -308,6 +312,11 @@ Verified entry points:
 - Molecule engine/API: `createMoleculeEngine`, `ensureMoleculeEngine`, `getMoleculeCommandCatalog`, `createMoleculeApi`, `ensureMoleculeApi`, `ensureMoleculeMediaRuntime`.
 - Molecule tool modules: timeline schemas, reducers, session registry, persistence controller, media resolver, panel runtime, gestures, recording, nesting, and multi-instance controllers.
 - MTraX window API: `createMtrackWindowApiRuntime`, `createWindowApiBridgeRuntime`, transport, recording, clip move/crop, track record source, misc, and record-state runtimes.
+- MTraX ruler rendering helpers: `ruler_canvas_runtime.js` exposes internal major-step and visible tick-window helpers for canvas-backed ruler rendering. This is a rendering implementation boundary, not a public timeline API.
+- DOM projection guardrails: `npm run check:dom-projection-guardrails` scans maintained DOM fixtures under `tests/fixtures/dom` by default; pass `--paths` to audit explicit legacy/debug captures.
+- Media projection helpers: `eVe/domains/media/shared/media_projection_state.js` exposes internal host-local media source and identifier readers/writers for renderer binding. This is not a durable media API and must not replace Atome properties, media stores, or persistence services.
+- Media Atome integrity helpers: `eVe/domains/media/shared/media_atom_integrity.js` exposes internal validation and normalization for project media Atomes before persistence/rendering. It enforces stable source, audio/video duration, visual refs, and pending visual status while preserving the separation between Atome `kind` and renderable `media_kind`.
+- Group projection state helpers: `eVe/intuition/shared/group_state_runtime.js` exposes host-local group steps, timeline, and preview readers/writers for renderers. These helpers are an internal projection boundary only; durable group data must still come from Atome properties and timeline persistence APIs.
 - MTraX karaoke detail: `detail_runtime.js` owns detail state and mutation application; `detail_record_schedule_state.js` owns the selection-only record-schedule detail projection.
 - MTraX dropped-video import: `addClipFromEntry` keeps the public drop entry point and delegates linked audio creation to the existing descriptor media resolver with `audio_source_role: video_audio`.
 
@@ -398,7 +407,7 @@ Status: Public, with route details and legacy breadth to verify before mutation.
 
 Visibility: Public runtime API.
 
-Evidence: `eVe/core/atome_commit.js` attaches methods to `window.Atome` and `window.__atomeCommitApi`; `eVe/core/atome_property_sanitizer.js` owns eVe-side property payload sanitization.
+Evidence: `eVe/core/atome_commit.js` attaches methods to `window.Atome` and `window.__atomeCommitApi`; `atome/shared/atome_contract.js` owns property payload sanitization.
 
 Public entry points:
 

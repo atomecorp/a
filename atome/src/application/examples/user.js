@@ -724,8 +724,6 @@ function createMediaAtome(atomeId, mediaType, left, top, borderRadius, opacity, 
 
   src = normalizeApiMediaRouteSourceFromProperties(src, particles) || '';
 
-  console.log('[User] Final media src:', src);
-
   // Base container CSS
   const containerCss = {
     position: 'absolute',
@@ -752,15 +750,14 @@ function createMediaAtome(atomeId, mediaType, left, top, borderRadius, opacity, 
     parent: currentProjectDiv,
     css: containerCss,
     attrs: {
-      'data-atome-type': mediaType,
-      'data-media-src': src,
-      'data-eve-media-source': src
+      'data-atome-type': mediaType
     },
     onClick: (e) => {
       e.stopPropagation();
       selectVisualAtome(container, atomeId);
     }
   });
+  container.__atomeMediaProjectionState = { source: src };
 
   // Create inner media element based on type
   if (mediaType === 'image') {

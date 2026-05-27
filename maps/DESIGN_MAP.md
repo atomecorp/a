@@ -35,6 +35,10 @@ Atome/eVe does not use a classic static HTML plus authored CSS architecture for 
 - Shared tokens are exposed as JavaScript constants and CSS custom properties.
 - Some modules inject `<style>` tags from JavaScript strings or generated rule objects.
 - Static CSS files exist, but they are framework, vendor, or build artifacts rather than the main eVe design source.
+- DOM `data-*` attributes are not a design or model source of truth. Product renderers may use them only for short roles, view ids, renderer hints, and transient UI state; visual caches, media sources, media identifiers, group timelines, and serialized model data belong to structured JavaScript state, stores, or renderer caches.
+- Tool palette child lists are renderer behavior state, not design metadata; `data-tool-children` and `data-source-tool-children` must stay absent from product DOM output.
+- Media mount errors are runtime diagnostics, not DOM design state; visual surfaces may reflect media readiness, but `data-media-api-error` must not persist in exported product DOM.
+- Canvas surfaces are dense renderer outputs and must expose a short `data-role` in maintained DOM exports so active surfaces can be counted, pooled, and audited.
 
 ## Ownership Boundary
 
@@ -269,6 +273,8 @@ Role:
 - Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`.
 - Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
 - Matrix layout runtime owns toolbar-aware viewport fitting, CSS grid variable updates, and scroll positioning; Matrix view runtime owns project and tile DOM composition.
+- Matrix visual grids use logical slot virtualization: empty background capacity is represented by grid sizing and slot math, while DOM nodes are reserved for project tiles and the first actionable empty creation tile.
+- Matrix project-view fixed geometry is owned by the generated `.eve-project-view` visual rule in `eVe/intuition/matrix/visual/matrix_visual_tokens.js`; `ensureProjectView()` may set only dynamic projection state and runtime interaction styles.
 
 Design rule: menu/ribbon/flower/Matrix changes must preserve shared tool visual semantics and layer ordering.
 
@@ -333,6 +339,7 @@ Role:
 - Styles are injected or applied by JavaScript and rely on system/eVe CSS custom properties.
 - Preview/tracks separator sizing is owned by `eVe/domains/mtrax/preview/preview_layout_runtime.js`; bounds must be computed from the rendered MTraX stack, including the real tracks viewport, so WebView layout differences cannot collapse the separator resize range to the preview minimum.
 - MTraX integrated tools keep horizontal overflow while hiding native scrollbars, and the position indicator is placed inside the ruler-left column above track headers.
+- MTraX ruler ticks are visual density, not interactive controls. Loop and marker zones remain DOM elements, while repeated tick marks and tick labels render through the ruler canvas surface when available.
 - MTraX content, preview section, preview host, and preview surface containers stay square-edged; rounded corners remain reserved for explicit controls or timeline affordances, not the Molecule composition frame.
 - Docked MTraX keeps the preview section, preview/tracks splitter, and tracks content directly adjacent; the splitter owns the only reserved space between preview and tracks.
 - Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
@@ -344,6 +351,7 @@ Role:
 - Molecule close-time project posters must be captured from the current MTraX playhead. The close lifecycle must not reset the playhead before `exportCurrentMtrackPreviewDescriptor()` runs, so reopening a molecule, scrubbing to another frame, and closing it updates the project atome image to that selected timeline frame.
 - Project video atomes use `eVe/domains/media/shared/media_video_poster_runtime.js` to render and persist an image poster over the video surface, preventing black live-video rectangles on the desktop after recording.
 - Project video recording posters are implemented by `eVe/domains/media/shared/media_video_poster_runtime.js` and are captured from the persisted recording file after project atome reuse/creation, then mounted as `img[data-role="eve-media-video-poster"]` and persisted through `media_poster_data_url`/`poster_data_url`.
+- Maintained DOM projection fixtures are audited and validated by `scripts/check_dom_projection_guardrails.mjs`, including measurable DOM size, element/tag counts, data attribute counts, inline styles, duplicate ids, document roots, media errors, and canvas/video counts so dense visual surfaces remain renderer-owned rather than DOM-owned.
 - Video recordings made from the capture tool snapshot the live preview through `eVe/intuition/shared/capture_video_poster_runtime.js` before the preview is disposed, then mount and persist that image on the reused `video_recording_*` project atome returned by the UI stop path. The later media-file poster generator must not overwrite a poster already mounted on that host.
 - Project-visible video molecule previews are finalized by `eVe/intuition/shared/group_video_poster_runtime.js`, which captures and persists an image poster before refreshing the group visual instead of leaving a live video surface in the atome square.
 - MTraX clip preview metadata renders audio waveforms and video thumbnails from the clip source window before visual layout. Split and crop operations must display the `in`/`out` media interval without restarting from the source beginning or stretching the full-source waveform/thumbnails into the cropped clip width.

@@ -126,6 +126,9 @@ Fixtures:
 
 - `tests/fixtures/media/` contains Git-tracked media fixtures used by media, Molecule, and MTraX probes.
 - Runtime probes should prefer `ATOME_MEDIA_TEST_DIR` when supplied and fall back to `tests/fixtures/media/`.
+- `tests/fixtures/dom/maintained_projection.dom` is the maintained clean DOM projection fixture scanned by the default DOM projection guardrail.
+- `tests/eve/media_fixture_restore_contract.test.mjs` guards the fixture-driven project media persistence contract for every maintained audio/video fixture and verifies canonical properties survive DOM teardown reconstruction without reading DOM state.
+- `tests/eve/project_dom_teardown_reconstruction.test.mjs` guards project reconstruction from serialized canonical records after DOM teardown across normal Atomes, grouped Atomes, media Atomes, timeline tracks, clips, waveform refs, and thumbnail refs.
 
 Main entry points:
 
@@ -136,6 +139,10 @@ Main entry points:
 - `npm run check:molecule-guardrails`
 - `npm run test:run`
 - Targeted `node --test ...` commands for persistent regression coverage. New persistent tests must be placed under `tests/`; temporary probes belong under `temp/`.
+- `tests/scripts/check_mutation_ownership_guardrails.test.mjs` guards the mutation ownership checker that prevents direct client/runtime writes to `state_current` and direct event-commit transport bypasses outside the canonical owners.
+- `tests/scripts/check_squirrel_dom_adapter_guardrails.test.mjs` guards Squirrel Atome DOM adapter containment: `this.element` and local `element` projections must not receive canonical business state properties or serialized model payloads.
+- `database/adole.event_projection_invariants.test.mjs` guards event/particle/`state_current` projection coherence: append-only event dedupe, projection versioning, sanitized reserved fields, and matching particle/state properties.
+- `database/adole.snapshot_restore_invariants.test.mjs` guards controlled state snapshot restoration through event replay instead of direct DOM or projection writes.
 - `tests/probes/mtrax_play_resume_position.test.mjs` guards the MTraX transport contract that `playTimeline()` starts from the current playhead and does not rewind at play start.
 - `tests/probes/mtrax_group_reload_preserve_playhead.test.mjs` guards same-group MTraX timeline reloads so play-triggered reloads do not issue stop before play and preserve the current playhead.
 - `tests/probes/mtrax_keyboard_space_toggle_resume.test.mjs` guards the Molecule space-key shortcut cycle so it calls play, pause, then play again without resetting the playhead.
@@ -684,9 +691,8 @@ Main files:
 
 - `atome_commit.js`
 - `atome_commit_gesture_trace.js`
-- `atome_property_sanitizer.js`
 - `atome_events.js`
-- `atome_timeline.js`
+- `atome_timeline.js` owns timeline event replay, preview, undo/redo, and backend apply. It remains an oversized legacy module after the DOM-baseline removal; the active reduction plan is to split pure replay snapshot construction, DOM preview projection, backend apply, and transport controls into cohesive modules before adding new timeline feature scope.
 - `event_bus.js`
 - `project_security.js`
 - `event_store/*`
@@ -701,6 +707,12 @@ Reusable APIs:
 
 - eVe commit and event runtime.
 - Local gesture trace recording for commit diagnostics is owned by `atome_commit_gesture_trace.js`; `atome_commit.js` may call it but must not own trace-store internals.
+- `scripts/check_mutation_ownership_guardrails.mjs` owns the persistent mutation ownership guardrail for source scans: `state_current` remains read/projection-only outside server route owners, event commit transport calls stay inside `eVe/core/atome_commit.js`, Adole adapter ownership, or server route definitions, timeline replay baselines must not be rebuilt from DOM projection state, and timeline preview/replay code must not combine DOM projection reads with backend commits.
+- `scripts/check_squirrel_dom_adapter_guardrails.mjs` owns the Squirrel Atome DOM adapter containment scan: legacy `this.element` remains a renderer adapter only and must not receive `properties`, `state`, `model`, `timeline`, media source/ref/url, waveform, thumbnail, group state, sync, permission, or serialized dataset payloads as canonical state.
+- `scripts/check_dom_projection_guardrails.mjs` owns maintained DOM projection scans and audit reporting. The default scan targets `tests/fixtures/dom`, emits measurable DOM size/node/tag/data/style/id/root/media metrics plus repeated `data-atome-id` projection contexts and canvas role distribution, and enforces forbidden model-shaped `data-*` state, durable media error attributes, duplicate ids, subtree document-root rejection for `.dom` exports, nested document roots in full documents, local source leaks, oversized attributes, repeated Atome projection model-data duplication, named canvas renderer surfaces, node-count thresholds, inline-style thresholds, and canvas/video thresholds.
+- `tests/probes/tool_genesis_create_atome_order.test.mjs` guards the `toolBase.createAtome` orchestration boundary: commit must precede state refresh, render must follow canonical state refresh, `render:false` must stay available, and `createAtome` must not allocate DOM or write render caches directly.
+- `database/adole.js` owns server-side event-to-projection application. `appendEvent` and `appendEvents` must sanitize event patches before writing both `particles` and `state_current.properties`; envelope fields belong in `atomes`, event metadata, or projection columns, not in durable properties.
+- `database/adole.js` exposes `restoreStateSnapshot` as the controlled state snapshot restore path: snapshot records are normalized into `set` events and replayed through `appendEvents`; legacy `restoreSnapshot` remains migration debt.
 - Shared Atome property sanitization for eVe commit and project Atome creation boundaries.
 - Event, media, and project store APIs with memory adapters.
 - Platform-specific storage backends.
@@ -740,6 +752,10 @@ Reusable APIs:
 
 - Media API facades, persistence service, diagnostics, media source and identifier helpers.
 - Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff and Tauri-local canonicalization away from loopback Fastify media URLs.
+- `eVe/domains/media/shared/media_projection_state.js` owns disposable host-side media projection source, identifier, and runtime error state. Renderers may use it to bind playback resources and transient mount failures to DOM hosts, but must not serialize media URLs, recording identifiers, local paths, user-scoped media query state, or durable `data-media-api-error` values into `data-*` attributes.
+- `eVe/domains/media/shared/media_atom_integrity.js` owns the closed product media Atome integrity contract for persisted project media: stable source, duration for audio/video, visual refs, and pending visual status before commit/render.
+- Fixture-driven media restoration coverage for this contract lives in `tests/eve/media_fixture_restore_contract.test.mjs`; browser playback probes remain higher-level acceptance coverage and must not be the only guard for persisted media Atome integrity.
+- DOM teardown reconstruction coverage lives in `tests/eve/project_dom_teardown_reconstruction.test.mjs`; it verifies grouped timeline/step state and media visual refs are restored from canonical properties, not from stale `data-*` payloads.
 - Browser video recording owns a single persisted project atome: the `video_recording_*` atome created during recording persistence is reused and rendered on the project surface after stop. `ensureProjectMediaAtome` remains for media paths that do not already return a recording atome, such as native/file-only captures and image capture.
 - `eVe/intuition/shared/media_video_poster_runtime.js` owns reusable video frame poster capture for project-visible video media and molecule previews; normal video atomes and group previews must consume it instead of duplicating video seek/canvas capture logic.
 - `eVe/intuition/shared/capture_video_poster_runtime.js` owns live capture-tool poster extraction from the active preview overlay, persistence of poster fields, and DOM mounting for recorded video atomes; `capture.js` may only wire this shared runtime into UI stop paths.
@@ -749,6 +765,7 @@ Reusable APIs:
 - Video preview renderers and preview panel services.
 - `eVe/intuition/shared/group_video_poster_runtime.js` owns conversion of project-visible video molecule previews into persisted image posters, so imported or recorded video molecules do not render live black video placeholders in the project grid.
 - MTraX transport, clips, tracks, timeline, media, preview, project, automation, SVG, text, and recording runtime modules.
+- `eVe/domains/mtrax/timeline/ruler_canvas_runtime.js` owns canvas-backed ruler tick rendering and visible tick-window calculation. `ruler_render_runtime.js` keeps interactive loop and marker zones in DOM, but repeated tick marks and labels should render through the canvas surface when available.
 - MTraX local file drops create linked video/audio clip pairs through `eVe/domains/mtrax/clips/add_clip_runtime.js` and `linked_video_audio_drop_runtime.js`; the audio side must keep the existing `video_audio` descriptor path so server/native extraction and conversion remain centralized.
 - MTraX preview frame dispatch owns visual track priority: during playback and transport scrub, video/image clips are resolved by top visible track order; paused editing may temporarily promote selected clips for manipulation, while audio clips remain outside visual priority filtering.
 - MTraX molecule poster capture is split between `preview_poster_capture_runtime.js` for media/source selection and `preview_poster_canvas_runtime.js` for canvas drawing, image-detail validation, and poster encoding; project-visible molecule posters must reject flat empty preview surfaces before persisting.
@@ -814,6 +831,8 @@ Reusable APIs:
 - `project_drop.js` owns project-layer native file drop routing, including document-level drops that resolve back to a `project_view_*` surface before entering the product media import path, plus project tool shortcut drag intent routing back to the main ribbon trash target for canonical soft-delete handling.
 - `tool_runtime.js` owns protected system-tool contract reconciliation before gateway execution, including `ui.creator` recovery when persisted registry state has a stale execution mode.
 - Shared media types, DOM utilities, SVG runtime, color values, group state, slider content, slider DOM/data-role selectors, shared slider direct-drag control, and tool drag.
+- `eVe/intuition/shared/group_state_runtime.js` owns disposable host-side group projection state for group steps, timelines, and previews. Group renderers may keep cloned runtime values on host object properties, but must not serialize group timelines, steps, members, media sources, or previews into `data-*` attributes as canonical state.
+- `eVe/intuition/shared/tool_children_projection_state.js` owns disposable host-side palette child projection state for Intuition tool buttons and tool-instance hosts. Tool renderers may use it to bind palette expansion behavior to DOM hosts, but must not serialize palette child lists into `data-tool-children` or `data-source-tool-children`.
 - `eVe/intuition/shared/dom_utils.js` owns reusable DOM style helpers, including `toPx`, `applyStyleObject`, `toKebabCase`, and `buildCssRule`; feature tools must consume these helpers instead of cloning CSS serialization logic.
 - `eVe/intuition/shared/dom_utils.js` also owns reusable CSS declaration/rule serialization through `serializeCssDeclarations()` and `serializeCssRule()`; generated style modules such as toolbox visual CSS must consume those helpers instead of local serializers.
 - Finder tool drops create `tool_instance` projection hosts through `project_drop.js` and `tool_instances.js`; they must not create persisted `shape` atomes or `tool_shortcut` DOM hosts.
@@ -821,6 +840,7 @@ Reusable APIs:
 - `eVe/intuition/tools/clipboard/` owns shared copy/paste clipboard state, Atome record normalization for clipboard payloads, system clipboard writes, and paste event generation. `copy.js` and `paste.js` remain product tool entrypoints and panel/action registration surfaces.
 - `eVe/intuition/flower/menu.js` owns flower menu DOM orchestration; `menu_layout.js` owns radial geometry, `menu_items.js` owns item/icon normalization, `context_target.js` owns context target resolution, and `context_pointer_lock.js` owns flower pointer locks.
 - `eVe/intuition/matrix/ui/view.js` owns Matrix root/project-view/tile DOM orchestration; `eVe/intuition/matrix/ui/matrix_layout.js` owns Matrix viewport fitting, toolbar-aware row/column sizing, scroll positioning, and layout observers.
+- `eVe/intuition/matrix/ui/matrix_virtual_slots.js` owns Matrix logical slot virtualization: it maps projects to collision-free logical slots and keeps repeated empty slots out of the DOM, leaving only project tiles and the first actionable empty creation tile.
 - Tool definition SSOT and tool instances.
 
 Should be extended by:
@@ -836,6 +856,7 @@ Known risks:
 
 - Several UI/tool runtime files exceed size thresholds and require reduction when touched.
 - `eVe/intuition/runtime/tool_genesis.js` remains a critical legacy owner for project group visual mounting. New group-preview behavior must be extracted into shared modules and only wired there until group visual rendering is split out; the intended reduction path is to move group host preview rendering, project-layer refresh, and persisted-preview mounting into focused Intuition group visual runtime modules. Group placeholder creation must use the existing `ensureGroupPlaceholderLayer` helper instead of feature-local DOM duplication.
+- `eVe/intuition/runtime/tool_genesis.js` owns the public `toolBase.createAtome` orchestration boundary: raw specs are converted into internal create commands, committed through `window.Atome.commit`, refreshed from `state_current` when available, and only then projected through `renderAtomeRecord`. `createAtome(..., { render: false })` must remain canonical-only and must not emit a DOM projection event.
 - `eVe/intuition/runtime/mtrack_debug_snapshot.js` owns MTraX panel debug snapshot DOM cloning. `eVe/intuition/eVeIntuition.js` may request snapshots, but must not own the snapshot DOM construction.
 - Direct DOM helpers exist in this layer; compliance with the WebGPU/Squirrel rendering policy needs targeted review before broad UI rewrites.
 - Slider styling still relies on toolbox/editor compatibility classes in visual token modules, even though behavioral readers now target the canonical slider data-role contract.
@@ -1030,6 +1051,8 @@ Main files:
 - `scripts/check_tauri_fs_boundary.mjs`
 - `scripts/check_molecule_guardrails.mjs`
 - `scripts/check_eve_ai_guardrails.mjs`
+- `scripts/check_dom_projection_guardrails.mjs`
+- `scripts/export_dom_subtrees.mjs`
 - `scripts/static_file_server.mjs`
 - `scripts/run_fastify.sh`
 - `scripts/rollup.config.cdn.js`

@@ -45,6 +45,7 @@ globalThis.document = {
 };
 
 const { ensureProjectMediaAtome } = await import('../../eVe/domains/media/api/media_persistence_service.js');
+const { readMediaProjectionSource } = await import('../../eVe/domains/media/shared/media_projection_state.js');
 
 const assertNoEnvelopeOrAliasProps = (props = {}) => {
     [
@@ -86,9 +87,13 @@ assertNoEnvelopeOrAliasProps(commits[0].props);
 assert.equal(commits[0].props.media_user_id, 'user_a');
 assert.equal(commits[0].props.media_kind, 'video');
 assert.equal(commits[0].props.storage_root, 'recordings');
+assert.match(commits[0].props.visual_ref, /^thumbnail:/);
+assert.match(commits[0].props.thumbnail_ref, /^thumbnail:/);
+assert.equal(commits[0].props.visual_status, 'pending');
 assertNoEnvelopeOrAliasProps(renders[0].record.properties);
 assert.equal(renders[0].record.properties.media_user_id, 'user_a');
 assert.equal(renders[0].record.properties.storage_root, 'recordings');
+assert.match(renders[0].record.properties.visual_ref, /^thumbnail:/);
 assert.match(renders[0].record.properties.media_url, /^\/api\/recordings\/video_1779220000000\.webm/);
 
 commits.length = 0;
@@ -120,6 +125,8 @@ assert.equal(renders[0].record.type, 'video_recording');
 assert.equal(renders[0].record.properties.recording_id, 'video_recording_existing');
 assert.equal(renders[0].record.properties.kind, 'video_recording');
 assert.equal(renders[0].record.properties.media_kind, 'video');
+assert.match(renders[0].record.properties.visual_ref, /^thumbnail:/);
+assert.match(renders[0].record.properties.thumbnail_ref, /^thumbnail:/);
 assertNoEnvelopeOrAliasProps(renders[0].record.properties);
 assert.match(renders[0].record.properties.media_url, /^\/api\/recordings\/video_1779220000001\.webm/);
 
@@ -147,11 +154,15 @@ assert.equal(commits[0].atome_id, 'audio_recording_pending');
 assert.equal(commits[0].props.kind, 'audio_recording');
 assert.equal(commits[0].props.pending, false);
 assert.equal(commits[0].props.media_pending, false);
+assert.match(commits[0].props.visual_ref, /^waveform:/);
+assert.match(commits[0].props.waveform_ref, /^waveform:/);
 assert.equal(commits[0].props.left, 33);
 assert.equal(commits[0].props.top, 44);
 assert.equal(renders.length, 1);
 assert.equal(renders[0].record.id, 'audio_recording_pending');
 assert.equal(renders[0].record.properties.kind, 'audio_recording');
+assert.match(renders[0].record.properties.visual_ref, /^waveform:/);
+assert.match(renders[0].record.properties.waveform_ref, /^waveform:/);
 
 commits.length = 0;
 renders.length = 0;
@@ -190,12 +201,14 @@ assert.equal(existingHydrated.ok, true);
 assert.equal(existingHydrated.atomeId, 'video_recording_pending');
 assert.equal(commits.length, 1);
 assert.equal(commits[0].atome_id, 'video_recording_pending');
+assert.match(commits[0].props.visual_ref, /^thumbnail:/);
+assert.match(commits[0].props.thumbnail_ref, /^thumbnail:/);
 assert.equal(renders.length, 0);
 assert.equal(existingHost.style.left, '77px');
 assert.equal(existingHost.style.top, '88px');
 assert.equal(existingHost.style.width, '333px');
 assert.equal(existingHost.style.height, '187px');
 assert.equal(existingHost.style.zIndex, '99');
-assert.equal(existingHost.dataset.eveMediaSource.startsWith('/api/recordings/video_1779220000003.webm'), true);
+assert.equal(readMediaProjectionSource(existingHost).startsWith('/api/recordings/video_1779220000003.webm'), true);
 
 console.log('media_persistence_service_sanitization: ok');

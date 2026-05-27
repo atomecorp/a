@@ -80,10 +80,67 @@ const tryLogin = async (page) => {
 const importMedia = async (page) => {
   const bootstrap = await safeEval(page, async () => {
     if (!window.eveProjectDropApi?.importFilesToProjectViaCreator) {
-      await import('/eve/application/intuition/tools/project_drop.js');
+      await import('/eVe/intuition/tools/project_drop.js');
     }
-    const projectEl = document.querySelector('[id^="project_view_"]');
-    const projectId = window.__currentProject?.id || projectEl?.id?.replace(/^project_view_/, '') || null;
+    const readProjectId = (project) => project?.id || project?.project_id || project?.projectId || project?.atome_id || project?.atomeId || null;
+    const readProjectName = (project) => project?.name || project?.project_name || project?.properties?.name || 'Media API Suite Probe';
+    const readProjectOwnerId = (project) => project?.owner_id || project?.ownerId || project?.user_id || project?.userId || null;
+    const listProjects = (result) => {
+      if (Array.isArray(result)) return result;
+      if (Array.isArray(result?.projects)) return result.projects;
+      if (Array.isArray(result?.fastify?.projects)) return result.fastify.projects;
+      if (Array.isArray(result?.fastify?.data?.projects)) return result.fastify.data.projects;
+      if (Array.isArray(result?.tauri?.projects)) return result.tauri.projects;
+      if (Array.isArray(result?.tauri?.data?.projects)) return result.tauri.data.projects;
+      return [];
+    };
+    const extractCreatedId = (result) => {
+      const candidates = [result, result?.project, result?.fastify, result?.fastify?.data, result?.fastify?.data?.project, result?.tauri, result?.tauri?.data, result?.tauri?.data?.project];
+      for (const candidate of candidates) {
+        const id = readProjectId(candidate);
+        if (id) return id;
+      }
+      return null;
+    };
+    const findMountedProject = () => {
+      const projectEl = document.querySelector('[id^="project_view_"]');
+      const projectId = window.__currentProject?.id || projectEl?.dataset?.projectId || projectEl?.id?.replace(/^project_view_/, '') || null;
+      return { projectEl, projectId };
+    };
+    let { projectEl, projectId } = findMountedProject();
+    if (!projectEl || !projectId) {
+      const api = window.AdoleAPI || null;
+      if (api?.projects?.list && api?.projects?.setCurrent) {
+        let projectsResult = await api.projects.list();
+        let projects = listProjects(projectsResult);
+        let project = projects.find((entry) => readProjectName(entry) === 'Media API Suite Probe') || projects[0] || null;
+        let createdProjectId = null;
+        if (!project && typeof api.projects.create === 'function') {
+          const created = await api.projects.create('Media API Suite Probe');
+          createdProjectId = extractCreatedId(created);
+          projectsResult = await api.projects.list();
+          projects = listProjects(projectsResult);
+          project = projects.find((entry) => readProjectId(entry) === createdProjectId)
+            || projects.find((entry) => readProjectName(entry) === 'Media API Suite Probe')
+            || projects[0]
+            || null;
+        }
+        projectId = readProjectId(project) || createdProjectId;
+        if (projectId) {
+          await api.projects.setCurrent(projectId, readProjectName(project), readProjectOwnerId(project), true);
+          await window.eveToolBase?.loadProjectAtomes?.(projectId, { force: true }).catch(() => null);
+          for (let attempt = 0; attempt < 40; attempt += 1) {
+            const mounted = findMountedProject();
+            if (mounted.projectEl && mounted.projectId) {
+              projectEl = mounted.projectEl;
+              projectId = mounted.projectId;
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+        }
+      }
+    }
     return {
       ok: !!(window.eveProjectDropApi?.importFilesToProjectViaCreator && projectEl && projectId),
       project_id: projectId
@@ -103,11 +160,11 @@ const importMedia = async (page) => {
   });
   await page.setInputFiles('#media_api_suite_probe_input', mediaPaths);
 
-  return safeEval(page, async () => {
+  return safeEval(page, async ({ bootstrapProjectId }) => {
     const input = document.getElementById('media_api_suite_probe_input');
     const entries = Array.from(input?.files || []);
     const projectEl = document.querySelector('[id^="project_view_"]');
-    const projectId = window.__currentProject?.id || projectEl?.id?.replace(/^project_view_/, '') || null;
+    const projectId = bootstrapProjectId || window.__currentProject?.id || projectEl?.id?.replace(/^project_view_/, '') || null;
     if (!entries.length) return { ok: false, error: 'no_files_selected' };
     return window.eveProjectDropApi.importFilesToProjectViaCreator({
       entries,
@@ -118,7 +175,7 @@ const importMedia = async (page) => {
       sourceLayer: 'headless_media_api_suite_probe',
       actorType: 'headless_probe'
     });
-  }, null, 180000);
+  }, { bootstrapProjectId: bootstrap.project_id }, 180000);
 };
 
 const inspectImportedRenderers = async (page, importResult) => {
@@ -261,7 +318,11 @@ const run = async () => {
       };
     }, null, 10000);
     report.state = await safeEval(page, () => window.__DEBUG__?.getMediaApiState?.() || null, null, 10000);
-    await page.screenshot({ path: path.join(outDir, 'after_suite.png'), fullPage: true });
+    try {
+      await page.screenshot({ path: path.join(outDir, 'after_suite.png'), fullPage: true, timeout: 30000 });
+    } catch (error) {
+      report.screenshot_error = error?.message || String(error || 'screenshot_failed');
+    }
     report.ok = report.suite?.ok === true
       && report.transport?.ok === true
       && report.targeted_transport?.ok === true

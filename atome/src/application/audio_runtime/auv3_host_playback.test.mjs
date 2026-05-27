@@ -54,8 +54,8 @@ const audioNode = {
     tagName: 'audio',
     currentSrc: 'blob:atome://local-object-url',
     src: '',
-    dataset: {
-        eveMediaSource: '/api/uploads/Evolution_2.wav'
+    __eveMediaProjectionState: {
+        source: '/api/uploads/Evolution_2.wav'
     },
     play() {
         return Promise.resolve();
