@@ -26,7 +26,14 @@ The ABSOLUTE GIT READ-ONLY POLICY defined in this document is part of that non-n
 
 This document is cumulative. When several contexts apply, the assistant MUST apply the strict union of all relevant sections, never the weakest subset.
 
-Always active for every task:
+Apply this decision order before acting:
+
+1. Identify the task type: debug, code creation or refactor, API or MCP, architecture review, or mixed task.
+2. Identify the owning runtime: Tauri, iOS, Web Browser, server, AUv3, or cross-runtime.
+3. Apply the always-active sections.
+4. Apply the context-specific sections below.
+
+Always-active sections:
 
 - ABSOLUTE PRECEDENCE;
 - CORE ROLE;
@@ -39,7 +46,7 @@ Always active for every task:
 - MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE;
 - FINAL OPERATIONAL RULE.
 
-Primary task routing:
+Task-type routing:
 
 - Debugging, regression fixing, performance diagnosis, UI diagnosis, crash analysis, synchronization investigation, and root-cause analysis: apply AUTONOMOUS TEST EXECUTION POLICY, DEBUGGING, EVIDENCE, AND CLEANUP POLICY, EXECUTION MODES, and every architecture section touched by the failing path.
 - Code creation, feature work, cleanup, refactor, migration, and structural repair: apply ARCHITECTURAL AUTHORITY, MANDATORY MAP MAINTENANCE POLICY, MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE, UI AND COMPONENT POLICY when UI is touched, ATOME MODEL POLICY when Atome state is touched, and STATE, HISTORY, AND SYNC POLICY when mutations or replay are touched.
@@ -52,7 +59,7 @@ Runtime routing:
 - If no runtime is specified and ownership is not yet proven, default to Web Browser mode first, then widen only if evidence requires it.
 - If a scenario crosses several runtimes or layers, validate every participating boundary instead of stopping at the first visible symptom.
 
-Debugging and repair are evidence-only activities:
+Evidence-first rule:
 
 - Never write debug code, a fix, a refactor, or a cleanup based on intuition, habit, or an unverified hypothesis.
 - Never treat a plausible explanation as sufficient evidence.
@@ -265,8 +272,7 @@ The assistant MUST drive validation autonomously and MUST NOT stop at a partial 
 Operational obligations:
 
 - Continue working until the reproduced problem is resolved, or until an evidence-backed architectural blocker makes resolution impossible without user clarification.
-- Never guess the cause of a failure and never repair blindly.
-- Never add debug code, probes, fixes, refactors, or cleanup changes just because a hypothesis seems likely; first verify the hypothesis with runtime evidence in the owning context.
+- Never guess the cause of a failure, repair blindly, or add code because a hypothesis merely seems likely.
 - Add the minimum precise temporary logs, probes, or diagnostics required to identify the owning layer and the root cause.
 - Always read the relevant execution logs before and after each attempted fix.
 - Never stop while relevant error logs or warning logs remain unexplained.
@@ -310,7 +316,7 @@ Test routing rules:
 - For Molecule-related changes, include npm run test:molecule and widen to npm run check:m1 when the change can affect guardrails.
 - During any Molecule-related debug, feature addition, repair, cleanup, or refactor, progressively rename remaining `MTrax` references to `molecule` whenever the touched scope makes the rename coherent and verifiable.
 - For server or API behavior, include npm run test:server-verification when the touched path reaches the verification surface.
-- For UI issues, use the documented UI debug process and the UI scenario runner when applicable; do not rely on visual inspection alone, and exercise the real UI path with concrete interactions such as click, tap, drag, pointer, keyboard, or gesture input when those interactions are part of the bug.
+- For UI issues, use the documented UI debug process and the UI scenario runner when applicable; do not rely on visual inspection alone, and exercise the real UI path when the bug depends on interaction.
 - If an existing probe already targets the failing surface, run it before inventing a new temporary script.
 
 Autonomous completion criteria:
