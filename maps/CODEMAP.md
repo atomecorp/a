@@ -247,7 +247,7 @@ Known risks:
 
 ### Atome Shared Contracts
 
-Path: `atome/shared/`
+Path: `atome/src/shared/`
 
 Owner: Atome open layer.
 
@@ -255,7 +255,8 @@ Purpose: Product-neutral framework contracts shared by browser, server, and data
 
 Main files:
 
-- `atome/shared/atome_contract.js`
+- `atome/src/shared/atome_contract.js`
+- `atome/shared/atome_contract.js` re-exports the browser-served contract for Node and server consumers.
 
 Reusable APIs:
 

@@ -1,7 +1,7 @@
 import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
-import { sanitizeAtomeProperties } from '../../../../../shared/atome_contract.js';
+import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 
 const adapters = {
     tauri: TauriAdapter,

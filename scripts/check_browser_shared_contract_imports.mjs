@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = process.cwd();
 const SOURCE_ROOTS = ['eVe', 'atome/src'];
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'temp', 'coverage']);
-const SHARED_CONTRACT_IMPORT_RE = /from\s+['"`][^'"`]*atome\/shared\/atome_contract\.js['"`]|from\s+['"`][^'"`]*shared\/atome_contract\.js['"`]/g;
+const SHARED_CONTRACT_IMPORT_RE = /from\s+['"`]([^'"`]*atome\/shared\/atome_contract\.js|[^'"`]*shared\/atome_contract\.js)['"`]/g;
+const BROWSER_SHARED_CONTRACT_RE = /(?:^|\/)atome\/src\/shared\/atome_contract\.js$|(?:^|\/)src\/shared\/atome_contract\.js$/;
 
 const walk = (dir, files = []) => {
     if (!fs.existsSync(dir)) return files;
@@ -24,10 +25,20 @@ const walk = (dir, files = []) => {
 };
 
 const lineForIndex = (text, index) => text.slice(0, index).split(/\r?\n/).length;
+const normalizeImportPath = (importPath, file) => {
+    const normalized = String(importPath || '').replace(/\\/g, '/');
+    if (normalized.startsWith('.')) {
+        const base = file && file !== '<inline>' ? path.posix.dirname(String(file).replace(/\\/g, '/')) : '';
+        return path.posix.normalize(path.posix.join(base, normalized));
+    }
+    return normalized.replace(/^\/+/, '');
+};
 
 export function findBrowserSharedContractImportViolations(text, file = '<inline>') {
     const violations = [];
     for (const match of text.matchAll(SHARED_CONTRACT_IMPORT_RE)) {
+        const importPath = normalizeImportPath(match[1], file);
+        if (BROWSER_SHARED_CONTRACT_RE.test(importPath)) continue;
         violations.push({
             file,
             line: lineForIndex(text, match.index || 0),

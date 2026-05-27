@@ -143,7 +143,9 @@ Known constraints: `database/adole.js` is a critical oversized legacy file and m
 
 Ownership: Atome open shared layer.
 
-Primary source: `atome/shared/atome_contract.js`.
+Primary source: `atome/src/shared/atome_contract.js`.
+
+Compatibility export: `atome/shared/atome_contract.js` re-exports the same contract for server and Node tests.
 
 Exposure: JavaScript module exports consumed by the ADOLE client API, Fastify Atome routes, and database persistence.
 
@@ -153,7 +155,7 @@ Boundary rules:
 
 - `normalizeCanonicalAtome` is the strict contract entry point. Transitional aliases such as `atome_id`, `atome_type`, `particles`, and `data` are accepted only when called with an explicit boundary-adapter option.
 - `formatCanonicalAtome` remains a tolerant server/database response formatter and emits only the canonical envelope.
-- Browser-served modules under `atome/src/` must not import `atome/shared/atome_contract.js` unless the serving graph exposes that shared path.
+- Browser-served modules under `atome/src/` and `eVe/` must import `atome/src/shared/atome_contract.js`; `atome/shared/atome_contract.js` remains a Node/server compatibility export and must not be imported by browser-served modules.
 
 Boundary status: Open framework contract helper. It owns reserved Atome envelope-field filtering and canonical envelope formatting so route, client, and database layers do not define competing schemas.
 
@@ -165,7 +167,7 @@ Primary sources:
 
 - `eVe/core/atome_commit.js`
 - `eVe/core/atome_commit_gesture_trace.js`
-- `atome/shared/atome_contract.js`
+- `atome/src/shared/atome_contract.js`
 
 Exposure: `window.Atome.commit`, `window.Atome.commitBatch`, and the injected `__atomeCommitApi` test/runtime surface.
 
@@ -177,7 +179,7 @@ Boundary rules:
 - `scripts/check_squirrel_dom_adapter_guardrails.mjs` is the guardrail entry point for the legacy Squirrel Atome DOM adapter boundary. `this.element` may remain a projection handle, but model/business state must stay on Atome instance data or canonical persistence surfaces.
 - Database event projection APIs: `database/adole.js` exposes `appendEvent`, `appendEvents`, `getStateCurrent`, `listStateCurrent`, and `restoreStateSnapshot`. Event projection must sanitize reserved Atome envelope keys before writing `state_current.properties`, keeping `state_current` coherent with `particles`; controlled state snapshot restore must replay through `appendEvents` instead of writing `state_current` or DOM state directly.
 - `props`, `properties`, `patch`, and `delta` are normalized into `payload.props` before transport.
-- `atome/shared/atome_contract.js` owns removal of reserved Atome envelope fields from durable property payloads; project Atome creation code and commit code must consume this shared contract rather than maintaining local sanitizer modules or parallel reserved-key lists.
+- `atome/src/shared/atome_contract.js` owns removal of reserved Atome envelope fields from durable property payloads; project Atome creation code and commit code must consume this shared contract rather than maintaining local sanitizer modules or parallel reserved-key lists.
 - Reserved envelope fields such as `id`, `type`, `owner_id`, `project_id`, `parent_id`, timestamps, sync fields, selection fields, and media render aliases such as `media_type` or `visualType` must not be emitted as durable properties.
 - Top-level event fields such as `atome_id`, `project_id`, `parent_id`, `actor`, transaction id, and gesture id remain event envelope fields.
 
@@ -407,7 +409,7 @@ Status: Public, with route details and legacy breadth to verify before mutation.
 
 Visibility: Public runtime API.
 
-Evidence: `eVe/core/atome_commit.js` attaches methods to `window.Atome` and `window.__atomeCommitApi`; `atome/shared/atome_contract.js` owns property payload sanitization.
+Evidence: `eVe/core/atome_commit.js` attaches methods to `window.Atome` and `window.__atomeCommitApi`; `atome/src/shared/atome_contract.js` owns property payload sanitization.
 
 Public entry points:
 
