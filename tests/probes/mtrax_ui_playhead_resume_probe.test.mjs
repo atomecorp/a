@@ -274,11 +274,9 @@ const clickTransport = async (page, key) => {
         return;
     }
     if (key === 'stop') {
-        const stopped = await safeEval(page, async () => {
-            if (typeof window.eveMtrackApi?.stop !== 'function') return { ok: false, error: 'stop_api_missing' };
-            return window.eveMtrackApi.stop({ source: 'mtrax_ui_playhead_resume_probe' });
-        }, null, 15000);
-        if (!stopped?.ok) throw new Error(`stop_failed:${JSON.stringify(stopped)}`);
+        const stopButton = page.locator('#eve_mtrack_dialog button[data-name-key="play_stop"]:visible, #eve_mtrack_dialog button[data-tool-id="ui.stop"]:visible').first();
+        await stopButton.waitFor({ state: 'visible', timeout: 15000 });
+        await stopButton.click({ timeout: 15000 });
         return;
     }
     const selector = `#eve_mtrack_dialog button[data-name-key="${key}"]:visible, #eve_mtrack_dialog button[data-tool-id*="${key}"]:visible, #eve_mtrack_dialog button[data-label="${key}"]:visible`;
