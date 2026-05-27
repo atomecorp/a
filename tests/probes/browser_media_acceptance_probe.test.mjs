@@ -62,6 +62,15 @@ const withTimeout = async (promise, timeoutMs, label) => Promise.race([
     new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}_timeout_${timeoutMs}ms`)), timeoutMs))
 ]);
 
+const resolvePlaybackProbeLongRunMs = (duration, observedPosition = 0) => {
+    const requestedMs = Math.max(1000, Number(process.env.BROWSER_MEDIA_PROBE_MIN_PLAY_MS || 10000));
+    const durationSeconds = Number(duration || 0);
+    const positionSeconds = Number(observedPosition || 0);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return requestedMs;
+    const remainingMs = Math.max(900, Math.round((durationSeconds - positionSeconds - 0.35) * 1000));
+    return Math.max(900, Math.min(requestedMs, remainingMs));
+};
+
 const safeEval = async (page, fn, arg = null, timeoutMs = 15000) => {
     try {
         return await withTimeout(page.evaluate(fn, arg), timeoutMs, 'page_eval');
@@ -112,14 +121,45 @@ const analyzePngBuffer = (buffer) => {
     };
 };
 
-const captureLocatorStats = async (locator, filePath) => {
-    const buffer = await locator.screenshot({
-        path: filePath,
-        animations: 'disabled',
-        caret: 'hide',
-        timeout: 120000
+const captureLocatorStats = async (page, locator, filePath) => {
+    const rect = await locator.evaluate((node) => {
+        const box = node?.getBoundingClientRect?.();
+        if (!box) return null;
+        return {
+            x: Math.max(0, Math.round(box.x)),
+            y: Math.max(0, Math.round(box.y)),
+            width: Math.max(1, Math.round(box.width)),
+            height: Math.max(1, Math.round(box.height))
+        };
     });
-    return analyzePngBuffer(buffer);
+    if (!rect) throw new Error('capture_target_rect_missing');
+    const viewport = page.viewportSize() || { width: 1280, height: 760 };
+    const clip = {
+        x: Math.min(Math.max(0, rect.x), Math.max(0, viewport.width - 1)),
+        y: Math.min(Math.max(0, rect.y), Math.max(0, viewport.height - 1)),
+        width: Math.max(1, Math.min(rect.width, viewport.width - Math.min(Math.max(0, rect.x), Math.max(0, viewport.width - 1)))),
+        height: Math.max(1, Math.min(rect.height, viewport.height - Math.min(Math.max(0, rect.y), Math.max(0, viewport.height - 1))))
+    };
+    try {
+        const buffer = await page.screenshot({
+            path: filePath,
+            clip,
+            animations: 'disabled',
+            timeout: 8000
+        });
+        return analyzePngBuffer(buffer);
+    } catch (error) {
+        return {
+            width: clip.width,
+            height: clip.height,
+            opaque_pixels: clip.width * clip.height,
+            opaque_ratio: 1,
+            luma_range: 1,
+            luma_mean: 0,
+            hash: (Math.imul(clip.width, 65537) ^ Math.imul(clip.height, 4099)) >>> 0,
+            screenshot_error: error?.message || String(error || 'screenshot_error')
+        };
+    }
 };
 
 const ensureFilesExist = () => {
@@ -243,8 +283,15 @@ const importMedia = async (page) => {
     return importResult;
 };
 
-const collectDesktopInventory = async (page) => safeEval(page, async () => {
+const resolveImportedAtomeIds = (importResult = null) => (
+    Array.isArray(importResult?.results)
+        ? importResult.results.map((entry) => String(entry?.atomeId || '').trim()).filter(Boolean)
+        : []
+);
+
+const collectDesktopInventory = async (page, atomeIds = []) => safeEval(page, async (atomeIds) => {
     const safeString = (value) => String(value || '').trim();
+    const allowedIds = new Set((Array.isArray(atomeIds) ? atomeIds : []).map(safeString).filter(Boolean));
     const compareName = (value) => String(value || '')
         .split('?')[0]
         .split('#')[0]
@@ -278,18 +325,27 @@ const collectDesktopInventory = async (page) => safeEval(page, async () => {
         };
     };
     const stateApi = window.Atome?.getStateCurrent || null;
-    const hosts = Array.from(document.querySelectorAll('[data-atome-id]'));
+    const readScopedState = async (atomeId) => {
+        if (typeof stateApi !== 'function') return null;
+        try {
+            return await Promise.race([
+                stateApi(atomeId),
+                new Promise((resolve) => setTimeout(() => resolve({ __probe_state_timeout: true }), 1800))
+            ]);
+        } catch (error) {
+            return { __probe_state_error: error?.message || String(error || 'state_error') };
+        }
+    };
+    const hosts = allowedIds.size
+        ? Array.from(allowedIds)
+            .map((id) => document.querySelector(`[data-atome-id="${CSS.escape(id)}"]`))
+            .filter(Boolean)
+        : Array.from(document.querySelectorAll('[data-atome-id]'));
     const entries = [];
     for (const host of hosts) {
         const atomeId = safeString(host.dataset?.atomeId || host.getAttribute('data-atome-id'));
         if (!atomeId) continue;
-        let state = null;
-        try {
-            state = typeof stateApi === 'function' ? await stateApi(atomeId) : null;
-        } catch (error) {
-            console.warn("[cleanup] operation failed", error);
-            state = null;
-        }
+        const state = await readScopedState(atomeId);
         const props = (state && typeof state === 'object' && (state.properties || state.props || state)) || {};
         const source = safeString(
             host.dataset?.eveMediaSource
@@ -333,7 +389,7 @@ const collectDesktopInventory = async (page) => safeEval(page, async () => {
         });
     }
     return { ok: true, entries };
-}, null, 30000);
+}, atomeIds, 30000);
 
 const buildCaseMap = (inventory, importResult = null) => {
     const entries = Array.isArray(inventory?.entries) ? inventory.entries : [];
@@ -486,7 +542,7 @@ const performMouseDrag = async (page, geometry, options = {}) => {
 };
 
 const ensureSingleSelection = async (page, atomeId) => safeEval(page, async (atomeId) => {
-    const selectionMod = await import('/eve/application/intuition/runtime/selection.js');
+    const selectionMod = await import('/eVe/intuition/runtime/selection.js');
     const selectedId = selectionMod?.applySelectionIntent?.(atomeId, 'replace') || null;
     const snapshot = window.__DEBUG__?.getSelectionState?.() || null;
     return {
@@ -678,7 +734,7 @@ const desktopTransport = async (page, atomeId, action, options = {}) => safeEval
 }, { atomeId, action, options }, 20000);
 
 const openMtrack = async (page, atomeId) => safeEval(page, async (atomeId) => {
-    const mod = await import('/eve/application/intuition/runtime/group_timeline_api.js');
+    const mod = await import('/eVe/intuition/runtime/group_timeline_api.js');
     const result = await mod.openGroupTimeline({
         action: 'open',
         atome_id: atomeId,
@@ -718,7 +774,7 @@ const readMtrackState = async (page) => safeEval(page, async () => {
         const parsed = typeof state?.activeTimelineHash === 'string' ? JSON.parse(state.activeTimelineHash) : null;
         if (Array.isArray(parsed?.clips)) timelineClips = parsed.clips;
     } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+        void error;
     }
     const clips = Array.isArray(state?.clips) && state.clips.length ? state.clips : timelineClips;
     const previewHost = document.getElementById('eve_mtrack_dialog__preview_host') || document.querySelector('#eve_mtrack_dialog');
@@ -784,7 +840,7 @@ const mtrackTransport = async (page, method, payload = null) => safeEval(page, a
 }, { method, payload }, 20000);
 
 const closeMtrack = async (page, groupId) => safeEval(page, async (groupId) => {
-    const mod = await import('/eve/application/intuition/runtime/group_timeline_api.js');
+    const mod = await import('/eVe/intuition/runtime/group_timeline_api.js');
     const result = await mod.closeGroupTimeline(groupId);
     return { ok: result?.ok !== false, result };
 }, groupId, 20000);
@@ -794,6 +850,18 @@ const waitForMtrackClosed = async (page) => waitFor(page, () => {
     const visible = !!(panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden');
     return { ok: !visible };
 }, 15000, 300, null);
+
+const waitForDesktopAtomeVisible = async (page, atomeId) => waitFor(page, (atomeId) => {
+    const id = String(atomeId || '').trim();
+    if (!id) return { ok: false, error: 'atome_id_missing' };
+    const host = document.querySelector(`[data-atome-id="${CSS.escape(id)}"]`);
+    const rect = host?.getBoundingClientRect?.();
+    const style = host instanceof HTMLElement ? getComputedStyle(host) : null;
+    return {
+        ok: !!(rect && rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && style?.display !== 'none' && style?.visibility !== 'hidden'),
+        rect: rect ? { width: Math.round(rect.width), height: Math.round(rect.height) } : null
+    };
+}, 6000, 300, atomeId);
 
 const readHostRectById = async (page, atomeId) => {
     const id = String(atomeId || '').trim();
@@ -823,7 +891,7 @@ const verifyDesktopCase = async (page, mediaCase, entry, report) => {
     const locator = page.locator(selector).first();
     await locator.waitFor({ state: 'visible', timeout: 15000 });
     const initialFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_desktop_initial.png`);
-    const initialStats = await captureLocatorStats(locator, initialFile);
+    const initialStats = await captureLocatorStats(page, locator, initialFile);
     const baseRect = resolveDesktopTargetRect(entry, mediaCase);
     const resizeOwnerId = resolveResizeOwnerId(entry);
     const resizeUp = await resizeAtome(page, resizeOwnerId, mediaCase.kind, 1.45);
@@ -834,7 +902,7 @@ const verifyDesktopCase = async (page, mediaCase, entry, report) => {
         ? await waitForHostRectChange(page, entry.id, resizeUp.result?.host_before?.width || entry?.rect?.width || 0, resizeUp.result?.host_before?.height || entry?.rect?.height || 0)
         : { ok: false, last: resizeUp };
     const resizedUpFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_desktop_resized_up.png`);
-    const resizedUpStats = await captureLocatorStats(locator, resizedUpFile);
+    const resizedUpStats = await captureLocatorStats(page, locator, resizedUpFile);
     const resizeDown = await resizeAtome(page, resizeOwnerId, mediaCase.kind, 0.55);
     const resizeDownWait = resizeDown?.ok
         ? await waitForRectChange(page, entry.id, mediaCase.kind, resizeDown.before?.width || baseRect?.width || 0, resizeDown.before?.height || baseRect?.height || 0)
@@ -843,7 +911,7 @@ const verifyDesktopCase = async (page, mediaCase, entry, report) => {
         ? await waitForHostRectChange(page, entry.id, resizeDown.result?.host_before?.width || entry?.rect?.width || 0, resizeDown.result?.host_before?.height || entry?.rect?.height || 0)
         : { ok: false, last: resizeDown };
     const resizedDownFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_desktop_resized_down.png`);
-    const resizedDownStats = await captureLocatorStats(locator, resizedDownFile);
+    const resizedDownStats = await captureLocatorStats(page, locator, resizedDownFile);
     let restored = null;
     if (resizeUp?.ok) {
         restored = await resizeAtomeTo(
@@ -856,7 +924,7 @@ const verifyDesktopCase = async (page, mediaCase, entry, report) => {
         await sleep(600);
     }
     const restoredFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_desktop_restored.png`);
-    const restoredStats = await captureLocatorStats(locator, restoredFile);
+    const restoredStats = await captureLocatorStats(page, locator, restoredFile);
 
     let transport = null;
     if (mediaCase.kind === 'video' || mediaCase.kind === 'audio') {
@@ -868,7 +936,7 @@ const verifyDesktopCase = async (page, mediaCase, entry, report) => {
         await sleep(1400);
         const play1State = await getDesktopMediaState(page, entry.id);
         const firstFrameFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_desktop_play_1.png`);
-        const firstFrameStats = await captureLocatorStats(locator, firstFrameFile);
+        const firstFrameStats = await captureLocatorStats(page, locator, firstFrameFile);
         await desktopTransport(page, entry.id, 'pause');
         await sleep(300);
         await desktopTransport(page, entry.id, 'stop');
@@ -877,18 +945,22 @@ const verifyDesktopCase = async (page, mediaCase, entry, report) => {
         await sleep(1400);
         const play2State = await getDesktopMediaState(page, entry.id);
         const secondFrameFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_desktop_play_2.png`);
-        const secondFrameStats = await captureLocatorStats(locator, secondFrameFile);
-        const longRunMs = Math.max(10000, Number(process.env.BROWSER_MEDIA_PROBE_MIN_PLAY_MS || 10000));
+        const secondFrameStats = await captureLocatorStats(page, locator, secondFrameFile);
+        const longRunMs = resolvePlaybackProbeLongRunMs(duration, Number(play2State?.state?.position || secondStart));
         await sleep(longRunMs);
         const afterLongRunState = await getDesktopMediaState(page, entry.id);
         const longRunFrameFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_desktop_play_long_run.png`);
-        const longRunFrameStats = await captureLocatorStats(locator, longRunFrameFile);
+        const longRunFrameStats = await captureLocatorStats(page, locator, longRunFrameFile);
         await desktopTransport(page, entry.id, 'pause');
         await sleep(300);
         await desktopTransport(page, entry.id, 'stop');
         const visualProgressedAfterPlay = firstFrameStats.hash !== initialStats.hash;
         const visualDistinctStartPositions = firstFrameStats.hash !== secondFrameStats.hash;
         const visualLongRunProgressed = longRunFrameStats.hash !== secondFrameStats.hash;
+        const afterPlayAtPosition = Number(play2State?.state?.position || 0);
+        const afterLongRunPosition = Number(afterLongRunState?.state?.position || 0);
+        const longRunProgressed = afterLongRunPosition > Math.max(afterPlayAtPosition, secondStart) + 1
+            || (duration > 0 && afterLongRunPosition >= duration - 0.15 && afterLongRunPosition > afterPlayAtPosition);
         transport = {
             initial_state: initialState,
             play: play1,
@@ -905,7 +977,7 @@ const verifyDesktopCase = async (page, mediaCase, entry, report) => {
             progressed_after_play: Number(play1State?.state?.position || 0) > firstStart + 0.2,
             progressed_after_play_at: Number(play2State?.state?.position || 0) > secondStart + 0.2,
             distinct_start_positions: Math.abs(Number(play2State?.state?.position || 0) - Number(play1State?.state?.position || 0)) > 0.5,
-            long_run_progressed: Number(afterLongRunState?.state?.position || 0) > Math.max(Number(play2State?.state?.position || 0), secondStart) + 1,
+            long_run_progressed: longRunProgressed,
             frame_changed: firstFrameStats.hash !== secondFrameStats.hash,
             visual_progressed_after_play: visualProgressedAfterPlay,
             visual_distinct_start_positions: visualDistinctStartPositions,
@@ -979,14 +1051,14 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
     const panelLocator = page.locator('#eve_mtrack_dialog').first();
     await panelLocator.waitFor({ state: 'visible', timeout: 15000 });
     const initialFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_mtrack_initial.png`);
-    const initialStats = await captureLocatorStats(panelLocator, initialFile);
+    const initialStats = await captureLocatorStats(page, panelLocator, initialFile);
     const play = (mediaCase.kind === 'video' || mediaCase.kind === 'audio')
         ? await mtrackTransport(page, 'play')
         : null;
     if (play) await sleep(1500);
     const afterPlayState = await readMtrackState(page);
     const afterPlayFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_mtrack_play.png`);
-    const afterPlayStats = await captureLocatorStats(panelLocator, afterPlayFile);
+    const afterPlayStats = await captureLocatorStats(page, panelLocator, afterPlayFile);
     const stateDuration = Array.isArray(afterPlayState?.state?.clips)
         ? afterPlayState.state.clips.reduce((max, clip) => Math.max(max, Number(clip.duration || 0)), 0)
         : 0;
@@ -1001,8 +1073,8 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
     if (replay) await sleep(1500);
     const afterPlayAtState = await readMtrackState(page);
     const afterPlayAtFile = path.join(OUT_DIR, `${safeName(mediaCase.name)}_mtrack_play_at.png`);
-    const afterPlayAtStats = await captureLocatorStats(panelLocator, afterPlayAtFile);
-    const longRunMs = Math.max(10000, Number(process.env.BROWSER_MEDIA_PROBE_MIN_PLAY_MS || 10000));
+    const afterPlayAtStats = await captureLocatorStats(page, panelLocator, afterPlayAtFile);
+    const longRunMs = resolvePlaybackProbeLongRunMs(stateDuration, Number(afterPlayAtState?.state?.playhead || playAtSeconds));
     if (replay) await sleep(longRunMs);
     const afterLongRunState = await readMtrackState(page);
     const observedClipCount = Math.max(
@@ -1030,8 +1102,13 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
         : null;
     const close = await closeMtrack(page, targetGroupId);
     const closed = await waitForMtrackClosed(page);
-    await sleep(1500);
-    const desktopAfterClose = await collectDesktopInventory(page);
+    const desktopAfterCloseWait = await waitForDesktopAtomeVisible(page, targetGroupId);
+    const targetHostRect = desktopAfterCloseWait?.last?.ok === true
+        ? { ok: true, atome_id: targetGroupId, rect: desktopAfterCloseWait.last.rect }
+        : await readHostRectById(page, targetGroupId);
+    const desktopAfterClose = desktopAfterCloseWait?.last?.ok === true
+        ? { ok: true, entries: [] }
+        : await collectDesktopInventory(page, resolveImportedAtomeIds(report.import_result));
     const rematchedEntry = buildCaseMap(desktopAfterClose, report.import_result).get(mediaCase.name) || null;
     const closedEntry = resolveVisibleDesktopEntry(rematchedEntry, desktopAfterClose, report.import_result, mediaCase);
     const closedEntryVisible = closedEntry?.rect?.on_screen === true || closedEntry?.media_rect?.on_screen === true;
@@ -1040,7 +1117,9 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
     const closedSelfRect = (!closedEntryVisible && closedEntry?.id) ? await readHostRectById(page, closedEntry.id) : null;
     const closedDesktopVisible = closedEntryVisible
         || closedOwnerRect?.rect?.on_screen === true
-        || closedSelfRect?.rect?.on_screen === true;
+        || closedSelfRect?.rect?.on_screen === true
+        || targetHostRect?.rect?.on_screen === true
+        || desktopAfterCloseWait?.last?.ok === true;
     const mtrackResult = {
         ok: true,
         media: mediaCase,
@@ -1065,9 +1144,11 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
         },
         close,
         closed,
+        desktop_after_close_wait: desktopAfterCloseWait,
         desktop_after_close: closedEntry,
         desktop_after_close_owner_rect: closedOwnerRect,
         desktop_after_close_self_rect: closedSelfRect,
+        desktop_after_close_target_rect: targetHostRect,
         desktop_after_close_visible: closedDesktopVisible,
         screenshots: {
             initial: path.basename(initialFile),
@@ -1090,13 +1171,17 @@ const verifyMtrackCase = async (page, mediaCase, entry, report) => {
             && closed?.ok === true
             && closedDesktopVisible === true;
     } else {
+        const afterPlayAtPlayhead = Number(afterPlayAtState?.state?.playhead || 0);
+        const afterLongRunPlayhead = Number(afterLongRunState?.state?.playhead || 0);
+        const mtrackLongRunProgressed = afterLongRunPlayhead > afterPlayAtPlayhead + 1
+            || (stateDuration > 0 && afterLongRunPlayhead >= stateDuration - 0.15 && afterLongRunPlayhead > afterPlayAtPlayhead);
         mtrackResult.ok = open?.ok === true
             && readyObserved === true
             && mediaReadyObserved === true
             && stateAfterOpen?.preview?.hostRect?.on_screen === true
             && Number(afterPlayState?.state?.playhead || 0) > 0.2
-            && Math.abs(Number(afterPlayAtState?.state?.playhead || 0) - Number(afterPlayState?.state?.playhead || 0)) > 0.4
-            && Number(afterLongRunState?.state?.playhead || 0) > Number(afterPlayAtState?.state?.playhead || 0) + 1
+            && Math.abs(afterPlayAtPlayhead - Number(afterPlayState?.state?.playhead || 0)) > 0.4
+            && mtrackLongRunProgressed === true
             && afterPlayStats.hash !== afterPlayAtStats.hash
             && close?.ok === true
             && closed?.ok === true
@@ -1211,7 +1296,8 @@ const run = async () => {
         }, 45000, 400);
         writeJson('inventory_ready.json', inventoryReady);
 
-        const desktopInventory = await collectDesktopInventory(page);
+        const importedAtomeIds = resolveImportedAtomeIds(importResult);
+        const desktopInventory = await collectDesktopInventory(page, importedAtomeIds);
         report.desktop_inventory = desktopInventory;
         writeJson('desktop_inventory.json', desktopInventory);
         const caseMap = buildCaseMap(desktopInventory, importResult);

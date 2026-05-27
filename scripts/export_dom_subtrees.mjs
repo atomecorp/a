@@ -9,6 +9,7 @@ const EXPORT_TARGETS = Object.freeze([
     Object.freeze({
         name: 'matrix',
         file: 'export_matrix_subtree.dom',
+        multiple: false,
         selectors: Object.freeze([
             '#eve_project_matrix',
             '.eve-project-matrix',
@@ -19,6 +20,7 @@ const EXPORT_TARGETS = Object.freeze([
     Object.freeze({
         name: 'project',
         file: 'export_project_subtree.dom',
+        multiple: false,
         selectors: Object.freeze([
             '[id^="project_view_"]',
             '.project-view',
@@ -28,6 +30,7 @@ const EXPORT_TARGETS = Object.freeze([
     Object.freeze({
         name: 'timeline',
         file: 'export_timeline_subtree.dom',
+        multiple: false,
         selectors: Object.freeze([
             '[data-role*="timeline"]',
             '.eve-mtrack-timeline',
@@ -37,6 +40,8 @@ const EXPORT_TARGETS = Object.freeze([
     Object.freeze({
         name: 'media_hosts',
         file: 'export_media_hosts_subtree.dom',
+        multiple: true,
+        uniqueAttribute: 'data-atome-id',
         selectors: Object.freeze([
             '[data-role="media-host"]',
             '[data-role="eve-media-host"]',
@@ -83,17 +88,69 @@ const resolveOutputDir = (outDir) => {
     return path.resolve(normalized);
 };
 
-const serializeMatches = (document, selectors = []) => {
+const describeNode = (node) => {
+    if (!node) return 'none';
+    const tag = String(node.tagName || '').toLowerCase();
+    const id = node.getAttribute?.('id');
+    const role = node.getAttribute?.('data-role');
+    const viewId = node.getAttribute?.('data-view-id');
+    const atomeId = node.getAttribute?.('data-atome-id');
+    return [
+        tag,
+        id ? `#${id}` : '',
+        role ? `[data-role="${role}"]` : '',
+        viewId ? `[data-view-id="${viewId}"]` : '',
+        atomeId ? `[data-atome-id="${atomeId}"]` : ''
+    ].filter(Boolean).join('');
+};
+
+const collectMatches = (document, selectors = []) => {
     const seen = new Set();
-    const fragments = [];
+    const matches = [];
     selectors.forEach((selector) => {
         document.querySelectorAll(selector).forEach((node) => {
             if (seen.has(node)) return;
             seen.add(node);
-            fragments.push(node.outerHTML || '');
+            matches.push(node);
         });
     });
-    return fragments.filter(Boolean).join('\n');
+    return matches;
+};
+
+const serializeSingleRoot = (document, target) => {
+    const root = collectMatches(document, target.selectors)[0];
+    return {
+        roots: root ? [root] : [],
+        content: root?.outerHTML || ''
+    };
+};
+
+const serializeMultipleRoots = (document, target) => {
+    const roots = [];
+    const keys = new Set();
+    collectMatches(document, target.selectors).forEach((node) => {
+        const key = target.uniqueAttribute ? node.getAttribute(target.uniqueAttribute) : '';
+        const dedupeKey = key || node.outerHTML || describeNode(node);
+        if (keys.has(dedupeKey)) return;
+        keys.add(dedupeKey);
+        roots.push(node);
+    });
+    return {
+        roots,
+        content: roots.map((node) => node.outerHTML || '').filter(Boolean).join('\n')
+    };
+};
+
+const serializeTarget = (document, target) => {
+    const result = target.multiple
+        ? serializeMultipleRoots(document, target)
+        : serializeSingleRoot(document, target);
+    if (!result.content) return '';
+    const rootSummary = result.roots.map(describeNode).join(', ');
+    return [
+        `<!-- DOM projection export: name=${target.name}; roots=${rootSummary} -->`,
+        result.content
+    ].join('\n');
 };
 
 export const exportDomSubtrees = ({ input, outDir = DEFAULT_OUTPUT_DIR } = {}) => {
@@ -106,7 +163,7 @@ export const exportDomSubtrees = ({ input, outDir = DEFAULT_OUTPUT_DIR } = {}) =
     fs.mkdirSync(outputDir, { recursive: true });
 
     const exports = EXPORT_TARGETS.map((target) => {
-        const content = serializeMatches(document, target.selectors);
+        const content = serializeTarget(document, target);
         const outputPath = path.join(outputDir, target.file);
         fs.writeFileSync(outputPath, content ? `${content}\n` : '', 'utf8');
         return {
@@ -117,7 +174,7 @@ export const exportDomSubtrees = ({ input, outDir = DEFAULT_OUTPUT_DIR } = {}) =
         };
     });
 
-    const fullAppPath = path.join(outputDir, 'export_full_app_debug.dom');
+    const fullAppPath = path.join(outputDir, 'export_full_app_debug.snapshot');
     fs.writeFileSync(fullAppPath, html.endsWith('\n') ? html : `${html}\n`, 'utf8');
     exports.push({
         name: 'full_app_debug',

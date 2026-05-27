@@ -13,7 +13,7 @@ globalThis.CSS = {
     }
 };
 
-const { createPreviewHostResolutionRuntime } = await import('../../eve/application/domains/mtrax/preview/preview_host_resolution_runtime.js');
+const { createPreviewHostResolutionRuntime } = await import('../../eVe/domains/mtrax/preview/preview_host_resolution_runtime.js');
 
 const installVisibleRects = (node) => {
     node.getClientRects = () => [{ left: 0, top: 0, width: 120, height: 80 }];

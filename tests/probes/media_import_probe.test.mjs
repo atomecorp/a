@@ -140,7 +140,7 @@ const run = async () => {
       await import('/eVe/intuition/tools/project_drop.js');
     }
     if (!window.eveMediaDiagnostics?.runFullSuite) {
-      const mod = await import('/eve/application/domains/media/media_diagnostics.js');
+      const mod = await import('/eVe/domains/media/media_diagnostics.js');
       window.eveMediaDiagnostics = mod.createMediaDiagnosticsRuntime();
     }
     const projectEl = document.querySelector('[id^="project_view_"]');
@@ -217,14 +217,14 @@ const run = async () => {
   writeJson('dom_ready.json', domReady);
   log('dom_ready', domReady);
 
-  const scan = await safeEval(page, async () => window.eveMediaDiagnostics.scan(), null, 30000);
+  const scan = await safeEval(page, async (atomeIds) => window.eveMediaDiagnostics.scan({ atome_ids: atomeIds }), importedIds, 30000);
   writeJson('scan.json', scan);
   log('scan_counts', {
     inventory: Array.isArray(scan?.inventory) ? scan.inventory.length : null,
     expected: Array.isArray(scan?.expected) ? scan.expected.map((entry) => ({ key: entry.key, found: entry.found, atome_id: entry.atome_id, media_tag: scan.inventory?.find((item) => item.id === entry.atome_id)?.media_tag || null })) : null
   });
 
-  const suite = await safeEval(page, async () => window.eveMediaDiagnostics.runFullSuite(), null, 180000);
+  const suite = await safeEval(page, async (atomeIds) => window.eveMediaDiagnostics.runFullSuite({ atome_ids: atomeIds }), importedIds, 180000);
   writeJson('suite.json', suite);
   log('suite_counts', suite?.counts || { ok: false, error: suite?.error || null });
   await page.screenshot({ path: path.join(outDir, '04_after_suite.png'), fullPage: true });
