@@ -1,6 +1,6 @@
 # eVe / Atome Unified AI Coding & Architecture Guideline
 
-Version: 2.2
+Version: 2.3
 Status: Active – Strict Enforcement
 Scope: Architecture, code generation, review, integration, synchronization, rendering, communication, storage, multimedia, realtime systems, and framework consistency.
 
@@ -21,6 +21,46 @@ If a conflict exists:
 Compliance is mandatory and non-negotiable.
 
 The ABSOLUTE GIT READ-ONLY POLICY defined in this document is part of that non-negotiable precedence and must never be overridden.
+
+## TASK ROUTING AND SECTION APPLICABILITY
+
+This document is cumulative. When several contexts apply, the assistant MUST apply the strict union of all relevant sections, never the weakest subset.
+
+Always active for every task:
+
+- ABSOLUTE PRECEDENCE;
+- CORE ROLE;
+- MANDATORY CODE QUALITY RULES;
+- MANDATORY FILE SIZE AND CODING STANDARDS;
+- ABSOLUTE PROHIBITION OF PATCHING;
+- LANGUAGE AND STACK POLICY;
+- TEMPORARY FILE POLICY;
+- ABSOLUTE GIT READ-ONLY POLICY;
+- MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE;
+- FINAL OPERATIONAL RULE.
+
+Primary task routing:
+
+- Debugging, regression fixing, performance diagnosis, UI diagnosis, crash analysis, synchronization investigation, and root-cause analysis: apply AUTONOMOUS TEST EXECUTION POLICY, DEBUGGING, EVIDENCE, AND CLEANUP POLICY, EXECUTION MODES, and every architecture section touched by the failing path.
+- Code creation, feature work, cleanup, refactor, migration, and structural repair: apply ARCHITECTURAL AUTHORITY, MANDATORY MAP MAINTENANCE POLICY, MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE, UI AND COMPONENT POLICY when UI is touched, ATOME MODEL POLICY when Atome state is touched, and STATE, HISTORY, AND SYNC POLICY when mutations or replay are touched.
+- API, MCP, tool, command, or automation work: apply API AND MCP POLICY, STATE, HISTORY, AND SYNC POLICY, COMMUNICATION ARCHITECTURE, ATOME MODEL POLICY, and the relevant execution-mode constraints.
+
+Runtime routing:
+
+- If the user explicitly names the runtime, that runtime is mandatory.
+- If the owning failing surface clearly belongs to Tauri, iOS, AUv3, server, or browser code, that runtime is mandatory even when the symptom is observed elsewhere.
+- If no runtime is specified and ownership is not yet proven, default to Web Browser mode first, then widen only if evidence requires it.
+- If a scenario crosses several runtimes or layers, validate every participating boundary instead of stopping at the first visible symptom.
+
+Debugging and repair are evidence-only activities:
+
+- Never write debug code, a fix, a refactor, or a cleanup based on intuition, habit, or an unverified hypothesis.
+- Never treat a plausible explanation as sufficient evidence.
+- Every attempted fix MUST be tied to a falsifiable hypothesis, targeted logs or diagnostics, and a precise validation in the real concerned context: Tauri, iOS, Web Browser, server, or another proven owning runtime.
+- For UI issues, validation MUST use real interactions when relevant: click, tap, drag, pointer, keyboard, focus, selection, resize, and gesture flows.
+- If the issue is not explicitly limited to a synthetic or headless path, do not rely solely on static reading or simulated assumptions; verify the visible behavior through the actual UI path.
+
+When the task type is ambiguous, the assistant MUST classify it first and then apply the relevant sections before editing code.
 
 ## CORE ROLE
 
@@ -226,6 +266,7 @@ Operational obligations:
 
 - Continue working until the reproduced problem is resolved, or until an evidence-backed architectural blocker makes resolution impossible without user clarification.
 - Never guess the cause of a failure and never repair blindly.
+- Never add debug code, probes, fixes, refactors, or cleanup changes just because a hypothesis seems likely; first verify the hypothesis with runtime evidence in the owning context.
 - Add the minimum precise temporary logs, probes, or diagnostics required to identify the owning layer and the root cause.
 - Always read the relevant execution logs before and after each attempted fix.
 - Never stop while relevant error logs or warning logs remain unexplained.
@@ -269,7 +310,7 @@ Test routing rules:
 - For Molecule-related changes, include npm run test:molecule and widen to npm run check:m1 when the change can affect guardrails.
 - During any Molecule-related debug, feature addition, repair, cleanup, or refactor, progressively rename remaining `MTrax` references to `molecule` whenever the touched scope makes the rename coherent and verifiable.
 - For server or API behavior, include npm run test:server-verification when the touched path reaches the verification surface.
-- For UI issues, use the documented UI debug process and the UI scenario runner when applicable; do not rely on visual inspection alone.
+- For UI issues, use the documented UI debug process and the UI scenario runner when applicable; do not rely on visual inspection alone, and exercise the real UI path with concrete interactions such as click, tap, drag, pointer, keyboard, or gesture input when those interactions are part of the bug.
 - If an existing probe already targets the failing surface, run it before inventing a new temporary script.
 
 Autonomous completion criteria:
@@ -577,16 +618,14 @@ Per-mode mandatory stacks and constraints:
 - AUv3 mode: AIS server, native SQLite iOS, WebGPU, native Kira, native Symphonia. Realtime constraints are mandatory: no blocking operations, no disk access in audio thread, no nondeterministic latency, and no runtime allocation in realtime audio thread.
 - Pure OS FreeBSD mode: native FreeBSD runtime, Fastify server, auto-launched WebView, native Kira, native Symphonia. The system must behave as a standalone creative operating system.
 
-────────────────────────────────
-
-DEBUGGING, EVIDENCE, AND CLEANUP POLICY
-────────────────────────────────
+## DEBUGGING, EVIDENCE, AND CLEANUP POLICY
 
 Problem resolution MUST be evidence-driven.
 
 The assistant MUST NOT:
 
 - presume a root cause without proof;
+- create code for debugging, fixing, refactoring, or cleanup from intuition alone;
 - repair a bug blindly;
 - draw hasty conclusions from a single symptom;
 - declare a fix valid without targeted verification.
@@ -594,13 +633,21 @@ The assistant MUST NOT:
 Mandatory investigation method:
 
 1. reproduce the issue when feasible;
-2. identify the exact failing surface and owning layer;
+2. identify the exact failing surface, owning layer, and runtime context;
 3. formulate a falsifiable hypothesis;
 4. collect evidence that can confirm or disprove that hypothesis;
 5. instrument the responsible layer with precise temporary logs, probes, traces, snapshots, or diagnostics when needed;
 6. isolate and fix the root cause;
 7. rerun the same scenario;
 8. verify the symptom is gone, the root cause is addressed, and no regression was introduced.
+
+Context selection is mandatory during debugging:
+
+- Use the explicitly requested context first: Tauri, iOS, Web Browser, server, AUv3, or another stated runtime.
+- If no context is specified, start with Web Browser mode unless runtime ownership evidence points elsewhere.
+- If ownership points to Tauri, validate in Tauri with the WebView, Axum, and related logs.
+- If ownership points to iOS, validate in iOS with Xcode, native, WebView, and related backend logs.
+- If the path crosses runtime boundaries, inspect the logs and behavior of each boundary instead of assuming the first visible failure is the source.
 
 Accepted evidence includes targeted logs, debug snapshots, runtime state inspection, deterministic reproduction steps, browser or native console errors, screenshots or frame captures, focused automated tests, and code-path inspection tied to observed behavior.
 
@@ -611,6 +658,8 @@ Console and UI obligations:
 - Each remaining error or warning must be resolved, disproven as unrelated with evidence, or escalated to the user with clear proof and scope.
 - For UI issues, read and apply eVe/documentations/debug_UI.md before defining or running UI diagnostics, autonomous UI checks, or browser-driven validation.
 - Use the documented UI debug surface whenever relevant, including window.__DEBUG__ state readers, deterministic test mode, screenshot capture, and comparison of DOM state, debug state, visual output, and console errors.
+- Validate UI fixes through the real interaction path when applicable: click, tap, drag, pointer movement, focus changes, keyboard input, gesture sequences, and visible state transitions.
+- Do not approve a UI fix based only on code inspection, a static screenshot, or a guessed event path when the failure depends on interaction.
 
 Temporary diagnostics:
 
