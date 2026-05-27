@@ -63,3 +63,42 @@ test('ADOLE createAtome rejects records without canonical type', async () => {
         try { fs.unlinkSync(dbPath); } catch (_) {}
     }
 });
+
+test('ADOLE pending owner resolution keeps state_current owner coherent', async () => {
+    const dbPath = path.join(os.tmpdir(), `adole-pending-owner-${process.pid}-${Date.now()}.db`);
+    process.env.SQLITE_PATH = dbPath;
+    const db = await import(`./adole.js?pending_owner=${Date.now()}`);
+
+    try {
+        await db.initDatabase();
+        await db.createAtome({
+            id: 'child_before_owner',
+            type: 'shape',
+            owner: 'owner_late',
+            creator: 'owner_late',
+            properties: {
+                left: '12px'
+            }
+        });
+        await db.createAtome({
+            id: 'owner_late',
+            type: 'user',
+            owner: 'owner_late',
+            creator: 'owner_late',
+            properties: {
+                username: 'Owner'
+            }
+        });
+
+        const result = await db.resolvePendingOwners();
+        const atome = await db.getAtome('child_before_owner');
+        const state = await db.getStateCurrent('child_before_owner');
+
+        assert.equal(result.resolved, 1);
+        assert.equal(atome.owner_id, 'owner_late');
+        assert.equal(state.owner_id, 'owner_late');
+    } finally {
+        await db.closeDatabase().catch(() => {});
+        try { fs.unlinkSync(dbPath); } catch (_) {}
+    }
+});

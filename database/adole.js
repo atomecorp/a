@@ -620,6 +620,33 @@ export async function resolvePendingOwners() {
     let resolved = 0;
     let failed = 0;
 
+    const updateResolvedStateCurrentReference = async ({ atomeId, particleKey, resolvedId }) => {
+        if (particleKey === '_pending_owner_id') {
+            await query(
+                'run',
+                'UPDATE state_current SET owner_id = ?, updated_at = ? WHERE atome_id = ?',
+                [resolvedId, now, atomeId]
+            );
+            return;
+        }
+        if (particleKey !== '_pending_parent_id') return;
+        const row = await query(
+            'get',
+            'SELECT properties, project_id FROM state_current WHERE atome_id = ?',
+            [atomeId]
+        );
+        if (!row) return;
+        const properties = safeParseJson(row.properties);
+        const nextProperties = properties && typeof properties === 'object'
+            ? { ...properties, parent_id: resolvedId }
+            : { parent_id: resolvedId };
+        await query(
+            'run',
+            'UPDATE state_current SET properties = ?, project_id = COALESCE(project_id, ?), updated_at = ? WHERE atome_id = ?',
+            [JSON.stringify(nextProperties), resolvedId, now, atomeId]
+        );
+    };
+
     for (const row of pending) {
         try {
             const pendingId = JSON.parse(row.particle_value);
@@ -636,6 +663,11 @@ export async function resolvePendingOwners() {
                 } else if (row.particle_key === '_pending_parent_id') {
                     await query('run', 'UPDATE atomes SET parent_id = ?, updated_at = ? WHERE atome_id = ?', [pendingId, now, row.atome_id]);
                 }
+                await updateResolvedStateCurrentReference({
+                    atomeId: row.atome_id,
+                    particleKey: row.particle_key,
+                    resolvedId: pendingId
+                });
 
                 await query('run', 'DELETE FROM particles WHERE atome_id = ? AND particle_key = ?', [row.atome_id, row.particle_key]);
                 console.log('[resolvePendingOwners] Resolved', row.particle_key, 'for:', row.atome_id);

@@ -194,6 +194,7 @@ Responsibilities:
 - Fastify server bootstrap, auth, routes, WebSocket endpoints, file/user/sharing services, mail gateway, visio, operational logging, and sync.
 - Database driver selection and Atome persistence over `atomes`, `particles`, `particles_versions`, `events`, `state_current`, `snapshots`, `permissions`, and `sync_queue`.
 - Durable event commit and current-state projection.
+- Deferred owner or parent references stored through `_pending_owner_id` or `_pending_parent_id` must resolve both the identity row in `atomes` and the matching `state_current` projection metadata, so runtime current-state reads do not diverge from persistence identity reads.
 
 Dependency direction:
 

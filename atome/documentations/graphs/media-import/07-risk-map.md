@@ -1,0 +1,10 @@
+# Risk Map - media-import
+
+| Niveau | Type | Fichier | Fonction | Probleme | Impact possible | Preuve | Action recommandee |
+|---|---|---|---|---|---|---|---|
+| High | CONFLICT | eVe/intuition/tools/project_drop.js / eVe/domains/mtrax/preview/preview_file_drop_bridge.js / eVe/domains/mtrax/media/drop_runtime.js | global drop / preview drop / timeline drop | Plusieurs handlers peuvent voir le meme drop natif. | Double import ou import dans mauvais contexte. | project_drop.js:7439,7839; preview_file_drop_bridge.js:112; drop_runtime.js:230 | Confirmer l'ordre de propagation et la consommation d'evenement. |
+| High | ASYNC_RISK | eVe/domains/mtrax/preview/preview_file_drop_bridge.js | `bindPreviewFileDropBridge` | `appendDroppedFilesOnNewTopTrack` est lance en `void`. | Erreur d'import non rattachee au drop. | preview_file_drop_bridge.js:136 | Retourner/await la promesse ou journaliser l'echec au niveau appelant. |
+| High | MULTI_SOURCE_OF_TRUTH | eVe/domains/mtrax/media/element_runtime.js / timeline/import_media_timeline.js | media source resolution | Plusieurs representations de source coexistent. | Lecture audio/video divergente entre preview, clip et persistence. | element_runtime.js:584,830; import_media_timeline.js:44-60 | Documenter une source canonique par media importe. |
+| Medium | ASYNC_RISK | eVe/domains/mtrax/media/element_runtime.js | metadata probes | Durees resolues via events/timeouts. | Clip cree avec duree par defaut/partielle. | element_runtime.js:219-223,257-262,745-748 | Marquer les clips auto-duration et rehydrater apres metadata fiable. |
+| Medium | PARTIAL_LIFECYCLE | eVe/domains/mtrax/preview/preview_file_drop_bridge.js | `bindPreviewFileDropBridge` | Listeners window sans chemin cleanup prouve. | Handlers persistants apres fermeture/reinit. | preview_file_drop_bridge.js:92,112 | Ajouter ou verifier un dispose de bridge. |
+| Unknown | SILENT_ERROR | eVe/domains/mtrax/media/drop_runtime.js | `handleFilesDropped` | Retour silencieux si aucun track cible. | Drop ignore sans etat explicite. | drop_runtime.js:195-205 | Exposer un resultat ou une question ouverte de debug. |

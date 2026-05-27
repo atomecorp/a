@@ -133,6 +133,7 @@ Verified entry points:
 - Object aliases: `createObject`, `getObject`, `getObjectById`, `getObjectsByOwner`, `getObjectChildren`, `updateObject`, `deleteObject`.
 - Property aliases: `setProperty`, `setProperties`, `getProperty`, `getProperties`, `deleteProperty`, `getPropertyHistory`, `restorePropertyVersion`.
 - Data source access: `getDataSourceAdapter`.
+- Deferred reference repair: `resolvePendingOwners` resolves pending owner and parent references in `atomes` and keeps the corresponding `state_current` projection metadata coherent.
 
 Boundary status: Open persistence contract. eVe closed stores may use it through explicit adapters, not by duplicating persistence rules.
 

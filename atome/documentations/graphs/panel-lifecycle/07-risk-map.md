@@ -1,0 +1,10 @@
+# Risk Map - panel-lifecycle
+
+| Niveau | Type | Fichier | Fonction | Probleme | Impact possible | Preuve | Action recommandee |
+|---|---|---|---|---|---|---|---|
+| High | PARTIAL_LIFECYCLE | eVe/intuition/tools/molecule/panel/index.js / eVe/domains/mtrax/ui/panel_lifecycle_runtime.js | `closeMoleculePanel` / `close_mtrack_panel` | Une fermeture masque seulement, l'autre nettoie media/audio/renderer. | Session ou media fantome. | molecule panel/index.js:202-206; panel_lifecycle_runtime.js:216-301 | Unifier les routes de fermeture. |
+| High | ASYNC_RISK | eVe/domains/mtrax/ui/panel_lifecycle_runtime.js | `close_mtrack_panel` | Pause/dispose audio lances en `void`. | Audio engine pas ferme avant fin de close. | panel_lifecycle_runtime.js:234-235 | Await ou documenter l'idempotence. |
+| Medium | MULTI_SOURCE_OF_TRUTH | eVe/domains/mtrax/ui/panel_lifecycle_runtime.js / eVe/intuition/runtime/mtrack_dock_controller.js | panel state | DOM root, dock snapshots et mtrackState possedent l'etat visuel. | Panneau visible mais state ferme, ou inverse. | panel_lifecycle_runtime.js:115,270; mtrack_dock_controller.js:136-153 | Definir un statut canonique expose. |
+| Medium | PARTIAL_LIFECYCLE | eVe/domains/mtrax/ui/panel_lifecycle_runtime.js | `open_mtrack_panel` | MutationObserver diagnostic installe sans disconnect trouve dans ce fichier. | Observers persistants en debug. | panel_lifecycle_runtime.js:116-134 | Verifier ou ajouter cleanup dans close/dispose. |
+| Medium | ASYNC_RISK | eVe/domains/mtrax/ui/panel_lifecycle_runtime.js | `open_mtrack_panel` | `rendererRuntime.syncFromEnvironment` est lance en `void`. | Renderer pas synchronise quand UI devient visible. | panel_lifecycle_runtime.js:99-101 | Verifier si sync est facultative ou attendre ready. |
+| Unknown | CYCLE_RISK | eVe/intuition/runtime/panel_api.js | singleton panel API | API globale clonee peut pointer vers surface qui reappelle panel. | Boucle open/close indirecte. | panel_api.js:20-33 | Cartographier `runtime-api`. |
