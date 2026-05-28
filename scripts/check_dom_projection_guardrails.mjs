@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { formatDomProjectionReport, summarizeMetrics } from './dom_projection_report_runtime.mjs';
+import { collectDocumentDensityViolations } from './dom_projection_density_runtime.mjs';
 
 const DEFAULT_ROOT = process.cwd();
 const DEFAULT_MAX_DATA_ATTRIBUTE_LENGTH = 256;
@@ -17,15 +19,30 @@ const FORBIDDEN_DATA_ATTRIBUTES = new Set([
     'data-media-src',
     'data-eve-media-source',
     'data-eve-media-identifier',
-    'data-media-api-error'
+    'data-media-api-error',
+    'data-preview-signature',
+    'data-waveform',
+    'data-thumbnail'
 ]);
 const BUSINESS_DATA_NAME_RE = /(?:timeline|properties|history|permission|waveform|thumbnail|cache|source|members|steps)/i;
 const LOCAL_SOURCE_RE = /(?:127\.0\.0\.1|localhost|media_user_id=|(?:^|[/"'])data\/users\/|(?:^|[/"'])Users\/)/i;
+const DATA_URI_RE = /\bdata:(?:image|audio|video)\//i;
+const BASE64_RE = /(?:;base64,|base64)/i;
 const DATA_ATTRIBUTE_RE = /\s(data-[a-zA-Z0-9_.:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+const SOURCE_ATTRIBUTE_RE = /\s(src|href|poster)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
 const ID_ATTRIBUTE_RE = /\sid\s*=\s*(?:"([^"]+)"|'([^']+)')/g;
+const STYLE_ATTRIBUTE_RE = /\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+const INLINE_HANDLER_RE = /\son[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*')/g;
 const OPENING_TAG_RE = /<([a-zA-Z][a-zA-Z0-9:-]*)(\s[^<>]*?)?>/g;
 
 const normalizeProjectPath = (rootDir, filePath) => path.relative(rootDir, filePath).replace(/\\/g, '/');
+
+const isRuntimeBlobUrl = (value = '') => String(value || '').trim().startsWith('blob:');
+
+const hasForbiddenSourceValue = (value = '') => {
+    if (isRuntimeBlobUrl(value)) return false;
+    return LOCAL_SOURCE_RE.test(value) || DATA_URI_RE.test(value) || BASE64_RE.test(value);
+};
 
 const decodeHtmlAttribute = (value = '') => String(value)
     .replace(/&quot;/g, '"')
@@ -70,12 +87,19 @@ const createMetrics = (file) => ({
     json_like_data_count: 0,
     large_data_count: 0,
     inline_style_count: 0,
+    inline_style_ratio: 0,
+    inline_style_properties: [],
+    inline_handler_count: 0,
+    base64_in_dom_count: 0,
+    data_uri_in_dom_count: 0,
+    data_preview_signature_count: 0,
     duplicate_id_count: 0,
     duplicate_ids: [],
     html_count: 0,
     head_count: 0,
     body_count: 0,
     localhost_occurrence_count: 0,
+    localhost_or_127_count_in_persisted_attrs: 0,
     media_error_count: 0,
     data_atome_id_count: 0,
     data_atome_id_unique_count: 0,
@@ -84,7 +108,8 @@ const createMetrics = (file) => ({
     repeated_data_atome_ids: [],
     has_data_group_timeline: false,
     heavy_business_data_count: 0,
-    heavy_business_data_attributes: []
+    heavy_business_data_attributes: [],
+    forbidden_data_attributes: []
 });
 
 const collectDomFiles = (rootDir, targets = []) => {
@@ -139,7 +164,7 @@ const collectAttributeViolations = ({ rootDir, file, html, maxDataAttributeLengt
                 excerpt: value.slice(0, 220)
             });
         }
-        if (LOCAL_SOURCE_RE.test(value)) {
+        if (!isRuntimeBlobUrl(value) && LOCAL_SOURCE_RE.test(value)) {
             violations.push({
                 code: 'local_source_leak',
                 file: location,
@@ -148,8 +173,42 @@ const collectAttributeViolations = ({ rootDir, file, html, maxDataAttributeLengt
                 excerpt: value.slice(0, 220)
             });
         }
+        if (DATA_URI_RE.test(value) || BASE64_RE.test(value)) {
+            violations.push({
+                code: 'encoded_media_data_attribute',
+                file: location,
+                attribute: name,
+                message: 'DOM projection must not expose data URIs, base64 media, thumbnails, waveforms, or preview payloads.',
+                excerpt: value.slice(0, 220)
+            });
+        }
     }
     return violations;
+};
+
+const collectSourceAttributeViolations = ({ rootDir, file, html }) => {
+    const violations = [];
+    const location = normalizeProjectPath(rootDir, file);
+    for (const match of html.matchAll(SOURCE_ATTRIBUTE_RE)) {
+        const name = String(match[1] || '').toLowerCase();
+        const value = decodeHtmlAttribute(String(match[2] ?? match[3] ?? ''));
+        if (!hasForbiddenSourceValue(value)) continue;
+        violations.push({ code: 'source_attribute_leak', file: location, attribute: name, message: 'DOM projection must not expose local URLs, media user query state, data URIs, or base64 media in source attributes.', excerpt: value.slice(0, 220) });
+    }
+    return violations;
+};
+
+const collectInlineStyleProperties = (html) => {
+    const properties = new Map();
+    for (const match of html.matchAll(STYLE_ATTRIBUTE_RE)) {
+        const styleValue = decodeHtmlAttribute(String(match[1] ?? match[2] ?? ''));
+        styleValue.split(';').forEach((declaration) => {
+            const property = String(declaration.split(':')[0] || '').trim().toLowerCase();
+            if (!property) return;
+            properties.set(property, (properties.get(property) || 0) + 1);
+        });
+    }
+    return Array.from(properties.entries()).map(([property, count]) => ({ property, count }));
 };
 
 const collectDataAttributesFromTag = (rawAttributes = '') => {
@@ -177,7 +236,7 @@ const collectAtomeProjectionReferences = ({ rootDir, file, html, maxDataAttribut
                     || BUSINESS_DATA_NAME_RE.test(name)
                     || looksLikeJsonModel(value)
                     || value.length > maxDataAttributeLength
-                    || LOCAL_SOURCE_RE.test(value);
+                    || (!isRuntimeBlobUrl(value) && LOCAL_SOURCE_RE.test(value));
             })
             .map(([name]) => name);
         references.push({
@@ -306,6 +365,12 @@ const collectDomProjectionMetrics = ({ rootDir, file, html, maxDataAttributeLeng
     }, new Map()).entries()).map(([role, count]) => ({ role, count }));
     metrics.video_count = countTag(html, 'video');
     metrics.inline_style_count = countMatches(html, /\sstyle\s*=\s*(?:"[^"]*"|'[^']*')/gi);
+    metrics.inline_style_ratio = metrics.node_count ? Number((metrics.inline_style_count / metrics.node_count).toFixed(4)) : 0;
+    metrics.inline_style_properties = collectInlineStyleProperties(html);
+    metrics.inline_handler_count = countMatches(html, INLINE_HANDLER_RE);
+    metrics.base64_in_dom_count = countMatches(html, BASE64_RE);
+    metrics.data_uri_in_dom_count = countMatches(html, DATA_URI_RE);
+    metrics.data_preview_signature_count = countMatches(html, /\sdata-preview-signature\s*=/gi);
     metrics.html_count = countTag(html, 'html');
     metrics.head_count = countTag(html, 'head');
     metrics.body_count = countTag(html, 'body');
@@ -325,6 +390,7 @@ const collectDomProjectionMetrics = ({ rootDir, file, html, maxDataAttributeLeng
 
     const atomeIds = new Map();
     const heavyBusinessAttributes = new Map();
+    const forbiddenAttributes = new Map();
     const atomeReferences = collectAtomeProjectionReferences({
         rootDir,
         file,
@@ -341,10 +407,20 @@ const collectDomProjectionMetrics = ({ rootDir, file, html, maxDataAttributeLeng
             const atomeId = value.trim();
             if (atomeId) atomeIds.set(atomeId, (atomeIds.get(atomeId) || 0) + 1);
         }
+        if (!isRuntimeBlobUrl(value) && LOCAL_SOURCE_RE.test(value)) {
+            metrics.localhost_or_127_count_in_persisted_attrs += 1;
+        }
         if (FORBIDDEN_DATA_ATTRIBUTES.has(name) || BUSINESS_DATA_NAME_RE.test(name)) {
             metrics.heavy_business_data_count += 1;
             heavyBusinessAttributes.set(name, (heavyBusinessAttributes.get(name) || 0) + 1);
         }
+        if (FORBIDDEN_DATA_ATTRIBUTES.has(name)) {
+            forbiddenAttributes.set(name, (forbiddenAttributes.get(name) || 0) + 1);
+        }
+    }
+    for (const match of html.matchAll(SOURCE_ATTRIBUTE_RE)) {
+        const value = decodeHtmlAttribute(String(match[2] ?? match[3] ?? ''));
+        if (!isRuntimeBlobUrl(value) && LOCAL_SOURCE_RE.test(value)) metrics.localhost_or_127_count_in_persisted_attrs += 1;
     }
 
     metrics.data_atome_id_count = Array.from(atomeIds.values()).reduce((total, count) => total + count, 0);
@@ -356,173 +432,9 @@ const collectDomProjectionMetrics = ({ rootDir, file, html, maxDataAttributeLeng
         .map(([id, count]) => ({ id, count }));
     metrics.heavy_business_data_attributes = Array.from(heavyBusinessAttributes.entries())
         .map(([attribute, count]) => ({ attribute, count }));
+    metrics.forbidden_data_attributes = Array.from(forbiddenAttributes.entries())
+        .map(([attribute, count]) => ({ attribute, count }));
     return metrics;
-};
-
-const sumMetric = (metrics, key) => metrics.reduce((total, item) => total + item[key], 0);
-
-const summarizeMetrics = (metrics = []) => {
-    const atomeIds = new Map();
-    const atomeReferences = [];
-    const canvasRoles = new Map();
-    const duplicateIds = [];
-    const heavyBusinessAttributes = new Map();
-    for (const item of metrics) {
-        item.data_atome_ids.forEach((id) => {
-            atomeIds.set(id, (atomeIds.get(id) || 0) + 1);
-        });
-        item.data_atome_id_references.forEach((reference) => atomeReferences.push(reference));
-        item.canvas_roles.forEach(({ role, count }) => {
-            canvasRoles.set(role, (canvasRoles.get(role) || 0) + count);
-        });
-        item.duplicate_ids.forEach(({ id, count }) => duplicateIds.push({ file: item.file, id, count }));
-        item.heavy_business_data_attributes.forEach(({ attribute, count }) => {
-            heavyBusinessAttributes.set(attribute, (heavyBusinessAttributes.get(attribute) || 0) + count);
-        });
-    }
-    return {
-        file_count: metrics.length,
-        dom_size_bytes: sumMetric(metrics, 'dom_size_bytes'),
-        node_count: sumMetric(metrics, 'node_count'),
-        div_count: sumMetric(metrics, 'div_count'),
-        span_count: sumMetric(metrics, 'span_count'),
-        button_count: sumMetric(metrics, 'button_count'),
-        canvas_count: sumMetric(metrics, 'canvas_count'),
-        canvas_without_role_count: sumMetric(metrics, 'canvas_without_role_count'),
-        canvas_roles: Array.from(canvasRoles.entries()).map(([role, count]) => ({ role, count })),
-        video_count: sumMetric(metrics, 'video_count'),
-        data_attribute_count: sumMetric(metrics, 'data_attribute_count'),
-        json_like_data_count: sumMetric(metrics, 'json_like_data_count'),
-        large_data_count: sumMetric(metrics, 'large_data_count'),
-        inline_style_count: sumMetric(metrics, 'inline_style_count'),
-        duplicate_id_count: duplicateIds.length,
-        duplicate_ids: duplicateIds,
-        html_count: sumMetric(metrics, 'html_count'),
-        head_count: sumMetric(metrics, 'head_count'),
-        body_count: sumMetric(metrics, 'body_count'),
-        localhost_occurrence_count: sumMetric(metrics, 'localhost_occurrence_count'),
-        media_error_count: sumMetric(metrics, 'media_error_count'),
-        data_atome_id_count: sumMetric(metrics, 'data_atome_id_count'),
-        data_atome_id_unique_count: atomeIds.size,
-        repeated_data_atome_ids: Array.from(atomeIds.entries())
-            .filter(([, count]) => count > 1)
-            .map(([id, count]) => ({ id, count })),
-        repeated_data_atome_id_references: atomeReferences.filter((reference) => {
-            const count = atomeIds.get(reference.id) || 0;
-            return count > 1;
-        }),
-        has_data_group_timeline: metrics.some((item) => item.has_data_group_timeline),
-        heavy_business_data_count: sumMetric(metrics, 'heavy_business_data_count'),
-        heavy_business_data_attributes: Array.from(heavyBusinessAttributes.entries()).map(([attribute, count]) => ({
-            attribute,
-            count
-        }))
-    };
-};
-
-export const formatDomProjectionReport = (result) => {
-    const summary = result.summary || summarizeMetrics(result.metrics || []);
-    const lines = [
-        'DOM projection audit report',
-        `files: ${summary.file_count}`,
-        `dom_size_bytes: ${summary.dom_size_bytes}`,
-        `node_count: ${summary.node_count}`,
-        `div_count: ${summary.div_count}`,
-        `span_count: ${summary.span_count}`,
-        `button_count: ${summary.button_count}`,
-        `canvas_count: ${summary.canvas_count}`,
-        `canvas_without_role_count: ${summary.canvas_without_role_count}`,
-        `video_count: ${summary.video_count}`,
-        `data_attribute_count: ${summary.data_attribute_count}`,
-        `json_like_data_count: ${summary.json_like_data_count}`,
-        `large_data_count: ${summary.large_data_count}`,
-        `inline_style_count: ${summary.inline_style_count}`,
-        `duplicate_id_count: ${summary.duplicate_id_count}`,
-        `html_count: ${summary.html_count}`,
-        `head_count: ${summary.head_count}`,
-        `body_count: ${summary.body_count}`,
-        `localhost_occurrence_count: ${summary.localhost_occurrence_count}`,
-        `media_error_count: ${summary.media_error_count}`,
-        `data_atome_id_count: ${summary.data_atome_id_count}`,
-        `data_atome_id_unique_count: ${summary.data_atome_id_unique_count}`,
-        `data_group_timeline: ${summary.has_data_group_timeline ? 'present' : 'absent'}`,
-        `heavy_business_data_count: ${summary.heavy_business_data_count}`,
-        `violations: ${result.violations.length}`
-    ];
-    if (summary.duplicate_ids.length) {
-        lines.push(`duplicate_ids: ${summary.duplicate_ids.map((item) => `${item.file}:${item.id}(${item.count})`).join(', ')}`);
-    }
-    if (summary.repeated_data_atome_ids.length) {
-        lines.push(`repeated_data_atome_ids: ${summary.repeated_data_atome_ids.map((item) => `${item.id}(${item.count})`).join(', ')}`);
-        lines.push(`repeated_data_atome_projection_refs: ${summary.repeated_data_atome_id_references.map((item) => {
-            const role = item.role || 'no-role';
-            const renderer = item.renderer || 'no-renderer';
-            const viewId = item.view_id || 'no-view';
-            return `${item.id}:${item.tag}/${role}/${renderer}/${viewId}`;
-        }).join(', ')}`);
-    }
-    if (summary.heavy_business_data_attributes.length) {
-        lines.push(`heavy_business_data_attributes: ${summary.heavy_business_data_attributes.map((item) => `${item.attribute}(${item.count})`).join(', ')}`);
-    }
-    if (summary.canvas_roles.length) {
-        lines.push(`canvas_roles: ${summary.canvas_roles.map((item) => `${item.role}(${item.count})`).join(', ')}`);
-    }
-    return lines.join('\n');
-};
-
-const collectDocumentDensityViolations = ({
-    rootDir,
-    file,
-    html,
-    maxNodeCount,
-    maxInlineStyleCount,
-    maxCanvasCount,
-    maxVideoCount
-}) => {
-    const location = normalizeProjectPath(rootDir, file);
-    const violations = [];
-    const nodeCount = (html.match(/<[a-zA-Z][a-zA-Z0-9:-]*(?:\s|>|\/)/g) || []).length;
-    const inlineStyleCount = (html.match(/\sstyle\s*=\s*(?:"[^"]*"|'[^']*')/gi) || []).length;
-    const canvasCount = (html.match(/<canvas(?:\s|>|\/)/gi) || []).length;
-    const videoCount = (html.match(/<video(?:\s|>|\/)/gi) || []).length;
-
-    if (nodeCount > maxNodeCount) {
-        violations.push({
-            code: 'dom_node_count_threshold',
-            file: location,
-            attribute: '',
-            message: `DOM projections must stay below ${maxNodeCount} element nodes.`,
-            excerpt: String(nodeCount)
-        });
-    }
-    if (inlineStyleCount > maxInlineStyleCount) {
-        violations.push({
-            code: 'inline_style_count_threshold',
-            file: location,
-            attribute: 'style',
-            message: `DOM projections must stay below ${maxInlineStyleCount} inline style attributes.`,
-            excerpt: String(inlineStyleCount)
-        });
-    }
-    if (canvasCount > maxCanvasCount) {
-        violations.push({
-            code: 'canvas_count_threshold',
-            file: location,
-            attribute: 'canvas',
-            message: `DOM projections must stay below ${maxCanvasCount} canvas elements.`,
-            excerpt: String(canvasCount)
-        });
-    }
-    if (videoCount > maxVideoCount) {
-        violations.push({
-            code: 'video_count_threshold',
-            file: location,
-            attribute: 'video',
-            message: `DOM projections must stay below ${maxVideoCount} video elements.`,
-            excerpt: String(videoCount)
-        });
-    }
-    return violations;
 };
 
 export const checkDomProjectionGuardrails = ({
@@ -545,12 +457,12 @@ export const checkDomProjectionGuardrails = ({
         const html = fs.readFileSync(file, 'utf8');
         return [
             ...collectAttributeViolations({ rootDir, file, html, maxDataAttributeLength }),
+            ...collectSourceAttributeViolations({ rootDir, file, html }),
             ...collectDocumentShapeViolations({ rootDir, file, html }),
             ...collectAtomeProjectionViolations({ rootDir, file, html, maxDataAttributeLength }),
             ...collectCanvasViolations({ rootDir, file, html }),
             ...collectDocumentDensityViolations({
-                rootDir,
-                file,
+                location: normalizeProjectPath(rootDir, file),
                 html,
                 maxNodeCount,
                 maxInlineStyleCount,
