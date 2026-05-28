@@ -1135,7 +1135,9 @@ if (typeof window !== 'undefined') {
     }
 
     // Check if atome is already rendered
-    const existing = document.querySelector(`[data-atome-id="${atomeId}"]`);
+    const existing = document.getElementById(`eve-atome_${atomeId}`)
+      || document.getElementById(`atome_${atomeId}`)
+      || document.getElementById(String(atomeId));
     if (existing) {
       console.log('[User] Atome already rendered, skipping:', atomeId);
       return;

@@ -28,15 +28,20 @@ const {
     normalizeItem,
     withForcedAlpha
 } = await import('../../eVe/intuition/flower/menu_items.js');
+const { registerAtomeElement } = await import('../../eVe/core/atome_dom_id.js');
 
 const project = document.createElement('div');
 project.id = 'project_view_alpha';
 const group = document.createElement('div');
-group.dataset.atomeId = 'group_alpha';
-group.dataset.atomeKind = 'group';
+registerAtomeElement(group, {
+    atome_id: 'group_alpha',
+    kind: 'group'
+});
 const child = document.createElement('div');
-child.dataset.atomeId = 'child_alpha';
-child.dataset.atomeKind = 'shape';
+registerAtomeElement(child, {
+    atome_id: 'child_alpha',
+    kind: 'shape'
+});
 group.appendChild(child);
 project.appendChild(group);
 document.body.appendChild(project);

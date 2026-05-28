@@ -136,10 +136,6 @@ function resolveReceiverProjectId(explicitId) {
             const last = projectViews[projectViews.length - 1];
             if (last?.id) return last.id.replace('project_view_', '');
         }
-        const projectViewAlt = document.querySelector('[data-project-id]');
-        if (projectViewAlt?.dataset?.projectId && projectViewAlt.dataset.projectId !== 'default') {
-            return projectViewAlt.dataset.projectId;
-        }
     }
     try {
         const stored = localStorage.getItem('eve_current_project_id');

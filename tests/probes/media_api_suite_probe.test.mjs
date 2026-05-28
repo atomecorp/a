@@ -111,7 +111,7 @@ const importMedia = async (page) => {
     };
     const findMountedProject = () => {
       const projectEl = document.querySelector('[id^="project_view_"]');
-      const projectId = window.__currentProject?.id || projectEl?.dataset?.projectId || projectEl?.id?.replace(/^project_view_/, '') || null;
+      const projectId = window.__currentProject?.id || projectEl?.id?.replace(/^project_view_/, '') || null;
       return { projectEl, projectId };
     };
     let { projectEl, projectId } = findMountedProject();

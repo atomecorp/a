@@ -228,11 +228,14 @@ function suppress_item_clicks(ms = 220){
 }
 function clicks_suppressed(){ try{ return (window.__AUV3_CLICK_SUPPRESS_UNTIL||0) > Date.now(); }catch(_){ return false; } }
 // Ajoute cette fonction sans changer les noms existants
+function file_browser_role_class(role) {
+  return 'auv3-file-browser-role-' + String(role || 'name').replace(/[^a-z0-9_-]/gi, '-');
+}
 function create_editable_name_span(text, role = 'name') {
   try {
     const span = document.createElement('span');
   span.textContent = text || '';
-    try { span.setAttribute('data-role', role); } catch(_){}
+    try { span.classList.add(file_browser_role_class(role)); } catch(_){}
   // Non-éditable par défaut; l'édition sera activée via edit_filer_element (long-press/rename)
   span.contentEditable = 'false';
   span.spellcheck = false;
@@ -247,7 +250,7 @@ function create_editable_name_span(text, role = 'name') {
   span.style.webkitTouchCallout = 'none';
   // Pas de stopPropagation global ici; les handlers dédiés gèrent selon le contexte
     return span;
-  } catch(_) { return $('span', { text, 'data-role': role }); }
+  } catch(_) { return $('span', { text, class: file_browser_role_class(role) }); }
 }
 function edit_filer_element(listing, fullPath){
   try{
@@ -266,7 +269,7 @@ function edit_filer_element(listing, fullPath){
         if (sel_is_selected(fullPath)) { window.__auv3_selection.focus = idx; update_selection_ui(wrap); }
       }
     }catch(_){ }
-    const nameSpan = li.querySelector('span[data-role="name"]');
+    const nameSpan = li.querySelector('span.auv3-file-browser-role-name');
     if (!nameSpan) return;
   const oldName = nameSpan.textContent || '';
   const oldPath = fullPath;
@@ -296,7 +299,7 @@ function edit_filer_element(listing, fullPath){
         const wrap2 = document.getElementById('auv3-file-list');
         if (wrap2) {
           const existing = new Set();
-          const spans = wrap2.querySelectorAll('li[data-fullpath] > span[data-role="name"]');
+          const spans = wrap2.querySelectorAll('li[data-fullpath] > span.auv3-file-browser-role-name');
           spans && spans.forEach(sp=>{
             // Ignore the currently edited item to avoid false self-collision
             if (sp === nameSpan) return;
@@ -630,8 +633,8 @@ function update_selection_ui(container){
     items.forEach((li)=>{
       const fp = li.getAttribute('data-fullpath')||'';
       const isDir = li.getAttribute('data-isdir') === '1';
-      const dot = li.querySelector('span[data-role="dot"]');
-      const nameSpan = li.querySelector('span[data-role="name"]');
+      const dot = li.querySelector('span.auv3-file-browser-role-dot');
+      const nameSpan = li.querySelector('span.auv3-file-browser-role-name');
       if (sel_is_selected(fp)) {
         li.style.backgroundColor = UI.colors.selectionBg;
         li.style.color = UI.colors.selectionText;
@@ -681,7 +684,7 @@ function pick_unique_name(dirPath, baseName, isFolder){
     try{
       const wrap = document.getElementById('auv3-file-list');
       if (wrap) {
-        const lis = wrap.querySelectorAll('li[data-fullpath] > span[data-role="name"]');
+        const lis = wrap.querySelectorAll('li[data-fullpath] > span.auv3-file-browser-role-name');
         lis && lis.forEach(span => { existing.add(String(span.textContent||'')); });
       }
     }catch(_){ }
@@ -1681,7 +1684,7 @@ function display_files(target, listing, opts = {}) {
         __indexToPath[__linearIndex] = fullPath; __linearIndex++;
         // File name label (keeps whole-row click behavior)
         if (isDir) {
-          $('span', { parent: li, text: '●', css: { color: UI.colors.accent, fontSize:'10px', marginRight:'6px' }, 'data-role': 'dot' });
+          $('span', { parent: li, text: '●', css: { color: UI.colors.accent, fontSize:'10px', marginRight:'6px' }, class: file_browser_role_class('dot') });
         }
         const nameSpan = create_editable_name_span(it.name);
         try { li.appendChild(nameSpan); } catch(_) { }

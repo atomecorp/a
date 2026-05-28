@@ -120,6 +120,7 @@ Capture reveal ownership:
 Atome DOM projection ownership:
 
 - `eVe/core/atome_dom_id.js` owns the final Atome DOM host id contract: `eve-atome_<atome_id>`, `toDomId`, `fromDomId`, `getAtomeElement`, nearest-host resolution helpers, and WeakMap-backed runtime metadata for projection-only elements.
+- `eVe/intuition/matrix/core/project_dom_state.js` owns WeakMap-backed project projection metadata for project views, Matrix tiles, and project-scoped tool projection hosts; project identity must be recovered from this runtime registry or `project_view_<id>` ids, not from `data-project-id`.
 - Final Atome DOM hosts and their final rendered subtrees must not carry Atome business state, type, selection, group, media, renderer, drag, resize, binding, project, replay, or persistence data in `data-*` attributes.
 - Event layers such as click, double-click, selection, drag, resize, flower menu routing, media transport, and MTRAX opening must resolve the nearest `eve-atome_*` host, recover the canonical Atome id, and then consult the Atome registry, runtime registry, or owning domain registry for behavior decisions.
 - Binding flags and ephemeral UI state belong in runtime registries or WeakMaps. Group/media runtime facts belong in their owning runtime/domain registries, not in the DOM.
@@ -859,6 +860,7 @@ Reusable APIs:
 - `eVe/intuition/tools/clipboard/` owns shared copy/paste clipboard state, Atome record normalization for clipboard payloads, system clipboard writes, and paste event generation. `copy.js` and `paste.js` remain product tool entrypoints and panel/action registration surfaces.
 - `eVe/intuition/flower/menu.js` owns flower menu DOM orchestration; `menu_layout.js` owns radial geometry, `menu_items.js` owns item/icon normalization, `context_target.js` owns context target resolution, and `context_pointer_lock.js` owns flower pointer locks.
 - `eVe/intuition/matrix/ui/view.js` owns Matrix root/project-view/tile DOM orchestration; `eVe/intuition/matrix/ui/matrix_layout.js` owns Matrix viewport fitting, toolbar-aware row/column sizing, scroll positioning, and layout observers.
+- `eVe/intuition/matrix/core/project_dom_state.js` stores Matrix/project DOM projection metadata outside attributes and is consumed by Matrix runtime, project bootstrap, user project surfaces, and project drop/tool projection paths.
 - `eVe/intuition/matrix/ui/matrix_virtual_slots.js` owns Matrix logical slot virtualization: it maps projects to collision-free logical slots and keeps repeated empty slots out of the DOM, leaving only project tiles and the first actionable empty creation tile.
 - Tool definition SSOT and tool instances.
 

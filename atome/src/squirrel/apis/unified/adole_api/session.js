@@ -41,7 +41,7 @@ const clearProjectAndAtomeDom = () => {
     if (typeof document === 'undefined') return;
     const viewRoot = document.getElementById('view');
     const atomeElements = viewRoot
-        ? viewRoot.querySelectorAll('[data-atome-id], [data-atome], .atome-element, .eve-atome')
+        ? viewRoot.querySelectorAll('[data-atome], .atome-element, .eve-atome')
         : [];
     atomeElements.forEach((el) => {
         el.remove();

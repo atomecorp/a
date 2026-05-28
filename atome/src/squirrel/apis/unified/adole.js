@@ -929,17 +929,13 @@ class TauriWebSocket {
                             const applyDomPatch = (atomeId, properties = {}) => {
                                 if (!atomeId || typeof document === 'undefined') return;
                                 const elements = new Set();
-                                const byId = document.getElementById(`atome_${atomeId}`) || document.getElementById(String(atomeId));
+                                const byId = document.getElementById(`eve-atome_${atomeId}`)
+                                    || document.getElementById(`atome_${atomeId}`)
+                                    || document.getElementById(String(atomeId));
                                 if (byId) elements.add(byId);
-                                const escapedId = (typeof CSS !== 'undefined' && CSS.escape)
-                                    ? CSS.escape(String(atomeId))
-                                    : String(atomeId).replace(/"/g, '\\"');
-                                document.querySelectorAll(`[data-atome-id="${escapedId}"]`).forEach((el) => elements.add(el));
                                 if (!elements.size) return;
                                 const isMediaLikeElement = (el) => {
                                     if (!el) return false;
-                                    const kind = String(el.dataset?.atomeKind || el.dataset?.kind || '').trim().toLowerCase();
-                                    if (kind === 'video' || kind === 'sound' || kind === 'audio' || kind === 'image') return true;
                                     return !!el.querySelector?.('video, audio, img');
                                 };
                                 const patchKind = normalizeMediaPatchKindHint(

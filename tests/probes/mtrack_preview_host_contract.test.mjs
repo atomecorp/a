@@ -14,6 +14,7 @@ globalThis.CSS = {
 };
 
 const { createPreviewHostResolutionRuntime } = await import('../../eVe/domains/mtrax/preview/preview_host_resolution_runtime.js');
+const { registerAtomeElement } = await import('../../eVe/core/atome_dom_id.js');
 
 const installVisibleRects = (node) => {
     node.getClientRects = () => [{ left: 0, top: 0, width: 120, height: 80 }];
@@ -32,9 +33,11 @@ panel.appendChild(previewHost);
 installVisibleRects(previewHost);
 
 const groupHost = document.createElement('div');
-groupHost.id = 'atome_group_a';
-groupHost.dataset.atomeId = 'group_a';
-groupHost.dataset.atomeKind = 'group';
+registerAtomeElement(groupHost, {
+    atome_id: 'group_a',
+    kind: 'group',
+    group: { is_group_atome: true, group_id: 'group_a' }
+});
 document.body.appendChild(groupHost);
 installVisibleRects(groupHost);
 

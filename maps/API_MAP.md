@@ -194,6 +194,7 @@ Boundary rules:
 - `toDomId` and `fromDomId` are the only canonical conversion points between Atome ids and final DOM host ids.
 - `getAtomeElement` and nearest-host helpers are projection lookup helpers only; they must not make the DOM a source of truth.
 - `registerAtomeElement` and `updateAtomeRuntimeState` store ephemeral projection/runtime metadata outside DOM attributes through the runtime registry/WeakMap contract.
+- Matrix/project projection metadata is held by `eVe/intuition/matrix/core/project_dom_state.js` through `registerProjectElement`, `getProjectIdFromElement`, and `findProjectTileElement`; project runtime routing must not depend on `data-project-id`.
 - Event routing must use the DOM id only to recover `atome_id`, then consult Atome/runtime/domain registries to decide behavior.
 - This API must not be used to persist, replay, synchronize, serialize, or audit Atome facts.
 

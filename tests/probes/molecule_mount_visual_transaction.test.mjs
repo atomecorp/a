@@ -21,12 +21,15 @@ Object.defineProperty(globalThis, 'navigator', {
 
 const { createMoleculeEngine } = await import('../../eVe/core/media_engine/molecule.js');
 const { createMoleculeApi } = await import('../../eVe/core/media_engine/molecule.api.js');
+const { registerAtomeElement } = await import('../../eVe/core/atome_dom_id.js');
 
 const engine = createMoleculeEngine();
 const api = createMoleculeApi(engine);
 const host = document.createElement('div');
-host.dataset.atomeId = 'molecule_transaction_probe_video';
-host.dataset.atomeKind = 'video';
+registerAtomeElement(host, {
+    atome_id: 'molecule_transaction_probe_video',
+    kind: 'video'
+});
 host.style.width = '320px';
 host.style.height = '180px';
 document.body.appendChild(host);
