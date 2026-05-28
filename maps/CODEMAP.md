@@ -117,6 +117,14 @@ Capture reveal ownership:
 - `eVe/intuition/runtime/project_media_import_runtime.js` owns shared project media file selection for flower-menu import and capture import, then delegates durable project media creation to `project_drop.importFilesToProjectViaCreator`.
 - `eVe/intuition/tools/capture.js` remains a critical oversized legacy module after this scoped extraction. Current reduction ownership is the capture tool action layer; the intended reduction plan is to continue moving cohesive responsibilities into dedicated runtimes: fullscreen capture surface, quick-record pointer session, capture menu registration, and preview session lifecycle.
 
+Atome DOM projection ownership:
+
+- `eVe/core/atome_dom_id.js` owns the final Atome DOM host id contract: `eve-atome_<atome_id>`, `toDomId`, `fromDomId`, `getAtomeElement`, nearest-host resolution helpers, and WeakMap-backed runtime metadata for projection-only elements.
+- Final Atome DOM hosts and their final rendered subtrees must not carry Atome business state, type, selection, group, media, renderer, drag, resize, binding, project, replay, or persistence data in `data-*` attributes.
+- Event layers such as click, double-click, selection, drag, resize, flower menu routing, media transport, and MTRAX opening must resolve the nearest `eve-atome_*` host, recover the canonical Atome id, and then consult the Atome registry, runtime registry, or owning domain registry for behavior decisions.
+- Binding flags and ephemeral UI state belong in runtime registries or WeakMaps. Group/media runtime facts belong in their owning runtime/domain registries, not in the DOM.
+- Legacy code may keep narrow read-only fallbacks while migrating old DOM, but new rendering code must emit the clean projection contract and new routing code must not branch on Atome `data-*` state.
+
 ### Tests
 
 Path: `tests/`.
@@ -148,6 +156,7 @@ Main entry points:
 - `tests/probes/mtrax_group_reload_preserve_playhead.test.mjs` guards same-group MTraX timeline reloads so play-triggered reloads do not issue stop before play and preserve the current playhead.
 - `tests/probes/mtrax_keyboard_space_toggle_resume.test.mjs` guards the Molecule space-key shortcut cycle so it calls play, pause, then play again without resetting the playhead.
 - `tests/probes/molecule_session_history.test.mjs` guards Molecule session undo/redo, append-only history events, and persistence of restored timeline snapshots.
+- `tests/probes/media_api_suite_probe.test.mjs` guards the project media import DOM projection contract for image, SVG, video, and audio Atomes. It fails when final Atome DOM contains forbidden Atome `data-*` attributes, empty `class=""`, or renderer state stored in DOM instead of runtime state.
 - `tests/strangler_v2/_env.mjs` owns the maintained mock browser fixture for colocated eVe Intuition runtime tests.
 - `tests/strangler_v2/palette_ssot_guard.test.mjs` guards the menu/palette source-of-truth contract by preventing legacy example entrypoints from mutating `new_menu_v2` directly.
 - `tests/probes/user_panel_content_contract.test.mjs` verifies the home/user panel module still mounts non-empty auth and profile dialog bodies from the canonical panel controls.

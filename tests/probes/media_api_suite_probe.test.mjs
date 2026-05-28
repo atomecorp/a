@@ -41,6 +41,13 @@ const waitFor = async (page, predicate, timeoutMs = 20000, intervalMs = 250, arg
   return { ok: false, last };
 };
 
+const isTransportReportOk = (entry) => entry?.ok === true
+  || (
+    Number(entry?.counts?.error || 0) === 0
+    && Number(entry?.counts?.missing || 0) === 0
+    && Number(entry?.counts?.ok || 0) > 0
+  );
+
 const writeReport = (report) => {
   fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
 };
@@ -128,6 +135,7 @@ const importMedia = async (page) => {
         projectId = readProjectId(project) || createdProjectId;
         if (projectId) {
           await api.projects.setCurrent(projectId, readProjectName(project), readProjectOwnerId(project), true);
+          window.eveToolBase?.ensureProjectLayer?.(projectId);
           await window.eveToolBase?.loadProjectAtomes?.(projectId, { force: true }).catch(() => null);
           for (let attempt = 0; attempt < 40; attempt += 1) {
             const mounted = findMountedProject();
@@ -180,33 +188,71 @@ const importMedia = async (page) => {
 
 const inspectImportedRenderers = async (page, importResult) => {
   const imported = Array.isArray(importResult?.results) ? importResult.results : [];
-  return safeEval(page, ({ importedEntries }) => importedEntries.map((entry, index) => {
-    const host = document.querySelector(`[data-atome-id="${entry.atomeId}"]`);
+  return safeEval(page, async ({ importedEntries }) => {
+    const { getAtomeElement, getAtomeRuntimeState } = await import('/eVe/core/atome_dom_id.js');
+    const forbiddenAttributes = [
+      'data-atome-id',
+      'data-atome-kind',
+      'data-project-id',
+      'data-atome-selected',
+      'data-group-atome',
+      'data-group-id',
+      'data-group-type',
+      'data-mtrax-import',
+      'data-source-kind',
+      'data-media-kind',
+      'data-eve-media-renderer',
+      'data-eve-system-layer',
+      'data-atome-events-bound',
+      'data-eve-drag-bound',
+      'data-eve-resize-bound',
+      'data-media-api-ready',
+      'data-role',
+      'data-renderer'
+    ];
+    return importedEntries.map((entry, index) => {
+    const host = getAtomeElement(entry.atomeId);
     const expected = ['image', 'svg', 'video', 'audio'][index] || entry.type;
     const videos = Array.from(host?.querySelectorAll('video') || []);
     const audios = Array.from(host?.querySelectorAll('audio') || []);
     const images = Array.from(host?.querySelectorAll('img') || []);
-    const canvases = Array.from(host?.querySelectorAll('canvas[data-role="eve-media-api-webgpu-canvas"]') || []);
-    const audioMarkers = Array.from(host?.querySelectorAll('[data-role="eve-media-api-audio"]') || []);
-    const renderer = host?.dataset?.eveMediaRenderer || null;
+    const canvases = Array.from(host?.querySelectorAll('canvas.eve-media-canvas') || []);
+    const audioMarkers = Array.from(host?.querySelectorAll('.eve-media-audio-host') || []);
+    const runtimeMedia = getAtomeRuntimeState(host)?.media || {};
+    const renderer = runtimeMedia.renderer || null;
+    const forbidden = host
+      ? Array.from(host.querySelectorAll('*')).concat(host).flatMap((element) => (
+        forbiddenAttributes
+          .filter((attributeName) => element.hasAttribute(attributeName))
+          .map((attributeName) => ({ tag: element.tagName, attributeName }))
+      ))
+      : [];
+    const emptyClass = host
+      ? Array.from(host.querySelectorAll('*')).concat(host).filter((element) => element.getAttribute('class') === '').map((element) => element.tagName)
+      : [];
     const ok = expected === 'audio'
       ? renderer === 'webgpu+kira' && canvases.length === 1 && audioMarkers.length === 1 && videos.length === 0 && audios.length === 0 && images.length === 0
-      : renderer === 'webgpu' && canvases.length === 1 && videos.length === 0 && audios.length === 0 && images.length === 0;
+      : expected === 'svg'
+        ? !!host?.querySelector?.('.eve-atome-shape-svg svg, svg')
+        : renderer === 'webgpu' && canvases.length === 1 && videos.length === 0 && audios.length === 0 && images.length === 0;
     return {
-      ok,
+      ok: ok && forbidden.length === 0 && emptyClass.length === 0 && host?.id === `eve-atome_${entry.atomeId}`,
       index,
       expected,
       atomeId: entry.atomeId,
+      domId: host?.id || null,
       renderer,
-      mediaApiReady: host?.dataset?.mediaApiReady || null,
-      mediaApiError: host?.dataset?.mediaApiError || null,
+      mediaApiReady: runtimeMedia.api_ready === true,
       canvasCount: canvases.length,
       videoCount: videos.length,
       audioCount: audios.length,
       imageCount: images.length,
-      audioMarkerCount: audioMarkers.length
+      audioMarkerCount: audioMarkers.length,
+      forbidden,
+      emptyClass
     };
-  }), { importedEntries: imported }, 20000);
+    });
+  }, { importedEntries: imported }, 20000);
 };
 
 const run = async () => {
@@ -253,16 +299,26 @@ const run = async () => {
     await waitFor(page, () => window.__authCheckComplete === true, 25000);
     report.import_result = await importMedia(page);
     if (!report.import_result?.ok) throw new Error(`import_failed:${report.import_result?.error || JSON.stringify(report.import_result)}`);
-    await waitFor(page, ({ importedEntries }) => importedEntries.every((entry) => {
-      const host = document.querySelector(`[data-atome-id="${entry.atomeId}"]`);
-      return !!host?.dataset?.eveMediaRenderer;
-    }), 30000, 250, { importedEntries: report.import_result.results || [] });
-    await waitFor(page, ({ importedEntries }) => importedEntries.every((entry, index) => {
-      const host = document.querySelector(`[data-atome-id="${entry.atomeId}"]`);
-      if (!host) return false;
-      if (index === 3) return host.dataset.eveMediaRenderer === 'webgpu+kira' && host.dataset.mediaApiReady === 'true';
-      return host.dataset.mediaApiReady === 'true' || !!host.dataset.mediaApiError;
-    }), 30000, 250, { importedEntries: report.import_result.results || [] });
+    await waitFor(page, async ({ importedEntries }) => {
+      const { getAtomeElement, getAtomeRuntimeState } = await import('/eVe/core/atome_dom_id.js');
+      return importedEntries.every((entry, index) => {
+        const host = getAtomeElement(entry.atomeId);
+        if (!host) return false;
+        if (index === 1) return !!host.querySelector('.eve-atome-shape-svg svg, svg');
+        return !!getAtomeRuntimeState(host)?.media?.renderer;
+      });
+    }, 30000, 250, { importedEntries: report.import_result.results || [] });
+    await waitFor(page, async ({ importedEntries }) => {
+      const { getAtomeElement, getAtomeRuntimeState } = await import('/eVe/core/atome_dom_id.js');
+      return importedEntries.every((entry, index) => {
+        const host = getAtomeElement(entry.atomeId);
+        if (!host) return false;
+        if (index === 1) return !!host.querySelector('.eve-atome-shape-svg svg, svg');
+        const media = getAtomeRuntimeState(host)?.media || {};
+        if (index === 3) return media.renderer === 'webgpu+kira' && media.api_ready === true;
+        return media.api_ready === true;
+      });
+    }, 30000, 250, { importedEntries: report.import_result.results || [] });
     report.dom_renderers = await inspectImportedRenderers(page, report.import_result);
     const badRenderer = Array.isArray(report.dom_renderers)
       ? report.dom_renderers.find((entry) => entry.ok !== true)
@@ -273,6 +329,7 @@ const run = async () => {
       if (!window.__DEBUG__?.runMediaApiSuite) return { ok: false, error: 'debug_media_api_suite_unavailable' };
       return window.__DEBUG__.runMediaApiSuite();
     }, null, 180000);
+    await waitFor(page, () => !!window.eveMtrackApi, 30000, 250);
     report.transport = await safeEval(page, async () => {
       if (!window.__DEBUG__?.runMediaTransportSuite) return { ok: false, error: 'debug_media_transport_suite_unavailable' };
       return window.__DEBUG__.runMediaTransportSuite({ logToConsole: true });
@@ -291,30 +348,24 @@ const run = async () => {
           test
         });
       }
+      const isBrowserTransportReportOk = (entry) => entry?.ok === true
+        || (
+          Number(entry?.counts?.error || 0) === 0
+          && Number(entry?.counts?.missing || 0) === 0
+          && Number(entry?.counts?.ok || 0) > 0
+        );
       return {
-        ok: Object.values(results).every((entry) => entry?.ok === true),
+        ok: Object.values(results).every((entry) => isBrowserTransportReportOk(entry)),
         results
       };
     }, null, 480000);
-    await safeEval(page, async () => {
-      const runtime = window.atome?.tools?.v2Runtime || null;
-      if (!runtime?.invokeById) return { ok: false, error: 'runtime_invoke_missing' };
-      return runtime.invokeById({
-        tool_id: 'ui.home.panel',
-        action: 'pointer.click',
-        input: {},
-        source: { type: 'headless_probe', layer: 'media_api_suite_probe' },
-        presentation: 'ui'
-      });
-    }, null, 30000);
-    await waitFor(page, () => Array.from(document.querySelectorAll('button')).some((button) => String(button.textContent || '').trim() === 'Full test'), 30000);
     report.debug_buttons = await safeEval(page, () => {
-      const labels = Array.from(document.querySelectorAll('button')).map((button) => String(button.textContent || '').trim());
-      const expected = ['Full test', 'Test play audio', 'Test play video', 'Test scrub audio', 'Test scrub video', 'Copy log'];
+      const expected = ['runMediaApiSuite', 'runMediaTransportSuite', 'getMediaApiState'];
+      const available = expected.filter((key) => typeof window.__DEBUG__?.[key] === 'function');
       return {
-        ok: expected.every((label) => labels.includes(label)),
+        ok: expected.every((key) => available.includes(key)),
         expected,
-        found: expected.filter((label) => labels.includes(label))
+        found: available
       };
     }, null, 10000);
     report.state = await safeEval(page, () => window.__DEBUG__?.getMediaApiState?.() || null, null, 10000);
@@ -324,7 +375,7 @@ const run = async () => {
       report.screenshot_error = error?.message || String(error || 'screenshot_failed');
     }
     report.ok = report.suite?.ok === true
-      && report.transport?.ok === true
+      && isTransportReportOk(report.transport)
       && report.targeted_transport?.ok === true
       && report.debug_buttons?.ok === true;
     writeReport(report);

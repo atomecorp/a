@@ -46,6 +46,56 @@ Strict interpretation rules:
 - view code may render canonical state and emit user intent, but it MUST NOT own business rules, persistence rules, sync decisions, replay logic, or authoritative mutation ordering;
 - if two layers appear to own the same business fact, the task is incomplete until one canonical owner is restored outside the DOM.
 
+## ABSOLUTE ATOME DOM PROJECTION CONTRACT
+
+This section has absolute priority for every Atome, eVe, MTRAX, media, selection, event, rendering, persistence, debug, and replay task. It is mandatory, non-negotiable, and must be enforced before any feature, optimization, or UI change.
+
+The DOM MUST be treated only as a disposable projection of canonical Atome state. The DOM is allowed to expose:
+
+- one canonical host id using the format `eve-atome_<atome_id>`;
+- semantic CSS classes required for styling, hit testing, rendering selection, and view-only grouping;
+- inline style only when the rendering contract requires it;
+- real visual children such as text nodes, SVG, canvas, image/video/audio rendering surfaces, handles, or view-only UI controls.
+
+The DOM MUST NEVER contain Atome authority, Atome metadata, business state, replay state, persistence state, sync state, runtime ownership, action routing decisions, mutation payloads, or serialized Atome structures.
+
+The following attributes MUST NOT be present on final Atome DOM hosts or inside final Atome DOM subtrees:
+
+- `data-atome-id`;
+- `data-atome-kind`;
+- `data-project-id`;
+- `data-atome-selected`;
+- `data-group-atome`;
+- `data-group-id`;
+- `data-group-type`;
+- `data-mtrax-import`;
+- `data-source-kind`;
+- `data-media-kind`;
+- `data-eve-media-renderer`;
+- `data-eve-system-layer`;
+- `data-atome-events-bound`;
+- `data-eve-drag-bound`;
+- `data-eve-resize-bound`;
+- `data-media-api-ready`;
+- `data-role`;
+- `data-renderer`;
+- any empty `class=""` attribute;
+- any new `data-*` attribute that carries Atome identity, type, state, ownership, registry membership, persistence, replay, sync, debug routing, media renderer state, selection state, drag state, resize state, group state, project state, or event binding state.
+
+All Atome information that is required to decide behavior MUST be centralized outside the DOM in the canonical Atome registry, runtime state registry, or the explicitly owned domain registry for that concern. Event handlers MUST resolve the nearest Atome host from the DOM id, recover the canonical `atome_id`, and then consult the appropriate registry or correspondence table to decide the action. Double click, left click, drag, resize, selection, keyboard routing, flower menu routing, MTRAX opening, media transport, persistence, refresh, replay, and debug behavior MUST NOT branch on DOM `data-*` state.
+
+Mandatory role separation:
+
+- Atome registry: owns Atome identity, kind, particles, persistence-facing state, and canonical mutation facts.
+- Runtime registry: owns ephemeral UI/runtime state such as event binding flags, selected state, drag/resize session state, media renderer readiness, group preview membership, and non-persistent interaction state.
+- Domain registries: own domain-specific runtime facts such as media projection, MTRAX timeline state, transport state, audio/video rendering state, and debug instrumentation state.
+- DOM: owns only paintable structure, CSS classes, geometry projection, browser-native event targets, and visual rendering surfaces.
+- Event layer: translates browser events into Atome intent by id, then delegates to registries and canonical mutation APIs.
+
+Any code that writes Atome business facts into DOM attributes is architecturally invalid. Any code that reads Atome behavior decisions from DOM attributes is architecturally invalid unless it is explicitly reading a legacy fallback during an active migration and the final rendered Atome DOM contract remains clean. New code MUST NOT add such fallbacks.
+
+Every Atome rendering change MUST include or preserve an automated regression check that renders real Atome DOM and fails when forbidden attributes, empty classes, duplicated DOM authority, or DOM-owned Atome state reappear.
+
 ## TASK ROUTING AND SECTION APPLICABILITY
 
 This document is cumulative. When several contexts apply, the assistant MUST apply the strict union of all relevant sections, never the weakest subset.
@@ -61,6 +111,7 @@ Always-active sections:
 
 - ABSOLUTE PRECEDENCE;
 - NON-NEGOTIABLE STATE AND DOM AUTHORITY;
+- ABSOLUTE ATOME DOM PROJECTION CONTRACT;
 - CORE ROLE;
 - MANDATORY CODE QUALITY RULES;
 - MANDATORY FILE SIZE AND CODING STANDARDS;

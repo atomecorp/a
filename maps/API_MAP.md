@@ -178,6 +178,26 @@ Boundary rules:
 - `scripts/check_mutation_ownership_guardrails.mjs` is the guardrail entry point for this API boundary. It rejects direct client/runtime mutation of `state_current` and direct event-commit transport calls outside canonical commit/server owners.
 - `scripts/check_squirrel_dom_adapter_guardrails.mjs` is the guardrail entry point for the legacy Squirrel Atome DOM adapter boundary. `this.element` may remain a projection handle, but model/business state must stay on Atome instance data or canonical persistence surfaces.
 - Database event projection APIs: `database/adole.js` exposes `appendEvent`, `appendEvents`, `getStateCurrent`, `listStateCurrent`, and `restoreStateSnapshot`. Event projection must sanitize reserved Atome envelope keys before writing `state_current.properties`, keeping `state_current` coherent with `particles`; controlled state snapshot restore must replay through `appendEvents` instead of writing `state_current` or DOM state directly.
+
+### eVe Atome DOM Projection Runtime
+
+Ownership: eVe closed projection/runtime boundary.
+
+Primary source: `eVe/core/atome_dom_id.js`.
+
+Exposure: Browser-served JavaScript module exports consumed by eVe projection, interaction, selection, media, MTRAX, and diagnostic runtimes.
+
+Verified entry points: `ATOME_DOM_PREFIX`, `toDomId`, `fromDomId`, `getAtomeElement`, `closestAtomeElement`, `getAtomeIdFromElement`, `getAtomeIdFromEventTarget`, `registerAtomeElement`, `updateAtomeRuntimeState`, `getAtomeRuntimeState`, `getAtomeKindFromElement`, `queryAtomeElements`, `escapeCssValue`.
+
+Boundary rules:
+
+- `toDomId` and `fromDomId` are the only canonical conversion points between Atome ids and final DOM host ids.
+- `getAtomeElement` and nearest-host helpers are projection lookup helpers only; they must not make the DOM a source of truth.
+- `registerAtomeElement` and `updateAtomeRuntimeState` store ephemeral projection/runtime metadata outside DOM attributes through the runtime registry/WeakMap contract.
+- Event routing must use the DOM id only to recover `atome_id`, then consult Atome/runtime/domain registries to decide behavior.
+- This API must not be used to persist, replay, synchronize, serialize, or audit Atome facts.
+
+Forbidden API pattern: adding new Atome `data-*` attributes or reading behavior decisions from Atome `data-*` attributes in final rendered Atome DOM. Legacy read-only fallbacks are temporary migration debt and must not become new contracts.
 - `props`, `properties`, `patch`, and `delta` are normalized into `payload.props` before transport.
 - `atome/src/shared/atome_contract.js` owns removal of reserved Atome envelope fields from durable property payloads; project Atome creation code and commit code must consume this shared contract rather than maintaining local sanitizer modules or parallel reserved-key lists.
 - Reserved envelope fields such as `id`, `type`, `owner_id`, `project_id`, `parent_id`, timestamps, sync fields, selection fields, and media render aliases such as `media_type` or `visualType` must not be emitted as durable properties.
