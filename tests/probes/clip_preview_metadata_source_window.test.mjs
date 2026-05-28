@@ -17,8 +17,12 @@ const hasObjectShape = (value) => !!(value && typeof value === 'object' && !Arra
 const state = {
     persistRev: 0,
     previewMetadataByCacheKey: new Map(),
+    previewRegistryById: new Map(),
+    previewResourceUrlByDataUrl: new Map(),
     clips: []
 };
+
+const dataImage = (label) => `data:image/png;base64,${btoa(label)}`;
 
 const createRuntime = () => createClipPreviewMetadataRuntime({
     getState: () => state,
@@ -54,14 +58,14 @@ test('clip preview metadata renders the cropped source window for audio and vide
             status: 'ready',
             duration_seconds: 8,
             frames: [
-                { data_url: 'frame-0' },
-                { data_url: 'frame-1' },
-                { data_url: 'frame-2' },
-                { data_url: 'frame-3' },
-                { data_url: 'frame-4' },
-                { data_url: 'frame-5' },
-                { data_url: 'frame-6' },
-                { data_url: 'frame-7' }
+                { data_url: dataImage('frame-0') },
+                { data_url: dataImage('frame-1') },
+                { data_url: dataImage('frame-2') },
+                { data_url: dataImage('frame-3') },
+                { data_url: dataImage('frame-4') },
+                { data_url: dataImage('frame-5') },
+                { data_url: dataImage('frame-6') },
+                { data_url: dataImage('frame-7') }
             ]
         }
     });
@@ -83,6 +87,9 @@ test('clip preview metadata renders the cropped source window for audio and vide
     const waveformPath = audioPreview.querySelector('.eve-mtrack-clip-waveform-bars');
 
     assert.ok(waveformPath, 'audio waveform must render for a cropped source window');
+    assert.match(audioPreview.dataset.previewId, /^preview_/);
+    assert.equal(audioPreview.dataset.previewSignature, undefined);
+    assert.equal(String(audioPreview.outerHTML).includes('data-preview-signature'), false);
     assert.match(waveformPath.getAttribute('d'), /0\.00 10\.16L0\.00 17\.84/);
     assert.match(waveformPath.getAttribute('d'), /100\.00 6\.32L100\.00 21\.68/);
     assert.doesNotMatch(waveformPath.getAttribute('d'), /12\.72L0\.00 15\.28/);
@@ -106,10 +113,19 @@ test('clip preview metadata renders the cropped source window for audio and vide
         .map((node) => node.style.backgroundImage);
 
     assert.equal(renderedFrames.length, 4);
-    assert.ok(renderedFrames[0].includes('frame-2'));
-    assert.ok(renderedFrames[3].includes('frame-5'));
-    assert.equal(renderedFrames.some((value) => value.includes('frame-0')), false);
-    assert.equal(renderedFrames.some((value) => value.includes('frame-7')), false);
+    assert.match(videoPreview.dataset.previewId, /^preview_/);
+    assert.equal(videoPreview.dataset.previewSignature, undefined);
+    assert.equal(String(videoPreview.outerHTML).includes('data-preview-signature'), false);
+    assert.equal(String(videoPreview.outerHTML).includes('data:image'), false);
+    const videoPayload = runtime.previewRegistry.get(videoPreview.dataset.previewId);
+    assert.deepEqual(videoPayload.frames, [
+        dataImage('frame-2'),
+        dataImage('frame-3'),
+        dataImage('frame-4'),
+        dataImage('frame-5')
+    ]);
+    assert.equal(videoPayload.frames.includes(dataImage('frame-0')), false);
+    assert.equal(videoPayload.frames.includes(dataImage('frame-7')), false);
 });
 
 afterAll(() => {
