@@ -218,6 +218,14 @@ Primary sources:
 - `eVe/intuition/projection/tool_strip.js`
 - `eVe/intuition/shared/slider_tool_dom.js`
 - `eVe/intuition/shared/slider_direct_drag.js`
+
+P8 projection style ownership:
+
+- `eVe/intuition/projection/button.js` owns IntuitionX projection tool DOM roles and dynamic slider dimensions.
+- Static projection host, surface, icon, and label visuals are generated as classes by `eVe/elements/eVe_look.js`.
+- `eVe/intuition/core/dom.js` rejects static `background` and `boxShadow` writes on `.eve-intuitionx-projection-tool-surface`; those constants must stay class-owned.
+- `eVe/intuition/ribbon/menu.js` may update projection visual state through `data-visual-active`, `data-visual-kind`, and `data-hovered`, but must not reintroduce static inline surface colors or shadows.
+- Inline style remains allowed for projection sliders while expanded/collapsed width is actively driven by the runtime.
 - `eVe/intuition/shared/slider_tool_content.js`
 
 Role:

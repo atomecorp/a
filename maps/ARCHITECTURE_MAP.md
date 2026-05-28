@@ -156,6 +156,7 @@ Responsibilities:
 - Global visual tiers must use distinct HTML layer nodes under `#intuition`; z-index values alone are not sufficient when tools, Molecules, docked palettes, panels, and drag items coexist.
 - Shared product-tool slider ownership now lives in the open Atome/Squirrel component layer at `atome/src/squirrel/components/tool_slider_builder.js`; eVe consumers must use that owner through the shared wrapper/re-export surfaces instead of keeping feature-local slider DOM or gesture logic.
 - Background text creation has one geometry owner per phase: `text_creation_session.js` owns the synchronous focusable provisional surface, `ui.text.create` owns the canonical Atome frame written through creation, and `text_fit_runtime.js` owns later content-driven growth without moving the original click coordinate.
+- IntuitionX projection tools keep static visual constants class-owned in `eVe/elements/eVe_look.js`; projection runtimes may expose active/hover/kind state through data attributes and may keep slider width inline only while the slider control is dynamically resized.
 
 Dependency direction:
 
