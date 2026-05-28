@@ -114,6 +114,7 @@ Capture reveal ownership:
 - `eVe/intuition/tools/capture_reveal_runtime.js` owns capture media reveal orchestration for audio recordings, video recordings, and photos.
 - `eVe/intuition/tools/capture_export_geometry.js` owns the viewport-to-project-layer geometry contract for that reveal.
 - `eVe/intuition/tools/capture.js` owns capture tool actions and delegates media reveal creation, animation, and final-position persistence to the reveal runtime.
+- `eVe/intuition/runtime/project_media_import_runtime.js` owns shared project media file selection for flower-menu import and capture import, then delegates durable project media creation to `project_drop.importFilesToProjectViaCreator`.
 - `eVe/intuition/tools/capture.js` remains a critical oversized legacy module after this scoped extraction. Current reduction ownership is the capture tool action layer; the intended reduction plan is to continue moving cohesive responsibilities into dedicated runtimes: fullscreen capture surface, quick-record pointer session, capture menu registration, and preview session lifecycle.
 
 ### Tests

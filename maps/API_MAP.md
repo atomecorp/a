@@ -203,6 +203,24 @@ Boundary rules:
 
 Boundary status: Closed product tool API. It consumes the eVe Atome commit boundary and must not duplicate open server/database persistence contracts.
 
+### eVe Project Media Import Runtime API
+
+Ownership: eVe closed product runtime over the project drop and Atome commit boundaries.
+
+Primary source: `eVe/intuition/runtime/project_media_import_runtime.js`.
+
+Exposure: JavaScript module exports consumed by eVeIntuition flower-menu import and the capture import tool.
+
+Verified entry points: `invokeProjectMediaImport`, `requestProjectImportFiles`, `resolveCurrentProjectImportTarget`, `buildProjectImportAnchorEvent`.
+
+Boundary rules:
+
+- File selection is UI intent collection only; durable media creation is delegated to `eVe/intuition/tools/project_drop.js` through `importFilesToProjectViaCreator`.
+- The runtime may use the native iOS/AUv3 document picker, browser file picker, or hidden input picker only as file-selection surfaces.
+- It must not persist Atome state, upload files, or render media directly.
+
+Boundary status: Closed product runtime API. It centralizes project media import intent collection for eVe UI tools and preserves the canonical project drop creation path.
+
 ### Security and Sync APIs
 
 Ownership: Atome open.
