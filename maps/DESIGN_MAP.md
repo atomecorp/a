@@ -229,6 +229,7 @@ Role:
 - For sliders specifically, the canonical product-tool behavior now lives in `atome/src/squirrel/components/tool_slider_builder.js`: the control rests as a compact square tool, expands on pointer down or touch down, exposes the manipulable slider while expanded, and collapses again on pointer up or pointer cancel unless pinned by the interaction model.
 - `atome/src/squirrel/components/tool_slider_builder.js` now owns both the canonical slider DOM/data-role contract and the shared direct-drag gesture semantics for the product-tool slider.
 - `eVe/intuition/shared/slider_tool_content.js`, `eVe/intuition/shared/slider_tool_dom.js`, and `eVe/intuition/shared/slider_direct_drag.js` are product wrappers and compatibility re-exports around the Atome owner.
+- Background text creation uses a point-origin editable surface: the provisional editor and first rendered text child start at the click coordinate with a one-pixel width and no padding, then expand through the shared text fit runtime as characters are entered.
 
 Design rule: a business capability has one visual tool identity across toolbox, projection, panel, Finder, and MCP-triggered contexts.
 

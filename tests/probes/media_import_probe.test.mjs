@@ -35,6 +35,14 @@ const withTimeout = async (promise, timeoutMs, label) => Promise.race([
   new Promise((_, reject) => setTimeout(() => reject(new Error(`${label}_timeout_${timeoutMs}ms`)), timeoutMs))
 ]);
 
+const suiteSucceeded = (suite) => {
+  const counts = suite?.counts || {};
+  return Number(counts.ok || 0) > 0
+    && Number(counts.warning || 0) === 0
+    && Number(counts.error || 0) === 0
+    && Number(counts.missing || 0) === 0;
+};
+
 const safeEval = async (page, fn, arg = null, timeoutMs = 15000) => {
   try {
     return await withTimeout(page.evaluate(fn, arg), timeoutMs, 'page_eval');
@@ -227,6 +235,9 @@ const run = async () => {
   const suite = await safeEval(page, async (atomeIds) => window.eveMediaDiagnostics.runFullSuite({ atome_ids: atomeIds }), importedIds, 180000);
   writeJson('suite.json', suite);
   log('suite_counts', suite?.counts || { ok: false, error: suite?.error || null });
+  if (!suiteSucceeded(suite)) {
+    throw new Error(`media_suite_failed:${suite?.error || JSON.stringify(suite?.counts || {})}`);
+  }
   await page.screenshot({ path: path.join(outDir, '04_after_suite.png'), fullPage: true });
 
   const state = await safeEval(page, async () => ({
@@ -237,11 +248,15 @@ const run = async () => {
   writeJson('final_state.json', state);
   writeJson('console_counts.json', Object.fromEntries(consoleCounts.entries()));
 
-  await browser.close();
+  await withTimeout(browser.close(), 8000, 'browser_close').catch((error) => {
+    log('browser_close_warning', { message: error?.message || String(error || 'browser_close_failed') });
+  });
   log('done');
 };
 
-run().catch((error) => {
+run().then(() => {
+  process.exit(0);
+}).catch((error) => {
   log('fatal', { message: error?.message || String(error || 'fatal') });
   process.exit(1);
 });
