@@ -27,7 +27,7 @@ Etat apres correction du 2026-05-28
   - `Jeezs's fire.m4v` n'est plus absent de l'inventaire desktop.
 - [x] Etape 3 terminee : le cas MTrack `atome.svg` passe.
 - [x] Etape 4 terminee : les 5 cas MTrack passent et la restauration desktop apres fermeture reste valide.
-- [ ] Etape 5 non traitee dans cette passe : verifier/corriger le prompteur texte au double click/tap projet.
+- [x] Etape 5 terminee : le prompteur texte au double click/tap projet est verifie/corrige.
 - [x] Etape 6 traitee pour les probes media : le bruit WebGPU a ete reduit et le comportement d'indisponibilite WebGPU headless est documente dans `maps/`.
   - Note : `No available adapters.` peut encore apparaitre dans l'environnement headless sans adapter WebGPU, mais les probes media passent.
 

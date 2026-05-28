@@ -722,6 +722,7 @@ Reusable APIs:
 - Event, media, and project store APIs with memory adapters.
 - Platform-specific storage backends.
 - Molecule engine, command catalog, API, native audio, and WebGPU renderer.
+- Molecule media image mounting owns alpha-preserving WebGPU canvas projection for raster images. SVG sources must remain on the vector shape renderer path and must not be rasterized by the Molecule image canvas.
 
 Should be extended by:
 
@@ -757,6 +758,7 @@ Reusable APIs:
 
 - Media API facades, persistence service, diagnostics, media source and identifier helpers.
 - Media source and identifier helpers own canonical `/api/uploads` and `/api/recordings` route resolution for product media playback paths, including timestamped recording filenames before renderer handoff and Tauri-local canonicalization away from loopback Fastify media URLs.
+- SVG uploads are editable Atome `shape` objects: `eVe/domains/media/asset_box.js` must keep SVG shape uploads out of MTraX import grouping, and `eVe/intuition/runtime/tool_genesis.js` must not convert SVG shape specs into `group/mtrax_media`.
 - `eVe/domains/media/media_diagnostics.js` validates renderer-owned media projections by reading canonical media state plus lightweight host visibility/renderer summaries. Static image/SVG/video/audio imports can pass diagnostics through visible project projection evidence when minimal DOM hosts intentionally do not expose native media tags.
 - `eVe/domains/media/shared/media_projection_state.js` owns disposable host-side media projection source, identifier, and runtime error state. Renderers may use it to bind playback resources and transient mount failures to DOM hosts, but must not serialize media URLs, recording identifiers, local paths, user-scoped media query state, or durable `data-media-api-error` values into `data-*` attributes.
 - `eVe/domains/media/shared/media_atom_integrity.js` owns the closed product media Atome integrity contract for persisted project media: stable source, duration for audio/video, visual refs, and pending visual status before commit/render.
