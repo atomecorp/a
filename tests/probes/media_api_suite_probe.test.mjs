@@ -7,6 +7,7 @@ const phone = process.env.ADOLE_TEST_PHONE || '55555555';
 const password = process.env.ADOLE_TEST_PASSWORD || '55555555';
 const mediaDir = path.resolve(process.env.ATOME_MEDIA_TEST_DIR || 'tests/fixtures/media');
 const outDir = path.resolve('temp/probe_reports/media_api_suite_probe');
+const projectName = process.env.ADOLE_TEST_PROJECT_NAME || `Media API Suite Probe ${Date.now()}`;
 const mediaPaths = [
   path.join(mediaDir, '0000.png'),
   path.join(mediaDir, 'atome.svg'),
@@ -85,12 +86,12 @@ const tryLogin = async (page) => {
 };
 
 const importMedia = async (page) => {
-  const bootstrap = await safeEval(page, async () => {
+  const bootstrap = await safeEval(page, async ({ projectName: targetProjectName }) => {
     if (!window.eveProjectDropApi?.importFilesToProjectViaCreator) {
       await import('/eVe/intuition/tools/project_drop.js');
     }
     const readProjectId = (project) => project?.id || project?.project_id || project?.projectId || project?.atome_id || project?.atomeId || null;
-    const readProjectName = (project) => project?.name || project?.project_name || project?.properties?.name || 'Media API Suite Probe';
+    const readProjectName = (project) => project?.name || project?.project_name || project?.properties?.name || targetProjectName;
     const readProjectOwnerId = (project) => project?.owner_id || project?.ownerId || project?.user_id || project?.userId || null;
     const listProjects = (result) => {
       if (Array.isArray(result)) return result;
@@ -120,16 +121,15 @@ const importMedia = async (page) => {
       if (api?.projects?.list && api?.projects?.setCurrent) {
         let projectsResult = await api.projects.list();
         let projects = listProjects(projectsResult);
-        let project = projects.find((entry) => readProjectName(entry) === 'Media API Suite Probe') || projects[0] || null;
+        let project = projects.find((entry) => readProjectName(entry) === targetProjectName) || null;
         let createdProjectId = null;
         if (!project && typeof api.projects.create === 'function') {
-          const created = await api.projects.create('Media API Suite Probe');
+          const created = await api.projects.create(targetProjectName);
           createdProjectId = extractCreatedId(created);
           projectsResult = await api.projects.list();
           projects = listProjects(projectsResult);
           project = projects.find((entry) => readProjectId(entry) === createdProjectId)
-            || projects.find((entry) => readProjectName(entry) === 'Media API Suite Probe')
-            || projects[0]
+            || projects.find((entry) => readProjectName(entry) === targetProjectName)
             || null;
         }
         projectId = readProjectId(project) || createdProjectId;
@@ -153,7 +153,7 @@ const importMedia = async (page) => {
       ok: !!(window.eveProjectDropApi?.importFilesToProjectViaCreator && projectEl && projectId),
       project_id: projectId
     };
-  }, null, 25000);
+  }, { projectName }, 25000);
   if (!bootstrap?.ok) throw new Error(`bootstrap_failed:${bootstrap?.error || JSON.stringify(bootstrap)}`);
 
   await page.evaluate(() => {
@@ -210,6 +210,29 @@ const inspectImportedRenderers = async (page, importResult) => {
       'data-role',
       'data-renderer'
     ];
+    const forbiddenAttributePrefixes = ['data-'];
+    const forbiddenClassPrefixes = [
+      'eve-system-layer-',
+      'eve-project-id-',
+      'eve-group-id-',
+      'eve-media-kind-',
+      'eve-renderer-',
+      'eve-source-kind-',
+      'eve-mtrax-import-',
+      'eve-atome-kind-',
+      'eve-binding-',
+      'eve-events-bound-',
+      'eve-drag-bound-',
+      'eve-resize-bound-',
+      'eve-api-ready-'
+    ];
+    const forbiddenExactClasses = [
+      'eve-selected-true',
+      'eve-selected-false'
+    ];
+    const allowedExactClasses = [
+      'eve-mtrax-import-preview-media'
+    ];
     return importedEntries.map((entry, index) => {
     const host = getAtomeElement(entry.atomeId);
     const expected = ['image', 'svg', 'video', 'audio'][index] || entry.type;
@@ -219,13 +242,44 @@ const inspectImportedRenderers = async (page, importResult) => {
     const canvases = Array.from(host?.querySelectorAll('canvas.eve-media-canvas') || []);
     const audioMarkers = Array.from(host?.querySelectorAll('.eve-media-audio-host') || []);
     const runtimeMedia = getAtomeRuntimeState(host)?.media || {};
-    const renderer = runtimeMedia.renderer || null;
-    const forbidden = host
-      ? Array.from(host.querySelectorAll('*')).concat(host).flatMap((element) => (
-        forbiddenAttributes
-          .filter((attributeName) => element.hasAttribute(attributeName))
-          .map((attributeName) => ({ tag: element.tagName, attributeName }))
+      const renderer = runtimeMedia.renderer || null;
+      const forbidden = host
+        ? Array.from(host.querySelectorAll('*')).concat(host).flatMap((element) => (
+        Array.from(element.getAttributeNames()).flatMap((attributeName) => {
+          const explicitlyForbidden = forbiddenAttributes.includes(attributeName);
+          const forbiddenPrefix = forbiddenAttributePrefixes.some((prefix) => attributeName.startsWith(prefix));
+          const customAtomeId = attributeName === 'atome_id';
+          return explicitlyForbidden || forbiddenPrefix || customAtomeId
+            ? [{ tag: element.tagName, attributeName }]
+            : [];
+        })
       ))
+      : [];
+    const forbiddenClasses = host
+      ? Array.from(host.querySelectorAll('*')).concat(host).flatMap((element) => (
+        Array.from(element.classList || []).flatMap((className) => (
+          !allowedExactClasses.includes(className)
+          && (
+            forbiddenExactClasses.includes(className)
+            || forbiddenClassPrefixes.some((prefix) => className.startsWith(prefix))
+          )
+            ? [{ tag: element.tagName, className }]
+            : []
+        ))
+      ))
+      : [];
+    const forbiddenStyles = host
+      ? Array.from(host.querySelectorAll('*')).concat(host).flatMap((element) => {
+        const style = element.getAttribute('style') || '';
+        const violations = [];
+        if (/border\s*:\s*medium/i.test(style)) {
+          violations.push({ tag: element.tagName, css: 'border: medium' });
+        }
+        if (/outline\s*:/i.test(style) && !element.classList.contains('is-selected')) {
+          violations.push({ tag: element.tagName, css: 'outline without is-selected' });
+        }
+        return violations;
+      })
       : [];
     const emptyClass = host
       ? Array.from(host.querySelectorAll('*')).concat(host).filter((element) => element.getAttribute('class') === '').map((element) => element.tagName)
@@ -236,7 +290,12 @@ const inspectImportedRenderers = async (page, importResult) => {
         ? !!host?.querySelector?.('.eve-atome-shape-svg svg, svg')
         : renderer === 'webgpu' && canvases.length === 1 && videos.length === 0 && audios.length === 0 && images.length === 0;
     return {
-      ok: ok && forbidden.length === 0 && emptyClass.length === 0 && host?.id === `eve-atome_${entry.atomeId}`,
+      ok: ok
+        && forbidden.length === 0
+        && forbiddenClasses.length === 0
+        && forbiddenStyles.length === 0
+        && emptyClass.length === 0
+        && host?.id === `eve-atome_${entry.atomeId}`,
       index,
       expected,
       atomeId: entry.atomeId,
@@ -249,6 +308,8 @@ const inspectImportedRenderers = async (page, importResult) => {
       imageCount: images.length,
       audioMarkerCount: audioMarkers.length,
       forbidden,
+      forbiddenClasses,
+      forbiddenStyles,
       emptyClass
     };
     });
@@ -296,7 +357,7 @@ const run = async () => {
     const login = await tryLogin(page);
     if (!login?.ok) throw new Error(`login_failed:${login?.error || JSON.stringify(login)}`);
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
-    await waitFor(page, () => window.__authCheckComplete === true, 25000);
+    await waitFor(page, () => !!window.AdoleAPI && window.__authCheckComplete === true, 25000);
     report.import_result = await importMedia(page);
     if (!report.import_result?.ok) throw new Error(`import_failed:${report.import_result?.error || JSON.stringify(report.import_result)}`);
     await waitFor(page, async ({ importedEntries }) => {

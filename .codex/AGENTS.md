@@ -54,10 +54,22 @@ The DOM MUST be treated only as a disposable projection of canonical Atome state
 
 - one canonical host id using the format `eve-atome_<atome_id>`;
 - semantic CSS classes required for styling, hit testing, rendering selection, and view-only grouping;
-- inline style only when the rendering contract requires it;
+- inline style only for dynamic geometry required by the current rendering contract;
 - real visual children such as text nodes, SVG, canvas, image/video/audio rendering surfaces, handles, or view-only UI controls.
 
 The DOM MUST NEVER contain Atome authority, Atome metadata, business state, replay state, persistence state, sync state, runtime ownership, action routing decisions, mutation payloads, or serialized Atome structures.
+
+This prohibition applies to every DOM carrier. Runtime, business, persistence, replay, sync, ownership, renderer, media-kind, group, project, selection, drag, resize, event-binding, debug-routing, or system-layer facts MUST NOT be stored as:
+
+- `data-*` attributes;
+- custom attributes;
+- disguised CSS classes;
+- inline styles;
+- DOM comments;
+- secondary ids;
+- serialized payloads;
+- hidden text nodes;
+- element names, wrapper nodes, or marker nodes whose only purpose is to encode runtime state.
 
 The following attributes MUST NOT be present on final Atome DOM hosts or inside final Atome DOM subtrees:
 
@@ -79,8 +91,74 @@ The following attributes MUST NOT be present on final Atome DOM hosts or inside 
 - `data-media-api-ready`;
 - `data-role`;
 - `data-renderer`;
+- `atome_id`;
 - any empty `class=""` attribute;
+- any custom attribute that carries Atome identity, type, state, ownership, registry membership, persistence, replay, sync, debug routing, media renderer state, selection state, drag state, resize state, group state, project state, event binding state, or mutation payloads;
 - any new `data-*` attribute that carries Atome identity, type, state, ownership, registry membership, persistence, replay, sync, debug routing, media renderer state, selection state, drag state, resize state, group state, project state, or event binding state.
+
+The following runtime class forms MUST NOT be present on final Atome DOM hosts or inside final Atome DOM subtrees:
+
+- `eve-system-layer-*`;
+- `eve-project-id-*`;
+- `eve-group-id-*`;
+- `eve-media-kind-*`;
+- `eve-renderer-*`;
+- `eve-source-kind-*`;
+- `eve-mtrax-import-*`, except the exact visual wrapper class `eve-mtrax-import-preview-media`;
+- `eve-atome-kind-*`;
+- `eve-binding-*`;
+- `eve-events-bound-*`;
+- `eve-drag-bound-*`;
+- `eve-resize-bound-*`;
+- `eve-api-ready-*`;
+- `eve-selected-true`;
+- `eve-selected-false`;
+- any new class that embeds an Atome id, project id, group id, system layer name, renderer name, media kind, source kind, boolean business state, persistence state, replay state, sync state, debug-routing fact, event-binding fact, or mutation payload.
+
+The following generic visual classes are allowed by default because they describe structure, visual category, or generic UI state rather than business/runtime identity:
+
+- `eve-atome`;
+- `eve-matrix-tile`;
+- `eve-media-atome`;
+- `eve-shape-atome`;
+- `eve-svg-atome`;
+- `eve-rounded-large`;
+- `eve-atome-shape-svg`;
+- `eve-atome-group-placeholder`;
+- `eve-mtrax-import-preview-media`;
+- `eve-media-canvas`;
+- `eve-media-audio-host`;
+- `is-selected`;
+- `is-dragging`;
+- `is-resizing`;
+- `is-hidden`;
+- `is-disabled`;
+- `is-focused`.
+
+Selection MUST be projected only through the generic `is-selected` class. Internal selected state belongs in the runtime registry. Classes such as `eve-selected-true` and `eve-selected-false`, inline `outline` state, and dataset-backed selected flags are forbidden.
+
+System layer data MUST be stored only in the runtime registry or an explicitly owned layer registry. It MUST NOT be projected into DOM classes such as `eve-system-layer-intuition_active_drag`, attributes such as `data-eve-system-layer`, or inline styles.
+
+Final Atome host inline styles are limited to dynamic geometry values that cannot yet be represented by the current renderer contract, such as `left`, `top`, `width`, `height`, and `z-index` when z-order is dynamic. Decorative or stateful inline CSS is forbidden on final Atome hosts and final media/SVG projection children, including:
+
+- `border: medium`;
+- `outline` and `outline-offset`;
+- `box-sizing`;
+- `border`;
+- `border-color`;
+- `border-radius`;
+- `background`;
+- `background-color`;
+- `box-shadow`;
+- `color`;
+- `overflow`;
+- `touch-action`;
+- `pointer-events`;
+- `display`;
+- `user-select`;
+- any inline style whose value represents selection, drag, resize, renderer readiness, media kind, project membership, group membership, source kind, system layer, event binding, persistence, replay, sync, or debug state.
+
+Decorative Atome styling MUST live in the approved JavaScript-driven visual contract documented in `maps/DESIGN_MAP.md`, not in final DOM inline style. Required dynamic visual values must be justified by renderer constraints and covered by regression tests.
 
 All Atome information that is required to decide behavior MUST be centralized outside the DOM in the canonical Atome registry, runtime state registry, or the explicitly owned domain registry for that concern. Event handlers MUST resolve the nearest Atome host from the DOM id, recover the canonical `atome_id`, and then consult the appropriate registry or correspondence table to decide the action. Double click, left click, drag, resize, selection, keyboard routing, flower menu routing, MTRAX opening, media transport, persistence, refresh, replay, and debug behavior MUST NOT branch on DOM `data-*` state.
 
@@ -92,9 +170,9 @@ Mandatory role separation:
 - DOM: owns only paintable structure, CSS classes, geometry projection, browser-native event targets, and visual rendering surfaces.
 - Event layer: translates browser events into Atome intent by id, then delegates to registries and canonical mutation APIs.
 
-Any code that writes Atome business facts into DOM attributes is architecturally invalid. Any code that reads Atome behavior decisions from DOM attributes is architecturally invalid unless it is explicitly reading a legacy fallback during an active migration and the final rendered Atome DOM contract remains clean. New code MUST NOT add such fallbacks.
+Any code that writes Atome business facts into DOM attributes, CSS classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid. Any code that reads Atome behavior decisions from DOM attributes, runtime-disguised classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid unless it is explicitly reading a legacy fallback during an active migration and the final rendered Atome DOM contract remains clean. New code MUST NOT add such fallbacks.
 
-Every Atome rendering change MUST include or preserve an automated regression check that renders real Atome DOM and fails when forbidden attributes, empty classes, duplicated DOM authority, or DOM-owned Atome state reappear.
+Every Atome rendering change MUST include or preserve an automated regression check that renders real Atome DOM and fails when forbidden attributes, custom attributes, empty classes, runtime-disguised classes, `border: medium`, inline outline without `is-selected`, decorative inline styles, DOM comments, secondary ids, duplicated DOM authority, or DOM-owned Atome state reappear. The regression check MUST verify the real final DOM after creation, selection/deselection, drag, resize, refresh, reload, SVG rendering, media/canvas rendering, and event resolution through `closest('.eve-atome')` plus `fromDomId(host.id)` when those flows are in scope.
 
 ## TASK ROUTING AND SECTION APPLICABILITY
 

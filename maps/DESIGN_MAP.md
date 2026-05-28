@@ -136,6 +136,24 @@ Role:
 
 Design rule: broad product styling belongs here only when it is genuinely shared. Feature-specific styling belongs in the feature visual module.
 
+### Atome Projection Visual Contract
+
+Primary sources:
+
+- `eVe/elements/eVe_look.js`
+- `eVe/intuition/runtime/tool_genesis.js`
+- `eVe/intuition/runtime/selection.js`
+- `eVe/core/media_engine/molecule.api.js`
+
+Role:
+
+- `eVe/elements/eVe_look.js` owns the shared visual CSS rules for final Atome hosts and their media/SVG projection children: `eve-atome`, `eve-matrix-tile`, `eve-media-atome`, `eve-shape-atome`, `eve-svg-atome`, `eve-rounded-large`, `is-selected`, `eve-atome-shape-svg`, `eve-atome-group-placeholder`, `eve-mtrax-import-preview-media`, `eve-media-canvas`, and `eve-media-audio-host`.
+- `eVe/intuition/runtime/tool_genesis.js` owns host class projection and keeps final Atome host inline styles limited to dynamic geometry such as left, top, width, height, and z-index.
+- `eVe/intuition/runtime/selection.js` owns selected-state projection through the generic `is-selected` class only.
+- `eVe/core/media_engine/molecule.api.js` owns Molecule media canvas/audio host creation without decorative inline styles.
+
+Design rule: final Atome DOM must not encode runtime facts as CSS classes or inline styles. System layer, renderer, media kind, group, binding, and selection truth belongs in the runtime registries, while CSS classes remain visual/category-only.
+
 ### Panel Chrome Tokens
 
 Primary source: `eVe/elements/design/panel_chrome_tokens.js`
