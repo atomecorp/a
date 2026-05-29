@@ -11,6 +11,8 @@ const timelineSource = await readSource('eVe/core/atome_timeline.js');
 const toolGenesisSource = await readSource('eVe/intuition/runtime/tool_genesis.js');
 const projectBridgeSource = await readSource('eVe/intuition/runtime/project_scene_render_bridge.js');
 const mediaIntegritySource = await readSource('eVe/intuition/runtime/media_integrity_runtime.js');
+const shapeSvgSource = await readSource('eVe/intuition/runtime/shape_svg_runtime.js');
+const groupVisualSource = await readSource('eVe/intuition/runtime/group_visual_runtime.js');
 
 const sliceFunction = (source, name) => {
     const start = source.indexOf(`const ${name} =`);
@@ -76,4 +78,26 @@ test('tool genesis delegates media integrity ownership outside the legacy runtim
     assert.equal(toolGenesisSource.includes('const mediaIntegrityHistory ='), false);
     assert.equal(toolGenesisSource.includes('const mediaIntegrityKindHintsByAtomeId ='), false);
     assert.equal(toolGenesisSource.includes("Symbol.for('eve.bind.mediaIntegrityObserver')"), false);
+});
+
+test('tool genesis delegates shape svg ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './shape_svg_runtime.js'"));
+    assert.ok(shapeSvgSource.includes('createShapeSvgRuntime'));
+    assert.ok(shapeSvgSource.includes('isSvgShapeSpec'));
+    assert.ok(shapeSvgSource.includes('createInlineSvgElement'));
+    assert.equal(toolGenesisSource.includes('const SVG_DATA_PREFIX ='), false);
+    assert.equal(toolGenesisSource.includes('const decodeSvgDataUrl ='), false);
+    assert.equal(toolGenesisSource.includes('const fetchSvgMarkup ='), false);
+});
+
+test('tool genesis delegates legacy group visual ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './group_visual_runtime.js'"));
+    assert.ok(groupVisualSource.includes('createGroupVisualRuntime'));
+    assert.ok(groupVisualSource.includes('renderGroupHostPreview'));
+    assert.ok(groupVisualSource.includes('applyGroupMembership'));
+    assert.ok(groupVisualSource.includes('refreshGroupVisual'));
+    assert.equal(toolGenesisSource.includes('const mediaGroupState ='), false);
+    assert.equal(toolGenesisSource.includes('const renderGroupHostPreview ='), false);
+    assert.equal(toolGenesisSource.includes('const createGroupPersistedPreviewNode ='), false);
+    assert.equal(toolGenesisSource.includes('const createGroupMemberPreviewNode ='), false);
 });
