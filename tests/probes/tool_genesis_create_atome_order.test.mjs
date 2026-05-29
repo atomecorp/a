@@ -40,6 +40,14 @@ test('renderCreatedAtome is the only createAtome render owner', () => {
     const renderBody = sliceFunction('renderCreatedAtome');
 
     assert.ok(renderBody.includes('buildSpecFromRecord(canonicalState)'), 'render must start from canonical state');
-    assert.ok(renderBody.includes('renderAtomeRecord(canonicalState, layer)'), 'render must delegate to the existing record renderer');
+    assert.ok(renderBody.includes('renderAtomeRecord(canonicalState, layer)'), 'render must delegate to the unified record renderer');
     assert.equal(renderBody.includes('commitCreateAtome'), false, 'render must not commit model state');
+});
+
+test('project visual rendering delegates to the scene runtime', () => {
+    const body = sliceFunction('renderAtomeRecord');
+
+    assert.ok(body.includes('isProjectSceneParent(parent)'), 'project parents must be detected before DOM host rendering');
+    assert.ok(body.includes('renderProjectSceneRecord(record, parent, spec)'), 'project visual records must enter the scene runtime');
+    assert.ok(body.indexOf('renderProjectSceneRecord(record, parent, spec)') < body.indexOf('createAtomeElement(spec, spec.id, parent)'), 'project scene routing must happen before legacy host creation');
 });

@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
 
 const commits = [];
-const renders = [];
 const storage = {
     getItem: () => '',
     setItem: () => { },
     removeItem: () => { }
 };
 
-globalThis.window = {
+const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>', {
+    url: 'http://127.0.0.1:3000/'
+});
+dom.window.HTMLMediaElement.prototype.load = () => {};
+dom.window.HTMLMediaElement.prototype.pause = () => {};
+globalThis.window = dom.window;
+Object.assign(globalThis.window, {
     __currentProject: { id: 'project_a' },
     __currentUser: { user_id: 'user_a' },
     Atome: {
@@ -29,23 +35,26 @@ globalThis.window = {
         }
     },
     eveToolBase: {
-        ensureProjectLayer: (projectId) => ({ projectId }),
-        renderAtomeRecord: (record, layer) => {
-            renders.push({ record, layer });
+        ensureProjectLayer: () => dom.window.document.getElementById('project'),
+        renderAtomeRecord: () => {
+            throw new Error('project_media_must_not_call_renderAtomeRecord');
         }
-    },
-    location: { href: 'http://127.0.0.1:3000/' },
-    localStorage: storage,
-    sessionStorage: storage
-};
+    }
+});
 globalThis.localStorage = storage;
 globalThis.sessionStorage = storage;
-globalThis.document = {
-    querySelector: () => null
-};
+globalThis.document = dom.window.document;
 
 const { ensureProjectMediaAtome } = await import('../../eVe/domains/media/api/media_persistence_service.js');
-const { readMediaProjectionSource } = await import('../../eVe/domains/media/shared/media_projection_state.js');
+const {
+    clearAllProjectScenes,
+    getProjectSceneState
+} = await import('../../eVe/domains/rendering/project_scene_runtime.js');
+
+clearAllProjectScenes();
+
+const sceneRecords = () => getProjectSceneState('project_a')?.scene?.atoms || [];
+const latestSceneAtom = () => sceneRecords().at(-1);
 
 const assertNoEnvelopeOrAliasProps = (props = {}) => {
     [
@@ -81,7 +90,7 @@ const result = await ensureProjectMediaAtome({
 
 assert.equal(result.ok, true);
 assert.equal(commits.length, 1);
-assert.equal(renders.length, 1);
+assert.equal(sceneRecords().length, 1);
 assert.equal(commits[0].project_id, 'project_a');
 assertNoEnvelopeOrAliasProps(commits[0].props);
 assert.equal(commits[0].props.media_user_id, 'user_a');
@@ -90,14 +99,11 @@ assert.equal(commits[0].props.storage_root, 'recordings');
 assert.match(commits[0].props.visual_ref, /^thumbnail:/);
 assert.match(commits[0].props.thumbnail_ref, /^thumbnail:/);
 assert.equal(commits[0].props.visual_status, 'pending');
-assertNoEnvelopeOrAliasProps(renders[0].record.properties);
-assert.equal(renders[0].record.properties.media_user_id, 'user_a');
-assert.equal(renders[0].record.properties.storage_root, 'recordings');
-assert.match(renders[0].record.properties.visual_ref, /^thumbnail:/);
-assert.match(renders[0].record.properties.media_url, /^\/api\/recordings\/video_1779220000000\.webm/);
+assert.equal(latestSceneAtom().id, result.atomeId);
+assert.equal(latestSceneAtom().type, 'video');
+assert.match(latestSceneAtom().content.source, /\/api\/recordings\/video_1779220000000\.webm/);
 
 commits.length = 0;
-renders.length = 0;
 
 const reused = await ensureProjectMediaAtome({
     kind: 'video',
@@ -119,19 +125,11 @@ assert.equal(reused.created, false);
 assert.equal(reused.reused, true);
 assert.equal(reused.atomeId, 'video_recording_existing');
 assert.equal(commits.length, 0);
-assert.equal(renders.length, 1);
-assert.equal(renders[0].record.id, 'video_recording_existing');
-assert.equal(renders[0].record.type, 'video_recording');
-assert.equal(renders[0].record.properties.recording_id, 'video_recording_existing');
-assert.equal(renders[0].record.properties.kind, 'video_recording');
-assert.equal(renders[0].record.properties.media_kind, 'video');
-assert.match(renders[0].record.properties.visual_ref, /^thumbnail:/);
-assert.match(renders[0].record.properties.thumbnail_ref, /^thumbnail:/);
-assertNoEnvelopeOrAliasProps(renders[0].record.properties);
-assert.match(renders[0].record.properties.media_url, /^\/api\/recordings\/video_1779220000001\.webm/);
+assert.equal(sceneRecords().some((atom) => atom.id === 'video_recording_existing'), true);
+assert.equal(latestSceneAtom().type, 'video');
+assert.match(latestSceneAtom().content.source, /\/api\/recordings\/video_1779220000001\.webm/);
 
 commits.length = 0;
-renders.length = 0;
 
 const hydrated = await ensureProjectMediaAtome({
     kind: 'sound',
@@ -158,28 +156,10 @@ assert.match(commits[0].props.visual_ref, /^waveform:/);
 assert.match(commits[0].props.waveform_ref, /^waveform:/);
 assert.equal(commits[0].props.left, 33);
 assert.equal(commits[0].props.top, 44);
-assert.equal(renders.length, 1);
-assert.equal(renders[0].record.id, 'audio_recording_pending');
-assert.equal(renders[0].record.properties.kind, 'audio_recording');
-assert.match(renders[0].record.properties.visual_ref, /^waveform:/);
-assert.match(renders[0].record.properties.waveform_ref, /^waveform:/);
+assert.equal(sceneRecords().some((atom) => atom.id === 'audio_recording_pending'), true);
+assert.equal(latestSceneAtom().type, 'audio_waveform');
 
 commits.length = 0;
-renders.length = 0;
-
-class ExistingHost {
-    constructor() {
-        this.style = {};
-        this.dataset = { atomeId: 'video_recording_pending', atomeKind: 'video_recording' };
-    }
-}
-
-globalThis.HTMLElement = ExistingHost;
-const existingHost = new ExistingHost();
-globalThis.document = {
-    querySelector: (selector) => selector.includes('video_recording_pending') ? existingHost : null,
-    getElementById: () => null
-};
 
 const existingHydrated = await ensureProjectMediaAtome({
     kind: 'video',
@@ -203,12 +183,7 @@ assert.equal(commits.length, 1);
 assert.equal(commits[0].atome_id, 'video_recording_pending');
 assert.match(commits[0].props.visual_ref, /^thumbnail:/);
 assert.match(commits[0].props.thumbnail_ref, /^thumbnail:/);
-assert.equal(renders.length, 0);
-assert.equal(existingHost.style.left, '77px');
-assert.equal(existingHost.style.top, '88px');
-assert.equal(existingHost.style.width, '333px');
-assert.equal(existingHost.style.height, '187px');
-assert.equal(existingHost.style.zIndex, '99');
-assert.equal(readMediaProjectionSource(existingHost).startsWith('/api/recordings/video_1779220000003.webm'), true);
+assert.equal(sceneRecords().some((atom) => atom.id === 'video_recording_pending'), true);
+assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
 
 console.log('media_persistence_service_sanitization: ok');

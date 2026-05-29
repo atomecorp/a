@@ -153,6 +153,7 @@ Role:
 - `eVe/intuition/runtime/selection.js` owns selected-state projection through the generic `is-selected` class only.
 - `eVe/core/media_engine/molecule.api.js` owns Molecule media canvas/audio host creation without decorative inline styles.
 - `eVe/domains/rendering/surface_runtime.js` owns bounded project and matrix WebGPU canvas surface projection. These canvas surfaces may expose short `data-role` values for auditability because they are rendering-zone surfaces, not final Atome DOM subtrees.
+- `eVe/domains/rendering/project_scene_runtime.js` owns active project Atome visual projection into the bounded project canvas. Project Atome count must change scene entries, not visible DOM hosts, text nodes, media elements, SVG nodes, or per-Atome canvases.
 
 Design rule: final Atome DOM must not encode runtime facts as CSS classes or inline styles. System layer, renderer, media kind, group, binding, and selection truth belongs in the runtime registries, while CSS classes remain visual/category-only.
 

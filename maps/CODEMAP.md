@@ -129,6 +129,7 @@ Atome DOM projection ownership:
 Unified rendering ownership:
 
 - `eVe/domains/rendering/` owns the closed product unified rendering projection contract for eVe Atomes: disposable `RenderAtom` normalization, render-scene ordering and hit testing, bounded project/matrix canvas surfaces, hidden text service lifecycle, and the shared WebGPU render-at-time compositor entry point.
+- `eVe/domains/rendering/project_scene_runtime.js` owns active project scene projection state keyed by project id. It accepts canonical project Atome records, normalizes them into `RenderAtom` entries, updates the bounded project render surface, and returns projection handles instead of per-Atome DOM hosts.
 - `RenderAtom` data is runtime-only and derived from canonical Atome records. It must not be written into DOM attributes, persisted as business state, or used as a second writable source of truth.
 - Project audio waveform Atomes now publish waveform render metadata into the Atome runtime registry for WebGPU rendering instead of creating per-Atome visible waveform DOM or SVG nodes.
 

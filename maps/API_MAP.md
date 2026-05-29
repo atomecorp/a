@@ -210,11 +210,11 @@ Boundary status: Closed product adapter over an open Atome event contract. It mi
 
 Ownership: eVe closed rendering projection boundary.
 
-Primary sources: `eVe/domains/rendering/render_atom.js`, `eVe/domains/rendering/scene_graph.js`, `eVe/domains/rendering/surface_runtime.js`, `eVe/domains/rendering/webgpu_compositor.js`.
+Primary sources: `eVe/domains/rendering/render_atom.js`, `eVe/domains/rendering/scene_graph.js`, `eVe/domains/rendering/surface_runtime.js`, `eVe/domains/rendering/webgpu_compositor.js`, `eVe/domains/rendering/project_scene_runtime.js`.
 
 Exposure: JavaScript module exports consumed by eVe project, Matrix, media, text, export, and compositor runtimes.
 
-Verified entry points: `normalizeRenderAtom`, `normalizeRenderAtoms`, `buildTextureCacheKey`, `buildTextCacheKey`, `buildWaveformCacheKey`, `createRenderScene`, `hitTestRenderScene`, `createSurfaceEventRouter`, `ensureRenderSurface`, `updateRenderSurfaceScene`, `getRenderSurfaceState`, `ensureHiddenTextServiceRoot`, `mountActiveTextEditor`, `unmountActiveTextEditor`, `getTextServiceState`, `createUnifiedWebGPUCompositor`.
+Verified entry points: `normalizeRenderAtom`, `normalizeRenderAtoms`, `buildTextureCacheKey`, `buildTextCacheKey`, `buildWaveformCacheKey`, `createRenderScene`, `hitTestRenderScene`, `createSurfaceEventRouter`, `ensureRenderSurface`, `updateRenderSurfaceScene`, `getRenderSurfaceState`, `ensureHiddenTextServiceRoot`, `mountActiveTextEditor`, `unmountActiveTextEditor`, `getTextServiceState`, `createUnifiedWebGPUCompositor`, `renderProjectScene`, `updateProjectSceneRecord`, `updateProjectSceneRecordByAtomeId`, `findProjectSceneByAtomeId`, `getProjectSceneState`, `clearProjectScene`, `clearAllProjectScenes`.
 
 Boundary rules:
 
