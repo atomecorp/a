@@ -210,18 +210,18 @@ Boundary status: Closed product adapter over an open Atome event contract. It mi
 
 Ownership: eVe closed rendering projection boundary.
 
-Primary sources: `eVe/domains/rendering/render_atom.js`, `eVe/domains/rendering/scene_graph.js`, `eVe/domains/rendering/surface_runtime.js`, `eVe/domains/rendering/webgpu_compositor.js`, `eVe/domains/rendering/project_scene_runtime.js`.
+Primary sources: `eVe/domains/rendering/render_atom.js`, `eVe/domains/rendering/scene_graph.js`, `eVe/domains/rendering/surface_runtime.js`, `eVe/domains/rendering/webgpu_compositor.js`, `eVe/domains/rendering/project_scene_runtime.js`, `eVe/domains/rendering/matrix_preview_renderer.js`, `eVe/intuition/runtime/project_scene_render_bridge.js`, `eVe/intuition/runtime/atome_description_frame_runtime.js`.
 
 Exposure: JavaScript module exports consumed by eVe project, Matrix, media, text, export, and compositor runtimes.
 
-Verified entry points: `normalizeRenderAtom`, `normalizeRenderAtoms`, `buildTextureCacheKey`, `buildTextCacheKey`, `buildWaveformCacheKey`, `createRenderScene`, `hitTestRenderScene`, `createSurfaceEventRouter`, `ensureRenderSurface`, `updateRenderSurfaceScene`, `getRenderSurfaceState`, `ensureHiddenTextServiceRoot`, `mountActiveTextEditor`, `unmountActiveTextEditor`, `getTextServiceState`, `createUnifiedWebGPUCompositor`, `renderProjectScene`, `updateProjectSceneRecord`, `updateProjectSceneRecordByAtomeId`, `findProjectSceneByAtomeId`, `getProjectSceneState`, `clearProjectScene`, `clearAllProjectScenes`.
+Verified entry points: `normalizeRenderAtom`, `normalizeRenderAtoms`, `buildTextureCacheKey`, `buildTextCacheKey`, `buildWaveformCacheKey`, `createRenderScene`, `hitTestRenderScene`, `createSurfaceEventRouter`, `ensureRenderSurface`, `updateRenderSurfaceScene`, `getRenderSurfaceState`, `ensureHiddenTextServiceRoot`, `mountActiveTextEditor`, `unmountActiveTextEditor`, `getTextServiceState`, `createUnifiedWebGPUCompositor`, `createMatrixPreviewRenderer`, `renderProjectScene`, `updateProjectSceneRecord`, `updateProjectSceneRecordByAtomeId`, `findProjectSceneByAtomeId`, `getProjectSceneState`, `beginProjectSceneTextEdit`, `commitProjectSceneTextEdit`, `cancelProjectSceneTextEdit`, `emitProjectSceneIntent`, `resizeProjectSceneRecord`, `clearProjectScene`, `clearAllProjectScenes`, `projectIdFromProjectLayer`, `isProjectSceneParent`, `renderProjectSceneRecord`, `rememberAtomeDescriptionFrame`, `resolveAtomeFrame`, `readAtomeFrameState`, `clearAtomeDescriptionFrames`.
 
 Boundary rules:
 
 - The API consumes canonical Atome records and returns disposable render projections only.
-- Effectful Atome mutations remain outside this API and must pass through `window.Atome.commit` or `window.Atome.commitBatch`.
+- Effectful project drag, resize, and text mutations enter as scene intents and must pass through `window.Atome.commit` or `window.Atome.commitBatch`; the runtime may update its disposable records only after issuing the canonical mutation.
 - Render surfaces are bounded by zone (`project`, `matrix`) and must not create one canvas per Atome.
-- Text DOM is limited to one hidden service root and one active editor.
+- Text DOM is limited to one hidden service root and one active editor. Project text editing is exposed through project-scene text APIs, not `.eve-atome-text` hosts.
 
 Boundary status: Semi-public closed product API. It is not an Atome open framework contract until a product-neutral renderer contract is explicitly promoted.
 
