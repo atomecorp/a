@@ -126,6 +126,12 @@ Atome DOM projection ownership:
 - Binding flags and ephemeral UI state belong in runtime registries or WeakMaps. Group/media runtime facts belong in their owning runtime/domain registries, not in the DOM.
 - Legacy code may keep narrow read-only fallbacks while migrating old DOM, but new rendering code must emit the clean projection contract and new routing code must not branch on Atome `data-*` state.
 
+Unified rendering ownership:
+
+- `eVe/domains/rendering/` owns the closed product unified rendering projection contract for eVe Atomes: disposable `RenderAtom` normalization, render-scene ordering and hit testing, bounded project/matrix canvas surfaces, hidden text service lifecycle, and the shared WebGPU render-at-time compositor entry point.
+- `RenderAtom` data is runtime-only and derived from canonical Atome records. It must not be written into DOM attributes, persisted as business state, or used as a second writable source of truth.
+- Project audio waveform Atomes now publish waveform render metadata into the Atome runtime registry for WebGPU rendering instead of creating per-Atome visible waveform DOM or SVG nodes.
+
 ### Tests
 
 Path: `tests/`.

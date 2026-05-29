@@ -141,6 +141,7 @@ Design rule: broad product styling belongs here only when it is genuinely shared
 Primary sources:
 
 - `eVe/elements/eVe_look.js`
+- `eVe/domains/rendering/surface_runtime.js`
 - `eVe/intuition/runtime/tool_genesis.js`
 - `eVe/intuition/runtime/selection.js`
 - `eVe/core/media_engine/molecule.api.js`
@@ -151,6 +152,7 @@ Role:
 - `eVe/intuition/runtime/tool_genesis.js` owns host class projection and keeps final Atome host inline styles limited to dynamic geometry such as left, top, width, height, and z-index.
 - `eVe/intuition/runtime/selection.js` owns selected-state projection through the generic `is-selected` class only.
 - `eVe/core/media_engine/molecule.api.js` owns Molecule media canvas/audio host creation without decorative inline styles.
+- `eVe/domains/rendering/surface_runtime.js` owns bounded project and matrix WebGPU canvas surface projection. These canvas surfaces may expose short `data-role` values for auditability because they are rendering-zone surfaces, not final Atome DOM subtrees.
 
 Design rule: final Atome DOM must not encode runtime facts as CSS classes or inline styles. System layer, renderer, media kind, group, binding, and selection truth belongs in the runtime registries, while CSS classes remain visual/category-only.
 

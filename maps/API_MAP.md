@@ -206,6 +206,25 @@ Forbidden API pattern: adding new Atome `data-*` attributes or reading behavior 
 
 Boundary status: Closed product adapter over an open Atome event contract. It mirrors the canonical server/database property boundary without importing `atome/shared/atome_contract.js` into browser-served eVe modules.
 
+### eVe Unified Rendering Projection API
+
+Ownership: eVe closed rendering projection boundary.
+
+Primary sources: `eVe/domains/rendering/render_atom.js`, `eVe/domains/rendering/scene_graph.js`, `eVe/domains/rendering/surface_runtime.js`, `eVe/domains/rendering/webgpu_compositor.js`.
+
+Exposure: JavaScript module exports consumed by eVe project, Matrix, media, text, export, and compositor runtimes.
+
+Verified entry points: `normalizeRenderAtom`, `normalizeRenderAtoms`, `buildTextureCacheKey`, `buildTextCacheKey`, `buildWaveformCacheKey`, `createRenderScene`, `hitTestRenderScene`, `createSurfaceEventRouter`, `ensureRenderSurface`, `updateRenderSurfaceScene`, `getRenderSurfaceState`, `ensureHiddenTextServiceRoot`, `mountActiveTextEditor`, `unmountActiveTextEditor`, `getTextServiceState`, `createUnifiedWebGPUCompositor`.
+
+Boundary rules:
+
+- The API consumes canonical Atome records and returns disposable render projections only.
+- Effectful Atome mutations remain outside this API and must pass through `window.Atome.commit` or `window.Atome.commitBatch`.
+- Render surfaces are bounded by zone (`project`, `matrix`) and must not create one canvas per Atome.
+- Text DOM is limited to one hidden service root and one active editor.
+
+Boundary status: Semi-public closed product API. It is not an Atome open framework contract until a product-neutral renderer contract is explicitly promoted.
+
 ### eVe Clipboard Tool APIs
 
 Ownership: eVe closed product tools over the Atome commit boundary.
