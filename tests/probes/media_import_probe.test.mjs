@@ -78,17 +78,17 @@ const tryLogin = async (page) => {
 
   if (apiResult?.ok) return apiResult;
 
-  return safeEval(page, async ({ phone: loginPhone, password: loginPassword }) => {
+  return safeEval(page, async ({ phone: loginPhone, password: loginPassword, priorLogin }) => {
     const api = window.AdoleAPI || null;
     if (!api?.auth?.create) return { ok: false, error: 'AdoleAPI.auth.create unavailable' };
     try {
       const res = await api.auth.create(loginPhone, loginPassword, loginPhone, { autoLogin: true });
       const ok = !!(res?.fastify?.success || res?.tauri?.success || res?.login?.fastify?.success || res?.login?.tauri?.success);
-      return { ok, method: 'create', result: res, prior_login: apiResult };
+      return { ok, method: 'create', result: res, prior_login: priorLogin };
     } catch (error) {
-      return { ok: false, error: error?.message || String(error || 'create_error'), prior_login: apiResult };
+      return { ok: false, error: error?.message || String(error || 'create_error'), prior_login: priorLogin };
     }
-  }, { phone, password }, 18000);
+  }, { phone, password, priorLogin: apiResult }, 18000);
 };
 
 const run = async () => {
@@ -219,7 +219,12 @@ const run = async () => {
     : [];
   const domReady = await waitFor(page, (ids) => {
     if (!Array.isArray(ids) || !ids.length) return { ok: false, error: 'no_imported_ids' };
-    const missing = ids.filter((id) => !document.querySelector(`[data-atome-id="${CSS.escape(id)}"]`));
+    const projectId = window.__currentProject?.id
+      || document.querySelector('[id^="project_view_"]')?.id?.replace(/^project_view_/, '')
+      || '';
+    const scene = window.eveToolBase?.getProjectSceneState?.(projectId);
+    const records = Array.isArray(scene?.records) ? scene.records : [];
+    const missing = ids.filter((id) => !records.some((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '') === String(id)));
     return { ok: missing.length === 0, missing };
   }, 30000, 500, importedIds);
   writeJson('dom_ready.json', domReady);

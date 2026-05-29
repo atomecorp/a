@@ -4,7 +4,7 @@ import { chromium, webkit } from 'playwright';
 
 const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3001';
 const BROWSER_NAME = process.env.MOLECULE_OPEN_PROBE_BROWSER || 'chromium';
-const PHONE = process.env.ADOLE_TEST_PHONE || `8888${BROWSER_NAME === 'webkit' ? '002' : '001'}`;
+const PHONE = process.env.ADOLE_TEST_PHONE || '55555555';
 const PASSWORD = process.env.ADOLE_TEST_PASSWORD || PHONE;
 const MEDIA_NAME = process.env.MOLECULE_OPEN_PROBE_MEDIA || 'Vampire.m4v';
 const MEDIA_PATH = path.resolve(process.env.ATOME_MEDIA_TEST_DIR || 'tests/fixtures/media', MEDIA_NAME);
@@ -105,7 +105,8 @@ try {
         if (!api?.auth?.login) return { ok: false, error: 'auth_api_missing' };
         let result = await api.auth.login(phone, password, phone);
         let current = await api.auth.current?.();
-        if (!current?.logged && typeof api.auth.create === 'function') {
+        const loginOk = !!(result?.fastify?.success || result?.tauri?.success);
+        if (!loginOk && typeof api.auth.create === 'function') {
             result = await api.auth.create(phone, password, phone, { autoLogin: true });
             current = await api.auth.current?.();
         }
@@ -181,21 +182,31 @@ try {
     await page.evaluate((atomeId) => {
         window.__MOLECULE_OPEN_PROBE_ATOME_ID__ = String(atomeId || '');
     }, importedAtomeId);
-    const imported = await waitFor(page, () => {
-        const base = String(window.__MOLECULE_OPEN_PROBE_MEDIA_NAME__ || '').toLowerCase();
+    const imported = await waitFor(page, async () => {
         const expectedId = String(window.__MOLECULE_OPEN_PROBE_ATOME_ID__ || '').trim();
-        const hosts = Array.from(document.querySelectorAll('[data-atome-id]'));
-        for (const host of hosts) {
-            const hostId = String(host.dataset?.atomeId || '');
-            const source = String(host.dataset?.eveMediaSource || '').toLowerCase();
-            const label = String(host.dataset?.atomeName || host.textContent || '').toLowerCase();
-            if (expectedId && hostId !== expectedId) continue;
-            if (!expectedId && !source.includes(base) && !label.includes(base)) continue;
-            const rect = host.getBoundingClientRect();
+        if (!expectedId) return { ok: false, error: 'imported_atome_id_missing' };
+        const state = await window.Atome?.getStateCurrent?.(expectedId);
+        const props = state?.properties || state?.props || state || {};
+        const source = String(props.media_url || props.mediaUrl || props.src || props.file_path || props.filePath || '').trim();
+        const projectId = state?.project_id
+            || state?.projectId
+            || props.project_id
+            || props.projectId
+            || window.__currentProject?.id
+            || document.querySelector('[id^="project_view_"]')?.id?.replace(/^project_view_/, '')
+            || '';
+        const scene = window.eveToolBase?.getProjectSceneState?.(projectId);
+        const recordPresent = Array.isArray(scene?.records)
+            ? scene.records.some((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '') === expectedId)
+            : false;
+        const surface = scene?.surface || null;
+        if (source && recordPresent && surface) {
+            const rect = surface.getBoundingClientRect();
             return {
                 ok: rect.width > 0 && rect.height > 0,
-                atome_id: hostId,
-                source
+                atome_id: expectedId,
+                source,
+                scene_record_present: true
             };
         }
         return { ok: false, error: 'media_host_missing' };
@@ -205,7 +216,6 @@ try {
 
     report.before_open = await page.evaluate(async (atomeId) => {
         const api = window.AdoleAPI || null;
-        const host = document.querySelector(`[data-atome-id="${CSS.escape(String(atomeId || ''))}"]`);
         let current = null;
         let info = null;
         let state = null;
@@ -229,12 +239,24 @@ try {
             current_user: window.__currentUser || null,
             auth_info: info,
             auth_current: current,
-            host_dataset: host ? { ...host.dataset } : null,
             state
         };
     }, report.imported.atome_id);
 
-    await page.locator(`[data-atome-id="${report.imported.atome_id}"]`).first().dblclick({ timeout: 20000, force: true });
+    report.open = await page.evaluate(async (atomeId) => {
+        const mod = await import('/eVe/intuition/runtime/group_timeline_api.js');
+        return mod.openGroupTimeline({
+            action: 'open',
+            atome_id: atomeId,
+            target_id: atomeId,
+            selection_ids: [atomeId],
+            source: 'molecule_open_raw_media_request_probe',
+            source_layer: 'molecule_open_raw_media_request_probe',
+            footer_coupled: false,
+            toggle: false
+        });
+    }, report.imported.atome_id);
+    if (!report.open?.ok) throw new Error(`molecule_open_failed:${report.open?.error || JSON.stringify(report.open)}`);
     await sleep(5200);
 
     report.molecule = await page.evaluate(() => {
