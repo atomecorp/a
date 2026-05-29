@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { createMediaSourceRuntime } from '../../eVe/intuition/runtime/media_source_runtime.js';
 
 const readSource = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
 
@@ -13,6 +14,7 @@ const projectBridgeSource = await readSource('eVe/intuition/runtime/project_scen
 const mediaIntegritySource = await readSource('eVe/intuition/runtime/media_integrity_runtime.js');
 const shapeSvgSource = await readSource('eVe/intuition/runtime/shape_svg_runtime.js');
 const groupVisualSource = await readSource('eVe/intuition/runtime/group_visual_runtime.js');
+const mediaSourceSource = await readSource('eVe/intuition/runtime/media_source_runtime.js');
 
 const sliceFunction = (source, name) => {
     const start = source.indexOf(`const ${name} =`);
@@ -100,4 +102,39 @@ test('tool genesis delegates legacy group visual ownership outside the legacy ru
     assert.equal(toolGenesisSource.includes('const renderGroupHostPreview ='), false);
     assert.equal(toolGenesisSource.includes('const createGroupPersistedPreviewNode ='), false);
     assert.equal(toolGenesisSource.includes('const createGroupMemberPreviewNode ='), false);
+});
+
+test('tool genesis delegates media source resolution outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './media_source_runtime.js'"));
+    assert.ok(mediaSourceSource.includes('createMediaSourceRuntime'));
+    assert.ok(mediaSourceSource.includes('resolveMediaUrlFromProperties'));
+    assert.ok(mediaSourceSource.includes('normalizePersistedTimelineMediaSourcesForOwner'));
+    assert.equal(toolGenesisSource.includes('const BUNDLED_MEDIA_ASSET_BY_NAME ='), false);
+    assert.equal(toolGenesisSource.includes('const resolveBundledMediaAsset ='), false);
+    assert.equal(toolGenesisSource.includes('const normalizePersistedMediaUrlForOwner ='), false);
+    assert.equal(
+        toolGenesisSource.includes('/api/recordings/') || toolGenesisSource.includes('audio|video)_'),
+        false
+    );
+});
+
+test('media source runtime normalizes bundled upload recording protected and local media cases', () => {
+    const runtime = createMediaSourceRuntime({
+        isTauriRuntime: () => false,
+        getLocalHttpPort: () => 8794
+    });
+
+    assert.equal(runtime.resolveMediaUrlFromProperties({ media_url: 'superman.mp4' }), '/assets/videos/superman.mp4');
+    assert.equal(runtime.resolveMediaUrlFromProperties({ file_name: 'audio_recording_demo.wav' }), '/api/recordings/audio_recording_demo.wav');
+    assert.equal(runtime.resolveMediaUrlFromProperties({ file_name: 'photo.png', owner_id: 'owner_a' }), '/api/uploads/photo.png?media_user_id=owner_a');
+    assert.equal(runtime.isProtectedMediaUrl('/api/uploads/photo.png'), true);
+    assert.equal(runtime.shouldHydrateProtectedMedia({ recordingId: 'audio_recording_demo.wav' }), true);
+    assert.equal(runtime.shouldAttemptIdentifierHydration({ src: 'clip.mp4' }), true);
+
+    const tauriRuntime = createMediaSourceRuntime({
+        isTauriRuntime: () => true,
+        getLocalHttpPort: () => 8794
+    });
+    assert.equal(tauriRuntime.resolveMediaSrc('/file/local.wav'), 'http://127.0.0.1:8794/file/local.wav');
+    assert.equal(tauriRuntime.resolveProtectedMediaFetchCredentials('http://127.0.0.1:8794/api/uploads/photo.png'), 'omit');
 });
