@@ -10,6 +10,7 @@ const communicationSource = await readSource('eVe/intuition/tools/communication.
 const timelineSource = await readSource('eVe/core/atome_timeline.js');
 const toolGenesisSource = await readSource('eVe/intuition/runtime/tool_genesis.js');
 const projectBridgeSource = await readSource('eVe/intuition/runtime/project_scene_render_bridge.js');
+const mediaIntegritySource = await readSource('eVe/intuition/runtime/media_integrity_runtime.js');
 
 const sliceFunction = (source, name) => {
     const start = source.indexOf(`const ${name} =`);
@@ -65,4 +66,14 @@ test('tool genesis delegates project scene routing to a cohesive bridge owner', 
     assert.equal(projectBridgeSource.includes('bindAtomeHost('), false);
     assert.equal(createBody.includes('project_view_'), false);
     assert.equal(createBody.includes('eve-matrix-tile'), false);
+});
+
+test('tool genesis delegates media integrity ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './media_integrity_runtime.js'"));
+    assert.ok(mediaIntegritySource.includes('createMediaHostIntegrityRuntime'));
+    assert.ok(mediaIntegritySource.includes('logMediaIntegrityEvent'));
+    assert.ok(mediaIntegritySource.includes('rememberMediaIntegrityKindHint'));
+    assert.equal(toolGenesisSource.includes('const mediaIntegrityHistory ='), false);
+    assert.equal(toolGenesisSource.includes('const mediaIntegrityKindHintsByAtomeId ='), false);
+    assert.equal(toolGenesisSource.includes("Symbol.for('eve.bind.mediaIntegrityObserver')"), false);
 });
