@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { createInfoPanelSyncRuntime } from '../../eVe/intuition/runtime/info_panel_sync_runtime.js';
 import { createMediaHydrationRuntime } from '../../eVe/intuition/runtime/media_hydration_runtime.js';
 import { createMediaMountRuntime } from '../../eVe/intuition/runtime/media_mount_runtime.js';
 import { createMediaSourceRuntime } from '../../eVe/intuition/runtime/media_source_runtime.js';
 import { createProjectAtomeIndexRuntime } from '../../eVe/intuition/runtime/project_atome_index_runtime.js';
+import { createPersistenceDiagRuntime } from '../../eVe/intuition/runtime/persistence_diag_runtime.js';
 import { createRealtimeAtomeEventsRuntime } from '../../eVe/intuition/runtime/realtime_atome_events_runtime.js';
 
 const readSource = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -15,6 +17,7 @@ const communicationSource = await readSource('eVe/intuition/tools/communication.
 const timelineSource = await readSource('eVe/core/atome_timeline.js');
 const toolGenesisSource = await readSource('eVe/intuition/runtime/tool_genesis.js');
 const projectBridgeSource = await readSource('eVe/intuition/runtime/project_scene_render_bridge.js');
+const infoPanelSyncSource = await readSource('eVe/intuition/runtime/info_panel_sync_runtime.js');
 const mediaIntegritySource = await readSource('eVe/intuition/runtime/media_integrity_runtime.js');
 const shapeSvgSource = await readSource('eVe/intuition/runtime/shape_svg_runtime.js');
 const groupVisualSource = await readSource('eVe/intuition/runtime/group_visual_runtime.js');
@@ -23,6 +26,7 @@ const mediaHydrationSource = await readSource('eVe/intuition/runtime/media_hydra
 const mediaMountSource = await readSource('eVe/intuition/runtime/media_mount_runtime.js');
 const hostRegistrySource = await readSource('eVe/intuition/runtime/atome_host_registry_runtime.js');
 const projectAtomeIndexSource = await readSource('eVe/intuition/runtime/project_atome_index_runtime.js');
+const persistenceDiagSource = await readSource('eVe/intuition/runtime/persistence_diag_runtime.js');
 const realtimeEventsSource = await readSource('eVe/intuition/runtime/realtime_atome_events_runtime.js');
 
 const sliceFunction = (source, name) => {
@@ -403,6 +407,144 @@ test('realtime atome events runtime sanitizes media text patches and routes even
     } finally {
         globalThis.window = originalWindow;
         globalThis.document = originalDocument;
+    }
+});
+
+test('tool genesis delegates persistence diagnostics outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './persistence_diag_runtime.js'"));
+    assert.ok(persistenceDiagSource.includes('createPersistenceDiagRuntime'));
+    assert.ok(persistenceDiagSource.includes('persistenceDiagLog'));
+    assert.ok(persistenceDiagSource.includes('summarizePersistenceRecord'));
+    assert.ok(persistenceDiagSource.includes('summarizePersistenceRecords'));
+    assert.equal(toolGenesisSource.includes('const persistenceDiagLog ='), false);
+    assert.equal(toolGenesisSource.includes('const summarizePersistenceRecord ='), false);
+});
+
+test('persistence diagnostics runtime summarizes records and logs only when enabled', async () => {
+    const originalWindow = globalThis.window;
+    try {
+        const messages = [];
+        const invokes = [];
+        globalThis.window = {
+            __EVE_PERSISTENCE_DIAG__: false,
+            webkit: {
+                messageHandlers: {
+                    console: {
+                        postMessage: (message) => messages.push(message)
+                    }
+                }
+            },
+            __TAURI_INTERNALS__: {
+                invoke: async (name, payload) => invokes.push({ name, payload })
+            }
+        };
+        const runtime = createPersistenceDiagRuntime({
+            resolveAtomeProperties: (record) => record.properties || {}
+        });
+
+        const records = runtime.summarizePersistenceRecords([
+            {
+                atome_id: 'shape_a',
+                type: 'shape',
+                owner_id: 'owner_a',
+                properties: {
+                    project_id: 'project_a',
+                    parent_id: 'project_a',
+                    left: 10,
+                    top: 20,
+                    width: 30,
+                    height: 40
+                }
+            },
+            null
+        ]);
+        assert.deepEqual(records, [{
+            id: 'shape_a',
+            type: 'shape',
+            projectId: 'project_a',
+            parentId: 'project_a',
+            ownerId: 'owner_a',
+            left: 10,
+            top: 20,
+            width: 30,
+            height: 40,
+            deleted: null
+        }]);
+
+        runtime.persistenceDiagLog('disabled', { ok: false });
+        assert.deepEqual(messages, []);
+        assert.deepEqual(invokes, []);
+
+        globalThis.window.__EVE_PERSISTENCE_DIAG__ = true;
+        runtime.persistenceDiagLog('enabled', { ok: true });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(messages.length, 1);
+        assert.ok(messages[0].includes('[eVe:persistence:temporary] enabled'));
+        assert.equal(invokes[0].name, 'log_from_webview');
+        assert.equal(invokes[0].payload.payload.component, 'persistence');
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
+
+test('tool genesis delegates info panel synchronization outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './info_panel_sync_runtime.js'"));
+    assert.ok(infoPanelSyncSource.includes('createInfoPanelSyncRuntime'));
+    assert.ok(infoPanelSyncSource.includes('notifyInfoPanelProperties'));
+    assert.ok(infoPanelSyncSource.includes('notifyInfoPanelPosition'));
+    assert.ok(infoPanelSyncSource.includes('notifyInfoPanelResize'));
+    assert.equal(toolGenesisSource.includes('const notifyInfoPanelProperties ='), false);
+    assert.equal(toolGenesisSource.includes('const notifyInfoPanelPosition ='), false);
+    assert.equal(toolGenesisSource.includes('const notifyInfoPanelResize ='), false);
+});
+
+test('info panel sync runtime projects position and resize updates', () => {
+    const originalWindow = globalThis.window;
+    try {
+        const updates = [];
+        globalThis.window = {
+            eveInfoPanelUpdateAtomeProperties: (atomeId, props) => updates.push({ atomeId, props })
+        };
+        const runtime = createInfoPanelSyncRuntime({
+            toPx: (value) => `${Math.round(Number(value) || 0)}px`
+        });
+        const item = {
+            id: 'shape_panel',
+            width: 40,
+            height: 50,
+            parentWidth: 200,
+            parentHeight: 180,
+            hasRight: true,
+            hasBottom: true
+        };
+
+        runtime.notifyInfoPanelPosition(item, 10, 20);
+        runtime.notifyInfoPanelResize(item, 15, 25, 60, 70);
+
+        assert.deepEqual(updates, [
+            {
+                atomeId: 'shape_panel',
+                props: {
+                    left: '10px',
+                    top: '20px',
+                    right: '150px',
+                    bottom: '110px'
+                }
+            },
+            {
+                atomeId: 'shape_panel',
+                props: {
+                    left: '15px',
+                    top: '25px',
+                    width: '60px',
+                    height: '70px',
+                    right: '125px',
+                    bottom: '85px'
+                }
+            }
+        ]);
+    } finally {
+        globalThis.window = originalWindow;
     }
 });
 
