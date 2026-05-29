@@ -259,7 +259,7 @@ Boundary rules:
 - File selection is UI intent collection only; durable media creation is delegated to `eVe/intuition/tools/project_drop.js` through `importFilesToProjectViaCreator`.
 - The runtime may use the native iOS/AUv3 document picker, browser file picker, or hidden input picker only as file-selection surfaces.
 - It must not persist Atome state, upload files, or render media directly.
-- The delegated media creation path must preserve the selected project id through both the commit envelope and the created media Atome properties.
+- The delegated media creation path must preserve the selected project id through the canonical commit envelope and project scene records, not DOM parent inference.
 
 Boundary status: Closed product runtime API. It centralizes project media import intent collection for eVe UI tools and preserves the canonical project drop creation path.
 
