@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { createInfoPanelSyncRuntime } from '../../eVe/intuition/runtime/info_panel_sync_runtime.js';
+import { createImplicitGestureCommitRuntime } from '../../eVe/intuition/runtime/implicit_gesture_commit_runtime.js';
 import { createMediaHydrationRuntime } from '../../eVe/intuition/runtime/media_hydration_runtime.js';
 import { createMediaMountRuntime } from '../../eVe/intuition/runtime/media_mount_runtime.js';
 import { createMediaSourceRuntime } from '../../eVe/intuition/runtime/media_source_runtime.js';
 import { createProjectAtomeIndexRuntime } from '../../eVe/intuition/runtime/project_atome_index_runtime.js';
 import { createPersistenceDiagRuntime } from '../../eVe/intuition/runtime/persistence_diag_runtime.js';
 import { createRealtimeAtomeEventsRuntime } from '../../eVe/intuition/runtime/realtime_atome_events_runtime.js';
+import { createSharedProjectOverrideRuntime } from '../../eVe/intuition/runtime/shared_project_override_runtime.js';
 
 const readSource = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
 
@@ -25,9 +27,11 @@ const mediaSourceSource = await readSource('eVe/intuition/runtime/media_source_r
 const mediaHydrationSource = await readSource('eVe/intuition/runtime/media_hydration_runtime.js');
 const mediaMountSource = await readSource('eVe/intuition/runtime/media_mount_runtime.js');
 const hostRegistrySource = await readSource('eVe/intuition/runtime/atome_host_registry_runtime.js');
+const implicitGestureCommitSource = await readSource('eVe/intuition/runtime/implicit_gesture_commit_runtime.js');
 const projectAtomeIndexSource = await readSource('eVe/intuition/runtime/project_atome_index_runtime.js');
 const persistenceDiagSource = await readSource('eVe/intuition/runtime/persistence_diag_runtime.js');
 const realtimeEventsSource = await readSource('eVe/intuition/runtime/realtime_atome_events_runtime.js');
+const sharedOverrideSource = await readSource('eVe/intuition/runtime/shared_project_override_runtime.js');
 
 const sliceFunction = (source, name) => {
     const start = source.indexOf(`const ${name} =`);
@@ -570,6 +574,168 @@ test('tool genesis delegates project atome index ownership outside the legacy ru
     assert.equal(toolGenesisSource.includes('const projectAtomeSnapshot ='), false);
     assert.equal(toolGenesisSource.includes('const projectAtomeLoadInFlight ='), false);
     assert.equal(toolGenesisSource.includes('const PROJECT_ATOME_LOAD_DEDUP_WINDOW_MS ='), false);
+});
+
+test('tool genesis delegates shared project override ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './shared_project_override_runtime.js'"));
+    assert.ok(sharedOverrideSource.includes('createSharedProjectOverrideRuntime'));
+    assert.ok(sharedOverrideSource.includes('sharedProjectOverrides'));
+    assert.ok(sharedOverrideSource.includes('sharedOverrideFetchInFlight'));
+    assert.ok(sharedOverrideSource.includes('fetchSharedOverrideAtomes'));
+    assert.equal(toolGenesisSource.includes('const sharedProjectOverrides ='), false);
+    assert.equal(toolGenesisSource.includes('const sharedOverrideFetchInFlight ='), false);
+    assert.equal(toolGenesisSource.includes('const fetchFastifyAtomeRecord ='), false);
+    assert.equal(toolGenesisSource.includes('const fetchSharedOverrideAtomes ='), false);
+});
+
+test('shared project override runtime persists overrides and prunes stale remote records', async () => {
+    const originalWindow = globalThis.window;
+    const originalLocalStorage = globalThis.localStorage;
+    const originalFetch = globalThis.fetch;
+    try {
+        const storage = new Map();
+        const fetches = [];
+        const logs = [];
+        globalThis.window = {};
+        globalThis.localStorage = {
+            getItem: (key) => storage.get(key) || null,
+            setItem: (key, value) => {
+                storage.set(key, String(value));
+            }
+        };
+        globalThis.fetch = async (url) => {
+            fetches.push(String(url));
+            if (String(url).endsWith('/shared_a')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        data: {
+                            atome: {
+                                id: 'shared_a',
+                                type: 'shape'
+                            }
+                        }
+                    })
+                };
+            }
+            return {
+                ok: false,
+                status: 404,
+                json: async () => ({})
+            };
+        };
+
+        const runtime = createSharedProjectOverrideRuntime({
+            resolveCurrentUserId: () => 'owner_a',
+            getCloudAuthToken: () => 'token_a',
+            getFastifyBaseUrl: () => 'http://fastify.test',
+            getTauriHttpBaseUrl: () => '',
+            isTauriRuntime: () => false,
+            extractAtomeFromResult: (payload) => payload?.data?.atome || payload?.atome || null,
+            toErrorMessage: (error) => error?.message || String(error),
+            debugLog: (...args) => logs.push(args)
+        });
+
+        assert.equal(runtime.setSharedProjectOverride('shared_a', 'project_a'), true);
+        assert.equal(runtime.setSharedProjectOverride('stale_a', 'project_a'), true);
+        assert.deepEqual(runtime.listSharedOverrideIdsForProject('project_a'), ['shared_a', 'stale_a']);
+
+        const records = await runtime.fetchSharedOverrideAtomes('project_a', [{ id: 'existing_a' }]);
+        assert.deepEqual(records, [{
+            id: 'shared_a',
+            type: 'shape',
+            project_id: 'project_a',
+            projectId: 'project_a'
+        }]);
+        assert.equal(fetches.length, 2);
+        assert.ok(fetches.some((url) => url.endsWith('/shared_a')));
+        assert.ok(fetches.some((url) => url.endsWith('/stale_a')));
+        assert.equal(runtime.getSharedProjectOverride('stale_a'), null);
+        assert.equal(runtime.getSharedProjectOverride('shared_a'), 'project_a');
+        assert.deepEqual(JSON.parse(storage.get('eve_shared_project_overrides_owner_a')), {
+            shared_a: 'project_a'
+        });
+        assert.equal(logs.length, 1);
+        assert.equal(logs[0][0], '[AtomeRender] pruned stale shared overrides');
+        assert.deepEqual(logs[0][1].ids, ['stale_a']);
+    } finally {
+        globalThis.window = originalWindow;
+        globalThis.localStorage = originalLocalStorage;
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('tool genesis delegates implicit gesture commit ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './implicit_gesture_commit_runtime.js'"));
+    assert.ok(implicitGestureCommitSource.includes('createImplicitGestureCommitRuntime'));
+    assert.ok(implicitGestureCommitSource.includes('implicitGesturePhaseGuard'));
+    assert.ok(implicitGestureCommitSource.includes('resolveImplicitGestureDispatch'));
+    assert.ok(implicitGestureCommitSource.includes('dispatchImplicitGestureBatch'));
+    assert.equal(toolGenesisSource.includes('const IMPLICIT_GESTURE_KIND_TO_PHASE ='), false);
+    assert.equal(toolGenesisSource.includes('const implicitGesturePhaseGuard ='), false);
+    assert.equal(toolGenesisSource.includes('const implicitGestureFailureGuard ='), false);
+    assert.equal(toolGenesisSource.includes('const resolveImplicitGestureDispatch ='), false);
+    assert.equal(toolGenesisSource.includes('const dispatchImplicitGestureBatch ='), false);
+});
+
+test('implicit gesture commit runtime routes gestures through the tool gateway and falls back to commitBatch', async () => {
+    const gatewayPayloads = [];
+    const selfPatches = [];
+    const commitBatches = [];
+    let timestamp = 1000;
+    const runtime = createImplicitGestureCommitRuntime({
+        invokeToolGateway: async (payload) => {
+            gatewayPayloads.push(payload);
+            return { ok: true };
+        },
+        buildFingerprint: (props) => JSON.stringify(props),
+        rememberSelfPatch: (atomeId, fingerprint) => selfPatches.push({ atomeId, fingerprint }),
+        getWindow: () => ({
+            Atome: {
+                commitBatch: async (events, options) => commitBatches.push({ events, options })
+            }
+        }),
+        now: () => timestamp
+    });
+
+    const gestureEvents = [{
+        kind: 'gesture_end',
+        atome_id: 'shape_a',
+        tx_id: 'tx_a',
+        payload: {
+            meta: { action: 'resize', gesture_id: 'gesture_a' },
+            props: { width: '120px', height: '80px' }
+        }
+    }];
+    runtime.emitCommitBatch(gestureEvents, { source: 'probe' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(gatewayPayloads.length, 1);
+    assert.equal(gatewayPayloads[0].tool_id, 'ui.resize');
+    assert.equal(gatewayPayloads[0].action, 'resize.end');
+    assert.equal(gatewayPayloads[0].input.atome_id, 'shape_a');
+    assert.deepEqual(gatewayPayloads[0].input.items, [{
+        atome_id: 'shape_a',
+        props: { width: '120px', height: '80px' }
+    }]);
+    assert.deepEqual(selfPatches, [{
+        atomeId: 'shape_a',
+        fingerprint: JSON.stringify({ width: '120px', height: '80px' })
+    }]);
+
+    runtime.emitCommitBatch(gestureEvents);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(gatewayPayloads.length, 1);
+
+    timestamp += 100;
+    runtime.emitCommitBatch([{ kind: 'set', atome_id: 'shape_b', payload: { props: { left: '10px' } } }], {
+        refreshState: false
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(commitBatches.length, 1);
+    assert.equal(commitBatches[0].events[0].atome_id, 'shape_b');
+    assert.deepEqual(commitBatches[0].options, { refreshState: false });
 });
 
 test('project atome index runtime remembers caches and clears scoped project state', () => {
