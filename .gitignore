@@ -40,6 +40,7 @@ tests/eve/*
 !tests/eve/code_tool.finder_only.test.mjs
 !tests/eve/tool_instance_projection_store.test.mjs
 !tests/eve/project_drop_tool_instance_contract.test.mjs
+!tests/eve/project_scene_gesture_performance.test.mjs
 !tests/probes/
 !tests/probes/flower_menu_modules.test.mjs
 
