@@ -2,11 +2,24 @@
 
 Copie-colle ce prompt dans Codex. Objectif : isoler pourquoi les tools Atome/eVe ne répondent pas quand l'IA pilote Chrome via Playwright, alors que l'interface marche en navigateur standard et dans Tauri.
 
+Ce prompt est volontairement diagnostic. Il ne doit pas servir à introduire un correctif produit, un proxy DOM, un fallback renderer, un shim, une API de contournement ou une deuxième voie d'activation des tools.
+
 ---
 
 ## Prompt à donner à Codex
 
 Tu es chargé de diagnostiquer un problème d'interaction Playwright sur une application Atome/eVe.
+
+Avant toute action :
+
+1. Lis et applique `.codex/AGENTS.md`.
+2. Classe la tâche comme diagnostic Playwright, test/probe, interaction UI, et éventuellement accessibilité uniquement si le diagnostic le prouve.
+3. Identifie le propriétaire canonique : le test/probe Playwright appartient à `tests/probes`, les tools produit restent dans les propriétaires eVe/Squirrel existants, et le rendu Atome reste dans la route WebGPU/canvas partagée.
+4. N'écris aucun fichier temporaire hors `./temp`.
+5. N'écris aucun test persistant hors `./tests`.
+6. N'utilise pas TypeScript.
+7. N'ajoute aucune mutation Git.
+8. Ne modifie pas la logique produit tant que le diagnostic n'a pas prouvé la catégorie exacte du problème.
 
 ### Contexte
 
@@ -14,7 +27,7 @@ Tu es chargé de diagnostiquer un problème d'interaction Playwright sur une app
 - L'application fonctionne normalement dans Tauri.
 - En mode IA/Codex avec Chrome piloté par Playwright, les tools Atome/eVe ne répondent pas aux clics.
 - On veut d'abord vérifier que Playwright envoie bien des events au navigateur avec un bouton HTML de test indépendant d'Atome.
-- Ce bouton doit être injecté directement dans `document.body`, au-dessus de tous les éléments générés par Atome.
+- Ce bouton doit être injecté exclusivement depuis Playwright (`page.addInitScript()` ou `page.evaluate()`), dans le contexte de page du test, et ne doit pas devenir du code produit.
 - Ensuite, si le bouton de test marche, il faut comprendre pourquoi les tools Atome/eVe ne reçoivent pas ou n'interprètent pas les events.
 
 ### Sources techniques à prendre en compte
@@ -49,8 +62,14 @@ Créer une procédure de debug reproductible, sans modifier la logique métier A
 ## Contraintes
 
 - Ne pas casser la prod.
-- Toute instrumentation doit être activable uniquement en debug, par exemple avec `?pwdebug=1`, `localStorage.PW_DEBUG=1`, ou `process.env.PW_DEBUG`.
+- Toute instrumentation intégrée au repo doit être activable uniquement en debug, par exemple avec `?pwdebug=1`, `localStorage.PW_DEBUG=1`, ou `process.env.PW_DEBUG`.
+- Préférer l'instrumentation externe Playwright (`page.addInitScript()` / `page.evaluate()`) à toute modification de l'app.
 - Ne pas remplacer Atome/eVe par un mock.
+- Ne pas ajouter de proxy DOM au-dessus du canvas ou des tools.
+- Ne pas ajouter de `data-*` sur les Atomes, tools, surfaces rendues ou contrôles produit pour contourner Playwright.
+- Ne pas créer d'API test-only qui active directement un tool à la place du vrai chemin d'interaction.
+- Ne pas garder `dispatchEvent`, `force: true`, ou un click par coordonnées comme solution finale : ils servent uniquement à classifier le problème.
+- Si un correctif produit semble nécessaire, arrêter le diagnostic et produire un rapport avec le propriétaire canonique à modifier.
 - Ne pas supposer que le problème vient de Playwright tant qu'on n'a pas comparé :
   - bouton HTML indépendant ;
   - clic réel Playwright ;
@@ -62,9 +81,9 @@ Créer une procédure de debug reproductible, sans modifier la logique métier A
 
 ---
 
-## Étape 1 — Ajouter un bouton de test au-dessus de tout
+## Étape 1 — Injecter un bouton de test depuis Playwright
 
-Ajoute ou injecte ce script en mode debug. Il doit être exécutable depuis la console, depuis `page.evaluate`, ou intégré temporairement dans l'app derrière un flag.
+Injecte ce script depuis Playwright uniquement. Il doit être exécutable depuis `page.addInitScript()` ou `page.evaluate()`. Ne l'intègre pas dans l'app tant qu'une décision d'architecture n'a pas explicitement autorisé une instrumentation debug produit.
 
 ```js
 (() => {
@@ -83,8 +102,7 @@ Ajoute ou injecte ce script en mode debug. Il doit être exécutable depuis la c
       ? '.' + el.className.trim().split(/\s+/).slice(0, 4).join('.')
       : '';
     const role = el.getAttribute?.('role') ? `[role="${el.getAttribute('role')}"]` : '';
-    const testid = el.getAttribute?.('data-testid') ? `[data-testid="${el.getAttribute('data-testid')}"]` : '';
-    return `${el.tagName?.toLowerCase?.() || el.nodeName}${id}${cls}${role}${testid}`;
+    return `${el.tagName?.toLowerCase?.() || el.nodeName}${id}${cls}${role}`;
   };
 
   const pathOf = (event) => {
@@ -143,7 +161,6 @@ Ajoute ou injecte ce script en mode debug. Il doit être exécutable depuis la c
   btn.id = 'pw-debug-probe';
   btn.type = 'button';
   btn.textContent = 'PW DEBUG CLICK';
-  btn.setAttribute('data-testid', 'pw-debug-probe');
   btn.setAttribute('aria-label', 'Playwright debug probe');
   btn.style.cssText = [
     'position:fixed',
@@ -168,13 +185,14 @@ Ajoute ou injecte ce script en mode debug. Il doit être exécutable depuis la c
     'cursor:pointer'
   ].join(';');
 
-  btn.dataset.clicked = '0';
+  let clicked = 0;
 
   const probeHandler = (event) => {
     logEvent('probe:handler', event);
     if (event.type === 'click') {
-      const next = String(Number(btn.dataset.clicked || '0') + 1);
-      btn.dataset.clicked = next;
+      clicked += 1;
+      const next = String(clicked);
+      btn.setAttribute('aria-pressed', clicked > 0 ? 'true' : 'false');
       btn.textContent = `PW DEBUG CLICK ${next}`;
       console.log('[PWDBG:probe-clicked]', { count: next, isTrusted: event.isTrusted });
     }
@@ -186,6 +204,8 @@ Ajoute ou injecte ce script en mode debug. Il doit être exécutable depuis la c
   }
 
   document.body.appendChild(btn);
+
+  window.__pwDebugProbeClicked = () => clicked;
 
   window.__pwDebugDumpPoint = (x, y) => {
     const stack = document.elementsFromPoint(x, y).map((el) => {
@@ -233,7 +253,6 @@ Ajoute ou injecte ce script en mode debug. Il doit être exécutable depuis la c
         class: el.className,
         role: el.getAttribute?.('role'),
         ariaLabel: el.getAttribute?.('aria-label'),
-        dataTestId: el.getAttribute?.('data-testid'),
         tabindex: el.getAttribute?.('tabindex'),
         disabled: el.getAttribute?.('disabled'),
       },
@@ -262,9 +281,9 @@ Ajoute ou injecte ce script en mode debug. Il doit être exécutable depuis la c
 
 Après injection, Playwright doit pouvoir cliquer sur :
 
-```ts
-await page.getByTestId('pw-debug-probe').click();
-await expect(page.getByTestId('pw-debug-probe')).toHaveAttribute('data-clicked', '1');
+```js
+await page.locator('#pw-debug-probe').click();
+await expect.poll(() => page.evaluate(() => window.__pwDebugProbeClicked?.() || 0)).toBe(1);
 ```
 
 Si ce bouton ne marche pas, le problème est global : Playwright, page bloquée, iframe, overlay navigateur, mauvais contexte, ou navigation non terminée.
@@ -275,19 +294,19 @@ Si ce bouton marche mais pas les tools Atome/eVe, le problème est dans l'exposi
 
 ## Étape 2 — Créer un test Playwright dédié
 
-Créer un fichier, par exemple :
+Créer un fichier JavaScript, par exemple :
 
 ```txt
-tests/atome-eve-playwright-click-debug.spec.ts
+tests/probes/atome_eve_playwright_click_debug_probe.test.mjs
 ```
 
 Avec ce squelette :
 
-```ts
+```js
 import { test, expect } from '@playwright/test';
 
 const APP_URL = process.env.ATOME_URL || 'http://localhost:3000';
-const TOOL_SELECTOR = process.env.TOOL_SELECTOR || '[data-testid="eve-tool"]';
+const TOOL_SELECTOR = process.env.TOOL_SELECTOR || '';
 
 test('debug Playwright clicks on Atome/eVe tools', async ({ page }) => {
   page.on('console', (msg) => {
@@ -302,12 +321,16 @@ test('debug Playwright clicks on Atome/eVe tools', async ({ page }) => {
     waitUntil: 'domcontentloaded',
   });
 
-  // Injecter ici le script de l'étape 1 si l'app ne l'injecte pas elle-même.
-  // Exemple : await page.evaluate(() => { ...script... });
+  // Injecter ici le script de l'étape 1 avec page.addInitScript() ou page.evaluate().
+  // Ne pas modifier le code produit pour installer ce bouton.
 
-  await expect(page.getByTestId('pw-debug-probe')).toBeVisible();
-  await page.getByTestId('pw-debug-probe').click();
-  await expect(page.getByTestId('pw-debug-probe')).toHaveAttribute('data-clicked', '1');
+  await expect(page.locator('#pw-debug-probe')).toBeVisible();
+  await page.locator('#pw-debug-probe').click();
+  await expect.poll(() => page.evaluate(() => window.__pwDebugProbeClicked?.() || 0)).toBe(1);
+
+  if (!TOOL_SELECTOR) {
+    throw new Error('TOOL_SELECTOR is required and must point to an existing canonical tool/control target.');
+  }
 
   const tool = page.locator(TOOL_SELECTOR).first();
   await expect(tool).toBeAttached();
@@ -377,17 +400,19 @@ test('debug Playwright clicks on Atome/eVe tools', async ({ page }) => {
 });
 ```
 
-Adapter `TOOL_SELECTOR` avec un vrai sélecteur du tool eVe/Atome à tester. Préférer un sélecteur stable :
+Adapter `TOOL_SELECTOR` avec un vrai sélecteur déjà existant du tool eVe/Atome à tester. Ne pas ajouter de `data-testid`, de `data-*`, de classe runtime ou d'attribut métier pour le seul besoin du test.
 
 ```html
-<button data-testid="eve-tool-move" aria-label="eVe move tool">...</button>
+<button id="existing-canonical-tool-id" aria-label="Existing localized tool name">...</button>
 ```
 
-ou, si Atome génère un `div` :
+ou, si le propriétaire canonique expose déjà un contrôle non natif :
 
 ```html
-<div role="button" tabindex="0" data-testid="eve-tool-move" aria-label="eVe move tool">...</div>
+<div id="existing-canonical-tool-id" role="button" tabindex="0" aria-label="Existing localized tool name">...</div>
 ```
+
+Si aucun sélecteur stable n'existe, le résultat du diagnostic est `locator/accessibility target missing`. Ne pas créer un attribut de test local avant d'avoir identifié le propriétaire canonique du contrôle.
 
 ---
 
@@ -395,7 +420,7 @@ ou, si Atome génère un `div` :
 
 Si on soupçonne que les listeners Atome/eVe sont attachés très tôt, ajouter temporairement un `addInitScript` avant `goto` pour tracer les registrations d'event listeners.
 
-```ts
+```js
 await page.addInitScript(() => {
   window.__pwListenerRegistrations = [];
   const originalAddEventListener = EventTarget.prototype.addEventListener;
@@ -424,7 +449,7 @@ await page.addInitScript(() => {
 
 Après chargement :
 
-```ts
+```js
 const registrations = await page.evaluate(() => window.__pwListenerRegistrations || []);
 console.log('[PWDBG:listeners]', JSON.stringify(registrations.slice(-200), null, 2));
 ```
@@ -442,16 +467,17 @@ Comme Codex en mode Playwright peut cibler les éléments via les refs d'accessi
 - le snapshot montre-t-il plusieurs éléments identiques ?
 - le ref utilisé pointe-t-il vers le bon outil ?
 
-Corriger temporairement les tools avec :
+Ne corrige pas temporairement les tools. Si le snapshot prouve un défaut d'accessibilité, produire un rapport qui identifie le propriétaire canonique du contrôle à corriger.
+
+Un correctif produit futur devra utiliser le composant Squirrel/Atome canonique ou son propriétaire eVe existant. Il pourra ajouter des attributs d'accessibilité standard uniquement s'ils sont nécessaires au vrai contrôle utilisateur, pas comme contournement Playwright :
 
 ```html
 role="button"
 tabindex="0"
 aria-label="Nom unique du tool"
-data-testid="eve-tool-nom-unique"
 ```
 
-Pour un composant non natif, ajouter aussi le support clavier :
+Pour un composant non natif, le support clavier doit être ajouté uniquement dans le propriétaire canonique du composant, via son API/factory existante, pas par un listener local posé dans le probe :
 
 ```js
 el.addEventListener('keydown', (event) => {
@@ -488,9 +514,11 @@ Conclusion probable : overlay, hit-test ou mauvaise cible.
 À vérifier avec :
 
 ```js
-window.__pwDebugDumpElement('[data-testid="eve-tool-move"]')
+window.__pwDebugDumpElement('#existing-canonical-tool-id')
 window.__pwDebugDumpPoint(x, y)
 ```
+
+Remplacer l'exemple de sélecteur par un id, rôle accessible, ou autre sélecteur déjà existant dans le contrôle canonique inspecté.
 
 Chercher :
 
@@ -531,13 +559,13 @@ Inspecter `elementsFromPoint()` au centre du tool.
 
 Conclusion probable : locator mauvais, élément wrapper non interactif, ou accessibilité insuffisante.
 
-Solution : ajouter `data-testid`, `role`, `aria-label`, ou cibler l'élément interne qui possède réellement le handler.
+Solution : utiliser un sélecteur canonique existant, corriger l'accessibilité dans le propriétaire canonique si elle est réellement absente, ou cibler l'élément interne qui possède réellement le handler. Ne pas ajouter de `data-*` comme raccourci de test.
 
 ### Cas G — Le locator marche dans test Playwright mais pas via Codex/MCP
 
 Conclusion probable : problème d'exposition accessibility snapshot ou de ref MCP.
 
-Solution : rendre les tools explicitement accessibles et nommés, puis utiliser les refs du snapshot.
+Solution : rendre les tools explicitement accessibles et nommés dans leur propriétaire canonique, puis utiliser les refs du snapshot.
 
 ---
 
@@ -548,8 +576,8 @@ Ne proposer un correctif qu'après avoir classé le problème dans un cas ci-des
 Correctifs typiques :
 
 1. **Accessibilité / MCP**
-   - Remplacer les `div` cliquables muets par des `button` natifs quand possible.
-   - Sinon ajouter `role="button"`, `tabindex="0"`, `aria-label`, `data-testid`.
+   - Remplacer les `div` cliquables muets par des `button` natifs quand le propriétaire canonique le permet.
+   - Sinon ajouter `role="button"`, `tabindex="0"`, `aria-label` dans le propriétaire canonique.
    - Donner un nom unique à chaque tool eVe.
 
 2. **Overlay / z-index**
@@ -568,8 +596,9 @@ Correctifs typiques :
 
 5. **Canvas/SVG**
    - Si les tools sont dessinés dans canvas, Playwright ne peut pas cibler des sous-éléments DOM inexistants.
-   - Ajouter des proxies DOM accessibles au-dessus du canvas en mode test/debug.
-   - Ou exposer une API test-only : `window.eVeDebug.triggerTool('move')`.
+   - Ne pas ajouter de proxies DOM accessibles au-dessus du canvas.
+   - Ne pas exposer d'API test-only qui contourne le vrai chemin d'interaction.
+   - Diagnostiquer par hit-test canvas, coordonnées, accessibility snapshot des contrôles canoniques existants, et logs de routage d'events.
 
 6. **Iframe / Shadow DOM**
    - Utiliser `frameLocator()` si l'app ou le tool est dans un iframe.
@@ -585,8 +614,8 @@ Correctifs typiques :
 
 Produire :
 
-1. Un test Playwright dédié.
-2. Un bouton debug `#pw-debug-probe` au-dessus de l'UI Atome.
+1. Un test/probe Playwright dédié en JavaScript sous `tests/probes`.
+2. Un bouton debug `#pw-debug-probe` injecté uniquement par Playwright au-dessus de l'UI Atome.
 3. Un logger d'events consultable via `window.__pwDebugEvents`.
 4. Une fonction `window.__pwDebugDumpElement(selectorOrElement)`.
 5. Une fonction `window.__pwDebugDumpPoint(x, y)`.
@@ -596,7 +625,7 @@ Produire :
    - quel élément est au-dessus du tool selon `elementsFromPoint()` ?
    - quelle méthode marche : standard click, force click, coordonnées, dispatchEvent, pointer sequence ?
    - conclusion : overlay, locator, accessibilité, event-model, iframe/shadow, canvas, timing, ou autre.
-7. Un correctif minimal, derrière un flag si nécessaire.
+7. Aucun correctif produit pendant le diagnostic. Si un correctif est nécessaire, livrer seulement le propriétaire canonique, la catégorie du problème, et le plus petit changement conforme à faire ensuite.
 
 ---
 
@@ -629,7 +658,7 @@ Catégorie : overlay / locator / accessibilité / event-model / iframe / shadow 
 ...
 
 ## Patch minimal
-...
+Non applicable pendant le diagnostic. Toute modification produit exige un nouveau passage par les règles `.codex/AGENTS.md`, les maps, le propriétaire canonique, et les validations adaptées.
 
 ## Risque
 ...
