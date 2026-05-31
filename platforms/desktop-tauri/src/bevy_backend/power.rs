@@ -1,5 +1,9 @@
 #[cfg(feature = "bevy_backend")]
 use bevy::prelude::Resource;
+#[cfg(feature = "bevy_renderer_core")]
+use bevy::window::PresentMode;
+#[cfg(feature = "bevy_renderer_native")]
+use bevy::winit::{UpdateMode, WinitSettings};
 #[cfg(feature = "bevy_backend")]
 use core::time::Duration;
 #[cfg(feature = "bevy_backend")]
@@ -234,6 +238,35 @@ pub fn atome_present_mode_for_profile(profile: AtomePowerProfile) -> AtomePresen
     match profile {
         AtomePowerProfile::Eco | AtomePowerProfile::Balanced => AtomePresentMode::AutoVsync,
         AtomePowerProfile::Performance => AtomePresentMode::AutoNoVsync,
+    }
+}
+
+#[cfg(feature = "bevy_renderer_native")]
+pub fn atome_update_mode_to_bevy(mode: AtomeUpdateMode) -> UpdateMode {
+    match mode {
+        AtomeUpdateMode::Continuous => UpdateMode::Continuous,
+        AtomeUpdateMode::Reactive { wait } => UpdateMode::reactive_low_power(wait),
+    }
+}
+
+#[cfg(feature = "bevy_renderer_native")]
+pub fn atome_winit_settings_to_bevy(settings: AtomeWinitSettings) -> WinitSettings {
+    WinitSettings {
+        focused_mode: atome_update_mode_to_bevy(settings.focused_mode),
+        unfocused_mode: atome_update_mode_to_bevy(settings.unfocused_mode),
+    }
+}
+
+#[cfg(feature = "bevy_renderer_native")]
+pub fn bevy_winit_settings_for_profile(profile: AtomePowerProfile) -> WinitSettings {
+    atome_winit_settings_to_bevy(atome_winit_settings_for_profile(profile))
+}
+
+#[cfg(feature = "bevy_renderer_core")]
+pub fn bevy_present_mode_for_profile(profile: AtomePowerProfile) -> PresentMode {
+    match profile {
+        AtomePowerProfile::Eco | AtomePowerProfile::Balanced => PresentMode::AutoVsync,
+        AtomePowerProfile::Performance => PresentMode::AutoNoVsync,
     }
 }
 

@@ -68,21 +68,34 @@ impl AtomeBevyProjection {
 }
 
 #[cfg(feature = "bevy_backend")]
-pub fn spawn_atome_node(world: &mut World, node: AtomeBevyNode) -> Entity {
-    let translation = Vec3::new(
+pub fn atome_transform_for_node(node: &AtomeBevyNode) -> Transform {
+    Transform::from_translation(Vec3::new(
         node.logical_position[0],
         node.logical_position[1],
         node.layer as f32,
-    );
-    let size = AtomeBevyLogicalSize {
+    ))
+}
+
+#[cfg(feature = "bevy_backend")]
+pub fn atome_size_for_node(node: &AtomeBevyNode) -> AtomeBevyLogicalSize {
+    AtomeBevyLogicalSize {
         width: node.logical_size[0],
         height: node.logical_size[1],
-    };
-    let layer = AtomeBevyLayer(node.layer);
+    }
+}
 
-    world
-        .spawn((node, Transform::from_translation(translation), size, layer))
-        .id()
+#[cfg(feature = "bevy_backend")]
+pub fn atome_layer_for_node(node: &AtomeBevyNode) -> AtomeBevyLayer {
+    AtomeBevyLayer(node.layer)
+}
+
+#[cfg(feature = "bevy_backend")]
+pub fn spawn_atome_node(world: &mut World, node: AtomeBevyNode) -> Entity {
+    let transform = atome_transform_for_node(&node);
+    let size = atome_size_for_node(&node);
+    let layer = atome_layer_for_node(&node);
+
+    world.spawn((node, transform, size, layer)).id()
 }
 
 #[cfg(all(test, feature = "bevy_backend"))]

@@ -374,7 +374,7 @@ Main files:
 Primary dependencies:
 
 - `atome/src/js/` for bundled browser libraries.
-- `atome/src/wasm/` for audio WASM artifacts.
+- `atome/src/wasm/` for generated audio WASM artifacts and generated `squirrel_bevy_renderer*` Bevy WebGPU renderer artifacts.
 - Server config loading is split between runtime fetch/exposure in `loadServerConfig.js`, debug flag application in `loadServerConfigDebug.js`, generated defaults in `loadServerConfigDefaults.js`, and WebSocket URL construction in `loadServerConfigWs.js`.
 - eVe bootstrap/version product references still exist in `atome/src/application/index.js` and `atome/src/squirrel/kickstart.js`.
 - `atome/src/application/examples/user.js` is legacy product-bootstrap rendering debt and must use the shared eVe media source canonicalization contract for media atome sources instead of reconstructing recording or upload paths locally.
@@ -1062,14 +1062,18 @@ Main areas:
 - `platforms/desktop-tauri/`
 - `platforms/ios/atome-auv3/`
 - `platforms/web/audio-wasm/`
+- `platforms/web/bevy-renderer/`
 - `platforms/atomeOS/`
 
-Verified desktop Bevy preparation owner:
+Verified desktop Bevy renderer owner:
 
-- `platforms/desktop-tauri/Cargo.toml` declares optional Bevy dependency `0.18.1` behind the `bevy_backend` feature.
-- `platforms/desktop-tauri/src/bevy_backend/mod.rs` owns the minimal native Atome-to-Bevy preparation surface for compile-time validation only and must not become canonical Atome state, a second renderer, a Bevy window, or a parallel scene model.
+- `platforms/desktop-tauri/Cargo.toml` declares optional Bevy dependency `0.18.1` behind `bevy_backend` and explicit renderer feature groups `bevy_renderer_core` and `bevy_renderer_native`. Renderer features enable Bevy WebGPU/window/render/sprite/camera crates without enabling `bevy_audio`, so Kira remains the single Atome audio engine.
+- `platforms/desktop-tauri/src/bevy_backend/mod.rs` owns the native Atome-to-Bevy backend surface. With `bevy_backend` it exposes projection and power contracts; with `bevy_renderer_core` it also exposes the Bevy renderer plugin/app entry point. It must not become canonical Atome state, a DOM path, a canvas-per-Atome path, or a parallel scene model.
 - `platforms/desktop-tauri/src/bevy_backend/projection.rs` owns the native Atome-to-Bevy projection contract. It maps explicit projection data to Bevy ECS components without owning canonical Atome state.
-- `platforms/desktop-tauri/src/bevy_backend/power.rs` owns the native Bevy power-policy preparation contract. It defines `ATOME_POWER_PROFILE=eco|balanced|performance`, defaults to low-power idle behavior, keeps continuous/game mode opt-in, tracks explicit redraw requests, and rejects idle transform writes without a dirty cause. Its policy values mirror Bevy `WinitSettings`, `UpdateMode`, and `PresentMode` names while the concrete `bevy_winit` feature graph remains unavailable in the current Cargo registry state.
+- `platforms/desktop-tauri/src/bevy_backend/power.rs` owns the native Bevy power-policy contract. It defines `ATOME_POWER_PROFILE=eco|balanced|performance`, defaults to low-power idle behavior, keeps continuous/game mode opt-in, tracks explicit redraw requests, rejects idle transform writes without a dirty cause, and converts Atome power policy into real Bevy `WinitSettings`, `UpdateMode`, and `PresentMode` when renderer features are enabled.
+- `platforms/desktop-tauri/src/bevy_backend/renderer.rs` owns the active Bevy App/plugin entry point for native WebGPU rendering. It consumes explicit `AtomeBevyNode` projection data, installs one `Camera2d`, projects Atomes as Bevy ECS render entities, uses Bevy `DefaultPlugins`/`WindowPlugin`, and preserves Kira audio ownership by not enabling Bevy audio features.
+- `platforms/web/bevy-renderer/` owns the browser/WASM Bevy WebGPU renderer surface. It consumes virtual-scene projection data as explicit JSON/wasm-bindgen input, binds Bevy to a caller-owned canvas selector, and exports `run_atome_bevy_renderer(...)` without implementing a DOM renderer, canvas-per-Atome path, or fallback renderer.
+- Browser/WASM Bevy rendering stays in the web-owned crate rather than the desktop Tauri crate, because the desktop crate owns Axum/Tauri/native dependencies that do not compile for `wasm32-unknown-unknown`.
 - `setup.sh` and `scripts/setup/bootstrap.sh` own clean-clone setup for Rust/Cargo metadata resolution. They verify the Rust toolchain and resolve Cargo metadata without installing any global Bevy binary.
 
 Verified iOS/AUv3 native owners:

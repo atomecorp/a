@@ -17,6 +17,27 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [features]
 default = []
 bevy_backend = ["dep:bevy"]
+bevy_renderer_core = [
+    "bevy_backend",
+    "bevy/default_app",
+    "bevy/bevy_window",
+    "bevy/bevy_winit",
+    "bevy/bevy_render",
+    "bevy/bevy_core_pipeline",
+    "bevy/bevy_camera",
+    "bevy/bevy_asset",
+    "bevy/bevy_image",
+    "bevy/bevy_sprite",
+    "bevy/bevy_sprite_render",
+    "bevy/png",
+    "bevy/webgpu",
+]
+bevy_renderer_native = [
+    "bevy_renderer_core",
+    "bevy/multi_threaded",
+    "bevy/x11",
+    "bevy/wayland",
+]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

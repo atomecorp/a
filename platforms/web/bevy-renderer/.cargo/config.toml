@@ -1,0 +1,2 @@
+[build]
+target-dir = "../../../temp/platforms-web-bevy-renderer-target"
