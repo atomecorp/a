@@ -1064,6 +1064,14 @@ Main areas:
 - `platforms/web/audio-wasm/`
 - `platforms/atomeOS/`
 
+Verified desktop Bevy preparation owner:
+
+- `platforms/desktop-tauri/Cargo.toml` declares optional Bevy dependency `0.18.1` behind the `bevy_backend` feature.
+- `platforms/desktop-tauri/src/bevy_backend/mod.rs` owns the minimal native Atome-to-Bevy preparation surface for compile-time validation only and must not become canonical Atome state, a second renderer, a Bevy window, or a parallel scene model.
+- `platforms/desktop-tauri/src/bevy_backend/projection.rs` owns the native Atome-to-Bevy projection contract. It maps explicit projection data to Bevy ECS components without owning canonical Atome state.
+- `platforms/desktop-tauri/src/bevy_backend/power.rs` owns the native Bevy power-policy preparation contract. It defines `ATOME_POWER_PROFILE=eco|balanced|performance`, defaults to low-power idle behavior, keeps continuous/game mode opt-in, tracks explicit redraw requests, and rejects idle transform writes without a dirty cause. Its policy values mirror Bevy `WinitSettings`, `UpdateMode`, and `PresentMode` names while the concrete `bevy_winit` feature graph remains unavailable in the current Cargo registry state.
+- `setup.sh` and `scripts/setup/bootstrap.sh` own clean-clone setup for Rust/Cargo metadata resolution. They verify the Rust toolchain and resolve Cargo metadata without installing any global Bevy binary.
+
 Verified iOS/AUv3 native owners:
 
 - `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift` owns file sync scheduling, safe-mode gating, tombstone state, move/deletion tracking, and the core newest-wins sync pass.
@@ -1108,6 +1116,7 @@ Main files:
 - `scripts/check_eve_ai_guardrails.mjs`
 - `scripts/check_dom_projection_guardrails.mjs`
 - `scripts/export_dom_subtrees.mjs`
+- `scripts/setup/bootstrap.sh`
 - `scripts/static_file_server.mjs`
 - `scripts/run_fastify.sh`
 - `scripts/rollup.config.cdn.js`

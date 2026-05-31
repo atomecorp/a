@@ -4,6 +4,9 @@ mod native_contacts;
 mod runtime_logging;
 mod server;
 
+#[cfg(feature = "bevy_backend")]
+pub mod bevy_backend;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State};

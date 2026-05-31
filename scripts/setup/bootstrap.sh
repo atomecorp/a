@@ -377,10 +377,32 @@ ensure_tauri_cli() {
   npm install --save-dev @tauri-apps/cli
 }
 
+ensure_rust_project_metadata() {
+  local manifest="$PROJECT_ROOT/platforms/desktop-tauri/Cargo.toml"
+
+  if [[ ! -f "$manifest" ]]; then
+    log_error "Missing Tauri Cargo manifest: $manifest"
+    exit 1
+  fi
+
+  if has_cmd rustup; then
+    rustup show active-toolchain >/dev/null 2>&1 || {
+      log_error "rustup is installed but no active Rust toolchain is configured."
+      exit 1
+    }
+  else
+    log_warn "rustup not found; using the system Rust/Cargo toolchain."
+  fi
+
+  log_info "Checking Rust dependency metadata..."
+  cargo metadata --manifest-path "$manifest" --format-version 1 --no-deps >/dev/null
+}
+
 main() {
   ensure_basics
   ensure_js_dependencies
   ensure_tauri_cli
+  ensure_rust_project_metadata
 }
 
 main "$@"

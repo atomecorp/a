@@ -2,7 +2,7 @@
 
 > This repository (`a`, codename **Squirrel**) is the next-generation evolution of the original Atome Ruby framework and is still under active development. It is a work in progress, but not a mere proof of concept: it serves as the base for the fully functional solution. The roadmap includes a FreeBSD boot mode leveraging jails to provide connected, shareable environments that sync seamlessly online/offline (with robust conflict resolution), plus the same unified, agnostic object system that made classic Atome unique.
 > Atome (Squirrel version) is a full-stack, cross-platform creation framework aimed at building entire ecosystems: from multimedia operating-system-like experiences, audio/video editors, web apps, and services, down to tiny personal utilities or educational playgrounds.
-> Hybrid agnostic and multi purpose-first toolkit that mixes Vanilla JS + Squirrel UI DSL, a Node/Fastify toolchain, and a Rust/Tauri runtime to target web, desktop,mobile and even AUv3 hosts with a single codebase.
+> Hybrid agnostic and multi purpose-first toolkit that mixes Vanilla JS + Squirrel UI DSL, a Node/Fastify toolchain, and a Rust/Tauri runtime to target web, desktop, mobile and even AUv3 hosts with a single codebase.
 
 ## Overview
 
@@ -28,8 +28,9 @@ Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that driv
 
 ## Prerequisites
 
-- Node.js 18+ and npm
-- Rust toolchain + `@tauri-apps/cli`
+- Node.js 22+ and npm for the full local bootstrap
+- Rust toolchain + Cargo + `@tauri-apps/cli`
+- Bevy resolved by Cargo through the optional Tauri `bevy_backend` feature; no global Bevy binary is required.
 - macOS toolchain for AUv3 (Xcode 15+, Command Line Tools, codesigning identities)
 - CMake + Ninja/Make for the DSP superbuild
 - SQLite3 (included by default on macOS/Linux) – `run.sh` auto-configures the database path
@@ -37,13 +38,27 @@ Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that driv
 
 ## Getting started
 
-### 1. Install dependencies
+### 1. Prepare a clean clone
+
+```bash
+./setup.sh
+```
+
+This idempotent setup wrapper installs or verifies the local Node, npm, Rust/Cargo, Tauri CLI, and Cargo metadata prerequisites used by the framework.
+
+For a non-launching audit:
+
+```bash
+./setup.sh --audit
+```
+
+### 2. Install dependencies manually when needed
 
 ```bash
 npm install
 ```
 
-### 2. Run only the Fastify backend (dev web)
+### 3. Run only the Fastify backend (dev web)
 
 ```bash
 npm run start:server
@@ -51,7 +66,7 @@ npm run start:server
 
 This serves `src/` at `http://127.0.0.1:3001`, exposes `/api/uploads`, and uses `src/assets/uploads` as the storage root.
 
-### 3. Launch only the Tauri shell
+### 4. Launch only the Tauri shell
 
 ```bash
 npm run tauri dev
@@ -59,7 +74,7 @@ npm run tauri dev
 
 Tauri embeds the Axum server on port `3000`, points the webview to the same `src/` assets, and spawns Fastify if it is not already running.
 
-### 4. Orchestrated workflow
+### 5. Orchestrated workflow
 
 ```bash
 ./run.sh              # installs deps (if needed), starts Fastify + Tauri
@@ -69,7 +84,7 @@ Tauri embeds the Axum server on port `3000`, points the webview to the same `src
 
 `run.sh` also ensures `SQLITE_PATH` exists by using `database_storage/adole.db` as the default database location. For cloud deployments, set `LIBSQL_URL` and `LIBSQL_AUTH_TOKEN` for Turso.
 
-### 5. Production bundles & packages
+### 6. Production bundles & packages
 
 ```bash
 npm run build          # rollup build for npm package
@@ -78,13 +93,17 @@ npm run build:all      # npm + CDN builds
 npm run tauri build    # production desktop bundle (also invoked by ./run.sh --prod)
 ```
 
-### 6. Tests & utilities
+### 7. Tests & utilities
 
 ```bash
 npm run test           # vitest
 npm run scan:components
 npm run check:syntax
+npm run cargo:bevy:check
+npm run cargo:bevy:test
 ```
+
+The Bevy integration is documented in `atome/documentations/bevy_integration.md`.
 
 ## Upload workflow
 

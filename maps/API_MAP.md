@@ -228,6 +228,28 @@ Boundary rules:
 
 Boundary status: Semi-public closed product API. It is not an Atome open framework contract until a product-neutral renderer contract is explicitly promoted.
 
+### Native Bevy Backend Preparation API
+
+Ownership: Tauri native platform preparation boundary.
+
+Primary sources: `platforms/desktop-tauri/Cargo.toml`, `platforms/desktop-tauri/src/bevy_backend/mod.rs`.
+
+Exposure: Rust library module exported only when Cargo feature `bevy_backend` is enabled.
+
+Verified entry points: `AtomeBevyNode`, `AtomeBevyLogicalSize`, `AtomeBevyLayer`, `AtomeBevyProjection`, `AtomeBevyMapping`, `spawn_atome_node`, `AtomePowerProfile`, `AtomeRenderActivity`, `AtomeWinitSettings`, `AtomeUpdateMode`, `AtomePresentMode`, `AtomeRedrawRequest`, `AtomeFrameCounter`, `AtomeBevyPowerState`, `parse_atome_power_profile`, `atome_power_profile_from_env`, `atome_winit_settings_for_profile`, `atome_winit_settings_for_activity`, `atome_present_mode_for_profile`, `apply_atome_power_activity`, `request_atome_redraw`, `should_write_transform`, `trace_is_idle_mutation`, `expected_updates_per_minute`.
+
+Boundary rules:
+
+- The API consumes explicit projection data derived from canonical Atome records.
+- It may map logical position to Bevy `Transform` and logical size/layer to native projection components.
+- It may expose low-power Bevy preparation policy values for `ATOME_POWER_PROFILE=eco|balanced|performance`; eco is the default, balanced mirrors desktop-app behavior, and performance/continuous behavior is opt-in.
+- Redraw requests must be explicit and transform writes must be gated by dirty interaction, animation, resize, or external state causes rather than idle timers.
+- It must not own canonical Atome state, mutation ordering, persistence, replay, sync, or renderer selection.
+- It must not create a Bevy window, a DOM path, a canvas-per-Atome path, or a replacement renderer while the shared WebGPU compositor remains the active route.
+- Future bridging must consume `eVe/domains/rendering/virtual_scene_contract.js` rather than duplicating a second virtual scene owner.
+
+Boundary status: Internal feature-gated Rust preparation API.
+
 ### eVe Clipboard Tool APIs
 
 Ownership: eVe closed product tools over the Atome commit boundary.

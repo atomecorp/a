@@ -44,6 +44,7 @@
   "scripts": {
     "setup": "node scripts/setup/cli/run.mjs",
     "setup:audit": "node scripts/setup/cli/run.mjs --audit",
+    "setup:bootstrap": "./setup.sh",
     "dev": "./run.sh",
     "dev:windows": "./scripts/setup/run_windows.sh",
     "build": "rollup -c scripts/rollup.config.npm.js",
@@ -61,6 +62,9 @@
     "serve": "node scripts/static_file_server.mjs 8000 .",
     "perf": "rollup -c --environment BUILD:development && node scripts/static_file_server.mjs 8000 .",
     "tauri": "cd platforms/desktop-tauri && tauri",
+    "cargo:metadata": "cargo metadata --manifest-path platforms/desktop-tauri/Cargo.toml --format-version 1 --no-deps",
+    "cargo:bevy:check": "cargo check --manifest-path platforms/desktop-tauri/Cargo.toml --features bevy_backend",
+    "cargo:bevy:test": "cargo test --manifest-path platforms/desktop-tauri/Cargo.toml --features bevy_backend bevy_backend",
     "postinstall": "./scripts/fix_node_modules.sh",
     "tauri:dev": "cd platforms/desktop-tauri && tauri dev",
     "debug-bundle": "node debug-bundle.mjs",

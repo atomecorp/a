@@ -14,10 +14,15 @@ edition = "2021"
 name = "squirrel_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+bevy_backend = ["dep:bevy"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+bevy = { version = "0.18.1", default-features = false, optional = true }
 axum = { version = "0.7.9", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5.0", features = ["fs", "cors", "limit"] }
