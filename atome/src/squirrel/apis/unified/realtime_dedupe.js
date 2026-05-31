@@ -109,6 +109,52 @@ const resolveRealtimePatchGeometry = (payload = {}) => ({
     height: parseFiniteRealtimeNumber(payload?.height)
 });
 
+const hasRealtimePatchGeometry = (payload = {}) => {
+    const geometry = resolveRealtimePatchGeometry(payload);
+    return [geometry.left, geometry.top, geometry.width, geometry.height]
+        .some((value) => Number.isFinite(value));
+};
+
+const resolveRecentLocalGestureEnd = (aliases = []) => {
+    const recentDragEnd = resolveRecentLocalGestureEndByAliases(aliases, RECENT_LOCAL_DRAG_ENDS_KEY);
+    const recentResizeEnd = resolveRecentLocalGestureEndByAliases(aliases, RECENT_LOCAL_RESIZE_ENDS_KEY);
+    if (recentDragEnd && recentResizeEnd) {
+        return Number(recentResizeEnd.endedAt || 0) >= Number(recentDragEnd.endedAt || 0)
+            ? recentResizeEnd
+            : recentDragEnd;
+    }
+    return recentResizeEnd || recentDragEnd || null;
+};
+
+const realtimePatchMatchesRecentGesture = (recentLocalEnd = null, payload = {}, options = {}) => {
+    if (!recentLocalEnd) return false;
+    const gestureId = String(
+        options?.gestureId
+        || options?.gesture_id
+        || payload?.gestureId
+        || payload?.gesture_id
+        || ''
+    ).trim();
+    const txId = String(
+        options?.txId
+        || options?.tx_id
+        || payload?.txId
+        || payload?.tx_id
+        || ''
+    ).trim();
+    return !!(
+        (gestureId && gestureId === recentLocalEnd.gestureId)
+        || (txId && txId === recentLocalEnd.txId)
+    );
+};
+
+const shouldApplyRecentLocalGestureGuard = (authorId, recentLocalEnd, payload, options = {}) => {
+    if (!recentLocalEnd || !hasRealtimePatchGeometry(payload)) return false;
+    if (!authorId) return true;
+    if (realtimePatchMatchesRecentGesture(recentLocalEnd, payload, options)) return true;
+    return !getCurrentUserId();
+};
+
 /**
  * Mark an atome as being actively edited locally.
  * While marked, remote patches for this atome will be ignored.
@@ -326,39 +372,24 @@ export function shouldIgnoreRealtimePatch(atomeId, payload, options = {}) {
         return false;
     }
 
-    if (!authorId) {
-        const recentDragEnd = resolveRecentLocalGestureEndByAliases(aliases, RECENT_LOCAL_DRAG_ENDS_KEY);
-        const recentResizeEnd = resolveRecentLocalGestureEndByAliases(aliases, RECENT_LOCAL_RESIZE_ENDS_KEY);
-        const recentLocalEnd = (() => {
-            if (recentDragEnd && recentResizeEnd) {
-                return Number(recentResizeEnd.endedAt || 0) >= Number(recentDragEnd.endedAt || 0)
-                    ? recentResizeEnd
-                    : recentDragEnd;
-            }
-            return recentResizeEnd || recentDragEnd || null;
-        })();
-        if (recentLocalEnd) {
-            const geometry = resolveRealtimePatchGeometry(payload);
-            const hasGeometry = [geometry.left, geometry.top, geometry.width, geometry.height]
-                .some((value) => Number.isFinite(value));
-            if (hasGeometry) {
-                logRealtimeDedup('ignore_patch', {
-                    reason: 'recent_local_gesture_guard',
-                    ...baseLog,
-                    fingerprint,
-                    ended_at: Number(recentLocalEnd.endedAt || 0),
-                    age_ms: Math.max(0, Date.now() - Number(recentLocalEnd.endedAt || 0)),
-                    recent_geometry: {
-                        left: recentLocalEnd.left,
-                        top: recentLocalEnd.top,
-                        width: recentLocalEnd.width,
-                        height: recentLocalEnd.height
-                    },
-                    incoming_geometry: geometry
-                });
-                return true;
-            }
-        }
+    const recentLocalEnd = resolveRecentLocalGestureEnd(aliases);
+    if (shouldApplyRecentLocalGestureGuard(authorId, recentLocalEnd, payload, options)) {
+        const geometry = resolveRealtimePatchGeometry(payload);
+        logRealtimeDedup('ignore_patch', {
+            reason: 'recent_local_gesture_guard',
+            ...baseLog,
+            fingerprint,
+            ended_at: Number(recentLocalEnd.endedAt || 0),
+            age_ms: Math.max(0, Date.now() - Number(recentLocalEnd.endedAt || 0)),
+            recent_geometry: {
+                left: recentLocalEnd.left,
+                top: recentLocalEnd.top,
+                width: recentLocalEnd.width,
+                height: recentLocalEnd.height
+            },
+            incoming_geometry: geometry
+        });
+        return true;
     }
 
     if (isSelfPatch(aliases[0], fingerprint)) {

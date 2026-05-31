@@ -34,14 +34,19 @@ const installFrameScheduler = (windowRef) => {
         callbacks.push(callback);
         return callbacks.length;
     };
-    return async () => {
+    const flushAnimationFrames = async () => {
         while (callbacks.length) {
             const next = callbacks.shift();
             next(Date.now());
             await Promise.resolve();
         }
+    };
+    const flushFrames = async () => {
+        await flushAnimationFrames();
         await new Promise((resolve) => windowRef.setTimeout(resolve, 0));
     };
+    flushFrames.animationFrames = flushAnimationFrames;
+    return flushFrames;
 };
 
 const pointerEvent = (windowRef, type, options = {}) => {
@@ -92,6 +97,11 @@ test('Project scene drag coalesces move frames into one render and one gesture e
             bubbles: true
         }));
     }
+
+    await flushFrames.animationFrames();
+
+    assert.equal(commits.length, 0);
+    assert.equal(renders.length, rendersAfterPointerDown + 1);
 
     await flushFrames();
 
@@ -237,6 +247,17 @@ test('Project scene surface records async commit timeout failures without an unh
     assert.equal(commitCalls, 2);
     assert.equal(state.last_intent_error.message, 'Request timeout');
     assert.equal(state.last_intent_error.kind, 'drag.end');
+    const guard = dom.window.__EVE_RECENT_LOCAL_DRAG_ENDS__?.drag_timeout_atom;
+    assert.equal(guard.left, 18);
+    assert.equal(guard.top, 28);
+    assert.equal(shouldIgnoreRealtimePatch('drag_timeout_atom', {
+        left: 10,
+        top: 20,
+        gesture_id: guard.gestureId
+    }, {
+        authorId: 'delayed_author_echo',
+        gestureId: guard.gestureId
+    }), true);
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
     assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
 });
@@ -273,6 +294,43 @@ test('Project scene records local drag end geometry for delayed realtime guards'
     assert.equal(getProjectSceneState('project_local_drag_guard').records[0].properties.left, 36);
 });
 
+test('Realtime dedupe rejects delayed authored geometry echo for recent project-scene gesture', () => {
+    resetRealtimeDedup();
+    const dom = new JSDOM('<!doctype html><html><body></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    const endedAt = Date.now();
+    dom.window.AdoleAPI = {
+        auth: {
+            getCurrentInfo: () => ({ user_id: 'current_user' })
+        }
+    };
+    dom.window.__EVE_RECENT_LOCAL_DRAG_ENDS__ = {
+        delayed_echo_atom: {
+            endedAt,
+            left: 120,
+            top: 130,
+            gestureId: 'project_drag_delayed_echo_atom_1',
+            txId: 'project_drag_delayed_echo_atom_1'
+        }
+    };
+
+    assert.equal(shouldIgnoreRealtimePatch('delayed_echo_atom', {
+        left: 60,
+        top: 70
+    }, {
+        authorId: 'other_user'
+    }), false);
+
+    assert.equal(shouldIgnoreRealtimePatch('delayed_echo_atom', {
+        left: 60,
+        top: 70
+    }, {
+        authorId: 'transport_echo_author',
+        gestureId: 'project_drag_delayed_echo_atom_1'
+    }), true);
+});
+
 test('Realtime atome events route project-scene patches before stale state fetch fallback', () => {
     const listeners = new Map();
     const projectScenePatches = [];
@@ -285,8 +343,8 @@ test('Realtime atome events route project-scene patches before stale state fetch
         },
         removeAtomeElement: () => null,
         applyRealtimeProps: () => false,
-        applyProjectSceneProps: (atomeId, props) => {
-            projectScenePatches.push({ atomeId, props });
+        applyProjectSceneProps: (atomeId, props, meta) => {
+            projectScenePatches.push({ atomeId, props, meta });
             return true;
         },
         ensureAtomeRenderState: () => {
@@ -301,6 +359,8 @@ test('Realtime atome events route project-scene patches before stale state fetch
         event: {
             kind: 'gesture_frame',
             atome_id: 'canvas_atom',
+            gesture_id: 'project_drag_canvas_atom_1',
+            tx_id: 'project_drag_canvas_atom_1',
             props: { left: 12, top: 24 }
         },
         state: null
@@ -308,7 +368,13 @@ test('Realtime atome events route project-scene patches before stale state fetch
 
     assert.deepEqual(projectScenePatches, [{
         atomeId: 'canvas_atom',
-        props: { left: 12, top: 24 }
+        props: { left: 12, top: 24 },
+        meta: {
+            source: 'event_bus:gesture_frame',
+            author_id: null,
+            gesture_id: 'project_drag_canvas_atom_1',
+            tx_id: 'project_drag_canvas_atom_1'
+        }
     }]);
     assert.equal(fallbackFetches, 0);
 });
