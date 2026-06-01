@@ -1,7 +1,7 @@
 # Prompt — Rendre le format Atome universel
 
 Date : 2026-05-29  
-Statut : en cours  
+Statut : terminé  
 Objet : faire évoluer le format Atome actuel vers une forme canonique unique, extensible et capable de couvrir les capacités fonctionnelles cibles de l'écosystème eVe.
 
 Ce document doit être suffisant à lui seul pour guider la migration du format Atome. Il ne dépend pas d'un autre plan de conception.
@@ -10,9 +10,9 @@ Ce document doit être suffisant à lui seul pour guider la migration du format 
 
 ## État d'exécution — 2026-06-01
 
-Statut : en cours.
+Statut : terminé.
 
-Avancement estimé : 90 %. Reste estimé : 10 %.
+Avancement estimé : 100 %. Reste estimé : 0 %.
 
 Réalisé :
 
@@ -29,13 +29,15 @@ Réalisé :
 - `server/atomeRoutes.orm.js` a été réduit en orchestrateur de routes et de commit ; les handlers CRUD, event/state/snapshot, le formatage de frontière et les effets de sync sont extraits dans `server/atomeCrudRoutes.js`, `server/atomeEventRoutes.js`, `server/atomeRouteContract.js` et `server/atomeSyncRuntime.js`.
 - `atome/src/squirrel/apis/unified/adole_api/atomes.js` a été réduit et la projection client des records Atome est isolée dans `atome_record_projection.js`.
 - `server/sharing.js` consomme maintenant les Atomes retournés par `db.getAtome` via des accesseurs canoniques locaux au lieu de supposer `data`, `particles`, `atome_type` ou `parent_id`.
+- `database/adole_permissions.js` isole l'écriture, l'évaluation conditionnelle et les checks ACL ADOLE hors de `database/adole.js`, qui conserve les exports publics de persistance.
+- `server/sharingPermissionService.js` isole les primitives de partage/permissions (`createShare`, `revokeShare`, checks et listings ACL) hors de l'orchestrateur WebSocket.
+- `server/sharingAtomeAccessors.js` isole les lectures canoniques d'Atomes utilisées par le partage, sans supposer la forme SQL comme contrat d'Atome.
 - Les maps `API_MAP`, `CODEMAP` et `ARCHITECTURE_MAP` ont été mises à jour pour les nouveaux propriétaires.
 - Le test d'acceptation `tests/eve/code_tool.registry_identity_repair.test.mjs` existe et passe.
 
 Reste à faire :
 
-- Terminer la réduction structurelle de `database/adole.js` et `server/sharing.js`, qui restent des surfaces historiques surdimensionnées.
-- Élargir la validation d'intégration serveur/client autour des parcours réels de partage, création, liste et synchronisation après la réduction restante.
+- Aucun point restant pour cette tâche.
 
 Validations exécutées :
 
@@ -48,6 +50,12 @@ Validations exécutées :
 - `npm run check:m0` : PASS.
 - `npm run test:server-verification` : PASS.
 - `npm run check:syntax` : PASS, 665 fichiers.
+- `node --check` sur `database/adole.js`, `database/adole_permissions.js`, `server/sharing.js`, `server/sharingPermissionService.js`, `server/sharingAtomeAccessors.js`, `server/userFiles.js` et `server/server.js` : PASS.
+- `node --test atome/shared/atome_contract.test.mjs tests/eve/adole_storage_projection_contract.test.mjs database/adole.event_projection_invariants.test.mjs database/adole.sanitization.test.mjs database/adole.snapshot_restore_invariants.test.mjs database/adole.user_classification.test.mjs tests/eve/code_tool.registry_identity_repair.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs tests/eve/tool_instance_projection_store.test.mjs tests/scripts/check_browser_shared_contract_imports.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/scripts/check_mutation_ownership_guardrails.test.mjs` : PASS, 29 tests.
+- `npm run check:mutation-ownership-guardrails` : PASS.
+- `npm run test:server-verification` : PASS.
+- `npm run check:m0` : PASS.
+- `npm run check:syntax` : PASS, 667 fichiers.
 
 ## Contexte vérifié dans le code
 

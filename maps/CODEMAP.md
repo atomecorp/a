@@ -368,6 +368,26 @@ Status: Added for Atome sanitization.
 
 Status: Verified.
 
+### ADOLE Permissions
+
+Purpose: Own ADOLE permission writes, condition evaluation, and can-read/write/delete/share/create checks outside the oversized persistence runtime.
+
+Main file:
+
+- `database/adole_permissions.js`
+
+Reusable APIs:
+
+- `createAdolePermissionApi` binds the SQL query boundary plus canonical Atome accessors and returns permission mutation/check functions consumed by `database/adole.js`.
+
+Used by:
+
+- `database/adole.js` for the public ADOLE permission exports.
+
+Must not be duplicated by:
+
+- server sharing services, route handlers, client adapters, or direct permission SQL checks that bypass the canonical ADOLE permission API.
+
 ### Atome Shared Utilities
 
 Path: `atome/shared/`
@@ -1081,6 +1101,8 @@ Main files:
 - `server/atomeRouteContract.js`
 - `server/atomeSyncRuntime.js`
 - `server/atomeRealtime.js`
+- `server/sharingAtomeAccessors.js`
+- `server/sharingPermissionService.js`
 - `server/wsApiState.js`
 - `server/wsSend.js`
 - `server/ws_api_schema.js`
@@ -1095,6 +1117,7 @@ Should be extended by:
 
 - Server-side source-of-truth behavior, websocket communication, auth, sharing, sync, and file APIs.
 - Atome route changes through the split route owners: orchestration and event commit helpers in `server/atomeRoutes.orm.js`, CRUD route handlers in `server/atomeCrudRoutes.js`, event/state/snapshot routes in `server/atomeEventRoutes.js`, route-boundary formatting in `server/atomeRouteContract.js`, and sync side effects in `server/atomeSyncRuntime.js`.
+- Sharing changes through the split sharing owners: message orchestration in `server/sharing.js`, ACL primitives in `server/sharingPermissionService.js`, and canonical Atome field accessors in `server/sharingAtomeAccessors.js`.
 
 Should not be duplicated by:
 

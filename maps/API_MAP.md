@@ -120,13 +120,15 @@ Boundary status: Open server infrastructure. Route names containing `eve` curren
 
 Atome route ownership: `server/atomeRoutes.orm.js` owns route orchestration, authentication, and event commit helpers; CRUD HTTP routes are owned by `server/atomeCrudRoutes.js`; event/state/snapshot routes are owned by `server/atomeEventRoutes.js`; boundary formatting lives in `server/atomeRouteContract.js`; WebSocket sync side effects live in `server/atomeSyncRuntime.js`.
 
+Sharing API ownership: `server/sharing.js` owns WebSocket message orchestration and route registration, `server/sharingPermissionService.js` owns permission creation/revocation/check/list APIs, and `server/sharingAtomeAccessors.js` owns canonical Atome field reads used by sharing code.
+
 Known constraints: `server/server.js`, `server/auth.js`, and `server/sharing.js` are oversized legacy files. Do not expand them without reduction ownership.
 
 ### Database and Object Persistence API
 
 Ownership: Atome open data layer.
 
-Primary sources: `database/adole.js`, `database/adole_schema_migrations.js`, `database/driver.js`, `database/index.js`.
+Primary sources: `database/adole.js`, `database/adole_permissions.js`, `database/adole_schema_migrations.js`, `database/driver.js`, `database/index.js`.
 
 Exposure: JavaScript module exports for database adapters and object persistence helpers.
 
@@ -139,6 +141,7 @@ Verified entry points:
 - Data source access: `getDataSourceAdapter`.
 - Deferred reference repair: `resolvePendingOwners` resolves pending owner and parent references in `atomes` and keeps the corresponding `state_current` projection metadata coherent.
 - Schema migration owner: `database/adole_schema_migrations.js` owns additive ADOLE schema migrations invoked during `initDatabase`.
+- Permission owner: `database/adole_permissions.js` owns ADOLE permission writes, condition evaluation, and permission flag checks consumed through `database/adole.js` exports.
 
 Boundary status: Open persistence contract. eVe closed stores may use it through explicit adapters, not by duplicating persistence rules.
 
