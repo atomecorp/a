@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
@@ -214,5 +215,11 @@ assert.match(commits[0].props.thumbnail_ref, /^thumbnail:/);
 assert.equal(sceneRecords().some((atom) => atom.id === 'video_recording_pending'), true);
 assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
 
-console.log('media_persistence_service_sanitization: ok');
 }, 30000);
+
+test('media persistence uses the shared Atome property sanitizer', () => {
+    const source = fs.readFileSync('eVe/domains/media/api/media_persistence_service.js', 'utf8');
+    assert.match(source, /from '\.\.\/\.\.\/\.\.\/\.\.\/atome\/src\/shared\/atome_contract\.js'/);
+    assert.doesNotMatch(source, /RESERVED_ATOME_PROPERTY_KEYS/);
+    assert.doesNotMatch(source, /const sanitizeAtomeProperties = \(/);
+});

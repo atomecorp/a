@@ -16,6 +16,9 @@ test('Adole framework Atome APIs route durable writes through event commit', asy
     assert.match(adapterSource, /action: 'commit'/);
     assert.match(adapterSource, /async commitBatch\(events = \[\]\)/);
     assert.match(adapterSource, /action: 'commit-batch'/);
+    assert.match(adapterSource, /from '\.\.\/\.\.\/\.\.\/shared\/atome_contract\.js'/);
+    assert.doesNotMatch(adapterSource, /RESERVED_ATOME_PROPERTY_KEYS/);
+    assert.doesNotMatch(adapterSource, /const sanitizeAtomeProperties = \(/);
 
     assert.doesNotMatch(atomesSource, /\.atome\.create\(/);
     assert.doesNotMatch(atomesSource, /\.atome\.alter\(/);

@@ -38,7 +38,9 @@ tests/eve/*
 !tests/eve/selection.sanitization.test.mjs
 !tests/eve/copy_clipboard.sanitization.test.mjs
 !tests/eve/adole_commit_boundary.test.mjs
+!tests/eve/atome_property_sanitizer_ownership.test.mjs
 !tests/eve/code_tool.finder_only.test.mjs
+!tests/eve/media_asset_box.sanitization.test.mjs
 !tests/eve/tool_instance_projection_store.test.mjs
 !tests/eve/project_drop_tool_instance_contract.test.mjs
 !tests/eve/project_scene_gesture_performance.test.mjs

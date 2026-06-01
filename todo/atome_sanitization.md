@@ -77,18 +77,41 @@ Rendering must become a projection of that structure. Runtime/editor/session sta
 - Extended the shared contract reserved-property list to cover `media_type`, `visualType`, `selected`, and `selection`, keeping media aliases and UI selection state out of canonical Atome properties unless explicitly modeled elsewhere.
 - Consolidated `properties` / `particles` / `data` normalization in `server/atomeRoutes.orm.js` behind a single boundary adapter helper, so those aliases do not remain ordinary route-level working contracts.
 - Added `tests/server/atome_persistence_boundary.test.mjs` as a guard against reintroducing the removed direct server persistence calls or local sanitizer duplication.
+- Removed obsolete local reserved-property sanitizer duplicates from active Atome mutation surfaces and routed them to the shared `atome/src/shared/atome_contract.js` owner:
+  - `eVe/domains/media/api/media_persistence_service.js`
+  - `eVe/domains/media/asset_box.js`
+  - `atome/src/application/audio_runtime/av_contracts.js`
+  - `atome/src/squirrel/apis/unified/adole.js`
+  - `eVe/intuition/matrix/core/project_data.js`
+  - `eVe/intuition/tools/clipboard/paste_events.js`
+  - `eVe/intuition/tools/selection_style_apply.js`
+- Added sanitizer ownership guards so active media, AV, ADOLE, Matrix, clipboard, and selection-style mutation surfaces cannot reintroduce local `RESERVED_ATOME_PROPERTY_KEYS` lists or local sanitizer contracts.
+- Verified obsolete renderer routes were not touched or reintroduced; Bevy remains the active project renderer path and the cleanup stayed limited to canonical Atome property-boundary ownership.
+- Sanitized the active Atome event placement/text-fit boundary so system-root, tool-host, and text-host decisions use Atome runtime state instead of DOM `dataset` authority:
+  - `eVe/core/atome_events/placement_runtime.js`
+  - `eVe/core/atome_events/text_fit_runtime.js`
+  - `eVe/core/atome_events/drag_runtime.js`
+  - `eVe/core/atome_events.js`
+  - `eVe/intuition/runtime/tool_genesis.js`
+- Added focused event-runtime tests proving snap geometry still comes from described Atome state and host classification ignores stale `dataset` values.
 
 Validation completed:
 
 - `node --test atome/shared/atome_contract.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/eve/atome_commit.sanitization.test.mjs tests/eve/adole_commit_boundary.test.mjs`
 - `npx vitest run tests/server/share_notifications.test.js tests/server/notification_stack.test.js tests/server/state_current_shared.test.js`
 - `node --check` on the modified server, runtime, and client modules.
+- `node --test atome/shared/atome_contract.test.mjs database/adole.sanitization.test.mjs database/adole.event_projection_invariants.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/eve/atome_commit.sanitization.test.mjs atome/src/application/audio_runtime/av_api_boundaries.test.mjs`
+- `npm run test:run -- tests/eve/media_persistence_service.sanitization.test.mjs tests/eve/media_asset_box.sanitization.test.mjs tests/eve/atome_property_sanitizer_ownership.test.mjs`
+- `node --check` on the modified media, AV, ADOLE, Matrix, clipboard, and selection-style modules.
+- `node --test eVe/core/atome_events/placement_runtime.test.mjs eVe/core/atome_events/text_fit_runtime.test.mjs`
+- `npm run test:run -- tests/eve/project_layer_canvas_lasso_selection.test.mjs`
+- `node --check` on the modified Atome event and `tool_genesis.js` modules.
 
 Still open:
 
-- DOM and `dataset` decoupling in `tool_genesis.js`, `tool_runtime.js`, and import/tool surfaces.
-- Drag, resize, placement, and geometry cleanup so the DOM is only a projection.
-- P1 media/import/poster and MTraX/Molecule sanitization.
+- Remaining DOM and `dataset` decoupling in `tool_genesis.js`, `tool_runtime.js`, and import/tool surfaces outside the placement/text-fit boundary.
+- Remaining drag, resize, placement, and geometry cleanup beyond the described-geometry snap and runtime-host-classification guards.
+- Remaining P1 media/import/poster and MTraX/Molecule sanitization beyond shared sanitizer ownership.
 
 ## Priority Audit Files
 
