@@ -1,12 +1,53 @@
 # Prompt — Rendre le format Atome universel
 
 Date : 2026-05-29  
-Statut : prompt de réalisation  
+Statut : en cours  
 Objet : faire évoluer le format Atome actuel vers une forme canonique unique, extensible et capable de couvrir les capacités fonctionnelles cibles de l'écosystème eVe.
 
 Ce document doit être suffisant à lui seul pour guider la migration du format Atome. Il ne dépend pas d'un autre plan de conception.
 
 ---
+
+## État d'exécution — 2026-06-01
+
+Statut : en cours.
+
+Avancement estimé : 90 %. Reste estimé : 10 %.
+
+Réalisé :
+
+- Le contrat Atome accepte maintenant le mode universel via `normalizeCanonicalAtome(..., { universal: true })`.
+- L'enveloppe enrichie couvre `schema_version`, `capabilities`, `interfaces`, `composition`, `policy` et `lifecycle` avec valeurs par défaut sûres.
+- `sanitizeAtomeEnvelope` sépare enveloppe, `meta`, `properties` et champs inconnus quarantainés.
+- Un registre de types minimal existe via `registerAtomeType`, `getAtomeType` et `listAtomeTypes`.
+- Les tools peuvent être projetés comme Atomes spécialisés via `toolToUniversalAtome`.
+- Aucune API publique `fromLegacy...` ou `toLegacy...` n'est ajoutée ni tolérée.
+- `atome_contract.js` a été refactoré en propriétaires cohésifs : contrat central, contrat universel et erreur de contrat.
+- `database/adole_storage_projection.js` isole la sérialisation SQL comme frontière de stockage, sans format Atome legacy public.
+- `database/adole_schema_migrations.js` isole les migrations additives ADOLE hors du fichier de persistance principal.
+- `database/adole.js` expose maintenant une enveloppe canonique pour `getAtome`, `getStateCurrent` et `listStateCurrent`.
+- `server/atomeRoutes.orm.js` a été réduit en orchestrateur de routes et de commit ; les handlers CRUD, event/state/snapshot, le formatage de frontière et les effets de sync sont extraits dans `server/atomeCrudRoutes.js`, `server/atomeEventRoutes.js`, `server/atomeRouteContract.js` et `server/atomeSyncRuntime.js`.
+- `atome/src/squirrel/apis/unified/adole_api/atomes.js` a été réduit et la projection client des records Atome est isolée dans `atome_record_projection.js`.
+- `server/sharing.js` consomme maintenant les Atomes retournés par `db.getAtome` via des accesseurs canoniques locaux au lieu de supposer `data`, `particles`, `atome_type` ou `parent_id`.
+- Les maps `API_MAP`, `CODEMAP` et `ARCHITECTURE_MAP` ont été mises à jour pour les nouveaux propriétaires.
+- Le test d'acceptation `tests/eve/code_tool.registry_identity_repair.test.mjs` existe et passe.
+
+Reste à faire :
+
+- Terminer la réduction structurelle de `database/adole.js` et `server/sharing.js`, qui restent des surfaces historiques surdimensionnées.
+- Élargir la validation d'intégration serveur/client autour des parcours réels de partage, création, liste et synchronisation après la réduction restante.
+
+Validations exécutées :
+
+- `node --test atome/shared/atome_contract.test.mjs database/adole.event_projection_invariants.test.mjs tests/eve/tool_instance_projection_store.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs` : PASS, 15 tests.
+- `node --test atome/shared/atome_contract.test.mjs tests/eve/adole_storage_projection_contract.test.mjs database/adole.event_projection_invariants.test.mjs database/adole.sanitization.test.mjs database/adole.snapshot_restore_invariants.test.mjs database/adole.user_classification.test.mjs` : PASS, 21 tests.
+- `node --test tests/eve/code_tool.registry_identity_repair.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs tests/eve/tool_instance_projection_store.test.mjs` : PASS, 3 tests.
+- `npm run check:syntax` : PASS, 660 fichiers.
+- `node --test atome/shared/atome_contract.test.mjs tests/eve/adole_storage_projection_contract.test.mjs database/adole.event_projection_invariants.test.mjs database/adole.sanitization.test.mjs database/adole.snapshot_restore_invariants.test.mjs database/adole.user_classification.test.mjs tests/eve/code_tool.registry_identity_repair.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs tests/eve/tool_instance_projection_store.test.mjs tests/scripts/check_browser_shared_contract_imports.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/scripts/check_mutation_ownership_guardrails.test.mjs` : PASS, 29 tests.
+- `npm run check:mutation-ownership-guardrails` : PASS.
+- `npm run check:m0` : PASS.
+- `npm run test:server-verification` : PASS.
+- `npm run check:syntax` : PASS, 665 fichiers.
 
 ## Contexte vérifié dans le code
 
@@ -373,11 +414,11 @@ Fichier principal :
 
 - `atome/src/shared/atome_contract.js`
 
-### 2. Adapters legacy
+### 2. Frontières historiques confinées
 
-Responsabilité : convertir vers et depuis les anciennes formes `atome_id`, `atome_type`, `particles`, `data`.
+Responsabilité : normaliser immédiatement les anciennes formes `atome_id`, `atome_type`, `particles`, `data` vers l'enveloppe Atome canonique.
 
-Ces adapters doivent être les seuls endroits où ces formes sont normales.
+Ces formes ne doivent être normales nulle part dans le runtime. Elles ne peuvent exister qu'en entrée de frontière ou dans la sérialisation SQL existante, jamais comme API Atome publique.
 
 ### 3. Registre de types Atome
 
@@ -463,22 +504,30 @@ assertCanonicalPropertyKey(key)
 - `properties` ;
 - champs inconnus quarantainés.
 
-### 2. Isoler les adapters legacy
+### 2. Isoler les frontières de stockage sans API legacy publique
 
-Créer des helpers explicites :
+Ne pas créer de helpers publics de type `fromLegacy...` ou `toLegacy...`.
 
-```js
-fromLegacyAtomeRecord(record)
-toLegacyAtomeRecord(canonical)
-```
+Étude du problème :
 
-Les utiliser dans :
+- Des helpers nommés autour du legacy rendent l'ancien format toléré comme contrat durable.
+- Ils créent une voie de compatibilité permanente et peuvent réintroduire `atome_id`, `atome_type`, `particles` ou `data` dans les couches internes.
+- Ils contredisent la cible : un Atome interne doit toujours être canonique.
+
+Solution retenue :
+
+- Toute entrée historique doit être normalisée immédiatement par `normalizeCanonicalAtome(..., { boundaryAdapter: true, universal: true })`.
+- Aucune fonction interne ne doit retourner une forme legacy.
+- Les tables SQL existantes peuvent garder leurs colonnes actuelles, mais la sérialisation vers SQL doit être une frontière de stockage nommée comme telle, pas un format Atome alternatif.
+- Les routes et adapters doivent produire ou consommer une enveloppe Atome canonique enrichie dès que possible.
+
+Zones à durcir :
 
 - `server/atomeRoutes.orm.js` ;
 - `atome/src/squirrel/apis/unified/adole_api/atomes.js` ;
-- les zones ADOLE qui doivent encore parler SQL legacy.
+- les zones ADOLE qui sérialisent encore vers les tables existantes.
 
-Objectif : éviter que les alias legacy soient manipulés partout.
+Objectif : empêcher que les alias historiques soient manipulés partout et éviter de transformer l'ancien format en API stable.
 
 ### 3. Canoniser les retours internes ADOLE
 
@@ -491,7 +540,7 @@ Modifier progressivement :
 - `listStateCurrent` ;
 - `appendEvent` projection output.
 
-Les fonctions internes doivent retourner une enveloppe canonique. Si une route a besoin de l'ancien format, elle doit utiliser `toLegacyAtomeRecord`.
+Les fonctions internes doivent retourner une enveloppe canonique. Si une route doit écrire dans le stockage SQL existant, elle doit passer par une frontière de sérialisation stockage explicite qui ne circule pas comme Atome applicatif.
 
 ### 4. Ajouter un registre de types Atome
 
@@ -624,14 +673,14 @@ Livrables :
 - validation ;
 - tests unitaires.
 
-### Phase 2 — Adapters
+### Phase 2 — Frontières de stockage strictes
 
-Centraliser les conversions legacy.
+Centraliser la normalisation d'entrée et la sérialisation de stockage sans créer d'API legacy publique.
 
 Livrables :
 
-- `fromLegacyAtomeRecord` ;
-- `toLegacyAtomeRecord` ;
+- normalisation immédiate vers enveloppe canonique aux frontières d'entrée ;
+- sérialisation SQL isolée et nommée comme stockage, jamais comme Atome legacy ;
 - suppression progressive des conversions dispersées.
 
 ### Phase 3 — ADOLE canonique

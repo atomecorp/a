@@ -80,6 +80,7 @@ Status: Verified by current tree inspection.
 Adole mutation boundary:
 
 - `atome/src/squirrel/apis/unified/adole_api/atomes.js` owns public `AdoleAPI.atomes.*` compatibility methods.
+- `atome/src/squirrel/apis/unified/adole_api/atome_record_projection.js` owns browser-side Atome API record projection and must keep network/storage aliases at the boundary instead of re-emitting them as public record shape.
 - `atome/src/squirrel/apis/unified/adole.js` owns detached WebSocket adapters, including `adapter.atome.commit` and `adapter.atome.commitBatch`.
 - Framework code must route durable Atome writes through the event commit surface even when the public method name is still `create` or `alter`.
 
@@ -303,19 +304,61 @@ Purpose: Product-neutral framework contracts shared by browser, server, and data
 Main files:
 
 - `atome/src/shared/atome_contract.js`
+- `atome/src/shared/atome_universal_contract.js`
+- `atome/src/shared/atome_contract_errors.js`
 - `atome/shared/atome_contract.js` re-exports the browser-served contract for Node and server consumers.
 
 Reusable APIs:
 
 - Canonical Atome envelope normalization through `normalizeCanonicalAtome`.
+- Universal Atome envelope normalization through `normalizeCanonicalAtome(..., { universal: true })`, including `schema_version`, capabilities, interfaces, composition, policy, and lifecycle defaults.
 - Boundary-only alias normalization for `atome_id`, `atome_type`, `particles`, and `data`.
 - Canonical Atome property sanitization with reserved-key rejection and schema hooks.
+- Minimal Atome type registration through `registerAtomeType`, `getAtomeType`, and `listAtomeTypes`.
+- Tool contract projection through `toolToUniversalAtome`, while keeping tool compatibility data inside a property subtree instead of turning tool fields into envelope fields.
 - Reserved envelope-field rejection for durable property writes.
 - Canonical Atome envelope formatting for tolerant server/database responses.
+- No public `fromLegacy...` or `toLegacy...` Atome adapter is allowed; historical shapes are input-boundary concerns only, and SQL storage serialization must not circulate as an Atome format.
 
 Should be extended by:
 
 - Open Atome description, validation, history, and persistence contracts needed across client/server/database boundaries.
+
+### ADOLE Storage Projection
+
+Purpose: Convert SQL storage rows into canonical Atome envelopes at the database boundary without creating a public legacy format.
+
+Main file:
+
+- `database/adole_storage_projection.js`
+
+Reusable APIs:
+
+- `projectStoredAtome` projects rows from `atomes` plus particle properties into universal canonical Atomes.
+- `projectStoredStateCurrent` projects `state_current` rows into universal canonical Atomes.
+- `projectStoredEvent` parses event rows while preserving append-only event identity.
+
+Used by:
+
+- `database/adole.js` for canonical `getAtome`, `getStateCurrent`, and `listStateCurrent` outputs.
+
+Must not be extended with:
+
+- public `fromLegacy...` or `toLegacy...` APIs;
+- runtime compatibility shims;
+- application-level propagation of SQL column names as Atome format.
+
+### ADOLE Schema Migrations
+
+Purpose: Keep additive ADOLE schema migrations outside the oversized data-layer runtime.
+
+Main file:
+
+- `database/adole_schema_migrations.js`
+
+Reusable APIs:
+
+- `runAdoleSchemaMigrations` applies permissions, snapshots, events, and `state_current` additive migration checks during `database/adole.js` initialization.
 
 Should not be duplicated by:
 
@@ -1032,6 +1075,11 @@ Main files:
 
 - `server/server.js`
 - `server/auth.js`
+- `server/atomeRoutes.orm.js`
+- `server/atomeCrudRoutes.js`
+- `server/atomeEventRoutes.js`
+- `server/atomeRouteContract.js`
+- `server/atomeSyncRuntime.js`
 - `server/atomeRealtime.js`
 - `server/wsApiState.js`
 - `server/wsSend.js`
@@ -1046,6 +1094,7 @@ Main files:
 Should be extended by:
 
 - Server-side source-of-truth behavior, websocket communication, auth, sharing, sync, and file APIs.
+- Atome route changes through the split route owners: orchestration and event commit helpers in `server/atomeRoutes.orm.js`, CRUD route handlers in `server/atomeCrudRoutes.js`, event/state/snapshot routes in `server/atomeEventRoutes.js`, route-boundary formatting in `server/atomeRouteContract.js`, and sync side effects in `server/atomeSyncRuntime.js`.
 
 Should not be duplicated by:
 

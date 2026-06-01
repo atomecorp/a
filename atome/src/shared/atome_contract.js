@@ -1,3 +1,22 @@
+import { AtomeContractError } from './atome_contract_errors.js';
+import {
+    clonePlainObject,
+    getAtomeType,
+    hasObjectShape,
+    listAtomeTypes,
+    normalizeCapabilities,
+    normalizeComposition,
+    normalizeInterfaces,
+    normalizeLifecycle,
+    normalizePolicy,
+    normalizeSchemaVersion,
+    normalizeStringField,
+    normalizeUniversalKind,
+    normalizeUniversalMeta,
+    readRegisteredAtomeType,
+    registerAtomeType
+} from './atome_universal_contract.js';
+
 const RESERVED_PROPERTY_KEYS = new Set([
     'id',
     'atome_id',
@@ -25,6 +44,13 @@ const RESERVED_PROPERTY_KEYS = new Set([
     'visualType',
     'selected',
     'selection',
+    'schema_version',
+    'schemaVersion',
+    'capabilities',
+    'interfaces',
+    'composition',
+    'policy',
+    'lifecycle',
     'last_sync',
     'lastSync',
     'sync_status',
@@ -32,21 +58,6 @@ const RESERVED_PROPERTY_KEYS = new Set([
     'created_source',
     'createdSource'
 ]);
-
-const hasObjectShape = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-
-class AtomeContractError extends Error {
-    constructor(message, details = {}) {
-        super(message);
-        this.name = 'AtomeContractError';
-        this.details = details;
-    }
-}
-
-const normalizeStringField = (value) => {
-    const normalized = String(value || '').trim();
-    return normalized || null;
-};
 
 const readTypeDefinition = (type, typeDefinitions = {}) => {
     if (!type) return null;
@@ -57,6 +68,8 @@ const readTypeDefinition = (type, typeDefinitions = {}) => {
     if (hasObjectShape(typeDefinitions) && hasObjectShape(typeDefinitions[type])) {
         return typeDefinitions[type];
     }
+    const registered = readRegisteredAtomeType(type);
+    if (registered) return registered;
     return null;
 };
 
@@ -124,6 +137,82 @@ const assertCanonicalPropertyKey = (key) => {
     return normalized;
 };
 
+const sanitizeAtomeEnvelope = (record = {}, options = {}) => {
+    const source = hasObjectShape(record) ? record : {};
+    const boundaryAdapter = options.boundaryAdapter === true;
+    const universal = options.universal === true;
+    const envelope = {};
+    const meta = clonePlainObject(source.meta);
+    const properties = resolveInputProperties(source, boundaryAdapter);
+    const quarantined = {};
+    const dropped = [];
+
+    Object.entries(source).forEach(([key, value]) => {
+        if (value === undefined) return;
+        if ([
+            'id',
+            'atome_id',
+            'atomeId',
+            'type',
+            'atome_type',
+            'atomeType',
+            'kind',
+            'renderer',
+            'schema_version',
+            'schemaVersion',
+            'traits',
+            'capabilities',
+            'interfaces',
+            'composition',
+            'policy',
+            'lifecycle',
+            'properties',
+            'particles',
+            'data',
+            'meta'
+        ].includes(key)) {
+            envelope[key] = value;
+            return;
+        }
+        if ([
+            'owner',
+            'owner_id',
+            'ownerId',
+            'parent',
+            'parent_id',
+            'parentId',
+            'project_id',
+            'projectId',
+            'creator_id',
+            'creatorId',
+            'created_at',
+            'createdAt',
+            'created_by',
+            'createdBy',
+            'updated_at',
+            'updatedAt',
+            'updated_by',
+            'updatedBy',
+            'status',
+            'name',
+            'description'
+        ].includes(key)) {
+            if (universal || boundaryAdapter) meta[key] = value;
+            else dropped.push(key);
+            return;
+        }
+        quarantined[key] = value;
+    });
+
+    return {
+        envelope,
+        meta,
+        properties,
+        quarantined,
+        dropped
+    };
+};
+
 const resolveCanonicalProperties = (record = {}) => {
     if (hasObjectShape(record?.properties)) return sanitizeAtomeProperties(record.properties);
     return {};
@@ -140,6 +229,7 @@ const resolveInputProperties = (record = {}, boundaryAdapter = false) => {
 const normalizeCanonicalAtome = (record = {}, options = {}) => {
     if (!hasObjectShape(record)) return null;
     const boundaryAdapter = options.boundaryAdapter === true;
+    const universal = options.universal === true;
     const usesAliases = record.atome_id != null
         || record.atomeId != null
         || record.atome_type != null
@@ -169,6 +259,7 @@ const normalizeCanonicalAtome = (record = {}, options = {}) => {
     const allowUnknownProperties = typeDefinition
         ? typeDefinition.allow_unknown_properties !== false && typeDefinition.allowUnknownProperties !== false
         : true;
+    const envelope = sanitizeAtomeEnvelope(record, { boundaryAdapter, universal });
     const properties = sanitizeAtomeProperties(resolveInputProperties(record, boundaryAdapter), {
         schema,
         allowUnknownProperties,
@@ -178,35 +269,97 @@ const normalizeCanonicalAtome = (record = {}, options = {}) => {
     });
 
     const definitionTraits = Array.isArray(typeDefinition?.traits) ? typeDefinition.traits : null;
+    const atome = {
+        id,
+        type,
+        kind: universal
+            ? normalizeUniversalKind(typeDefinition?.kind || record.kind)
+            : normalizeStringField(typeDefinition?.kind || record.kind),
+        renderer: normalizeStringField(record.renderer),
+        meta: universal
+            ? normalizeUniversalMeta(envelope.meta, record.meta)
+            : (hasObjectShape(record.meta) ? { ...record.meta } : {}),
+        traits: definitionTraits ? definitionTraits.slice() : (Array.isArray(record.traits) ? record.traits.slice() : []),
+        properties
+    };
+    if (universal) {
+        atome.schema_version = normalizeSchemaVersion(record);
+        atome.capabilities = normalizeCapabilities(record.capabilities, typeDefinition?.default_capabilities);
+        atome.interfaces = normalizeInterfaces(record.interfaces);
+        atome.composition = normalizeComposition(record.composition);
+        atome.policy = normalizePolicy(record.policy, typeDefinition?.default_policy);
+        atome.lifecycle = normalizeLifecycle(record.lifecycle);
+    }
     return {
-        atome: {
-            id,
-            type,
-            kind: normalizeStringField(typeDefinition?.kind || record.kind),
-            renderer: normalizeStringField(record.renderer),
-            meta: hasObjectShape(record.meta) ? { ...record.meta } : {},
-            traits: definitionTraits ? definitionTraits.slice() : (Array.isArray(record.traits) ? record.traits.slice() : []),
-            properties
-        },
+        atome,
         quarantined,
-        dropped
+        dropped: [...dropped, ...envelope.dropped]
     };
 };
 
-const formatCanonicalAtome = (record = {}) => {
+const formatCanonicalAtome = (record = {}, options = {}) => {
     try {
-        const normalized = normalizeCanonicalAtome(record, { boundaryAdapter: true });
+        const normalized = normalizeCanonicalAtome(record, {
+            boundaryAdapter: true,
+            universal: options.universal === true,
+            typeDefinitions: options.typeDefinitions,
+            unknownPropertyMode: options.unknownPropertyMode
+        });
         return normalized?.atome || null;
     } catch (_) {
         return null;
     }
 };
 
+const toolToUniversalAtome = (tool = {}) => {
+    const id = normalizeStringField(tool.id || tool.tool_key || tool.toolKey);
+    if (!id) throw new AtomeContractError('Tool projection requires id or tool_key');
+    const toolKey = normalizeStringField(tool.tool_key || tool.toolKey || id);
+    return normalizeCanonicalAtome({
+        id,
+        type: `tool.${toolKey}`,
+        kind: 'tool',
+        renderer: tool.renderer || 'dom',
+        schema_version: 1,
+        meta: {
+            name: tool.name || tool.label || toolKey,
+            description: tool.description || null,
+            status: tool.status || 'validated'
+        },
+        traits: ['executable', 'inspectable', 'tool'],
+        capabilities: Array.isArray(tool.capabilities)
+            ? tool.capabilities.map((capability) => (
+                hasObjectShape(capability)
+                    ? capability
+                    : { key: String(capability), effects: ['read'], risk_level: 'LOW' }
+            ))
+            : [],
+        interfaces: {
+            inputs: clonePlainObject(tool.inputs_schema || tool.inputsSchema),
+            outputs: clonePlainObject(tool.outputs_schema || tool.outputsSchema),
+            events: clonePlainObject(tool.events),
+            commands: clonePlainObject(tool.bindings || tool.commands)
+        },
+        properties: {
+            tool_definition: { ...tool, capabilities: undefined }
+        },
+        policy: tool.policy || {},
+        lifecycle: tool.lifecycle || {}
+    }, {
+        universal: true
+    }).atome;
+};
+
 export {
     AtomeContractError,
     assertCanonicalPropertyKey,
     formatCanonicalAtome,
+    getAtomeType,
+    listAtomeTypes,
     normalizeCanonicalAtome,
+    registerAtomeType,
     resolveCanonicalProperties,
-    sanitizeAtomeProperties
+    sanitizeAtomeEnvelope,
+    sanitizeAtomeProperties,
+    toolToUniversalAtome,
 };

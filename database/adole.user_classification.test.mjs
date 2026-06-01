@@ -39,7 +39,7 @@ try {
     });
 
     const usersSeenByUserA = await listAtomes('user_a', { type: 'user', limit: 50, offset: 0, skipOwner: true });
-    const userIds = usersSeenByUserA.map((item) => item.atome_id).sort();
+    const userIds = usersSeenByUserA.map((item) => item.id).sort();
     assert.deepEqual(userIds, ['user_a', 'user_b'], 'user listing should not be filtered by current owner');
 
     const projectsSeenByUserA = await listAtomes('user_a', { type: 'project', limit: 50, offset: 0 });

@@ -51,12 +51,13 @@ async function commitSharingAtomeCreate({
     });
     return {
         id: atomeId,
-        atome_id: atomeId,
         type,
-        atome_type: type,
-        parent_id: parent || null,
-        owner_id: owner || null,
-        creator_id: creator || owner || null,
+        kind: kind || null,
+        meta: {
+            parent_id: parent || null,
+            owner_id: owner || null,
+            created_by: creator || owner || null
+        },
         properties
     };
 }
@@ -72,6 +73,30 @@ async function commitSharingAtomePatch(atomeId, properties, actorId) {
             actor: { type: 'user', id: actorId }
         }
     });
+}
+
+function atomeProperties(atome) {
+    return atome?.properties && typeof atome.properties === 'object' ? atome.properties : {};
+}
+
+function atomeIdOf(atome) {
+    return atome?.id || null;
+}
+
+function atomeTypeOf(atome) {
+    return String(atome?.type || atome?.kind || '').trim().toLowerCase();
+}
+
+function atomeParentIdOf(atome) {
+    return atome?.meta?.parent_id || atomeProperties(atome).parent_id || atomeProperties(atome).parentId || null;
+}
+
+function atomeOwnerIdOf(atome) {
+    return atome?.meta?.owner_id || atomeProperties(atome).owner_id || atomeProperties(atome).ownerId || null;
+}
+
+function atomeCreatorIdOf(atome) {
+    return atome?.meta?.created_by || atomeProperties(atome).creator_id || atomeProperties(atome).creatorId || null;
 }
 
 /**
@@ -159,8 +184,7 @@ function emitPermissionChange(action, permission) {
 async function isProjectContainer(atomeId) {
     if (!atomeId) return false;
     const atome = await db.getAtome(atomeId);
-    const type = String(atome?.atome_type || atome?.type || '').toLowerCase();
-    return type === 'project';
+    return atomeTypeOf(atome) === 'project';
 }
 
 async function ensureProjectContainer({ projectId, ownerId }) {
@@ -198,7 +222,7 @@ async function resolveUserCurrentProjectId(userId) {
     if (!userId) return null;
     try {
         const user = await db.getAtome(userId);
-        const data = user?.data || user?.particles || user?.properties || {};
+        const data = atomeProperties(user);
         return data.current_project_id || data.currentProjectId || null;
     } catch (error) {
         console.warn("[cleanup] operation failed", error);
@@ -405,8 +429,8 @@ async function checkCanShare(userId, atomeId) {
             console.warn('[Share] checkCanShare DENIED:', {
                 userId,
                 atomeId,
-                atomeOwnerId: atome?.owner_id || 'NO_OWNER',
-                atomeType: atome?.atome_type || 'UNKNOWN'
+                atomeOwnerId: atomeOwnerIdOf(atome) || 'NO_OWNER',
+                atomeType: atomeTypeOf(atome) || 'UNKNOWN'
             });
         }
         return result;
@@ -559,10 +583,10 @@ async function findSharePolicy(ownerId, peerUserId) {
     if (!ownerId || !peerUserId) return null;
     const policies = await loadAtomesByOwnerWithParticles(ownerId, 'share_policy');
     for (const policy of policies) {
-        const particles = policy?.data || policy?.particles || {};
+        const particles = atomeProperties(policy);
         const peer = particles.peerUserId || particles.peer_user_id || null;
         if (String(peer || '') === String(peerUserId)) {
-            return { id: policy.atome_id || policy.id, particles };
+            return { id: atomeIdOf(policy), particles };
         }
     }
     return null;
@@ -593,7 +617,7 @@ async function upsertSharePolicy(ownerId, peerUserId, policy, permissions) {
         creator: ownerId,
         properties: payload
     });
-    return created?.atome_id || created?.id || null;
+    return atomeIdOf(created);
 }
 
 function extractShareType(particles) {
@@ -749,13 +773,13 @@ async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
             try {
                 const atome = await db.getAtome(atomeId);
                 if (atome) {
-                    const atomeType = String(atome.atome_type || atome.type || '').trim().toLowerCase();
+                    const atomeType = atomeTypeOf(atome);
                     if (!atomeType || atomeType === 'atome') continue;
                     await broadcastAtomeCreate({
                         atomeId,
                         atomeType,
-                        parentId: atome.parent_id || null,
-                        particles: atome.data || {},
+                        parentId: atomeParentIdOf(atome),
+                        particles: atomeProperties(atome),
                         senderUserId: sharerId
                     });
                 }
@@ -786,8 +810,8 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
     try {
         if (Array.isArray(atomeIds) && atomeIds.length) {
             const first = await db.getAtome(atomeIds[0]);
-            const data = first?.data || first?.particles || {};
-            const candidate = data.project_id || data.projectId || first?.parent_id || null;
+            const data = atomeProperties(first);
+            const candidate = data.project_id || data.projectId || atomeParentIdOf(first);
             if (candidate) {
                 projectId = candidate;
             } else {
@@ -831,8 +855,8 @@ async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeId
         properties: { ...baseParticles, status, box: 'outbox' }
     });
 
-    const inboxId = inbox?.atome_id || inbox?.id || null;
-    const outboxId = outbox?.atome_id || outbox?.id || null;
+    const inboxId = atomeIdOf(inbox);
+    const outboxId = atomeIdOf(outbox);
 
     try {
         if (inboxId || outboxId) {
@@ -933,13 +957,13 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
                 continue;
             }
 
-            const parentId = original.parent_id || null;
+            const parentId = atomeParentIdOf(original);
             const resolvedParent = pickParent(parentId);
             if (parentId && pending.has(parentId) && !resolvedParent) {
                 continue;
             }
 
-            const properties = { ...(original.data || {}) };
+            const properties = { ...atomeProperties(original) };
             for (const key of reservedKeys) {
                 if (key in properties) delete properties[key];
             }
@@ -948,21 +972,22 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
             properties.shared_at = new Date().toISOString();
             properties.original_atome_id = id;
             properties.share_type = 'copy';
-            if (original.creator_id) properties.original_creator_id = original.creator_id;
+            const originalCreatorId = atomeCreatorIdOf(original);
+            if (originalCreatorId) properties.original_creator_id = originalCreatorId;
 
             console.log('[Share] Creating copy with parent:', resolvedParent, 'for owner:', targetUserId);
             const created = await commitSharingAtomeCreate({
                 id: null,
-                type: original.atome_type || original.type || 'shape',
+                type: atomeTypeOf(original) || 'shape',
                 kind: original.kind || null,
                 parent: resolvedParent,
                 owner: targetUserId,
-                creator: original.creator_id || sharerId,
+                creator: originalCreatorId || sharerId,
                 properties
             });
             console.log('[Share] Created copy result:', JSON.stringify(created));
 
-            const newId = created?.atome_id || created?.id;
+            const newId = atomeIdOf(created);
             if (newId) {
                 mapping.set(id, newId);
                 copies.push({ original_atome_id: id, shared_atome_id: newId });
@@ -983,7 +1008,7 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
             continue;
         }
 
-        const properties = { ...(original.data || {}) };
+        const properties = { ...atomeProperties(original) };
         for (const key of reservedKeys) {
             if (key in properties) delete properties[key];
         }
@@ -991,19 +1016,20 @@ async function createSharedCopies({ sharerId, targetUserId, atomeIds, receiverPr
         properties.shared_at = new Date().toISOString();
         properties.original_atome_id = id;
         properties.share_type = 'copy';
-        if (original.creator_id) properties.original_creator_id = original.creator_id;
+        const originalCreatorId = atomeCreatorIdOf(original);
+        if (originalCreatorId) properties.original_creator_id = originalCreatorId;
 
         const created = await commitSharingAtomeCreate({
             id: null,
-            type: original.atome_type || original.type || 'shape',
+            type: atomeTypeOf(original) || 'shape',
             kind: original.kind || null,
             parent: receiverProjectId || null,
             owner: targetUserId,
-            creator: original.creator_id || sharerId,
+            creator: originalCreatorId || sharerId,
             properties
         });
 
-        const newId = created?.atome_id || created?.id;
+        const newId = atomeIdOf(created);
         if (newId) {
             mapping.set(id, newId);
             copies.push({ original_atome_id: id, shared_atome_id: newId });
@@ -1041,12 +1067,12 @@ async function resolveProjectIdForAtome(atomeId, maxDepth = 16) {
         depth += 1;
         const atome = await db.getAtome(currentId);
         if (!atome) return null;
-        const data = atome.data || atome.particles || {};
+        const data = atomeProperties(atome);
         const directProject = data.project_id || data.projectId || atome.project_id || atome.projectId || null;
         if (directProject) return String(directProject);
-        const type = String(atome.atome_type || atome.type || '').toLowerCase();
+        const type = atomeTypeOf(atome);
         if (type === 'project') return String(currentId);
-        const parentId = atome.parent_id || data.parent_id || data.parentId || null;
+        const parentId = atomeParentIdOf(atome);
         if (!parentId || String(parentId) === String(currentId)) return null;
         currentId = String(parentId);
     }
@@ -1104,8 +1130,10 @@ async function loadShareRequestsByRequestId(requestId) {
     return out;
 }
 
-function normalizeParticles(particles) {
-    return particles && typeof particles === 'object' ? particles : {};
+function normalizeParticles(source) {
+    if (!source || typeof source !== 'object') return {};
+    if (source.properties && typeof source.properties === 'object') return source.properties;
+    return source;
 }
 
 async function listShareRequestsForUser(userId, options = {}) {
@@ -1387,14 +1415,14 @@ export async function handleShareMessage(message, userId) {
                 let requestRecord = inboxRequest;
                 if (!requestRecord && requestIdValue) {
                     const candidates = await loadShareRequestsByRequestId(requestIdValue);
-                    requestRecord = candidates.find(r => String(r.owner_id || '') === String(userId)) || null;
+                    requestRecord = candidates.find(r => String(atomeOwnerIdOf(r) || '') === String(userId)) || null;
                 }
 
                 if (!requestRecord) {
                     return { requestId, success: false, error: 'Share request not found' };
                 }
 
-                const particles = normalizeParticles(requestRecord.data || requestRecord.particles || {});
+                const particles = normalizeParticles(requestRecord);
                 if (String(particles.box || '') !== 'inbox') {
                     return { requestId, success: false, error: 'Not an inbox request' };
                 }
@@ -1449,7 +1477,7 @@ export async function handleShareMessage(message, userId) {
                     receiver_project_id: resolvedProjectId || null
                 };
 
-                const inboxId = particles.inboxId || requestRecord.atome_id || requestRecord.id;
+                const inboxId = particles.inboxId || atomeIdOf(requestRecord);
                 const outboxId = particles.outboxId || null;
 
                 const finalResult = await withTransaction(async () => {
@@ -1480,8 +1508,8 @@ export async function handleShareMessage(message, userId) {
                     if (!outboxId && requestIdResolved) {
                         const related = await loadShareRequestsByRequestId(requestIdResolved);
                         for (const item of related) {
-                            if (String(item.owner_id || '') !== String(sharerId)) continue;
-                            const id = item.atome_id || item.id;
+                            if (String(atomeOwnerIdOf(item) || '') !== String(sharerId)) continue;
+                            const id = atomeIdOf(item);
                             if (!id) continue;
                             await commitSharingAtomePatch(id, updates, userId);
                         }
@@ -1509,14 +1537,14 @@ export async function handleShareMessage(message, userId) {
                 let requestRecord = sourceRequest;
                 if (!requestRecord && requestIdValue) {
                     const candidates = await loadShareRequestsByRequestId(requestIdValue);
-                    requestRecord = candidates.find(r => String(r.owner_id || '') === String(userId)) || null;
+                    requestRecord = candidates.find(r => String(atomeOwnerIdOf(r) || '') === String(userId)) || null;
                 }
 
                 if (!requestRecord) {
                     return { requestId, success: false, error: 'Share request not found' };
                 }
 
-                const particles = normalizeParticles(requestRecord.data || requestRecord.particles || {});
+                const particles = normalizeParticles(requestRecord);
                 const targetUserId = particles.target_user_id || particles.targetUserId || null;
                 const shareMode = normalizeShareMode(particles.mode || 'real-time');
                 const atomeIds = Array.isArray(particles.atome_ids) ? particles.atome_ids : [];
@@ -1535,8 +1563,8 @@ export async function handleShareMessage(message, userId) {
                     if (!atome) continue;
                     items.push({
                         atome_id: String(id),
-                        parent_id: atome.parent_id || null,
-                        atome_type: atome.atome_type || atome.type || null
+                        parent_id: atomeParentIdOf(atome),
+                        atome_type: atomeTypeOf(atome) || null
                     });
                 }
 
@@ -1552,7 +1580,7 @@ export async function handleShareMessage(message, userId) {
                 });
 
                 await commitSharingAtomePatch(
-                    requestRecord.atome_id || requestRecord.id,
+                    atomeIdOf(requestRecord),
                     { published_at: new Date().toISOString() },
                     sharerId
                 );

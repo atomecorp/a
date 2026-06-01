@@ -1,268 +1,37 @@
 import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
-import { getSessionState } from './session.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
+import {
+    buildBackendAuthHeaders,
+    buildUpsertPayload,
+    extractUserId,
+    filterByOwner,
+    getCurrentUserId,
+    isAnonymous,
+    isLoggedOut,
+    listOnBackend,
+    listStateCurrentOnBackend,
+    normalizeAtomeRecord,
+    resolveAtomeId,
+    resolveAtomeParentId,
+    resolveAtomeProjectId,
+    resolveAtomeType,
+    shouldSkipFastifyStateCurrentOnTauri,
+    topologicalSortByParent
+} from './atome_record_projection.js';
 
 const adapters = {
     tauri: TauriAdapter,
     fastify: FastifyAdapter
 };
 
-const normalizeAtomeRecord = (record) => {
-    if (!record || typeof record !== 'object') return null;
-    const id = record.atome_id || record.id || null;
-    const type = record.atome_type || record.type || record.kind || null;
-    const ownerId = record.owner_id || record.ownerId || record.owner || null;
-    const parentId = record.parent_id || record.parentId || record.parent || null;
-    const properties = record.particles || record.properties || record.data || {};
-    return {
-        ...record,
-        atome_id: id || record.atome_id,
-        id: id || record.atome_id,
-        atome_type: type || record.atome_type,
-        type: type || record.atome_type,
-        owner_id: ownerId || record.owner_id,
-        parent_id: parentId || record.parent_id,
-        particles: properties,
-        properties,
-        data: properties
-    };
-};
-
-const extractUserId = (user) => {
-    if (!user) return null;
-    return user.user_id || user.userId || user.id || user.atome_id || null;
-};
-
-const getCurrentUserId = () => {
-    const state = getSessionState();
-    return state?.user?.id || null;
-};
-
-const isAnonymous = () => getSessionState().mode === 'anonymous';
-const isLoggedOut = () => getSessionState().mode === 'logged_out';
-
-const filterByOwner = (records, userId, { allowCreator = false } = {}) => {
-    if (!Array.isArray(records) || !userId) return [];
-    const resolved = String(userId);
-    return records.filter((record) => {
-        const ownerId = record.owner_id || record.ownerId || record.owner || record?.properties?.owner_id || null;
-        if (ownerId && String(ownerId) === resolved) return true;
-        if (allowCreator && !ownerId) {
-            const creatorId = record.creator_id || record.creatorId || record?.properties?.creator_id || null;
-            if (creatorId && String(creatorId) === resolved) return true;
-        }
-        const pendingOwner = record._pending_owner_id || record.pending_owner_id || record?.properties?._pending_owner_id || null;
-        if (pendingOwner && String(pendingOwner) === resolved) return true;
-        return false;
-    });
-};
-
-const resolveAtomeType = (record) => String(record?.atome_type || record?.type || record?.kind || '').toLowerCase();
-
-const resolveAtomeId = (record) => record?.atome_id || record?.id || null;
-
-const resolveAtomeParentId = (record) => (
-    record?.parent_id
-    || record?.parentId
-    || record?.parent
-    || record?.properties?.parent_id
-    || record?.properties?.parentId
-    || record?.particles?.parent_id
-    || record?.particles?.parentId
-    || null
-);
-
-const resolveAtomeProjectId = (record) => (
-    record?.project_id
-    || record?.projectId
-    || record?.properties?.project_id
-    || record?.properties?.projectId
-    || record?.particles?.project_id
-    || record?.particles?.projectId
-    || null
-);
-
-const buildUpsertPayload = (record, ownerIdFallback) => {
-    const id = resolveAtomeId(record);
-    if (!id) return null;
-    const type = String(record?.atome_type || record?.type || record?.kind || '').trim().toLowerCase();
-    if (!type || type === 'atome') return null;
-    const ownerId = record?.owner_id || record?.ownerId || record?.owner || ownerIdFallback || null;
-    const parentId = resolveAtomeParentId(record);
-    const properties = sanitizeAtomeProperties(record?.properties || record?.particles || record?.data || {});
-    return {
-        id,
-        type,
-        kind: record?.kind || properties.kind || null,
-        renderer: record?.renderer || null,
-        meta: {},
-        traits: Array.isArray(record?.traits) ? record.traits : [],
-        owner_id: ownerId,
-        project_id: resolveAtomeProjectId(record),
-        parent_id: parentId,
-        properties
-    };
-};
-
-const topologicalSortByParent = (items = []) => {
-    const byId = new Map();
-    items.forEach((item) => {
-        const id = resolveAtomeId(item);
-        if (id) byId.set(id, item);
-    });
-    const visited = new Set();
-    const sorted = [];
-
-    const visit = (item, stack = new Set()) => {
-        const id = resolveAtomeId(item);
-        if (!id || visited.has(id)) return;
-        if (stack.has(id)) {
-            sorted.push(item);
-            visited.add(id);
-            return;
-        }
-        stack.add(id);
-        const parentId = resolveAtomeParentId(item);
-        if (parentId && byId.has(parentId)) {
-            visit(byId.get(parentId), stack);
-        }
-        stack.delete(id);
-        if (!visited.has(id)) {
-            sorted.push(item);
-            visited.add(id);
-        }
-    };
-
-    items.forEach((item) => visit(item));
-    return sorted;
-};
-
-const listOnBackend = async (backend, options, currentUserId, skipOwner) => {
-    const adapter = adapters[backend];
-    if (!adapter?.atome?.list) return { ok: false, list: [], error: 'backend_unavailable' };
-    const explicitOwner = options.ownerId || options.owner_id || null;
-    const query = {
-        atome_type: options.atome_type || options.type || options.atomeType || null,
-        owner_id: skipOwner ? (explicitOwner || null) : (explicitOwner || currentUserId || null),
-        parent_id: options.project_id || options.projectId || options.parent_id || options.parentId || null,
-        limit: options.limit,
-        offset: options.offset,
-        include_deleted: options.include_deleted ?? options.includeDeleted
-    };
-    const result = await adapter.atome.list(query);
-    const ok = !!(result?.ok || result?.success);
-    const list = Array.isArray(result?.atomes) ? result.atomes : Array.isArray(result?.data) ? result.data : [];
-    return { ok, list: list.map(normalizeAtomeRecord).filter(Boolean), raw: result, error: ok ? null : (result?.error || 'list_failed') };
-};
-
-const mapStateCurrentToAtome = (state) => {
-    if (!state || typeof state !== 'object') return null;
-    const properties = state.properties || {};
-    const atomeType = properties.type || properties.kind || state.atome_type || null;
-    const parentId = properties.parent_id || properties.parentId || state.parent_id || null;
-    const projectId = state.project_id || properties.project_id || properties.projectId || null;
-    const record = {
-        atome_id: state.atome_id || state.id || null,
-        id: state.atome_id || state.id || null,
-        atome_type: atomeType,
-        type: atomeType,
-        parent_id: parentId,
-        owner_id: state.owner_id || state.ownerId || null,
-        project_id: projectId,
-        properties,
-        particles: properties,
-        data: properties
-    };
-    return normalizeAtomeRecord(record);
-};
-
-const resolveHttpBaseUrl = (backend, adapter) => {
-    let base = adapter?.baseUrl || '';
-    if (base.startsWith('ws://')) base = `http://${base.slice(5)}`;
-    if (base.startsWith('wss://')) base = `https://${base.slice(6)}`;
-    base = base.replace(/\/ws\/api\/?$/, '').replace(/\/$/, '');
-    if (base) return base;
-    if (typeof window === 'undefined') return '';
-    if (backend === 'fastify') {
-        return (window.__SQUIRREL_FASTIFY_URL__ || 'http://127.0.0.1:3001').replace(/\/$/, '');
-    }
-    const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || 3000;
-    return `http://127.0.0.1:${port}`;
-};
-
-const isLoopbackHost = (hostname = '') => {
-    const host = String(hostname || '').trim().toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1' || host === '[::1]' || host === 'tauri.localhost';
-};
-
-const shouldSkipFastifyStateCurrentOnTauri = (backend, baseUrl) => {
-    if (backend !== 'fastify') return false;
-    if (!isTauriRuntime()) return false;
-    if (typeof window === 'undefined') return false;
-    try {
-        const parsed = new URL(baseUrl || '', window.location?.href || 'http://127.0.0.1/');
-        const pageOrigin = String(window.location?.origin || '').trim();
-        return isLoopbackHost(parsed.hostname) && pageOrigin && parsed.origin !== pageOrigin;
-    } catch (_) {
-        return false;
-    }
-};
-
-const buildBackendAuthHeaders = (backend, token) => {
-    const headers = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    if (backend === 'tauri') {
-        const userId = getCurrentUserId();
-        if (userId) headers['X-User-Id'] = String(userId);
-    }
-    return headers;
-};
-
-const listStateCurrentOnBackend = async (backend, options) => {
-    const adapter = adapters[backend];
-    const baseUrl = resolveHttpBaseUrl(backend, adapter);
-    if (shouldSkipFastifyStateCurrentOnTauri(backend, baseUrl)) {
-        return { ok: false, list: [], error: 'fastify_state_current_cross_origin_loopback_blocked' };
-    }
-    const token = adapter?.getToken?.();
-    if (!baseUrl || !token) return { ok: false, list: [], error: 'state_current_unavailable' };
-    const params = new URLSearchParams();
-    const projectId = options.project_id || options.projectId || options.parent_id || options.parentId || null;
-    if (projectId) params.set('project_id', projectId);
-    if (options.limit != null) params.set('limit', String(options.limit));
-    if (options.offset != null) params.set('offset', String(options.offset));
-    const url = `${baseUrl}/api/state_current${params.toString() ? `?${params.toString()}` : ''}`;
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: buildBackendAuthHeaders(backend, token),
-            credentials: 'include'
-        });
-        if (!response.ok) {
-            return { ok: false, list: [], error: `state_current_http_${response.status}` };
-        }
-        const payload = await response.json().catch(() => null);
-        const listRaw = Array.isArray(payload?.states) ? payload.states : Array.isArray(payload?.state_current) ? payload.state_current : [];
-        const list = listRaw.map(mapStateCurrentToAtome).filter(Boolean);
-        return { ok: true, list, raw: payload };
-    } catch (e) {
-        return { ok: false, list: [], error: e?.message || 'state_current_failed' };
-    }
-};
-
 export const __ATOMES_TEST_ONLY__ = { buildBackendAuthHeaders, shouldSkipFastifyStateCurrentOnTauri };
 
 const canUseFastify = async (currentUserId) => {
     if (!FastifyAdapter?.getToken?.()) return false;
-    
-        const me = await FastifyAdapter.auth.me();
-        const user = normalizeAtomeRecord(me?.user || me?.data?.user || me?.user_data || null);
-        const id = extractUserId(me?.user || me?.data?.user || null);
-        if (id && currentUserId && String(id) === String(currentUserId)) {
-            return true;
-        }
-    
+    const me = await FastifyAdapter.auth.me();
+    const id = extractUserId(me?.user || me?.data?.user || me?.user_data || null);
+    if (id && currentUserId && String(id) === String(currentUserId)) return true;
     return false;
 };
 
@@ -295,25 +64,25 @@ export async function list_atomes(options = {}, callback) {
 
     const shouldUseStateCurrent = !!(options.projectId || options.project_id || options.parentId || options.parent_id);
     const primaryResult = shouldUseStateCurrent
-        ? await listStateCurrentOnBackend(primary, options)
-        : await listOnBackend(primary, options, currentUserId, allowCrossOwner);
+        ? await listStateCurrentOnBackend(adapters, primary, options)
+        : await listOnBackend(adapters, primary, options, currentUserId, allowCrossOwner);
     results[primary] = { atomes: primaryResult.list, error: primaryResult.error };
 
     if (runtimeTauri && !isAnonymous() && (options.includeShared || primaryResult.list.length === 0)) {
         const allowFastify = await canUseFastify(currentUserId);
         if (allowFastify) {
             const secondaryResult = shouldUseStateCurrent
-                ? await listStateCurrentOnBackend(secondary, options)
-                : await listOnBackend(secondary, options, currentUserId, allowCrossOwner);
+                ? await listStateCurrentOnBackend(adapters, secondary, options)
+                : await listOnBackend(adapters, secondary, options, currentUserId, allowCrossOwner);
             results[secondary] = { atomes: secondaryResult.list, error: secondaryResult.error };
             if (primaryResult.list.length === 0 && secondaryResult.list.length > 0) {
                 results.meta.preferFastify = true;
             }
             if (options.includeShared && secondaryResult.list.length > 0) {
                 const merged = new Map();
-                primaryResult.list.forEach((item) => merged.set(item.atome_id || item.id, item));
+                primaryResult.list.forEach((item) => merged.set(resolveAtomeId(item), item));
                 secondaryResult.list.forEach((item) => {
-                    const key = item.atome_id || item.id;
+                    const key = resolveAtomeId(item);
                     if (!merged.has(key)) merged.set(key, item);
                 });
                 results[primary].atomes = Array.from(merged.values());

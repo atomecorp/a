@@ -1,0 +1,1 @@
+{"rustc":17940977064402226622,"features":"[\"std\"]","declared_features":"[\"default\", \"std\"]","target":3325569089069378502,"profile":5347358027863023418,"path":2780523678106114109,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/atomicow-5962bb8e4cbd114c/dep-lib-atomicow","checksum":false}}],"rustflags":[],"config":8247474407144887393,"compile_kind":0}

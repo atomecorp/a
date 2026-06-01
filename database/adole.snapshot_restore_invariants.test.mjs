@@ -68,7 +68,7 @@ test('ADOLE state snapshot restore replays through events and sanitized projecti
         assert.ok(restoredProjectEvent);
         assert.equal(restoredShapeEvent.tx_id, 'tx_restore_snapshot');
         assert.equal(events.length, 3);
-        assert.equal(state.version, 3);
+        assert.equal(state.meta.version, 3);
         assert.deepEqual(state.properties, {
             left: '10px',
             top: '20px'

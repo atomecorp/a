@@ -19,6 +19,7 @@ const ALLOWED_EVENT_COMMIT_CALLERS = new Set([
     'eVe/core/atome_commit.js',
     'atome/src/squirrel/apis/unified/adole.js',
     'server/atomeRoutes.orm.js',
+    'server/atomeEventRoutes.js',
     'server/server.js'
 ]);
 

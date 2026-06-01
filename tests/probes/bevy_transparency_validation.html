@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Bevy transparency validation</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        linear-gradient(45deg, #ff2d55 25%, transparent 25%),
+        linear-gradient(-45deg, #ff2d55 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ff2d55 75%),
+        linear-gradient(-45deg, transparent 75%, #ff2d55 75%),
+        #14f195;
+      background-position: 0 0, 0 24px, 24px -24px, -24px 0;
+      background-size: 48px 48px;
+    }
+
+    #project {
+      width: 320px;
+      height: 640px;
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <main id="project"></main>
+  <script type="module">
+    import { renderProjectScene, clearAllProjectScenes } from '/eVe/domains/rendering/project_scene_runtime.js';
+
+    window.__BEVY_TRANSPARENCY_VALIDATION__ = { ok: false };
+
+    try {
+      clearAllProjectScenes();
+      const projection = await renderProjectScene({
+        projectId: 'bevy_transparency_validation',
+        projectRevision: 1,
+        records: [],
+        host: document.getElementById('project'),
+        maxTextureDimension2D: 1024
+      });
+      window.__BEVY_TRANSPARENCY_VALIDATION__ = {
+        ok: projection?.ok === true,
+        renderResult: projection?.render_result || null,
+        canvasCount: document.querySelectorAll('canvas#eve_surface_project').length,
+        domAtomeCount: document.querySelectorAll('.eve-atome,img,video,audio,svg').length
+      };
+    } catch (error) {
+      window.__BEVY_TRANSPARENCY_VALIDATION__ = {
+        ok: false,
+        error: String(error?.message || error)
+      };
+      throw error;
+    }
+  </script>
+</body>
+</html>

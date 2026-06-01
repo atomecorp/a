@@ -1,0 +1,9 @@
+/Users/jean-ericgodard/RubymineProjects/a/platforms/web/bevy-renderer/target/debug/deps/linebender_resource_handle-1332ede7c1e5a1d1.d: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/blob.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/font.rs
+
+/Users/jean-ericgodard/RubymineProjects/a/platforms/web/bevy-renderer/target/debug/deps/liblinebender_resource_handle-1332ede7c1e5a1d1.rlib: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/blob.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/font.rs
+
+/Users/jean-ericgodard/RubymineProjects/a/platforms/web/bevy-renderer/target/debug/deps/liblinebender_resource_handle-1332ede7c1e5a1d1.rmeta: /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/lib.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/blob.rs /Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/font.rs
+
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/lib.rs:
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/blob.rs:
+/Users/jean-ericgodard/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linebender_resource_handle-0.1.1/src/font.rs:

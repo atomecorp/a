@@ -95,8 +95,8 @@ test('ADOLE pending owner resolution keeps state_current owner coherent', async 
         const state = await db.getStateCurrent('child_before_owner');
 
         assert.equal(result.resolved, 1);
-        assert.equal(atome.owner_id, 'owner_late');
-        assert.equal(state.owner_id, 'owner_late');
+        assert.equal(atome.meta.owner_id, 'owner_late');
+        assert.equal(state.meta.owner_id, 'owner_late');
     } finally {
         await db.closeDatabase().catch(() => {});
         try { fs.unlinkSync(dbPath); } catch (_) {}

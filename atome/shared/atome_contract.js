@@ -2,7 +2,12 @@ export {
     AtomeContractError,
     assertCanonicalPropertyKey,
     formatCanonicalAtome,
+    getAtomeType,
+    listAtomeTypes,
     normalizeCanonicalAtome,
+    registerAtomeType,
     resolveCanonicalProperties,
-    sanitizeAtomeProperties
+    sanitizeAtomeEnvelope,
+    sanitizeAtomeProperties,
+    toolToUniversalAtome
 } from '../src/shared/atome_contract.js';

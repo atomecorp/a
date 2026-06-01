@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
     text::TextBounds,
-    window::{PresentMode, Window, WindowPlugin},
+    window::{CompositeAlphaMode, PresentMode, Window, WindowPlugin},
 };
 use std::cell::RefCell;
 
@@ -34,7 +34,7 @@ impl Plugin for WebBevyRendererPlugin {
             .init_resource::<WebAtomeEntityTable>()
             .init_resource::<WebBevyRendererDiagnostics>()
             .init_resource::<Assets<Image>>()
-            .insert_resource(ClearColor(Color::srgb(0.04, 0.04, 0.045)))
+            .insert_resource(ClearColor(Color::NONE))
             .add_systems(Startup, spawn_web_atome_scene)
             .add_systems(Update, apply_pending_web_ops);
     }
@@ -477,8 +477,10 @@ fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
             config.height.round() as u32,
         )
             .into(),
+        composite_alpha_mode: CompositeAlphaMode::PreMultiplied,
         present_mode: PresentMode::AutoVsync,
         title: "Atome Bevy Renderer".to_string(),
+        transparent: true,
         visible: true,
         ..default()
     };

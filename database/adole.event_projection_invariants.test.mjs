@@ -58,9 +58,10 @@ test('ADOLE events, particles, and state_current stay projection-coherent', asyn
         const events = await db.listEvents({ atomeId: 'shape_projection' });
 
         assert.equal(events.length, 2);
-        assert.equal(state.project_id, 'project_projection');
-        assert.equal(state.owner_id, 'user_projection');
-        assert.equal(state.version, 2);
+        assert.equal(state.id, 'shape_projection');
+        assert.equal(state.meta.project_id, 'project_projection');
+        assert.equal(state.meta.owner_id, 'user_projection');
+        assert.equal(state.meta.version, 2);
         assert.deepEqual(state.properties, {
             left: '10px',
             top: '42px',
@@ -75,7 +76,7 @@ test('ADOLE events, particles, and state_current stay projection-coherent', asyn
 
         const listed = await db.listStateCurrent('project_projection');
         assert.equal(listed.length, 1);
-        assert.equal(listed[0].atome_id, 'shape_projection');
+        assert.equal(listed[0].id, 'shape_projection');
         assert.deepEqual(listed[0].properties, state.properties);
     } finally {
         await db.closeDatabase().catch(() => {});

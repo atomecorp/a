@@ -29,6 +29,11 @@ import {
     normalizeCanonicalAtome,
     sanitizeAtomeProperties
 } from '../atome/shared/atome_contract.js';
+import {
+    projectStoredAtome,
+    projectStoredStateCurrent
+} from './adole_storage_projection.js';
+import { runAdoleSchemaMigrations } from './adole_schema_migrations.js';
 
 let db = null;
 let isAsync = false;
@@ -59,29 +64,7 @@ export async function initDatabase(config = {}) {
         console.log('[ADOLE v3.0] Schema already exists or error:', e.message);
     }
 
-    try {
-        await ensurePermissionsColumns();
-    } catch (e) {
-        console.log('[ADOLE v3.0] Permissions migration skipped:', e.message);
-    }
-
-    try {
-        await ensureSnapshotColumns();
-    } catch (e) {
-        console.log('[ADOLE v3.0] Snapshot migration skipped:', e.message);
-    }
-
-    try {
-        await ensureEventColumns();
-    } catch (e) {
-        console.log('[ADOLE v3.0] Event migration skipped:', e.message);
-    }
-
-    try {
-        await ensureStateCurrentColumns();
-    } catch (e) {
-        console.log('[ADOLE v3.0] State_current migration skipped:', e.message);
-    }
+    await runAdoleSchemaMigrations(query);
 
     return db;
 }
@@ -92,72 +75,6 @@ async function query(method, sql, params = []) {
         return await db[method](sql, params);
     }
     return db[method](sql, params);
-}
-
-async function ensurePermissionsColumns() {
-    const columns = await query('all', "PRAGMA table_info(permissions)");
-    const names = new Set((columns || []).map((col) => col.name));
-
-    if (!names.has('can_create')) {
-        await query('run', "ALTER TABLE permissions ADD COLUMN can_create INTEGER NOT NULL DEFAULT 0");
-    }
-    if (!names.has('share_mode')) {
-        await query('run', "ALTER TABLE permissions ADD COLUMN share_mode TEXT DEFAULT 'real-time'");
-    }
-    if (!names.has('conditions')) {
-        await query('run', "ALTER TABLE permissions ADD COLUMN conditions TEXT");
-    }
-}
-
-async function ensureSnapshotColumns() {
-    const columns = await query('all', "PRAGMA table_info(snapshots)");
-    const names = new Set((columns || []).map((col) => col.name));
-
-    if (!names.has('project_id')) {
-        await query('run', "ALTER TABLE snapshots ADD COLUMN project_id TEXT");
-    }
-    if (!names.has('state_blob')) {
-        await query('run', "ALTER TABLE snapshots ADD COLUMN state_blob TEXT");
-    }
-    if (!names.has('label')) {
-        await query('run', "ALTER TABLE snapshots ADD COLUMN label TEXT");
-    }
-    if (!names.has('actor')) {
-        await query('run', "ALTER TABLE snapshots ADD COLUMN actor TEXT");
-    }
-}
-
-async function ensureEventColumns() {
-    const columns = await query('all', "PRAGMA table_info(events)");
-    const names = new Set((columns || []).map((col) => col.name));
-
-    if (!names.has('project_id')) {
-        await query('run', "ALTER TABLE events ADD COLUMN project_id TEXT");
-    }
-    if (!names.has('actor')) {
-        await query('run', "ALTER TABLE events ADD COLUMN actor TEXT");
-    }
-    if (!names.has('tx_id')) {
-        await query('run', "ALTER TABLE events ADD COLUMN tx_id TEXT");
-    }
-    if (!names.has('gesture_id')) {
-        await query('run', "ALTER TABLE events ADD COLUMN gesture_id TEXT");
-    }
-}
-
-async function ensureStateCurrentColumns() {
-    const columns = await query('all', "PRAGMA table_info(state_current)");
-    const names = new Set((columns || []).map((col) => col.name));
-
-    if (!names.has('owner_id')) {
-        await query('run', "ALTER TABLE state_current ADD COLUMN owner_id TEXT");
-        try {
-            await query(
-                'run',
-                "UPDATE state_current SET owner_id = (SELECT owner_id FROM atomes WHERE atomes.atome_id = state_current.atome_id) WHERE owner_id IS NULL"
-            );
-        } catch (_) { }
-    }
 }
 
 function safeParseJson(value) {
@@ -406,7 +323,9 @@ export async function withTransaction(work) {
     } catch (error) {
         try {
             await db.rollback();
-        } catch (_) { }
+        } catch (rollbackError) {
+            error.rollback_error = rollbackError.message;
+        }
         throw error;
     }
 }
@@ -505,8 +424,6 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
     const ownerId = owner;
     const creatorId = creator || owner;
     const canonicalProperties = canonical.properties;
-
-    console.log('[createAtome Debug] Creating with id:', atomeId, 'type:', canonical.type, 'owner:', ownerId, 'parent:', parent);
 
     const parentId = parent || null;
     const selfOwner = ownerId && ownerId === atomeId;
@@ -670,10 +587,8 @@ export async function resolvePendingOwners() {
                 });
 
                 await query('run', 'DELETE FROM particles WHERE atome_id = ? AND particle_key = ?', [row.atome_id, row.particle_key]);
-                console.log('[resolvePendingOwners] Resolved', row.particle_key, 'for:', row.atome_id);
                 resolved++;
             } else {
-                console.log('[resolvePendingOwners] Reference still missing for:', row.atome_id, row.particle_key, '->', pendingId);
                 failed++;
             }
         } catch (e) {
@@ -763,7 +678,8 @@ async function getPendingOwnerId(atomeId) {
 		`, [atomeId]);
         if (!row?.particle_value) return null;
         return JSON.parse(row.particle_value);
-    } catch (_) {
+    } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         return null;
     }
 }
@@ -807,39 +723,27 @@ export async function getAtome(id) {
         }
     }
 
-    return {
-        atome_id: atome.atome_id,
-        atome_type: atome.atome_type,
-        kind,
-        parent_id: atome.parent_id,
-        owner_id: atome.owner_id,
-        creator_id: atome.creator_id,
-        data,
-        sync_status: atome.sync_status,
-        last_sync: atome.last_sync,
-        created_source: atome.created_source,
-        created_at: atome.created_at,
-        updated_at: atome.updated_at,
-        // Legacy compatibility
-        id: atome.atome_id,
-        type: atome.atome_type,
-        parent: atome.parent_id,
-        owner: atome.owner_id,
-        properties: data
-    };
+    return projectStoredAtome({
+        row: atome,
+        properties: data,
+        kind
+    });
 }
 
 export async function isAnonymousUser(userId) {
     if (!userId) return false;
     try {
         const atome = await getAtome(userId);
-        const data = atome?.data || {};
+        const data = atome?.properties || {};
         if (data.anonymous === true || data.is_anonymous === true) return true;
         const username = String(data.username || data.name || '').trim().toLowerCase();
         if (username === 'anonymous' || username === 'guest') return true;
         const phone = String(data.phone || '').trim();
         if (phone.startsWith('999') || phone.startsWith('000000')) return true;
-    } catch (_) {
+    } catch (error) {
+        if (process.env.SQUIRREL_ADOLE_DEBUG === '1') {
+            console.warn('[ADOLE] anonymous user classification failed:', error.message);
+        }
         return false;
     }
     return false;
@@ -1450,7 +1354,11 @@ async function applyEventToStateCurrent(event) {
         if (ownerRow?.owner_id) {
             resolvedOwnerId = ownerRow.owner_id;
         }
-    } catch (_) { }
+    } catch (error) {
+        if (process.env.SQUIRREL_ADOLE_DEBUG === '1') {
+            console.warn('[ADOLE] state owner lookup failed:', error.message);
+        }
+    }
 
     const parsed = safeParseJson(existing?.properties);
     const currentProps = parsed && typeof parsed === 'object' ? parsed : {};
@@ -1669,12 +1577,16 @@ export async function getEvent(eventId) {
 
 export async function getStateCurrent(atomeId) {
     if (!atomeId) return null;
-    const row = await query('get', 'SELECT * FROM state_current WHERE atome_id = ?', [atomeId]);
+    const row = await query(
+        'get',
+        `SELECT sc.*, a.atome_type, a.parent_id
+         FROM state_current sc
+         LEFT JOIN atomes a ON a.atome_id = sc.atome_id
+         WHERE sc.atome_id = ?`,
+        [atomeId]
+    );
     if (!row) return null;
-    return {
-        ...row,
-        properties: safeParseJson(row.properties) || {}
-    };
+    return projectStoredStateCurrent(row);
 }
 
 export async function listStateCurrent(projectId, options = {}) {
@@ -1724,10 +1636,7 @@ export async function listStateCurrent(projectId, options = {}) {
         includeShared && ownerId ? [ownerId, ...params, limit, offset] : [...params, limit, offset]
     );
 
-    return (rows || []).map((row) => ({
-        ...row,
-        properties: safeParseJson(row.properties) || {}
-    }));
+    return (rows || []).map((row) => projectStoredStateCurrent(row)).filter(Boolean);
 }
 
 export async function createStateSnapshot(options = {}) {
@@ -1922,7 +1831,8 @@ function parseConditions(raw) {
     if (typeof raw === 'object') return raw;
     try {
         return JSON.parse(raw);
-    } catch (_) {
+    } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         return null;
     }
 }
@@ -2028,8 +1938,8 @@ async function isPermissionActive(permission, principalId, atomeId) {
 
     const context = {
         now: new Date(),
-        user: userAtome ? (userAtome.data || {}) : {},
-        atome: targetAtome ? (targetAtome.data || {}) : {}
+        user: userAtome ? (userAtome.properties || {}) : {},
+        atome: targetAtome ? (targetAtome.properties || {}) : {}
     };
 
     return evaluateConditionNode(conditions, context);

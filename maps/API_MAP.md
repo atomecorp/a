@@ -98,11 +98,13 @@ Known constraints: `atome/src/squirrel/apis/unified/adole.js` is a large legacy 
 
 Atome mutation rule: `AdoleAPI.atomes.create` and `AdoleAPI.atomes.alter` are public compatibility method names, but their framework implementation must emit canonical event commits through `adapter.atome.commit`. Direct adapter-level `atome.create` / `atome.alter` calls are legacy WebSocket protocol adapters only and must not be used as durable framework write paths.
 
+Atome browser projection owner: `atome/src/squirrel/apis/unified/adole_api/atome_record_projection.js` owns browser-side normalization of Atome API records and state-current results into canonical `{ id, type, kind, renderer, meta, traits, properties }` records at network/runtime boundaries. Historical transport aliases may be read only at that boundary and must not be re-emitted as a public Atome format.
+
 ### Server HTTP and WebSocket APIs
 
 Ownership: Atome open server layer.
 
-Primary sources: `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/mailRoutes.js`, `server/sharing.js`, `server/userFiles.js`, `server/visio.js`, `server/wsApiState.js`, `server/wsSend.js`, `server/serverIdentity.js`.
+Primary sources: `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/atomeCrudRoutes.js`, `server/atomeEventRoutes.js`, `server/atomeRouteContract.js`, `server/atomeSyncRuntime.js`, `server/mailRoutes.js`, `server/sharing.js`, `server/userFiles.js`, `server/visio.js`, `server/wsApiState.js`, `server/wsSend.js`, `server/serverIdentity.js`.
 
 Verified route families:
 
@@ -116,13 +118,15 @@ Verified route families:
 
 Boundary status: Open server infrastructure. Route names containing `eve` currently exist for product mail integration and must be reviewed before being treated as stable open API names.
 
+Atome route ownership: `server/atomeRoutes.orm.js` owns route orchestration, authentication, and event commit helpers; CRUD HTTP routes are owned by `server/atomeCrudRoutes.js`; event/state/snapshot routes are owned by `server/atomeEventRoutes.js`; boundary formatting lives in `server/atomeRouteContract.js`; WebSocket sync side effects live in `server/atomeSyncRuntime.js`.
+
 Known constraints: `server/server.js`, `server/auth.js`, and `server/sharing.js` are oversized legacy files. Do not expand them without reduction ownership.
 
 ### Database and Object Persistence API
 
 Ownership: Atome open data layer.
 
-Primary sources: `database/adole.js`, `database/driver.js`, `database/index.js`.
+Primary sources: `database/adole.js`, `database/adole_schema_migrations.js`, `database/driver.js`, `database/index.js`.
 
 Exposure: JavaScript module exports for database adapters and object persistence helpers.
 
@@ -134,6 +138,7 @@ Verified entry points:
 - Property aliases: `setProperty`, `setProperties`, `getProperty`, `getProperties`, `deleteProperty`, `getPropertyHistory`, `restorePropertyVersion`.
 - Data source access: `getDataSourceAdapter`.
 - Deferred reference repair: `resolvePendingOwners` resolves pending owner and parent references in `atomes` and keeps the corresponding `state_current` projection metadata coherent.
+- Schema migration owner: `database/adole_schema_migrations.js` owns additive ADOLE schema migrations invoked during `initDatabase`.
 
 Boundary status: Open persistence contract. eVe closed stores may use it through explicit adapters, not by duplicating persistence rules.
 
@@ -143,21 +148,43 @@ Known constraints: `database/adole.js` is a critical oversized legacy file and m
 
 Ownership: Atome open shared layer.
 
-Primary source: `atome/src/shared/atome_contract.js`.
+Primary sources:
+
+- `atome/src/shared/atome_contract.js`
+- `atome/src/shared/atome_universal_contract.js`
+- `atome/src/shared/atome_contract_errors.js`
 
 Compatibility export: `atome/shared/atome_contract.js` re-exports the same contract for server and Node tests.
 
 Exposure: JavaScript module exports consumed by the ADOLE client API, Fastify Atome routes, and database persistence.
 
-Verified entry points: `normalizeCanonicalAtome`, `sanitizeAtomeProperties`, `assertCanonicalPropertyKey`, `resolveCanonicalProperties`, `formatCanonicalAtome`, `AtomeContractError`.
+Verified entry points: `normalizeCanonicalAtome`, `sanitizeAtomeEnvelope`, `sanitizeAtomeProperties`, `assertCanonicalPropertyKey`, `resolveCanonicalProperties`, `formatCanonicalAtome`, `registerAtomeType`, `getAtomeType`, `listAtomeTypes`, `toolToUniversalAtome`, `AtomeContractError`.
 
 Boundary rules:
 
 - `normalizeCanonicalAtome` is the strict contract entry point. Transitional aliases such as `atome_id`, `atome_type`, `particles`, and `data` are accepted only when called with an explicit boundary-adapter option.
+- `normalizeCanonicalAtome(..., { universal: true })` emits the enriched Atome envelope with `schema_version`, `capabilities`, `interfaces`, `composition`, `policy`, and `lifecycle`.
 - `formatCanonicalAtome` remains a tolerant server/database response formatter and emits only the canonical envelope.
+- No public `fromLegacy...` or `toLegacy...` adapter API is allowed. Historical input shapes may be normalized only at explicit boundaries; SQL serialization must be named as storage serialization, not as a legacy Atome format.
 - Browser-served modules under `atome/src/` and `eVe/` must import `atome/src/shared/atome_contract.js`; `atome/shared/atome_contract.js` remains a Node/server compatibility export and must not be imported by browser-served modules.
 
 Boundary status: Open framework contract helper. It owns reserved Atome envelope-field filtering and canonical envelope formatting so route, client, and database layers do not define competing schemas.
+
+### ADOLE Storage Projection API
+
+Ownership: Database storage boundary.
+
+Primary source: `database/adole_storage_projection.js`.
+
+Exposure: Internal JavaScript module consumed by `database/adole.js`.
+
+Verified entry points: `projectStoredAtome`, `projectStoredStateCurrent`, `projectStoredEvent`.
+
+Boundary rules:
+
+- SQL column names such as `atome_id`, `atome_type`, `owner_id`, `parent_id`, and serialized `properties` are storage facts only.
+- `getAtome`, `getStateCurrent`, and `listStateCurrent` must expose canonical Atome envelopes, not storage rows.
+- This module is not a legacy adapter and must not expose public `fromLegacy...` or `toLegacy...` APIs.
 
 ### eVe Atome Commit Boundary
 
