@@ -1,57 +1,27 @@
 use bevy::{
+    asset::RenderAssetUsages,
+    image::Image,
     prelude::*,
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+    text::TextBounds,
     window::{PresentMode, Window, WindowPlugin},
 };
-use serde::Deserialize;
-use wasm_bindgen::prelude::*;
+use std::cell::RefCell;
 
-#[derive(Clone, Debug, Deserialize)]
-struct WebAtomeRenderNode {
-    id: String,
-    parent_id: Option<String>,
-    logical_position: [f32; 2],
-    logical_size: [f32; 2],
-    layer: i32,
-    color: Option<[f32; 4]>,
+mod exports;
+mod types;
+use types::*;
+
+thread_local! {
+    static WEB_PENDING_OPS: RefCell<Vec<WebAtomeRenderOp>> = RefCell::new(Vec::new());
 }
 
-#[derive(Clone, Debug, Component)]
-pub struct AtomeEntityId(pub String);
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeParentEntityId(pub Option<String>);
-
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeLogicalSize {
-    pub width: f32,
-    pub height: f32,
+fn queue_web_op(op: WebAtomeRenderOp) {
+    WEB_PENDING_OPS.with(|cell| cell.borrow_mut().push(op));
 }
 
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeLayer(pub i32);
-
-#[derive(Clone, Debug, Resource)]
-struct WebBevyRendererConfig {
-    canvas_selector: String,
-    width: f32,
-    height: f32,
-    initial_nodes: Vec<WebAtomeRenderNode>,
-}
-
-impl WebBevyRendererConfig {
-    fn new(
-        canvas_selector: String,
-        width: f32,
-        height: f32,
-        initial_nodes: Vec<WebAtomeRenderNode>,
-    ) -> Self {
-        Self {
-            canvas_selector,
-            width: width.max(1.0),
-            height: height.max(1.0),
-            initial_nodes,
-        }
-    }
+fn drain_web_ops() -> Vec<WebAtomeRenderOp> {
+    WEB_PENDING_OPS.with(|cell| cell.borrow_mut().drain(..).collect())
 }
 
 struct WebBevyRendererPlugin {
@@ -61,32 +31,439 @@ struct WebBevyRendererPlugin {
 impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.config.clone())
+            .init_resource::<WebAtomeEntityTable>()
+            .init_resource::<WebBevyRendererDiagnostics>()
+            .init_resource::<Assets<Image>>()
             .insert_resource(ClearColor(Color::srgb(0.04, 0.04, 0.045)))
-            .add_systems(Startup, spawn_web_atome_scene);
+            .add_systems(Startup, spawn_web_atome_scene)
+            .add_systems(Update, apply_pending_web_ops);
     }
 }
 
-fn spawn_web_atome_scene(mut commands: Commands, config: Res<WebBevyRendererConfig>) {
+fn color_for_node(node: &WebAtomeRenderNode) -> [f32; 4] {
+    node.color.unwrap_or([0.24, 0.55, 0.92, 1.0])
+}
+
+fn color_from_rgba(color: [f32; 4]) -> Color {
+    Color::srgba(color[0], color[1], color[2], color[3])
+}
+
+fn depth_for_layer(layer: i32) -> f32 {
+    -(layer as f32)
+}
+
+fn image_from_texture(texture: &WebAtomeTexture, id: &str) -> Result<Image, String> {
+    if texture.width == 0 || texture.height == 0 {
+        return Err(format!("bevy_texture_dimension_required:{id}"));
+    }
+    let expected_len = texture.width as usize * texture.height as usize * 4;
+    if texture.rgba.len() != expected_len {
+        return Err(format!("bevy_texture_rgba_length_invalid:{id}"));
+    }
+    Ok(Image::new(
+        Extent3d {
+            width: texture.width,
+            height: texture.height,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        texture.rgba.clone(),
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    ))
+}
+
+fn image_handle_from_texture(
+    images: &mut Assets<Image>,
+    texture: &Option<WebAtomeTexture>,
+    id: &str,
+) -> Result<Handle<Image>, String> {
+    let texture = texture
+        .as_ref()
+        .ok_or_else(|| format!("bevy_texture_required:{id}"))?;
+    Ok(images.add(image_from_texture(texture, id)?))
+}
+
+fn atome_transform(
+    node: &WebAtomeRenderNode,
+    width: f32,
+    height: f32,
+    surface_width: f32,
+    surface_height: f32,
+) -> Transform {
+    Transform::from_translation(Vec3::new(
+        node.logical_position[0] + width / 2.0 - surface_width / 2.0,
+        surface_height / 2.0 - node.logical_position[1] - height / 2.0,
+        depth_for_layer(node.layer),
+    ))
+}
+
+fn node_base_components(
+    node: &WebAtomeRenderNode,
+    width: f32,
+    height: f32,
+    surface_width: f32,
+    surface_height: f32,
+) -> (
+    AtomeEntityId,
+    AtomeParentEntityId,
+    AtomeLogicalSize,
+    AtomeLayer,
+    AtomeRenderKind,
+    AtomeTextMetadata,
+    AtomeMediaSource,
+    AtomeWaveformPeaks,
+    Visibility,
+    Transform,
+) {
+    (
+        AtomeEntityId(node.id.clone()),
+        AtomeParentEntityId(node.parent_id.clone()),
+        AtomeLogicalSize { width, height },
+        AtomeLayer(node.layer),
+        AtomeRenderKind(node.kind.clone()),
+        AtomeTextMetadata(node.text.clone()),
+        AtomeMediaSource(node.source.clone()),
+        AtomeWaveformPeaks(node.peaks.clone().unwrap_or_default()),
+        Visibility::Visible,
+        atome_transform(node, width, height, surface_width, surface_height),
+    )
+}
+
+fn spawn_node_in_world(world: &mut World, node: WebAtomeRenderNode) -> Result<Entity, String> {
+    let entity = {
+        let texture_handle = if node.kind == "image" || node.kind == "video" || node.texture.is_some() {
+            let mut images = world
+                .get_resource_mut::<Assets<Image>>()
+                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+            Some(image_handle_from_texture(&mut images, &node.texture, &node.id)?)
+        } else {
+            None
+        };
+        let (surface_width, surface_height) = {
+            let config = world.resource::<WebBevyRendererConfig>();
+            (config.width, config.height)
+        };
+        spawn_node_with_texture_handle(
+            world,
+            node.clone(),
+            texture_handle,
+            surface_width,
+            surface_height,
+        )?
+    };
+    world
+        .resource_mut::<WebAtomeEntityTable>()
+        .by_id
+        .insert(node.id, entity);
+    Ok(entity)
+}
+
+fn spawn_node_with_texture_handle(
+    world: &mut World,
+    node: WebAtomeRenderNode,
+    texture_handle: Option<Handle<Image>>,
+    surface_width: f32,
+    surface_height: f32,
+) -> Result<Entity, String> {
+    let width = node.logical_size[0].max(1.0);
+    let height = node.logical_size[1].max(1.0);
+    let color = color_for_node(&node);
+    let size = Vec2::new(width, height);
+    let entity = match node.kind.as_str() {
+        "shape" => world.spawn((
+            node_base_components(&node, width, height, surface_width, surface_height),
+            Sprite::from_color(color_from_rgba(color), size),
+        )).id(),
+        "text" => {
+            if let Some(handle) = texture_handle {
+                let mut sprite = Sprite::from_image(handle);
+                sprite.custom_size = Some(size);
+                sprite.color = Color::WHITE;
+                world.spawn((node_base_components(&node, width, height, surface_width, surface_height), sprite)).id()
+            } else {
+                world.spawn((
+                    node_base_components(&node, width, height, surface_width, surface_height),
+                    Text2d::new(node.text.clone().unwrap_or_default()),
+                    TextFont {
+                        font_size: height.min(32.0).max(12.0),
+                        ..default()
+                    },
+                    TextColor(color_from_rgba(color)),
+                    TextBounds::from(size),
+                )).id()
+            }
+        }
+        "image" | "video" => {
+            let _source = node.source.clone()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| format!("bevy_media_source_required:{}", node.id))?;
+            let handle = texture_handle.ok_or_else(|| format!("bevy_texture_required:{}", node.id))?;
+            let mut sprite = Sprite::from_image(handle);
+            sprite.custom_size = Some(size);
+            sprite.color = Color::WHITE;
+            world.spawn((node_base_components(&node, width, height, surface_width, surface_height), sprite)).id()
+        }
+        "audio_waveform" => {
+            let handle = texture_handle.ok_or_else(|| format!("bevy_waveform_texture_required:{}", node.id))?;
+            let mut sprite = Sprite::from_image(handle);
+            sprite.custom_size = Some(size);
+            sprite.color = Color::WHITE;
+            world.spawn((node_base_components(&node, width, height, surface_width, surface_height), sprite)).id()
+        }
+        other => return Err(format!("bevy_render_kind_unsupported:{other}")),
+    };
+    Ok(entity)
+}
+
+fn spawn_web_atome_scene(
+    mut commands: Commands,
+    config: Res<WebBevyRendererConfig>,
+    mut images: ResMut<Assets<Image>>,
+) {
     commands.spawn(Camera2d);
     for node in &config.initial_nodes {
         let width = node.logical_size[0].max(1.0);
         let height = node.logical_size[1].max(1.0);
-        let color = node.color.unwrap_or([0.24, 0.55, 0.92, 1.0]);
-        commands.spawn((
-            AtomeEntityId(node.id.clone()),
-            AtomeParentEntityId(node.parent_id.clone()),
-            AtomeLogicalSize { width, height },
-            AtomeLayer(node.layer),
-            Transform::from_translation(Vec3::new(
-                node.logical_position[0],
-                node.logical_position[1],
-                node.layer as f32,
-            )),
-            Sprite::from_color(
-                Color::srgba(color[0], color[1], color[2], color[3]),
-                Vec2::new(width, height),
-            ),
-        ));
+        let color = color_for_node(node);
+        let node_id = node.id.clone();
+        let size = Vec2::new(width, height);
+        let entity = match node.kind.as_str() {
+            "shape" => commands.spawn((
+                node_base_components(node, width, height, config.width, config.height),
+                Sprite::from_color(color_from_rgba(color), size),
+            )).id(),
+            "text" => {
+                if node.texture.is_some() {
+                    let mut sprite = Sprite::from_image(
+                        image_handle_from_texture(&mut images, &node.texture, &node.id)
+                            .unwrap_or_else(|error| panic!("{error}"))
+                    );
+                    sprite.custom_size = Some(size);
+                    sprite.color = Color::WHITE;
+                    commands.spawn((node_base_components(node, width, height, config.width, config.height), sprite)).id()
+                } else {
+                    commands.spawn((
+                        node_base_components(node, width, height, config.width, config.height),
+                        Text2d::new(node.text.clone().unwrap_or_default()),
+                        TextFont {
+                            font_size: height.min(32.0).max(12.0),
+                            ..default()
+                        },
+                        TextColor(color_from_rgba(color)),
+                        TextBounds::from(size),
+                    )).id()
+                }
+            }
+            "image" | "video" => {
+                let source = node.source.clone().unwrap_or_default();
+                if source.trim().is_empty() {
+                    panic!("bevy_media_source_required:{node_id}");
+                }
+                let mut sprite = Sprite::from_image(
+                    image_handle_from_texture(&mut images, &node.texture, &node.id)
+                        .unwrap_or_else(|error| panic!("{error}"))
+                );
+                sprite.custom_size = Some(size);
+                sprite.color = Color::WHITE;
+                commands.spawn((node_base_components(node, width, height, config.width, config.height), sprite)).id()
+            }
+            "audio_waveform" => {
+                let mut sprite = Sprite::from_image(
+                    image_handle_from_texture(&mut images, &node.texture, &node.id)
+                        .unwrap_or_else(|error| panic!("{error}"))
+                );
+                sprite.custom_size = Some(size);
+                sprite.color = Color::WHITE;
+                commands.spawn((node_base_components(node, width, height, config.width, config.height), sprite)).id()
+            }
+            other => panic!("bevy_render_kind_unsupported:{other}"),
+        };
+        commands
+        .queue(move |world: &mut World| {
+            world
+                .resource_mut::<WebAtomeEntityTable>()
+                .by_id
+                .insert(node_id, entity);
+        });
+    }
+}
+
+fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
+    world
+        .resource::<WebAtomeEntityTable>()
+        .by_id
+        .get(id)
+        .copied()
+        .ok_or_else(|| format!("bevy_atome_entity_missing:{id}"))
+}
+
+fn apply_spawn(world: &mut World, node: WebAtomeRenderNode) -> Result<Entity, String> {
+    if node.id.trim().is_empty() {
+        return Err("bevy_spawn_id_required".to_string());
+    }
+    if world.resource::<WebAtomeEntityTable>().by_id.contains_key(&node.id) {
+        return Err(format!("bevy_spawn_duplicate_id:{}", node.id));
+    }
+    spawn_node_in_world(world, node)
+}
+
+fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
+    let entity = world
+        .resource_mut::<WebAtomeEntityTable>()
+        .by_id
+        .remove(id)
+        .ok_or_else(|| format!("bevy_despawn_entity_missing:{id}"))?;
+    world.despawn(entity);
+    Ok(())
+}
+
+fn apply_transform(world: &mut World, patch: WebAtomeTransformPatch) -> Result<(), String> {
+    let entity = entity_for(world, &patch.id)?;
+    let width = patch.logical_size[0].max(1.0);
+    let height = patch.logical_size[1].max(1.0);
+    let layer = world.get::<AtomeLayer>(entity).map(|value| value.0).unwrap_or(0);
+    let (surface_width, surface_height) = {
+        let config = world.resource::<WebBevyRendererConfig>();
+        (config.width, config.height)
+    };
+    *world.get_mut::<AtomeLogicalSize>(entity)
+        .ok_or_else(|| format!("bevy_transform_size_missing:{}", patch.id))? = AtomeLogicalSize { width, height };
+    let mut transform = world.get_mut::<Transform>(entity)
+        .ok_or_else(|| format!("bevy_transform_component_missing:{}", patch.id))?;
+    transform.translation = Vec3::new(
+        patch.logical_position[0] + width / 2.0 - surface_width / 2.0,
+        surface_height / 2.0 - patch.logical_position[1] - height / 2.0,
+        depth_for_layer(layer),
+    );
+    if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
+        sprite.custom_size = Some(Vec2::new(width, height));
+    }
+    if let Some(mut bounds) = world.get_mut::<TextBounds>(entity) {
+        *bounds = TextBounds::from(Vec2::new(width, height));
+    }
+    Ok(())
+}
+
+fn apply_style(world: &mut World, patch: WebAtomeStylePatch) -> Result<(), String> {
+    let entity = entity_for(world, &patch.id)?;
+    if let Some(color) = patch.color {
+        if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
+            sprite.color = color_from_rgba(color);
+        }
+        if let Some(mut text_color) = world.get_mut::<TextColor>(entity) {
+            text_color.0 = color_from_rgba(color);
+        }
+    }
+    Ok(())
+}
+
+fn apply_reparent(world: &mut World, patch: WebAtomeParentPatch) -> Result<(), String> {
+    let entity = entity_for(world, &patch.id)?;
+    *world.get_mut::<AtomeParentEntityId>(entity)
+        .ok_or_else(|| format!("bevy_parent_component_missing:{}", patch.id))? = AtomeParentEntityId(patch.parent_id);
+    Ok(())
+}
+
+fn apply_layer(world: &mut World, patch: WebAtomeLayerPatch) -> Result<(), String> {
+    let entity = entity_for(world, &patch.id)?;
+    *world.get_mut::<AtomeLayer>(entity)
+        .ok_or_else(|| format!("bevy_layer_component_missing:{}", patch.id))? = AtomeLayer(patch.layer);
+    let mut transform = world.get_mut::<Transform>(entity)
+        .ok_or_else(|| format!("bevy_layer_transform_missing:{}", patch.id))?;
+    transform.translation.z = depth_for_layer(patch.layer);
+    Ok(())
+}
+
+fn apply_visibility(world: &mut World, patch: WebAtomeVisibilityPatch) -> Result<(), String> {
+    let entity = entity_for(world, &patch.id)?;
+    *world.get_mut::<Visibility>(entity)
+        .ok_or_else(|| format!("bevy_visibility_component_missing:{}", patch.id))? = if patch.visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    Ok(())
+}
+
+fn apply_text(world: &mut World, patch: WebAtomeTextPatch) -> Result<(), String> {
+    let entity = entity_for(world, &patch.id)?;
+    *world.get_mut::<AtomeTextMetadata>(entity)
+        .ok_or_else(|| format!("bevy_text_component_missing:{}", patch.id))? = AtomeTextMetadata(patch.text.clone());
+    if let Some(mut text) = world.get_mut::<Text2d>(entity) {
+        text.0 = patch.text.unwrap_or_default();
+    }
+    if patch.texture.is_some() {
+        let handle = {
+            let mut images = world
+                .get_resource_mut::<Assets<Image>>()
+                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+            image_handle_from_texture(&mut images, &patch.texture, &patch.id)?
+        };
+        if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
+            sprite.image = handle;
+            sprite.color = Color::WHITE;
+        }
+    }
+    Ok(())
+}
+
+fn apply_resource(world: &mut World, patch: WebAtomeResourcePatch) -> Result<(), String> {
+    let entity = entity_for(world, &patch.id)?;
+    let source = patch.source.clone().filter(|value| !value.trim().is_empty());
+    if let Some(mut media_source) = world.get_mut::<AtomeMediaSource>(entity) {
+        media_source.0 = source.clone();
+    }
+    if let Some(peaks) = patch.peaks {
+        if let Some(mut waveform) = world.get_mut::<AtomeWaveformPeaks>(entity) {
+            waveform.0 = peaks;
+        }
+    }
+    let kind = world.get::<AtomeRenderKind>(entity).map(|value| value.0.clone()).unwrap_or_default();
+    if kind == "image" || kind == "video" || kind == "audio_waveform" {
+        if kind == "image" || kind == "video" {
+            let _source = source.ok_or_else(|| format!("bevy_media_source_required:{}", patch.id))?;
+        }
+        let handle = {
+            let mut images = world
+                .get_resource_mut::<Assets<Image>>()
+                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+            image_handle_from_texture(&mut images, &patch.texture, &patch.id)?
+        };
+        let mut sprite = world.get_mut::<Sprite>(entity)
+            .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?;
+        sprite.image = handle;
+        sprite.color = Color::WHITE;
+    }
+    Ok(())
+}
+
+fn apply_render_op(world: &mut World, op: WebAtomeRenderOp) -> Result<(), String> {
+    match op {
+        WebAtomeRenderOp::Spawn(node) => apply_spawn(world, node).map(|_| ()),
+        WebAtomeRenderOp::Despawn(id) => apply_despawn(world, &id),
+        WebAtomeRenderOp::Transform(patch) => apply_transform(world, patch),
+        WebAtomeRenderOp::Style(patch) => apply_style(world, patch),
+        WebAtomeRenderOp::Reparent(patch) => apply_reparent(world, patch),
+        WebAtomeRenderOp::Layer(patch) => apply_layer(world, patch),
+        WebAtomeRenderOp::Visibility(patch) => apply_visibility(world, patch),
+        WebAtomeRenderOp::Text(patch) => apply_text(world, patch),
+        WebAtomeRenderOp::Resource(patch) => apply_resource(world, patch),
+    }
+}
+
+fn apply_pending_web_ops(world: &mut World) {
+    for op in drain_web_ops() {
+        match apply_render_op(world, op) {
+            Ok(()) => {
+                let mut diagnostics = world.resource_mut::<WebBevyRendererDiagnostics>();
+                diagnostics.applied_ops += 1;
+                diagnostics.last_error = None;
+            }
+            Err(error) => {
+                world.resource_mut::<WebBevyRendererDiagnostics>().last_error = Some(format!("{error:?}"));
+            }
+        }
     }
 }
 
@@ -114,67 +491,5 @@ fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
     app
 }
 
-#[wasm_bindgen]
-pub fn run_atome_bevy_renderer(
-    canvas_selector: String,
-    width: f32,
-    height: f32,
-    initial_nodes: JsValue,
-) -> Result<(), JsValue> {
-    if canvas_selector.trim().is_empty() {
-        return Err(JsValue::from_str("bevy_canvas_selector_required"));
-    }
-    let nodes: Vec<WebAtomeRenderNode> = serde_wasm_bindgen::from_value(initial_nodes)
-        .map_err(|error| JsValue::from_str(&format!("bevy_projection_decode_failed:{error}")))?;
-    let mut app = build_web_bevy_app(WebBevyRendererConfig::new(
-        canvas_selector,
-        width,
-        height,
-        nodes,
-    ));
-    app.run();
-    Ok(())
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::app::{App, Startup};
-
-    #[test]
-    fn plugin_projects_nodes_without_dom_state() {
-        let config = WebBevyRendererConfig::new(
-            "#atome-bevy".to_string(),
-            640.0,
-            480.0,
-            vec![WebAtomeRenderNode {
-                id: "shape_1".to_string(),
-                parent_id: None,
-                logical_position: [12.0, 24.0],
-                logical_size: [80.0, 40.0],
-                layer: 3,
-                color: Some([1.0, 0.0, 0.0, 1.0]),
-            }],
-        );
-        let mut app = App::new();
-        app.add_plugins(WebBevyRendererPlugin { config });
-        app.world_mut().run_schedule(Startup);
-
-        let mut query = app.world_mut().query::<(
-            &AtomeEntityId,
-            &AtomeParentEntityId,
-            &AtomeLogicalSize,
-            &AtomeLayer,
-            &Transform,
-        )>();
-        let nodes: Vec<_> = query.iter(app.world()).collect();
-        assert_eq!(nodes.len(), 1);
-        let (id, parent_id, size, layer, transform) = nodes[0];
-        assert_eq!(id.0, "shape_1");
-        assert_eq!(parent_id.0, None);
-        assert_eq!(size.width, 80.0);
-        assert_eq!(size.height, 40.0);
-        assert_eq!(layer.0, 3);
-        assert_eq!(transform.translation, Vec3::new(12.0, 24.0, 3.0));
-    }
-}
+mod tests;

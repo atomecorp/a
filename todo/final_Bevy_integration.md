@@ -4,6 +4,30 @@
 
 Bevy est integre comme surface de rendu disponible, compilee et testee, mais il n'est pas encore le chemin actif unique pour tous les Atomes.
 
+## Point d'avancement 2026-06-01
+
+Avancement estime : 95 %. Reste estime : 5 %.
+
+Correction active :
+
+- Fait : retrait du comportement non conforme qui excluait SVG et video du rendu Bevy.
+- Fait : remplacement du chargement image par source seule par une texture RGBA explicite consommee par Bevy.
+- Fait : application du meme chemin texture Bevy aux SVG, aux frames video et au texte.
+- Fait : validation visuelle image, SVG, video, texte, shape et waveform dans le navigateur avec console erreur/warn propre.
+- Fait : extraction de frame video Bevy stabilisee par seek vers une frame representative puis amorcage muet de presentation avant lecture RGBA, ce qui evite la frame noire initiale sur `superman.mp4`.
+- Fait : waveform audio corrigee sur la route Bevy par texture RGBA derivee des pics canoniques, plus de rectangle plein.
+- Fait : waveform Bevy avec pics inline ne requiert plus de source media, ce qui evite de bloquer tout le demarrage Bevy quand une waveform canonique est deja disponible.
+- Fait : waveform Bevy pour audio importe sans pics corrigee par decodage du fichier audio source normalise avant generation de texture, ce qui corrige `bevy_waveform_peaks_empty`.
+- Fait : les enregistrements video/audio pending sans source media ne sont plus projetes vers Bevy avant disponibilite de la source commitee, ce qui corrige `bevy_media_texture_source_required` sur enregistrement Tauri.
+- Fait : les sources media RenderAtom passent par la normalisation partagee avant projection Bevy, donc `test.m4a` et les noms d'uploads/recordings ne sont plus emis comme URLs relatives nues.
+- Fait : les deux fichiers signales en 404 ont ete verifies disponibles via les routes API owner-scopees (`200 OK`) et le chemin nu a ete confirme comme la source du 404 (`/test.m4a` -> `404`).
+- Fait : les routes d'enregistrement audio/video directes reprojettent les Atomes media sur la scene projet apres commit.
+- Fait : les enregistrements audio WAV locaux produisent des pics waveform canoniques pendant la persistence.
+- Fait : hit-test/drag corrige quand le canvas visible est scale par rapport a la surface logique.
+- Fait : selection verifiee au demarrage du drag sur surface scalee.
+- Fait : tests JS cibles, tests Rust, check WASM, build WASM, `check:syntax`, `check:no-fallbacks` et `check:m0`.
+- Reste : audit final du renderer legacy actif et verification UI complete d'import/enregistrement depuis les outils produit avec inspection visuelle stable apres demarrage du WASM.
+
 Deja en place :
 
 - Backend Bevy natif Tauri dans `platforms/desktop-tauri/src/bevy_backend/`.

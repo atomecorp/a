@@ -2,15 +2,15 @@
 
 ## Status
 
-Bevy is integrated as an official, feature-gated Tauri Rust dependency. It is not the active Atome renderer yet.
+Bevy is integrated as an official, feature-gated Tauri Rust dependency and as the active browser/WASM project renderer entry point for supported visible Atome projections.
 
-The active project rendering path remains:
+The active project rendering path is:
 
 ```text
-canonical Atome record -> RenderAtom / AtomeRenderNode -> shared WebGPU compositor
+canonical Atome record -> RenderAtom / Virtual Scene -> Bevy projection adapter -> browser Bevy WASM renderer
 ```
 
-The Bevy backend is a native preparation surface for a future renderer migration. It must consume the existing renderer-agnostic virtual scene contract instead of becoming a parallel Atome state model.
+The Bevy backend consumes the existing renderer-agnostic virtual scene contract instead of becoming a parallel Atome state model. Browser project rendering starts one Bevy app on the existing shared project canvas and applies Virtual Scene diffs through explicit WASM exports.
 
 ## Version
 
@@ -177,11 +177,23 @@ The source of truth remains outside Bevy:
 
 This integration does not:
 
-- replace the current WebGPU compositor;
-- add a Bevy window;
-- add a new DOM route;
 - add a canvas per Atome;
-- migrate project drag, resize, or media rendering;
-- create a second source of truth for Atome geometry.
+- create a new DOM route;
+- create a second source of truth for Atome geometry;
+- enable `bevy_audio`;
+- keep video, SVG, text, image, and waveform display on the browser Bevy texture route without reactivating a legacy project renderer.
 
-The next renderer migration step is to build a read-only bridge from `eVe/domains/rendering/virtual_scene_contract.js` into the Bevy projection components, then validate it against the existing project-scene WebGPU route before any active rendering handoff.
+The browser bridge from `eVe/domains/rendering/virtual_scene_contract.js` into the Bevy WASM payload now lives in `eVe/domains/rendering/bevy_projection_adapter.js`. Browser startup and diff dispatch against the generated `atome/src/wasm/squirrel_bevy_renderer.js` module lives in `eVe/domains/rendering/bevy_web_renderer_runtime.js` and is limited to one Bevy app per shared canvas.
+
+The web renderer now exposes wasm-bindgen diff exports for spawn, despawn, transform, style, reparent, layer, visibility, text metadata, and resource updates. `project_scene_runtime.js` consumes those exports through `diffVirtualSceneTrees(...)` so project Atome projection enters Bevy without restarting the app for each mutation.
+
+Text, image, SVG, video, and audio waveform records are decoded by `eVe/domains/rendering/bevy_media_texture_resolver.js` into non-visible RGBA textures, then consumed by Bevy as `Image` assets attached to sprite entities. The decode elements are disposable browser resources only; final display remains Bevy/WebGPU on the shared canvas. RenderAtom content projection canonicalizes uploaded and recorded media sources through the shared media source contract before Bevy receives them, so browser-relative filenames are not emitted as renderer input. Video textures seek to a representative source frame and prime muted frame presentation before RGBA readback, avoiding black initial frames while keeping final display in Bevy. Audio waveforms use canonical peak projection data when present; inline peaks can generate the Bevy waveform texture without requiring a media URL, and imported audio without peaks is decoded from the normalized audio source to derive real waveform peaks before texture generation. Direct WAV recording stores those peaks before Bevy texture generation. Pending recording Atomes without a source are not projected to Bevy until the committed media source is available. Bevy audio remains disabled; Kira stays the only audio engine.
+
+## Browser Media Route
+
+Browser media support is now texture-driven:
+
+- Text, raster images, SVG documents, video frames, and audio waveforms must provide explicit `{ width, height, rgba }` texture data in the Bevy payload.
+- The Rust/WASM renderer creates Bevy `Image` assets from that RGBA data and never loads media through a visible DOM node or legacy project renderer.
+- Missing media source or missing texture data is an explicit integration error.
+- Kira remains the only audio engine; `bevy_audio` is not enabled.

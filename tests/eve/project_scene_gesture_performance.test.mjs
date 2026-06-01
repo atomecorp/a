@@ -28,6 +28,27 @@ const makeRecord = (id) => ({
     }
 });
 
+const createTestCompositor = (calls = []) => ({
+    default: async () => {},
+    resolve_bevy_media_texture: async () => ({
+        width: 1,
+        height: 1,
+        rgba: [255, 0, 0, 255]
+    }),
+    run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
+        calls.push({ type: 'run', canvasSelector, width, height, initialNodes, scene: { atoms: initialNodes } });
+    },
+    apply_atome_bevy_spawn: (payload) => calls.push({ type: 'spawn', payload }),
+    apply_atome_bevy_despawn: (id) => calls.push({ type: 'despawn', id }),
+    apply_atome_bevy_transform: (payload) => calls.push({ type: 'transform', payload }),
+    apply_atome_bevy_style: (payload) => calls.push({ type: 'style', payload }),
+    apply_atome_bevy_reparent: (payload) => calls.push({ type: 'reparent', payload }),
+    apply_atome_bevy_layer: (payload) => calls.push({ type: 'layer', payload }),
+    apply_atome_bevy_visibility: (payload) => calls.push({ type: 'visibility', payload }),
+    apply_atome_bevy_resource: (payload) => calls.push({ type: 'resource', payload }),
+    apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload })
+});
+
 const installFrameScheduler = (windowRef) => {
     const callbacks = [];
     windowRef.requestAnimationFrame = (callback) => {
@@ -74,12 +95,7 @@ test('Project scene drag coalesces move frames into one render and one gesture e
         projectId: 'project_gesture_perf',
         records: [makeRecord('drag_perf_atom')],
         host: dom.window.document.getElementById('project'),
-        compositor: {
-            async renderAtTime(payload) {
-                renders.push(payload);
-                return { ok: true, scene: payload.scene };
-            }
-        }
+        compositor: createTestCompositor(renders)
     });
 
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', {
@@ -123,9 +139,64 @@ test('Project scene drag coalesces move frames into one render and one gesture e
     assert.equal(commits[1][0].kind, 'set');
     assert.deepEqual(commits[1][0].props, { left: 30, top: 35 });
     assert.equal(commits[0][0].gesture_id, commits[1][0].gesture_id);
-    assert.equal(renders.length, rendersAfterPointerDown + 2);
+    assert.equal(renders.length, rendersAfterPointerDown + 1);
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
     assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
+});
+
+test('Project scene drag hit-testing uses logical surface coordinates when the canvas is visually scaled', async () => {
+    clearAllProjectScenes();
+    const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    const host = dom.window.document.getElementById('project');
+    Object.defineProperty(host, 'clientWidth', { configurable: true, value: 200 });
+    Object.defineProperty(host, 'clientHeight', { configurable: true, value: 160 });
+    const flushFrames = installFrameScheduler(dom.window);
+    const commits = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => {
+            commits.push(events);
+            return { ok: true };
+        }
+    };
+    const record = makeRecord('scaled_drag_atom');
+    record.properties.left = 20;
+    record.properties.top = 40;
+    record.properties.width = 60;
+    record.properties.height = 40;
+
+    await renderProjectScene({
+        projectId: 'project_scaled_drag',
+        records: [record],
+        host,
+        compositor: createTestCompositor()
+    });
+
+    const canvas = dom.window.document.getElementById('eve_surface_project');
+    canvas.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        right: 100,
+        bottom: 80,
+        width: 100,
+        height: 80
+    });
+
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', { clientX: 25, clientY: 30, pointerId: 3 }));
+    await Promise.resolve();
+    assert.deepEqual(dom.window.__selectedAtomeIds, ['scaled_drag_atom']);
+
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointermove', { clientX: 35, clientY: 45, pointerId: 3 }));
+    await flushFrames();
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerup', { clientX: 35, clientY: 45, pointerId: 3 }));
+    await flushFrames();
+
+    const updated = getProjectSceneState('project_scaled_drag').records[0];
+    assert.equal(updated.properties.left, 40);
+    assert.equal(updated.properties.top, 70);
+    assert.equal(commits.at(-1)[0].kind, 'set');
+    assert.deepEqual(commits.at(-1)[0].props, { left: 40, top: 70 });
 });
 
 test('Project scene ignores move and end events from a non-owner pointer', async () => {
@@ -146,7 +217,7 @@ test('Project scene ignores move and end events from a non-owner pointer', async
         projectId: 'project_pointer_owner',
         records: [makeRecord('drag_pointer_atom')],
         host: dom.window.document.getElementById('project'),
-        compositor: { async renderAtTime(payload) { return { ok: true, scene: payload.scene }; } }
+        compositor: createTestCompositor()
     });
 
     dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', { clientX: 12, clientY: 22, pointerId: 7 }));
@@ -181,7 +252,7 @@ test('Project scene cancels active drag when the render surface resizes', async 
         projectId: 'project_resize_cancel',
         records: [makeRecord('drag_resize_atom')],
         host,
-        compositor: { async renderAtTime(payload) { return { ok: true, scene: payload.scene }; } }
+        compositor: createTestCompositor()
     });
 
     const canvas = dom.window.document.getElementById('eve_surface_project');
@@ -216,11 +287,7 @@ test('Project scene surface records async commit timeout failures without an unh
         projectId: 'project_gesture_timeout',
         records: [makeRecord('drag_timeout_atom')],
         host: dom.window.document.getElementById('project'),
-        compositor: {
-            async renderAtTime(payload) {
-                return { ok: true, scene: payload.scene };
-            }
-        }
+        compositor: createTestCompositor()
     });
 
     const canvas = dom.window.document.getElementById('eve_surface_project');
@@ -277,7 +344,7 @@ test('Project scene records local drag end geometry for delayed realtime guards'
         projectId: 'project_local_drag_guard',
         records: [makeRecord('drag_guard_atom')],
         host: dom.window.document.getElementById('project'),
-        compositor: { async renderAtTime(payload) { return { ok: true, scene: payload.scene }; } }
+        compositor: createTestCompositor()
     });
 
     dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', { clientX: 12, clientY: 22, pointerId: 4 }));

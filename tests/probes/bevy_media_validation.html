@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Bevy media validation</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #111318;
+      overflow: hidden;
+    }
+    #project {
+      width: 320px;
+      height: 640px;
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <main id="project"></main>
+  <script type="module">
+    import { renderProjectScene, clearAllProjectScenes } from '/eVe/domains/rendering/project_scene_runtime.js';
+    import { createBrowserBevyMediaTextureResolver } from '/eVe/domains/rendering/bevy_media_texture_resolver.js?bevy_media_validation_video_ready=4';
+
+    const record = (id, kind, left, top, width, height, extra = {}) => ({
+      id,
+      type: kind,
+      properties: {
+        kind,
+        left,
+        top,
+        width,
+        height,
+        z_index: extra.zIndex || 1,
+        material: extra.material || { fill: extra.fill || '#4ca3ff' },
+        text: extra.text || '',
+        media_url: extra.source || '',
+        peaks: extra.peaks || []
+      }
+    });
+
+    const records = [
+      record('bevy_shape_probe', 'shape', 20, 22, 80, 62, { fill: '#f05252' }),
+      record('bevy_text_probe', 'text', 118, 22, 182, 62, { fill: '#f2f4f8', text: 'Bevy text OK' }),
+      record('bevy_image_probe', 'image', 20, 108, 78, 78, { source: '/atome/src/assets/images/1.png' }),
+      record('bevy_svg_probe', 'image', 120, 108, 78, 78, { source: '/atome/src/assets/images/logos/atome.svg' }),
+      record('bevy_video_probe', 'video', 220, 108, 78, 78, { source: '/atome/src/assets/videos/superman.mp4' }),
+      record('bevy_waveform_probe', 'audio_waveform', 20, 220, 280, 86, {
+        fill: '#20c997',
+        peaks: [0.1, 0.5, -0.8, 0.9, -0.3, 0.7, -0.6, 0.4]
+      })
+    ];
+
+    window.__BEVY_MEDIA_VALIDATION__ = { ok: false, records: records.map((item) => item.id) };
+    window.__BEVY_MEDIA_RESOLVE_LOG__ = [];
+
+    try {
+      clearAllProjectScenes();
+      const mediaResolver = createBrowserBevyMediaTextureResolver({ maxTextureSize: 1024 });
+      const resolveBevyMediaTexture = async (node) => {
+        window.__BEVY_MEDIA_RESOLVE_LOG__.push({ phase: 'start', id: node.id, kind: node.kind, source: node.content?.source || null });
+        try {
+          const texture = await mediaResolver(node);
+          window.__BEVY_MEDIA_RESOLVE_LOG__.push({
+            phase: 'done',
+            id: node.id,
+            width: texture?.width || 0,
+            height: texture?.height || 0,
+            rgba: Array.isArray(texture?.rgba) ? texture.rgba.length : 0
+          });
+          return texture;
+        } catch (error) {
+          window.__BEVY_MEDIA_RESOLVE_LOG__.push({ phase: 'error', id: node.id, error: String(error?.message || error) });
+          throw error;
+        }
+      };
+      const projection = await renderProjectScene({
+        projectId: 'bevy_media_validation',
+        projectRevision: 1,
+        records,
+        host: document.getElementById('project'),
+        bevyMediaTextureResolver: resolveBevyMediaTexture,
+        maxTextureDimension2D: 1024
+      });
+      window.__BEVY_MEDIA_VALIDATION__ = {
+        ok: projection?.ok === true,
+        renderResult: projection?.render_result || null,
+        nodeCount: projection?.virtual_scene?.nodes?.length || 0,
+        canvasCount: document.querySelectorAll('canvas#eve_surface_project').length,
+        atomeHostCount: document.querySelectorAll('.eve-atome,img,video,audio,svg').length
+      };
+    } catch (error) {
+      window.__BEVY_MEDIA_VALIDATION__ = {
+        ok: false,
+        error: String(error && error.message ? error.message : error)
+      };
+      throw error;
+    }
+  </script>
+</body>
+</html>
