@@ -288,16 +288,32 @@ const run = async () => {
         report.extractedAudio = await analyzeAudio(report.record.extractUrl, 'server_extracted_audio');
 
         const mtrackAtomeId = report.record.project?.atomeId || report.record.result?.atomeId || report.record.result?.atome_id || null;
-        if (mtrackAtomeId) {
-            try {
-                await page.locator(`[data-atome-id="${mtrackAtomeId}"]`).first().dblclick({ timeout: 20000, force: true });
-            } catch (error) {
-                report.mtrack = { ok: false, error: error?.message || String(error || 'dblclick_failed') };
+        report.mtrack = await safeEval(page, async (atomeId) => {
+            if (!atomeId) return { ok: false, error: 'atome_id_missing' };
+            const { openGroupTimeline } = await import('/eVe/intuition/runtime/group_timeline_api.js');
+            const open = await openGroupTimeline({
+                atome_id: atomeId,
+                atomeId,
+                target_id: atomeId,
+                targetId: atomeId,
+                selection_ids: [atomeId],
+                selectionIds: [atomeId],
+                action: 'open',
+                toggle: false,
+                media_timeline: true,
+                mediaTimeline: true,
+                media_kind: 'video',
+                mediaKind: 'video',
+                dock_to_atome: false,
+                dockToAtome: false
+            });
+            if (!open?.ok) {
+                return {
+                    ok: false,
+                    error: open?.error || 'mtrack_open_failed',
+                    open
+                };
             }
-        }
-        if (!report.mtrack) report.mtrack = await safeEval(page, async (atomeId) => {
-            const host = document.querySelector(`[data-atome-id="${CSS.escape(atomeId)}"]`);
-            if (!(host instanceof HTMLElement)) return { ok: false, error: 'host_missing', atomeId };
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             const deadline = Date.now() + 30000;
             let lastState = null;

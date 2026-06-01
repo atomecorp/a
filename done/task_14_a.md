@@ -1,8 +1,22 @@
 # Task 14A Prompt — Finish Active Atome Rendering Migration
 
 Version: 2026-05-29
-Status: Continuation prompt
+Status: Complete
 Scope: Continuation of `todo/task14.md`
+
+## Execution Status — 2026-06-01
+
+Status: complete.
+
+Estimated progress: 100 %. Remaining work: 0 %.
+
+Completion evidence:
+
+- `tool_genesis.js` is now 3150 lines and delegates the cohesive owners required by this task.
+- Active project Atomes render through the scene/canvas route without visible per-Atome DOM hosts.
+- Matrix preview remains scene-rendered and DOM-capture-free.
+- Project creation, drag/resize/text/media/group contracts are covered by static and Vitest suites.
+- Browser validation on `http://127.0.0.1:3002/tests/probes/bevy_media_validation.html?final_validation=1780298700948` shows one visible Bevy canvas, zero project Atome DOM nodes, zero visible project media DOM nodes, and no console `error`, `warning`, or `warn`.
 
 ## Objective
 
@@ -43,19 +57,30 @@ Inspect the current extracted owners:
 
 ## Current State
 
-Already completed:
+Completed:
 
 - Active project visual rendering delegates to `project_scene_runtime.js`.
 - Matrix preview active path no longer uses `html2canvas`, SVG `foreignObject`, DOM clone, or symbolic DOM scan.
 - Matrix tile interactions are centralized through scene hit-test runtime.
 - Project drag, resize, and text commit paths use scene intents and canonical commit.
 - One hidden text service is used for active project text editing.
-- `tool_genesis.js` has been reduced from 5251 lines to 4920 lines.
+- `tool_genesis.js` has been reduced from 5251 lines to 3150 lines.
 - Extracted owners:
   - `project_scene_render_bridge.js`
   - `atome_description_frame_runtime.js`
   - `media_integrity_runtime.js`
   - `shape_svg_runtime.js`
+  - `group_visual_runtime.js`
+  - `media_source_runtime.js`
+  - `media_hydration_runtime.js`
+  - `media_mount_runtime.js`
+  - `realtime_atome_events_runtime.js`
+  - `persistence_diagnostics_runtime.js`
+  - `info_panel_sync_runtime.js`
+  - `atome_host_registry_runtime.js`
+  - `project_atome_index_runtime.js`
+  - `shared_project_override_runtime.js`
+  - `implicit_gesture_commit_runtime.js`
 - Browser probes have validated:
   - project scene canvas remains bounded;
   - project Atomes do not create `.eve-atome` hosts;
@@ -63,12 +88,12 @@ Already completed:
   - resize gesture commits canonical dimensions;
   - non-project SVG legacy rendering still works while project SVG stays in scene.
 
-Remaining risk:
+Residual scope:
 
-- `tool_genesis.js` is still oversized and owns multiple legacy responsibilities.
-- Some non-project DOM paths are still valid and must not be deleted blindly.
-- Some legacy branches may be dead, but each deletion needs call-site and browser proof.
-- Generation and rendering behavior must remain canonical-first, not DOM-first.
+- No blocking Task 14A work remains.
+- Valid non-project DOM paths are retained only where they are still proven non-project UI.
+- Future reductions of `tool_genesis.js` remain allowed only through cohesive owner extraction with matching tests and maps.
+- Generation and rendering behavior remains canonical-first, not DOM-first.
 
 ## Task 14A Work Breakdown
 
@@ -254,6 +279,34 @@ Task 14A is complete only when:
 6. New owners are documented in maps.
 7. Static tests and browser probes prove the behavior.
 8. No temporary probes, logs, or servers remain.
+
+Completion validation run on 2026-06-01:
+
+```text
+node --test tests/probes/tool_genesis_create_atome_order.test.mjs tests/probes/matrix_rendering_migration_contract.test.mjs tests/probes/project_render_legacy_audit.test.mjs
+PASS: 34 tests
+
+npm run test:run -- tests/eve/unified_rendering_contract.test.mjs tests/eve/project_audio_waveform_renderer.test.mjs
+PASS: 2 files, 13 tests
+
+npm run check:syntax
+PASS: Syntax OK (657 file(s))
+
+npm run check:dom-projection-guardrails
+PASS: DOM projection guardrails OK
+
+npm run check:mutation-ownership-guardrails
+PASS: mutation ownership guardrails: ok
+
+npm run check:squirrel-dom-adapter-guardrails
+PASS: squirrel DOM adapter guardrails: ok
+
+npm run check:molecule-guardrails
+PASS: Molecule guardrails OK
+
+Browser validation
+PASS: Bevy canvas visible, project Atome DOM count 0, project media DOM count 0, console error/warn count 0.
+```
 
 ## Stop Conditions
 

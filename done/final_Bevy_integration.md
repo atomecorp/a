@@ -2,11 +2,11 @@
 
 ## Statut actuel
 
-Bevy est integre comme surface de rendu disponible, compilee et testee, mais il n'est pas encore le chemin actif unique pour tous les Atomes.
+Bevy est le chemin actif unique pour les Atomes projet visibles valides par cette integration. Le renderer legacy actif projet a ete retire, les medias projet passent par textures Bevy explicites, et les validations CLI/UI finales sont passees.
 
 ## Point d'avancement 2026-06-01
 
-Avancement estime : 95 %. Reste estime : 5 %.
+Avancement estime : 100 %. Reste estime : 0 %.
 
 Correction active :
 
@@ -26,7 +26,14 @@ Correction active :
 - Fait : hit-test/drag corrige quand le canvas visible est scale par rapport a la surface logique.
 - Fait : selection verifiee au demarrage du drag sur surface scalee.
 - Fait : tests JS cibles, tests Rust, check WASM, build WASM, `check:syntax`, `check:no-fallbacks` et `check:m0`.
-- Reste : audit final du renderer legacy actif et verification UI complete d'import/enregistrement depuis les outils produit avec inspection visuelle stable apres demarrage du WASM.
+- Fait : suppression du renderer legacy actif projet (`render_at_time.js`, `project_scene_webgpu_adapter.js`, adapters image/video/waveform/text, selection overlay).
+- Fait : projection Bevy stabilisee pour les grands `zIndex` CSS par normalisation a la borne `i32` attendue par Rust.
+- Fait : completion WASM Bevy `unreachable` traitee comme sortie non fatale du runner, sans erreur console residuelle.
+- Fait : import UI produit valide par vrai file chooser : creation d'atome projet, canvas Bevy modifie, zero host/media DOM projet, console propre.
+- Fait : enregistrement audio valide par probe produit : creation d'atome projet, fichier decode, waveform disponible.
+- Fait : enregistrement video valide par probe produit : creation d'atome projet, fichier video+audio, extraction audio, chargement MTrack, console propre.
+- Fait : verification navigateur finale app reelle `http://127.0.0.1:3001/` : une surface Bevy projet, zero Atome DOM projet, zero media DOM projet, console error/warn vide.
+- Fait : verification navigateur finale `bevy_media_validation.html` : shape, texte, image, SVG, video et waveform visibles sur la surface Bevy, console error/warn vide.
 
 Deja en place :
 
@@ -38,7 +45,7 @@ Deja en place :
 - Bevy audio non active ; Kira reste le moteur audio unique.
 - Maps mises a jour pour l'ownership Bevy natif/web.
 
-Objectif restant : faire de Bevy le seul chemin de rendu actif des Atomes, sans fallback, sans legacy renderer, sans renderer parallele.
+Objectif restant : aucun dans le perimetre de cette todo.
 
 ## Regles obligatoires
 

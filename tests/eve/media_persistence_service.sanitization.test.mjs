@@ -1,6 +1,27 @@
 import assert from 'node:assert/strict';
+import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
+const createTestCompositor = () => ({
+    default: async () => {},
+    resolve_bevy_media_texture: async () => ({
+        width: 1,
+        height: 1,
+        rgba: [255, 0, 0, 255]
+    }),
+    run_atome_bevy_renderer: () => {},
+    apply_atome_bevy_spawn: () => {},
+    apply_atome_bevy_despawn: () => {},
+    apply_atome_bevy_transform: () => {},
+    apply_atome_bevy_style: () => {},
+    apply_atome_bevy_reparent: () => {},
+    apply_atome_bevy_layer: () => {},
+    apply_atome_bevy_visibility: () => {},
+    apply_atome_bevy_resource: () => {},
+    apply_atome_bevy_text_metadata: () => {}
+});
+
+test('media persistence sanitizes recording Atomes and projects them through Bevy', async () => {
 const commits = [];
 const storage = {
     getItem: () => '',
@@ -48,10 +69,17 @@ globalThis.document = dom.window.document;
 const { ensureProjectMediaAtome } = await import('../../eVe/domains/media/api/media_persistence_service.js');
 const {
     clearAllProjectScenes,
-    getProjectSceneState
+    getProjectSceneState,
+    renderProjectScene
 } = await import('../../eVe/domains/rendering/project_scene_runtime.js');
 
 clearAllProjectScenes();
+await renderProjectScene({
+    projectId: 'project_a',
+    records: [],
+    host: dom.window.document.getElementById('project'),
+    compositor: createTestCompositor()
+});
 
 const sceneRecords = () => getProjectSceneState('project_a')?.scene?.atoms || [];
 const latestSceneAtom = () => sceneRecords().at(-1);
@@ -187,3 +215,4 @@ assert.equal(sceneRecords().some((atom) => atom.id === 'video_recording_pending'
 assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
 
 console.log('media_persistence_service_sanitization: ok');
+}, 30000);

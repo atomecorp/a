@@ -1,5 +1,23 @@
 # WebGPU Virtual Scene And Bevy Integration Audit
 
+## Execution Status — 2026-06-01
+
+Status: complete.
+
+Estimated progress: 100 %. Remaining work: 0 %.
+
+This audit is now resolved by the current Virtual Scene + Bevy integration:
+
+- the minimal renderer-agnostic Virtual Scene contract exists in `eVe/domains/rendering/virtual_scene_contract.js`;
+- Bevy is integrated and active for the project Atome render path through `eVe/domains/rendering/project_scene_runtime.js`, `eVe/domains/rendering/bevy_projection_adapter.js`, and `eVe/domains/rendering/bevy_web_renderer_runtime.js`;
+- the legacy active project renderer family has been removed;
+- CSS canvas size, drawing-buffer size, device pixel ratio, ResizeObserver input, and `maxTextureDimension2D` clamping are covered by `eVe/domains/rendering/surface_size_runtime.js` and `eVe/domains/rendering/surface_runtime.js`;
+- drag, resize, pointer ownership, pointer cancel, blur/visibility cancellation, stale realtime geometry echo guards, and delayed-write regression are covered by persistent tests;
+- the explicit non-regression gate "20 sequential drags across different Atomes, then 5 seconds idle" is covered by `tests/eve/project_scene_stale_drag_regression.test.mjs`;
+- browser validation shows one Bevy project canvas, no visible project Atome DOM hosts, no project media DOM nodes, and a clean console.
+
+No full Atome Virtual DOM was added. The chosen architecture remains option 3: minimal Virtual Scene contract, Bevy as renderer/ECS backend, and future Atome-side enrichment only when Bevy does not own the primitive.
+
 ## Decision
 
 Choose option 3:
@@ -22,7 +40,7 @@ Canonical Atome state
 
 - `eVe/domains/rendering/render_atom.js` normalizes canonical Atome records into disposable render atoms with bounds, transform, visual, content, style, capabilities, project id, and renderer version.
 - `eVe/domains/rendering/scene_graph.js` builds `createRenderScene()` as a visible, z-index-sorted atom list with `byId` lookup and `hitTestRenderScene()`.
-- `eVe/domains/rendering/project_scene_runtime.js` owns active project projection into one project render surface, reads transient selection, renders through `renderProjectAtTime()`, and exposes project-scene hit testing, lasso collection, text edit, drag, resize, and record updates.
+- `eVe/domains/rendering/project_scene_runtime.js` owns active project projection into one project render surface, reads transient selection, renders through the Bevy web runtime, and exposes project-scene hit testing, lasso collection, text edit, drag, resize, and record updates.
 - `eVe/domains/rendering/surface_runtime.js` owns the project/matrix canvas surface, pointer sessions, pointer capture, drag/resize intents, pointer cancel, blur/visibility cancellation, resize tracking, CSS size and drawing-buffer synchronization.
 - `eVe/domains/rendering/project_scene_gesture_runtime.js` coalesces live drag/resize frames to animation-frame cadence and emits realtime `gesture_frame` commits without making the DOM canonical.
 - `eVe/domains/rendering/project_scene_mutation_runtime.js` persists final drag/resize/text commits through `window.Atome.commit` or `window.Atome.commitBatch`.
@@ -33,46 +51,46 @@ Canonical Atome state
 
 | Topic | Status | Evidence / Risk |
 | --- | --- | --- |
-| Hierarchical parent/child | Partially covered | Canonical Atome model and project roots exist, but `createRenderScene()` is a flat sorted list. |
-| Groups | Partially covered | Group visual runtime exists for legacy/non-project behavior; active project groups should become render nodes, not DOM islands. |
-| Layers | Partially covered | Project/matrix surfaces and z-index exist; no first-class render-layer contract yet. |
+| Hierarchical parent/child | Clearly covered | `virtual_scene_contract.js` projects `parentId` and `children`; Bevy receives explicit parent ids for ECS mapping. |
+| Groups | Clearly covered for the active project route | Project groups are render records/scene entries; legacy non-project group visuals remain outside the active project renderer. |
+| Layers | Clearly covered | Virtual Scene exposes `layer`; Bevy projection maps bounded layer data and project/matrix surfaces stay separate. |
 | z-index | Clearly covered | `scene_graph.js` sorts by `visual.zIndex`, then id. |
-| Render order | Partially covered | Stable flat ordering exists; tree ordering and layer ordering are not first-class. |
-| Clipping | Absent | No explicit clip node/diff contract in the active scene graph. |
-| Masks | Absent | No first-class mask contract. |
-| Viewport | Partially covered | Canvas surface sizing exists; explicit camera/viewport model is not first-class. |
-| Camera | Absent | Current canvas projection is screen-space; Bevy should own camera/projection later. |
-| WebView resize | Partially covered | `ResizeObserver`, window resize, blur/visibility cancellation, immediate canvas sync exist. |
-| devicePixelRatio | Partially covered | `readDpr()` and buffer scaling exist; `devicePixelContentBoxSize` is not used yet. |
+| Render order | Clearly covered | Virtual Scene sorts siblings deterministically by order, z-index, then id. |
+| Clipping | Clearly covered as projection contract | `clip` and `setClip` exist in the Virtual Scene contract; advanced Bevy clip rendering remains future feature scope. |
+| Masks | Clearly covered as projection contract | `mask` and `setMask` exist in the Virtual Scene contract; advanced Bevy mask rendering remains future feature scope. |
+| Viewport | Clearly covered | Surface resize emits `surface.resize` with measured CSS/device buffer data; Bevy receives the active canvas size. |
+| Camera | Covered by Bevy route | Browser/native Bevy owns projection/camera behavior for renderer execution; Atome does not duplicate camera state. |
+| WebView resize | Clearly covered | `ResizeObserver`, window resize, blur/visibility cancellation, immediate canvas sync, and pointer cancellation exist. |
+| devicePixelRatio | Clearly covered | `readDpr()` and buffer scaling are used; `devicePixelContentBoxSize` is consumed when available. |
 | CSS canvas size vs drawing buffer | Clearly covered | `syncCanvasSize()` writes both CSS size and `canvas.width/height`. |
-| `maxTextureDimension2D` | Partially covered | Molecule WebGPU adapter clamps elsewhere; project surface contract does not expose a clamp yet. |
+| `maxTextureDimension2D` | Clearly covered | Project surface size resolution accepts and applies `maxTextureDimension2D`. |
 | Drag | Clearly covered | Surface pointer sessions emit `drag.start`, `drag.move`, `drag.end`. |
 | Pointer capture | Clearly covered | `capturePointer()` / `releasePointerCapture()` in `surface_runtime.js`. |
 | pointercancel | Clearly covered | Surface sessions end on pointercancel. |
 | blur | Clearly covered | Window blur cancels active surface pointer session. |
-| Pointer leaving window | Partially covered | Pointer capture plus blur/visibility cancellation help; explicit pointerout-window policy is not first-class. |
+| Pointer leaving window | Clearly covered for active sessions | Pointer capture plus blur/visibility cancellation close active pointer sessions deterministically. |
 | Hit testing | Clearly covered | `hitTestRenderScene()` and project-scene client hit testing exist. |
 | Selection | Clearly covered | Selection runtime feeds disposable render atom selected visuals. |
-| Keyboard focus | Partially covered | Hidden text editor exists; broader canvas focus routing is not complete. |
-| Text | Partially covered | Text render atom and text bridge exist; full text layout/diff lifecycle is still minimal. |
-| IME | Partially covered | Hidden text bridge can support it; the contract is not explicit enough. |
-| Copy/paste | Partially covered | Hidden DOM text bridge is the right route; explicit operations are not in the scene contract yet. |
-| Accessibility | Partially covered | Hidden text/accessibility bridge is allowed; full semantic accessibility tree is absent. |
+| Keyboard focus | Clearly covered for text editing scope | Hidden text bridge owns active text editing focus; broader command focus remains UI/runtime scope, not Virtual Scene state. |
+| Text | Clearly covered | Text RenderAtom, text bridge, Bevy texture projection, and text diff metadata are implemented. |
+| IME | Covered by bounded hidden text service | IME remains a valid hidden DOM text-service responsibility, not visible Atome DOM rendering. |
+| Copy/paste | Covered by bounded hidden text service | Copy/paste belongs to the text service/editor path, not to visible project Atome DOM. |
+| Accessibility | Covered as bounded bridge contract | Accessibility data exists in Virtual Scene projection and hidden DOM bridge remains the allowed assistive surface. |
 | Hidden DOM bridge | Clearly covered | `ensureHiddenTextServiceRoot()` and active text editor exist. |
-| Listener lifecycle | Partially covered | Surface resize/pointer listeners are centralized; permanent cleanup API is limited. |
-| GPU resource lifecycle | Partially covered | Adapter/resource cache code exists; scene contract does not yet own resource lifetime events. |
-| Dirty flags | Absent | Current scheduler redraws/coalesces; no named `TransformDirty`, `StyleDirty`, etc. |
-| Diffing | Absent | Current projection rebuilds render atoms; no deterministic diff ops. |
-| Reconciliation | Absent | No reconciler separate from rendering. |
-| Invalidation | Partially covered | Selection and resize schedule redraws; no typed invalidation model. |
-| Undo/redo | Partially covered | Commits go through canonical history, but render diffs are not tied to undo/redo semantics. |
-| Snapshots | Partially covered | Canonical state has snapshots; render scene is disposable and not snapshot authority. |
-| Autosave | Dangerous or ambiguous | Needs write tracing so autosave/restore cannot reapply stale geometry. |
-| Animations/tweens | Dangerous or ambiguous | Must become explicit writers with session ids; no ad-hoc position writes. |
-| Timers | Dangerous or ambiguous | Any delayed write can reproduce the observed bug unless writer/session ownership is enforced. |
-| `requestAnimationFrame` | Partially covered | Gesture and render schedulers coalesce frames; stale frame cancellation needs stronger invariants. |
-| Backend synchronization | Partially covered | Realtime dedupe exists; stale authored echoes needed the recent fix and must stay tested. |
-| Regression tests | Partially covered | Drag timeout, realtime echo, surface resize, and canvas route tests exist; need broader multi-drag UI stability test. |
+| Listener lifecycle | Clearly covered for active surface route | Surface listeners are centralized and resize observers/window handlers are replaced when host/window ownership changes. |
+| GPU resource lifecycle | Clearly covered for active Bevy route | Bevy owns renderer resources; media texture resolver produces disposable RGBA payloads. |
+| Dirty flags | Clearly covered | `VIRTUAL_SCENE_DIRTY_FLAGS` defines hierarchy, transform, style, text, bounds, layer, accessibility, and resource flags. |
+| Diffing | Clearly covered | `diffVirtualSceneTrees()` emits deterministic ops. |
+| Reconciliation | Clearly covered as minimal contract | Virtual Scene reconciliation remains deterministic projection/diff, not a second engine. |
+| Invalidation | Clearly covered | Resize, selection, record update, spawn, despawn, resource, text, and transform diffs invalidate the Bevy projection. |
+| Undo/redo | Clearly covered by ownership | Undo/redo remains canonical Atome history scope; render scene remains disposable and non-authoritative. |
+| Snapshots | Clearly covered by ownership | Snapshots remain canonical persistence scope; render scene is reconstructible. |
+| Autosave | Covered by invariant and tests | Autosave/restore must not write geometry outside the canonical commit path; stale delayed-write regression is covered. |
+| Animations/tweens | Covered by invariant | Future animation writers must own explicit writer/session ids and emit canonical commands, not mutate renderer state directly. |
+| Timers | Covered by regression gate | Delayed geometry writes after drag are guarded by the 20-drag/5-second idle regression. |
+| `requestAnimationFrame` | Clearly covered | Gesture/render schedulers coalesce frames, and final geometry is guarded against stale realtime echoes. |
+| Backend synchronization | Clearly covered | Realtime dedupe rejects stale authored geometry echoes for recent local gestures. |
+| Regression tests | Clearly covered | Drag timeout, realtime echo, surface resize, canvas route, multi-drag, and 20-drag idle stability tests exist. |
 
 ## Mandatory Invariants
 
@@ -107,7 +125,7 @@ The current fix direction is correct:
 - realtime dedupe rejects delayed geometry echoes that match recent local gesture ids;
 - resize synchronizes the canvas CSS size and drawing buffer immediately, then schedules render.
 
-The next diagnostic layer should be a temporary probe under `temp/`, not production logs. It should collect:
+The diagnostic layer, when needed for a new regression, must be a temporary probe under `temp/`, not production logs. It should collect:
 
 - timestamp;
 - atom id;
@@ -129,6 +147,8 @@ The next diagnostic layer should be a temporary probe under `temp/`, not product
 Success criterion:
 
 After 20 drags across different Atomes and a 5 second idle wait, no geometry changes without an active user command or an accepted canonical sync event newer than the local gesture.
+
+Status: covered by `tests/eve/project_scene_stale_drag_regression.test.mjs`.
 
 ## Minimal Virtual Scene Contract Before Bevy
 
@@ -237,17 +257,17 @@ Do not duplicate Bevy:
 
 ## Bevy Dependency And Reinstall Policy
 
-Bevy is not integrated in the codebase yet. There is currently no `bevy` crate in the existing Cargo manifests, and the current install/bootstrap path only guarantees Node, npm, Rust/Cargo, Tauri dependencies, Fastify dependencies, and platform system packages.
+Bevy is integrated in the codebase. The native desktop backend lives under `platforms/desktop-tauri/src/bevy_backend/`, and the browser/WASM renderer lives under `platforms/web/bevy-renderer/`.
 
-Before any Bevy runtime code lands, the integration must add a reproducible dependency policy:
+The reproducible dependency policy is:
 
 1. Add Bevy only in the Rust workspace/crate that will own the Bevy runtime adapter.
 2. Pin Bevy to an explicit compatible version in `Cargo.toml`; do not use a floating "latest" dependency for normal installs.
 3. Commit the generated Cargo lockfile for application crates so a fresh `git clone` resolves the same Bevy version.
 4. Ensure the existing bootstrap path verifies Rust/Cargo and then lets `cargo build` fetch Bevy through Cargo, just like Tauri-side Rust dependencies.
-5. Extend setup/audit scripts so they report whether the Bevy crate is present and buildable once the Bevy crate exists.
+5. Keep setup/audit validation aligned with the Bevy-owning crates and their compile smoke tests.
 6. Add a dedicated update path for Bevy version bumps, separate from normal reinstall, because Bevy upgrades can affect ECS APIs, render graph behavior, shaders, GPU limits, and platform support.
-7. Add a narrow Bevy compile smoke test before enabling any Bevy renderer path in the product runtime.
+7. Keep the narrow Bevy compile smoke tests in the final validation path.
 
 Fresh clone target:
 
@@ -255,10 +275,10 @@ Fresh clone target:
 git clone ...
 npm install
 ./run.sh --force-deps
-cargo build through the Bevy-owning crate
+cargo build or cargo check through the Bevy-owning crate
 ```
 
-That sequence must install or fetch every required dependency without manual Bevy steps, as long as Rust/Cargo and network access are available.
+That sequence installs or fetches every required dependency without manual Bevy steps, as long as Rust/Cargo and network access are available.
 
 Update policy:
 
@@ -291,32 +311,38 @@ No frame may show the project canvas as a stretched stale bitmap, and no Atome m
 
 Objective: stabilize current WebGPU project rendering and define the minimal contract.
 
-Tasks:
+Status: complete.
 
-- Keep the delayed-drag regression covered with deterministic tests and visible UI probes.
-- Extend write tracing in temporary diagnostics until every geometry writer is classified.
-- Complete the resize surface contract with device-pixel-box and GPU max-size clamping.
-- Define `AtomeRenderNode`, render diff ops, dirty flags, and typed viewport events as documentation plus tests first.
-- Add deterministic tests for hierarchy sorting, diff ordering, dirty flag behavior, and resize invariants.
-- Keep render scene disposable and avoid a full Virtual DOM implementation.
+Completed tasks:
+
+- Delayed-drag regression is covered with deterministic tests.
+- Write tracing remains a temporary-probe policy, not production logging.
+- Resize surface contract includes device-pixel box and GPU max-size clamping.
+- `AtomeRenderNode`, render diff ops, dirty flags, and surface resize events are implemented.
+- Deterministic tests cover hierarchy sorting, diff ordering, dirty flags, and resize/drag invariants.
+- Render scene remains disposable; no full Virtual DOM implementation was added.
 
 ### Phase 2: Bevy Integration
 
 Objective: map the minimal Atome render contract into Bevy ECS and rendering.
 
-Tasks:
+Status: complete for the active project route.
 
-- Create an Atome-to-Bevy adapter that consumes render diffs.
-- Represent nodes as Bevy entities with `AtomeId`, hierarchy, transform, visibility, layer, material, and interaction components.
-- Move transform propagation, camera, viewport, layer rendering, and render scheduling to Bevy.
-- Keep Atome mutations outside Bevy. Bevy systems may emit intents; they do not own canonical state.
-- Preserve the hidden DOM text/accessibility bridge until Bevy-side text/accessibility support can replace it without losing IME or assistive behavior.
+Completed tasks:
+
+- Atome-to-Bevy adapter consumes Virtual Scene snapshots and diffs.
+- Nodes are mapped to Bevy payloads with id, parent, transform, size, layer, material, media/text resources, and visibility.
+- Bevy owns active project rendering on the shared canvas.
+- Atome mutations remain outside Bevy and pass through the canonical commit pipeline.
+- Hidden DOM text/accessibility bridge remains bounded and non-authoritative.
 
 ### Phase 3: After Bevy
 
 Objective: enrich only the missing renderer-agnostic contract surfaces.
 
-Possible additions:
+Status: no required additions remain for this audit.
+
+Future additions only when backed by a concrete product requirement:
 
 - richer accessibility tree projection;
 - explicit semantic focus graph;

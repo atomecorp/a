@@ -135,7 +135,7 @@ For WebGPU pixel validation, do not rely on Chromium headless screenshots alone.
 ATOME_PLAYWRIGHT_HEADLESS=0 ADOLE_TEST_URL=http://127.0.0.1:3001 node temp/import_tool_filechooser_probe.mjs
 ```
 
-The validated project import fix was not in the tool click path. The tool path reached upload and Atome creation correctly; the project canvas stayed blank because `project_scene_runtime.js` created `createUnifiedWebGPUCompositor()` without a real project adapter. The compliant fix is to attach the project scene compositor to the existing `MoleculeWebGpuRenderer` WebGPU texture renderer through `eVe/domains/rendering/project_scene_webgpu_adapter.js`, not to add DOM media nodes, a 2D canvas renderer, `force: true`, or a synthetic click path.
+The validated project import fix was not in the tool click path. The tool path reached upload and Atome creation correctly; the project canvas stayed blank because the active project route was not yet sending media records through Bevy. The compliant current fix is to project records through `project_scene_runtime.js`, `bevy_media_texture_resolver.js`, and `bevy_web_renderer_runtime.js`, not to add DOM media nodes, a 2D canvas renderer, `force: true`, a synthetic click path, or a legacy project WebGPU adapter.
 
 ## Required Diagnostic Order
 
