@@ -16,6 +16,7 @@ database_storage/
 atome/src/svelte/build/
 platforms/ios/atome-auv3/build/
 platforms/web/audio-wasm/target/
+platforms/web/bevy-renderer/target/
 /temp/
 
 # Development files
