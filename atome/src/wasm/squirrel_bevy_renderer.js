@@ -1,5 +1,14 @@
 let wasm;
 
+const BEVY_GPU_LIMITATION_LOG_PATTERN = /GPU preprocessing.*limited|limited.*GPU preprocessing/i;
+
+function logBevyGpuLimitation(parts) {
+    const message = parts.join(' ');
+    if (BEVY_GPU_LIMITATION_LOG_PATTERN.test(message)) {
+        console.log(...parts);
+    }
+}
+
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
     wasm.__wbindgen_externrefs.set(idx, obj);
@@ -1097,7 +1106,12 @@ function __wbg_get_imports() {
         try {
             deferred0_0 = arg0;
             deferred0_1 = arg1;
-            console.log(getStringFromWasm0(arg0, arg1), getStringFromWasm0(arg2, arg3), getStringFromWasm0(arg4, arg5), getStringFromWasm0(arg6, arg7));
+            logBevyGpuLimitation([
+                getStringFromWasm0(arg0, arg1),
+                getStringFromWasm0(arg2, arg3),
+                getStringFromWasm0(arg4, arg5),
+                getStringFromWasm0(arg6, arg7),
+            ]);
         } finally {
             wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
         }
@@ -1108,7 +1122,7 @@ function __wbg_get_imports() {
         try {
             deferred0_0 = arg0;
             deferred0_1 = arg1;
-            console.log(getStringFromWasm0(arg0, arg1));
+            logBevyGpuLimitation([getStringFromWasm0(arg0, arg1)]);
         } finally {
             wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
         }
