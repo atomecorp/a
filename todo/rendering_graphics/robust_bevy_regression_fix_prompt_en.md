@@ -2,6 +2,10 @@
 
 Copy and paste this entire prompt into the development agent.
 
+## Progress Notes
+
+- Done: imported media Atomes persist after browser refresh and project reload validation.
+
 ---
 
 ## Role

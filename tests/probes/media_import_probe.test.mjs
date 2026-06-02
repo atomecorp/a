@@ -245,6 +245,66 @@ const run = async () => {
   }
   await page.screenshot({ path: path.join(outDir, '04_after_suite.png'), fullPage: true });
 
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+  const reloadReady = await waitFor(page, () => (
+    !!window.__DEBUG__
+    || !!window.new_menu_v2
+    || !!document.getElementById('intuition')
+  ), 30000);
+  writeJson('reload_ready.json', reloadReady);
+  log('reload_ready', reloadReady);
+  if (!reloadReady.ok) throw new Error('reload_runtime_not_ready');
+
+  const reloadCheck = await safeEval(page, async (atomeIds) => {
+    const projectId = window.__currentProject?.id
+      || document.querySelector('[id^="project_view_"]')?.id?.replace(/^project_view_/, '')
+      || null;
+    if (!projectId) return { ok: false, error: 'project_missing_after_reload' };
+    if (typeof window.eveToolBase?.loadProjectAtomes === 'function') {
+      await window.eveToolBase.loadProjectAtomes(projectId, { force: true });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const states = [];
+    for (const id of atomeIds) {
+      const state = await window.Atome?.getStateCurrent?.(id).catch((error) => ({ error: error?.message || String(error) }));
+      states.push({
+        id,
+        found: !!state && !state.error,
+        project_id: state?.project_id || state?.projectId || state?.meta?.project_id || null,
+        media_url: state?.properties?.media_url || state?.properties?.mediaUrl || null,
+        error: state?.error || null
+      });
+    }
+    const scene = window.eveToolBase?.getProjectSceneState?.(projectId);
+    const records = Array.isArray(scene?.records) ? scene.records : [];
+    const sceneIds = new Set(records.map((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '')));
+    const missingState = states.filter((entry) => !entry.found || String(entry.project_id || '') !== String(projectId));
+    const missingScene = atomeIds.filter((id) => !sceneIds.has(String(id)));
+    return {
+      ok: missingState.length === 0 && missingScene.length === 0,
+      project_id: projectId,
+      states,
+      scene_count: records.length,
+      missing_state: missingState,
+      missing_scene: missingScene
+    };
+  }, importedIds, 60000);
+  writeJson('reload_check.json', reloadCheck);
+  log('reload_check', {
+    ok: reloadCheck?.ok,
+    project_id: reloadCheck?.project_id || null,
+    scene_count: reloadCheck?.scene_count ?? null,
+    missing_state: reloadCheck?.missing_state || null,
+    missing_scene: reloadCheck?.missing_scene || null
+  });
+  if (!reloadCheck?.ok) {
+    throw new Error(`media_reload_failed:${reloadCheck?.error || JSON.stringify({
+      missing_state: reloadCheck?.missing_state,
+      missing_scene: reloadCheck?.missing_scene
+    })}`);
+  }
+  await page.screenshot({ path: path.join(outDir, '05_after_reload.png'), fullPage: true });
+
   const state = await safeEval(page, async () => ({
     debug_state: window.__DEBUG__?.getAppState?.() || null,
     mtrack_state: window.eveMtrackApi?.getState?.() || null,

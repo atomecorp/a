@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installMockBrowserEnv } from '../../eve/application/tests/strangler_v2/_env.mjs';
+import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const outDir = path.resolve('temp/probe_reports');
 fs.mkdirSync(outDir, { recursive: true });
@@ -128,7 +128,7 @@ const run = async () => {
     };
 
     try {
-        const { toolRuntimeV2, commandBusV2 } = await import('../../eve/application/intuition/runtime/index.js');
+        const { toolRuntimeV2, commandBusV2 } = await import('../../eVe/intuition/runtime/index.js');
         commandBusV2.clear();
 
         const invoke = async ({ tool_id, action, input = {}, meta = {} }) => {
