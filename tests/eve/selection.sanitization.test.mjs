@@ -43,6 +43,9 @@ assert.doesNotMatch(selectionSource, /data-tool-shortcut/);
 assert.doesNotMatch(selectionSource, /dataset\?\.atomeRole/);
 assert.doesNotMatch(selectionSource, /dataset\?\.atomeKind/);
 
+const selectionSnapshotSource = readFileSync(new URL('../../eVe/intuition/runtime/selection_snapshot.js', import.meta.url), 'utf8');
+assert.doesNotMatch(selectionSnapshotSource, /entry\.dataset\?\.atomeId/);
+
 const toolRuntimeSource = readFileSync(new URL('../../eVe/intuition/tools/core/tool_runtime.js', import.meta.url), 'utf8');
 assert.doesNotMatch(toolRuntimeSource, /dataset\?\.toolShortcut/);
 assert.doesNotMatch(toolRuntimeSource, /data-tool-shortcut/);
@@ -51,12 +54,15 @@ assert.doesNotMatch(toolRuntimeSource, /dataset\?\.atomeKind/);
 
 const toolGenesisSource = readFileSync(new URL('../../eVe/intuition/runtime/tool_genesis.js', import.meta.url), 'utf8');
 assert.doesNotMatch(toolGenesisSource, /element\.dataset\?\.toolShortcut/);
+assert.doesNotMatch(toolGenesisSource, /dataset\.toolShortcut/);
 assert.doesNotMatch(toolGenesisSource, /element\.dataset\?\.atomeRole/);
+assert.doesNotMatch(toolGenesisSource, /dataset\.atomeRole/);
 assert.doesNotMatch(toolGenesisSource, /element\.dataset\?\.atomeKind/);
 
 const flowerContextTargetSource = readFileSync(new URL('../../eVe/intuition/flower/context_target.js', import.meta.url), 'utf8');
 assert.doesNotMatch(flowerContextTargetSource, /host\.dataset\?\.toolShortcut/);
 assert.doesNotMatch(flowerContextTargetSource, /host\.dataset\?\.atomeRole/);
+assert.doesNotMatch(flowerContextTargetSource, /data-tool-shortcut/);
 
 const flowerMenuContextSource = readFileSync(new URL('../../eVe/intuition/tools/contextual/flower_menu_context.js', import.meta.url), 'utf8');
 assert.doesNotMatch(flowerMenuContextSource, /host\.dataset\?\.toolShortcut/);
@@ -68,6 +74,7 @@ const performSource = readFileSync(new URL('../../eVe/intuition/tools/perform.js
 assert.doesNotMatch(performSource, /element\.dataset\?\.toolShortcut/);
 assert.doesNotMatch(performSource, /element\.dataset\?\.atomeRole/);
 assert.doesNotMatch(performSource, /element\.dataset\?\.atomeKind/);
+assert.doesNotMatch(performSource, /data-tool-shortcut/);
 assert.doesNotMatch(performSource, /element\.getAttribute\?\('data-tool-shortcut'\)/);
 
 const selectionContextRuntimeSource = readFileSync(new URL('../../eVe/core/atome_events/selection_context_runtime.js', import.meta.url), 'utf8');
@@ -81,12 +88,17 @@ const traceRuntimeSource = readFileSync(new URL('../../eVe/core/atome_events/tra
 assert.doesNotMatch(traceRuntimeSource, /host\.dataset\?\.toolShortcut/);
 assert.doesNotMatch(traceRuntimeSource, /atomeHost\?\.dataset\?\.atomeRole/);
 assert.doesNotMatch(traceRuntimeSource, /atomeHost\?\.dataset\?\.atomeKind/);
+assert.doesNotMatch(traceRuntimeSource, /target\?\.dataset\?\.atomeId/);
 
 const matrixRuntimeSource = readFileSync(new URL('../../eVe/intuition/matrix/core/matrix_runtime.js', import.meta.url), 'utf8');
 assert.doesNotMatch(matrixRuntimeSource, /host\.dataset\?\.toolShortcut/);
+assert.doesNotMatch(matrixRuntimeSource, /data-tool-shortcut/);
+assert.doesNotMatch(matrixRuntimeSource, /data-atome-type/);
+assert.doesNotMatch(matrixRuntimeSource, /host\?\.dataset\?\.atomeId/);
 
 const captureSource = readFileSync(new URL('../../eVe/intuition/tools/capture.js', import.meta.url), 'utf8');
 assert.doesNotMatch(captureSource, /host\?\.dataset\?\.atomeKind/);
+assert.doesNotMatch(captureSource, /entry\.dataset\?\.atomeId/);
 
 const playbackMirrorSource = readFileSync(new URL('../../eVe/domains/mtrax/project/project_playback_mirror_runtime.js', import.meta.url), 'utf8');
 assert.doesNotMatch(playbackMirrorSource, /host\?\.dataset\?\.atomeKind/);
@@ -106,3 +118,30 @@ const eveIntuitionSource = readFileSync(new URL('../../eVe/intuition/eVeIntuitio
 assert.doesNotMatch(eveIntuitionSource, /String\(node\.dataset\?\.atomeKind \|\| ''\)\.trim\(\)\.toLowerCase\(\) === 'group'/);
 assert.doesNotMatch(eveIntuitionSource, /host\.dataset\.toolShortcut === 'true'/);
 assert.doesNotMatch(eveIntuitionSource, /state\.role \|\| host\.dataset\?\.atomeRole/);
+assert.doesNotMatch(eveIntuitionSource, /dataset\?\.atomeId/);
+assert.doesNotMatch(eveIntuitionSource, /dataset\?\.atomeType/);
+assert.doesNotMatch(eveIntuitionSource, /dataset\?\.mediaType/);
+
+const selectionStyleApplySource = readFileSync(new URL('../../eVe/intuition/tools/selection_style_apply.js', import.meta.url), 'utf8');
+assert.doesNotMatch(selectionStyleApplySource, /nextHost\.dataset\?\.atomeKind/);
+assert.doesNotMatch(selectionStyleApplySource, /dataset\?\.atomeId/);
+
+const userToolSource = readFileSync(new URL('../../eVe/intuition/tools/user.js', import.meta.url), 'utf8');
+assert.doesNotMatch(userToolSource, /data-atome-role/);
+
+const toolShortcutVisualSource = readFileSync(new URL('../../eVe/intuition/shared/tool_shortcut_visual.js', import.meta.url), 'utf8');
+assert.doesNotMatch(toolShortcutVisualSource, /dataset\.atomeRole/);
+assert.doesNotMatch(toolShortcutVisualSource, /dataset\.toolShortcut/);
+
+const mtrackDockControllerSource = readFileSync(new URL('../../eVe/intuition/runtime/mtrack_dock_controller.js', import.meta.url), 'utf8');
+assert.doesNotMatch(mtrackDockControllerSource, /groupHost\.dataset\?\.atomeId/);
+assert.doesNotMatch(mtrackDockControllerSource, /groupHost\?\.dataset\?\.atomeId/);
+
+const mtraxBridgeRuntimeSource = readFileSync(new URL('../../eVe/intuition/runtime/eve_intuition/mtrax_bridge_runtime.js', import.meta.url), 'utf8');
+assert.doesNotMatch(mtraxBridgeRuntimeSource, /dataset\?\.atomeId/);
+
+const mtraxDiagnosticsSource = readFileSync(new URL('../../eVe/domains/mtrax/core/diagnostics.js', import.meta.url), 'utf8');
+assert.doesNotMatch(mtraxDiagnosticsSource, /dataset\?\.atomeId/);
+
+const projectDropSource = readFileSync(new URL('../../eVe/intuition/tools/project_drop.js', import.meta.url), 'utf8');
+assert.doesNotMatch(projectDropSource, /host\?\.dataset\?\.atomeId/);
