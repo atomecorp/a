@@ -13,6 +13,7 @@ Copy and paste this entire prompt into the development agent.
 - Done: project refresh no longer replaces the initial complete scene with a partial media-ready scene. Uncached video/audio nodes stay present as visible Bevy entities and receive textures later through resource updates; WebView resize uses a Bevy surface-size patch instead of forcing media reconstruction.
 - Done: deferred video/audio texture generation is serialized and yields between media records so repeated WebView resizes can apply Bevy surface-size patches before expensive poster/waveform work resumes.
 - Done: video/audio Atomes spawned after Bevy startup now use the same pending-media texture path as reload; `bevy_media_texture_video_metadata_failed:*` is stored as a skipped deferred resource instead of becoming an unhandled diff rejection.
+- Done: project resize hit-testing now includes 5 logical px of additional inward tolerance on the Atome right/bottom edge band without adding DOM handles or changing canonical geometry.
 
 ## Open Regression Notes
 

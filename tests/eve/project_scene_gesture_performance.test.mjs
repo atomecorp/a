@@ -200,6 +200,54 @@ test('Project scene drag hit-testing uses logical surface coordinates when the c
     assert.deepEqual(commits.at(-1)[0].props, { left: 40, top: 70 });
 });
 
+test('Project scene resize accepts five extra logical pixels inside the Atome edge', async () => {
+    clearAllProjectScenes();
+    const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    const flushFrames = installFrameScheduler(dom.window);
+    const commits = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => {
+            commits.push(events);
+            return { ok: true };
+        }
+    };
+
+    await renderProjectScene({
+        projectId: 'project_resize_inner_tolerance',
+        records: [makeRecord('resize_inner_atom')],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor()
+    });
+
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', {
+        clientX: 36,
+        clientY: 36,
+        pointerId: 5
+    }));
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointermove', {
+        clientX: 46,
+        clientY: 46,
+        pointerId: 5
+    }));
+    await flushFrames();
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerup', {
+        clientX: 46,
+        clientY: 46,
+        pointerId: 5
+    }));
+    await flushFrames();
+
+    const updated = getProjectSceneState('project_resize_inner_tolerance').records[0];
+    assert.equal(commits.at(-1)[0].kind, 'set');
+    assert.deepEqual(commits.at(-1)[0].props, { width: 53, height: 40 });
+    assert.equal(updated.properties.left, 10);
+    assert.equal(updated.properties.top, 20);
+    assert.equal(updated.properties.width, 53);
+    assert.equal(updated.properties.height, 40);
+});
+
 test('Project scene ignores move and end events from a non-owner pointer', async () => {
     clearAllProjectScenes();
     const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
