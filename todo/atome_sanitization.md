@@ -94,6 +94,33 @@ Rendering must become a projection of that structure. Runtime/editor/session sta
   - `eVe/core/atome_events.js`
   - `eVe/intuition/runtime/tool_genesis.js`
 - Added focused event-runtime tests proving snap geometry still comes from described Atome state and host classification ignores stale `dataset` values.
+- Sanitized the active selection runtime boundary so tool-host filtering and debug classification use Atome runtime state instead of obsolete DOM `dataset` authority:
+  - `eVe/intuition/runtime/selection.js`
+  - `eVe/intuition/runtime/tool_genesis.js`
+  - `eVe/intuition/tools/core/tool_runtime.js`
+  - `tests/eve/selection.sanitization.test.mjs`
+- Confirmed selection remains transient UI state in this pass: the existing selection sanitization guard still proves `syncSelectionState` does not call persistence helpers, and the new guard prevents reintroducing `dataset.toolShortcut`, `data-tool-shortcut`, `dataset.atomeRole`, or `dataset.atomeKind` as selection/tool-runtime authority.
+- Sanitized the active tool runtime duplicate selection/text cleanup boundary so tool-host filtering and empty-text cleanup read runtime state for role, kind, project, and tool-shortcut decisions instead of DOM dataset mirrors.
+- Sanitized the active `tool_genesis.js` realtime/render patch fallback path so role, tool-shortcut, and SVG kind decisions read the runtime state helpers instead of `element.dataset` mirrors. Existing `dataset` writes remain only as temporary projection compatibility for still-open consumers and are not treated as canonical state.
+- Sanitized the active flower/perform tool-host filtering paths so context targeting, contextual flower menus, and perform-mode host exclusion read Atome runtime state instead of DOM dataset mirrors:
+  - `eVe/intuition/flower/context_target.js`
+  - `eVe/intuition/tools/contextual/flower_menu_context.js`
+  - `eVe/intuition/tools/perform.js`
+- Sanitized the remaining active Atome event context/trace helpers so flower selection context matching, bind diagnostics, and pointer trace diagnostics read Atome IDs/kinds/tool-shortcut state from runtime helpers instead of DOM datasets:
+  - `eVe/core/atome_events/selection_context_runtime.js`
+  - `eVe/core/atome_events/host_binding_runtime.js`
+  - `eVe/core/atome_events/trace_runtime.js`
+- Sanitized compact Matrix/capture dataset-authority reads so projection shortcut collection and capture group resolution use runtime helpers instead of DOM Atome dataset mirrors:
+  - `eVe/intuition/matrix/core/matrix_runtime.js`
+  - `eVe/intuition/tools/capture.js`
+- Sanitized MTraX project playback kind resolution so playback mirror/target sanitization uses explicit clip/original property kind or injected runtime kind helpers instead of DOM Atome dataset mirrors:
+  - `eVe/domains/mtrax/project/project_playback_mirror_runtime.js`
+  - `eVe/domains/mtrax/project/project_playback_target_runtime.js`
+  - `eVe/domains/mtrax/project/project_playback_automation_bundle_runtime.js`
+- Sanitized compact MTraX footer/timeline dataset-authority reads so footer host grouping and play-runtime interaction diagnostics use Atome runtime helpers instead of DOM Atome dataset mirrors:
+  - `eVe/domains/mtrax/ui/footer_embed_primitives.js`
+  - `eVe/domains/mtrax/timeline/play_runtime.js`
+- Sanitized targeted `eVeIntuition.js` group/tool-host filters so selected group detection, atome edit footer tool-host exclusion, and media-track candidate filtering read Atome runtime helpers instead of DOM Atome dataset mirrors.
 
 Validation completed:
 
@@ -106,10 +133,34 @@ Validation completed:
 - `node --test eVe/core/atome_events/placement_runtime.test.mjs eVe/core/atome_events/text_fit_runtime.test.mjs`
 - `npm run test:run -- tests/eve/project_layer_canvas_lasso_selection.test.mjs`
 - `node --check` on the modified Atome event and `tool_genesis.js` modules.
+- `node --test tests/eve/selection.sanitization.test.mjs`
+- `node --check eVe/intuition/runtime/selection.js`
+- `node --check eVe/intuition/tools/core/tool_runtime.js`
+- `node --check eVe/intuition/runtime/tool_genesis.js`
+- `node --test tests/eve/project_drop_tool_instance_contract.test.mjs`
+- `node --check eVe/intuition/flower/context_target.js`
+- `node --check eVe/intuition/tools/contextual/flower_menu_context.js`
+- `node --check eVe/intuition/tools/perform.js`
+- `node --test tests/probes/flower_menu_modules.test.mjs`
+- `node --check eVe/core/atome_events/selection_context_runtime.js`
+- `node --check eVe/core/atome_events/host_binding_runtime.js`
+- `node --check eVe/core/atome_events/trace_runtime.js`
+- `node --check eVe/intuition/matrix/core/matrix_runtime.js`
+- `node --check eVe/intuition/tools/capture.js`
+- `node --test tests/probes/matrix_rendering_migration_contract.test.mjs`
+- `node --check eVe/domains/mtrax/project/project_playback_mirror_runtime.js`
+- `node --check eVe/domains/mtrax/project/project_playback_target_runtime.js`
+- `node --check eVe/domains/mtrax/project/project_playback_automation_bundle_runtime.js`
+- `node --test eVe/domains/mtrax/project/project_playback_mirror_runtime.test.mjs eVe/domains/mtrax/project/project_playback_target_runtime.test.mjs`
+- `node --check eVe/domains/mtrax/ui/footer_embed_primitives.js`
+- `node --check eVe/domains/mtrax/timeline/play_runtime.js`
+- `node --test tests/probes/mtrax_play_resume_position.test.mjs`
+- `node --check eVe/intuition/eVeIntuition.js`
 
 Still open:
 
-- Remaining DOM and `dataset` decoupling in `tool_genesis.js`, `tool_runtime.js`, and import/tool surfaces outside the placement/text-fit boundary.
+- Remaining DOM and `dataset` decoupling in `tool_genesis.js` compatibility writes and import/tool projection surfaces outside the completed placement/text-fit/selection/tool-runtime classification boundaries.
+- Remaining dataset-authority migration in broader eVe orchestration and media surfaces, including unresolved `eVe/intuition/eVeIntuition.js` media/timeline/source-kind fallbacks and probe/debug-only paths.
 - Remaining drag, resize, placement, and geometry cleanup beyond the described-geometry snap and runtime-host-classification guards.
 - Remaining P1 media/import/poster and MTraX/Molecule sanitization beyond shared sanitizer ownership.
 
@@ -160,7 +211,9 @@ These files decide whether the DOM is only a projection or becomes a source of t
 
 - [eVe/intuition/runtime/tool_genesis.js](../eVe/intuition/runtime/tool_genesis.js)
   - Action: split Atome rendering from Atome creation/persistence responsibilities.
-  - Action: replace `dataset`-owned group/timeline/preview state with reads from canonical Atome descriptions.
+  - Status: active role/tool-shortcut/kind fallback reads now use runtime state helpers instead of `element.dataset` mirrors.
+  - Remaining action: replace `dataset`-owned group/timeline/preview state with reads from canonical Atome descriptions.
+  - Remaining action: remove temporary role/tool-shortcut dataset compatibility writes after still-open consumers are migrated.
   - Action: ensure `renderAtomeRecord`, `createAtomeElement`, `buildPropertiesFromSpec`, `loadProjectAtomes`, and `updateAtomeProperties` are adapters around canonical Atome records, not independent contracts.
   - Action: remove long-term reliance on `properties`/`particles`/`data` equivalence.
   - Risk: 5505 lines; critical coupling hotspot.
@@ -206,8 +259,9 @@ These files can accidentally make DOM geometry canonical.
   - Action: keep editor DOM transient and validate final mutation through canonical text schema.
 
 - [eVe/intuition/runtime/selection.js](../eVe/intuition/runtime/selection.js)
-  - Action: determine whether selection is canonical persisted Atome state or transient UI state.
-  - Action: stop persisting UI-only selection fields unless schema-authorized.
+  - Status: active selection-state persistence and dataset-authority cleanup completed in this pass.
+  - Done: selection is treated as transient UI state, `syncSelectionState` is guarded against persistence, and tool-host classification now reads Atome runtime state rather than stale DOM datasets.
+  - Remaining follow-up: re-audit only if future selection work introduces schema-authorized collaborative selection or history semantics.
 
 ### P1 - Media, Recording, Import, Poster, And Asset Atomes
 
@@ -318,8 +372,10 @@ These files must not store session/editor/render state as canonical Atome state.
 These files create or mutate Atomes through tools and must not own parallel contracts.
 
 - [eVe/intuition/tools/core/tool_runtime.js](../eVe/intuition/tools/core/tool_runtime.js)
-  - Action: audit all tool-created Atome payloads and enforce canonical envelope.
-  - Action: prevent tool DOM state from being model state.
+  - Status: active selection/tool-host classification and empty-text cleanup dataset-authority cleanup completed in this pass.
+  - Done: role, kind, project, and tool-shortcut decisions now read runtime state helpers instead of DOM dataset mirrors.
+  - Remaining action: audit all command-specific tool-created Atome payloads and enforce canonical envelope.
+  - Remaining action: prevent projection-host metadata and tool DOM state from becoming model state.
 
 - [eVe/intuition/tools/core/tool_registry.js](../eVe/intuition/tools/core/tool_registry.js)
   - Action: verify deferred persistence uses canonical Atome mutations.
