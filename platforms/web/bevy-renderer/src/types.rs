@@ -3,81 +3,83 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeRenderNode {
-    pub(super) id: String,
-    pub(super) kind: String,
-    pub(super) parent_id: Option<String>,
-    pub(super) logical_position: [f32; 2],
-    pub(super) logical_size: [f32; 2],
-    pub(super) layer: i32,
-    pub(super) color: Option<[f32; 4]>,
-    pub(super) text: Option<String>,
-    pub(super) source: Option<String>,
-    pub(super) texture: Option<WebAtomeTexture>,
-    pub(super) peaks: Option<Vec<f32>>,
+pub(crate) struct WebAtomeRenderNode {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) parent_id: Option<String>,
+    pub(crate) logical_position: [f32; 2],
+    pub(crate) logical_size: [f32; 2],
+    pub(crate) layer: i32,
+    pub(crate) color: Option<[f32; 4]>,
+    pub(crate) text: Option<String>,
+    pub(crate) source: Option<String>,
+    pub(crate) texture: Option<WebAtomeTexture>,
+    pub(crate) peaks: Option<Vec<f32>>,
+    pub(crate) selected: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeTexture {
-    pub(super) width: u32,
-    pub(super) height: u32,
-    pub(super) rgba: Vec<u8>,
+pub(crate) struct WebAtomeTexture {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) rgba: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeTransformPatch {
-    pub(super) id: String,
-    pub(super) logical_position: [f32; 2],
-    pub(super) logical_size: [f32; 2],
+pub(crate) struct WebAtomeTransformPatch {
+    pub(crate) id: String,
+    pub(crate) logical_position: [f32; 2],
+    pub(crate) logical_size: [f32; 2],
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeSurfacePatch {
-    pub(super) width: f32,
-    pub(super) height: f32,
+pub(crate) struct WebAtomeSurfacePatch {
+    pub(crate) width: f32,
+    pub(crate) height: f32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeStylePatch {
-    pub(super) id: String,
-    pub(super) color: Option<[f32; 4]>,
+pub(crate) struct WebAtomeStylePatch {
+    pub(crate) id: String,
+    pub(crate) color: Option<[f32; 4]>,
+    pub(crate) selected: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeParentPatch {
-    pub(super) id: String,
-    pub(super) parent_id: Option<String>,
+pub(crate) struct WebAtomeParentPatch {
+    pub(crate) id: String,
+    pub(crate) parent_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeLayerPatch {
-    pub(super) id: String,
-    pub(super) layer: i32,
+pub(crate) struct WebAtomeLayerPatch {
+    pub(crate) id: String,
+    pub(crate) layer: i32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeVisibilityPatch {
-    pub(super) id: String,
-    pub(super) visible: bool,
+pub(crate) struct WebAtomeVisibilityPatch {
+    pub(crate) id: String,
+    pub(crate) visible: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeTextPatch {
-    pub(super) id: String,
-    pub(super) text: Option<String>,
-    pub(super) texture: Option<WebAtomeTexture>,
+pub(crate) struct WebAtomeTextPatch {
+    pub(crate) id: String,
+    pub(crate) text: Option<String>,
+    pub(crate) texture: Option<WebAtomeTexture>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct WebAtomeResourcePatch {
-    pub(super) id: String,
-    pub(super) source: Option<String>,
-    pub(super) texture: Option<WebAtomeTexture>,
-    pub(super) peaks: Option<Vec<f32>>,
+pub(crate) struct WebAtomeResourcePatch {
+    pub(crate) id: String,
+    pub(crate) source: Option<String>,
+    pub(crate) texture: Option<WebAtomeTexture>,
+    pub(crate) peaks: Option<Vec<f32>>,
 }
 
 #[derive(Clone, Debug)]
-pub(super) enum WebAtomeRenderOp {
+pub(crate) enum WebAtomeRenderOp {
     Spawn(WebAtomeRenderNode),
     Despawn(String),
     Transform(WebAtomeTransformPatch),
@@ -127,9 +129,17 @@ pub struct AtomeMediaSource(pub Option<String>);
 #[derive(Clone, Debug, Component)]
 pub struct AtomeWaveformPeaks(pub Vec<f32>);
 
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeSelected(pub bool);
+
+#[derive(Clone, Debug, Component)]
+pub struct AtomeSelectionOverlay {
+    pub(crate) entities: Vec<Entity>,
+}
+
 #[derive(Clone, Debug, Resource, Default)]
 pub struct WebAtomeEntityTable {
-    pub(super) by_id: HashMap<String, Entity>,
+    pub(crate) by_id: HashMap<String, Entity>,
 }
 
 #[derive(Clone, Debug, Resource, Default)]
@@ -139,11 +149,11 @@ pub struct WebBevyRendererDiagnostics {
 }
 
 #[derive(Clone, Debug, Resource)]
-pub(super) struct WebBevyRendererConfig {
+pub(crate) struct WebBevyRendererConfig {
     pub(super) canvas_selector: String,
-    pub(super) width: f32,
-    pub(super) height: f32,
-    pub(super) initial_nodes: Vec<WebAtomeRenderNode>,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) initial_nodes: Vec<WebAtomeRenderNode>,
 }
 
 impl WebBevyRendererConfig {
