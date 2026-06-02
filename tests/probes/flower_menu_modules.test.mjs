@@ -21,6 +21,9 @@ const {
     resolveContextFromTarget
 } = await import('../../eVe/intuition/flower/context_target.js');
 const {
+    resolveFlowerSelectionMode
+} = await import('../../eVe/intuition/flower/context_selection.js');
+const {
     computeFlowerLayout,
     computeFlowerSubmenuLayout
 } = await import('../../eVe/intuition/flower/menu_layout.js');
@@ -29,6 +32,10 @@ const {
     withForcedAlpha
 } = await import('../../eVe/intuition/flower/menu_items.js');
 const { registerAtomeElement } = await import('../../eVe/core/atome_dom_id.js');
+const {
+    clearAllProjectScenes,
+    renderProjectScene
+} = await import('../../eVe/domains/rendering/project_scene_runtime.js');
 
 const project = document.createElement('div');
 project.id = 'project_view_alpha';
@@ -48,7 +55,7 @@ document.body.appendChild(project);
 
 document.elementsFromPoint = () => [group, child, project];
 
-const context = resolveContextFromTarget(group, {
+const context = await resolveContextFromTarget(group, {
     clientX: 42,
     clientY: 24,
     source: 'test'
@@ -61,6 +68,83 @@ assert.equal(context.projectId, 'alpha');
 assert.equal(context.x, 42);
 assert.equal(context.y, 24);
 assert.equal(context.source, 'test');
+
+const setBox = (element, width, height) => {
+    Object.defineProperty(element, 'clientWidth', {
+        configurable: true,
+        value: width
+    });
+    Object.defineProperty(element, 'clientHeight', {
+        configurable: true,
+        value: height
+    });
+    element.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        right: width,
+        bottom: height,
+        width,
+        height
+    });
+};
+
+clearAllProjectScenes();
+const projectSceneHost = document.createElement('div');
+projectSceneHost.id = 'project_view_flower_canvas';
+setBox(projectSceneHost, 300, 220);
+document.body.appendChild(projectSceneHost);
+await renderProjectScene({
+    projectId: 'flower_canvas',
+    host: projectSceneHost,
+    compositor: {
+        default: async () => {},
+        run_atome_bevy_renderer: () => {}
+    },
+    records: [{
+        id: 'canvas_shape_atom',
+        type: 'shape',
+        properties: {
+            left: 20,
+            top: 30,
+            width: 80,
+            height: 60
+        }
+    }]
+});
+const projectCanvas = document.getElementById('eve_surface_project');
+document.elementsFromPoint = () => [projectCanvas, projectSceneHost];
+const canvasContext = await resolveContextFromTarget(projectCanvas, {
+    clientX: 30,
+    clientY: 40,
+    source: 'test'
+});
+assert.equal(canvasContext.type, 'atome');
+assert.equal(canvasContext.atomeId, 'canvas_shape_atom');
+assert.equal(canvasContext.kind, 'shape');
+assert.equal(canvasContext.projectId, 'flower_canvas');
+
+const mixedSelectionMode = resolveFlowerSelectionMode({
+    context: {
+        atomeId: 'shape_a',
+        kind: 'shape'
+    },
+    selectedIds: ['shape_a', 'video_b'],
+    kindForId: (id) => (id === 'shape_a' ? 'shape' : 'video')
+});
+assert.equal(mixedSelectionMode.useSelection, true);
+assert.equal(mixedSelectionMode.mixedKinds, true);
+
+const pointerOutsideSelectionMode = resolveFlowerSelectionMode({
+    context: {
+        atomeId: 'text_c',
+        kind: 'text'
+    },
+    selectedIds: ['shape_a', 'video_b'],
+    kindForId: (id) => (id === 'text_c' ? 'text' : 'shape')
+});
+assert.equal(pointerOutsideSelectionMode.useSelection, false);
+assert.equal(pointerOutsideSelectionMode.mixedKinds, false);
+assert.equal(pointerOutsideSelectionMode.kind, 'text');
 
 const panel = document.createElement('div');
 panel.dataset.evePanel = 'true';

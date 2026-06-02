@@ -294,6 +294,7 @@ Primary sources:
 - `eVe/intuition/flower/menu.js`
 - `eVe/intuition/flower/menu_layout.js`
 - `eVe/intuition/flower/menu_items.js`
+- `eVe/intuition/flower/context_selection.js`
 - `eVe/intuition/tools/contextual/flower_menu_visual.js`
 - `eVe/intuition/matrix/visual/matrix_visual_tokens.js`
 - `eVe/intuition/matrix/ui/matrix_layout.js`
@@ -305,7 +306,7 @@ Role:
 - The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
 - The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-left or bottom-right edge according to handedness.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
-- Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`.
+- Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`; active-selection compatibility is owned by `context_selection.js`, with mixed-kind multi-selection constrained to the `info` tool until compatible batch-tool policy is expanded.
 - Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
 - Matrix layout runtime owns toolbar-aware viewport fitting, CSS grid variable updates, and scroll positioning; Matrix view runtime owns project and tile DOM composition.
 - Matrix visual grids use logical slot virtualization: empty background capacity is represented by grid sizing and slot math, while DOM nodes are reserved for project tiles and the first actionable empty creation tile.

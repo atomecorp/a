@@ -17,10 +17,11 @@ Copy and paste this entire prompt into the development agent.
 - Done: project hit-testing now uses the canonical scene geometry and logical canvas coordinates for drag/resize routing.
 - Done: active project selection visuals are rendered in the Bevy/WebGPU canvas from the maintained runtime selection table (`SelectionAPI.selected()` / `window.__selectedAtomeIds`), using a very light gray dotted contour and a uniform visible 12 px shadow; selected-state style diffs no longer stop before the WASM renderer.
 - Done: active project deselection removes the Bevy/WebGPU selected visual through the canonical runtime selection table and style diff path, without DOM selection state or per-Atome DOM decoration.
+- Done: contextual flower-menu routing now resolves the Atome under the project canvas pointer through lazy project-scene hit testing, uses active selection context for item choice, and constrains mixed-kind multi-selection to the `info` tool only.
 
 ## Open Regression Notes
 
-- Open: remaining drag, lasso priority, and contextual flower-menu routing tasks from the main problem list still need their own focused passes.
+- Open: remaining drag and lasso priority tasks from the main problem list still need their own focused passes.
 
 ---
 
