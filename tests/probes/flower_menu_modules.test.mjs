@@ -146,6 +146,19 @@ assert.equal(pointerOutsideSelectionMode.useSelection, false);
 assert.equal(pointerOutsideSelectionMode.mixedKinds, false);
 assert.equal(pointerOutsideSelectionMode.kind, 'text');
 
+const staleProjectSelectionMode = resolveFlowerSelectionMode({
+    context: {
+        type: 'project',
+        projectId: 'flower_canvas'
+    },
+    selectedIds: ['missing_selection_atom'],
+    kindForId: () => ''
+});
+assert.deepEqual(staleProjectSelectionMode.activeIds, []);
+assert.equal(staleProjectSelectionMode.useSelection, false);
+assert.equal(staleProjectSelectionMode.mixedKinds, false);
+assert.equal(staleProjectSelectionMode.kind, '');
+
 const panel = document.createElement('div');
 panel.dataset.evePanel = 'true';
 document.body.appendChild(panel);
