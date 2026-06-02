@@ -1,0 +1,25 @@
+[package]
+name = "atome-bevy-renderer-core"
+version = "0.1.0"
+edition = "2021"
+description = "Shared Bevy renderer core for Atome projections"
+
+[dependencies]
+bevy = { version = "0.18.1", default-features = false, features = [
+    "default_app",
+    "bevy_window",
+    "bevy_winit",
+    "bevy_render",
+    "bevy_core_pipeline",
+    "bevy_camera",
+    "bevy_asset",
+    "bevy_image",
+    "bevy_sprite",
+    "bevy_sprite_render",
+    "bevy_text",
+    "jpeg",
+    "png",
+    "webp",
+    "webgpu",
+] }
+serde = { version = "1", features = ["derive"] }

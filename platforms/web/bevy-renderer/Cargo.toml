@@ -8,6 +8,7 @@ description = "Unique Bevy WebGPU renderer surface for Atome/eVe web projection"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+atome-bevy-renderer-core = { path = "../../../atome/renderers/bevy-core" }
 bevy = { version = "0.18.1", default-features = false, features = [
     "default_app",
     "bevy_window",

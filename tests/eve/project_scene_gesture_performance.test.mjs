@@ -36,7 +36,7 @@ const createTestCompositor = (calls = []) => ({
         rgba: [255, 0, 0, 255]
     }),
     run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
-        calls.push({ type: 'run', canvasSelector, width, height, initialNodes, scene: { atoms: initialNodes } });
+        calls.push({ type: 'run', canvasSelector, width, height, initialNodes, scene: { atoms: initialNodes.nodes } });
     },
     apply_atome_bevy_spawn: (payload) => calls.push({ type: 'spawn', payload }),
     apply_atome_bevy_despawn: (id) => calls.push({ type: 'despawn', id }),

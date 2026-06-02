@@ -1,81 +1,51 @@
 #[cfg(feature = "bevy_renderer_core")]
+use atome_bevy_renderer_core::{
+    AtomeBevyRendererConfig as AtomeCoreBevyRendererConfig, AtomeBevyRendererPlugin,
+    AtomeRenderScene,
+};
+#[cfg(feature = "bevy_renderer_core")]
 use bevy::{
     prelude::*,
     window::{Window, WindowPlugin},
 };
 
-#[cfg(feature = "bevy_renderer_core")]
-use super::{
-    atome_layer_for_node, atome_size_for_node, atome_transform_for_node,
-    bevy_present_mode_for_profile, AtomeBevyNode, AtomePowerProfile,
-};
 #[cfg(feature = "bevy_renderer_native")]
 use super::bevy_winit_settings_for_profile;
+#[cfg(feature = "bevy_renderer_core")]
+use super::{bevy_present_mode_for_profile, AtomePowerProfile};
 
 #[cfg(feature = "bevy_renderer_core")]
 #[derive(Clone, Debug, Resource)]
-pub struct AtomeBevyRendererConfig {
+pub struct AtomeNativeBevyRendererConfig {
     pub title: String,
     pub width: f32,
     pub height: f32,
     pub power_profile: AtomePowerProfile,
-    pub initial_nodes: Vec<AtomeBevyNode>,
+    pub initial_scene: AtomeRenderScene,
 }
 
 #[cfg(feature = "bevy_renderer_core")]
-impl Default for AtomeBevyRendererConfig {
+impl Default for AtomeNativeBevyRendererConfig {
     fn default() -> Self {
         Self {
             title: "Atome Bevy Renderer".to_string(),
             width: 1280.0,
             height: 720.0,
             power_profile: AtomePowerProfile::default(),
-            initial_nodes: Vec::new(),
+            initial_scene: AtomeRenderScene::default(),
         }
     }
 }
 
 #[cfg(feature = "bevy_renderer_core")]
-pub struct AtomeBevyRendererPlugin {
-    pub config: AtomeBevyRendererConfig,
-}
-
-#[cfg(feature = "bevy_renderer_core")]
-impl AtomeBevyRendererPlugin {
-    pub fn new(config: AtomeBevyRendererConfig) -> Self {
-        Self { config }
+impl AtomeNativeBevyRendererConfig {
+    pub fn core_config(&self) -> AtomeCoreBevyRendererConfig {
+        AtomeCoreBevyRendererConfig::new(self.width, self.height, self.initial_scene.clone())
     }
 }
 
 #[cfg(feature = "bevy_renderer_core")]
-impl Plugin for AtomeBevyRendererPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(self.config.clone())
-            .insert_resource(ClearColor(Color::srgb(0.04, 0.04, 0.045)))
-            .add_systems(Startup, spawn_atome_bevy_scene);
-    }
-}
-
-#[cfg(feature = "bevy_renderer_core")]
-fn spawn_atome_bevy_scene(mut commands: Commands, config: Res<AtomeBevyRendererConfig>) {
-    commands.spawn(Camera2d);
-    for node in &config.initial_nodes {
-        let size = atome_size_for_node(node);
-        commands.spawn((
-            node.clone(),
-            atome_transform_for_node(node),
-            size,
-            atome_layer_for_node(node),
-            Sprite::from_color(
-                Color::srgb(0.24, 0.55, 0.92),
-                Vec2::new(size.width.max(1.0), size.height.max(1.0)),
-            ),
-        ));
-    }
-}
-
-#[cfg(feature = "bevy_renderer_core")]
-fn window_for_config(config: &AtomeBevyRendererConfig) -> Window {
+fn window_for_config(config: &AtomeNativeBevyRendererConfig) -> Window {
     Window {
         title: config.title.clone(),
         resolution: (
@@ -92,18 +62,18 @@ fn window_for_config(config: &AtomeBevyRendererConfig) -> Window {
 }
 
 #[cfg(feature = "bevy_renderer_core")]
-pub fn build_atome_bevy_app(config: AtomeBevyRendererConfig) -> App {
+pub fn build_atome_bevy_app(config: AtomeNativeBevyRendererConfig) -> App {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(window_for_config(&config)),
         ..default()
     }))
-    .add_plugins(AtomeBevyRendererPlugin::new(config));
+    .add_plugins(AtomeBevyRendererPlugin::new(config.core_config()));
     app
 }
 
 #[cfg(feature = "bevy_renderer_native")]
-pub fn run_atome_bevy_native(config: AtomeBevyRendererConfig) {
+pub fn run_atome_bevy_native(config: AtomeNativeBevyRendererConfig) {
     let settings = bevy_winit_settings_for_profile(config.power_profile);
     let mut app = build_atome_bevy_app(config);
     app.insert_resource(settings);
@@ -112,49 +82,61 @@ pub fn run_atome_bevy_native(config: AtomeBevyRendererConfig) {
 
 #[cfg(all(test, feature = "bevy_renderer_core"))]
 mod tests {
-    use super::super::{AtomeBevyLayer, AtomeBevyLogicalSize};
     use super::*;
+    use atome_bevy_renderer_core::{
+        AtomeEntityId, AtomeLogicalSize, AtomeRenderNode, AtomeRenderScene,
+    };
     use bevy::app::{App, Startup};
 
+    fn shape_node(id: &str) -> AtomeRenderNode {
+        AtomeRenderNode {
+            id: id.to_string(),
+            kind: "shape".to_string(),
+            parent_id: None,
+            logical_position: [10.0, 20.0],
+            logical_size: [80.0, 40.0],
+            layer: 2,
+            color: Some([0.24, 0.55, 0.92, 1.0]),
+            text: None,
+            source: None,
+            texture: None,
+            peaks: None,
+            selected: None,
+        }
+    }
+
     #[test]
-    fn renderer_plugin_spawns_camera_and_projected_atome_nodes() {
-        let config = AtomeBevyRendererConfig {
-            initial_nodes: vec![AtomeBevyNode::new(
-                "shape_1",
-                None,
-                [10.0, 20.0],
-                [80.0, 40.0],
-                2,
-            )],
-            ..AtomeBevyRendererConfig::default()
+    fn native_renderer_uses_shared_atome_bevy_plugin() {
+        let config = AtomeNativeBevyRendererConfig {
+            initial_scene: AtomeRenderScene {
+                nodes: vec![shape_node("shape_1")],
+                selection_style: None,
+            },
+            ..AtomeNativeBevyRendererConfig::default()
         };
         let mut app = App::new();
-        app.add_plugins(AtomeBevyRendererPlugin::new(config));
+        app.add_plugins(AtomeBevyRendererPlugin::new(config.core_config()));
         app.world_mut().run_schedule(Startup);
 
         let mut camera_query = app.world_mut().query::<&Camera2d>();
         assert_eq!(camera_query.iter(app.world()).count(), 1);
 
-        let mut node_query = app.world_mut().query::<(
-            &AtomeBevyNode,
-            &Transform,
-            &AtomeBevyLogicalSize,
-            &AtomeBevyLayer,
-        )>();
+        let mut node_query = app
+            .world_mut()
+            .query::<(&AtomeEntityId, &Transform, &AtomeLogicalSize)>();
         let nodes: Vec<_> = node_query.iter(app.world()).collect();
         assert_eq!(nodes.len(), 1);
-        let (node, transform, size, layer) = nodes[0];
-        assert_eq!(node.atome_id, "shape_1");
-        assert_eq!(transform.translation, Vec3::new(10.0, 20.0, 2.0));
+        let (node, transform, size) = nodes[0];
+        assert_eq!(node.0, "shape_1");
+        assert_eq!(transform.translation, Vec3::new(-590.0, 320.0, -2.0));
         assert_eq!(size.width, 80.0);
         assert_eq!(size.height, 40.0);
-        assert_eq!(layer.0, 2);
     }
 
     #[test]
-    fn renderer_config_does_not_enable_bevy_audio() {
-        let config = AtomeBevyRendererConfig::default();
+    fn renderer_config_keeps_native_power_policy_outside_shared_core() {
+        let config = AtomeNativeBevyRendererConfig::default();
         assert_eq!(config.power_profile, AtomePowerProfile::Eco);
-        assert!(config.initial_nodes.is_empty());
+        assert!(config.initial_scene.nodes.is_empty());
     }
 }

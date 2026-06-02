@@ -21,7 +21,7 @@ export function apply_atome_bevy_transform(patch: any): void;
 
 export function apply_atome_bevy_visibility(patch: any): void;
 
-export function run_atome_bevy_renderer(canvas_selector: string, width: number, height: number, initial_nodes: any): void;
+export function run_atome_bevy_renderer(canvas_selector: string, width: number, height: number, initial_scene: any): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -42,9 +42,9 @@ export interface InitOutput {
   readonly wasm_bindgen__closure__destroy__h0aba2fb1a3850afa: (a: number, b: number) => void;
   readonly wasm_bindgen__convert__closures_____invoke__h5ca707e6c08eb6c7: (a: number, b: number, c: any) => void;
   readonly wasm_bindgen__closure__destroy__h9761e79704d05d65: (a: number, b: number) => void;
-  readonly wasm_bindgen__convert__closures_____invoke__h0f2406f0952c411f: (a: number, b: number, c: any, d: any) => void;
-  readonly wasm_bindgen__convert__closures_____invoke__h394380805492be99: (a: number, b: number, c: number) => void;
   readonly wasm_bindgen__convert__closures_____invoke__h35bfebd84f6c108c: (a: number, b: number) => void;
+  readonly wasm_bindgen__convert__closures_____invoke__h394380805492be99: (a: number, b: number, c: number) => void;
+  readonly wasm_bindgen__convert__closures_____invoke__h0f2406f0952c411f: (a: number, b: number, c: any, d: any) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __externref_table_alloc: () => number;

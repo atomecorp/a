@@ -7,17 +7,17 @@
 
 use crate::server::broadcast_sync_event;
 use chrono::Utc;
+use reqwest::Client;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
-use reqwest::Client;
-use tokio::time::{sleep, Duration};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 macro_rules! println {
@@ -446,7 +446,10 @@ async fn handle_transfer_owner(
     };
 
     if to_owner_id != user_id {
-        return error_response(request_id, "Access denied - target owner must be current user");
+        return error_response(
+            request_id,
+            "Access denied - target owner must be current user",
+        );
     }
 
     let db = match state.db.lock() {
@@ -540,10 +543,8 @@ async fn handle_transfer_owner(
         for id in &ids {
             params_particles.push(Box::new(id.clone()));
         }
-        let params_particles_refs: Vec<&dyn rusqlite::ToSql> = params_particles
-            .iter()
-            .map(|p| p.as_ref())
-            .collect();
+        let params_particles_refs: Vec<&dyn rusqlite::ToSql> =
+            params_particles.iter().map(|p| p.as_ref()).collect();
         tx.execute(
             &format!(
                 "DELETE FROM particles WHERE particle_key = '_pending_owner_id' AND atome_id IN ({})",
@@ -670,9 +671,7 @@ async fn handle_create(
         .unwrap_or("generic");
 
     // Canonical parent field
-    let parent_id = message
-        .get("parent_id")
-        .and_then(|v| v.as_str());
+    let parent_id = message.get("parent_id").and_then(|v| v.as_str());
 
     // Canonical owner field (sync operations may override)
     let owner_value = message.get("owner_id").or_else(|| message.get("user_id"));
@@ -1893,9 +1892,7 @@ async fn handle_state_current_list(
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
-    let project_id = message
-        .get("project_id")
-        .and_then(|v| v.as_str());
+    let project_id = message.get("project_id").and_then(|v| v.as_str());
     let limit = message
         .get("limit")
         .and_then(|v| v.as_i64())
@@ -2099,8 +2096,8 @@ fn enqueue_sync_event(
     event: &EventRecord,
     target_server: &str,
 ) -> Result<(), String> {
-    let payload_json = serde_json::to_string(&event_with_actor(event.clone()))
-        .map_err(|e| e.to_string())?;
+    let payload_json =
+        serde_json::to_string(&event_with_actor(event.clone())).map_err(|e| e.to_string())?;
     db.execute(
         "INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at)
          VALUES (?1, ?2, ?3, ?4, 'pending', 0, 5, datetime('now'))",
@@ -2141,11 +2138,7 @@ fn list_sync_queue(
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
-fn mark_sync_queue_syncing(
-    db: &Connection,
-    queue_id: i64,
-    attempts: i64,
-) -> Result<(), String> {
+fn mark_sync_queue_syncing(db: &Connection, queue_id: i64, attempts: i64) -> Result<(), String> {
     db.execute(
         "UPDATE sync_queue SET status = 'syncing', attempts = ?1, last_attempt_at = datetime('now') WHERE queue_id = ?2",
         rusqlite::params![attempts, queue_id],
@@ -2172,8 +2165,11 @@ fn mark_sync_queue_error(
 }
 
 fn mark_sync_queue_done(db: &Connection, queue_id: i64) -> Result<(), String> {
-    db.execute("DELETE FROM sync_queue WHERE queue_id = ?1", rusqlite::params![queue_id])
-        .map_err(|e| e.to_string())?;
+    db.execute(
+        "DELETE FROM sync_queue WHERE queue_id = ?1",
+        rusqlite::params![queue_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -3601,7 +3597,9 @@ pub async fn run_sync_worker(state: LocalAtomeState, remote_url: String) {
                     } else {
                         Some(
                             chrono::Utc::now()
-                                .checked_add_signed(chrono::Duration::milliseconds(compute_backoff_ms(attempts)))
+                                .checked_add_signed(chrono::Duration::milliseconds(
+                                    compute_backoff_ms(attempts),
+                                ))
                                 .unwrap_or_else(chrono::Utc::now)
                                 .to_rfc3339(),
                         )
@@ -3624,7 +3622,9 @@ pub async fn run_sync_worker(state: LocalAtomeState, remote_url: String) {
                     } else {
                         Some(
                             chrono::Utc::now()
-                                .checked_add_signed(chrono::Duration::milliseconds(compute_backoff_ms(attempts)))
+                                .checked_add_signed(chrono::Duration::milliseconds(
+                                    compute_backoff_ms(attempts),
+                                ))
                                 .unwrap_or_else(chrono::Utc::now)
                                 .to_rfc3339(),
                         )

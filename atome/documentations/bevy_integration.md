@@ -150,19 +150,28 @@ That flow invokes the existing dependency refresh script, which includes Rust de
 
 ## Contract
 
-The first native contract lives in:
+The shared Bevy rendering contract lives in:
 
 ```text
-platforms/desktop-tauri/src/bevy_backend/mod.rs
+atome/renderers/bevy-core/
 ```
 
 It defines:
 
-- `AtomeBevyNode`: a disposable native projection node derived from canonical Atome data;
-- `AtomeBevyLogicalSize`: logical size in Atome scene units;
-- `AtomeBevyLayer`: layer ordering as explicit projection data;
-- `AtomeBevyProjection`: a Bevy resource that keeps mapping evidence without owning canonical Atome state;
-- `spawn_atome_node`: a minimal compile-time entry point for creating a Bevy entity from projection data.
+- `AtomeRenderScene`: the explicit scene payload consumed by native and browser Bevy wrappers;
+- `AtomeRenderNode`: a disposable projection node derived from canonical Atome data;
+- `AtomeRenderOp`: the shared diff/update contract for spawn, despawn, transform, style, layer, resource, and surface changes;
+- `AtomeEntityId`, `AtomeLogicalSize`, `AtomeLogicalPosition`, `AtomeLayer`, and related ECS components;
+- `AtomeBevyRendererPlugin`: the shared Bevy plugin installed by the browser/WASM and Tauri/native wrappers.
+
+Platform wrappers live in:
+
+```text
+platforms/web/bevy-renderer/
+platforms/desktop-tauri/src/bevy_backend/
+```
+
+They own canvas/window/runtime setup only. They must not duplicate projection, spawn, texture, render-op, or selection-overlay logic that belongs in the shared Atome crate.
 
 The source of truth remains outside Bevy:
 

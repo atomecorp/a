@@ -287,7 +287,10 @@ fn lower_file_extension(name: &str) -> String {
 fn replace_file_extension(name: &str, extension: &str) -> String {
     let clean_extension = extension.trim().trim_start_matches('.');
     let path = Path::new(name);
-    let stem = path.file_stem().and_then(|value| value.to_str()).unwrap_or(name);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(name);
     sanitize_file_name(&format!("{}.{}", stem, clean_extension))
 }
 
@@ -312,10 +315,7 @@ fn video_cache_path(source_path: &Path, file_name: &str) -> Result<(PathBuf, Str
     Ok((cache_dir.join(&cached_name), cached_name))
 }
 
-async fn transcode_video_to_mp4(
-    source_path: &Path,
-    output_path: &Path,
-) -> Result<(), String> {
+async fn transcode_video_to_mp4(source_path: &Path, output_path: &Path) -> Result<(), String> {
     let source = source_path.to_path_buf();
     let output = output_path.to_path_buf();
     let ffmpeg_result = tokio::task::spawn_blocking(move || {
@@ -352,10 +352,16 @@ async fn transcode_video_to_mp4(
     .map_err(|err| format!("recording_transcode_spawn_failed: {err}"))?;
 
     if !ffmpeg_result.status.success() {
-        let stderr = String::from_utf8_lossy(&ffmpeg_result.stderr).trim().to_string();
+        let stderr = String::from_utf8_lossy(&ffmpeg_result.stderr)
+            .trim()
+            .to_string();
         return Err(format!(
             "recording_transcode_failed: {}",
-            if stderr.is_empty() { "ffmpeg exited without details" } else { stderr.as_str() }
+            if stderr.is_empty() {
+                "ffmpeg exited without details"
+            } else {
+                stderr.as_str()
+            }
         ));
     }
     Ok(())
@@ -1522,7 +1528,14 @@ fn redact_sensitive_query_params(uri: &str) -> String {
             let key = part.split_once('=').map(|(key, _)| key).unwrap_or(part);
             if matches!(
                 key,
-                "access_token" | "auth_token" | "token" | "media_user_id" | "user_id" | "userId" | "x_user_id" | "x_userid"
+                "access_token"
+                    | "auth_token"
+                    | "token"
+                    | "media_user_id"
+                    | "user_id"
+                    | "userId"
+                    | "x_user_id"
+                    | "x_userid"
             ) {
                 format!("{key}=<redacted>")
             } else {
@@ -1630,10 +1643,7 @@ fn project_root_from_static_dir(static_dir: &Path) -> PathBuf {
         }
     }
 
-    static_dir
-        .parent()
-        .unwrap_or(static_dir)
-        .to_path_buf()
+    static_dir.parent().unwrap_or(static_dir).to_path_buf()
 }
 
 fn read_version_candidate(candidate: &Path) -> Option<String> {
@@ -1730,7 +1740,12 @@ async fn locate_server_config(static_dir: &Path, project_root: &Path) -> Option<
     let mut candidates: Vec<PathBuf> = Vec::new();
     candidates.push(static_dir.join("server_config.json"));
     candidates.push(project_root.join("server_config.json"));
-    candidates.push(project_root.join("atome").join("src").join("server_config.json"));
+    candidates.push(
+        project_root
+            .join("atome")
+            .join("src")
+            .join("server_config.json"),
+    );
 
     for candidate in candidates {
         if fs::metadata(&candidate).await.is_ok() {
@@ -3650,23 +3665,26 @@ async fn download_upload_handler(
             .into_response();
     }
 
-    let (served_path, content_type, served_name) =
-        match resolve_playback_media_file(&file_path, &safe_name).await {
-            Ok(value) => value,
-            Err(err) => {
-                if verbose_logs {
-                    println!(
+    let (served_path, content_type, served_name) = match resolve_playback_media_file(
+        &file_path, &safe_name,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            if verbose_logs {
+                println!(
                         "[download_upload_handler] ❌ Playback media resolution failed: {:?}, error: {}",
                         file_path, err
                     );
-                }
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "success": false, "error": err })),
-                )
-                    .into_response();
             }
-        };
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err })),
+            )
+                .into_response();
+        }
+    };
 
     let metadata = match fs::metadata(&served_path).await {
         Ok(value) => value,
@@ -3715,7 +3733,10 @@ async fn download_upload_handler(
     {
         Ok(response) => {
             if verbose_logs {
-                println!("[download_upload_handler] ✅ Serving file: {:?}", served_path);
+                println!(
+                    "[download_upload_handler] ✅ Serving file: {:?}",
+                    served_path
+                );
             }
             response
         }
@@ -3995,7 +4016,10 @@ async fn download_recording_handler(
             match resolve_playback_media_file(&direct_path, &safe_name).await {
                 Ok(value) => value,
                 Err(err) => {
-                    println!("[download_recording_handler] Playback media resolution failed: {}", err);
+                    println!(
+                        "[download_recording_handler] Playback media resolution failed: {}",
+                        err
+                    );
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!({ "success": false, "error": err })),
@@ -4171,9 +4195,9 @@ async fn download_recording_handler(
             Ok(value) => value,
             Err(err) => {
                 println!(
-                    "[download_recording_handler] ❌ Playback media resolution failed: {:?}, error: {}",
-                    target_path, err
-                );
+                "[download_recording_handler] ❌ Playback media resolution failed: {:?}, error: {}",
+                target_path, err
+            );
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "success": false, "error": err })),
@@ -4229,7 +4253,10 @@ async fn update_file_handler(
     ];
     // Fichiers spécifiques autorisés (en dehors des préfixes)
     let allowed_files = ["atome/src/version.json"];
-    let protected_prefixes = ["atome/src/application/examples", "atome/src/application/config"];
+    let protected_prefixes = [
+        "atome/src/application/examples",
+        "atome/src/application/config",
+    ];
 
     let path_str = payload.path.as_str();
 
@@ -4343,7 +4370,10 @@ async fn batch_update_handler(
         "atome/security",
     ];
     let allowed_files = ["atome/src/version.json"];
-    let protected_prefixes = ["atome/src/application/examples", "atome/src/application/config"];
+    let protected_prefixes = [
+        "atome/src/application/examples",
+        "atome/src/application/config",
+    ];
 
     let client = reqwest::Client::new();
     let mut updated_files = Vec::new();
@@ -4491,7 +4521,9 @@ async fn sync_from_zip_handler(
 
     // Go up until we find the project root (where platforms/desktop-tauri exists)
     for _ in 0..10 {
-        if base_path.join("platforms/desktop-tauri").exists() || base_path.join("package.json").exists() {
+        if base_path.join("platforms/desktop-tauri").exists()
+            || base_path.join("package.json").exists()
+        {
             break;
         }
         if let Some(parent) = base_path.parent() {
@@ -4711,9 +4743,11 @@ fn json_string_field(data: &JsonValue, key: &str) -> Option<String> {
 
 fn json_number_field(data: &JsonValue, key: &str) -> Option<i64> {
     data.get(key).and_then(|value| {
-        value
-            .as_i64()
-            .or_else(|| value.as_str().and_then(|raw| raw.trim().parse::<i64>().ok()))
+        value.as_i64().or_else(|| {
+            value
+                .as_str()
+                .and_then(|raw| raw.trim().parse::<i64>().ok())
+        })
     })
 }
 
@@ -5359,7 +5393,9 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     let project_root = if static_dir_abs.file_name().and_then(|name| name.to_str()) == Some("src") {
         static_dir_abs
             .parent()
-            .filter(|atome_dir| atome_dir.file_name().and_then(|name| name.to_str()) == Some("atome"))
+            .filter(|atome_dir| {
+                atome_dir.file_name().and_then(|name| name.to_str()) == Some("atome")
+            })
             .and_then(|atome_dir| atome_dir.parent())
             .unwrap_or_else(|| static_dir_abs.parent().unwrap_or(&static_dir_abs))
             .to_path_buf()
@@ -5382,10 +5418,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     let serve_dir_src = ServeDir::new(base_dir.clone());
     let src_service = get_service(serve_dir_src).handle_error(|error| async move {
         println!("Erreur /src: {:?}", error);
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Erreur src",
-        )
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur src")
     });
 
     let serve_dir_atome = ServeDir::new(project_root.join("atome"));
@@ -5400,10 +5433,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     let serve_dir_eve = ServeDir::new(project_root.join("eVe"));
     let eve_service = get_service(serve_dir_eve).handle_error(|error| async move {
         println!("Erreur /eVe: {:?}", error);
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Erreur eVe",
-        )
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur eVe")
     });
 
     // Service fichiers (correspond à dataFetcher: /file/<path>).

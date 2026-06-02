@@ -1,9 +1,9 @@
 mod power;
-mod projection;
 #[cfg(feature = "bevy_renderer_core")]
 mod renderer;
 
+#[cfg(feature = "bevy_backend")]
+pub use atome_bevy_renderer_core::*;
 pub use power::*;
-pub use projection::*;
 #[cfg(feature = "bevy_renderer_core")]
 pub use renderer::*;

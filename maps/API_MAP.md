@@ -265,16 +265,16 @@ Boundary status: Semi-public closed product API. It is not an Atome open framewo
 
 Ownership: Tauri native platform renderer boundary.
 
-Primary sources: `platforms/desktop-tauri/Cargo.toml`, `platforms/desktop-tauri/src/bevy_backend/mod.rs`, `platforms/web/bevy-renderer/src/lib.rs`.
+Primary sources: `atome/renderers/bevy-core/`, `atome/shared/render_visual_tokens.js`, `platforms/desktop-tauri/Cargo.toml`, `platforms/desktop-tauri/src/bevy_backend/mod.rs`, `platforms/web/bevy-renderer/src/lib.rs`.
 
-Exposure: Rust library module exported when Cargo feature `bevy_backend` is enabled; renderer entry points are additionally exported by `bevy_renderer_core` and native runtime entry points by `bevy_renderer_native`. Browser exposure is the `squirrel-bevy-renderer` WASM module and its `run_atome_bevy_renderer(canvas_selector, width, height, initial_nodes)` export.
+Exposure: Rust library module exported when Cargo feature `bevy_backend` is enabled; renderer entry points are additionally exported by `bevy_renderer_core` and native runtime entry points by `bevy_renderer_native`. Browser exposure is the `squirrel-bevy-renderer` WASM module and its `run_atome_bevy_renderer(canvas_selector, width, height, initial_scene)` export.
 
-Verified entry points: `AtomeBevyNode`, `AtomeBevyLogicalSize`, `AtomeBevyLayer`, `AtomeBevyProjection`, `AtomeBevyMapping`, `atome_transform_for_node`, `atome_size_for_node`, `atome_layer_for_node`, `spawn_atome_node`, `AtomePowerProfile`, `AtomeRenderActivity`, `AtomeWinitSettings`, `AtomeUpdateMode`, `AtomePresentMode`, `AtomeRedrawRequest`, `AtomeFrameCounter`, `AtomeBevyPowerState`, `parse_atome_power_profile`, `atome_power_profile_from_env`, `atome_winit_settings_for_profile`, `atome_winit_settings_for_activity`, `atome_present_mode_for_profile`, `bevy_winit_settings_for_profile`, `bevy_present_mode_for_profile`, `apply_atome_power_activity`, `request_atome_redraw`, `should_write_transform`, `trace_is_idle_mutation`, `expected_updates_per_minute`, `AtomeBevyRendererConfig`, `AtomeBevyRendererPlugin`, `build_atome_bevy_app`, `run_atome_bevy_native`.
+Verified entry points: `AtomeRenderScene`, `AtomeRenderNode`, `AtomeRenderOp`, `AtomeEntityId`, `AtomeLogicalSize`, `AtomeLogicalPosition`, `AtomeLayer`, `AtomeRenderKind`, `AtomeMediaSource`, `AtomeSelected`, `AtomeSelectionOverlay`, `AtomeEntityTable`, `AtomeRendererDiagnostics`, `SelectionVisualStyle`, `AtomeBevyRendererConfig`, `AtomeBevyRendererPlugin`, `apply_render_ops`, `AtomePowerProfile`, `AtomeRenderActivity`, `AtomeWinitSettings`, `AtomeUpdateMode`, `AtomePresentMode`, `AtomeRedrawRequest`, `AtomeFrameCounter`, `AtomeBevyPowerState`, `parse_atome_power_profile`, `atome_power_profile_from_env`, `atome_winit_settings_for_profile`, `atome_winit_settings_for_activity`, `atome_present_mode_for_profile`, `bevy_winit_settings_for_profile`, `bevy_present_mode_for_profile`, `apply_atome_power_activity`, `request_atome_redraw`, `should_write_transform`, `trace_is_idle_mutation`, `expected_updates_per_minute`, `AtomeNativeBevyRendererConfig`, `build_atome_bevy_app`, `run_atome_bevy_native`, `ATOME_RENDER_VISUAL_TOKENS`, `getAtomeRenderSelectionVisualStyle`.
 
 Boundary rules:
 
 - The API consumes explicit projection data derived from canonical Atome records.
-- It may map logical position to Bevy `Transform` and logical size/layer to native projection components.
+- It may map logical position to Bevy `Transform` and logical size/layer to disposable Bevy ECS components.
 - It may expose low-power Bevy policy values for `ATOME_POWER_PROFILE=eco|balanced|performance`; eco is the default, balanced mirrors desktop-app behavior, and performance/continuous behavior is opt-in.
 - Renderer features may create a Bevy window/surface as the active native rendering surface. That surface must consume projection data from canonical Atome records and must not run alongside another renderer for the same Atomes.
 - Bevy audio features remain disabled; Atome Kira remains the single audio engine and may be exposed later through an explicit resource/event bridge instead of a second playback engine.
@@ -282,7 +282,7 @@ Boundary rules:
 - Browser Bevy projection currently supports shape, text, raster image, SVG, video-frame, audio waveform projection data, and selected-state style patches. Browser text/media payloads may include explicit RGBA texture data; the WASM renderer turns that data into Bevy `Image` assets, while selected-state patches rebuild disposable Bevy overlay entities inside the same canvas.
 - Redraw requests must be explicit and transform writes must be gated by dirty interaction, animation, resize, or external state causes rather than idle timers.
 - It must not own canonical Atome state, mutation ordering, persistence, replay, sync, or renderer selection.
-- Browser/WASM bridging must consume `eVe/domains/rendering/virtual_scene_contract.js` projection data rather than duplicating a second virtual scene owner.
+- Browser/WASM bridging must consume `eVe/domains/rendering/virtual_scene_contract.js` projection data wrapped as an `AtomeRenderScene` with shared Atome visual tokens rather than duplicating a second virtual scene owner.
 
 Boundary status: Internal feature-gated Rust renderer API.
 

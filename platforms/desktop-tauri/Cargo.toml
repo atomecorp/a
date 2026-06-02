@@ -16,7 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = []
-bevy_backend = ["dep:bevy"]
+bevy_backend = ["dep:bevy", "dep:atome-bevy-renderer-core"]
 bevy_renderer_core = [
     "bevy_backend",
     "bevy/default_app",
@@ -44,6 +44,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 bevy = { version = "0.18.1", default-features = false, optional = true }
+atome-bevy-renderer-core = { path = "../../atome/renderers/bevy-core", optional = true }
 axum = { version = "0.7.9", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5.0", features = ["fs", "cors", "limit"] }

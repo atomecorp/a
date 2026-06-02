@@ -52,10 +52,7 @@ fn project_root_from_static_dir(static_dir: &Path) -> PathBuf {
         }
     }
 
-    static_dir
-        .parent()
-        .unwrap_or(static_dir)
-        .to_path_buf()
+    static_dir.parent().unwrap_or(static_dir).to_path_buf()
 }
 
 fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> PathBuf {

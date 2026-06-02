@@ -221,45 +221,45 @@ pub fn macos_contacts_snapshot() -> Result<serde_json::Value, String> {
             .map_err(|error| format!("macos_contacts_json_failed:{}", error));
     }
 
-      #[cfg(target_os = "windows")]
-      {
+    #[cfg(target_os = "windows")]
+    {
         let output = Command::new("powershell")
-          .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            WINDOWS_CONTACTS_POWERSHELL,
-          ])
-          .output()
-          .map_err(|error| format!("windows_contacts_command_failed:{}", error))?;
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                WINDOWS_CONTACTS_POWERSHELL,
+            ])
+            .output()
+            .map_err(|error| format!("windows_contacts_command_failed:{}", error))?;
 
         if !output.status.success() {
-          let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-          let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-          let message = if !stderr.is_empty() {
-            stderr
-          } else if !stdout.is_empty() {
-            stdout
-          } else {
-            "unknown_powershell_failure".to_string()
-          };
-          return Err(format!("windows_contacts_command_failed:{}", message));
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let message = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                "unknown_powershell_failure".to_string()
+            };
+            return Err(format!("windows_contacts_command_failed:{}", message));
         }
 
         let stdout = String::from_utf8(output.stdout)
-          .map_err(|error| format!("windows_contacts_utf8_failed:{}", error))?;
+            .map_err(|error| format!("windows_contacts_utf8_failed:{}", error))?;
         let trimmed = stdout.trim();
         if trimmed.is_empty() {
-          return Err("windows_contacts_empty_output".to_string());
+            return Err("windows_contacts_empty_output".to_string());
         }
 
         return serde_json::from_str(trimmed)
-          .map_err(|error| format!("windows_contacts_json_failed:{}", error));
-      }
+            .map_err(|error| format!("windows_contacts_json_failed:{}", error));
+    }
 
-      #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Err("macos_contacts_unsupported".to_string())
     }
