@@ -256,10 +256,33 @@ const run = async () => {
   if (!reloadReady.ok) throw new Error('reload_runtime_not_ready');
 
   const reloadCheck = await safeEval(page, async (atomeIds) => {
+    const collectAtomeListEntries = (payload = null) => {
+      if (Array.isArray(payload)) return payload;
+      if (!payload || typeof payload !== 'object') return [];
+      const lists = [
+        payload.atomes,
+        payload.records,
+        payload.items,
+        payload.data,
+        payload.fastify?.atomes,
+        payload.tauri?.atomes
+      ];
+      const merged = new Map();
+      lists.filter(Array.isArray).flat().forEach((entry) => {
+        const id = String(entry?.id || entry?.atome_id || entry?.atomeId || '').trim();
+        if (id && !merged.has(id)) merged.set(id, entry);
+      });
+      return Array.from(merged.values());
+    };
     const projectId = window.__currentProject?.id
       || document.querySelector('[id^="project_view_"]')?.id?.replace(/^project_view_/, '')
       || null;
     if (!projectId) return { ok: false, error: 'project_missing_after_reload' };
+    const apiList = window.AdoleAPI?.atomes?.list
+      ? await window.AdoleAPI.atomes.list({ projectId, limit: 2000, includeShared: true }).catch((error) => ({ error: error?.message || String(error) }))
+      : { skipped: true, reason: 'AdoleAPI.atomes.list_unavailable' };
+    const listEntries = collectAtomeListEntries(apiList);
+    const listedIds = new Set(listEntries.map((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '')));
     if (typeof window.eveToolBase?.loadProjectAtomes === 'function') {
       await window.eveToolBase.loadProjectAtomes(projectId, { force: true });
     }
@@ -278,12 +301,16 @@ const run = async () => {
     const scene = window.eveToolBase?.getProjectSceneState?.(projectId);
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const sceneIds = new Set(records.map((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '')));
+    const missingList = atomeIds.filter((id) => !listedIds.has(String(id)));
     const missingState = states.filter((entry) => !entry.found || String(entry.project_id || '') !== String(projectId));
     const missingScene = atomeIds.filter((id) => !sceneIds.has(String(id)));
     return {
-      ok: missingState.length === 0 && missingScene.length === 0,
+      ok: missingList.length === 0 && missingState.length === 0 && missingScene.length === 0,
       project_id: projectId,
       states,
+      listed_count: listEntries.length,
+      missing_list: missingList,
+      api_list_error: apiList?.error || null,
       scene_count: records.length,
       missing_state: missingState,
       missing_scene: missingScene
@@ -293,13 +320,16 @@ const run = async () => {
   log('reload_check', {
     ok: reloadCheck?.ok,
     project_id: reloadCheck?.project_id || null,
+    listed_count: reloadCheck?.listed_count ?? null,
     scene_count: reloadCheck?.scene_count ?? null,
+    missing_list: reloadCheck?.missing_list || null,
     missing_state: reloadCheck?.missing_state || null,
     missing_scene: reloadCheck?.missing_scene || null
   });
   if (!reloadCheck?.ok) {
     throw new Error(`media_reload_failed:${reloadCheck?.error || JSON.stringify({
       missing_state: reloadCheck?.missing_state,
+      missing_list: reloadCheck?.missing_list,
       missing_scene: reloadCheck?.missing_scene
     })}`);
   }

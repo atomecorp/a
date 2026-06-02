@@ -5,6 +5,9 @@ Copy and paste this entire prompt into the development agent.
 ## Progress Notes
 
 - Done: imported media Atomes persist after browser refresh and project reload validation.
+- Done: homothetic resize preserves the X/Y ratio through the canonical resize mutation path.
+- Done: recording-created video Atomes persist through the canonical commit/list/reload path and appear in the project WebGPU canvas projection; stale source-less recording media are filtered before Bevy startup.
+- Done: persisted lightweight media cache inputs are reused on project load; video posters and waveform peaks feed the RenderAtom/Bevy route before source media regeneration, while GPU/RGBA resources remain disposable renderer outputs.
 
 ---
 

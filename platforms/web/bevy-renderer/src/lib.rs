@@ -12,6 +12,8 @@ mod exports;
 mod types;
 use types::*;
 
+const BEVY_LAYER_DEPTH_LIMIT: f32 = 900.0;
+
 thread_local! {
     static WEB_PENDING_OPS: RefCell<Vec<WebAtomeRenderOp>> = RefCell::new(Vec::new());
 }
@@ -49,7 +51,7 @@ fn color_from_rgba(color: [f32; 4]) -> Color {
 }
 
 fn depth_for_layer(layer: i32) -> f32 {
-    -(layer as f32)
+    -(layer as f32).clamp(-BEVY_LAYER_DEPTH_LIMIT, BEVY_LAYER_DEPTH_LIMIT)
 }
 
 fn image_from_texture(texture: &WebAtomeTexture, id: &str) -> Result<Image, String> {
@@ -467,10 +469,10 @@ fn apply_pending_web_ops(world: &mut World) {
     }
 }
 
-fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
-    let window = Window {
+fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
+    Window {
         canvas: Some(config.canvas_selector.clone()),
-        fit_canvas_to_parent: true,
+        fit_canvas_to_parent: false,
         prevent_default_event_handling: false,
         resolution: (
             config.width.round() as u32,
@@ -483,7 +485,11 @@ fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
         transparent: true,
         visible: true,
         ..default()
-    };
+    }
+}
+
+fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
+    let window = web_window_for_config(&config);
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(window),

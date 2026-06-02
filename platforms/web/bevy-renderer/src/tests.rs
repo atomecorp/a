@@ -120,6 +120,28 @@ fn diffs_apply_to_internal_ecs_projection_table() {
 }
 
 #[test]
+fn oversized_layers_stay_inside_camera_depth_range() {
+    assert_eq!(depth_for_layer(3), -3.0);
+    assert_eq!(depth_for_layer(i32::MAX), -BEVY_LAYER_DEPTH_LIMIT);
+    assert_eq!(depth_for_layer(i32::MIN), BEVY_LAYER_DEPTH_LIMIT);
+}
+
+#[test]
+fn web_window_uses_runtime_surface_size() {
+    let config = WebBevyRendererConfig::new(
+        "#atome-bevy".to_string(),
+        640.0,
+        480.0,
+        Vec::new(),
+    );
+    let window = web_window_for_config(&config);
+    assert_eq!(window.canvas, Some("#atome-bevy".to_string()));
+    assert_eq!(window.fit_canvas_to_parent, false);
+    assert_eq!(window.resolution.width(), 640.0);
+    assert_eq!(window.resolution.height(), 480.0);
+}
+
+#[test]
 fn text_and_waveform_nodes_use_typed_bevy_components() {
     let mut world = World::new();
     world.insert_resource(WebAtomeEntityTable::default());

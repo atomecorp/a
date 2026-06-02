@@ -17,6 +17,15 @@ const mark = (label) => {
     if (process.env.PROBE_VERBOSE === '1') console.log(`[video_audio_probe] ${label}`);
 };
 
+const resolveWorkspaceRecordingPath = ({ filePath = '', ownerId = '' } = {}) => {
+    const raw = String(filePath || '').trim();
+    if (!raw) return '';
+    if (path.isAbsolute(raw)) return raw;
+    if (/^data\/users\//i.test(raw)) return path.resolve(raw);
+    if (/^recordings\//i.test(raw) && ownerId) return path.resolve('data', 'users', ownerId, raw);
+    return path.resolve(raw);
+};
+
 const safeEval = async (page, fn, arg = null, timeout = 30000) => {
     try {
         return await Promise.race([
@@ -87,7 +96,7 @@ const readFfprobe = (filePath) => {
 };
 
 const run = async () => {
-    const report = { ok: false, record: null, rawAudio: null, extractedAudio: null, mtrack: null, ffprobe: null, errors: [] };
+    const report = { ok: false, record: null, file: null, state: null, scene: null, rawAudio: null, extractedAudio: null, mtrack: null, ffprobe: null, errors: [] };
     const browser = await chromium.launch({
         headless: process.env.HEADLESS !== '0',
         args: [
@@ -218,12 +227,128 @@ const run = async () => {
         mark(`record_done:${report.record?.ok === true}`);
         if (!report.record?.ok) throw new Error(`record_failed:${report.record?.error || 'unknown'}`);
 
-        const localFilePath = report.record.filePath && path.isAbsolute(report.record.filePath)
-            ? report.record.filePath
-            : (report.record.user_id && report.record.filePath
-                ? path.resolve('data', 'users', report.record.user_id, report.record.filePath)
-                : '');
+        const localFilePath = resolveWorkspaceRecordingPath({
+            filePath: report.record.filePath,
+            ownerId: report.record.user_id
+        });
+        report.file = {
+            ok: !!localFilePath && fs.existsSync(localFilePath),
+            path: localFilePath || null,
+            in_recordings: /\/data\/users\/[^/]+\/recordings\//.test(localFilePath),
+            byte_length: localFilePath && fs.existsSync(localFilePath) ? fs.statSync(localFilePath).size : 0
+        };
         report.ffprobe = readFfprobe(localFilePath);
+
+        const mtrackAtomeId = report.record.project?.atomeId || report.record.result?.atomeId || report.record.result?.atome_id || null;
+        report.state = await safeEval(page, async (input) => {
+            const atomeId = String(input?.atomeId || '').trim();
+            const projectId = String(input?.projectId || '').trim();
+            if (!atomeId || !projectId) return { ok: false, error: 'recording_project_identity_missing', atomeId, projectId };
+            const stateRecord = window.Atome?.getStateCurrent
+                ? await window.Atome.getStateCurrent(atomeId).catch((error) => ({ error: error?.message || String(error) }))
+                : null;
+            const props = stateRecord?.properties || stateRecord?.props || {};
+            const api = window.AdoleAPI?.atomes || null;
+            const apiGet = api?.get
+                ? await api.get(atomeId).catch((error) => ({ error: error?.message || String(error) }))
+                : { skipped: true, reason: 'AdoleAPI.atomes.get_unavailable' };
+            const apiList = api?.list
+                ? await api.list({ projectId, limit: 2000, includeShared: true }).catch((error) => ({ error: error?.message || String(error) }))
+                : { skipped: true, reason: 'AdoleAPI.atomes.list_unavailable' };
+            const collectAtomeListEntries = (payload = null) => {
+                if (Array.isArray(payload)) return payload;
+                if (!payload || typeof payload !== 'object') return [];
+                const lists = [
+                    payload.atomes,
+                    payload.records,
+                    payload.items,
+                    payload.data,
+                    payload.fastify?.atomes,
+                    payload.tauri?.atomes
+                ];
+                const merged = new Map();
+                lists.filter(Array.isArray).flat().forEach((entry) => {
+                    const id = String(entry?.id || entry?.atome_id || entry?.atomeId || '').trim();
+                    if (id && !merged.has(id)) merged.set(id, entry);
+                });
+                return Array.from(merged.values());
+            };
+            const listed = collectAtomeListEntries(apiList);
+            const listContains = listed.some((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '') === atomeId);
+            return {
+                ok: !!stateRecord && !stateRecord.error && String(stateRecord.id || stateRecord.atome_id || stateRecord.atomeId || atomeId) === atomeId,
+                atome_id: atomeId,
+                project_id: projectId,
+                state_kind: props.kind || stateRecord?.kind || null,
+                media_url: props.media_url || props.mediaUrl || null,
+                storage_root: props.storage_root || null,
+                api_get_ok: !!apiGet && !apiGet.error && apiGet.skipped !== true,
+                api_get_skipped: apiGet?.skipped === true,
+                api_list_contains: listContains,
+                api_list_skipped: apiList?.skipped === true,
+                api_error: apiGet?.error || apiList?.error || null
+            };
+        }, {
+            atomeId: mtrackAtomeId,
+            projectId: report.record.project?.projectId || null
+        }, 60000);
+
+        report.scene = await safeEval(page, async (input) => {
+            const atomeId = String(input?.atomeId || '').trim();
+            const projectId = String(input?.projectId || '').trim();
+            if (!atomeId || !projectId) return { ok: false, error: 'recording_project_identity_missing', atomeId, projectId };
+            const findVirtualNode = (root, targetId, seen = new Set()) => {
+                if (!root || typeof root !== 'object' || seen.has(root)) return null;
+                seen.add(root);
+                if (String(root.id || root.atome_id || root.atomeId || '') === targetId) return root;
+                const children = [
+                    ...(Array.isArray(root.nodes) ? root.nodes : []),
+                    ...(Array.isArray(root.children) ? root.children : []),
+                    ...(Array.isArray(root.items) ? root.items : []),
+                    ...(root.root && typeof root.root === 'object' ? [root.root] : [])
+                ];
+                for (const child of children) {
+                    const found = findVirtualNode(child, targetId, seen);
+                    if (found) return found;
+                }
+                return null;
+            };
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const deadline = Date.now() + 15000;
+            let scene = null;
+            let record = null;
+            let node = null;
+            while (Date.now() < deadline) {
+                scene = window.eveToolBase?.getProjectSceneState?.(projectId) || null;
+                const records = Array.isArray(scene?.records) ? scene.records : [];
+                record = records.find((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '') === atomeId) || null;
+                node = findVirtualNode(scene?.projection?.virtual_scene || null, atomeId);
+                if (record && node) break;
+                await sleep(250);
+            }
+            const canvas = document.getElementById('eve_surface_project');
+            const rect = canvas?.getBoundingClientRect?.();
+            return {
+                ok: !!record && !!canvas && Number(canvas.width || 0) > 0 && Number(canvas.height || 0) > 0 && !!node,
+                atome_id: atomeId,
+                project_id: projectId,
+                record_present: !!record,
+                canvas_present: !!canvas,
+                canvas_id: canvas?.id || null,
+                canvas_role: canvas?.getAttribute?.('data-role') || null,
+                canvas_width: Number(canvas?.width || 0),
+                canvas_height: Number(canvas?.height || 0),
+                canvas_css_width: Number(rect?.width || 0),
+                canvas_css_height: Number(rect?.height || 0),
+                virtual_node_present: !!node,
+                virtual_node_type: node?.type || null,
+                render_ok: scene?.projection?.ok === true,
+                render_error: scene?.projection?.render_result?.error || scene?.projection?.render_result?.reason || null
+            };
+        }, {
+            atomeId: mtrackAtomeId,
+            projectId: report.record.project?.projectId || null
+        }, 60000);
 
         const analyzeAudio = async (url, label) => safeEval(page, async ({ url, label }) => {
             const response = await fetch(url, { credentials: 'include' });
@@ -287,7 +412,6 @@ const run = async () => {
         report.rawAudio = await analyzeAudio(report.record.mediaUrl, 'raw_recording_webm');
         report.extractedAudio = await analyzeAudio(report.record.extractUrl, 'server_extracted_audio');
 
-        const mtrackAtomeId = report.record.project?.atomeId || report.record.result?.atomeId || report.record.result?.atome_id || null;
         report.mtrack = await safeEval(page, async (atomeId) => {
             if (!atomeId) return { ok: false, error: 'atome_id_missing' };
             const { openGroupTimeline } = await import('/eVe/intuition/runtime/group_timeline_api.js');
@@ -350,11 +474,10 @@ const run = async () => {
             };
         }, mtrackAtomeId, 40000);
 
-        report.ok = report.ffprobe?.has_video === true
-            && report.ffprobe?.has_audio === true
-            && report.rawAudio?.ok === true
-            && report.extractedAudio?.ok === true
-            && report.mtrack?.ok === true;
+        report.ok = report.file?.ok === true && report.file?.in_recordings === true
+            && report.state?.ok === true && report.scene?.ok === true
+            && report.ffprobe?.has_video === true && report.ffprobe?.has_audio === true
+            && report.rawAudio?.ok === true && report.extractedAudio?.ok === true && report.mtrack?.ok === true;
     } catch (error) {
         report.errors.push(error?.message || String(error || 'probe_failed'));
     } finally {
@@ -365,11 +488,9 @@ const run = async () => {
     if (!report.ok) {
         console.error(JSON.stringify(report, null, 2));
         process.exit(1);
-    }
-    console.log(JSON.stringify(report, null, 2));
+    } console.log(JSON.stringify(report, null, 2));
     process.exit(0);
 };
-
 run().catch((error) => {
     const report = { ok: false, errors: [error?.message || String(error || 'probe_crashed')] };
     writeReport(report);

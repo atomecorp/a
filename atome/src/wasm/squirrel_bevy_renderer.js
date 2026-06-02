@@ -1,14 +1,5 @@
 let wasm;
 
-const BEVY_GPU_LIMITATION_LOG_PATTERN = /GPU preprocessing.*limited|limited.*GPU preprocessing/i;
-
-function logBevyGpuLimitation(parts) {
-    const message = parts.join(' ');
-    if (BEVY_GPU_LIMITATION_LOG_PATTERN.test(message)) {
-        console.log(...parts);
-    }
-}
-
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
     wasm.__wbindgen_externrefs.set(idx, obj);
@@ -249,12 +240,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function wasm_bindgen__convert__closures_____invoke__h04caba32a0af2bd1(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h04caba32a0af2bd1(arg0, arg1, arg2);
+function wasm_bindgen__convert__closures_____invoke__h394380805492be99(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h394380805492be99(arg0, arg1, isLikeNone(arg2) ? 0 : addToExternrefTable0(arg2));
 }
 
-function wasm_bindgen__convert__closures_____invoke__h35bfebd84f6c108c(arg0, arg1) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h35bfebd84f6c108c(arg0, arg1);
+function wasm_bindgen__convert__closures_____invoke__h04caba32a0af2bd1(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h04caba32a0af2bd1(arg0, arg1, arg2);
 }
 
 function wasm_bindgen__convert__closures_____invoke__h0f2406f0952c411f(arg0, arg1, arg2, arg3) {
@@ -265,8 +256,8 @@ function wasm_bindgen__convert__closures_____invoke__h5ca707e6c08eb6c7(arg0, arg
     wasm.wasm_bindgen__convert__closures_____invoke__h5ca707e6c08eb6c7(arg0, arg1, arg2);
 }
 
-function wasm_bindgen__convert__closures_____invoke__h394380805492be99(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h394380805492be99(arg0, arg1, isLikeNone(arg2) ? 0 : addToExternrefTable0(arg2));
+function wasm_bindgen__convert__closures_____invoke__h35bfebd84f6c108c(arg0, arg1) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h35bfebd84f6c108c(arg0, arg1);
 }
 
 const __wbindgen_enum_GpuAddressMode = ["clamp-to-edge", "repeat", "mirror-repeat"];
@@ -1106,12 +1097,7 @@ function __wbg_get_imports() {
         try {
             deferred0_0 = arg0;
             deferred0_1 = arg1;
-            logBevyGpuLimitation([
-                getStringFromWasm0(arg0, arg1),
-                getStringFromWasm0(arg2, arg3),
-                getStringFromWasm0(arg4, arg5),
-                getStringFromWasm0(arg6, arg7),
-            ]);
+            console.log(getStringFromWasm0(arg0, arg1), getStringFromWasm0(arg2, arg3), getStringFromWasm0(arg4, arg5), getStringFromWasm0(arg6, arg7));
         } finally {
             wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
         }
@@ -1122,7 +1108,7 @@ function __wbg_get_imports() {
         try {
             deferred0_0 = arg0;
             deferred0_1 = arg1;
-            logBevyGpuLimitation([getStringFromWasm0(arg0, arg1)]);
+            console.log(getStringFromWasm0(arg0, arg1));
         } finally {
             wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
         }

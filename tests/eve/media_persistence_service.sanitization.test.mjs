@@ -152,8 +152,13 @@ const reused = await ensureProjectMediaAtome({
 assert.equal(reused.ok, true);
 assert.equal(reused.created, false);
 assert.equal(reused.reused, true);
+assert.equal(reused.associated, true);
 assert.equal(reused.atomeId, 'video_recording_existing');
-assert.equal(commits.length, 0);
+assert.equal(commits.length, 1);
+assert.equal(commits[0].atome_id, 'video_recording_existing');
+assert.equal(commits[0].project_id, 'project_a');
+assert.equal(commits[0].props.kind, 'video_recording');
+assert.equal(commits[0].props.storage_root, 'recordings');
 assert.equal(sceneRecords().some((atom) => atom.id === 'video_recording_existing'), true);
 assert.equal(latestSceneAtom().type, 'video');
 assert.match(latestSceneAtom().content.source, /\/api\/recordings\/video_1779220000001\.webm/);

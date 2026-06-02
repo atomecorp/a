@@ -875,7 +875,7 @@ Reusable APIs:
 - Fixture-driven media restoration coverage for this contract lives in `tests/eve/media_fixture_restore_contract.test.mjs`; browser playback probes remain higher-level acceptance coverage and must not be the only guard for persisted media Atome integrity.
 - DOM teardown reconstruction coverage lives in `tests/eve/project_dom_teardown_reconstruction.test.mjs`; it verifies grouped timeline/step state and media visual refs are restored from canonical properties, not from stale `data-*` payloads.
 - MTraX panel close is the canonical runtime cleanup boundary: pending audio/media work is awaited with bounded close tasks, transient clip/runtime state is cleared after dormant metadata is preserved, and expensive timeline verification/prewarm/preview export work must not run synchronously for `panel_close`.
-- Browser video recording owns a single persisted project atome: the `video_recording_*` atome created during recording persistence is reused and rendered on the project surface after stop. `ensureProjectMediaAtome` remains for media paths that do not already return a recording atome, such as native/file-only captures and image capture.
+- Browser video recording owns a single persisted project atome: the `video_recording_*` atome created during recording persistence is reused and rendered on the project surface after stop. Reusing that recording atome still requires a canonical `set` commit with the active project id so `state_current`, project listing, refresh, and WebGPU scene reconstruction all agree. `ensureProjectMediaAtome` remains for media paths that do not already return a recording atome, such as native/file-only captures and image capture.
 - `eVe/intuition/shared/media_video_poster_runtime.js` owns reusable video frame poster capture for project-visible video media and molecule previews; normal video atomes and group previews must consume it instead of duplicating video seek/canvas capture logic.
 - `eVe/intuition/shared/capture_video_poster_runtime.js` owns live capture-tool poster extraction from the active preview overlay, persistence of poster fields, and DOM mounting for recorded video atomes; `capture.js` may only wire this shared runtime into UI stop paths.
 - Recorded video atome creation must carry the recording owner into `resolveMediaUrl` and persist owner/media-user particles so the first load uses the user-scoped recordings route.
@@ -1320,6 +1320,15 @@ Do not create:
 Status: Verified.
 
 ## Duplication And Cleanup Risks
+
+Recent rendering and persistence fixes:
+
+- `eVe/domains/media/api/media_persistence_service.js`: recording Atome reuse must commit the active `project_id` before rendering; reusing an existing `video_recording_*` / `audio_recording_*` without this association leaves project reload and list results inconsistent.
+- `atome/src/squirrel/apis/unified/adole_api/atome_record_projection.js`: `state_current.meta.project_id` is part of the client projection contract and must survive reload into both top-level `project_id` and `meta.project_id`.
+- `eVe/domains/rendering/project_scene_runtime.js`: Bevy projection must skip stale media records that have no renderable source; old source-less `audio_recording_*` records must not abort WebGPU scene startup.
+- `eVe/domains/rendering/bevy_web_renderer_runtime.js`: initial Bevy startup records media texture decode failures as skipped nodes instead of rejecting the whole scene; valid nodes must still start.
+- `platforms/web/bevy-renderer/src/lib.rs`: layer depth is clamped for Bevy sprites so timestamp-like z-index values remain inside the camera range while preserving the canonical `AtomeLayer`.
+- Durable media cache reuse is owned by the existing projection path, not by a new renderer cache layer: `render_atom.js` exposes persisted video poster data URLs and waveform peaks, `bevy_media_texture_resolver.js` consumes persisted video posters before decoding a source video frame, and `project_audio_waveform_renderer.js` consumes persisted waveform peaks before requesting metadata or decoding audio. Full RGBA/GPU textures remain disposable derived renderer resources.
 
 High priority risks:
 

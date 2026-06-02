@@ -17,7 +17,15 @@ atome/src/svelte/build/
 platforms/ios/atome-auv3/build/
 platforms/web/audio-wasm/target/
 platforms/web/bevy-renderer/target/
+**/target/
 /temp/
+temp/
+tmp/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
 
 # Development files
 **/.DS_Store
@@ -25,7 +33,13 @@ platforms/web/bevy-renderer/target/
 *.tmp
 *.bak
 *.old
-logs
+*.log
+logs/
+reports/
+debug/
+diagnostics/
+captures/
+screenshots/
 tests
 
 tests/*

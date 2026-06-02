@@ -66,6 +66,8 @@ const resolveAtomeParentId = (record) => (
 const resolveAtomeProjectId = (record) => (
     record?.project_id
     || record?.projectId
+    || record?.meta?.project_id
+    || record?.meta?.projectId
     || record?.properties?.project_id
     || record?.properties?.projectId
     || null
@@ -132,9 +134,10 @@ function mapStateCurrentToAtome(state) {
         type: state.type || properties.type || properties.kind || null,
         meta: {
             owner_id: state.meta?.owner_id || state.owner_id || state.ownerId || null,
-            parent_id: state.meta?.parent_id || properties.parent_id || properties.parentId || null
+            parent_id: state.meta?.parent_id || properties.parent_id || properties.parentId || null,
+            project_id: state.meta?.project_id || state.meta?.projectId || state.project_id || state.projectId || properties.project_id || properties.projectId || null
         },
-        project_id: state.project_id || properties.project_id || properties.projectId || null,
+        project_id: state.project_id || state.projectId || state.meta?.project_id || state.meta?.projectId || properties.project_id || properties.projectId || null,
         properties
     });
 }
